@@ -223,7 +223,7 @@ No blocking. No background polling. Just direct results.
 
 ### 1. Performance
 
-* MVC → n8n → MVC round-trip completes under 3–10 seconds
+* MVC → n8n → MVC round-trip completes under 60 seconds
 * No timeouts
 * Workflow reliably hits Respond to Webhook
 
@@ -281,6 +281,6 @@ sequenceDiagram
     WF->>N8N: Prepare JSON response for MVC
     N8N-->>MVC: Respond to Webhook with risk report JSON
 
-    n8n Workflow Skeleton
+
 
 
