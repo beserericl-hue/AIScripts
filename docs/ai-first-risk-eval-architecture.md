@@ -37,7 +37,7 @@ This design moves evaluation out of MVC and into **n8n + AI**, using the Webhook
 ### High-Level Shift
 
 * **MVC app**
-  Handles data entry and receives the evaluation result.
+  Handles data entry and receives the evaluation result at later time.
 
 * **n8n workflow**
   Does all processing:
@@ -46,7 +46,7 @@ This design moves evaluation out of MVC and into **n8n + AI**, using the Webhook
   * Retrieves metadata
   * Calls an AI model for scoring
   * Writes structured results to SQL
-  * Responds to MVC via **Respond to Webhook**
+  
 
 ### Why this helps
 
@@ -54,7 +54,7 @@ This design moves evaluation out of MVC and into **n8n + AI**, using the Webhook
 * AI replaces rigid C# rule logic
 * Updating logic requires adjusting prompts or metadata, not code
 * n8n workflows stay visible, debuggable, and adjustable
-* MVC receives a clean JSON response and renders the report immediately
+
 
 ---
 
@@ -162,9 +162,10 @@ Output is a structured JSON risk report.
 
 Insert into:
 
-* `RiskSummary`
-* `RiskDomain`
-* `RiskRecommendation`
+* `RiskEvaluationOutput`
+* `RiskDomainResult`
+* `RiskDomainMitigationSteps`
+* `RiskDomainWeakness`
 
 #### 7. Respond to Webhook Node
 
@@ -186,7 +187,7 @@ Responds to MVC with JSON such as:
 }
 ```
 
-MVC receives the full risk report immediately.
+MVC receives notification of Workflow Start.
 
 ---
 
@@ -223,9 +224,9 @@ No blocking. No background polling. Just direct results.
 
 ### 1. Performance
 
-* MVC → n8n → MVC round-trip completes under 60 seconds
+* MVC → n8n → MVC round-trip completes instantly
 * No timeouts
-* Workflow reliably hits Respond to Webhook
+* Workflow completes, writes report to SQL database
 
 ### 2. Quality
 
