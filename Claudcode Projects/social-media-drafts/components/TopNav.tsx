@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, FileText, Calendar, Settings } from 'lucide-react';
+import SyncStatusIndicator from './SyncStatusIndicator';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -57,6 +58,11 @@ export default function TopNav() {
               </Link>
             );
           })}
+
+          {/* Sync Status Indicator */}
+          <div className="ml-2 px-3 py-2 bg-[#1a1a1a] border border-[#333333] rounded-md">
+            <SyncStatusIndicator />
+          </div>
         </nav>
       </div>
     </header>

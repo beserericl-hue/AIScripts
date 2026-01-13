@@ -3,6 +3,7 @@
 import TopNav from './TopNav';
 import Sidebar from './Sidebar';
 import ErrorBoundary from './ErrorBoundary';
+import AppInitializer from './AppInitializer';
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -11,6 +12,7 @@ interface AppLayoutProps {
 export default function AppLayout({ children }: AppLayoutProps) {
   return (
     <ErrorBoundary>
+      <AppInitializer>
       <div className="min-h-screen bg-black">
         {/* Fixed Top Navigation - 80px height */}
         <TopNav />
@@ -37,6 +39,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
           </div>
         </div>
       </div>
+      </AppInitializer>
     </ErrorBoundary>
   );
 }

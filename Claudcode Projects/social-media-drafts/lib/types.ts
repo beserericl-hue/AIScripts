@@ -52,6 +52,51 @@ export interface AppSettings {
   webhookUrl?: string;
   webhookUsername?: string; // Username for webhook Basic Auth
   webhookPassword?: string; // Password for webhook Basic Auth
+  // MongoDB settings
+  mongoUrl?: string;
+  mongoUsername?: string;
+  mongoPassword?: string;
+  mongoDatabaseName?: string; // Default: 'social_media_drafts'
+}
+
+// MongoDB sync status types
+export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error';
+
+export interface MongoSyncState {
+  status: SyncStatus;
+  lastSyncedAt?: number;
+  errorMessage?: string;
+}
+
+// MongoDB API response types
+export interface MongoSyncResponse {
+  success: boolean;
+  message: string;
+  timestamp: number;
+  counts?: {
+    posts: number;
+    folders: number;
+    activity: number;
+  };
+}
+
+export interface MongoLoadResponse {
+  success: boolean;
+  data?: {
+    posts: Post[];
+    folders: Folder[];
+    activity: ActivityItem[];
+    settings: Partial<AppSettings>;
+  };
+  message: string;
+  timestamp: number;
+}
+
+export interface MongoHealthResponse {
+  connected: boolean;
+  database: string | null;
+  collections: string[];
+  message: string;
 }
 
 // Legacy types for migration

@@ -2,8 +2,25 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { Post, Folder, ActivityItem, AppSettings, FilterOptions, Platform, PostStatus, LegacyDraft } from './types';
+import { Post, Folder, ActivityItem, AppSettings, FilterOptions, Platform, PostStatus, LegacyDraft, MongoSyncState, MongoSyncResponse, MongoLoadResponse } from './types';
 import { STORAGE_KEYS, DEFAULT_PLATFORMS, FOLDER_COLORS } from './constants';
+
+// Debounce utility
+function debounce<T extends (...args: unknown[]) => void>(fn: T, ms: number): T {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  return ((...args: unknown[]) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), ms);
+  }) as T;
+}
+
+// Check if MongoDB is configured
+const isMongoConfigured = (settings: AppSettings): boolean => {
+  return Boolean(settings.mongoUrl && settings.mongoUrl.trim().length > 0);
+};
+
+// Debounced sync function holder
+let debouncedSync: (() => void) | null = null;
 
 interface AppState {
   // Data
@@ -14,6 +31,9 @@ interface AppState {
 
   // UI State
   filters: FilterOptions;
+
+  // MongoDB Sync State
+  mongoSync: MongoSyncState;
 
   // Post Actions
   addPost: (post: Omit<Post, 'id' | 'createdAt' | 'updatedAt'>) => Post;
@@ -44,6 +64,12 @@ interface AppState {
 
   // Migration
   migrateFromLegacy: () => void;
+
+  // MongoDB Actions
+  syncToMongo: () => Promise<void>;
+  loadFromMongo: () => Promise<boolean>;
+  testMongoConnection: () => Promise<{ connected: boolean; message: string }>;
+  setMongoSyncStatus: (status: MongoSyncState) => void;
 }
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -61,7 +87,19 @@ const getPostTitle = (post: Post): string => {
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set, get) => ({
+    (set, get) => {
+      // Initialize debounced sync function
+      const triggerDebouncedSync = () => {
+        const state = get();
+        if (isMongoConfigured(state.settings)) {
+          if (!debouncedSync) {
+            debouncedSync = debounce(() => get().syncToMongo(), 2000);
+          }
+          debouncedSync();
+        }
+      };
+
+      return {
       // Initial State
       posts: [],
       folders: [],
@@ -70,6 +108,9 @@ export const useAppStore = create<AppState>()(
         defaultPlatforms: DEFAULT_PLATFORMS,
       },
       filters: {},
+      mongoSync: {
+        status: 'idle',
+      },
 
       // Post Actions
       addPost: (postData) => {
@@ -81,6 +122,7 @@ export const useAppStore = create<AppState>()(
         };
         set((state) => ({ posts: [...state.posts, newPost] }));
         get().addActivity('created', newPost.id, getPostTitle(newPost));
+        triggerDebouncedSync();
         return newPost;
       },
 
@@ -102,6 +144,7 @@ export const useAppStore = create<AppState>()(
             get().addActivity('edited', id, getPostTitle(post));
           }
         }
+        triggerDebouncedSync();
       },
 
       deletePost: (id) => {
@@ -112,6 +155,7 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           posts: state.posts.filter((post) => post.id !== id),
         }));
+        triggerDebouncedSync();
       },
 
       getPost: (id) => {
@@ -131,6 +175,7 @@ export const useAppStore = create<AppState>()(
           createdAt: Date.now(),
         };
         set((state) => ({ folders: [...state.folders, newFolder] }));
+        triggerDebouncedSync();
         return newFolder;
       },
 
@@ -140,6 +185,7 @@ export const useAppStore = create<AppState>()(
             folder.id === id ? { ...folder, ...updates } : folder
           ),
         }));
+        triggerDebouncedSync();
       },
 
       deleteFolder: (id) => {
@@ -150,6 +196,7 @@ export const useAppStore = create<AppState>()(
             post.folderId === id ? { ...post, folderId: undefined } : post
           ),
         }));
+        triggerDebouncedSync();
       },
 
       // Activity Actions
@@ -168,6 +215,7 @@ export const useAppStore = create<AppState>()(
 
       clearActivity: () => {
         set({ activity: [] });
+        triggerDebouncedSync();
       },
 
       // Settings Actions
@@ -175,6 +223,7 @@ export const useAppStore = create<AppState>()(
         set((state) => ({
           settings: { ...state.settings, ...settings },
         }));
+        triggerDebouncedSync();
       },
 
       // Filter Actions
@@ -189,19 +238,35 @@ export const useAppStore = create<AppState>()(
       // Data Management
       exportData: () => {
         const { posts, folders, settings, activity } = get();
-        return JSON.stringify({ posts, folders, settings, activity }, null, 2);
+        // Exclude MongoDB credentials from export
+        const exportSettings = { ...settings };
+        delete exportSettings.mongoUrl;
+        delete exportSettings.mongoUsername;
+        delete exportSettings.mongoPassword;
+        delete exportSettings.mongoDatabaseName;
+        return JSON.stringify({ posts, folders, settings: exportSettings, activity }, null, 2);
       },
 
       importData: (jsonData) => {
         try {
           const data = JSON.parse(jsonData);
           if (data.posts && Array.isArray(data.posts)) {
+            const currentSettings = get().settings;
             set({
               posts: data.posts,
               folders: data.folders || [],
-              settings: data.settings || { defaultPlatforms: DEFAULT_PLATFORMS },
+              settings: {
+                ...data.settings,
+                defaultPlatforms: data.settings?.defaultPlatforms || DEFAULT_PLATFORMS,
+                // Preserve MongoDB settings
+                mongoUrl: currentSettings.mongoUrl,
+                mongoUsername: currentSettings.mongoUsername,
+                mongoPassword: currentSettings.mongoPassword,
+                mongoDatabaseName: currentSettings.mongoDatabaseName,
+              },
               activity: data.activity || [],
             });
+            triggerDebouncedSync();
             return true;
           }
           return false;
@@ -211,17 +276,26 @@ export const useAppStore = create<AppState>()(
       },
 
       resetAll: () => {
+        const currentSettings = get().settings;
         set({
           posts: [],
           folders: [],
           activity: [],
-          settings: { defaultPlatforms: DEFAULT_PLATFORMS },
+          settings: {
+            defaultPlatforms: DEFAULT_PLATFORMS,
+            // Preserve MongoDB settings
+            mongoUrl: currentSettings.mongoUrl,
+            mongoUsername: currentSettings.mongoUsername,
+            mongoPassword: currentSettings.mongoPassword,
+            mongoDatabaseName: currentSettings.mongoDatabaseName,
+          },
           filters: {},
         });
         // Also clear legacy storage
         if (typeof window !== 'undefined') {
           localStorage.removeItem(STORAGE_KEYS.legacyDrafts);
         }
+        triggerDebouncedSync();
       },
 
       // Migration from legacy format
@@ -271,7 +345,170 @@ export const useAppStore = create<AppState>()(
           console.error('Migration failed:', e);
         }
       },
-    }),
+
+      // MongoDB Actions
+      setMongoSyncStatus: (syncState) => {
+        set({ mongoSync: syncState });
+      },
+
+      syncToMongo: async () => {
+        const state = get();
+
+        // Don't sync if MongoDB is not configured
+        if (!isMongoConfigured(state.settings)) {
+          return;
+        }
+
+        // Don't sync if already syncing
+        if (state.mongoSync.status === 'syncing') {
+          return;
+        }
+
+        set({ mongoSync: { status: 'syncing' } });
+
+        try {
+          const response = await fetch('/api/db/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mongoUrl: state.settings.mongoUrl,
+              mongoUsername: state.settings.mongoUsername,
+              mongoPassword: state.settings.mongoPassword,
+              mongoDatabaseName: state.settings.mongoDatabaseName || 'social_media_drafts',
+              data: {
+                posts: state.posts,
+                folders: state.folders,
+                activity: state.activity,
+                settings: state.settings,
+              },
+            }),
+          });
+
+          const result: MongoSyncResponse = await response.json();
+
+          if (result.success) {
+            set({
+              mongoSync: {
+                status: 'success',
+                lastSyncedAt: result.timestamp,
+              },
+            });
+            // Reset to idle after 3 seconds
+            setTimeout(() => {
+              const currentState = get();
+              if (currentState.mongoSync.status === 'success') {
+                set({ mongoSync: { ...currentState.mongoSync, status: 'idle' } });
+              }
+            }, 3000);
+          } else {
+            set({
+              mongoSync: {
+                status: 'error',
+                errorMessage: result.message,
+              },
+            });
+          }
+        } catch (error) {
+          set({
+            mongoSync: {
+              status: 'error',
+              errorMessage: error instanceof Error ? error.message : 'Network error',
+            },
+          });
+        }
+      },
+
+      loadFromMongo: async () => {
+        const state = get();
+
+        // Don't load if MongoDB is not configured
+        if (!isMongoConfigured(state.settings)) {
+          return false;
+        }
+
+        set({ mongoSync: { status: 'syncing' } });
+
+        try {
+          const params = new URLSearchParams({
+            mongoUrl: state.settings.mongoUrl!,
+            ...(state.settings.mongoUsername && { mongoUsername: state.settings.mongoUsername }),
+            ...(state.settings.mongoPassword && { mongoPassword: state.settings.mongoPassword }),
+            mongoDatabaseName: state.settings.mongoDatabaseName || 'social_media_drafts',
+          });
+
+          const response = await fetch(`/api/db/sync?${params}`);
+          const result: MongoLoadResponse = await response.json();
+
+          if (result.success && result.data) {
+            // Preserve current MongoDB settings
+            const currentSettings = state.settings;
+
+            set({
+              posts: result.data.posts,
+              folders: result.data.folders,
+              activity: result.data.activity,
+              settings: {
+                ...result.data.settings,
+                defaultPlatforms: result.data.settings.defaultPlatforms || DEFAULT_PLATFORMS,
+                mongoUrl: currentSettings.mongoUrl,
+                mongoUsername: currentSettings.mongoUsername,
+                mongoPassword: currentSettings.mongoPassword,
+                mongoDatabaseName: currentSettings.mongoDatabaseName,
+              },
+              mongoSync: { status: 'success', lastSyncedAt: result.timestamp },
+            });
+
+            setTimeout(() => {
+              const currentState = get();
+              if (currentState.mongoSync.status === 'success') {
+                set({ mongoSync: { ...currentState.mongoSync, status: 'idle' } });
+              }
+            }, 3000);
+
+            return true;
+          } else {
+            set({ mongoSync: { status: 'error', errorMessage: result.message } });
+            return false;
+          }
+        } catch (error) {
+          set({
+            mongoSync: {
+              status: 'error',
+              errorMessage: error instanceof Error ? error.message : 'Network error',
+            },
+          });
+          return false;
+        }
+      },
+
+      testMongoConnection: async () => {
+        const state = get();
+
+        if (!state.settings.mongoUrl) {
+          return { connected: false, message: 'MongoDB URL not configured' };
+        }
+
+        try {
+          const params = new URLSearchParams({
+            mongoUrl: state.settings.mongoUrl,
+            ...(state.settings.mongoUsername && { mongoUsername: state.settings.mongoUsername }),
+            ...(state.settings.mongoPassword && { mongoPassword: state.settings.mongoPassword }),
+            mongoDatabaseName: state.settings.mongoDatabaseName || 'social_media_drafts',
+          });
+
+          const response = await fetch(`/api/db/health?${params}`);
+          const result = await response.json();
+
+          return { connected: result.connected, message: result.message };
+        } catch (error) {
+          return {
+            connected: false,
+            message: error instanceof Error ? error.message : 'Network error',
+          };
+        }
+      },
+    };
+    },
     {
       name: STORAGE_KEYS.posts,
       partialize: (state) => ({
