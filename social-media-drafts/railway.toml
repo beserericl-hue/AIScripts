@@ -2,32 +2,20 @@
 # Documentation: https://docs.railway.app/reference/config-as-code
 
 [build]
-# Use Nixpacks builder (default, auto-detects Next.js)
-builder = "nixpacks"
-
-# Build command - Railway auto-detects npm run build for Next.js
-buildCommand = "npm run build"
+# Use Dockerfile
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
 
 [deploy]
-# Start command for the production server
-startCommand = "npm run start"
-
 # Number of instances (1 for hobby plan)
 numReplicas = 1
 
 # Health check path
-healthcheckPath = "/"
+healthcheckPath = "/api/health"
 
 # Health check timeout in seconds
-healthcheckTimeout = 100
+healthcheckTimeout = 300
 
 # Restart policy on failure
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
-
-[deploy.resources]
-# Memory limit (optional, depends on your plan)
-# memory = "512Mi"
-
-# CPU limit (optional, depends on your plan)
-# cpu = "0.5"
