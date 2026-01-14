@@ -1,0 +1,461 @@
+# SOCIAL MEDIA DRAFTS - BUILD SPECIFICATION
+# Claude Code Script for Developer Setup
+# =========================================
+
+This document provides complete specifications to rebuild the Social Media Drafts application.
+Use this with Claude Code or any AI coding assistant to recreate the full application.
+
+================================================================================
+QUICK START PROMPT
+================================================================================
+
+"Build a Next.js 16 social media content management application with the following
+features. Use TypeScript, Tailwind CSS 4, and a dark theme with black backgrounds
+and gold (#D4AF37) accents. Store data in localStorage with optional MongoDB sync."
+
+================================================================================
+TECHNOLOGY STACK
+================================================================================
+
+Framework & Core:
+- Next.js 16.1.1 (App Router)
+- React 19.2.3
+- TypeScript 5
+- Node.js 20
+
+Styling:
+- Tailwind CSS 4
+- @tailwindcss/postcss
+- Lucide React icons
+- Dark theme: black (#000000) background, gold (#D4AF37) accent
+
+State Management:
+- Zustand 5.0.9 with persist middleware (localStorage)
+
+Libraries:
+- @dnd-kit/core 6.3.1 - Drag and drop
+- @dnd-kit/sortable 10.0.0 - Sortable lists
+- date-fns 4.1.0 - Date manipulation
+- mongodb 7.0.0 - Database sync
+
+================================================================================
+APPLICATION STRUCTURE
+================================================================================
+
+/app
+  /layout.tsx              - Root layout with AppLayout wrapper
+  /page.tsx                - Dashboard home page
+  /drafts/page.tsx         - Posts list with search/filter
+  /calendar/page.tsx       - Drag-and-drop content calendar
+  /post/new/page.tsx       - Create new post form
+  /post/[id]/page.tsx      - Edit post with auto-save
+  /settings/page.tsx       - App settings & integrations
+  /globals.css             - Global styles
+  /api
+    /health/route.ts       - Health check endpoint
+    /generate/route.ts     - AI content generation
+    /db/sync/route.ts      - MongoDB sync (GET/POST)
+    /db/health/route.ts    - MongoDB connection test
+    /webhook/test/route.ts - Webhook connectivity test
+
+/components
+  /layout
+    /AppLayout.tsx         - Main layout wrapper
+    /TopNav.tsx            - Top navigation bar
+    /Sidebar.tsx           - Left sidebar with folders
+    /ErrorBoundary.tsx     - Error handling
+    /AppInitializer.tsx    - Startup logic
+  /posts
+    /PostCard.tsx          - Grid view card
+    /PostList.tsx          - List view table
+    /UpcomingPosts.tsx     - Upcoming posts widget
+    /ActivityFeed.tsx      - Recent activity widget
+  /editor
+    /PlatformEditor.tsx    - Content editor with char counter
+    /PlatformTabs.tsx      - Platform toggle tabs
+    /AIGenerateModal.tsx   - AI generation modal
+    /TagInput.tsx          - Tag management
+    /ImageDropZone.tsx     - Image upload
+  /ui
+    /StatsCard.tsx         - Status count card
+    /SyncStatusIndicator.tsx - Sync status display
+    /ViewToggle.tsx        - Grid/List toggle
+
+/lib
+  /store.ts                - Zustand store
+  /types.ts                - TypeScript interfaces
+  /mongodb.ts              - MongoDB client utilities
+
+================================================================================
+DATA MODELS
+================================================================================
+
+Post:
+{
+  id: string;                    // Generated: `${Date.now()}-${random}`
+  platforms: Platform[];         // ['twitter', 'linkedin', 'instagram', 'facebook', 'tiktok']
+  content: {                     // Platform-specific content
+    [platform: string]: string;
+  };
+  tags: string[];
+  status: 'idea' | 'draft' | 'ready' | 'published';
+  folderId?: string;
+  scheduledDate?: number;        // Epoch milliseconds
+  mediaUrl?: string;             // Video URL
+  mediaData?: string;            // Base64 image
+  mediaType?: 'image' | 'video';
+  createdAt: number;
+  updatedAt: number;
+}
+
+Folder:
+{
+  id: string;
+  name: string;
+  color: string;                 // Hex color
+  createdAt: number;
+}
+
+ActivityItem:
+{
+  id: string;
+  type: 'created' | 'edited' | 'published' | 'scheduled' | 'deleted';
+  postId: string;
+  postTitle: string;
+  timestamp: number;
+}
+
+AppSettings:
+{
+  defaultPlatforms: Platform[];
+  webhookUrl?: string;
+  webhookUsername?: string;
+  webhookPassword?: string;
+  mongoUrl?: string;
+  mongoUsername?: string;
+  mongoPassword?: string;
+  mongoDatabaseName?: string;
+}
+
+================================================================================
+PAGE FEATURES - DETAILED SPECIFICATIONS
+================================================================================
+
+## 1. DASHBOARD (/)
+
+Display:
+- Stats cards for each status (Idea, Draft, Ready, Published) - clickable to filter
+- Recent drafts list (top 5, sorted by updatedAt)
+- Posts ready to publish with "Post Now" button
+- Scheduled posts with right-click context menu
+- Upcoming posts widget (next 7 days)
+- Activity feed (last 50 actions)
+
+Auto-features:
+- Check every 60 seconds for scheduled posts that are ready to auto-publish
+- Right-click context menu: Edit, Approve for Posting, Remove Schedule
+
+## 2. DRAFTS LIST (/drafts)
+
+Controls:
+- Search bar (searches content and tags)
+- Platform filter dropdown (All, Twitter, LinkedIn, Instagram, Facebook, TikTok)
+- Status filter dropdown (All, Idea, Draft, Ready, Published)
+- Tag filter dropdown with all available tags
+- View toggle (Grid / List)
+- Post count display
+- AI Generate button (opens modal)
+
+Grid view: Cards with content preview, platforms icons, status badge, edit/delete buttons
+List view: Table rows with same info in columns
+
+## 3. CONTENT CALENDAR (/calendar)
+
+Layout:
+- Left sidebar: Unscheduled posts (draggable)
+- Center: Calendar grid
+- Right sidebar: Selected day details
+
+View modes:
+- Month: Shows all days, max 2 posts visible per cell, overflow indicator
+- Week: Shows 7 days, max 4 posts per cell
+- Day: Single day view, max 10 posts
+
+Drag-and-drop:
+- Drag from unscheduled sidebar to calendar cell
+- Drag between calendar cells
+- Preserves time if post already has scheduled time
+- Defaults to 9:00 AM for newly scheduled posts
+- Right-click to remove from calendar
+
+Navigation:
+- Previous/Next arrows for month/week/day
+- Today button
+- View mode toggle
+
+## 4. CREATE POST (/post/new)
+
+Form fields:
+- Platform toggles (Twitter, LinkedIn, Instagram, Facebook, TikTok) - at least one required
+- Tab for each selected platform with content editor
+- Each editor has:
+  - Textarea
+  - Character counter with progress bar
+  - Quick AI generate dropdown
+- Status selector (Idea, Draft, Ready, Published)
+- Schedule date/time picker (datetime-local)
+- Folder dropdown (optional)
+- Image upload with drag-and-drop (converts to base64)
+- Video URL input
+- Tags input with chips
+
+AI Generation:
+- Wand button opens quick generate with 5 tone options
+- Full modal for detailed generation with idea input
+
+URL parameter: ?scheduledDate=YYYY-MM-DDTHH:MM pre-fills schedule
+
+## 5. EDIT POST (/post/[id])
+
+Same as create, plus:
+- Auto-save: Saves 2 seconds after last change
+- Status indicators: "Unsaved changes" → "Saving..." → "Saved"
+- Delete button with confirmation
+- "Approve for Posting" button (sets status to ready)
+- "Post Now" button (if ready, publishes via webhook)
+- Success/error feedback for webhook calls
+
+## 6. SETTINGS (/settings)
+
+Sections:
+
+A. Default Platforms
+   - Checkboxes for default platforms on new posts
+
+B. Webhook Integration
+   - Webhook URL input
+   - Optional Basic Auth username/password
+   - Save button validates connectivity
+   - Shows expected JSON payload format
+
+C. MongoDB Database
+   - Connection URL input (mongodb:// or mongodb+srv://)
+   - Database name input
+   - Optional username/password
+   - Test Connection button
+   - Save button
+   - Manual sync buttons: "Push to Cloud", "Pull from Cloud"
+   - Sync status and timestamp
+
+D. Data Management
+   - Export as JSON button (downloads backup)
+   - Import from JSON button (file upload)
+   - Reset All Data button with confirmation modal
+   - Storage stats (post count)
+
+================================================================================
+API ENDPOINTS
+================================================================================
+
+## GET /api/health
+Response: { status: 'ok', timestamp: ISO string }
+
+## POST /api/generate
+Request:
+{
+  "idea": string,
+  "tone": "professional" | "casual" | "humorous" | "inspirational" | "educational",
+  "platform": "twitter" | "linkedin" | "instagram" | "facebook" | "tiktok",
+  "additionalContext"?: string
+}
+Response: { content: string, isDemo: boolean }
+
+Behavior:
+- Tries OpenAI (OPENAI_API_KEY env var) with gpt-4o-mini
+- Falls back to Anthropic (ANTHROPIC_API_KEY env var) with claude-3-haiku
+- Falls back to demo responses if no API keys
+
+## POST /api/db/sync
+Request: { mongoUrl, mongoUsername?, mongoPassword?, mongoDatabaseName, data: {...} }
+Response: { success, message, timestamp, counts: { posts, folders, activity } }
+
+## GET /api/db/sync
+Query params: mongoUrl, mongoUsername, mongoPassword, mongoDatabaseName
+Response: { success, data: { posts, folders, activity, settings }, message, timestamp }
+
+## GET /api/db/health
+Query params: mongoUrl, mongoUsername, mongoPassword, mongoDatabaseName
+Response: { connected, database, collections[], message }
+
+## POST /api/webhook/test
+Request: { url, username?, password? }
+Response: { success, message, status? }
+
+================================================================================
+ZUSTAND STORE ACTIONS
+================================================================================
+
+Posts:
+- addPost(postData) - Creates post, logs activity, triggers sync
+- updatePost(id, updates) - Updates post, logs activity, triggers sync
+- deletePost(id) - Deletes post, logs activity, triggers sync
+- getPost(id) - Returns single post
+
+Folders:
+- addFolder(name) - Creates folder with auto-assigned color
+- updateFolder(id, updates)
+- deleteFolder(id) - Also removes folder reference from all posts
+
+Activity:
+- addActivity(type, postId, postTitle) - Called automatically by mutations
+- clearActivity()
+
+Settings:
+- updateSettings(settings)
+
+Filters:
+- setFilters(filters)
+- clearFilters()
+
+Data:
+- exportData() - Returns JSON (excludes MongoDB credentials)
+- importData(jsonData) - Merges data, preserves MongoDB settings
+- resetAll() - Clears all data, preserves MongoDB settings
+
+MongoDB:
+- syncToMongo() - Push local data to MongoDB (debounced 2s)
+- loadFromMongo() - Pull data from MongoDB
+- testMongoConnection() - Test connection
+- setMongoSyncStatus(status)
+
+Helper Hooks:
+- useFilteredPosts() - Filtered by current filters
+- useUpcomingPosts(days) - Scheduled in next N days
+- usePostStats() - Returns { idea, draft, ready, published, total }
+- useAllTags() - Returns sorted unique tags array
+
+================================================================================
+CHARACTER LIMITS PER PLATFORM
+================================================================================
+
+Twitter: 280
+LinkedIn: 3000
+Instagram: 2200
+Facebook: 63206
+TikTok: 2200
+
+================================================================================
+COLOR SCHEME
+================================================================================
+
+Backgrounds:
+- #000000 - Pure black (page background)
+- #0a0a0a - Near black (inputs)
+- #111111 - Dark gray (cards)
+- #1a1a1a - Medium dark
+- #262626 - Borders
+- #333333, #404040 - Hover states
+
+Text:
+- #FFFFFF - Primary text
+- #A3A3A3, #737373 - Secondary text
+- #525252 - Muted text
+
+Accent:
+- #D4AF37 - Gold (buttons, active states, links)
+- #C4A030 - Gold hover
+
+Status Colors:
+- Idea: #737373 (gray)
+- Draft: #D97706 (amber)
+- Ready: #10B981 (emerald)
+- Published: #3B82F6 (blue)
+
+Platform Colors:
+- Twitter: #1DA1F2
+- LinkedIn: #0A66C2
+- Instagram: #E4405F
+- Facebook: #1877F2
+- TikTok: #00F2EA
+
+================================================================================
+KEY BEHAVIORS TO IMPLEMENT
+================================================================================
+
+1. AUTO-SAVE ON EDIT PAGE
+   - Debounce 2 seconds after last change
+   - Show "Unsaved changes" → "Saving..." → "Saved" indicators
+
+2. AUTO-SYNC TO MONGODB
+   - Debounce 2 seconds after any data change
+   - Only sync if MongoDB URL is configured
+   - Show sync status in top nav
+
+3. AUTO-PUBLISH SCHEDULED POSTS
+   - Dashboard checks every 60 seconds
+   - Only publishes if status === 'ready' AND scheduledDate <= now
+   - Uses webhook to publish
+   - Updates status to 'published' on success
+
+4. DRAG-AND-DROP CALENDAR
+   - Use @dnd-kit with pointerWithin collision detection
+   - DragOverlay shows visual feedback
+   - Preserve existing time when moving between dates
+   - Default to 9:00 AM for new schedules
+
+5. ACTIVITY LOGGING
+   - Automatically log: created, edited, published, scheduled, deleted
+   - Cap at 50 items
+   - Show in dashboard activity feed
+
+6. PLATFORM-SPECIFIC EDITORS
+   - Separate textarea for each platform
+   - Real-time character counter with progress bar
+   - Color coding: green (<90%), gold (90-100%), red (>100%)
+   - Quick AI generate dropdown per editor
+
+================================================================================
+DOCKER DEPLOYMENT
+================================================================================
+
+Dockerfile uses multi-stage build:
+1. deps stage: Install dependencies
+2. builder stage: Build Next.js with standalone output
+3. runner stage: Production image with non-root user
+
+next.config.ts must have: output: 'standalone'
+
+Railway config (railway.toml):
+- builder = "dockerfile"
+- healthcheckPath = "/api/health"
+- healthcheckTimeout = 300
+
+================================================================================
+ENVIRONMENT VARIABLES
+================================================================================
+
+Optional (for AI features):
+- OPENAI_API_KEY - Enable OpenAI content generation
+- ANTHROPIC_API_KEY - Enable Anthropic content generation
+
+Configured via UI (stored in localStorage):
+- Webhook URL and credentials
+- MongoDB connection details
+
+================================================================================
+FONTS
+================================================================================
+
+- Geist Sans - Primary font
+- Geist Mono - Monospace font
+
+Load via next/font/local in root layout.
+
+================================================================================
+END OF SPECIFICATION
+================================================================================
+
+To use this specification:
+1. Share this file with Claude Code or another AI assistant
+2. Say: "Build this application following the CLAUDE_CODE_BUILD_SPEC.txt"
+3. The AI will create all files based on these specifications
