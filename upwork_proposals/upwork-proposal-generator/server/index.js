@@ -23,6 +23,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+// MongoDB connection state
+let mongoConnected = false;
+
 // Middleware
 app.use(cors({
   origin: process.env.CORS_ORIGIN || '*',
@@ -41,9 +44,13 @@ app.use('/api/api-keys', apiKeyRoutes);
 app.use('/api/teams', teamRoutes);
 app.use('/api/profiles', profileRoutes);
 
-// Health check
+// Health check - must be before catch-all route
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    mongodb: mongoConnected ? 'connected' : 'disconnected'
+  });
 });
 
 // Serve static files from React build
@@ -59,21 +66,39 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(distPath, 'index.html'));
 });
 
-// Connect to MongoDB
-const connectDB = async () => {
-  try {
-    const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/upwork_proposals';
-    await mongoose.connect(mongoUri);
-    console.log('Connected to MongoDB');
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    process.exit(1);
+// Connect to MongoDB with retry logic
+const connectDB = async (retries = 5, delay = 5000) => {
+  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/upwork_proposals';
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`MongoDB connection attempt ${attempt}/${retries}...`);
+      await mongoose.connect(mongoUri);
+      mongoConnected = true;
+      console.log('Connected to MongoDB');
+      return true;
+    } catch (error) {
+      console.error(`MongoDB connection attempt ${attempt} failed:`, error.message);
+      if (attempt < retries) {
+        console.log(`Retrying in ${delay / 1000} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
   }
+
+  console.error('All MongoDB connection attempts failed');
+  return false;
 };
 
-connectDB().then(() => {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
+// Start server immediately, then connect to MongoDB
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+
+  // Connect to MongoDB in the background
+  connectDB().then(connected => {
+    if (!connected) {
+      console.error('WARNING: Running without MongoDB connection. API calls will fail.');
+    }
   });
 });
 
