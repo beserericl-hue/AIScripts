@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy package files
 COPY upwork-proposal-generator/package*.json ./
 
-# Clean npm cache and install dependencies
-RUN npm cache clean --force && npm install
+# Install all dependencies (including devDependencies for build)
+RUN npm ci
 
 # Copy source code
 COPY upwork-proposal-generator/ ./
@@ -24,7 +24,7 @@ WORKDIR /app
 COPY upwork-proposal-generator/package*.json ./
 
 # Install only production dependencies
-RUN npm cache clean --force && npm install --omit=dev
+RUN npm ci --omit=dev
 
 # Copy server code
 COPY upwork-proposal-generator/server ./server
