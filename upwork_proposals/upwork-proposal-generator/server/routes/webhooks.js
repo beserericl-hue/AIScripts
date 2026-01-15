@@ -1,18 +1,34 @@
 import express from 'express';
 import Job from '../models/Job.js';
+import Team from '../models/Team.js';
 import { authenticateApiKey } from '../middleware/auth.js';
 
 const router = express.Router();
 
 // N8N Proposal Evaluation Callback
 // Called when N8N evaluates a job and sends back data
+// Now accepts teamId to assign jobs to specific teams
 router.post('/evaluation', authenticateApiKey, async (req, res) => {
   try {
     const payload = req.body;
-    const { jobId, title, description, url, rating, evaluationData } = payload;
+    const { jobId, title, description, url, rating, evaluationData, teamId, teamName } = payload;
 
     if (!jobId && !title) {
       return res.status(400).json({ error: 'jobId or title is required' });
+    }
+
+    // Resolve team by teamId or teamName
+    let resolvedTeamId = null;
+    if (teamId) {
+      const team = await Team.findById(teamId);
+      if (team) {
+        resolvedTeamId = team._id;
+      }
+    } else if (teamName) {
+      const team = await Team.findOne({ name: teamName, isActive: true });
+      if (team) {
+        resolvedTeamId = team._id;
+      }
     }
 
     // Find or create job
@@ -32,7 +48,8 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
         url: url || '',
         rating: rating || null,
         status: 'pending',
-        evaluationData: payload
+        evaluationData: payload,
+        teamId: resolvedTeamId
       });
     } else if (job) {
       // Update existing job
@@ -41,6 +58,10 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
       if (description) job.description = description;
       if (url) job.url = url;
       if (rating) job.rating = rating;
+      // Only update teamId if provided and job doesn't already have one
+      if (resolvedTeamId && !job.teamId) {
+        job.teamId = resolvedTeamId;
+      }
     } else {
       return res.status(404).json({ error: 'Job not found and insufficient data to create' });
     }
@@ -50,7 +71,8 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
     res.json({
       success: true,
       message: 'Evaluation data received',
-      jobId: job.jobId
+      jobId: job.jobId,
+      teamId: job.teamId
     });
   } catch (error) {
     console.error('Evaluation webhook error:', error);
@@ -95,7 +117,8 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
     res.json({
       success: true,
       message: 'Proposal result received',
-      jobId: job.jobId
+      jobId: job.jobId,
+      teamId: job.teamId
     });
   } catch (error) {
     console.error('Proposal result webhook error:', error);

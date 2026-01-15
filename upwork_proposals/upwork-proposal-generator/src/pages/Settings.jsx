@@ -15,7 +15,10 @@ import {
   Eye,
   EyeOff,
   Shield,
-  RefreshCw
+  RefreshCw,
+  UsersRound,
+  UserPlus,
+  UserMinus
 } from 'lucide-react';
 
 const Settings = () => {
@@ -43,7 +46,14 @@ const Settings = () => {
 
   // Users state
   const [users, setUsers] = useState([]);
-  const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: 'user' });
+  const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: 'user', teamId: '' });
+
+  // Teams state
+  const [teams, setTeams] = useState([]);
+  const [newTeam, setNewTeam] = useState({ name: '', description: '' });
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [unassignedUsers, setUnassignedUsers] = useState([]);
 
   // Password visibility
   const [showPasswords, setShowPasswords] = useState({});
@@ -52,7 +62,21 @@ const Settings = () => {
     fetchSettings();
     fetchApiKeys();
     fetchUsers();
+    fetchTeams();
   }, []);
+
+  useEffect(() => {
+    if (selectedTeam) {
+      fetchTeamMembers(selectedTeam._id);
+    }
+  }, [selectedTeam]);
+
+  useEffect(() => {
+    // Calculate unassigned users when users or teams change
+    const assigned = users.filter(u => u.teamId);
+    const unassigned = users.filter(u => !u.teamId);
+    setUnassignedUsers(unassigned);
+  }, [users]);
 
   const fetchSettings = async () => {
     try {
@@ -78,6 +102,24 @@ const Settings = () => {
       setUsers(response.data);
     } catch (err) {
       console.error('Failed to fetch users:', err);
+    }
+  };
+
+  const fetchTeams = async () => {
+    try {
+      const response = await api.get('/teams');
+      setTeams(response.data);
+    } catch (err) {
+      console.error('Failed to fetch teams:', err);
+    }
+  };
+
+  const fetchTeamMembers = async (teamId) => {
+    try {
+      const response = await api.get(`/teams/${teamId}`);
+      setTeamMembers(response.data.members || []);
+    } catch (err) {
+      console.error('Failed to fetch team members:', err);
     }
   };
 
@@ -152,7 +194,7 @@ const Settings = () => {
 
     try {
       await api.post('/auth/register', newUser);
-      setNewUser({ email: '', password: '', name: '', role: 'user' });
+      setNewUser({ email: '', password: '', name: '', role: 'user', teamId: '' });
       fetchUsers();
       setSuccess('User added successfully');
     } catch (err) {
@@ -184,6 +226,76 @@ const Settings = () => {
     }
   };
 
+  // Team management functions
+  const createTeam = async (e) => {
+    e.preventDefault();
+    if (!newTeam.name.trim()) {
+      setError('Team name is required');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await api.post('/teams', newTeam);
+      setNewTeam({ name: '', description: '' });
+      fetchTeams();
+      setSuccess('Team created successfully');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to create team');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteTeam = async (id) => {
+    if (!confirm('Are you sure you want to delete this team? All members must be removed first.')) return;
+
+    try {
+      await api.delete(`/teams/${id}`);
+      fetchTeams();
+      if (selectedTeam?._id === id) {
+        setSelectedTeam(null);
+        setTeamMembers([]);
+      }
+      setSuccess('Team deleted');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to delete team');
+    }
+  };
+
+  const assignUserToTeam = async (userId) => {
+    if (!selectedTeam) {
+      setError('Please select a team first');
+      return;
+    }
+
+    try {
+      await api.post(`/teams/${selectedTeam._id}/members`, { userId });
+      fetchUsers();
+      fetchTeamMembers(selectedTeam._id);
+      fetchTeams();
+      setSuccess('User assigned to team');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to assign user to team');
+    }
+  };
+
+  const removeUserFromTeam = async (userId) => {
+    if (!selectedTeam) return;
+
+    try {
+      await api.delete(`/teams/${selectedTeam._id}/members/${userId}`);
+      fetchUsers();
+      fetchTeamMembers(selectedTeam._id);
+      fetchTeams();
+      setSuccess('User removed from team');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to remove user from team');
+    }
+  };
+
   const copyToClipboard = async (text, key) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -198,6 +310,7 @@ const Settings = () => {
     { id: 'webhooks', label: 'Webhooks', icon: Webhook },
     { id: 'apikeys', label: 'API Keys', icon: Key },
     { id: 'database', label: 'Database', icon: Database },
+    { id: 'teams', label: 'Teams', icon: UsersRound },
     { id: 'users', label: 'Users', icon: Users }
   ];
 
@@ -464,6 +577,156 @@ const Settings = () => {
             </div>
           )}
 
+          {/* Teams Tab */}
+          {activeTab === 'teams' && (
+            <div className="settings-section">
+              <h2>Team Management</h2>
+              <p className="section-description">
+                Create teams and assign users. Data is filtered by team - users only see their team's jobs.
+              </p>
+
+              {/* Create New Team Form */}
+              <div className="add-team-form">
+                <h3>Create New Team</h3>
+                <form onSubmit={createTeam}>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="newTeamName">Team Name</label>
+                      <input
+                        type="text"
+                        id="newTeamName"
+                        value={newTeam.name}
+                        onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
+                        placeholder="e.g., Sales Team A"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="newTeamDescription">Description</label>
+                      <input
+                        type="text"
+                        id="newTeamDescription"
+                        value={newTeam.description}
+                        onChange={(e) => setNewTeam({ ...newTeam, description: e.target.value })}
+                        placeholder="Optional description"
+                      />
+                    </div>
+                  </div>
+                  <button type="submit" className="btn-primary" disabled={loading || !newTeam.name.trim()}>
+                    <Plus size={18} />
+                    <span>Create Team</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* Teams List */}
+              <div className="teams-list">
+                <h3>Existing Teams</h3>
+                {teams.length === 0 ? (
+                  <p className="empty-message">No teams created yet</p>
+                ) : (
+                  <div className="teams-grid">
+                    {teams.map((team) => (
+                      <div
+                        key={team._id}
+                        className={`team-card ${selectedTeam?._id === team._id ? 'selected' : ''}`}
+                        onClick={() => setSelectedTeam(team)}
+                      >
+                        <div className="team-card-header">
+                          <h4>{team.name}</h4>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteTeam(team._id);
+                            }}
+                            className="btn-icon danger"
+                            title="Delete team"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <p className="team-description">{team.description || 'No description'}</p>
+                        <div className="team-meta">
+                          <span className="member-count">
+                            <Users size={14} />
+                            {team.memberCount || 0} members
+                          </span>
+                          <span className={`status-badge ${team.isActive ? 'active' : 'inactive'}`}>
+                            {team.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Team Members Management */}
+              {selectedTeam && (
+                <div className="team-members-section">
+                  <h3>
+                    <UsersRound size={18} />
+                    Members of "{selectedTeam.name}"
+                  </h3>
+
+                  {/* Current Members */}
+                  <div className="current-members">
+                    <h4>Current Members</h4>
+                    {teamMembers.length === 0 ? (
+                      <p className="empty-message">No members in this team</p>
+                    ) : (
+                      <div className="member-list">
+                        {teamMembers.map((member) => (
+                          <div key={member._id} className="member-item">
+                            <div className="member-info">
+                              <span className="member-name">{member.name}</span>
+                              <span className="member-email">{member.email}</span>
+                              <span className={`role-badge ${member.role}`}>{member.role}</span>
+                            </div>
+                            <button
+                              onClick={() => removeUserFromTeam(member._id)}
+                              className="btn-icon danger"
+                              title="Remove from team"
+                            >
+                              <UserMinus size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add Members */}
+                  <div className="add-members">
+                    <h4>Add Members</h4>
+                    {unassignedUsers.length === 0 ? (
+                      <p className="empty-message">All users are assigned to teams</p>
+                    ) : (
+                      <div className="member-list">
+                        {unassignedUsers.map((u) => (
+                          <div key={u._id} className="member-item unassigned">
+                            <div className="member-info">
+                              <span className="member-name">{u.name}</span>
+                              <span className="member-email">{u.email}</span>
+                              <span className={`role-badge ${u.role}`}>{u.role}</span>
+                            </div>
+                            <button
+                              onClick={() => assignUserToTeam(u._id)}
+                              className="btn-icon success"
+                              title="Add to team"
+                            >
+                              <UserPlus size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Users Tab */}
           {activeTab === 'users' && (
             <div className="settings-section">
@@ -542,6 +805,7 @@ const Settings = () => {
                         <th>Name</th>
                         <th>Email</th>
                         <th>Role</th>
+                        <th>Team</th>
                         <th>Created</th>
                         <th>Actions</th>
                       </tr>
@@ -561,6 +825,11 @@ const Settings = () => {
                               <option value="user">User</option>
                               <option value="administrator">Administrator</option>
                             </select>
+                          </td>
+                          <td>
+                            <span className={u.teamId ? 'team-assigned' : 'team-unassigned'}>
+                              {teams.find(t => t._id === u.teamId)?.name || 'No team'}
+                            </span>
                           </td>
                           <td>{new Date(u.createdAt).toLocaleDateString()}</td>
                           <td>

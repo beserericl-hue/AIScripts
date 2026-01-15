@@ -33,6 +33,17 @@ const jobSchema = new mongoose.Schema({
     type: String,
     maxlength: 4000
   },
+  // Team assignment for multi-tenant filtering
+  teamId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Team',
+    index: true
+  },
+  // Reference to the profile used for this job's proposal
+  profileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Profile'
+  },
   // Data from N8N evaluation webhook
   evaluationData: {
     type: mongoose.Schema.Types.Mixed

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import {
   Send,
   FileText,
@@ -10,11 +11,16 @@ import {
   AlertCircle,
   Loader,
   ExternalLink,
-  Code
+  Code,
+  User,
+  Save,
+  Plus,
+  ChevronDown
 } from 'lucide-react';
 
 const Proposal = () => {
   const location = useLocation();
+  const { user } = useAuth();
   const initialJob = location.state?.job;
 
   const [formData, setFormData] = useState({
@@ -31,6 +37,87 @@ const Proposal = () => {
   const [proposalData, setProposalData] = useState(initialJob?.proposalData || null);
   const [copied, setCopied] = useState({});
   const [iframeUrl, setIframeUrl] = useState(initialJob?.url || '');
+
+  // Team members and profile management state
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [profiles, setProfiles] = useState([]);
+  const [selectedProfileId, setSelectedProfileId] = useState(null);
+  const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
+  const [newProfileName, setNewProfileName] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // Initialize on mount
+  useEffect(() => {
+    fetchTeamMembers();
+  }, []);
+
+  // When team members load, set current user as selected
+  useEffect(() => {
+    if (teamMembers.length > 0 && !selectedUserId) {
+      // Default to current logged-in user
+      const currentUserInTeam = teamMembers.find(m => m._id === user._id);
+      if (currentUserInTeam) {
+        setSelectedUserId(currentUserInTeam._id);
+      } else if (teamMembers.length > 0) {
+        setSelectedUserId(teamMembers[0]._id);
+      }
+    }
+  }, [teamMembers, user._id, selectedUserId]);
+
+  // Fetch profiles when selected user changes
+  useEffect(() => {
+    if (selectedUserId) {
+      fetchUserProfiles(selectedUserId);
+    }
+  }, [selectedUserId]);
+
+  // Update form profile when profile selection changes
+  useEffect(() => {
+    if (selectedProfileId && profiles.length > 0) {
+      const selectedProfile = profiles.find(p => p._id === selectedProfileId);
+      if (selectedProfile) {
+        setFormData(prev => ({ ...prev, profile: selectedProfile.content }));
+      }
+    }
+  }, [selectedProfileId, profiles]);
+
+  const fetchTeamMembers = async () => {
+    try {
+      const response = await api.get('/teams/my/members');
+      setTeamMembers(response.data);
+    } catch (err) {
+      console.error('Failed to fetch team members:', err);
+      // If no team, just show current user
+      setTeamMembers([user]);
+      setSelectedUserId(user._id);
+    }
+  };
+
+  const fetchUserProfiles = async (userId) => {
+    try {
+      const endpoint = userId === user._id ? '/profiles/my' : `/profiles/user/${userId}`;
+      const response = await api.get(endpoint);
+      setProfiles(response.data);
+
+      // Select the last used profile or first profile
+      if (response.data.length > 0) {
+        const lastUsed = response.data.find(p => p.isLastUsed);
+        setSelectedProfileId(lastUsed?._id || response.data[0]._id);
+        setIsCreatingNewProfile(false);
+      } else {
+        setSelectedProfileId(null);
+        // If no profiles exist, start in create mode
+        if (userId === user._id) {
+          setIsCreatingNewProfile(true);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch profiles:', err);
+      setProfiles([]);
+      setSelectedProfileId(null);
+    }
+  };
 
   // Polling for proposal results
   useEffect(() => {
@@ -64,6 +151,97 @@ const Proposal = () => {
     }
   };
 
+  const handleUserChange = (e) => {
+    const newUserId = e.target.value;
+    setSelectedUserId(newUserId);
+    setIsCreatingNewProfile(false);
+    setNewProfileName('');
+  };
+
+  const handleProfileChange = (e) => {
+    const profileId = e.target.value;
+    if (profileId === 'new') {
+      setIsCreatingNewProfile(true);
+      setNewProfileName('');
+      setFormData(prev => ({ ...prev, profile: '' }));
+    } else {
+      setSelectedProfileId(profileId);
+      setIsCreatingNewProfile(false);
+      // Set as active profile
+      setProfileAsActive(profileId);
+    }
+  };
+
+  const setProfileAsActive = async (profileId) => {
+    try {
+      await api.post(`/profiles/${profileId}/set-active`);
+    } catch (err) {
+      console.error('Failed to set active profile:', err);
+    }
+  };
+
+  const handleNewProfile = () => {
+    setIsCreatingNewProfile(true);
+    setNewProfileName('');
+    setFormData(prev => ({ ...prev, profile: '' }));
+  };
+
+  const saveProfile = async () => {
+    if (isCreatingNewProfile) {
+      if (!newProfileName.trim()) {
+        setError('Profile name is required');
+        return;
+      }
+      await createNewProfile();
+    } else if (selectedProfileId) {
+      await updateExistingProfile();
+    }
+  };
+
+  const createNewProfile = async () => {
+    setSavingProfile(true);
+    setError('');
+
+    try {
+      const response = await api.post('/profiles', {
+        name: newProfileName.trim(),
+        content: formData.profile
+      });
+
+      // Refresh profiles and select the new one
+      await fetchUserProfiles(user._id);
+      setSelectedProfileId(response.data._id);
+      setIsCreatingNewProfile(false);
+      setNewProfileName('');
+      setSuccess('Profile created successfully');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to create profile');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const updateExistingProfile = async () => {
+    setSavingProfile(true);
+    setError('');
+
+    try {
+      const currentProfile = profiles.find(p => p._id === selectedProfileId);
+      await api.put(`/profiles/${selectedProfileId}`, {
+        name: currentProfile?.name,
+        content: formData.profile
+      });
+
+      // Refresh profiles
+      await fetchUserProfiles(selectedUserId);
+      setSuccess('Profile saved successfully');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to save profile');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -73,7 +251,8 @@ const Proposal = () => {
     try {
       const response = await api.post('/proposals/generate', {
         ...formData,
-        jobId: jobId || `job_${Date.now()}`
+        jobId: jobId || `job_${Date.now()}`,
+        profileId: selectedProfileId
       });
 
       setJobId(response.data.job.jobId);
@@ -103,6 +282,9 @@ const Proposal = () => {
       </span>
     );
   };
+
+  // Check if current user can edit profiles for selected user
+  const canEditProfile = selectedUserId === user._id;
 
   return (
     <div className="page-container proposal-page">
@@ -148,6 +330,7 @@ const Proposal = () => {
               <div className="error-message">
                 <AlertCircle size={18} />
                 <span>{error}</span>
+                <button onClick={() => setError('')}>×</button>
               </div>
             )}
 
@@ -155,6 +338,7 @@ const Proposal = () => {
               <div className="success-message">
                 <Check size={18} />
                 <span>{success}</span>
+                <button onClick={() => setSuccess('')}>×</button>
               </div>
             )}
 
@@ -193,9 +377,89 @@ const Proposal = () => {
                 />
               </div>
 
-              <div className="form-group">
+              {/* Team Member and Profile Selection */}
+              <div className="profile-selection-section">
+                <h4>
+                  <User size={16} />
+                  Profile Selection
+                </h4>
+
+                {/* Team Member Dropdown */}
+                <div className="form-row profile-dropdowns">
+                  <div className="form-group">
+                    <label htmlFor="teamMember">Team Member</label>
+                    <div className="select-wrapper">
+                      <select
+                        id="teamMember"
+                        value={selectedUserId || ''}
+                        onChange={handleUserChange}
+                      >
+                        {teamMembers.map((member) => (
+                          <option key={member._id} value={member._id}>
+                            {member.name} {member._id === user._id ? '(You)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={16} className="select-icon" />
+                    </div>
+                  </div>
+
+                  {/* Profile Dropdown or Name Input */}
+                  <div className="form-group">
+                    <label htmlFor="profileSelect">
+                      Profile Name
+                      {canEditProfile && !isCreatingNewProfile && (
+                        <button
+                          type="button"
+                          className="btn-link"
+                          onClick={handleNewProfile}
+                        >
+                          <Plus size={14} />
+                          New Profile
+                        </button>
+                      )}
+                    </label>
+                    {isCreatingNewProfile ? (
+                      <input
+                        type="text"
+                        id="newProfileName"
+                        value={newProfileName}
+                        onChange={(e) => setNewProfileName(e.target.value)}
+                        placeholder="Enter profile name"
+                        required
+                      />
+                    ) : (
+                      <div className="select-wrapper">
+                        <select
+                          id="profileSelect"
+                          value={selectedProfileId || ''}
+                          onChange={handleProfileChange}
+                          disabled={profiles.length === 0 && !canEditProfile}
+                        >
+                          {profiles.length === 0 ? (
+                            <option value="">No profiles available</option>
+                          ) : (
+                            profiles.map((profile) => (
+                              <option key={profile._id} value={profile._id}>
+                                {profile.name} {profile.isLastUsed ? '(Current)' : ''}
+                              </option>
+                            ))
+                          )}
+                          {canEditProfile && profiles.length > 0 && (
+                            <option value="new">+ Create New Profile</option>
+                          )}
+                        </select>
+                        <ChevronDown size={16} className="select-icon" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Profile Content */}
+              <div className="form-group profile-content-group">
                 <label htmlFor="profile">
-                  Profile
+                  Profile Content
                   {characterCount(formData.profile, 4000)}
                 </label>
                 <textarea
@@ -206,7 +470,28 @@ const Proposal = () => {
                   placeholder="Enter your profile/expertise"
                   maxLength={4000}
                   rows={4}
+                  disabled={!canEditProfile && !isCreatingNewProfile}
                 />
+                {canEditProfile && (
+                  <button
+                    type="button"
+                    className="btn-secondary btn-save-profile"
+                    onClick={saveProfile}
+                    disabled={savingProfile || (!isCreatingNewProfile && !selectedProfileId)}
+                  >
+                    {savingProfile ? (
+                      <>
+                        <Loader size={14} className="spinning" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save size={14} />
+                        <span>{isCreatingNewProfile ? 'Create Profile' : 'Save Profile'}</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
 
               <div className="form-group">

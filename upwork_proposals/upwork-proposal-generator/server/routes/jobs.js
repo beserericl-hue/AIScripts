@@ -5,11 +5,23 @@ import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
-// Get all jobs (with filtering)
+// Helper to add team filter to queries
+const addTeamFilter = (query, user) => {
+  // Only filter by team if user has a team assigned
+  if (user.teamId) {
+    query.teamId = user.teamId;
+  }
+  return query;
+};
+
+// Get all jobs (with filtering) - filtered by team
 router.get('/', authenticate, async (req, res) => {
   try {
     const { status, excludeStatus } = req.query;
     let query = {};
+
+    // Add team filter
+    addTeamFilter(query, req.user);
 
     if (status) {
       query.status = status;
@@ -22,7 +34,8 @@ router.get('/', authenticate, async (req, res) => {
 
     const jobs = await Job.find(query)
       .sort({ createdAt: -1 })
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate('profileId', 'name');
 
     res.json(jobs);
   } catch (error) {
@@ -31,14 +44,19 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// Get pending jobs (not proposal_generated and not rejected)
+// Get pending jobs (not proposal_generated and not rejected) - filtered by team
 router.get('/pending', authenticate, async (req, res) => {
   try {
-    const jobs = await Job.find({
+    let query = {
       status: { $nin: ['proposal_generated', 'rejected'] }
-    })
+    };
+
+    // Add team filter
+    addTeamFilter(query, req.user);
+
+    const jobs = await Job.find(query)
       .sort({ createdAt: -1 })
-      .select('jobId title rating status url createdAt');
+      .select('jobId title rating status url createdAt teamId');
 
     res.json(jobs);
   } catch (error) {
@@ -47,14 +65,20 @@ router.get('/pending', authenticate, async (req, res) => {
   }
 });
 
-// Get single job
+// Get single job - verify team access
 router.get('/:id', authenticate, async (req, res) => {
   try {
     const job = await Job.findById(req.params.id)
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate('profileId', 'name content');
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
+    }
+
+    // Verify team access
+    if (req.user.teamId && job.teamId && job.teamId.toString() !== req.user.teamId.toString()) {
+      return res.status(403).json({ error: 'Access denied - job belongs to different team' });
     }
 
     res.json(job);
@@ -64,11 +88,17 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Get job by jobId
+// Get job by jobId - verify team access
 router.get('/by-job-id/:jobId', authenticate, async (req, res) => {
   try {
-    const job = await Job.findOne({ jobId: req.params.jobId })
-      .populate('createdBy', 'name email');
+    let query = { jobId: req.params.jobId };
+
+    // Add team filter
+    addTeamFilter(query, req.user);
+
+    const job = await Job.findOne(query)
+      .populate('createdBy', 'name email')
+      .populate('profileId', 'name content');
 
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
@@ -81,10 +111,10 @@ router.get('/by-job-id/:jobId', authenticate, async (req, res) => {
   }
 });
 
-// Create new job
+// Create new job - assign to user's team
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { title, description, url, profile, rating } = req.body;
+    const { title, description, url, profile, rating, profileId } = req.body;
 
     const jobId = uuidv4();
 
@@ -96,7 +126,9 @@ router.post('/', authenticate, async (req, res) => {
       profile,
       rating,
       status: 'pending',
-      createdBy: req.user._id
+      createdBy: req.user._id,
+      teamId: req.user.teamId, // Assign to user's team
+      profileId: profileId || null
     });
 
     await job.save();
@@ -107,19 +139,28 @@ router.post('/', authenticate, async (req, res) => {
   }
 });
 
-// Update job
+// Update job - verify team access
 router.patch('/:id', authenticate, async (req, res) => {
   try {
+    // First, verify team access
+    const existingJob = await Job.findById(req.params.id);
+    if (!existingJob) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    if (req.user.teamId && existingJob.teamId && existingJob.teamId.toString() !== req.user.teamId.toString()) {
+      return res.status(403).json({ error: 'Access denied - job belongs to different team' });
+    }
+
     const updates = req.body;
+    // Prevent changing teamId through updates
+    delete updates.teamId;
+
     const job = await Job.findByIdAndUpdate(
       req.params.id,
       { ...updates, updatedAt: Date.now() },
       { new: true }
     );
-
-    if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
-    }
 
     res.json(job);
   } catch (error) {
@@ -128,18 +169,24 @@ router.patch('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Reject job
+// Reject job - verify team access
 router.post('/:id/reject', authenticate, async (req, res) => {
   try {
+    // First, verify team access
+    const existingJob = await Job.findById(req.params.id);
+    if (!existingJob) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    if (req.user.teamId && existingJob.teamId && existingJob.teamId.toString() !== req.user.teamId.toString()) {
+      return res.status(403).json({ error: 'Access denied - job belongs to different team' });
+    }
+
     const job = await Job.findByIdAndUpdate(
       req.params.id,
       { status: 'rejected', updatedAt: Date.now() },
       { new: true }
     );
-
-    if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
-    }
 
     res.json(job);
   } catch (error) {
@@ -148,9 +195,19 @@ router.post('/:id/reject', authenticate, async (req, res) => {
   }
 });
 
-// Delete job
+// Delete job - verify team access
 router.delete('/:id', authenticate, async (req, res) => {
   try {
+    // First, verify team access
+    const existingJob = await Job.findById(req.params.id);
+    if (!existingJob) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    if (req.user.teamId && existingJob.teamId && existingJob.teamId.toString() !== req.user.teamId.toString()) {
+      return res.status(403).json({ error: 'Access denied - job belongs to different team' });
+    }
+
     await Job.findByIdAndDelete(req.params.id);
     res.json({ message: 'Job deleted' });
   } catch (error) {

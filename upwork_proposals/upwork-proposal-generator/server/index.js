@@ -12,6 +12,8 @@ import proposalRoutes from './routes/proposals.js';
 import settingsRoutes from './routes/settings.js';
 import webhookRoutes from './routes/webhooks.js';
 import apiKeyRoutes from './routes/apiKeys.js';
+import teamRoutes from './routes/teams.js';
+import profileRoutes from './routes/profiles.js';
 
 dotenv.config();
 
@@ -36,6 +38,8 @@ app.use('/api/proposals', proposalRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/api-keys', apiKeyRoutes);
+app.use('/api/teams', teamRoutes);
+app.use('/api/profiles', profileRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

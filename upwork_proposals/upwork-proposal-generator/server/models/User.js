@@ -28,6 +28,18 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'administrator'],
     default: 'user'
   },
+  // Team assignment for multi-tenant filtering
+  teamId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Team',
+    default: null
+  },
+  // Track the last profile used by this user
+  lastProfileId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Profile',
+    default: null
+  },
   createdAt: {
     type: Date,
     default: Date.now
