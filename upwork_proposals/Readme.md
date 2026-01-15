@@ -11,8 +11,9 @@ A full-stack web application for generating, managing, and tracking Upwork job p
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage Guide](#usage-guide)
+- [MongoDB Data Schema](#mongodb-data-schema)
 - [API Reference](#api-reference)
-- [N8N Integration](#n8n-integration)
+- [Webhook Callbacks (N8N Integration)](#webhook-callbacks-n8n-integration)
 - [Deployment](#deployment)
 - [Troubleshooting](#troubleshooting)
 
@@ -27,7 +28,7 @@ The Upwork Proposal Generator streamlines the process of creating professional p
 
 ## Architecture
 
-```
+\`\`\`
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              SINGLE PORT (8080)                              │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -70,7 +71,45 @@ The Upwork Proposal Generator streamlines the process of creating professional p
                            │  - Job Eval      │
                            │  - Proposal Gen  │
                            └──────────────────┘
-```
+\`\`\`
+
+### Mermaid Diagram
+
+\`\`\`mermaid
+flowchart TB
+    subgraph CLIENT["Browser (Port 8080)"]
+        UI[React Frontend]
+    end
+
+    subgraph SERVER["Express.js Server (Port 8080)"]
+        STATIC[Static Files<br>/dist]
+        subgraph API["API Routes"]
+            AUTH["/api/auth"]
+            JOBS["/api/jobs"]
+            PROPOSALS["/api/proposals"]
+            SETTINGS["/api/settings"]
+            APIKEYS["/api/api-keys"]
+            WEBHOOKS["/api/webhooks"]
+            HEALTH["/api/health"]
+        end
+    end
+
+    subgraph DB["MongoDB"]
+        USERS[(users)]
+        JOBSCOLL[(jobs)]
+        APIKEYSDOC[(apikeys)]
+        SETTINGSDOC[(settings)]
+    end
+
+    N8N["N8N Workflows<br>- Job Evaluation<br>- Proposal Generation"]
+
+    UI -->|"GET /, /login, /proposal, /settings"| STATIC
+    UI -->|"API Requests"| API
+    API --> DB
+    N8N -->|"POST /api/webhooks/evaluation"| WEBHOOKS
+    N8N -->|"POST /api/webhooks/proposal-result"| WEBHOOKS
+    PROPOSALS -->|"Calls webhook"| N8N
+\`\`\`
 
 ### Component Breakdown
 
@@ -84,16 +123,16 @@ The Upwork Proposal Generator streamlines the process of creating professional p
 ### Data Flow
 
 1. **Job Evaluation Flow**:
-   ```
+   \`\`\`
    N8N Workflow → POST /api/webhooks/evaluation → MongoDB (jobs collection)
-   ```
+   \`\`\`
 
 2. **Proposal Generation Flow**:
-   ```
+   \`\`\`
    User submits form → POST /api/proposals/generate → N8N Workflow
                                                            ↓
    User views results ← MongoDB ← POST /api/webhooks/proposal-result
-   ```
+   \`\`\`
 
 ## Features
 
@@ -171,42 +210,42 @@ The Upwork Proposal Generator streamlines the process of creating professional p
 ### Local Development Setup
 
 1. **Clone the repository**
-   ```bash
+   \`\`\`bash
    git clone https://github.com/yourusername/upwork_proposals.git
    cd upwork_proposals/upwork-proposal-generator
-   ```
+   \`\`\`
 
 2. **Install dependencies**
-   ```bash
+   \`\`\`bash
    npm install
-   ```
+   \`\`\`
 
 3. **Create environment file**
-   ```bash
+   \`\`\`bash
    cp .env.example .env
-   ```
+   \`\`\`
 
 4. **Configure environment variables** (see [Configuration](#configuration))
 
 5. **Build and start the application**
-   ```bash
+   \`\`\`bash
    npm run build
    npm start
-   ```
+   \`\`\`
 
 6. **Access the application**
    - Open http://localhost:8080 in your browser
 
 ### Docker Setup
 
-```bash
+\`\`\`bash
 cd upwork_proposals
 docker build -t upwork-proposal-generator .
 docker run -p 8080:8080 \
   -e MONGODB_URI=mongodb://your-mongo-host:27017/upwork_proposals \
   -e JWT_SECRET=your-secret-key \
   upwork-proposal-generator
-```
+\`\`\`
 
 ## Configuration
 
@@ -214,15 +253,15 @@ docker run -p 8080:8080 \
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `PORT` | No | `8080` | Server port |
-| `NODE_ENV` | No | `development` | Environment mode |
-| `MONGODB_URI` | Yes | - | MongoDB connection string |
-| `JWT_SECRET` | Yes | - | Secret key for JWT signing (use a strong random string) |
-| `CORS_ORIGIN` | No | `*` | Allowed CORS origins |
+| \`PORT\` | No | \`8080\` | Server port |
+| \`NODE_ENV\` | No | \`development\` | Environment mode |
+| \`MONGODB_URI\` | Yes | - | MongoDB connection string |
+| \`JWT_SECRET\` | Yes | - | Secret key for JWT signing (use a strong random string) |
+| \`CORS_ORIGIN\` | No | \`*\` | Allowed CORS origins |
 
-### Example `.env` File
+### Example \`.env\` File
 
-```env
+\`\`\`env
 # Server Configuration
 PORT=8080
 NODE_ENV=production
@@ -235,17 +274,17 @@ JWT_SECRET=your-super-secret-key-min-32-characters
 
 # CORS (optional)
 CORS_ORIGIN=https://your-domain.com
-```
+\`\`\`
 
 ### Generating a Secure JWT Secret
 
-```bash
+\`\`\`bash
 # Using OpenSSL
 openssl rand -base64 32
 
 # Using Node.js
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
+\`\`\`
 
 ## Usage Guide
 
@@ -266,7 +305,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
    - Enter a name (e.g., "N8N Production")
    - Click "Generate Key"
    - **Important**: Copy and save the key immediately - it won't be shown again
-   - Use this key in your N8N workflows as the `X-API-Key` header
+   - Use this key in your N8N workflows as the \`X-API-Key\` header
 
 ### Daily Workflow
 
@@ -287,234 +326,574 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
    - Add new team members with User or Administrator role
    - Remove inactive users
 
+---
+
+## MongoDB Data Schema
+
+All data is stored in MongoDB. Below are the collections and their document structures.
+
+### Collection: \`users\`
+
+Stores user accounts and authentication data.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| \`_id\` | ObjectId | Auto | MongoDB document ID |
+| \`email\` | String | Yes | User email (unique, lowercase) |
+| \`password\` | String | Conditional | Hashed password (required if no googleId) |
+| \`googleId\` | String | No | Google OAuth ID |
+| \`name\` | String | Yes | User's display name |
+| \`role\` | String | Yes | \`"user"\` or \`"administrator"\` |
+| \`createdAt\` | Date | Auto | Account creation timestamp |
+| \`updatedAt\` | Date | Auto | Last update timestamp |
+
+**Example Document:**
+\`\`\`json
+{
+  "_id": "507f1f77bcf86cd799439011",
+  "email": "john@example.com",
+  "password": "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.G5FhN8/X4.G5Fh",
+  "name": "John Doe",
+  "role": "administrator",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T10:30:00.000Z"
+}
+\`\`\`
+
+---
+
+### Collection: \`jobs\`
+
+Stores job postings and generated proposals.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| \`_id\` | ObjectId | Auto | MongoDB document ID |
+| \`jobId\` | String | Yes | Unique job identifier (indexed) |
+| \`title\` | String | Yes | Job title |
+| \`description\` | String | No | Full job description (max 4000 chars) |
+| \`url\` | String | Yes | Upwork job URL |
+| \`rating\` | Number | No | Job rating 1-5 |
+| \`status\` | String | Yes | \`"pending"\`, \`"proposal_generated"\`, \`"rejected"\`, \`"applied"\` |
+| \`profile\` | String | No | User's profile/expertise (max 4000 chars) |
+| \`evaluationData\` | Object | No | Complete JSON from N8N evaluation webhook |
+| \`proposalData\` | Object | No | Generated proposal data (see below) |
+| \`createdBy\` | ObjectId | No | Reference to user who created |
+| \`createdAt\` | Date | Auto | Creation timestamp |
+| \`updatedAt\` | Date | Auto | Last update timestamp |
+
+**proposalData Sub-Object:**
+| Field | Type | Description |
+|-------|------|-------------|
+| \`coverLetter\` | String | Generated cover letter text |
+| \`docUrl\` | String | URL to generated Word document |
+| \`mermaidDiagram\` | String | Mermaid diagram source code |
+| \`mermaidImageUrl\` | String | URL to rendered diagram image |
+
+**Example Document:**
+\`\`\`json
+{
+  "_id": "507f1f77bcf86cd799439022",
+  "jobId": "job_1705312200000",
+  "title": "Build a React Dashboard",
+  "description": "We need a skilled React developer to build a dashboard...",
+  "url": "https://www.upwork.com/jobs/~01234567890abcdef",
+  "rating": 4,
+  "status": "proposal_generated",
+  "profile": "I am an experienced React developer with 5 years...",
+  "evaluationData": {
+    "skills_match": 0.92,
+    "budget_range": "$1000-$2500",
+    "client_history": "verified",
+    "job_type": "fixed_price"
+  },
+  "proposalData": {
+    "coverLetter": "Dear Hiring Manager,\n\nI am excited to apply...",
+    "docUrl": "https://docs.google.com/document/d/abc123",
+    "mermaidDiagram": "graph TD;\n  A[Start] --> B[Development];",
+    "mermaidImageUrl": "https://storage.example.com/diagrams/job123.png"
+  },
+  "createdBy": "507f1f77bcf86cd799439011",
+  "createdAt": "2024-01-15T10:30:00.000Z",
+  "updatedAt": "2024-01-15T11:45:00.000Z"
+}
+\`\`\`
+
+---
+
+### Collection: \`apikeys\`
+
+Stores API keys for webhook authentication.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| \`_id\` | ObjectId | Auto | MongoDB document ID |
+| \`name\` | String | Yes | Friendly name for the API key |
+| \`key\` | String | Yes | The API key (format: \`upw_xxxx...\`) |
+| \`hashedKey\` | String | Yes | SHA-256 hash for verification |
+| \`isActive\` | Boolean | Yes | Whether key is active |
+| \`createdBy\` | ObjectId | Yes | Reference to user who created |
+| \`lastUsed\` | Date | No | Last time key was used |
+| \`createdAt\` | Date | Auto | Creation timestamp |
+
+**Example Document:**
+\`\`\`json
+{
+  "_id": "507f1f77bcf86cd799439033",
+  "name": "N8N Production",
+  "key": "upw_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6",
+  "hashedKey": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "isActive": true,
+  "createdBy": "507f1f77bcf86cd799439011",
+  "lastUsed": "2024-01-15T14:22:00.000Z",
+  "createdAt": "2024-01-15T10:30:00.000Z"
+}
+\`\`\`
+
+---
+
+### Collection: \`settings\`
+
+Stores user-specific application settings.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| \`_id\` | ObjectId | Auto | MongoDB document ID |
+| \`userId\` | ObjectId | Yes | Reference to user |
+| \`n8nWebhookUrl\` | String | No | URL for proposal generation webhook |
+| \`n8nEvaluationWebhookUrl\` | String | No | URL for evaluation webhook |
+| \`mongodbUrl\` | String | No | Custom MongoDB URL |
+| \`mongodbUser\` | String | No | MongoDB username |
+| \`mongodbPassword\` | String | No | MongoDB password |
+| \`mongodbDatabase\` | String | No | MongoDB database name |
+| \`updatedAt\` | Date | Auto | Last update timestamp |
+
+**Example Document:**
+\`\`\`json
+{
+  "_id": "507f1f77bcf86cd799439044",
+  "userId": "507f1f77bcf86cd799439011",
+  "n8nWebhookUrl": "https://n8n.example.com/webhook/proposal-gen",
+  "n8nEvaluationWebhookUrl": "https://n8n.example.com/webhook/evaluate",
+  "mongodbUrl": "",
+  "mongodbUser": "",
+  "mongodbPassword": "",
+  "mongodbDatabase": "",
+  "updatedAt": "2024-01-15T10:30:00.000Z"
+}
+\`\`\`
+
+---
+
 ## API Reference
+
+### Base URL
+
+\`\`\`
+https://your-domain.com/api
+\`\`\`
+
+For local development:
+\`\`\`
+http://localhost:8080/api
+\`\`\`
+
+### Authentication
+
+Most endpoints require a JWT token. Include it in the Authorization header:
+\`\`\`
+Authorization: Bearer <your-jwt-token>
+\`\`\`
+
+Webhook endpoints require an API key:
+\`\`\`
+X-API-Key: <your-api-key>
+\`\`\`
+
+---
 
 ### Authentication Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register` | Register new user |
-| POST | `/api/auth/login` | Login with email/password |
-| POST | `/api/auth/google` | Google OAuth login |
-| POST | `/api/auth/logout` | Logout current user |
-| GET | `/api/auth/me` | Get current user info |
-| GET | `/api/auth/users` | List all users (admin) |
-| PATCH | `/api/auth/users/:id/role` | Update user role (admin) |
-| DELETE | `/api/auth/users/:id` | Delete user (admin) |
+#### POST \`/api/auth/register\`
+Register a new user account.
+
+**Request Body:**
+\`\`\`json
+{
+  "email": "user@example.com",
+  "password": "securePassword123",
+  "name": "John Doe",
+  "role": "user"
+}
+\`\`\`
+
+**Response (201):**
+\`\`\`json
+{
+  "user": {
+    "_id": "507f1f77bcf86cd799439011",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "role": "user",
+    "createdAt": "2024-01-15T10:30:00.000Z"
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+\`\`\`
+
+**Stored in:** \`users\` collection
+
+---
+
+#### POST \`/api/auth/login\`
+Login with email and password.
+
+**Request Body:**
+\`\`\`json
+{
+  "email": "user@example.com",
+  "password": "securePassword123"
+}
+\`\`\`
+
+**Response (200):**
+\`\`\`json
+{
+  "user": {
+    "_id": "507f1f77bcf86cd799439011",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "role": "administrator"
+  },
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+\`\`\`
+
+---
+
+#### GET \`/api/auth/me\`
+Get current authenticated user.
+
+**Headers:**
+\`\`\`
+Authorization: Bearer <token>
+\`\`\`
+
+**Response (200):**
+\`\`\`json
+{
+  "user": {
+    "_id": "507f1f77bcf86cd799439011",
+    "email": "user@example.com",
+    "name": "John Doe",
+    "role": "administrator"
+  }
+}
+\`\`\`
+
+---
 
 ### Job Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/jobs` | List all jobs |
-| GET | `/api/jobs/pending` | List pending jobs |
-| GET | `/api/jobs/:id` | Get job by ID |
-| POST | `/api/jobs` | Create new job |
-| PATCH | `/api/jobs/:id` | Update job |
-| POST | `/api/jobs/:id/reject` | Reject job |
-| DELETE | `/api/jobs/:id` | Delete job |
+#### GET \`/api/jobs\`
+List all jobs with optional filtering.
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| \`status\` | String | Filter by status (\`pending\`, \`rejected\`, etc.) |
+| \`excludeStatus\` | String | Exclude statuses (comma-separated) |
+
+**Response (200):**
+\`\`\`json
+[
+  {
+    "_id": "507f1f77bcf86cd799439022",
+    "jobId": "job_1705312200000",
+    "title": "Build a React Dashboard",
+    "status": "pending",
+    "rating": 4,
+    "url": "https://www.upwork.com/jobs/~01234567890"
+  }
+]
+\`\`\`
+
+---
+
+#### POST \`/api/jobs\`
+Create a new job manually.
+
+**Request Body:**
+\`\`\`json
+{
+  "title": "Build a React Dashboard",
+  "description": "We need a skilled React developer...",
+  "url": "https://www.upwork.com/jobs/~01234567890",
+  "profile": "I am an experienced React developer...",
+  "rating": 4
+}
+\`\`\`
+
+**Stored in:** \`jobs\` collection
+
+---
+
+#### POST \`/api/jobs/:id/reject\`
+Reject a job.
+
+**Updated in:** \`jobs\` collection (status → "rejected")
+
+---
 
 ### Proposal Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/proposals/generate` | Generate proposal |
-| GET | `/api/proposals/:jobId` | Get proposal data |
+#### POST \`/api/proposals/generate\`
+Generate a proposal for a job.
 
-### Webhook Endpoints (for N8N)
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/webhooks/evaluation` | Receive job evaluation |
-| POST | `/api/webhooks/proposal-result` | Receive generated proposal |
-
-### Settings & API Keys
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/settings` | Get user settings |
-| PUT | `/api/settings` | Update settings |
-| GET | `/api/api-keys` | List API keys |
-| POST | `/api/api-keys` | Generate new API key |
-| PATCH | `/api/api-keys/:id/toggle` | Toggle key active status |
-| DELETE | `/api/api-keys/:id` | Delete API key |
-
-### Health Check
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Server health status |
-
-## N8N Integration
-
-### Setting Up N8N Workflows
-
-#### 1. Job Evaluation Workflow
-
-This workflow evaluates Upwork jobs and sends them to the application.
-
-**Webhook Configuration:**
-- Method: POST
-- URL: `https://your-app-domain.com/api/webhooks/evaluation`
-- Headers:
-  ```
-  X-API-Key: your-api-key-from-settings
-  Content-Type: application/json
-  ```
-
-**Payload Format:**
-```json
+**Request Body:**
+\`\`\`json
 {
-  "jobId": "unique-job-identifier",
-  "title": "Job Title from Upwork",
+  "jobId": "job_1705312200000",
+  "title": "Build a React Dashboard",
   "description": "Full job description...",
-  "url": "https://www.upwork.com/jobs/~01234567890",
+  "profile": "Your expertise...",
+  "url": "https://www.upwork.com/jobs/~01234567890"
+}
+\`\`\`
+
+**Stored in:** \`jobs\` collection  
+**Calls:** N8N webhook URL from settings
+
+---
+
+## Webhook Callbacks (N8N Integration)
+
+These endpoints are called BY N8N to send data TO the application.
+
+### POST \`/api/webhooks/evaluation\`
+
+**Purpose:** N8N sends evaluated job data to the application.
+
+**Full URL:**
+\`\`\`
+https://your-domain.com/api/webhooks/evaluation
+\`\`\`
+
+**Headers:**
+\`\`\`
+X-API-Key: upw_your_api_key_here
+Content-Type: application/json
+\`\`\`
+
+**Request Body:**
+\`\`\`json
+{
+  "jobId": "unique-job-identifier-123",
+  "title": "Senior React Developer Needed",
+  "description": "We are looking for an experienced React developer...",
+  "url": "https://www.upwork.com/jobs/~01234567890abcdef",
   "rating": 4,
   "evaluationData": {
-    "skills_match": 0.85,
-    "budget_range": "$500-$1000",
+    "skills_match": 0.92,
+    "budget_range": "$2000-$5000",
     "client_history": "verified",
-    "custom_field": "any additional data"
+    "client_rating": 4.8,
+    "job_type": "fixed_price",
+    "required_skills": ["React", "TypeScript", "Redux"]
   }
 }
-```
+\`\`\`
 
-#### 2. Proposal Generation Workflow
+**Field Descriptions:**
 
-This workflow is called when a user clicks "Create Proposal".
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| \`jobId\` | String | Yes* | Unique identifier for the job |
+| \`title\` | String | Yes* | Job title |
+| \`description\` | String | No | Full job description |
+| \`url\` | String | No | Upwork job URL |
+| \`rating\` | Number | No | Rating 1-5 |
+| \`evaluationData\` | Object | No | Any additional data (flexible schema) |
 
-**Incoming Webhook receives:**
-```json
+**Response (200):**
+\`\`\`json
 {
-  "jobId": "unique-job-identifier",
+  "success": true,
+  "message": "Evaluation data received",
+  "jobId": "unique-job-identifier-123"
+}
+\`\`\`
+
+**Data Storage:**
+- **Collection:** \`jobs\`
+- **Fields Updated:** jobId, title, description, url, rating, status="pending", evaluationData (stores complete JSON)
+
+**cURL Example:**
+\`\`\`bash
+curl -X POST https://your-domain.com/api/webhooks/evaluation \
+  -H "X-API-Key: upw_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jobId": "job_123",
+    "title": "React Developer Needed",
+    "description": "Build a dashboard...",
+    "url": "https://www.upwork.com/jobs/~01234567890",
+    "rating": 4,
+    "evaluationData": {"skills_match": 0.92}
+  }'
+\`\`\`
+
+---
+
+### POST \`/api/webhooks/proposal-result\`
+
+**Purpose:** N8N sends generated proposal results back to the application.
+
+**Full URL:**
+\`\`\`
+https://your-domain.com/api/webhooks/proposal-result
+\`\`\`
+
+**Headers:**
+\`\`\`
+X-API-Key: upw_your_api_key_here
+Content-Type: application/json
+\`\`\`
+
+**Request Body:**
+\`\`\`json
+{
+  "jobId": "unique-job-identifier-123",
+  "coverLetter": "Dear Hiring Manager,\n\nI am thrilled to apply...",
+  "docUrl": "https://docs.google.com/document/d/1abc123xyz/edit",
+  "mermaidDiagram": "graph TD;\n  A[Start] --> B[Analysis];\n  B --> C[Development];",
+  "mermaidImageUrl": "https://storage.example.com/diagrams/proposal-123.png"
+}
+\`\`\`
+
+**Field Descriptions:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| \`jobId\` | String | Yes | Job identifier (must match existing job) |
+| \`coverLetter\` | String | No | Generated cover letter text |
+| \`docUrl\` | String | No | URL to generated document |
+| \`mermaidDiagram\` | String | No | Mermaid diagram source code |
+| \`mermaidImageUrl\` | String | No | URL to rendered diagram image |
+
+**Response (200):**
+\`\`\`json
+{
+  "success": true,
+  "message": "Proposal result received",
+  "jobId": "unique-job-identifier-123"
+}
+\`\`\`
+
+**Data Storage:**
+- **Collection:** \`jobs\`
+- **Fields Updated:** 
+  - status → "proposal_generated"
+  - proposalData.coverLetter
+  - proposalData.docUrl
+  - proposalData.mermaidDiagram
+  - proposalData.mermaidImageUrl
+  - evaluationData.proposalResponse (stores complete JSON)
+
+**cURL Example:**
+\`\`\`bash
+curl -X POST https://your-domain.com/api/webhooks/proposal-result \
+  -H "X-API-Key: upw_your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jobId": "job_123",
+    "coverLetter": "Dear Hiring Manager...",
+    "docUrl": "https://docs.google.com/document/d/abc123",
+    "mermaidDiagram": "graph TD; A-->B;",
+    "mermaidImageUrl": "https://example.com/diagram.png"
+  }'
+\`\`\`
+
+---
+
+### N8N Workflow Configuration
+
+#### Workflow 1: Job Evaluation
+\`\`\`
+[Trigger] → [Scrape Upwork] → [AI Evaluation] → [HTTP Request to /api/webhooks/evaluation]
+\`\`\`
+
+#### Workflow 2: Proposal Generation
+\`\`\`
+[Webhook Trigger] → [AI Generate] → [Create Doc] → [HTTP Request to /api/webhooks/proposal-result]
+\`\`\`
+
+**Data sent TO N8N when user clicks "Create Proposal":**
+\`\`\`json
+{
+  "jobId": "job_123",
   "title": "Job Title",
-  "description": "Full job description...",
-  "profile": "User's expertise and background...",
+  "description": "Full description...",
+  "profile": "User expertise...",
   "url": "https://www.upwork.com/jobs/~01234567890",
-  "userId": "user-id",
+  "userId": "507f1f77bcf86cd799439011",
   "timestamp": "2024-01-15T10:30:00.000Z"
 }
-```
+\`\`\`
 
-**Response Webhook Configuration:**
-- Method: POST
-- URL: `https://your-app-domain.com/api/webhooks/proposal-result`
-- Headers:
-  ```
-  X-API-Key: your-api-key-from-settings
-  Content-Type: application/json
-  ```
-
-**Response Payload Format:**
-```json
-{
-  "jobId": "unique-job-identifier",
-  "coverLetter": "Dear Hiring Manager,\n\nI am excited to apply for...",
-  "docUrl": "https://docs.google.com/document/d/...",
-  "mermaidDiagram": "graph TD;\n  A[Start] --> B[Analysis];\n  B --> C[Implementation];",
-  "mermaidImageUrl": "https://your-storage.com/diagrams/job-123.png"
-}
-```
+---
 
 ## Deployment
 
 ### Railway Deployment
 
-1. **Connect Repository**
-   - Go to [Railway](https://railway.app)
-   - Create new project from GitHub repo
-   - Select this repository
-
-2. **Add MongoDB**
-   - Add a MongoDB plugin to your project
-   - Or use MongoDB Atlas connection string
-
-3. **Configure Environment Variables**
-   ```
+1. Connect GitHub repository to Railway
+2. Add MongoDB plugin or use Atlas connection string
+3. Set environment variables:
+   \`\`\`
    MONGODB_URI=<your-mongodb-uri>
    JWT_SECRET=<your-secure-secret>
    NODE_ENV=production
-   ```
+   \`\`\`
+4. Deploy - Railway auto-detects the Dockerfile
 
-4. **Deploy**
-   - Railway automatically detects the Dockerfile
-   - Builds and deploys the application
-   - Provides a public URL
+### Docker Deployment
 
-### Manual Docker Deployment
-
-```bash
-# Build the image
+\`\`\`bash
 docker build -t upwork-proposal-generator .
-
-# Run with environment variables
-docker run -d \
-  --name upwork-proposals \
-  -p 8080:8080 \
+docker run -d -p 8080:8080 \
   -e MONGODB_URI="mongodb://host:27017/upwork_proposals" \
   -e JWT_SECRET="your-secret-key" \
-  -e NODE_ENV="production" \
   upwork-proposal-generator
-```
+\`\`\`
 
-### Health Check
-
-The application exposes a health check endpoint:
-```
-GET /api/health
-```
-
-Response:
-```json
-{
-  "status": "ok",
-  "timestamp": "2024-01-15T10:30:00.000Z"
-}
-```
+---
 
 ## Troubleshooting
 
-### Common Issues
-
 | Issue | Solution |
 |-------|----------|
-| "Cannot connect to MongoDB" | Verify `MONGODB_URI` is correct and MongoDB is accessible |
-| "Invalid token" error | Clear browser cookies and localStorage, then login again |
-| Webhooks not working | Verify API key is active in Settings → API Keys |
-| CORS errors | Check `CORS_ORIGIN` environment variable |
-| 404 on page refresh | Ensure Express is serving the React build correctly |
+| "Cannot connect to MongoDB" | Verify MONGODB_URI is correct |
+| "Invalid token" error | Clear browser cookies, login again |
+| Webhooks not working | Check API key is active in Settings |
+| "API key required" | Include X-API-Key header |
 
-### Logs
+### Testing Webhooks
 
-In Docker:
-```bash
-docker logs upwork-proposals
-```
+\`\`\`bash
+# Test evaluation webhook
+curl -X POST http://localhost:8080/api/webhooks/evaluation \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jobId": "test_123", "title": "Test Job", "url": "https://upwork.com/test"}'
 
-In Railway:
-- View logs in the Railway dashboard under your service
-
-### Database Issues
-
-Connect to MongoDB and check collections:
-```javascript
-// List all collections
-show collections
-
-// Check users
-db.users.find().pretty()
-
-// Check jobs
-db.jobs.find({ status: 'pending' }).pretty()
-
-// Check API keys
-db.apikeys.find().pretty()
-```
+# Test proposal result webhook
+curl -X POST http://localhost:8080/api/webhooks/proposal-result \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"jobId": "test_123", "coverLetter": "Test cover letter"}'
+\`\`\`
 
 ## License
 
-MIT License - See LICENSE file for details.
-
-## Support
-
-For issues and feature requests, please open an issue on GitHub.
+MIT License
