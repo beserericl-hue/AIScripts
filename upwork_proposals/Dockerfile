@@ -3,6 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Build arguments for frontend environment variables
+ARG VITE_GOOGLE_CLIENT_ID
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
+
 # Copy package files
 COPY upwork-proposal-generator/package*.json ./
 
@@ -12,7 +16,7 @@ RUN npm ci
 # Copy source code
 COPY upwork-proposal-generator/ ./
 
-# Build the React frontend
+# Build the React frontend (VITE_ env vars are embedded at build time)
 RUN npm run build
 
 # Production stage
