@@ -1,0 +1,49 @@
+# Dependencies
+**/node_modules
+**/.pnp
+**/.pnp.js
+
+# Build outputs (we rebuild in Docker)
+**/dist
+**/build
+
+# Testing
+**/coverage
+
+# Environment files (set via Railway)
+**/.env
+**/.env.local
+**/.env.development
+**/.env.test
+**/.env.production
+
+# IDE
+**/.idea
+**/.vscode
+**/*.swp
+**/*.swo
+
+# OS
+**/.DS_Store
+**/Thumbs.db
+
+# Logs
+**/logs
+**/*.log
+**/npm-debug.log*
+
+# Git
+**/.git
+**/.gitignore
+
+# Documentation
+**/README.md
+**/*.md
+
+# Docker
+**/Dockerfile
+**/.dockerignore
+
+# Misc
+**/.mcp.json
+**/.mcp.json.bak
