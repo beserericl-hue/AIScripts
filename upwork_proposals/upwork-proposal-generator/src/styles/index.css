@@ -676,6 +676,21 @@ button {
   background: var(--bg-tertiary);
 }
 
+/* Google OAuth Login Wrapper */
+.google-login-wrapper {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.google-login-wrapper > div {
+  width: 100% !important;
+}
+
+.google-login-wrapper iframe {
+  width: 100% !important;
+}
+
 .login-footer {
   text-align: center;
   margin-top: 1.5rem;
