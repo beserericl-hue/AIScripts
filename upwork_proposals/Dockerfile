@@ -23,8 +23,8 @@ WORKDIR /app
 # Copy package files
 COPY upwork-proposal-generator/package*.json ./
 
-# Install only production dependencies
-RUN npm ci --only=production
+# Install only production dependencies (--omit=dev is the modern syntax)
+RUN npm ci --omit=dev
 
 # Copy server code
 COPY upwork-proposal-generator/server ./server
