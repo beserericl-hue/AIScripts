@@ -74,7 +74,16 @@ app.use((req, res, next) => {
 // Connect to MongoDB with retry logic
 const connectDB = async (retries = 5, delay = 5000) => {
   const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/upwork_proposals';
-  console.log('MongoDB URI configured:', mongoUri ? 'Yes' : 'No (using default)');
+
+  // Log connection info (hide password)
+  try {
+    const url = new URL(mongoUri);
+    console.log('MongoDB host:', url.hostname);
+    console.log('MongoDB port:', url.port || '27017');
+    console.log('MongoDB database:', url.pathname.slice(1) || 'default');
+  } catch (e) {
+    console.log('MongoDB URI configured:', mongoUri ? 'Yes' : 'No');
+  }
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {

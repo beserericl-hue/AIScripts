@@ -34,6 +34,6 @@ teamSchema.pre('save', function(next) {
   next();
 });
 
-teamSchema.index({ name: 1 });
+// Note: name index is already created by unique: true constraint
 
 export default mongoose.model('Team', teamSchema);
