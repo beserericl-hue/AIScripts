@@ -1,0 +1,94 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#14a800', 'primaryTextColor': '#fff', 'primaryBorderColor': '#108a00', 'lineColor': '#6b7280', 'secondaryColor': '#f3f4f6', 'tertiaryColor': '#f9fafb'}}}%%
+
+flowchart TB
+    subgraph Client["Client (Browser)"]
+        subgraph React["React Application"]
+            Login[Login Page<br/>Email/Google Auth]
+            Home[Home Page<br/>Job Listing]
+            Proposal[Proposal Page<br/>Generation Form]
+            Settings[Settings Page<br/>Admin Config]
+            AuthCtx[AuthContext<br/>State Management]
+            API[API Service<br/>Axios Client]
+        end
+    end
+
+    subgraph Server["Express Server (Port 8080)"]
+        subgraph Middleware["Middleware Layer"]
+            CORS[CORS]
+            JSON[JSON Parser]
+            Cookie[Cookie Parser]
+            Static[Static Files]
+        end
+
+        subgraph Auth["Authentication"]
+            JWT[JWT Auth]
+            APIKey[API Key Auth]
+            Admin[Admin Check]
+        end
+
+        subgraph Routes["API Routes"]
+            AuthR[/api/auth]
+            JobsR[/api/jobs]
+            ProposalsR[/api/proposals]
+            WebhooksR[/api/webhooks]
+            SettingsR[/api/settings]
+            TeamsR[/api/teams]
+            ProfilesR[/api/profiles]
+            APIKeysR[/api/api-keys]
+        end
+    end
+
+    subgraph Database["MongoDB"]
+        Users[(Users)]
+        Jobs[(Jobs)]
+        Profiles[(Profiles)]
+        Teams[(Teams)]
+        APIKeys[(API Keys)]
+        SettingsDB[(Settings)]
+    end
+
+    subgraph External["External Services"]
+        N8N[N8N Workflows]
+        Google[Google OAuth]
+        SMTP[SMTP Server<br/>Email]
+    end
+
+    %% Client connections
+    Login --> AuthCtx
+    Home --> AuthCtx
+    Proposal --> AuthCtx
+    Settings --> AuthCtx
+    AuthCtx --> API
+
+    %% API to Server
+    API -->|HTTPS| Middleware
+    Middleware --> Auth
+    Auth --> Routes
+
+    %% Routes to Database
+    AuthR --> Users
+    JobsR --> Jobs
+    ProposalsR --> Jobs
+    SettingsR --> SettingsDB
+    TeamsR --> Teams
+    TeamsR --> Users
+    ProfilesR --> Profiles
+    APIKeysR --> APIKeys
+    WebhooksR --> Jobs
+
+    %% External integrations
+    ProposalsR -->|Trigger Workflow| N8N
+    N8N -->|Webhook Callback| WebhooksR
+    AuthR -->|OAuth| Google
+    AuthR -->|Send Email| SMTP
+
+    %% Styling
+    classDef clientBox fill:#e5e7eb,stroke:#9ca3af,stroke-width:2px
+    classDef serverBox fill:#f0fdf4,stroke:#14a800,stroke-width:2px
+    classDef dbBox fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    classDef extBox fill:#ede9fe,stroke:#8b5cf6,stroke-width:2px
+
+    class Client clientBox
+    class Server serverBox
+    class Database dbBox
+    class External extBox

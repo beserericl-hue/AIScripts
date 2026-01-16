@@ -1,0 +1,34 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#14a800'}}}%%
+
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant F as Frontend
+    participant B as Backend
+    participant DB as MongoDB
+    participant N as N8N
+
+    rect rgb(240, 253, 244)
+        Note over U,N: Proposal Generation Flow
+        U->>F: Fill proposal form
+        F->>B: POST /api/proposals/generate
+        B->>DB: Create job (status: pending)
+        B->>N: POST webhook with job data
+        B-->>F: Return jobId
+
+        loop Every 5 seconds
+            F->>B: GET /api/proposals/:jobId
+            B->>DB: Query job
+            DB-->>B: Return job data
+            B-->>F: Return proposal status
+        end
+
+        N->>B: POST /api/webhooks/proposal-result
+        B->>DB: Update job with proposal data
+
+        F->>B: GET /api/proposals/:jobId
+        B->>DB: Query job
+        DB-->>B: Return complete proposal
+        B-->>F: Return cover letter, doc URL, diagram
+        F->>U: Display results
+    end

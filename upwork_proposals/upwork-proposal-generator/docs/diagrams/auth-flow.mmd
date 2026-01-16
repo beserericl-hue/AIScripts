@@ -1,0 +1,62 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#14a800'}}}%%
+
+flowchart TD
+    subgraph Registration["Email Registration Flow"]
+        R1[Enter Email] --> R2[Send Verification Code]
+        R2 --> R3{Code Valid?}
+        R3 -->|No| R4[Show Error]
+        R4 --> R1
+        R3 -->|Yes| R5[Enter Name & Password]
+        R5 --> R6[Create Account]
+        R6 --> R7[Return JWT]
+        R7 --> R8[Store in Cookie]
+    end
+
+    subgraph GoogleAuth["Google OAuth Flow"]
+        G1[Click Google Button] --> G2[Google Picker]
+        G2 --> G3[Select Account]
+        G3 --> G4[Receive Credential]
+        G4 --> G5[Decode JWT]
+        G5 --> G6[Send to Backend]
+        G6 --> G7{User Exists?}
+        G7 -->|No| G8[Create User]
+        G7 -->|Yes| G9[Update GoogleId]
+        G8 --> G10[Return JWT]
+        G9 --> G10
+        G10 --> G11[Store in Cookie]
+    end
+
+    subgraph Login["Email Login Flow"]
+        L1[Enter Credentials] --> L2[Validate]
+        L2 --> L3{Valid?}
+        L3 -->|No| L4[Show Error]
+        L4 --> L1
+        L3 -->|Yes| L5[Return JWT]
+        L5 --> L6[Store in Cookie]
+    end
+
+    subgraph JWTAuth["JWT Authentication"]
+        J1[Request with Cookie] --> J2[Extract Token]
+        J2 --> J3[Verify Signature]
+        J3 --> J4{Valid?}
+        J4 -->|No| J5[401 Unauthorized]
+        J4 -->|Yes| J6[Decode User ID]
+        J6 --> J7[Query User]
+        J7 --> J8[Attach to Request]
+        J8 --> J9[Proceed to Route]
+    end
+
+    subgraph APIKeyAuth["API Key Authentication"]
+        A1[Request with X-API-Key] --> A2[Hash Key]
+        A2 --> A3[Query Database]
+        A3 --> A4{Found & Active?}
+        A4 -->|No| A5[401 Unauthorized]
+        A4 -->|Yes| A6[Update lastUsed]
+        A6 --> A7[Proceed to Route]
+    end
+
+    style Registration fill:#f0fdf4,stroke:#14a800
+    style GoogleAuth fill:#ede9fe,stroke:#8b5cf6
+    style Login fill:#fef3c7,stroke:#f59e0b
+    style JWTAuth fill:#e0f2fe,stroke:#0284c7
+    style APIKeyAuth fill:#fce7f3,stroke:#db2777

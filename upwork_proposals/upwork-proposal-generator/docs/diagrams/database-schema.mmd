@@ -1,0 +1,87 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#14a800'}}}%%
+
+erDiagram
+    USER ||--o{ JOB : creates
+    USER ||--o{ PROFILE : owns
+    USER ||--o{ API_KEY : generates
+    USER ||--o| SETTINGS : has
+    USER }o--o| TEAM : "belongs to"
+    TEAM ||--o{ USER : contains
+    TEAM ||--o{ JOB : owns
+    TEAM ||--o{ PROFILE : owns
+    PROFILE ||--o{ JOB : "used in"
+
+    USER {
+        ObjectId _id PK
+        string email UK "lowercase, trimmed"
+        string password "hashed, optional"
+        string googleId "OAuth"
+        string name
+        enum role "user | administrator"
+        ObjectId teamId FK
+        ObjectId lastProfileId FK
+        date createdAt
+        date updatedAt
+    }
+
+    JOB {
+        ObjectId _id PK
+        string jobId UK "indexed"
+        string title
+        string description
+        string url
+        number rating "1-5"
+        enum status "pending | proposal_generated | rejected | applied"
+        string profile
+        ObjectId profileId FK
+        ObjectId teamId FK
+        object evaluationData "from N8N"
+        object proposalData "coverLetter, docUrl, mermaid"
+        ObjectId createdBy FK
+        date createdAt
+        date updatedAt
+    }
+
+    PROFILE {
+        ObjectId _id PK
+        string name "unique per user"
+        string content "max 4000 chars"
+        ObjectId userId FK
+        ObjectId teamId FK
+        boolean isLastUsed
+        date createdAt
+        date updatedAt
+    }
+
+    TEAM {
+        ObjectId _id PK
+        string name UK
+        string description
+        boolean isActive
+        ObjectId createdBy FK
+        date createdAt
+        date updatedAt
+    }
+
+    API_KEY {
+        ObjectId _id PK
+        string name
+        string key "shown once"
+        string hashedKey "SHA256"
+        boolean isActive
+        ObjectId createdBy FK
+        date lastUsed
+        date createdAt
+    }
+
+    SETTINGS {
+        ObjectId _id PK
+        ObjectId userId FK UK
+        string n8nWebhookUrl
+        string n8nEvaluationWebhookUrl
+        string mongodbUrl
+        string mongodbUser
+        string mongodbPassword "masked"
+        string mongodbDatabase
+        date updatedAt
+    }
