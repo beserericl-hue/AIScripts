@@ -80,11 +80,12 @@ const Login = () => {
     if (isLogin) {
       setLoading(true);
       try {
-        await login(email, password);
-        navigate('/');
+        const user = await login(email, password);
+        if (user) {
+          navigate('/', { replace: true });
+        }
       } catch (err) {
         setError(err.response?.data?.error || 'An error occurred');
-      } finally {
         setLoading(false);
       }
     } else {
@@ -107,11 +108,12 @@ const Login = () => {
 
       setLoading(true);
       try {
-        await register(email, password, name);
-        navigate('/');
+        const user = await register(email, password, name);
+        if (user) {
+          navigate('/', { replace: true });
+        }
       } catch (err) {
         setError(err.response?.data?.error || 'An error occurred');
-      } finally {
         setLoading(false);
       }
     }
@@ -126,18 +128,20 @@ const Login = () => {
       const credential = credentialResponse.credential;
       const payload = JSON.parse(atob(credential.split('.')[1]));
 
-      await googleLogin({
+      const user = await googleLogin({
         email: payload.email,
         name: payload.name,
         googleId: payload.sub,
         picture: payload.picture
       });
 
-      navigate('/');
+      // Only navigate after successful login with user data
+      if (user) {
+        navigate('/', { replace: true });
+      }
     } catch (err) {
       console.error('Google login error:', err);
       setError(err.response?.data?.error || 'Google authentication failed');
-    } finally {
       setLoading(false);
     }
   };

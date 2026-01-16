@@ -26,7 +26,7 @@ const jobSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'proposal_generated', 'rejected', 'applied'],
+    enum: ['pending', 'proposal_generated', 'rejected', 'submitted', 'won', 'lost'],
     default: 'pending'
   },
   profile: {

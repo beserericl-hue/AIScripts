@@ -44,11 +44,11 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// Get pending jobs (not proposal_generated and not rejected) - filtered by team
+// Get pending jobs (status = pending only) - filtered by team
 router.get('/pending', authenticate, async (req, res) => {
   try {
     let query = {
-      status: { $nin: ['proposal_generated', 'rejected'] }
+      status: 'pending'
     };
 
     // Add team filter
@@ -56,12 +56,66 @@ router.get('/pending', authenticate, async (req, res) => {
 
     const jobs = await Job.find(query)
       .sort({ createdAt: -1 })
-      .select('jobId title rating status url createdAt teamId');
+      .select('jobId title rating status url createdAt teamId description');
 
     res.json(jobs);
   } catch (error) {
     console.error('Error fetching pending jobs:', error);
     res.status(500).json({ error: 'Failed to fetch pending jobs' });
+  }
+});
+
+// Get jobs with proposals (proposal_generated, submitted, won, lost) - filtered by team
+router.get('/with-proposals', authenticate, async (req, res) => {
+  try {
+    let query = {
+      status: { $in: ['proposal_generated', 'submitted', 'won', 'lost'] }
+    };
+
+    // Add team filter
+    addTeamFilter(query, req.user);
+
+    const jobs = await Job.find(query)
+      .sort({ updatedAt: -1 })
+      .select('jobId title rating status url createdAt updatedAt teamId proposalData description');
+
+    res.json(jobs);
+  } catch (error) {
+    console.error('Error fetching jobs with proposals:', error);
+    res.status(500).json({ error: 'Failed to fetch jobs with proposals' });
+  }
+});
+
+// Update job status - verify team access
+router.post('/:id/status', authenticate, async (req, res) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['pending', 'proposal_generated', 'rejected', 'submitted', 'won', 'lost'];
+
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status value' });
+    }
+
+    // First, verify team access
+    const existingJob = await Job.findById(req.params.id);
+    if (!existingJob) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    if (req.user.teamId && existingJob.teamId && existingJob.teamId.toString() !== req.user.teamId.toString()) {
+      return res.status(403).json({ error: 'Access denied - job belongs to different team' });
+    }
+
+    const job = await Job.findByIdAndUpdate(
+      req.params.id,
+      { status, updatedAt: Date.now() },
+      { new: true }
+    );
+
+    res.json(job);
+  } catch (error) {
+    console.error('Error updating job status:', error);
+    res.status(500).json({ error: 'Failed to update job status' });
   }
 });
 

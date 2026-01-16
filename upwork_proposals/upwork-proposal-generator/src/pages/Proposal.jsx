@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -14,14 +14,20 @@ import {
   User,
   Save,
   Plus,
-  ChevronDown
+  ChevronDown,
+  Star,
+  Trophy,
+  XOctagon,
+  ArrowLeft
 } from 'lucide-react';
 
 const Proposal = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const initialJob = location.state?.job;
 
+  const [job] = useState(initialJob);
   const [formData, setFormData] = useState({
     title: initialJob?.title || '',
     description: initialJob?.description || '',
@@ -30,14 +36,16 @@ const Proposal = () => {
   });
 
   const [jobId, setJobId] = useState(initialJob?.jobId || null);
+  const [mongoId, setMongoId] = useState(initialJob?._id || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [proposalData, setProposalData] = useState(initialJob?.proposalData || null);
   const [copied, setCopied] = useState({});
+  const [currentStatus, setCurrentStatus] = useState(initialJob?.status || 'pending');
+  const [updatingStatus, setUpdatingStatus] = useState(false);
 
   // Team members and profile management state
-  // Initialize with current user to avoid empty dropdown
   const [teamMembers, setTeamMembers] = useState([user]);
   const [selectedUserId, setSelectedUserId] = useState(user._id);
   const [profiles, setProfiles] = useState([]);
@@ -46,20 +54,17 @@ const Proposal = () => {
   const [newProfileName, setNewProfileName] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // Initialize on mount - fetch team members and profiles for current user
+  // Initialize on mount
   useEffect(() => {
     fetchTeamMembers();
-    // Also fetch profiles for current user immediately
     fetchUserProfiles(user._id);
   }, []);
 
   // When team members load, ensure current user is still selected
   useEffect(() => {
     if (teamMembers.length > 0) {
-      // Verify the selected user is in the team members list
       const selectedInTeam = teamMembers.find(m => m._id === selectedUserId);
       if (!selectedInTeam) {
-        // Default to current logged-in user
         const currentUserInTeam = teamMembers.find(m => m._id === user._id);
         if (currentUserInTeam) {
           setSelectedUserId(currentUserInTeam._id);
@@ -93,7 +98,6 @@ const Proposal = () => {
       setTeamMembers(response.data);
     } catch (err) {
       console.error('Failed to fetch team members:', err);
-      // If no team, just show current user
       setTeamMembers([user]);
       setSelectedUserId(user._id);
     }
@@ -105,14 +109,12 @@ const Proposal = () => {
       const response = await api.get(endpoint);
       setProfiles(response.data);
 
-      // Select the last used profile or first profile
       if (response.data.length > 0) {
         const lastUsed = response.data.find(p => p.isLastUsed);
         setSelectedProfileId(lastUsed?._id || response.data[0]._id);
         setIsCreatingNewProfile(false);
       } else {
         setSelectedProfileId(null);
-        // If no profiles exist, start in create mode
         if (userId === user._id) {
           setIsCreatingNewProfile(true);
         }
@@ -145,7 +147,6 @@ const Proposal = () => {
     } else {
       setSelectedProfileId(profileId);
       setIsCreatingNewProfile(false);
-      // Set as active profile
       setProfileAsActive(profileId);
     }
   };
@@ -164,15 +165,10 @@ const Proposal = () => {
     setFormData(prev => ({ ...prev, profile: '' }));
   };
 
-  // Check if current user can edit profiles for selected user
-  // Defined early so it can be used in saveProfile
   const canEditProfile = selectedUserId === user?._id;
-
-  // Computed property to determine if we're in "new profile mode"
   const isNewProfileMode = isCreatingNewProfile || (profiles.length === 0 && canEditProfile);
 
   const saveProfile = async () => {
-    // Creating new profile (either explicit or no profiles exist)
     if (isNewProfileMode) {
       if (!newProfileName.trim()) {
         setError('Profile name is required');
@@ -194,7 +190,6 @@ const Proposal = () => {
         content: formData.profile
       });
 
-      // Refresh profiles and select the new one
       await fetchUserProfiles(user._id);
       setSelectedProfileId(response.data._id);
       setIsCreatingNewProfile(false);
@@ -218,7 +213,6 @@ const Proposal = () => {
         content: formData.profile
       });
 
-      // Refresh profiles
       await fetchUserProfiles(selectedUserId);
       setSuccess('Profile saved successfully');
     } catch (err) {
@@ -242,11 +236,30 @@ const Proposal = () => {
       });
 
       setJobId(response.data.job.jobId);
-      setSuccess('Proposal generation initiated! Results will appear below when ready.');
+      setMongoId(response.data.job._id);
+      setCurrentStatus('pending');
+      setSuccess('Proposal generation initiated! The job has been sent to N8N for processing.');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to generate proposal');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStatusChange = async (newStatus) => {
+    if (!mongoId) return;
+
+    setUpdatingStatus(true);
+    setError('');
+
+    try {
+      await api.post(`/jobs/${mongoId}/status`, { status: newStatus });
+      setCurrentStatus(newStatus);
+      setSuccess(`Status updated to ${getStatusLabel(newStatus)}`);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update status');
+    } finally {
+      setUpdatingStatus(false);
     }
   };
 
@@ -269,232 +282,169 @@ const Proposal = () => {
     );
   };
 
+  const renderStars = (rating) => {
+    return (
+      <div className="rating-stars">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star
+            key={star}
+            size={16}
+            className={star <= (rating || 0) ? 'star-filled' : 'star-empty'}
+          />
+        ))}
+      </div>
+    );
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'proposal_generated':
+        return 'Generated';
+      case 'submitted':
+        return 'Submitted';
+      case 'won':
+        return 'Won';
+      case 'lost':
+        return 'Lost';
+      case 'pending':
+        return 'Pending';
+      default:
+        return status;
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'proposal_generated':
+        return <FileText size={14} />;
+      case 'submitted':
+        return <Send size={14} />;
+      case 'won':
+        return <Trophy size={14} />;
+      case 'lost':
+        return <XOctagon size={14} />;
+      default:
+        return <FileText size={14} />;
+    }
+  };
+
+  // Check if we have proposal data to show
+  const hasProposal = proposalData && (proposalData.coverLetter || proposalData.docUrl || proposalData.mermaidDiagram);
+
   return (
     <div className="page-container proposal-page">
-      <div className="proposal-layout proposal-layout-full">
-        {/* Form and Results */}
-        <div className="proposal-form-container">
-          {/* Form Section */}
-          <div className="form-section">
-            <h2>Create Proposal</h2>
+      {/* Back button */}
+      <button className="btn-back" onClick={() => navigate('/')}>
+        <ArrowLeft size={18} />
+        Back to Dashboard
+      </button>
 
-            {error && (
-              <div className="error-message">
-                <AlertCircle size={18} />
-                <span>{error}</span>
-                <button onClick={() => setError('')}>×</button>
-              </div>
-            )}
-
-            {success && (
-              <div className="success-message">
-                <Check size={18} />
-                <span>{success}</span>
-                <button onClick={() => setSuccess('')}>×</button>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label htmlFor="title">
-                  Title of Job
-                  {characterCount(formData.title, 4000)}
-                </label>
-                <input
-                  type="text"
-                  id="title"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  placeholder="Enter job title"
-                  maxLength={4000}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="description">
-                  Full Description of the Job
-                  {characterCount(formData.description, 4000)}
-                </label>
-                <textarea
-                  id="description"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  placeholder="Enter full job description"
-                  maxLength={4000}
-                  rows={6}
-                  required
-                />
-              </div>
-
-              {/* Team Member and Profile Selection */}
-              <div className="profile-selection-section">
-                <h4>
-                  <User size={16} />
-                  Profile Selection
-                </h4>
-
-                {/* Team Member Dropdown */}
-                <div className="form-row profile-dropdowns">
-                  <div className="form-group">
-                    <label htmlFor="teamMember">Team Member</label>
-                    <div className="select-wrapper">
-                      <select
-                        id="teamMember"
-                        value={selectedUserId || ''}
-                        onChange={handleUserChange}
-                      >
-                        {teamMembers.map((member) => (
-                          <option key={member._id} value={member._id}>
-                            {member.name} {member._id === user._id ? '(You)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <ChevronDown size={16} className="select-icon" />
-                    </div>
-                  </div>
-
-                  {/* Profile Dropdown or Name Input */}
-                  <div className="form-group">
-                    <label htmlFor="profileSelect">
-                      Profile Name
-                      {canEditProfile && !isCreatingNewProfile && profiles.length > 0 && (
-                        <button
-                          type="button"
-                          className="btn-link"
-                          onClick={handleNewProfile}
-                        >
-                          <Plus size={14} />
-                          New Profile
-                        </button>
-                      )}
-                    </label>
-                    {/* Show text input when creating new profile OR when no profiles exist for current user */}
-                    {(isCreatingNewProfile || (profiles.length === 0 && canEditProfile)) ? (
-                      <input
-                        type="text"
-                        id="newProfileName"
-                        value={newProfileName}
-                        onChange={(e) => setNewProfileName(e.target.value)}
-                        placeholder="Enter profile name"
-                      />
-                    ) : profiles.length === 0 ? (
-                      <div className="select-wrapper">
-                        <select id="profileSelect" disabled>
-                          <option value="">No profiles available</option>
-                        </select>
-                        <ChevronDown size={16} className="select-icon" />
-                      </div>
-                    ) : (
-                      <div className="select-wrapper">
-                        <select
-                          id="profileSelect"
-                          value={selectedProfileId || ''}
-                          onChange={handleProfileChange}
-                        >
-                          {profiles.map((profile) => (
-                            <option key={profile._id} value={profile._id}>
-                              {profile.name} {profile.isLastUsed ? '(Current)' : ''}
-                            </option>
-                          ))}
-                          {canEditProfile && (
-                            <option value="new">+ Create New Profile</option>
-                          )}
-                        </select>
-                        <ChevronDown size={16} className="select-icon" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Profile Content */}
-              <div className="form-group profile-content-group">
-                <label htmlFor="profile">
-                  Profile Content
-                  {characterCount(formData.profile, 4000)}
-                </label>
-                <textarea
-                  id="profile"
-                  name="profile"
-                  value={formData.profile}
-                  onChange={handleInputChange}
-                  placeholder="Enter your profile/expertise"
-                  maxLength={4000}
-                  rows={4}
-                  disabled={!canEditProfile && !isNewProfileMode}
-                />
-                {canEditProfile && (
-                  <button
-                    type="button"
-                    className="btn-secondary btn-save-profile"
-                    onClick={saveProfile}
-                    disabled={savingProfile || (!isNewProfileMode && !selectedProfileId)}
-                  >
-                    {savingProfile ? (
-                      <>
-                        <Loader size={14} className="spinning" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save size={14} />
-                        <span>{isNewProfileMode ? 'Create Profile' : 'Save Profile'}</span>
-                      </>
-                    )}
-                  </button>
-                )}
-              </div>
-
-              <div className="form-group">
-                <label htmlFor="url">Job URL</label>
-                <div className="input-with-button">
-                  <input
-                    type="url"
-                    id="url"
-                    name="url"
-                    value={formData.url}
-                    onChange={handleInputChange}
-                    placeholder="https://www.upwork.com/jobs/..."
-                  />
-                  {formData.url && (
-                    <a
-                      href={formData.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-secondary btn-view-job"
-                    >
-                      <ExternalLink size={16} />
-                      View Job
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="btn-primary btn-full"
-                disabled={loading}
+      <div className="proposal-layout proposal-two-column">
+        {/* Left Side - Job Details */}
+        <div className="proposal-job-panel">
+          <div className="panel-header">
+            <h2>Job Details</h2>
+            {formData.url && (
+              <a
+                href={formData.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary btn-small"
               >
-                {loading ? (
-                  <>
-                    <Loader size={18} className="spinning" />
-                    <span>Generating Proposal...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send size={18} />
-                    <span>Create Proposal</span>
-                  </>
-                )}
-              </button>
-            </form>
+                <ExternalLink size={14} />
+                View on Upwork
+              </a>
+            )}
           </div>
 
-          {/* Results Section */}
-          {proposalData && (
+          <div className="job-details-content">
+            <div className="job-detail-item">
+              <label>Title</label>
+              <p>{formData.title || 'No title'}</p>
+            </div>
+
+            <div className="job-detail-item">
+              <label>Description</label>
+              <div className="job-description-text">
+                {formData.description || 'No description'}
+              </div>
+            </div>
+
+            {job?.rating && (
+              <div className="job-detail-item">
+                <label>Rating</label>
+                {renderStars(job.rating)}
+              </div>
+            )}
+
+            {/* Status Display and Controls */}
+            {mongoId && (
+              <div className="job-detail-item">
+                <label>Status</label>
+                <div className="status-controls">
+                  <span className={`status-badge status-${currentStatus}`}>
+                    {getStatusIcon(currentStatus)}
+                    {getStatusLabel(currentStatus)}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Status Change Buttons - Show when proposal exists */}
+            {hasProposal && mongoId && (
+              <div className="status-actions">
+                <label>Update Status</label>
+                <div className="status-buttons">
+                  <button
+                    className={`btn-status btn-submitted ${currentStatus === 'submitted' ? 'active' : ''}`}
+                    onClick={() => handleStatusChange('submitted')}
+                    disabled={updatingStatus}
+                  >
+                    <Send size={14} />
+                    Submitted
+                  </button>
+                  <button
+                    className={`btn-status btn-won ${currentStatus === 'won' ? 'active' : ''}`}
+                    onClick={() => handleStatusChange('won')}
+                    disabled={updatingStatus}
+                  >
+                    <Trophy size={14} />
+                    Won
+                  </button>
+                  <button
+                    className={`btn-status btn-lost ${currentStatus === 'lost' ? 'active' : ''}`}
+                    onClick={() => handleStatusChange('lost')}
+                    disabled={updatingStatus}
+                  >
+                    <XOctagon size={14} />
+                    Lost
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Side - Form or Proposal Results */}
+        <div className="proposal-form-container">
+          {error && (
+            <div className="error-message">
+              <AlertCircle size={18} />
+              <span>{error}</span>
+              <button onClick={() => setError('')}>×</button>
+            </div>
+          )}
+
+          {success && (
+            <div className="success-message">
+              <Check size={18} />
+              <span>{success}</span>
+              <button onClick={() => setSuccess('')}>×</button>
+            </div>
+          )}
+
+          {/* Show proposal results if available */}
+          {hasProposal ? (
             <div className="results-section">
               <h3>Generated Proposal</h3>
 
@@ -503,7 +453,7 @@ const Proposal = () => {
                 <div className="result-card">
                   <div className="result-header">
                     <FileText size={18} />
-                    <span>Word Document</span>
+                    <span>Google Document</span>
                     <a
                       href={proposalData.docUrl}
                       target="_blank"
@@ -567,6 +517,147 @@ const Proposal = () => {
                   )}
                 </div>
               )}
+            </div>
+          ) : (
+            /* Show form when no proposal data */
+            <div className="form-section">
+              <h2>Create Proposal</h2>
+
+              <form onSubmit={handleSubmit}>
+                {/* Team Member and Profile Selection */}
+                <div className="profile-selection-section">
+                  <h4>
+                    <User size={16} />
+                    Profile Selection
+                  </h4>
+
+                  <div className="form-row profile-dropdowns">
+                    <div className="form-group">
+                      <label htmlFor="teamMember">Team Member</label>
+                      <div className="select-wrapper">
+                        <select
+                          id="teamMember"
+                          value={selectedUserId || ''}
+                          onChange={handleUserChange}
+                        >
+                          {teamMembers.map((member) => (
+                            <option key={member._id} value={member._id}>
+                              {member.name} {member._id === user._id ? '(You)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <ChevronDown size={16} className="select-icon" />
+                      </div>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="profileSelect">
+                        Profile Name
+                        {canEditProfile && !isCreatingNewProfile && profiles.length > 0 && (
+                          <button
+                            type="button"
+                            className="btn-link"
+                            onClick={handleNewProfile}
+                          >
+                            <Plus size={14} />
+                            New Profile
+                          </button>
+                        )}
+                      </label>
+                      {(isCreatingNewProfile || (profiles.length === 0 && canEditProfile)) ? (
+                        <input
+                          type="text"
+                          id="newProfileName"
+                          value={newProfileName}
+                          onChange={(e) => setNewProfileName(e.target.value)}
+                          placeholder="Enter profile name"
+                        />
+                      ) : profiles.length === 0 ? (
+                        <div className="select-wrapper">
+                          <select id="profileSelect" disabled>
+                            <option value="">No profiles available</option>
+                          </select>
+                          <ChevronDown size={16} className="select-icon" />
+                        </div>
+                      ) : (
+                        <div className="select-wrapper">
+                          <select
+                            id="profileSelect"
+                            value={selectedProfileId || ''}
+                            onChange={handleProfileChange}
+                          >
+                            {profiles.map((profile) => (
+                              <option key={profile._id} value={profile._id}>
+                                {profile.name} {profile.isLastUsed ? '(Current)' : ''}
+                              </option>
+                            ))}
+                            {canEditProfile && (
+                              <option value="new">+ Create New Profile</option>
+                            )}
+                          </select>
+                          <ChevronDown size={16} className="select-icon" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Profile Content */}
+                <div className="form-group profile-content-group">
+                  <label htmlFor="profile">
+                    Profile Content
+                    {characterCount(formData.profile, 4000)}
+                  </label>
+                  <textarea
+                    id="profile"
+                    name="profile"
+                    value={formData.profile}
+                    onChange={handleInputChange}
+                    placeholder="Enter your profile/expertise"
+                    maxLength={4000}
+                    rows={6}
+                    disabled={!canEditProfile && !isNewProfileMode}
+                  />
+                  {canEditProfile && (
+                    <button
+                      type="button"
+                      className="btn-secondary btn-save-profile"
+                      onClick={saveProfile}
+                      disabled={savingProfile || (!isNewProfileMode && !selectedProfileId)}
+                    >
+                      {savingProfile ? (
+                        <>
+                          <Loader size={14} className="spinning" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save size={14} />
+                          <span>{isNewProfileMode ? 'Create Profile' : 'Save Profile'}</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn-primary btn-full"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader size={18} className="spinning" />
+                      <span>Generating Proposal...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send size={18} />
+                      <span>Generate Proposal</span>
+                    </>
+                  )}
+                </button>
+              </form>
             </div>
           )}
         </div>

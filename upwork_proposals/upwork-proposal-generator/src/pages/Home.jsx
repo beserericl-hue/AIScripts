@@ -2,32 +2,36 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
-  ChevronDown,
   ExternalLink,
   Star,
   XCircle,
   FileText,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Clock,
+  CheckCircle,
+  Trophy,
+  XOctagon,
+  Send
 } from 'lucide-react';
 
 const Home = () => {
-  const [jobs, setJobs] = useState([]);
+  const [pendingJobs, setPendingJobs] = useState([]);
+  const [proposalJobs, setProposalJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const navigate = useNavigate();
 
   const fetchJobs = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/jobs/pending');
-      setJobs(response.data);
-      if (response.data.length > 0 && !selectedJob) {
-        const job = await api.get(`/jobs/${response.data[0]._id}`);
-        setSelectedJob(job.data);
-      }
+      const [pendingResponse, proposalResponse] = await Promise.all([
+        api.get('/jobs/pending'),
+        api.get('/jobs/with-proposals')
+      ]);
+      setPendingJobs(pendingResponse.data);
+      setProposalJobs(proposalResponse.data);
     } catch (err) {
       setError('Failed to fetch jobs');
       console.error(err);
@@ -40,32 +44,22 @@ const Home = () => {
     fetchJobs();
   }, []);
 
-  const handleJobSelect = async (job) => {
+  const handleJobClick = async (job) => {
     try {
       const response = await api.get(`/jobs/${job._id}`);
       setSelectedJob(response.data);
-      setDropdownOpen(false);
     } catch (err) {
       setError('Failed to fetch job details');
     }
   };
 
-  const handleReject = async () => {
-    if (!selectedJob) return;
-
+  const handleReject = async (job, e) => {
+    e.stopPropagation();
     try {
-      await api.post(`/jobs/${selectedJob._id}/reject`);
-
-      // Find next job
-      const currentIndex = jobs.findIndex(j => j._id === selectedJob._id);
-      const updatedJobs = jobs.filter(j => j._id !== selectedJob._id);
-      setJobs(updatedJobs);
-
-      if (updatedJobs.length > 0) {
-        const nextIndex = Math.min(currentIndex, updatedJobs.length - 1);
-        const nextJob = await api.get(`/jobs/${updatedJobs[nextIndex]._id}`);
-        setSelectedJob(nextJob.data);
-      } else {
+      await api.post(`/jobs/${job._id}/reject`);
+      // Remove from pending list
+      setPendingJobs(prev => prev.filter(j => j._id !== job._id));
+      if (selectedJob?._id === job._id) {
         setSelectedJob(null);
       }
     } catch (err) {
@@ -73,10 +67,12 @@ const Home = () => {
     }
   };
 
-  const handleViewProposal = () => {
-    if (selectedJob) {
-      navigate('/proposal', { state: { job: selectedJob } });
-    }
+  const handleCreateProposal = (job) => {
+    navigate('/proposal', { state: { job } });
+  };
+
+  const handleViewProposal = (job) => {
+    navigate('/proposal', { state: { job, viewMode: true } });
   };
 
   const renderStars = (rating) => {
@@ -85,12 +81,51 @@ const Home = () => {
         {[1, 2, 3, 4, 5].map((star) => (
           <Star
             key={star}
-            size={16}
+            size={14}
             className={star <= (rating || 0) ? 'star-filled' : 'star-empty'}
           />
         ))}
       </div>
     );
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'proposal_generated':
+        return <FileText size={14} />;
+      case 'submitted':
+        return <Send size={14} />;
+      case 'won':
+        return <Trophy size={14} />;
+      case 'lost':
+        return <XOctagon size={14} />;
+      default:
+        return <Clock size={14} />;
+    }
+  };
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'proposal_generated':
+        return 'Generated';
+      case 'submitted':
+        return 'Submitted';
+      case 'won':
+        return 'Won';
+      case 'lost':
+        return 'Lost';
+      default:
+        return status;
+    }
+  };
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   if (loading) {
@@ -109,7 +144,7 @@ const Home = () => {
       <div className="page-header">
         <div>
           <h1>Upwork Proposal Generator</h1>
-          <p className="subtitle">Generate an Upwork Proposal for recommended leads.</p>
+          <p className="subtitle">Manage your job leads and proposals.</p>
         </div>
         <button onClick={fetchJobs} className="btn-secondary">
           <RefreshCw size={18} />
@@ -125,112 +160,175 @@ const Home = () => {
         </div>
       )}
 
-      <div className="home-content">
-        <div className="jobs-panel">
-          {/* Job Selector Dropdown */}
-          <div className="dropdown-container">
-            <label className="dropdown-label">Select Job</label>
-            <div className="custom-dropdown">
-              <button
-                className="dropdown-trigger"
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-              >
-                <span>
-                  {selectedJob ? selectedJob.title : 'Select a job...'}
-                </span>
-                <ChevronDown
-                  size={18}
-                  className={dropdownOpen ? 'rotated' : ''}
-                />
-              </button>
-
-              {dropdownOpen && (
-                <div className="dropdown-menu">
-                  {jobs.length === 0 ? (
-                    <div className="dropdown-empty">No pending jobs</div>
-                  ) : (
-                    jobs.map((job) => (
-                      <button
-                        key={job._id}
-                        className={`dropdown-item ${selectedJob?._id === job._id ? 'selected' : ''}`}
-                        onClick={() => handleJobSelect(job)}
-                      >
-                        <span className="dropdown-item-title">{job.title}</span>
-                        {job.rating && renderStars(job.rating)}
-                      </button>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+      <div className="home-content home-two-lists">
+        {/* Pending Jobs List */}
+        <div className="jobs-list-panel">
+          <div className="panel-header">
+            <h2>
+              <Clock size={20} />
+              Pending Jobs
+            </h2>
+            <span className="count-badge">{pendingJobs.length}</span>
           </div>
 
-          {/* Job Details Table */}
-          {selectedJob ? (
-            <div className="job-details-card">
-              <table className="job-details-table">
-                <tbody>
-                  <tr>
-                    <th>Proposal Title</th>
-                    <td>{selectedJob.title}</td>
-                  </tr>
-                  <tr>
-                    <th>Proposal Details</th>
-                    <td>
-                      <div className="description-cell">
-                        {selectedJob.description || 'No description available'}
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <th>Live URL</th>
-                    <td>
-                      {selectedJob.url ? (
-                        <a
-                          href={selectedJob.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="url-link"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigate('/proposal', { state: { job: selectedJob } });
-                          }}
-                        >
-                          <span>{selectedJob.url}</span>
-                          <ExternalLink size={14} />
-                        </a>
-                      ) : (
-                        'No URL'
-                      )}
-                    </td>
-                  </tr>
-                  <tr>
-                    <th>Rating</th>
-                    <td>{renderStars(selectedJob.rating)}</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              <div className="job-actions">
-                <button onClick={handleReject} className="btn-danger">
-                  <XCircle size={18} />
-                  <span>Reject Job</span>
-                </button>
-                <button onClick={handleViewProposal} className="btn-primary">
-                  <FileText size={18} />
-                  <span>View in Proposal</span>
-                </button>
+          <div className="jobs-list">
+            {pendingJobs.length === 0 ? (
+              <div className="empty-state-small">
+                <FileText size={32} />
+                <p>No pending jobs</p>
               </div>
-            </div>
-          ) : (
-            <div className="empty-state">
-              <FileText size={48} />
-              <h3>No Jobs Available</h3>
-              <p>There are no pending jobs to review.</p>
-            </div>
-          )}
+            ) : (
+              pendingJobs.map((job) => (
+                <div
+                  key={job._id}
+                  className={`job-list-item ${selectedJob?._id === job._id ? 'selected' : ''}`}
+                  onClick={() => handleJobClick(job)}
+                >
+                  <div className="job-item-main">
+                    <h4 className="job-item-title">{job.title}</h4>
+                    <div className="job-item-meta">
+                      {job.rating && renderStars(job.rating)}
+                      <span className="job-item-date">{formatDate(job.createdAt)}</span>
+                    </div>
+                  </div>
+                  <div className="job-item-actions">
+                    <button
+                      className="btn-icon btn-reject"
+                      onClick={(e) => handleReject(job, e)}
+                      title="Reject"
+                    >
+                      <XCircle size={18} />
+                    </button>
+                    <button
+                      className="btn-icon btn-create"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCreateProposal(job);
+                      }}
+                      title="Create Proposal"
+                    >
+                      <FileText size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Proposals List */}
+        <div className="jobs-list-panel proposals-panel">
+          <div className="panel-header">
+            <h2>
+              <CheckCircle size={20} />
+              Proposals
+            </h2>
+            <span className="count-badge">{proposalJobs.length}</span>
+          </div>
+
+          <div className="jobs-list">
+            {proposalJobs.length === 0 ? (
+              <div className="empty-state-small">
+                <FileText size={32} />
+                <p>No proposals yet</p>
+              </div>
+            ) : (
+              proposalJobs.map((job) => (
+                <div
+                  key={job._id}
+                  className={`job-list-item ${selectedJob?._id === job._id ? 'selected' : ''}`}
+                  onClick={() => handleJobClick(job)}
+                >
+                  <div className="job-item-main">
+                    <h4 className="job-item-title">{job.title}</h4>
+                    <div className="job-item-meta">
+                      <span className={`status-badge status-${job.status}`}>
+                        {getStatusIcon(job.status)}
+                        {getStatusLabel(job.status)}
+                      </span>
+                      <span className="job-item-date">{formatDate(job.updatedAt)}</span>
+                    </div>
+                  </div>
+                  <div className="job-item-actions">
+                    <button
+                      className="btn-icon btn-view"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleViewProposal(job);
+                      }}
+                      title="View Proposal"
+                    >
+                      <ExternalLink size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Job Detail Preview */}
+      {selectedJob && (
+        <div className="job-preview-panel">
+          <div className="preview-header">
+            <h3>{selectedJob.title}</h3>
+            {selectedJob.url && (
+              <a
+                href={selectedJob.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-secondary btn-small"
+              >
+                <ExternalLink size={14} />
+                View on Upwork
+              </a>
+            )}
+          </div>
+          <div className="preview-content">
+            <div className="preview-meta">
+              {selectedJob.rating && (
+                <div className="meta-item">
+                  <span className="meta-label">Rating:</span>
+                  {renderStars(selectedJob.rating)}
+                </div>
+              )}
+              <div className="meta-item">
+                <span className="meta-label">Status:</span>
+                <span className={`status-badge status-${selectedJob.status}`}>
+                  {getStatusIcon(selectedJob.status)}
+                  {getStatusLabel(selectedJob.status)}
+                </span>
+              </div>
+            </div>
+            {selectedJob.description && (
+              <div className="preview-description">
+                <h4>Description</h4>
+                <p>{selectedJob.description}</p>
+              </div>
+            )}
+          </div>
+          <div className="preview-actions">
+            {selectedJob.status === 'pending' ? (
+              <button
+                className="btn-primary"
+                onClick={() => handleCreateProposal(selectedJob)}
+              >
+                <FileText size={18} />
+                Create Proposal
+              </button>
+            ) : (
+              <button
+                className="btn-primary"
+                onClick={() => handleViewProposal(selectedJob)}
+              >
+                <ExternalLink size={18} />
+                View Proposal
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
