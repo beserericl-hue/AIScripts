@@ -131,17 +131,26 @@ const Proposal = () => {
     let pollInterval;
 
     if (jobId && !proposalData) {
-      pollInterval = setInterval(async () => {
+      // Initial fetch immediately
+      const fetchProposalData = async () => {
         try {
           const response = await api.get(`/proposals/${jobId}`);
-          if (response.data.proposalData?.coverLetter) {
-            setProposalData(response.data.proposalData);
-            clearInterval(pollInterval);
+          // Check if any proposal data exists (coverLetter, docUrl, or mermaidDiagram)
+          const data = response.data.proposalData;
+          if (data && (data.coverLetter || data.docUrl || data.mermaidDiagram)) {
+            setProposalData(data);
+            if (pollInterval) clearInterval(pollInterval);
+            setSuccess('Proposal generated successfully!');
           }
         } catch (err) {
           // Silent fail for polling
+          console.log('Polling for proposal data...', err.message);
         }
-      }, 5000);
+      };
+
+      // Fetch immediately, then poll every 5 seconds
+      fetchProposalData();
+      pollInterval = setInterval(fetchProposalData, 5000);
     }
 
     return () => {
@@ -193,9 +202,16 @@ const Proposal = () => {
     setFormData(prev => ({ ...prev, profile: '' }));
   };
 
+  // Check if current user can edit profiles for selected user
+  // Defined early so it can be used in saveProfile
+  const canEditProfile = selectedUserId === user?._id;
+
+  // Computed property to determine if we're in "new profile mode"
+  const isNewProfileMode = isCreatingNewProfile || (profiles.length === 0 && canEditProfile);
+
   const saveProfile = async () => {
     // Creating new profile (either explicit or no profiles exist)
-    if (isCreatingNewProfile || (profiles.length === 0 && canEditProfile)) {
+    if (isNewProfileMode) {
       if (!newProfileName.trim()) {
         setError('Profile name is required');
         return;
@@ -205,9 +221,6 @@ const Proposal = () => {
       await updateExistingProfile();
     }
   };
-
-  // Computed property to determine if we're in "new profile mode"
-  const isNewProfileMode = isCreatingNewProfile || (profiles.length === 0 && canEditProfile);
 
   const createNewProfile = async () => {
     setSavingProfile(true);
@@ -294,13 +307,10 @@ const Proposal = () => {
     );
   };
 
-  // Check if current user can edit profiles for selected user
-  const canEditProfile = selectedUserId === user._id;
-
   return (
     <div className="page-container proposal-page">
       <div className="proposal-layout">
-        {/* Left Side - Iframe */}
+        {/* Left Side - Job Preview Panel */}
         <div className="proposal-iframe-container">
           <div className="iframe-header">
             <h3>Job Preview</h3>
@@ -309,19 +319,31 @@ const Proposal = () => {
                 href={iframeUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn-icon"
+                className="btn-secondary btn-small"
               >
                 <ExternalLink size={16} />
+                Open in New Tab
               </a>
             )}
           </div>
           <div className="iframe-wrapper">
             {iframeUrl ? (
-              <iframe
-                src={iframeUrl}
-                title="Job Preview"
-                sandbox="allow-same-origin allow-scripts"
-              />
+              <div className="job-preview-info">
+                <ExternalLink size={48} />
+                <h4>View Job on Upwork</h4>
+                <p>For security reasons, Upwork job pages cannot be embedded directly.</p>
+                <p className="job-url-display">{iframeUrl}</p>
+                <a
+                  href={iframeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary"
+                >
+                  <ExternalLink size={18} />
+                  Open Job in New Tab
+                </a>
+                <p className="hint">Tip: Open the job in a new tab to view details while filling out the proposal form.</p>
+              </div>
             ) : (
               <div className="iframe-placeholder">
                 <Link size={48} />
