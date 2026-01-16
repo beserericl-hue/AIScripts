@@ -1,1 +1,28 @@
-
+[
+  {
+    "score": {
+      "score": 3,
+      "reasoning": "The job requires expert-level skills in React Native and Node.js for building an automotive marketplace app, which is outside the user's core expertise in AI workflows and automation tools like n8n, make.com, and Zapier. The user's preference for hourly projects and a specific rate contrasts with the fixed price and budget offered. Although the job is well-defined and seems stable, the technical mismatch and job type misalignment lower the compatibility significantly."
+    },
+    "job": {
+      "jobName": "Senior React Native + Node.js Developer – Automotive Marketplace App",
+      "jobType": "Fixed",
+      "price": "$5,000",
+      "jobDetailUrl": "https://www.upwork.com/jobs/~022012293270821996782?link=new_job&frkscc=JJjJMslq8eEb",
+      "descriptionSnippet": "We are building a high-traffic automotive marketplace similar to DoneDeal and AutoTrader — focused purely on cars, vans, trucks, parts, and trade sellers (garages).\n\nThis is NOT e-commerce, NOT Shopify, and NOT...",
+      "country": "Ireland",
+      "paymentVerified": true,
+      "clientRating": 3.37,
+      "amountSpent": "$5K spent",
+      "tags": [
+        "React Native",
+        "Node.js",
+        "React",
+        "iOS",
+        "+5"
+      ],
+      "postedAt": "2026-01-16 16:40",
+      "experienceLevel": "Expert"
+    }
+  }
+]
