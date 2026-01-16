@@ -30,6 +30,26 @@ router.get('/', authenticate, requireAdmin, async (req, res) => {
   }
 });
 
+// Get team members (users in the same team as current user)
+// NOTE: This route MUST come before /:id to avoid "my" being treated as an ID
+router.get('/my/members', authenticate, async (req, res) => {
+  try {
+    if (!req.user.teamId) {
+      return res.json([]);
+    }
+
+    const members = await User.find({ teamId: req.user.teamId })
+      .select('name email role lastProfileId')
+      .populate('lastProfileId', 'name')
+      .sort({ name: 1 });
+
+    res.json(members);
+  } catch (error) {
+    console.error('Error fetching team members:', error);
+    res.status(500).json({ error: 'Failed to fetch team members' });
+  }
+});
+
 // Get single team with members
 router.get('/:id', authenticate, async (req, res) => {
   try {
@@ -55,29 +75,12 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Get team members (users in the same team as current user)
-router.get('/my/members', authenticate, async (req, res) => {
-  try {
-    if (!req.user.teamId) {
-      return res.json([]);
-    }
-
-    const members = await User.find({ teamId: req.user.teamId })
-      .select('name email role lastProfileId')
-      .populate('lastProfileId', 'name')
-      .sort({ name: 1 });
-
-    res.json(members);
-  } catch (error) {
-    console.error('Error fetching team members:', error);
-    res.status(500).json({ error: 'Failed to fetch team members' });
-  }
-});
-
 // Create new team (admin only)
 router.post('/', authenticate, requireAdmin, async (req, res) => {
   try {
     const { name, description } = req.body;
+
+    console.log('Creating team with data:', { name, description, userId: req.user._id });
 
     if (!name?.trim()) {
       return res.status(400).json({ error: 'Team name is required' });
@@ -96,10 +99,19 @@ router.post('/', authenticate, requireAdmin, async (req, res) => {
     });
 
     await team.save();
+    console.log('Team created successfully:', team._id);
     res.status(201).json(team);
   } catch (error) {
     console.error('Error creating team:', error);
-    res.status(500).json({ error: 'Failed to create team' });
+    // Provide more specific error messages
+    if (error.code === 11000) {
+      return res.status(400).json({ error: 'A team with this name already exists' });
+    }
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({ error: messages.join(', ') });
+    }
+    res.status(500).json({ error: 'Failed to create team: ' + error.message });
   }
 });
 
