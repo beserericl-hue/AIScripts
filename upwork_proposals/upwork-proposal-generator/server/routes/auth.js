@@ -1,13 +1,123 @@
 import express from 'express';
+import nodemailer from 'nodemailer';
 import User from '../models/User.js';
 import { authenticate, generateToken, requireAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Register new user (admin only after first user)
+// In-memory store for verification codes (in production, use Redis or DB)
+const verificationCodes = new Map();
+
+// Create email transporter
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    }
+  });
+};
+
+// Generate 6-digit verification code
+const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+// Send verification email endpoint
+router.post('/send-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Check if email already registered
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    // Generate verification code
+    const code = generateVerificationCode();
+
+    // Store code with expiration (10 minutes)
+    verificationCodes.set(email, {
+      code,
+      expiresAt: Date.now() + 10 * 60 * 1000
+    });
+
+    // Send email
+    const transporter = createTransporter();
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: email,
+      subject: 'Upwork Proposal Generator - Email Verification',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #14a800;">Upwork Proposal Generator</h2>
+          <p>Your verification code is:</p>
+          <h1 style="color: #14a800; font-size: 36px; letter-spacing: 5px;">${code}</h1>
+          <p>This code will expire in 10 minutes.</p>
+          <p>If you didn't request this code, please ignore this email.</p>
+        </div>
+      `
+    });
+
+    res.json({ message: 'Verification code sent' });
+  } catch (error) {
+    console.error('Send verification error:', error);
+    res.status(500).json({ error: 'Failed to send verification email' });
+  }
+});
+
+// Verify code endpoint
+router.post('/verify-code', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and code are required' });
+    }
+
+    const stored = verificationCodes.get(email);
+
+    if (!stored) {
+      return res.status(400).json({ error: 'No verification code found. Please request a new one.' });
+    }
+
+    if (Date.now() > stored.expiresAt) {
+      verificationCodes.delete(email);
+      return res.status(400).json({ error: 'Verification code expired. Please request a new one.' });
+    }
+
+    if (stored.code !== code) {
+      return res.status(400).json({ error: 'Invalid verification code' });
+    }
+
+    // Code is valid - mark email as verified (keep in map for registration)
+    stored.verified = true;
+
+    res.json({ message: 'Email verified successfully' });
+  } catch (error) {
+    console.error('Verify code error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// Register new user (admin only after first user, requires email verification)
 router.post('/register', async (req, res) => {
   try {
     const { email, password, name, role } = req.body;
+
+    // Check if email was verified
+    const verification = verificationCodes.get(email);
+    if (!verification || !verification.verified) {
+      return res.status(400).json({ error: 'Email must be verified before registration' });
+    }
 
     // Check if this is the first user
     const userCount = await User.countDocuments();
@@ -45,6 +155,9 @@ router.post('/register', async (req, res) => {
     });
 
     await user.save();
+
+    // Clean up verification code after successful registration
+    verificationCodes.delete(email);
 
     const token = generateToken(user._id);
 
