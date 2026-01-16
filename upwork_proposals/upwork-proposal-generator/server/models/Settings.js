@@ -30,6 +30,10 @@ const settingsSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  webhookTestMode: {
+    type: Boolean,
+    default: false
+  },
   updatedAt: {
     type: Date,
     default: Date.now

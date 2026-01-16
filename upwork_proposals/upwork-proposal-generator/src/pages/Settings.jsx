@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import WebhookDebugPopup from '../components/WebhookDebugPopup';
 import {
   Save,
   Key,
@@ -20,7 +21,8 @@ import {
   UserPlus,
   UserMinus,
   Pencil,
-  X
+  X,
+  FlaskConical
 } from 'lucide-react';
 
 const Settings = () => {
@@ -37,8 +39,14 @@ const Settings = () => {
     mongodbUrl: '',
     mongodbUser: '',
     mongodbPassword: '',
-    mongodbDatabase: ''
+    mongodbDatabase: '',
+    webhookTestMode: false
   });
+
+  // Webhook test mode state
+  const [pendingWebhooks, setPendingWebhooks] = useState([]);
+  const [selectedWebhookData, setSelectedWebhookData] = useState(null);
+  const [showDebugPopup, setShowDebugPopup] = useState(false);
 
   // API Keys state
   const [apiKeys, setApiKeys] = useState([]);
@@ -69,6 +77,18 @@ const Settings = () => {
     fetchTeams();
   }, []);
 
+  // Poll for pending webhooks when test mode is active
+  useEffect(() => {
+    let pollInterval;
+    if (settings.webhookTestMode && apiKeys.length > 0) {
+      fetchPendingWebhooks();
+      pollInterval = setInterval(fetchPendingWebhooks, 5000);
+    }
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [settings.webhookTestMode, apiKeys]);
+
   useEffect(() => {
     if (selectedTeam) {
       fetchTeamMembers(selectedTeam._id);
@@ -89,6 +109,101 @@ const Settings = () => {
     } catch (err) {
       console.error('Failed to fetch settings:', err);
     }
+  };
+
+  const fetchPendingWebhooks = useCallback(async () => {
+    if (apiKeys.length === 0) return;
+
+    try {
+      // Use the first active API key for authentication
+      const activeKey = apiKeys.find(k => k.isActive);
+      if (!activeKey) return;
+
+      const response = await api.get('/webhooks/test-data', {
+        headers: { 'X-API-Key': activeKey.key }
+      });
+
+      if (response.data.data) {
+        setPendingWebhooks(response.data.data);
+
+        // Auto-show popup for new webhooks
+        if (response.data.data.length > 0 && !showDebugPopup) {
+          setSelectedWebhookData(response.data.data[0]);
+          setShowDebugPopup(true);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch pending webhooks:', err);
+    }
+  }, [apiKeys, showDebugPopup]);
+
+  const handleConfirmWebhook = async () => {
+    if (!selectedWebhookData) return;
+
+    try {
+      const activeKey = apiKeys.find(k => k.isActive);
+      if (!activeKey) {
+        setError('No active API key found');
+        return;
+      }
+
+      await api.post(`/webhooks/test-data/${selectedWebhookData.jobId}/confirm`, {}, {
+        headers: { 'X-API-Key': activeKey.key }
+      });
+
+      setSuccess('Webhook data confirmed and saved to database');
+      setShowDebugPopup(false);
+      setSelectedWebhookData(null);
+      fetchPendingWebhooks();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to confirm webhook data');
+    }
+  };
+
+  const handleDiscardWebhook = async () => {
+    if (!selectedWebhookData) return;
+
+    try {
+      const activeKey = apiKeys.find(k => k.isActive);
+      if (!activeKey) {
+        setError('No active API key found');
+        return;
+      }
+
+      await api.delete(`/webhooks/test-data/${selectedWebhookData.jobId}`, {
+        headers: { 'X-API-Key': activeKey.key }
+      });
+
+      setSuccess('Webhook data discarded');
+      setShowDebugPopup(false);
+      setSelectedWebhookData(null);
+      fetchPendingWebhooks();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to discard webhook data');
+    }
+  };
+
+  const handleToggleTestMode = async () => {
+    const newTestMode = !settings.webhookTestMode;
+    setSettings(prev => ({ ...prev, webhookTestMode: newTestMode }));
+
+    try {
+      await api.put('/settings', { ...settings, webhookTestMode: newTestMode });
+      if (newTestMode) {
+        setSuccess('Webhook test mode enabled - webhooks will NOT save to database');
+      } else {
+        setSuccess('Webhook test mode disabled - normal operation resumed');
+        setPendingWebhooks([]);
+      }
+    } catch (err) {
+      setError('Failed to update test mode setting');
+      setSettings(prev => ({ ...prev, webhookTestMode: !newTestMode }));
+    }
+  };
+
+  const viewPendingWebhook = (webhookData) => {
+    setSelectedWebhookData(webhookData);
+    setShowDebugPopup(true);
   };
 
   const fetchApiKeys = async () => {
@@ -394,6 +509,55 @@ const Settings = () => {
           {activeTab === 'webhooks' && (
             <div className="settings-section">
               <h2>N8N Webhook Configuration</h2>
+
+              {/* Test Mode Toggle */}
+              <div className={`test-mode-toggle ${settings.webhookTestMode ? 'active' : ''}`}>
+                <FlaskConical size={24} />
+                <div className="toggle-info">
+                  <h4>Webhook Test Mode</h4>
+                  <p>
+                    {settings.webhookTestMode
+                      ? 'Test mode is ON - Webhook callbacks will be captured but NOT saved to the database'
+                      : 'Test mode is OFF - Webhooks operate normally'
+                    }
+                  </p>
+                </div>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={settings.webhookTestMode}
+                    onChange={handleToggleTestMode}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
+
+              {/* Pending Webhooks */}
+              {settings.webhookTestMode && pendingWebhooks.length > 0 && (
+                <div className="pending-webhooks">
+                  <h4>Pending Webhook Data ({pendingWebhooks.length})</h4>
+                  {pendingWebhooks.map((webhook) => (
+                    <div key={webhook.jobId} className="pending-webhook-item">
+                      <div className="webhook-info">
+                        <span className="webhook-type">
+                          {webhook.type === 'evaluation' ? 'Evaluation Webhook' : 'Proposal Result Webhook'}
+                        </span>
+                        <span className="webhook-id">Job ID: {webhook.jobId}</span>
+                      </div>
+                      <span className="webhook-time">
+                        {new Date(webhook.timestamp).toLocaleTimeString()}
+                      </span>
+                      <button
+                        onClick={() => viewPendingWebhook(webhook)}
+                        className="btn-secondary btn-view"
+                      >
+                        View
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <form onSubmit={saveSettings}>
                 <div className="form-group">
                   <label htmlFor="n8nWebhookUrl">
@@ -516,9 +680,9 @@ const Settings = () => {
                               <button
                                 onClick={() => toggleApiKey(key._id)}
                                 className="btn-icon"
-                                title={key.isActive ? 'Deactivate' : 'Activate'}
+                                title={key.isActive ? 'Click to deactivate this API key' : 'Click to activate this API key'}
                               >
-                                <RefreshCw size={16} />
+                                {key.isActive ? <EyeOff size={16} /> : <Eye size={16} />}
                               </button>
                               <button
                                 onClick={() => deleteApiKey(key._id)}
@@ -972,6 +1136,19 @@ const Settings = () => {
           )}
         </div>
       </div>
+
+      {/* Webhook Debug Popup */}
+      {showDebugPopup && selectedWebhookData && (
+        <WebhookDebugPopup
+          data={selectedWebhookData}
+          onConfirm={handleConfirmWebhook}
+          onDiscard={handleDiscardWebhook}
+          onClose={() => {
+            setShowDebugPopup(false);
+            setSelectedWebhookData(null);
+          }}
+        />
+      )}
     </div>
   );
 };
