@@ -846,6 +846,22 @@ const Settings = () => {
                           </button>
                         </div>
                         <p className="team-description">{team.description || 'No description'}</p>
+                        <div className="team-id-row">
+                          <span className="team-id-label">ID:</span>
+                          <code className="team-id-value">{team._id}</code>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(team._id);
+                              setSuccess(`Team ID copied: ${team._id}`);
+                              setTimeout(() => setSuccess(''), 2000);
+                            }}
+                            className="btn-icon-small"
+                            title="Copy Team ID"
+                          >
+                            <Copy size={12} />
+                          </button>
+                        </div>
                         <div className="team-meta">
                           <span className="member-count">
                             <Users size={14} />

@@ -15,10 +15,10 @@ import {
   Save,
   Plus,
   ChevronDown,
-  Star,
   Trophy,
   XOctagon,
-  ArrowLeft
+  ArrowLeft,
+  Link
 } from 'lucide-react';
 
 const Proposal = () => {
@@ -27,7 +27,7 @@ const Proposal = () => {
   const { user } = useAuth();
   const initialJob = location.state?.job;
 
-  const [job] = useState(initialJob);
+  // Form data for creating proposal
   const [formData, setFormData] = useState({
     title: initialJob?.title || '',
     description: initialJob?.description || '',
@@ -282,20 +282,6 @@ const Proposal = () => {
     );
   };
 
-  const renderStars = (rating) => {
-    return (
-      <div className="rating-stars">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <Star
-            key={star}
-            size={16}
-            className={star <= (rating || 0) ? 'star-filled' : 'star-empty'}
-          />
-        ))}
-      </div>
-    );
-  };
-
   const getStatusLabel = (status) => {
     switch (status) {
       case 'proposal_generated':
@@ -339,327 +325,343 @@ const Proposal = () => {
         Back to Dashboard
       </button>
 
-      <div className="proposal-layout proposal-two-column">
-        {/* Left Side - Job Details */}
-        <div className="proposal-job-panel">
-          <div className="panel-header">
-            <h2>Job Details</h2>
-            {formData.url && (
-              <a
-                href={formData.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-secondary btn-small"
-              >
-                <ExternalLink size={14} />
-                View on Upwork
-              </a>
-            )}
-          </div>
-
-          <div className="job-details-content">
-            <div className="job-detail-item">
-              <label>Title</label>
-              <p>{formData.title || 'No title'}</p>
-            </div>
-
-            <div className="job-detail-item">
-              <label>Description</label>
-              <div className="job-description-text">
-                {formData.description || 'No description'}
-              </div>
-            </div>
-
-            {job?.rating && (
-              <div className="job-detail-item">
-                <label>Rating</label>
-                {renderStars(job.rating)}
-              </div>
-            )}
-
-            {/* Status Display and Controls */}
-            {mongoId && (
-              <div className="job-detail-item">
-                <label>Status</label>
-                <div className="status-controls">
-                  <span className={`status-badge status-${currentStatus}`}>
-                    {getStatusIcon(currentStatus)}
-                    {getStatusLabel(currentStatus)}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Status Change Buttons - Show when proposal exists */}
-            {hasProposal && mongoId && (
-              <div className="status-actions">
-                <label>Update Status</label>
-                <div className="status-buttons">
-                  <button
-                    className={`btn-status btn-submitted ${currentStatus === 'submitted' ? 'active' : ''}`}
-                    onClick={() => handleStatusChange('submitted')}
-                    disabled={updatingStatus}
-                  >
-                    <Send size={14} />
-                    Submitted
-                  </button>
-                  <button
-                    className={`btn-status btn-won ${currentStatus === 'won' ? 'active' : ''}`}
-                    onClick={() => handleStatusChange('won')}
-                    disabled={updatingStatus}
-                  >
-                    <Trophy size={14} />
-                    Won
-                  </button>
-                  <button
-                    className={`btn-status btn-lost ${currentStatus === 'lost' ? 'active' : ''}`}
-                    onClick={() => handleStatusChange('lost')}
-                    disabled={updatingStatus}
-                  >
-                    <XOctagon size={14} />
-                    Lost
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+      {error && (
+        <div className="error-message">
+          <AlertCircle size={18} />
+          <span>{error}</span>
+          <button onClick={() => setError('')}>×</button>
         </div>
+      )}
 
-        {/* Right Side - Form or Proposal Results */}
-        <div className="proposal-form-container">
-          {error && (
-            <div className="error-message">
-              <AlertCircle size={18} />
-              <span>{error}</span>
-              <button onClick={() => setError('')}>×</button>
-            </div>
-          )}
+      {success && (
+        <div className="success-message">
+          <Check size={18} />
+          <span>{success}</span>
+          <button onClick={() => setSuccess('')}>×</button>
+        </div>
+      )}
 
-          {success && (
-            <div className="success-message">
-              <Check size={18} />
-              <span>{success}</span>
-              <button onClick={() => setSuccess('')}>×</button>
-            </div>
-          )}
+      <div className="proposal-layout proposal-two-column">
+        {/* Left Side - Create Proposal Form */}
+        <div className="proposal-form-panel">
+          <div className="panel-card">
+            <h2>Create Proposal</h2>
 
-          {/* Show proposal results if available */}
-          {hasProposal ? (
-            <div className="results-section">
-              <h3>Generated Proposal</h3>
+            <form onSubmit={handleSubmit}>
+              {/* Title */}
+              <div className="form-group">
+                <label htmlFor="title">
+                  Title of Job
+                  {characterCount(formData.title, 4000)}
+                </label>
+                <input
+                  type="text"
+                  id="title"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleInputChange}
+                  placeholder="Enter job title"
+                  maxLength={4000}
+                />
+              </div>
 
-              {/* Doc URL */}
-              {proposalData.docUrl && (
-                <div className="result-card">
-                  <div className="result-header">
-                    <FileText size={18} />
-                    <span>Google Document</span>
-                    <a
-                      href={proposalData.docUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-small"
-                    >
-                      <ExternalLink size={14} />
-                      Open
-                    </a>
-                  </div>
-                  <div className="result-content">
-                    <code>{proposalData.docUrl}</code>
-                  </div>
-                </div>
-              )}
+              {/* Description */}
+              <div className="form-group">
+                <label htmlFor="description">
+                  Full Description of the Job
+                  {characterCount(formData.description, 4000)}
+                </label>
+                <textarea
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  placeholder="Enter full job description"
+                  maxLength={4000}
+                  rows={6}
+                />
+              </div>
 
-              {/* Cover Letter */}
-              {proposalData.coverLetter && (
-                <div className="result-card">
-                  <div className="result-header">
-                    <FileText size={18} />
-                    <span>Cover Letter</span>
-                    <button
-                      className="btn-small"
-                      onClick={() => copyToClipboard(proposalData.coverLetter, 'coverLetter')}
-                    >
-                      {copied.coverLetter ? <Check size={14} /> : <Copy size={14} />}
-                      {copied.coverLetter ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <div className="result-content cover-letter">
-                    {proposalData.coverLetter}
-                  </div>
-                </div>
-              )}
+              {/* Team Member and Profile Selection */}
+              <div className="profile-selection-section">
+                <h4>
+                  <User size={16} />
+                  Profile Selection
+                </h4>
 
-              {/* Mermaid Diagram */}
-              {proposalData.mermaidDiagram && (
-                <div className="result-card">
-                  <div className="result-header">
-                    <Code size={18} />
-                    <span>Workflow Diagram (Mermaid)</span>
-                    <button
-                      className="btn-small"
-                      onClick={() => copyToClipboard(proposalData.mermaidDiagram, 'mermaid')}
-                    >
-                      {copied.mermaid ? <Check size={14} /> : <Copy size={14} />}
-                      {copied.mermaid ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
-                  <div className="result-content mermaid-code">
-                    <pre>{proposalData.mermaidDiagram}</pre>
-                  </div>
-                  {proposalData.mermaidImageUrl && (
-                    <div className="mermaid-image">
-                      <img
-                        src={proposalData.mermaidImageUrl}
-                        alt="Workflow Diagram"
-                      />
+                <div className="form-row profile-dropdowns">
+                  <div className="form-group">
+                    <label htmlFor="teamMember">Team Member</label>
+                    <div className="select-wrapper">
+                      <select
+                        id="teamMember"
+                        value={selectedUserId || ''}
+                        onChange={handleUserChange}
+                      >
+                        {teamMembers.map((member) => (
+                          <option key={member._id} value={member._id}>
+                            {member.name} {member._id === user._id ? '(You)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <ChevronDown size={16} className="select-icon" />
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Show form when no proposal data */
-            <div className="form-section">
-              <h2>Create Proposal</h2>
+                  </div>
 
-              <form onSubmit={handleSubmit}>
-                {/* Team Member and Profile Selection */}
-                <div className="profile-selection-section">
-                  <h4>
-                    <User size={16} />
-                    Profile Selection
-                  </h4>
-
-                  <div className="form-row profile-dropdowns">
-                    <div className="form-group">
-                      <label htmlFor="teamMember">Team Member</label>
-                      <div className="select-wrapper">
-                        <select
-                          id="teamMember"
-                          value={selectedUserId || ''}
-                          onChange={handleUserChange}
+                  <div className="form-group">
+                    <label htmlFor="profileSelect">
+                      Profile Name
+                      {canEditProfile && !isCreatingNewProfile && profiles.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn-link"
+                          onClick={handleNewProfile}
                         >
-                          {teamMembers.map((member) => (
-                            <option key={member._id} value={member._id}>
-                              {member.name} {member._id === user._id ? '(You)' : ''}
-                            </option>
-                          ))}
+                          <Plus size={14} />
+                          New Profile
+                        </button>
+                      )}
+                    </label>
+                    {(isCreatingNewProfile || (profiles.length === 0 && canEditProfile)) ? (
+                      <input
+                        type="text"
+                        id="newProfileName"
+                        value={newProfileName}
+                        onChange={(e) => setNewProfileName(e.target.value)}
+                        placeholder="Enter profile name"
+                      />
+                    ) : profiles.length === 0 ? (
+                      <div className="select-wrapper">
+                        <select id="profileSelect" disabled>
+                          <option value="">No profiles available</option>
                         </select>
                         <ChevronDown size={16} className="select-icon" />
                       </div>
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="profileSelect">
-                        Profile Name
-                        {canEditProfile && !isCreatingNewProfile && profiles.length > 0 && (
-                          <button
-                            type="button"
-                            className="btn-link"
-                            onClick={handleNewProfile}
-                          >
-                            <Plus size={14} />
-                            New Profile
-                          </button>
-                        )}
-                      </label>
-                      {(isCreatingNewProfile || (profiles.length === 0 && canEditProfile)) ? (
-                        <input
-                          type="text"
-                          id="newProfileName"
-                          value={newProfileName}
-                          onChange={(e) => setNewProfileName(e.target.value)}
-                          placeholder="Enter profile name"
-                        />
-                      ) : profiles.length === 0 ? (
-                        <div className="select-wrapper">
-                          <select id="profileSelect" disabled>
-                            <option value="">No profiles available</option>
-                          </select>
-                          <ChevronDown size={16} className="select-icon" />
-                        </div>
-                      ) : (
-                        <div className="select-wrapper">
-                          <select
-                            id="profileSelect"
-                            value={selectedProfileId || ''}
-                            onChange={handleProfileChange}
-                          >
-                            {profiles.map((profile) => (
-                              <option key={profile._id} value={profile._id}>
-                                {profile.name} {profile.isLastUsed ? '(Current)' : ''}
-                              </option>
-                            ))}
-                            {canEditProfile && (
-                              <option value="new">+ Create New Profile</option>
-                            )}
-                          </select>
-                          <ChevronDown size={16} className="select-icon" />
-                        </div>
-                      )}
-                    </div>
+                    ) : (
+                      <div className="select-wrapper">
+                        <select
+                          id="profileSelect"
+                          value={selectedProfileId || ''}
+                          onChange={handleProfileChange}
+                        >
+                          {profiles.map((profile) => (
+                            <option key={profile._id} value={profile._id}>
+                              {profile.name} {profile.isLastUsed ? '(Current)' : ''}
+                            </option>
+                          ))}
+                          {canEditProfile && (
+                            <option value="new">+ Create New Profile</option>
+                          )}
+                        </select>
+                        <ChevronDown size={16} className="select-icon" />
+                      </div>
+                    )}
                   </div>
                 </div>
+              </div>
 
-                {/* Profile Content */}
-                <div className="form-group profile-content-group">
-                  <label htmlFor="profile">
-                    Profile Content
-                    {characterCount(formData.profile, 4000)}
-                  </label>
-                  <textarea
-                    id="profile"
-                    name="profile"
-                    value={formData.profile}
-                    onChange={handleInputChange}
-                    placeholder="Enter your profile/expertise"
-                    maxLength={4000}
-                    rows={6}
-                    disabled={!canEditProfile && !isNewProfileMode}
-                  />
-                  {canEditProfile && (
-                    <button
-                      type="button"
-                      className="btn-secondary btn-save-profile"
-                      onClick={saveProfile}
-                      disabled={savingProfile || (!isNewProfileMode && !selectedProfileId)}
-                    >
-                      {savingProfile ? (
-                        <>
-                          <Loader size={14} className="spinning" />
-                          <span>Saving...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Save size={14} />
-                          <span>{isNewProfileMode ? 'Create Profile' : 'Save Profile'}</span>
-                        </>
-                      )}
-                    </button>
-                  )}
-                </div>
+              {/* Profile Content */}
+              <div className="form-group profile-content-group">
+                <label htmlFor="profile">
+                  Profile Content
+                  {characterCount(formData.profile, 4000)}
+                </label>
+                <textarea
+                  id="profile"
+                  name="profile"
+                  value={formData.profile}
+                  onChange={handleInputChange}
+                  placeholder="Enter your profile/expertise"
+                  maxLength={4000}
+                  rows={6}
+                  disabled={!canEditProfile && !isNewProfileMode}
+                />
+                {canEditProfile && (
+                  <button
+                    type="button"
+                    className="btn-secondary btn-save-profile"
+                    onClick={saveProfile}
+                    disabled={savingProfile || (!isNewProfileMode && !selectedProfileId)}
+                  >
+                    {savingProfile ? (
+                      <>
+                        <Loader size={14} className="spinning" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save size={14} />
+                        <span>{isNewProfileMode ? 'Create Profile' : 'Save Profile'}</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
 
-                <button
-                  type="submit"
-                  className="btn-primary btn-full"
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <>
-                      <Loader size={18} className="spinning" />
-                      <span>Generating Proposal...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Send size={18} />
-                      <span>Generate Proposal</span>
-                    </>
-                  )}
-                </button>
-              </form>
+              {/* Job URL */}
+              <div className="form-group">
+                <label htmlFor="url">
+                  <Link size={14} />
+                  Job URL
+                </label>
+                <input
+                  type="url"
+                  id="url"
+                  name="url"
+                  value={formData.url}
+                  onChange={handleInputChange}
+                  placeholder="https://www.upwork.com/jobs/..."
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="btn-primary btn-full"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader size={18} className="spinning" />
+                    <span>Creating Proposal...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={18} />
+                    <span>Create Proposal</span>
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
+
+        {/* Right Side - Generated Proposal Results */}
+        <div className="proposal-results-panel">
+          <div className="panel-card">
+            <div className="panel-header">
+              <h2>Generated Proposal</h2>
+              {mongoId && currentStatus && (
+                <span className={`status-badge status-${currentStatus}`}>
+                  {getStatusIcon(currentStatus)}
+                  {getStatusLabel(currentStatus)}
+                </span>
+              )}
             </div>
-          )}
+
+            {hasProposal ? (
+              <div className="results-content">
+                {/* Status Change Buttons */}
+                {mongoId && (
+                  <div className="status-actions">
+                    <label>Update Status</label>
+                    <div className="status-buttons">
+                      <button
+                        className={`btn-status btn-submitted ${currentStatus === 'submitted' ? 'active' : ''}`}
+                        onClick={() => handleStatusChange('submitted')}
+                        disabled={updatingStatus}
+                      >
+                        <Send size={14} />
+                        Submitted
+                      </button>
+                      <button
+                        className={`btn-status btn-won ${currentStatus === 'won' ? 'active' : ''}`}
+                        onClick={() => handleStatusChange('won')}
+                        disabled={updatingStatus}
+                      >
+                        <Trophy size={14} />
+                        Won
+                      </button>
+                      <button
+                        className={`btn-status btn-lost ${currentStatus === 'lost' ? 'active' : ''}`}
+                        onClick={() => handleStatusChange('lost')}
+                        disabled={updatingStatus}
+                      >
+                        <XOctagon size={14} />
+                        Lost
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Doc URL */}
+                {proposalData.docUrl && (
+                  <div className="result-card">
+                    <div className="result-header">
+                      <FileText size={18} />
+                      <span>Google Document</span>
+                      <a
+                        href={proposalData.docUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-small"
+                      >
+                        <ExternalLink size={14} />
+                        Open
+                      </a>
+                    </div>
+                    <div className="result-content">
+                      <code>{proposalData.docUrl}</code>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cover Letter */}
+                {proposalData.coverLetter && (
+                  <div className="result-card">
+                    <div className="result-header">
+                      <FileText size={18} />
+                      <span>Cover Letter</span>
+                      <button
+                        className="btn-small"
+                        onClick={() => copyToClipboard(proposalData.coverLetter, 'coverLetter')}
+                      >
+                        {copied.coverLetter ? <Check size={14} /> : <Copy size={14} />}
+                        {copied.coverLetter ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    <div className="result-content cover-letter">
+                      {proposalData.coverLetter}
+                    </div>
+                  </div>
+                )}
+
+                {/* Mermaid Diagram */}
+                {proposalData.mermaidDiagram && (
+                  <div className="result-card">
+                    <div className="result-header">
+                      <Code size={18} />
+                      <span>Workflow Diagram (Mermaid)</span>
+                      <button
+                        className="btn-small"
+                        onClick={() => copyToClipboard(proposalData.mermaidDiagram, 'mermaid')}
+                      >
+                        {copied.mermaid ? <Check size={14} /> : <Copy size={14} />}
+                        {copied.mermaid ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                    <div className="result-content mermaid-code">
+                      <pre>{proposalData.mermaidDiagram}</pre>
+                    </div>
+                    {proposalData.mermaidImageUrl && (
+                      <div className="mermaid-image">
+                        <img
+                          src={proposalData.mermaidImageUrl}
+                          alt="Workflow Diagram"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="no-proposal-placeholder">
+                <FileText size={48} className="placeholder-icon" />
+                <h3>No Proposal Generated Yet</h3>
+                <p>Fill out the form and click "Create Proposal" to generate your proposal.</p>
+                <p className="hint">The generated cover letter, document link, and workflow diagram will appear here.</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
