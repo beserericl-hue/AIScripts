@@ -29,9 +29,8 @@ const teamSchema = new mongoose.Schema({
   }
 });
 
-teamSchema.pre('save', function(next) {
+teamSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 
 // Note: name index is already created by unique: true constraint

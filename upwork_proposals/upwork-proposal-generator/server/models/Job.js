@@ -69,9 +69,8 @@ const jobSchema = new mongoose.Schema({
   }
 });
 
-jobSchema.pre('save', function(next) {
+jobSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 
 jobSchema.index({ status: 1, createdAt: -1 });

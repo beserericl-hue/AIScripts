@@ -36,9 +36,8 @@ const settingsSchema = new mongoose.Schema({
   }
 });
 
-settingsSchema.pre('save', function(next) {
+settingsSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 
 export default mongoose.model('Settings', settingsSchema);

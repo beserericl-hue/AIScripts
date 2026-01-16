@@ -38,9 +38,8 @@ const profileSchema = new mongoose.Schema({
   }
 });
 
-profileSchema.pre('save', function(next) {
+profileSchema.pre('save', function() {
   this.updatedAt = Date.now();
-  next();
 });
 
 // Compound index for user's profiles
