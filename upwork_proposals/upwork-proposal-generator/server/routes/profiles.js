@@ -78,15 +78,10 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Profile name is required' });
     }
 
-    // Check if user has a team assigned
-    if (!req.user.teamId) {
-      return res.status(400).json({ error: 'You must be assigned to a team to create profiles' });
-    }
-
-    // Check if profile name already exists for this user
+    // Check if profile name already exists for this user (case-insensitive check)
     const existingProfile = await Profile.findOne({
       userId: req.user._id,
-      name: name.trim()
+      name: { $regex: new RegExp(`^${name.trim()}$`, 'i') }
     });
 
     if (existingProfile) {
@@ -100,7 +95,7 @@ router.post('/', authenticate, async (req, res) => {
       name: name.trim(),
       content: content || '',
       userId: req.user._id,
-      teamId: req.user.teamId,
+      teamId: req.user.teamId || null, // Allow null teamId
       isLastUsed: profileCount === 0
     });
 
@@ -134,11 +129,11 @@ router.put('/:id', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'You can only edit your own profiles' });
     }
 
-    // Check for duplicate name if name is being changed
-    if (name && name.trim() !== profile.name) {
+    // Check for duplicate name if name is being changed (case-insensitive)
+    if (name && name.trim().toLowerCase() !== profile.name.toLowerCase()) {
       const existingProfile = await Profile.findOne({
         userId: req.user._id,
-        name: name.trim(),
+        name: { $regex: new RegExp(`^${name.trim()}$`, 'i') },
         _id: { $ne: req.params.id }
       });
 

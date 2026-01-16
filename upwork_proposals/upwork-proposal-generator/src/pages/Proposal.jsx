@@ -39,31 +39,38 @@ const Proposal = () => {
   const [iframeUrl, setIframeUrl] = useState(initialJob?.url || '');
 
   // Team members and profile management state
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [selectedUserId, setSelectedUserId] = useState(null);
+  // Initialize with current user to avoid empty dropdown
+  const [teamMembers, setTeamMembers] = useState([user]);
+  const [selectedUserId, setSelectedUserId] = useState(user._id);
   const [profiles, setProfiles] = useState([]);
   const [selectedProfileId, setSelectedProfileId] = useState(null);
   const [isCreatingNewProfile, setIsCreatingNewProfile] = useState(false);
   const [newProfileName, setNewProfileName] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
 
-  // Initialize on mount
+  // Initialize on mount - fetch team members and profiles for current user
   useEffect(() => {
     fetchTeamMembers();
+    // Also fetch profiles for current user immediately
+    fetchUserProfiles(user._id);
   }, []);
 
-  // When team members load, set current user as selected
+  // When team members load, ensure current user is still selected
   useEffect(() => {
-    if (teamMembers.length > 0 && !selectedUserId) {
-      // Default to current logged-in user
-      const currentUserInTeam = teamMembers.find(m => m._id === user._id);
-      if (currentUserInTeam) {
-        setSelectedUserId(currentUserInTeam._id);
-      } else if (teamMembers.length > 0) {
-        setSelectedUserId(teamMembers[0]._id);
+    if (teamMembers.length > 0) {
+      // Verify the selected user is in the team members list
+      const selectedInTeam = teamMembers.find(m => m._id === selectedUserId);
+      if (!selectedInTeam) {
+        // Default to current logged-in user
+        const currentUserInTeam = teamMembers.find(m => m._id === user._id);
+        if (currentUserInTeam) {
+          setSelectedUserId(currentUserInTeam._id);
+        } else {
+          setSelectedUserId(teamMembers[0]._id);
+        }
       }
     }
-  }, [teamMembers, user._id, selectedUserId]);
+  }, [teamMembers, user._id]);
 
   // Fetch profiles when selected user changes
   useEffect(() => {
@@ -187,7 +194,8 @@ const Proposal = () => {
   };
 
   const saveProfile = async () => {
-    if (isCreatingNewProfile) {
+    // Creating new profile (either explicit or no profiles exist)
+    if (isCreatingNewProfile || (profiles.length === 0 && canEditProfile)) {
       if (!newProfileName.trim()) {
         setError('Profile name is required');
         return;
@@ -197,6 +205,9 @@ const Proposal = () => {
       await updateExistingProfile();
     }
   };
+
+  // Computed property to determine if we're in "new profile mode"
+  const isNewProfileMode = isCreatingNewProfile || (profiles.length === 0 && canEditProfile);
 
   const createNewProfile = async () => {
     setSavingProfile(true);
@@ -408,7 +419,7 @@ const Proposal = () => {
                   <div className="form-group">
                     <label htmlFor="profileSelect">
                       Profile Name
-                      {canEditProfile && !isCreatingNewProfile && (
+                      {canEditProfile && !isCreatingNewProfile && profiles.length > 0 && (
                         <button
                           type="button"
                           className="btn-link"
@@ -419,33 +430,35 @@ const Proposal = () => {
                         </button>
                       )}
                     </label>
-                    {isCreatingNewProfile ? (
+                    {/* Show text input when creating new profile OR when no profiles exist for current user */}
+                    {(isCreatingNewProfile || (profiles.length === 0 && canEditProfile)) ? (
                       <input
                         type="text"
                         id="newProfileName"
                         value={newProfileName}
                         onChange={(e) => setNewProfileName(e.target.value)}
                         placeholder="Enter profile name"
-                        required
                       />
+                    ) : profiles.length === 0 ? (
+                      <div className="select-wrapper">
+                        <select id="profileSelect" disabled>
+                          <option value="">No profiles available</option>
+                        </select>
+                        <ChevronDown size={16} className="select-icon" />
+                      </div>
                     ) : (
                       <div className="select-wrapper">
                         <select
                           id="profileSelect"
                           value={selectedProfileId || ''}
                           onChange={handleProfileChange}
-                          disabled={profiles.length === 0 && !canEditProfile}
                         >
-                          {profiles.length === 0 ? (
-                            <option value="">No profiles available</option>
-                          ) : (
-                            profiles.map((profile) => (
-                              <option key={profile._id} value={profile._id}>
-                                {profile.name} {profile.isLastUsed ? '(Current)' : ''}
-                              </option>
-                            ))
-                          )}
-                          {canEditProfile && profiles.length > 0 && (
+                          {profiles.map((profile) => (
+                            <option key={profile._id} value={profile._id}>
+                              {profile.name} {profile.isLastUsed ? '(Current)' : ''}
+                            </option>
+                          ))}
+                          {canEditProfile && (
                             <option value="new">+ Create New Profile</option>
                           )}
                         </select>
@@ -470,14 +483,14 @@ const Proposal = () => {
                   placeholder="Enter your profile/expertise"
                   maxLength={4000}
                   rows={4}
-                  disabled={!canEditProfile && !isCreatingNewProfile}
+                  disabled={!canEditProfile && !isNewProfileMode}
                 />
                 {canEditProfile && (
                   <button
                     type="button"
                     className="btn-secondary btn-save-profile"
                     onClick={saveProfile}
-                    disabled={savingProfile || (!isCreatingNewProfile && !selectedProfileId)}
+                    disabled={savingProfile || (!isNewProfileMode && !selectedProfileId)}
                   >
                     {savingProfile ? (
                       <>
@@ -487,7 +500,7 @@ const Proposal = () => {
                     ) : (
                       <>
                         <Save size={14} />
-                        <span>{isCreatingNewProfile ? 'Create Profile' : 'Save Profile'}</span>
+                        <span>{isNewProfileMode ? 'Create Profile' : 'Save Profile'}</span>
                       </>
                     )}
                   </button>
