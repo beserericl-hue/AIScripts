@@ -979,6 +979,13 @@ button {
   min-height: calc(100vh - 180px);
 }
 
+/* Full-width layout when no iframe/sidebar */
+.proposal-layout.proposal-layout-full {
+  grid-template-columns: 1fr;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
 @media (max-width: 1024px) {
   .proposal-layout {
     grid-template-columns: 1fr;
@@ -1049,6 +1056,25 @@ button {
 .form-section h2 {
   margin-bottom: 1.5rem;
   font-size: 1.25rem;
+}
+
+/* Input with button layout */
+.input-with-button {
+  display: flex;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.input-with-button input {
+  flex: 1;
+}
+
+.input-with-button .btn-view-job {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+  padding: 0 1rem;
 }
 
 /* Results Section */

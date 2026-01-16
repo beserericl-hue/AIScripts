@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext';
 import {
   Send,
   FileText,
-  Link,
   Copy,
   Check,
   AlertCircle,
@@ -36,7 +35,6 @@ const Proposal = () => {
   const [success, setSuccess] = useState('');
   const [proposalData, setProposalData] = useState(initialJob?.proposalData || null);
   const [copied, setCopied] = useState({});
-  const [iframeUrl, setIframeUrl] = useState(initialJob?.url || '');
 
   // Team members and profile management state
   // Initialize with current user to avoid empty dropdown
@@ -126,45 +124,9 @@ const Proposal = () => {
     }
   };
 
-  // Polling for proposal results
-  useEffect(() => {
-    let pollInterval;
-
-    if (jobId && !proposalData) {
-      // Initial fetch immediately
-      const fetchProposalData = async () => {
-        try {
-          const response = await api.get(`/proposals/${jobId}`);
-          // Check if any proposal data exists (coverLetter, docUrl, or mermaidDiagram)
-          const data = response.data.proposalData;
-          if (data && (data.coverLetter || data.docUrl || data.mermaidDiagram)) {
-            setProposalData(data);
-            if (pollInterval) clearInterval(pollInterval);
-            setSuccess('Proposal generated successfully!');
-          }
-        } catch (err) {
-          // Silent fail for polling
-          console.log('Polling for proposal data...', err.message);
-        }
-      };
-
-      // Fetch immediately, then poll every 5 seconds
-      fetchProposalData();
-      pollInterval = setInterval(fetchProposalData, 5000);
-    }
-
-    return () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
-  }, [jobId, proposalData]);
-
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-
-    if (name === 'url') {
-      setIframeUrl(value);
-    }
   };
 
   const handleUserChange = (e) => {
@@ -309,51 +271,8 @@ const Proposal = () => {
 
   return (
     <div className="page-container proposal-page">
-      <div className="proposal-layout">
-        {/* Left Side - Job Preview Panel */}
-        <div className="proposal-iframe-container">
-          <div className="iframe-header">
-            <h3>Job Preview</h3>
-            {iframeUrl && (
-              <a
-                href={iframeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-secondary btn-small"
-              >
-                <ExternalLink size={16} />
-                Open in New Tab
-              </a>
-            )}
-          </div>
-          <div className="iframe-wrapper">
-            {iframeUrl ? (
-              <div className="job-preview-info">
-                <ExternalLink size={48} />
-                <h4>View Job on Upwork</h4>
-                <p>For security reasons, Upwork job pages cannot be embedded directly.</p>
-                <p className="job-url-display">{iframeUrl}</p>
-                <a
-                  href={iframeUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-primary"
-                >
-                  <ExternalLink size={18} />
-                  Open Job in New Tab
-                </a>
-                <p className="hint">Tip: Open the job in a new tab to view details while filling out the proposal form.</p>
-              </div>
-            ) : (
-              <div className="iframe-placeholder">
-                <Link size={48} />
-                <p>Enter a job URL to preview</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Side - Form and Results */}
+      <div className="proposal-layout proposal-layout-full">
+        {/* Form and Results */}
         <div className="proposal-form-container">
           {/* Form Section */}
           <div className="form-section">
@@ -531,14 +450,27 @@ const Proposal = () => {
 
               <div className="form-group">
                 <label htmlFor="url">Job URL</label>
-                <input
-                  type="url"
-                  id="url"
-                  name="url"
-                  value={formData.url}
-                  onChange={handleInputChange}
-                  placeholder="https://www.upwork.com/jobs/..."
-                />
+                <div className="input-with-button">
+                  <input
+                    type="url"
+                    id="url"
+                    name="url"
+                    value={formData.url}
+                    onChange={handleInputChange}
+                    placeholder="https://www.upwork.com/jobs/..."
+                  />
+                  {formData.url && (
+                    <a
+                      href={formData.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-secondary btn-view-job"
+                    >
+                      <ExternalLink size={16} />
+                      View Job
+                    </a>
+                  )}
+                </div>
               </div>
 
               <button
