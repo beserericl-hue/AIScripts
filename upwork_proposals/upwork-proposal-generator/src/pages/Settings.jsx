@@ -888,6 +888,8 @@ const Settings = () => {
                                   value={editUserForm.role}
                                   onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value })}
                                   className="role-select"
+                                  disabled={u._id === user._id}
+                                  title={u._id === user._id ? "Cannot change your own role" : ""}
                                 >
                                   <option value="user">User</option>
                                   <option value="administrator">Administrator</option>
@@ -944,7 +946,6 @@ const Settings = () => {
                                   <button
                                     onClick={() => startEditingUser(u)}
                                     className="btn-icon"
-                                    disabled={u._id === user._id}
                                     title="Edit user"
                                   >
                                     <Pencil size={16} />
@@ -953,7 +954,7 @@ const Settings = () => {
                                     onClick={() => deleteUser(u._id)}
                                     className="btn-icon danger"
                                     disabled={u._id === user._id}
-                                    title="Delete user"
+                                    title={u._id === user._id ? "Cannot delete yourself" : "Delete user"}
                                   >
                                     <Trash2 size={16} />
                                   </button>
