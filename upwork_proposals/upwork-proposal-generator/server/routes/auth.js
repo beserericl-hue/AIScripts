@@ -276,6 +276,43 @@ router.patch('/users/:id/role', authenticate, requireAdmin, async (req, res) => 
   }
 });
 
+// Update user (admin only) - full update including name, email, role, teamId
+router.put('/users/:id', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { name, email, role, teamId } = req.body;
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Check email uniqueness if changed
+    if (email && email !== user.email) {
+      const existingUser = await User.findOne({ email, _id: { $ne: req.params.id } });
+      if (existingUser) {
+        return res.status(400).json({ error: 'Email already in use' });
+      }
+      user.email = email;
+    }
+
+    if (name) user.name = name;
+    if (role) user.role = role;
+    // Allow setting teamId to null to remove from team
+    user.teamId = teamId || null;
+
+    await user.save();
+
+    // Return user without password
+    const userResponse = user.toObject();
+    delete userResponse.password;
+
+    res.json(userResponse);
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({ error: 'Failed to update user' });
+  }
+});
+
 // Delete user (admin only)
 router.delete('/users/:id', authenticate, requireAdmin, async (req, res) => {
   try {

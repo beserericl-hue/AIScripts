@@ -18,7 +18,9 @@ import {
   RefreshCw,
   UsersRound,
   UserPlus,
-  UserMinus
+  UserMinus,
+  Pencil,
+  X
 } from 'lucide-react';
 
 const Settings = () => {
@@ -47,6 +49,8 @@ const Settings = () => {
   // Users state
   const [users, setUsers] = useState([]);
   const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: 'user', teamId: '' });
+  const [editingUser, setEditingUser] = useState(null);
+  const [editUserForm, setEditUserForm] = useState({ name: '', email: '', role: 'user', teamId: '' });
 
   // Teams state
   const [teams, setTeams] = useState([]);
@@ -223,6 +227,38 @@ const Settings = () => {
       setSuccess('User deleted');
     } catch (err) {
       setError('Failed to delete user');
+    }
+  };
+
+  const startEditingUser = (u) => {
+    setEditingUser(u._id);
+    setEditUserForm({
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      teamId: u.teamId || ''
+    });
+  };
+
+  const cancelEditingUser = () => {
+    setEditingUser(null);
+    setEditUserForm({ name: '', email: '', role: 'user', teamId: '' });
+  };
+
+  const saveUserEdit = async (id) => {
+    setLoading(true);
+    setError('');
+
+    try {
+      await api.put(`/auth/users/${id}`, editUserForm);
+      setEditingUser(null);
+      setEditUserForm({ name: '', email: '', role: 'user', teamId: '' });
+      fetchUsers();
+      setSuccess('User updated successfully');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to update user');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -786,6 +822,22 @@ const Settings = () => {
                     </div>
                   </div>
 
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="newUserTeam">Team</label>
+                      <select
+                        id="newUserTeam"
+                        value={newUser.teamId}
+                        onChange={(e) => setNewUser({ ...newUser, teamId: e.target.value })}
+                      >
+                        <option value="">No team</option>
+                        {teams.map((t) => (
+                          <option key={t._id} value={t._id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   <button type="submit" className="btn-primary" disabled={loading}>
                     <Plus size={18} />
                     <span>Add User</span>
@@ -813,35 +865,102 @@ const Settings = () => {
                     <tbody>
                       {users.map((u) => (
                         <tr key={u._id}>
-                          <td>{u.name}</td>
-                          <td>{u.email}</td>
-                          <td>
-                            <select
-                              value={u.role}
-                              onChange={(e) => updateUserRole(u._id, e.target.value)}
-                              disabled={u._id === user._id}
-                              className="role-select"
-                            >
-                              <option value="user">User</option>
-                              <option value="administrator">Administrator</option>
-                            </select>
-                          </td>
-                          <td>
-                            <span className={u.teamId ? 'team-assigned' : 'team-unassigned'}>
-                              {teams.find(t => t._id === u.teamId)?.name || 'No team'}
-                            </span>
-                          </td>
-                          <td>{new Date(u.createdAt).toLocaleDateString()}</td>
-                          <td>
-                            <button
-                              onClick={() => deleteUser(u._id)}
-                              className="btn-icon danger"
-                              disabled={u._id === user._id}
-                              title="Delete user"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
+                          {editingUser === u._id ? (
+                            <>
+                              <td>
+                                <input
+                                  type="text"
+                                  value={editUserForm.name}
+                                  onChange={(e) => setEditUserForm({ ...editUserForm, name: e.target.value })}
+                                  className="edit-input"
+                                />
+                              </td>
+                              <td>
+                                <input
+                                  type="email"
+                                  value={editUserForm.email}
+                                  onChange={(e) => setEditUserForm({ ...editUserForm, email: e.target.value })}
+                                  className="edit-input"
+                                />
+                              </td>
+                              <td>
+                                <select
+                                  value={editUserForm.role}
+                                  onChange={(e) => setEditUserForm({ ...editUserForm, role: e.target.value })}
+                                  className="role-select"
+                                >
+                                  <option value="user">User</option>
+                                  <option value="administrator">Administrator</option>
+                                </select>
+                              </td>
+                              <td>
+                                <select
+                                  value={editUserForm.teamId}
+                                  onChange={(e) => setEditUserForm({ ...editUserForm, teamId: e.target.value })}
+                                  className="team-select"
+                                >
+                                  <option value="">No team</option>
+                                  {teams.map((t) => (
+                                    <option key={t._id} value={t._id}>{t.name}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+                              <td>
+                                <div className="action-buttons">
+                                  <button
+                                    onClick={() => saveUserEdit(u._id)}
+                                    className="btn-icon success"
+                                    disabled={loading}
+                                    title="Save changes"
+                                  >
+                                    <Check size={16} />
+                                  </button>
+                                  <button
+                                    onClick={cancelEditingUser}
+                                    className="btn-icon"
+                                    title="Cancel"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </div>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td>{u.name}</td>
+                              <td>{u.email}</td>
+                              <td>
+                                <span className={`role-badge ${u.role}`}>{u.role}</span>
+                              </td>
+                              <td>
+                                <span className={u.teamId ? 'team-assigned' : 'team-unassigned'}>
+                                  {teams.find(t => t._id === u.teamId)?.name || 'No team'}
+                                </span>
+                              </td>
+                              <td>{new Date(u.createdAt).toLocaleDateString()}</td>
+                              <td>
+                                <div className="action-buttons">
+                                  <button
+                                    onClick={() => startEditingUser(u)}
+                                    className="btn-icon"
+                                    disabled={u._id === user._id}
+                                    title="Edit user"
+                                  >
+                                    <Pencil size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => deleteUser(u._id)}
+                                    className="btn-icon danger"
+                                    disabled={u._id === user._id}
+                                    title="Delete user"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </td>
+                            </>
+                          )}
                         </tr>
                       ))}
                     </tbody>

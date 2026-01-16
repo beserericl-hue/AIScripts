@@ -351,34 +351,150 @@ All protected endpoints require one of:
 
 ### N8N Integration
 
+The application integrates with N8N workflows through webhook callbacks. Jobs are assigned to teams, allowing multi-tenant data isolation.
+
+```mermaid
+sequenceDiagram
+    participant N8N
+    participant API as Upwork API
+    participant DB as MongoDB
+
+    Note over N8N,DB: Evaluation Webhook Flow
+    N8N->>API: POST /api/webhooks/evaluation
+    Note right of N8N: Headers: X-API-Key
+    API->>DB: Create/Update Job
+    API-->>N8N: { success: true, jobId, teamId }
+
+    Note over N8N,DB: Proposal Result Flow
+    N8N->>API: POST /api/webhooks/proposal-result
+    API->>DB: Update Job with Proposal
+    API-->>N8N: { success: true, jobId, teamId }
+```
+
 #### Webhook Headers
-Include the API key in headers:
+
+All webhook requests must include the API key header:
+
+| Header | Required | Description |
+|--------|----------|-------------|
+| `X-API-Key` | Yes | API key generated in Settings > API Keys |
+| `Content-Type` | Yes | Must be `application/json` |
+
+Example:
 ```
-X-API-Key: your-api-key
+X-API-Key: upk_abc123xyz...
+Content-Type: application/json
 ```
 
-#### Evaluation Webhook Payload
+#### Evaluation Webhook (`POST /api/webhooks/evaluation`)
+
+Called when N8N evaluates a job opportunity. Creates a new job or updates an existing one.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `jobId` | string | Yes* | Unique job identifier |
+| `title` | string | Yes* | Job title |
+| `description` | string | No | Full job description |
+| `url` | string | No | Upwork job URL |
+| `rating` | number | No | Client rating (1-5) |
+| `teamId` | string | No | MongoDB ObjectId of target team |
+| `teamName` | string | No | Team name (alternative to teamId) |
+| `evaluationData` | object | No | Additional evaluation metadata |
+
+*Either `jobId` or `title` is required
+
+**Example Request:**
 ```json
 {
-  "jobId": "unique-job-id",
-  "title": "Job Title",
-  "description": "Job description",
-  "url": "https://upwork.com/jobs/...",
+  "jobId": "job-12345",
+  "title": "Full Stack Developer for E-commerce Platform",
+  "description": "We need an experienced developer to build...",
+  "url": "https://www.upwork.com/jobs/~01abc123",
   "rating": 4,
-  "evaluationData": { ... }
+  "teamId": "507f1f77bcf86cd799439011",
+  "evaluationData": {
+    "skills": ["React", "Node.js", "MongoDB"],
+    "budget": "$5000-$10000",
+    "duration": "3 months",
+    "clientHistory": {
+      "jobsPosted": 25,
+      "hireRate": 80,
+      "totalSpent": "$50000+"
+    }
+  }
 }
 ```
 
-#### Proposal Result Webhook Payload
+**Response (Success - 200):**
 ```json
 {
-  "jobId": "unique-job-id",
-  "coverLetter": "Generated cover letter...",
-  "docUrl": "https://docs.google.com/...",
-  "mermaidDiagram": "graph TD; ...",
-  "mermaidImageUrl": "https://..."
+  "success": true,
+  "message": "Evaluation data received",
+  "jobId": "job-12345",
+  "teamId": "507f1f77bcf86cd799439011"
 }
 ```
+
+**Response (Error - 400):**
+```json
+{
+  "error": "jobId or title is required"
+}
+```
+
+#### Proposal Result Webhook (`POST /api/webhooks/proposal-result`)
+
+Called when N8N generates a proposal and sends back the results.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `jobId` | string | Yes | Unique job identifier (must exist) |
+| `coverLetter` | string | No | Generated cover letter text |
+| `docUrl` | string | No | URL to Google Doc with full proposal |
+| `mermaidDiagram` | string | No | Mermaid diagram code |
+| `mermaidImageUrl` | string | No | URL to rendered diagram image |
+
+**Example Request:**
+```json
+{
+  "jobId": "job-12345",
+  "coverLetter": "Dear Hiring Manager,\n\nI am excited to apply for the Full Stack Developer position. With over 5 years of experience building scalable e-commerce platforms using React and Node.js, I am confident I can deliver exceptional results for your project.\n\nKey highlights:\n- Built 10+ e-commerce platforms with 99.9% uptime\n- Expert in React, Node.js, MongoDB stack\n- Strong focus on performance and user experience\n\nI would love to discuss how I can help bring your vision to life.\n\nBest regards,\n[Your Name]",
+  "docUrl": "https://docs.google.com/document/d/1abc123xyz/edit",
+  "mermaidDiagram": "graph TD\n    A[Client Request] --> B{Authentication}\n    B -->|Valid| C[API Gateway]\n    B -->|Invalid| D[401 Error]\n    C --> E[Business Logic]\n    E --> F[Database]\n    F --> G[Response]",
+  "mermaidImageUrl": "https://mermaid.ink/img/eyJjb2RlIjoiZ3JhcGggVEQi..."
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "success": true,
+  "message": "Proposal result received",
+  "jobId": "job-12345",
+  "teamId": "507f1f77bcf86cd799439011"
+}
+```
+
+**Response (Error - 404):**
+```json
+{
+  "error": "Job not found"
+}
+```
+
+#### Team Assignment
+
+Jobs can be assigned to teams for multi-tenant data isolation:
+
+1. **By Team ID:** Include `teamId` (MongoDB ObjectId) in the evaluation webhook
+2. **By Team Name:** Include `teamName` (case-sensitive) in the evaluation webhook
+3. **Default:** Jobs without team assignment are visible to all users
+
+The team assignment allows different organizations or departments to have separate job queues while using the same application instance.
 
 ## Deployment
 

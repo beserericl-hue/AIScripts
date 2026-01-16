@@ -12,23 +12,34 @@ sequenceDiagram
         Note over U,N: Proposal Generation Flow
         U->>F: Fill proposal form
         F->>B: POST /api/proposals/generate
-        B->>DB: Create job (status: pending)
+        B->>DB: Create job (status: pending, teamId)
         B->>N: POST webhook with job data
         B-->>F: Return jobId
 
         loop Every 5 seconds
             F->>B: GET /api/proposals/:jobId
-            B->>DB: Query job
+            B->>DB: Query job (filtered by teamId)
             DB-->>B: Return job data
             B-->>F: Return proposal status
         end
 
         N->>B: POST /api/webhooks/proposal-result
+        Note right of N: Headers: X-API-Key
         B->>DB: Update job with proposal data
+        B-->>N: { success: true, jobId, teamId }
 
         F->>B: GET /api/proposals/:jobId
         B->>DB: Query job
         DB-->>B: Return complete proposal
         B-->>F: Return cover letter, doc URL, diagram
         F->>U: Display results
+    end
+
+    rect rgb(254, 243, 199)
+        Note over N,DB: N8N Webhook Evaluation Flow
+        N->>B: POST /api/webhooks/evaluation
+        Note right of N: { jobId, title, teamId/teamName }
+        B->>DB: Resolve team by ID or name
+        B->>DB: Create/Update job with teamId
+        B-->>N: { success: true, jobId, teamId }
     end
