@@ -1466,6 +1466,12 @@ button {
   font-weight: 500;
 }
 
+.skill-tag.empty {
+  background: #f3f4f6;
+  color: #9ca3af;
+  font-style: italic;
+}
+
 /* Legacy - Job Details Panel (for backwards compatibility) */
 .proposal-job-panel {
   background: var(--bg-primary);

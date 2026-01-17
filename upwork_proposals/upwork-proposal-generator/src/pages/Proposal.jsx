@@ -353,67 +353,59 @@ const Proposal = () => {
             <h2>Create Proposal</h2>
 
             <form onSubmit={handleSubmit}>
-              {/* Job Reference Fields - Read-only data from N8N evaluation */}
-              {initialJob?.evaluationData && (
-                <div className="job-reference-section">
-                  {/* Score and Score Reason */}
-                  <div className="score-section">
-                    <div className="score-display">
-                      <Star size={20} className="score-icon" />
-                      <span className="score-label">Score</span>
-                      <span className="score-value">
-                        {initialJob.evaluationData.scoreValue || initialJob.rating || 'N/A'}
-                      </span>
-                    </div>
-                    {initialJob.evaluationData.scoreReasoning && (
-                      <div className="score-reason">
-                        <label>Score Reason</label>
-                        <p>{initialJob.evaluationData.scoreReasoning}</p>
-                      </div>
-                    )}
+              {/* Job Reference Fields - Always show with N/A for missing data */}
+              <div className="job-reference-section">
+                {/* Score and Score Reason */}
+                <div className="score-section">
+                  <div className="score-display">
+                    <Star size={20} className="score-icon" />
+                    <span className="score-label">Score</span>
+                    <span className="score-value">
+                      {initialJob?.evaluationData?.scoreValue || initialJob?.rating || 'N/A'}
+                    </span>
                   </div>
-
-                  {/* Job Meta Fields */}
-                  <div className="job-meta-fields">
-                    {initialJob.evaluationData.jobType && (
-                      <div className="meta-field">
-                        <Briefcase size={14} />
-                        <span className="meta-label">Job Type</span>
-                        <span className="meta-value">{initialJob.evaluationData.jobType}</span>
-                      </div>
-                    )}
-                    {initialJob.evaluationData.price && (
-                      <div className="meta-field">
-                        <DollarSign size={14} />
-                        <span className="meta-label">Price</span>
-                        <span className="meta-value">{initialJob.evaluationData.price}</span>
-                      </div>
-                    )}
-                    {initialJob.evaluationData.country && (
-                      <div className="meta-field">
-                        <MapPin size={14} />
-                        <span className="meta-label">Country</span>
-                        <span className="meta-value">{initialJob.evaluationData.country}</span>
-                      </div>
-                    )}
+                  <div className="score-reason">
+                    <label>Score Reason</label>
+                    <p>{initialJob?.evaluationData?.scoreReasoning || 'No score reasoning available'}</p>
                   </div>
-
-                  {/* Skills Tags */}
-                  {initialJob.evaluationData.tags && initialJob.evaluationData.tags.length > 0 && (
-                    <div className="skills-section">
-                      <label>
-                        <Tag size={14} />
-                        Skills
-                      </label>
-                      <div className="skills-tags">
-                        {initialJob.evaluationData.tags.map((tag, index) => (
-                          <span key={index} className="skill-tag">{tag}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
-              )}
+
+                {/* Job Meta Fields */}
+                <div className="job-meta-fields">
+                  <div className="meta-field">
+                    <Briefcase size={14} />
+                    <span className="meta-label">Job Type</span>
+                    <span className="meta-value">{initialJob?.evaluationData?.jobType || 'N/A'}</span>
+                  </div>
+                  <div className="meta-field">
+                    <DollarSign size={14} />
+                    <span className="meta-label">Price</span>
+                    <span className="meta-value">{initialJob?.evaluationData?.price || 'N/A'}</span>
+                  </div>
+                  <div className="meta-field">
+                    <MapPin size={14} />
+                    <span className="meta-label">Country</span>
+                    <span className="meta-value">{initialJob?.evaluationData?.country || 'N/A'}</span>
+                  </div>
+                </div>
+
+                {/* Skills Tags */}
+                <div className="skills-section">
+                  <label>
+                    <Tag size={14} />
+                    Skills
+                  </label>
+                  <div className="skills-tags">
+                    {initialJob?.evaluationData?.tags && initialJob.evaluationData.tags.length > 0 ? (
+                      initialJob.evaluationData.tags.map((tag, index) => (
+                        <span key={index} className="skill-tag">{tag}</span>
+                      ))
+                    ) : (
+                      <span className="skill-tag empty">No skills specified</span>
+                    )}
+                  </div>
+                </div>
+              </div>
 
               {/* Title */}
               <div className="form-group">
