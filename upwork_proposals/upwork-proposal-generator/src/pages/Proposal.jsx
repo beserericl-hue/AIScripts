@@ -358,10 +358,12 @@ const Proposal = () => {
                 {/* Score and Score Reason */}
                 <div className="score-section">
                   <div className="score-display">
-                    <Star size={20} className="score-icon" />
+                    <Star size={14} className="score-icon" />
                     <span className="score-label">Score</span>
-                    <span className="score-value">
-                      {initialJob?.evaluationData?.scoreValue || initialJob?.rating || 'N/A'}
+                    <span className={`score-value ${!(initialJob?.evaluationData?.scoreValue || initialJob?.rating) ? 'empty' : ''}`}>
+                      {(initialJob?.evaluationData?.scoreValue || initialJob?.rating)
+                        ? `${initialJob?.evaluationData?.scoreValue || initialJob?.rating} / 10`
+                        : 'N/A'}
                     </span>
                   </div>
                   <div className="score-reason">

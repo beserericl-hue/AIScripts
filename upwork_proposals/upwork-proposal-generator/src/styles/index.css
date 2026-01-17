@@ -1373,10 +1373,14 @@ button {
 }
 
 .score-display .score-value {
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: 0.875rem;
+  font-weight: 600;
   color: var(--primary-color);
   margin-left: 0.25rem;
+}
+
+.score-display .score-value.empty {
+  color: var(--text-primary);
 }
 
 .score-reason {
