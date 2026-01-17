@@ -16,13 +16,12 @@ const jobSchema = new mongoose.Schema({
     maxlength: 4000
   },
   url: {
-    type: String,
-    required: true
+    type: String
   },
   rating: {
     type: Number,
     min: 1,
-    max: 5
+    max: 10
   },
   status: {
     type: String,
