@@ -1342,6 +1342,130 @@ button {
   color: var(--text-muted);
 }
 
+/* Job Reference Section - Read-only fields from N8N */
+.job-reference-section {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.score-section {
+  margin-bottom: 1rem;
+}
+
+.score-display {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.score-display .score-icon {
+  color: #f59e0b;
+}
+
+.score-display .score-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.score-display .score-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-left: 0.25rem;
+}
+
+.score-reason {
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+}
+
+.score-reason label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.375rem;
+}
+
+.score-reason p {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.job-meta-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.meta-field {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: var(--bg-primary);
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+}
+
+.meta-field svg {
+  color: var(--text-muted);
+}
+
+.meta-field .meta-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.meta-field .meta-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.skills-section {
+  border-top: 1px solid var(--border-color);
+  padding-top: 1rem;
+}
+
+.skills-section label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.skills-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.skill-tag {
+  display: inline-block;
+  background: #e0f2fe;
+  color: #0369a1;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
 /* Legacy - Job Details Panel (for backwards compatibility) */
 .proposal-job-panel {
   background: var(--bg-primary);

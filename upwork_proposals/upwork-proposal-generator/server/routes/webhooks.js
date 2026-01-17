@@ -2,7 +2,7 @@ import express from 'express';
 import Job from '../models/Job.js';
 import Team from '../models/Team.js';
 import Settings from '../models/Settings.js';
-import { authenticateApiKey } from '../middleware/auth.js';
+import { authenticateApiKey, authenticateAny } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -22,26 +22,86 @@ const cleanupTestData = () => {
 // Run cleanup every 15 minutes
 setInterval(cleanupTestData, 15 * 60 * 1000);
 
+// Helper function to normalize evaluation payload (handles both old and new N8N formats)
+const normalizeEvaluationPayload = (payload) => {
+  // Check if it's the new N8N format with nested score and job objects
+  if (payload.score && payload.job) {
+    const { score, job } = payload;
+    return {
+      // Extract job fields
+      jobId: payload.jobId || null,
+      title: job.jobName || '',
+      description: job.descriptionSnippet || '',
+      url: job.jobDetailUrl || '',
+      rating: score.score || null,
+      // New fields from N8N
+      jobType: job.jobType || '',
+      price: job.price || '',
+      country: job.country || '',
+      paymentVerified: job.paymentVerified || false,
+      clientRating: job.clientRating || null,
+      amountSpent: job.amountSpent || '',
+      tags: job.tags || [],
+      postedAt: job.postedAt || '',
+      experienceLevel: job.experienceLevel || '',
+      // Score fields
+      scoreValue: score.score || null,
+      scoreReasoning: score.reasoning || '',
+      // Team assignment
+      teamId: payload.teamId || null,
+      teamName: payload.teamName || null,
+      // Store original payload
+      rawPayload: payload
+    };
+  }
+
+  // Old format - return as is with defaults
+  return {
+    jobId: payload.jobId || null,
+    title: payload.title || '',
+    description: payload.description || '',
+    url: payload.url || '',
+    rating: payload.rating || null,
+    jobType: payload.jobType || '',
+    price: payload.price || '',
+    country: payload.country || '',
+    paymentVerified: payload.paymentVerified || false,
+    clientRating: payload.clientRating || null,
+    amountSpent: payload.amountSpent || '',
+    tags: payload.tags || [],
+    postedAt: payload.postedAt || '',
+    experienceLevel: payload.experienceLevel || '',
+    scoreValue: payload.scoreValue || payload.rating || null,
+    scoreReasoning: payload.scoreReasoning || '',
+    teamId: payload.teamId || null,
+    teamName: payload.teamName || null,
+    rawPayload: payload
+  };
+};
+
 // Helper function to validate evaluation payload
 const validateEvaluationPayload = (payload) => {
   const errors = [];
   const warnings = [];
 
-  // Required fields
-  if (!payload.jobId && !payload.title) {
-    errors.push('Either jobId or title is required');
+  // Normalize payload first
+  const normalized = normalizeEvaluationPayload(payload);
+
+  // Required fields - need either jobId or title
+  if (!normalized.jobId && !normalized.title) {
+    errors.push('Either jobId or title (job.jobName) is required');
   }
 
   // Recommended fields
-  if (!payload.title) {
-    warnings.push('title is missing - recommended for job display');
+  if (!normalized.title) {
+    warnings.push('title/jobName is missing - recommended for job display');
   }
-  if (!payload.description) {
-    warnings.push('description is missing - recommended for context');
+  if (!normalized.description) {
+    warnings.push('description/descriptionSnippet is missing - recommended for context');
   }
 
   // Optional team assignment validation
-  if (payload.teamId && payload.teamName) {
+  if (normalized.teamId && normalized.teamName) {
     warnings.push('Both teamId and teamName provided - teamId will take precedence');
   }
 
@@ -50,18 +110,21 @@ const validateEvaluationPayload = (payload) => {
     errors,
     warnings,
     receivedFields: Object.keys(payload),
-    expectedFields: ['jobId', 'title', 'description', 'url', 'rating', 'evaluationData', 'teamId', 'teamName']
+    normalizedFields: Object.keys(normalized),
+    expectedFields: ['jobId', 'score.score', 'score.reasoning', 'job.jobName', 'job.jobType', 'job.price', 'job.jobDetailUrl', 'job.descriptionSnippet', 'job.country', 'job.tags', 'teamId', 'teamName']
   };
 };
 
 // N8N Proposal Evaluation Callback
 // Called when N8N evaluates a job and sends back data
-// Now accepts teamId to assign jobs to specific teams
+// Supports both old flat format and new nested {score, job} format from N8N
 router.post('/evaluation', authenticateApiKey, async (req, res) => {
   try {
     const payload = req.body;
-    const { jobId, title, description, url, rating, evaluationData, teamId, teamName } = payload;
     const testMode = req.query.testMode === 'true';
+
+    // Normalize payload (handles both old and new N8N formats)
+    const normalized = normalizeEvaluationPayload(payload);
 
     // Validate payload
     const validation = validateEvaluationPayload(payload);
@@ -75,10 +138,11 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
 
     // If test mode, store data but don't save to database
     if (testMode) {
-      const testKey = jobId || `test_${Date.now()}`;
+      const testKey = normalized.jobId || `test_${Date.now()}`;
       testModeData.set(testKey, {
         type: 'evaluation',
         payload,
+        normalized,
         validation,
         timestamp: Date.now()
       });
@@ -89,19 +153,20 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
         message: 'Test mode: Evaluation data received but NOT saved to database',
         jobId: testKey,
         validation,
+        normalizedPayload: normalized,
         receivedPayload: payload
       });
     }
 
     // Resolve team by teamId or teamName
     let resolvedTeamId = null;
-    if (teamId) {
-      const team = await Team.findById(teamId);
+    if (normalized.teamId) {
+      const team = await Team.findById(normalized.teamId);
       if (team) {
         resolvedTeamId = team._id;
       }
-    } else if (teamName) {
-      const team = await Team.findOne({ name: teamName, isActive: true });
+    } else if (normalized.teamName) {
+      const team = await Team.findOne({ name: normalized.teamName, isActive: true });
       if (team) {
         resolvedTeamId = team._id;
       }
@@ -110,30 +175,39 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
     // Find or create job
     let job;
 
-    if (jobId) {
-      job = await Job.findOne({ jobId });
+    if (normalized.jobId) {
+      job = await Job.findOne({ jobId: normalized.jobId });
     }
 
-    if (!job && title) {
+    if (!job && normalized.title) {
       // Create new job from evaluation
       const { v4: uuidv4 } = await import('uuid');
       job = new Job({
-        jobId: jobId || uuidv4(),
-        title,
-        description: description || '',
-        url: url || '',
-        rating: rating || null,
+        jobId: normalized.jobId || uuidv4(),
+        title: normalized.title,
+        description: normalized.description || '',
+        url: normalized.url || '',
+        rating: normalized.scoreValue || normalized.rating || null,
         status: 'pending',
-        evaluationData: payload,
+        // Store all evaluation data including new fields
+        evaluationData: {
+          ...normalized,
+          originalPayload: payload
+        },
         teamId: resolvedTeamId
       });
     } else if (job) {
       // Update existing job
-      job.evaluationData = payload;
-      if (title) job.title = title;
-      if (description) job.description = description;
-      if (url) job.url = url;
-      if (rating) job.rating = rating;
+      job.evaluationData = {
+        ...normalized,
+        originalPayload: payload
+      };
+      if (normalized.title) job.title = normalized.title;
+      if (normalized.description) job.description = normalized.description;
+      if (normalized.url) job.url = normalized.url;
+      if (normalized.scoreValue || normalized.rating) {
+        job.rating = normalized.scoreValue || normalized.rating;
+      }
       // Only update teamId if provided and job doesn't already have one
       if (resolvedTeamId && !job.teamId) {
         job.teamId = resolvedTeamId;
@@ -260,8 +334,8 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
   }
 });
 
-// Get test mode data for a specific job
-router.get('/test-data/:jobId', authenticateApiKey, async (req, res) => {
+// Get test mode data for a specific job (accepts JWT or API key)
+router.get('/test-data/:jobId', authenticateAny, async (req, res) => {
   try {
     const { jobId } = req.params;
     const data = testModeData.get(jobId);
@@ -280,8 +354,8 @@ router.get('/test-data/:jobId', authenticateApiKey, async (req, res) => {
   }
 });
 
-// Get all pending test mode data
-router.get('/test-data', authenticateApiKey, async (req, res) => {
+// Get all pending test mode data (accepts JWT or API key)
+router.get('/test-data', authenticateAny, async (req, res) => {
   try {
     const allData = [];
     for (const [key, value] of testModeData.entries()) {
@@ -301,8 +375,8 @@ router.get('/test-data', authenticateApiKey, async (req, res) => {
   }
 });
 
-// Confirm and save test mode data to database
-router.post('/test-data/:jobId/confirm', authenticateApiKey, async (req, res) => {
+// Confirm and save test mode data to database (accepts JWT or API key)
+router.post('/test-data/:jobId/confirm', authenticateAny, async (req, res) => {
   try {
     const { jobId } = req.params;
     const testData = testModeData.get(jobId);
@@ -402,8 +476,8 @@ router.post('/test-data/:jobId/confirm', authenticateApiKey, async (req, res) =>
   }
 });
 
-// Discard test mode data
-router.delete('/test-data/:jobId', authenticateApiKey, async (req, res) => {
+// Discard test mode data (accepts JWT or API key)
+router.delete('/test-data/:jobId', authenticateAny, async (req, res) => {
   try {
     const { jobId } = req.params;
     const deleted = testModeData.delete(jobId);

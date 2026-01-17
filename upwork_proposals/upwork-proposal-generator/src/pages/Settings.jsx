@@ -80,14 +80,14 @@ const Settings = () => {
   // Poll for pending webhooks when test mode is active
   useEffect(() => {
     let pollInterval;
-    if (settings.webhookTestMode && apiKeys.length > 0) {
+    if (settings.webhookTestMode) {
       fetchPendingWebhooks();
       pollInterval = setInterval(fetchPendingWebhooks, 5000);
     }
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [settings.webhookTestMode, apiKeys]);
+  }, [settings.webhookTestMode, fetchPendingWebhooks]);
 
   useEffect(() => {
     if (selectedTeam) {
@@ -112,16 +112,9 @@ const Settings = () => {
   };
 
   const fetchPendingWebhooks = useCallback(async () => {
-    if (apiKeys.length === 0) return;
-
     try {
-      // Use the first active API key for authentication
-      const activeKey = apiKeys.find(k => k.isActive);
-      if (!activeKey) return;
-
-      const response = await api.get('/webhooks/test-data', {
-        headers: { 'X-API-Key': activeKey.key }
-      });
+      // Use JWT authentication (via cookies) - no API key needed
+      const response = await api.get('/webhooks/test-data');
 
       if (response.data.data) {
         setPendingWebhooks(response.data.data);
@@ -135,21 +128,14 @@ const Settings = () => {
     } catch (err) {
       console.error('Failed to fetch pending webhooks:', err);
     }
-  }, [apiKeys, showDebugPopup]);
+  }, [showDebugPopup]);
 
   const handleConfirmWebhook = async () => {
     if (!selectedWebhookData) return;
 
     try {
-      const activeKey = apiKeys.find(k => k.isActive);
-      if (!activeKey) {
-        setError('No active API key found');
-        return;
-      }
-
-      await api.post(`/webhooks/test-data/${selectedWebhookData.jobId}/confirm`, {}, {
-        headers: { 'X-API-Key': activeKey.key }
-      });
+      // Use JWT authentication (via cookies) - no API key needed
+      await api.post(`/webhooks/test-data/${selectedWebhookData.jobId}/confirm`);
 
       setSuccess('Webhook data confirmed and saved to database');
       setShowDebugPopup(false);
@@ -164,15 +150,8 @@ const Settings = () => {
     if (!selectedWebhookData) return;
 
     try {
-      const activeKey = apiKeys.find(k => k.isActive);
-      if (!activeKey) {
-        setError('No active API key found');
-        return;
-      }
-
-      await api.delete(`/webhooks/test-data/${selectedWebhookData.jobId}`, {
-        headers: { 'X-API-Key': activeKey.key }
-      });
+      // Use JWT authentication (via cookies) - no API key needed
+      await api.delete(`/webhooks/test-data/${selectedWebhookData.jobId}`);
 
       setSuccess('Webhook data discarded');
       setShowDebugPopup(false);

@@ -63,3 +63,43 @@ export const authenticateApiKey = async (req, res, next) => {
 export const generateToken = (userId) => {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
 };
+
+// Authenticate with either JWT token OR API key (for internal admin endpoints)
+export const authenticateAny = async (req, res, next) => {
+  try {
+    // First try JWT authentication
+    const token = req.cookies.token || req.headers.authorization?.replace('Bearer ', '');
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await User.findById(decoded.userId);
+        if (user) {
+          req.user = user;
+          return next();
+        }
+      } catch (e) {
+        // JWT failed, try API key
+      }
+    }
+
+    // Then try API key authentication
+    const apiKey = req.headers['x-api-key'];
+
+    if (apiKey) {
+      const hashedKey = crypto.createHash('sha256').update(apiKey).digest('hex');
+      const keyDoc = await ApiKey.findOne({ hashedKey, isActive: true });
+
+      if (keyDoc) {
+        keyDoc.lastUsed = new Date();
+        await keyDoc.save();
+        req.apiKey = keyDoc;
+        return next();
+      }
+    }
+
+    return res.status(401).json({ error: 'Authentication required (JWT token or API key)' });
+  } catch (error) {
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+};
