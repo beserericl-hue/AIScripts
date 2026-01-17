@@ -1476,6 +1476,39 @@ button {
   font-style: italic;
 }
 
+/* URL Input Group with View Button */
+.url-input-group {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.url-input-group input {
+  flex: 1;
+}
+
+.btn-view-upwork {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--primary-color);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-view-upwork:hover {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
 /* Legacy - Job Details Panel (for backwards compatibility) */
 .proposal-job-panel {
   background: var(--bg-primary);

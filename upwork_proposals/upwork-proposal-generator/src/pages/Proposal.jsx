@@ -565,14 +565,27 @@ const Proposal = () => {
                   <Link size={14} />
                   Job URL
                 </label>
-                <input
-                  type="url"
-                  id="url"
-                  name="url"
-                  value={formData.url}
-                  onChange={handleInputChange}
-                  placeholder="https://www.upwork.com/jobs/..."
-                />
+                <div className="url-input-group">
+                  <input
+                    type="url"
+                    id="url"
+                    name="url"
+                    value={formData.url}
+                    onChange={handleInputChange}
+                    placeholder="https://www.upwork.com/jobs/..."
+                  />
+                  {formData.url && (
+                    <a
+                      href={formData.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-view-upwork"
+                    >
+                      <ExternalLink size={14} />
+                      View on Upwork
+                    </a>
+                  )}
+                </div>
               </div>
 
               <button
