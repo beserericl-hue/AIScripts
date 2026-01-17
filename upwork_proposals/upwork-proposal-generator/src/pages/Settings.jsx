@@ -77,31 +77,6 @@ const Settings = () => {
     fetchTeams();
   }, []);
 
-  // Poll for pending webhooks when test mode is active
-  useEffect(() => {
-    let pollInterval;
-    if (settings.webhookTestMode) {
-      fetchPendingWebhooks();
-      pollInterval = setInterval(fetchPendingWebhooks, 5000);
-    }
-    return () => {
-      if (pollInterval) clearInterval(pollInterval);
-    };
-  }, [settings.webhookTestMode, fetchPendingWebhooks]);
-
-  useEffect(() => {
-    if (selectedTeam) {
-      fetchTeamMembers(selectedTeam._id);
-    }
-  }, [selectedTeam]);
-
-  useEffect(() => {
-    // Calculate unassigned users when users or teams change
-    const assigned = users.filter(u => u.teamId);
-    const unassigned = users.filter(u => !u.teamId);
-    setUnassignedUsers(unassigned);
-  }, [users]);
-
   const fetchSettings = async () => {
     try {
       const response = await api.get('/settings');
@@ -118,17 +93,43 @@ const Settings = () => {
 
       if (response.data.data) {
         setPendingWebhooks(response.data.data);
-
-        // Auto-show popup for new webhooks
-        if (response.data.data.length > 0 && !showDebugPopup) {
-          setSelectedWebhookData(response.data.data[0]);
-          setShowDebugPopup(true);
-        }
       }
     } catch (err) {
       console.error('Failed to fetch pending webhooks:', err);
     }
-  }, [showDebugPopup]);
+  }, []);
+
+  // Poll for pending webhooks when test mode is active
+  useEffect(() => {
+    let pollInterval;
+    if (settings.webhookTestMode) {
+      fetchPendingWebhooks();
+      pollInterval = setInterval(fetchPendingWebhooks, 5000);
+    }
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [settings.webhookTestMode, fetchPendingWebhooks]);
+
+  // Auto-show popup for new webhooks
+  useEffect(() => {
+    if (pendingWebhooks.length > 0 && !showDebugPopup) {
+      setSelectedWebhookData(pendingWebhooks[0]);
+      setShowDebugPopup(true);
+    }
+  }, [pendingWebhooks, showDebugPopup]);
+
+  useEffect(() => {
+    if (selectedTeam) {
+      fetchTeamMembers(selectedTeam._id);
+    }
+  }, [selectedTeam]);
+
+  useEffect(() => {
+    // Calculate unassigned users when users or teams change
+    const unassigned = users.filter(u => !u.teamId);
+    setUnassignedUsers(unassigned);
+  }, [users]);
 
   const handleConfirmWebhook = async () => {
     if (!selectedWebhookData) return;
