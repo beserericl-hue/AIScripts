@@ -40,7 +40,6 @@ USER nextjs
 
 EXPOSE 8080
 ENV PORT=8080
+ENV HOSTNAME="0.0.0.0"
 
-# Use Railway's private domain if available, otherwise fall back to 0.0.0.0
-# RAILWAY_PRIVATE_DOMAIN is set by Railway (e.g., satisfied-clarity.railway.internal)
-CMD ["sh", "-c", "HOSTNAME=${RAILWAY_PRIVATE_DOMAIN:-0.0.0.0} node server.js"]
+CMD ["node", "server.js"]
