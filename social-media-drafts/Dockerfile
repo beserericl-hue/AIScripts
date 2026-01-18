@@ -38,9 +38,11 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
-EXPOSE 3000
+# Railway assigns PORT dynamically (usually 8080)
+# EXPOSE is just documentation - Railway ignores it
+EXPOSE 8080
 
-# Railway sets PORT dynamically, don't hardcode it
 ENV HOSTNAME="0.0.0.0"
+ENV PORT=8080
 
 CMD ["node", "server.js"]
