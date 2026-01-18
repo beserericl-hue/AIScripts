@@ -23,7 +23,9 @@ import {
   MapPin,
   Briefcase,
   DollarSign,
-  Tag
+  Tag,
+  MessageSquare,
+  ScrollText
 } from 'lucide-react';
 
 const Proposal = () => {
@@ -622,26 +624,58 @@ const Proposal = () => {
               )}
             </div>
 
-            {/* Job URL Section - Show at top if available */}
+            {/* Upwork URLs Section - Show at top if job URL available */}
             {formData.url && (
-              <div className="job-url-banner">
-                <div className="job-url-content">
-                  <ExternalLink size={16} />
-                  <span className="job-url-label">Job URL:</span>
-                  <a
-                    href={formData.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="job-url-link"
-                  >
-                    {formData.url}
-                  </a>
-                </div>
+              <div className="upwork-urls-section">
                 {initialJob?.source === 'gigradar' && (
-                  <span className="source-badge source-gigradar">
-                    GigRadar
-                  </span>
+                  <div className="source-indicator">
+                    <span className="source-badge source-gigradar">
+                      GigRadar
+                    </span>
+                  </div>
                 )}
+                <div className="job-url-banner">
+                  <div className="job-url-content">
+                    <ExternalLink size={16} />
+                    <span className="job-url-label">Job URL:</span>
+                    <a
+                      href={formData.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="job-url-link"
+                    >
+                      {formData.url}
+                    </a>
+                  </div>
+                </div>
+                <div className="job-url-banner">
+                  <div className="job-url-content">
+                    <MessageSquare size={16} />
+                    <span className="job-url-label">Message Room:</span>
+                    <a
+                      href="https://www.upwork.com/ab/messages/rooms/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="job-url-link"
+                    >
+                      https://www.upwork.com/ab/messages/rooms/
+                    </a>
+                  </div>
+                </div>
+                <div className="job-url-banner">
+                  <div className="job-url-content">
+                    <ScrollText size={16} />
+                    <span className="job-url-label">Proposals:</span>
+                    <a
+                      href="https://www.upwork.com/ab/proposals/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="job-url-link"
+                    >
+                      https://www.upwork.com/ab/proposals/
+                    </a>
+                  </div>
+                </div>
               </div>
             )}
 

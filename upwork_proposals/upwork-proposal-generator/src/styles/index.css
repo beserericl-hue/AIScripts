@@ -2916,3 +2916,21 @@ button {
 .job-url-link:hover {
   text-decoration: underline;
 }
+
+/* Upwork URLs Section Container */
+.upwork-urls-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.upwork-urls-section .job-url-banner {
+  margin-bottom: 0;
+}
+
+.upwork-urls-section .source-indicator {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.25rem;
+}
