@@ -7,10 +7,17 @@ const router = express.Router();
 
 // Helper to add team filter to queries
 const addTeamFilter = (query, user) => {
-  // Only filter by team if user has a team assigned
+  // If user has a team, show both:
+  // 1. Jobs assigned to their team
+  // 2. Jobs with no team assigned (from webhooks)
   if (user.teamId) {
-    query.teamId = user.teamId;
+    query.$or = [
+      { teamId: user.teamId },
+      { teamId: { $exists: false } },
+      { teamId: null }
+    ];
   }
+  // If user has no team, they see all jobs (no filter applied)
   return query;
 };
 
@@ -56,7 +63,7 @@ router.get('/pending', authenticate, async (req, res) => {
 
     const jobs = await Job.find(query)
       .sort({ createdAt: -1 })
-      .select('jobId title rating status url createdAt teamId description');
+      .select('jobId title rating status url createdAt teamId description source');
 
     res.json(jobs);
   } catch (error) {
@@ -77,7 +84,7 @@ router.get('/with-proposals', authenticate, async (req, res) => {
 
     const jobs = await Job.find(query)
       .sort({ updatedAt: -1 })
-      .select('jobId title rating status url createdAt updatedAt teamId proposalData description');
+      .select('jobId title rating status url createdAt updatedAt teamId proposalData description source');
 
     res.json(jobs);
   } catch (error) {
