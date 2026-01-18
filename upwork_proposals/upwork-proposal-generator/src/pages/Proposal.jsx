@@ -432,7 +432,6 @@ const Proposal = () => {
               <div className="form-group">
                 <label htmlFor="description">
                   Full Description of the Job
-                  {characterCount(formData.description, 4000)}
                 </label>
                 <textarea
                   id="description"
@@ -440,7 +439,6 @@ const Proposal = () => {
                   value={formData.description}
                   onChange={handleInputChange}
                   placeholder="Enter full job description"
-                  maxLength={4000}
                   rows={6}
                 />
               </div>
