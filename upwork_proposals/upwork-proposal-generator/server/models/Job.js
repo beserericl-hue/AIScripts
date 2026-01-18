@@ -12,8 +12,7 @@ const jobSchema = new mongoose.Schema({
     required: true
   },
   description: {
-    type: String,
-    maxlength: 4000
+    type: String
   },
   url: {
     type: String
