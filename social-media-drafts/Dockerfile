@@ -38,11 +38,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
-# Railway assigns PORT dynamically (usually 8080)
-# EXPOSE is just documentation - Railway ignores it
 EXPOSE 8080
-
-ENV HOSTNAME="0.0.0.0"
 ENV PORT=8080
 
-CMD ["node", "server.js"]
+# Use Railway's private domain if available, otherwise fall back to 0.0.0.0
+# RAILWAY_PRIVATE_DOMAIN is set by Railway (e.g., satisfied-clarity.railway.internal)
+CMD ["sh", "-c", "HOSTNAME=${RAILWAY_PRIVATE_DOMAIN:-0.0.0.0} node server.js"]
