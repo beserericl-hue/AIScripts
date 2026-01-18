@@ -25,7 +25,8 @@ import {
   DollarSign,
   Tag,
   MessageSquare,
-  ScrollText
+  ScrollText,
+  Image
 } from 'lucide-react';
 
 const Proposal = () => {
@@ -277,6 +278,23 @@ const Proposal = () => {
       setTimeout(() => setCopied({ ...copied, [key]: false }), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+    }
+  };
+
+  const copyImageToClipboard = async (imageUrl, key) => {
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          [blob.type]: blob
+        })
+      ]);
+      setCopied({ ...copied, [key]: true });
+      setTimeout(() => setCopied({ ...copied, [key]: false }), 2000);
+    } catch (err) {
+      console.error('Failed to copy image:', err);
+      setError('Failed to copy image. Try right-clicking and copying manually.');
     }
   };
 
@@ -773,6 +791,22 @@ const Proposal = () => {
                     </div>
                     {proposalData.mermaidImageUrl && (
                       <div className="mermaid-image">
+                        <div className="mermaid-image-actions">
+                          <button
+                            className="btn-icon"
+                            onClick={() => window.open(proposalData.mermaidImageUrl, '_blank')}
+                            title="Open image in new tab"
+                          >
+                            <ExternalLink size={16} />
+                          </button>
+                          <button
+                            className="btn-icon"
+                            onClick={() => copyImageToClipboard(proposalData.mermaidImageUrl, 'mermaidImage')}
+                            title="Copy image to clipboard"
+                          >
+                            {copied.mermaidImage ? <Check size={16} /> : <Image size={16} />}
+                          </button>
+                        </div>
                         <img
                           src={proposalData.mermaidImageUrl}
                           alt="Workflow Diagram"
