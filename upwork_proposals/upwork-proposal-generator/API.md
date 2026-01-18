@@ -194,7 +194,7 @@ curl -X POST "https://upwork-proposal-production.up.railway.app/api/webhooks/eva
 
 ## 3. Proposal Result Webhook (N8N → App)
 
-Called when N8N generates a proposal and sends back the results.
+Called when N8N generates a proposal and sends back the results. **Now supports creating new jobs** if the jobId doesn't exist in the database (useful for GigRadar integration and direct proposal generation).
 
 ### Endpoint
 
@@ -217,37 +217,79 @@ Content-Type: application/json
 
 ### JSON Body
 
-| Field             | Type   | Required    | Description                      |
-|-------------------|--------|-------------|----------------------------------|
-| `jobId`           | string | **Required**| Job ID to update                 |
-| `coverLetter`     | string | Recommended | Generated cover letter text      |
-| `docUrl`          | string | Optional    | Google Doc URL                   |
-| `mermaidDiagram`  | string | Optional    | Mermaid diagram code             |
-| `mermaidImageUrl` | string | Optional    | Rendered diagram image URL       |
+| Field             | Type   | Required    | Description                                      |
+|-------------------|--------|-------------|--------------------------------------------------|
+| `jobId`           | string | Optional    | Job ID to update (auto-generated UUID if not provided) |
+| `title`           | string | Optional    | Job title (used when creating new job, defaults to "Untitled Job") |
+| `description`     | string | Optional    | Job description (used when creating new job)     |
+| `url`             | string | Optional    | Upwork job URL (used when creating new job)      |
+| `coverLetter`     | string | Recommended | Generated cover letter text                      |
+| `docUrl`          | string | Optional    | Google Doc URL                                   |
+| `mermaidDiagram`  | string | Optional    | Mermaid diagram code                             |
+| `mermaidImageUrl` | string | Optional    | Rendered diagram image URL                       |
+| `teamId`          | string | Optional    | MongoDB Team ID (for new job assignment)         |
+| `teamName`        | string | Optional    | Team name to look up (for new job assignment)    |
 
-### Example Request
+### Behavior
+
+- **If jobId exists**: Updates the existing job with proposal data
+- **If jobId doesn't exist**: Creates a new job with the provided metadata and proposal data
+- **If jobId not provided**: Generates a UUID and creates a new job
+
+### Example Request - Update Existing Job
 
 ```bash
-curl -X POST "https://upwork-proposal-production.up.railway.app/api/webhooks/proposal-result?testMode=true" \
+curl -X POST "https://upwork-proposal-production.up.railway.app/api/webhooks/proposal-result" \
   -H "X-API-Key: YOUR_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "jobId": "test-job-001",
-    "coverLetter": "Dear Client,\n\nI am excited to help you build your automotive marketplace app. With over 5 years of experience in React Native and Node.js development, I have successfully delivered several high-traffic mobile applications.\n\nKey highlights:\n- Built marketplace apps handling 100K+ daily active users\n- Expert in React Native performance optimization\n- Strong background in Node.js microservices architecture\n\nI would love to discuss your project in more detail.\n\nBest regards",
+    "coverLetter": "Dear Client,\n\nI am excited to help you build your automotive marketplace app...",
     "docUrl": "https://docs.google.com/document/d/abc123xyz",
-    "mermaidDiagram": "graph TD\n  A[Mobile App] --> B[API Gateway]\n  B --> C[Auth Service]\n  B --> D[Listing Service]\n  B --> E[Search Service]\n  D --> F[(MongoDB)]\n  E --> G[(Elasticsearch)]",
+    "mermaidDiagram": "graph TD\n  A[Mobile App] --> B[API Gateway]...",
     "mermaidImageUrl": "https://mermaid.ink/img/eyJjb2RlIjoiZ3JhcGggVEQiLCJtZXJtYWlkIjp7fX0"
   }'
 ```
 
-### Success Response
+### Example Request - Create New Job with Proposal
+
+```bash
+curl -X POST "https://upwork-proposal-production.up.railway.app/api/webhooks/proposal-result" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Senior React Native Developer",
+    "description": "We are building a high-traffic automotive marketplace app...",
+    "url": "https://www.upwork.com/jobs/~022012293270821996782",
+    "coverLetter": "Dear Client,\n\nI am excited to help you build your automotive marketplace app...",
+    "docUrl": "https://docs.google.com/document/d/abc123xyz",
+    "mermaidDiagram": "graph TD\n  A[Mobile App] --> B[API Gateway]...",
+    "mermaidImageUrl": "https://mermaid.ink/img/eyJjb2RlIjoiZ3JhcGggVEQiLCJtZXJtYWlkIjp7fX0",
+    "teamId": "678abc123def456789012345"
+  }'
+```
+
+### Success Response - Updated Existing Job
 
 ```json
 {
   "success": true,
   "message": "Proposal result received",
   "jobId": "test-job-001",
-  "teamId": "678abc123def456789012345"
+  "teamId": "678abc123def456789012345",
+  "isNewJob": false
+}
+```
+
+### Success Response - Created New Job
+
+```json
+{
+  "success": true,
+  "message": "Proposal result received and new job created",
+  "jobId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "teamId": "678abc123def456789012345",
+  "isNewJob": true
 }
 ```
 
@@ -262,9 +304,9 @@ curl -X POST "https://upwork-proposal-production.up.railway.app/api/webhooks/pro
   "validation": {
     "isValid": true,
     "errors": [],
-    "warnings": [],
-    "receivedFields": ["jobId", "coverLetter", "docUrl", "mermaidDiagram", "mermaidImageUrl"],
-    "expectedFields": ["jobId", "coverLetter", "docUrl", "mermaidDiagram", "mermaidImageUrl"]
+    "warnings": ["docUrl is missing - Google Doc link will not be available"],
+    "receivedFields": ["jobId", "coverLetter", "mermaidDiagram", "mermaidImageUrl"],
+    "expectedFields": ["jobId", "title", "description", "url", "coverLetter", "docUrl", "mermaidDiagram", "mermaidImageUrl", "teamId", "teamName"]
   },
   "receivedPayload": { ... }
 }
@@ -522,10 +564,15 @@ To get your Team ID for use in webhook calls:
 
 ```json
 {
-  "jobId": "string (required)",
+  "jobId": "string (optional - auto-generated if not provided)",
+  "title": "string (optional - for new job creation)",
+  "description": "string (optional - for new job creation)",
+  "url": "string (optional - for new job creation)",
   "coverLetter": "string",
   "docUrl": "string",
   "mermaidDiagram": "string",
-  "mermaidImageUrl": "string"
+  "mermaidImageUrl": "string",
+  "teamId": "string (optional - for new job assignment)",
+  "teamName": "string (optional - for new job assignment)"
 }
 ```
