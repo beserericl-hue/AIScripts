@@ -40,7 +40,8 @@ const Settings = () => {
     mongodbUser: '',
     mongodbPassword: '',
     mongodbDatabase: '',
-    webhookTestMode: false
+    webhookTestMode: false,
+    callbackTeamId: ''
   });
 
   // Webhook test mode state
@@ -569,6 +570,27 @@ const Settings = () => {
                     placeholder="https://your-n8n-instance.com/webhook/..."
                   />
                   <small>URL called for proposal evaluation</small>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="callbackTeamId">
+                    <UsersRound size={16} />
+                    Callback Team ID
+                  </label>
+                  <select
+                    id="callbackTeamId"
+                    name="callbackTeamId"
+                    value={settings.callbackTeamId || ''}
+                    onChange={handleSettingsChange}
+                  >
+                    <option value="">No team (unassigned)</option>
+                    {teams.map((team) => (
+                      <option key={team._id} value={team._id}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                  <small>Default team for jobs created via webhooks (GigRadar, N8N callbacks). Jobs will be visible to this team on the dashboard.</small>
                 </div>
 
                 <button type="submit" className="btn-primary" disabled={loading}>

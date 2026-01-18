@@ -24,6 +24,9 @@ router.post('/generate', authenticate, async (req, res) => {
     let job = await Job.findOne({ jobId });
 
     if (!job) {
+      // Determine teamId: use user's teamId, or fall back to callbackTeamId from settings
+      const teamIdForJob = req.user.teamId || settings.callbackTeamId || null;
+
       job = new Job({
         jobId,
         title,
@@ -31,7 +34,8 @@ router.post('/generate', authenticate, async (req, res) => {
         profile,
         url,
         status: 'pending',
-        createdBy: req.user._id
+        createdBy: req.user._id,
+        teamId: teamIdForJob
       });
     } else {
       job.title = title;
@@ -44,6 +48,9 @@ router.post('/generate', authenticate, async (req, res) => {
 
     // Call N8N webhook
     try {
+      // Include teamId so it can be passed back in the callback
+      const teamIdForCallback = req.user.teamId ? req.user.teamId.toString() : (settings.callbackTeamId ? settings.callbackTeamId.toString() : null);
+
       const webhookResponse = await axios.post(settings.n8nWebhookUrl, {
         jobId: job.jobId,
         title,
@@ -51,6 +58,7 @@ router.post('/generate', authenticate, async (req, res) => {
         profile,
         url,
         userId: req.user._id.toString(),
+        teamId: teamIdForCallback,
         timestamp: new Date().toISOString()
       }, {
         timeout: 30000

@@ -34,6 +34,12 @@ const settingsSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Default team ID used for webhook callbacks (GigRadar, N8N responses)
+  callbackTeamId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Team',
+    default: null
+  },
   updatedAt: {
     type: Date,
     default: Date.now

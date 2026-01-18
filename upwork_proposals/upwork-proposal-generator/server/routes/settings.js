@@ -36,7 +36,8 @@ router.put('/', authenticate, async (req, res) => {
       mongodbUrl,
       mongodbUser,
       mongodbPassword,
-      mongodbDatabase
+      mongodbDatabase,
+      callbackTeamId
     } = req.body;
 
     let settings = await Settings.findOne({ userId: req.user._id });
@@ -53,6 +54,9 @@ router.put('/', authenticate, async (req, res) => {
       settings.mongodbPassword = mongodbPassword;
     }
     if (mongodbDatabase !== undefined) settings.mongodbDatabase = mongodbDatabase;
+    if (callbackTeamId !== undefined) {
+      settings.callbackTeamId = callbackTeamId || null;
+    }
 
     await settings.save();
 

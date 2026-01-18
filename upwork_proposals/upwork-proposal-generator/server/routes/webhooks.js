@@ -317,6 +317,7 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
       isNewJob = true;
 
       // Resolve team by teamId or teamName
+      // Fall back to callbackTeamId from settings if not specified
       let resolvedTeamId = null;
       if (teamId) {
         const team = await Team.findById(teamId);
@@ -327,6 +328,13 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
         const team = await Team.findOne({ name: teamName, isActive: true });
         if (team) {
           resolvedTeamId = team._id;
+        }
+      }
+      // Fall back to callbackTeamId from settings
+      if (!resolvedTeamId) {
+        const settingsWithTeam = await Settings.findOne({ callbackTeamId: { $ne: null } });
+        if (settingsWithTeam && settingsWithTeam.callbackTeamId) {
+          resolvedTeamId = settingsWithTeam.callbackTeamId;
         }
       }
 
@@ -704,6 +712,7 @@ router.post('/gigradar', authenticateApiKey, async (req, res) => {
     }
 
     // Resolve team by teamId or teamName from GigRadar data
+    // Fall back to callbackTeamId from settings if not specified
     let resolvedTeamId = null;
     if (normalized.teamId) {
       const team = await Team.findById(normalized.teamId).catch(() => null);
@@ -715,6 +724,13 @@ router.post('/gigradar', authenticateApiKey, async (req, res) => {
       const team = await Team.findOne({ name: normalized.teamName, isActive: true });
       if (team) {
         resolvedTeamId = team._id;
+      }
+    }
+    // Fall back to callbackTeamId from settings
+    if (!resolvedTeamId) {
+      const settingsWithTeam = await Settings.findOne({ callbackTeamId: { $ne: null } });
+      if (settingsWithTeam && settingsWithTeam.callbackTeamId) {
+        resolvedTeamId = settingsWithTeam.callbackTeamId;
       }
     }
 
@@ -769,6 +785,8 @@ router.post('/gigradar', authenticateApiKey, async (req, res) => {
           description: job.description,
           url: job.url,
           source: 'gigradar',
+          // Include teamId so it gets passed back in the callback
+          teamId: job.teamId ? job.teamId.toString() : null,
           // Include additional metadata for the proposal generator
           jobType: normalized.jobType,
           price: normalized.price,
