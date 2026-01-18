@@ -622,6 +622,29 @@ const Proposal = () => {
               )}
             </div>
 
+            {/* Job URL Section - Show at top if available */}
+            {formData.url && (
+              <div className="job-url-banner">
+                <div className="job-url-content">
+                  <ExternalLink size={16} />
+                  <span className="job-url-label">Job URL:</span>
+                  <a
+                    href={formData.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="job-url-link"
+                  >
+                    {formData.url}
+                  </a>
+                </div>
+                {initialJob?.source === 'gigradar' && (
+                  <span className="source-badge source-gigradar">
+                    GigRadar
+                  </span>
+                )}
+              </div>
+            )}
+
             {hasProposal ? (
               <div className="results-content">
                 {/* Status Change Buttons */}

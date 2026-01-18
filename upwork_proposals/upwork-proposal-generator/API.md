@@ -314,7 +314,216 @@ curl -X POST "https://upwork-proposal-production.up.railway.app/api/webhooks/pro
 
 ---
 
-## 4. Test Data Management
+## 4. GigRadar Webhook (GigRadar → App)
+
+Called when GigRadar detects a new job matching your scanner criteria. This endpoint creates a job in the system and automatically triggers the N8N proposal generator workflow.
+
+### Endpoint
+
+```
+POST /api/webhooks/gigradar
+```
+
+### Query Parameters
+
+| Parameter  | Type    | Description                                      |
+|------------|---------|--------------------------------------------------|
+| `testMode` | boolean | Set to `true` to test without saving to database or triggering N8N |
+
+### Headers
+
+```
+X-API-Key: YOUR_API_KEY
+Content-Type: application/json
+```
+
+### GigRadar Payload Structure
+
+The webhook expects the GigRadar `GIGRADAR.PROPOSAL.UPDATE` event format:
+
+| Field                           | Type    | Required | Description                                    |
+|---------------------------------|---------|----------|------------------------------------------------|
+| `type`                          | string  | Yes      | Must be "GIGRADAR.PROPOSAL.UPDATE"             |
+| `data.teamName`                 | string  | Optional | GigRadar team name                             |
+| `data.teamId`                   | string  | Optional | GigRadar team ID                               |
+| `data.scannerName`              | string  | Optional | Scanner that detected the job                  |
+| `data.scannerId`                | string  | Optional | Scanner ID                                     |
+| `data.job.ciphertext`           | string  | Yes      | Upwork job ciphertext (used to generate job URL) |
+| `data.job.title`                | string  | Yes      | Job title                                      |
+| `data.job.description`          | string  | Yes      | Full job description                           |
+| `data.job.createdOn`            | string  | Optional | Job creation timestamp (ISO 8601)              |
+| `data.job.duration`             | string  | Optional | Project duration                               |
+| `data.job.engagement`           | string  | Optional | Engagement type                                |
+| `data.job.connectsPrice`        | number  | Optional | Cost in connects to apply                      |
+| `data.job.talentPreference`     | string  | Optional | Talent preference settings                     |
+| `data.job.experienceLevel`      | string  | Optional | "Entry", "Intermediate", or "Expert"           |
+| `data.job.categoryName`         | string  | Optional | Job category                                   |
+| `data.job.subCategoryName`      | string  | Optional | Job subcategory                                |
+| `data.job.skills`               | array   | Optional | Skills array `[{name, uid}]`                   |
+| `data.job.questions`            | array   | Optional | Application questions                          |
+| `data.job.budget.type`          | number  | Optional | 1 = Fixed, 2 = Hourly                          |
+| `data.job.budget.fixed`         | number  | Optional | Fixed price budget                             |
+| `data.job.budget.hourlyMin`     | number  | Optional | Min hourly rate                                |
+| `data.job.budget.hourlyMax`     | number  | Optional | Max hourly rate                                |
+| `data.job.client.paymentVerified` | boolean | Optional | Client payment verified                      |
+| `data.job.client.location.country` | string | Optional | Client country                              |
+| `data.job.client.location.city`   | string  | Optional | Client city                                 |
+| `data.job.client.location.timezone` | string | Optional | Client timezone                            |
+| `data.job.client.stats.feedbackScore` | number | Optional | Client feedback score                    |
+| `data.job.client.stats.totalSpent` | number | Optional | Total amount spent by client               |
+| `data.job.client.stats.hireRate` | number  | Optional | Client hire rate                             |
+| `data.job.client.stats.totalHires` | number | Optional | Total hires by client                       |
+| `data.job.client.stats.jobsPostedCount` | number | Optional | Jobs posted by client                |
+| `data.job.client.company.industry` | string | Optional | Company industry                            |
+| `data.job.client.company.size`   | string  | Optional | Company size                                  |
+| `data.job.client.company.isEnterprise` | boolean | Optional | Enterprise client flag               |
+
+### Job URL Generation
+
+The endpoint generates the Upwork job URL from the ciphertext:
+
+```
+https://www.upwork.com/freelance-jobs/apply/{ciphertext}
+```
+
+### Example Request
+
+```bash
+curl -X POST "https://upwork-proposal-production.up.railway.app/api/webhooks/gigradar" \
+  -H "X-API-Key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "GIGRADAR.PROPOSAL.UPDATE",
+    "data": {
+      "teamName": "My Team",
+      "teamId": "team123",
+      "scannerName": "React Native Scanner",
+      "scannerId": "scanner456",
+      "job": {
+        "ciphertext": "~01abc123def456",
+        "title": "Senior React Native Developer for iOS App",
+        "description": "We are looking for an experienced React Native developer...",
+        "createdOn": "2026-01-18T10:00:00.000Z",
+        "duration": "3-6 months",
+        "engagement": "Full-time",
+        "experienceLevel": "Expert",
+        "connectsPrice": 16,
+        "categoryName": "Web, Mobile & Software Dev",
+        "subCategoryName": "Mobile Development",
+        "skills": [
+          {"name": "React Native", "uid": "skill1"},
+          {"name": "iOS", "uid": "skill2"},
+          {"name": "TypeScript", "uid": "skill3"}
+        ],
+        "budget": {
+          "type": 2,
+          "hourlyMin": 50,
+          "hourlyMax": 80
+        },
+        "client": {
+          "paymentVerified": true,
+          "location": {
+            "country": "United States",
+            "city": "San Francisco",
+            "timezone": "America/Los_Angeles"
+          },
+          "stats": {
+            "feedbackScore": 4.8,
+            "totalSpent": 150000,
+            "hireRate": 85,
+            "totalHires": 45,
+            "jobsPostedCount": 120
+          },
+          "company": {
+            "industry": "Technology",
+            "size": "51-200",
+            "isEnterprise": false
+          }
+        }
+      }
+    }
+  }'
+```
+
+### Success Response
+
+```json
+{
+  "success": true,
+  "message": "GigRadar job created",
+  "jobId": "~01abc123def456",
+  "jobUrl": "https://www.upwork.com/freelance-jobs/apply/~01abc123def456",
+  "teamId": "678abc123def456789012345",
+  "isNewJob": true,
+  "n8nTriggered": true,
+  "validation": {
+    "isValid": true,
+    "errors": [],
+    "warnings": []
+  }
+}
+```
+
+### Success Response (N8N not configured)
+
+```json
+{
+  "success": true,
+  "message": "GigRadar job created",
+  "jobId": "~01abc123def456",
+  "jobUrl": "https://www.upwork.com/freelance-jobs/apply/~01abc123def456",
+  "teamId": null,
+  "isNewJob": true,
+  "n8nTriggered": false,
+  "n8nError": "No N8N webhook URL configured in settings",
+  "validation": {
+    "isValid": true,
+    "errors": [],
+    "warnings": []
+  }
+}
+```
+
+### Test Mode Response
+
+```json
+{
+  "success": true,
+  "testMode": true,
+  "message": "Test mode: GigRadar data received but NOT saved or sent to N8N",
+  "jobId": "~01abc123def456",
+  "jobUrl": "https://www.upwork.com/freelance-jobs/apply/~01abc123def456",
+  "validation": {
+    "isValid": true,
+    "errors": [],
+    "warnings": []
+  },
+  "normalizedPayload": { ... }
+}
+```
+
+### Error Response - Missing Ciphertext
+
+```json
+{
+  "error": "Missing ciphertext - required for generating Upwork job URL",
+  "validation": {
+    "isValid": false,
+    "errors": ["Missing ciphertext - required for generating Upwork job URL"],
+    "warnings": []
+  }
+}
+```
+
+### UI Indicators
+
+Jobs created via GigRadar are marked with:
+- **Source badge**: "GigRadar" indicator in the dashboard job list
+- **Job URL**: Displayed prominently at the top of the Generated Proposal page
+
+---
+
+## 5. Test Data Management
 
 These endpoints allow you to manage test mode data before committing to the database. Accepts either JWT token (from browser) or API key.
 
@@ -398,7 +607,7 @@ curl -X DELETE "https://upwork-proposal-production.up.railway.app/api/webhooks/t
 
 ---
 
-## 5. Health Check
+## 6. Health Check
 
 ```bash
 curl -X GET "https://upwork-proposal-production.up.railway.app/api/webhooks/health"

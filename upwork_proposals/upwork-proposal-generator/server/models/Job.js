@@ -18,6 +18,12 @@ const jobSchema = new mongoose.Schema({
   url: {
     type: String
   },
+  // Source of the job (manual, gigradar, n8n, etc.)
+  source: {
+    type: String,
+    enum: ['manual', 'gigradar', 'n8n', 'api'],
+    default: 'manual'
+  },
   rating: {
     type: Number,
     min: 1,

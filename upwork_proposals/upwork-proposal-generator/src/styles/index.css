@@ -2837,3 +2837,82 @@ button {
   font-style: italic;
   margin-bottom: 0;
 }
+
+/* Job Item Title Row - for GigRadar badge */
+.job-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.job-item-title-row .job-item-title {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Source Badges */
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-full);
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.source-badge.source-gigradar {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+/* Job URL Banner - at top of Generated Proposal */
+.job-url-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.job-url-content {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.job-url-content svg {
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.job-url-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.job-url-link {
+  font-size: 0.8125rem;
+  color: var(--primary-color);
+  font-family: 'Monaco', 'Menlo', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-url-link:hover {
+  text-decoration: underline;
+}

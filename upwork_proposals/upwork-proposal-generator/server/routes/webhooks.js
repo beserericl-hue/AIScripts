@@ -532,6 +532,293 @@ router.delete('/test-data/:jobId', authenticateAny, async (req, res) => {
   }
 });
 
+// Helper function to normalize GigRadar payload to internal format
+const normalizeGigRadarPayload = (payload) => {
+  const { data } = payload;
+  if (!data || !data.job) {
+    return null;
+  }
+
+  const job = data.job;
+  const client = job.client || {};
+  const budget = job.budget || {};
+
+  // Generate job URL from ciphertext
+  const jobUrl = job.ciphertext
+    ? `https://www.upwork.com/freelance-jobs/apply/${job.ciphertext}`
+    : '';
+
+  // Format budget string
+  let priceString = '';
+  if (budget.type === 1 && budget.fixed) {
+    priceString = `$${budget.fixed} Fixed`;
+  } else if (budget.type === 2) {
+    if (budget.hourlyMin && budget.hourlyMax) {
+      priceString = `$${budget.hourlyMin}-$${budget.hourlyMax}/hr`;
+    } else if (budget.hourlyMin) {
+      priceString = `$${budget.hourlyMin}+/hr`;
+    }
+  }
+
+  // Format skills
+  const skills = (job.skills || []).map(s => s.name || s);
+
+  return {
+    title: job.title || '',
+    description: job.description || '',
+    url: jobUrl,
+    ciphertext: job.ciphertext || '',
+    // Job metadata
+    jobType: budget.type === 1 ? 'Fixed' : 'Hourly',
+    price: priceString,
+    duration: job.duration || '',
+    engagement: job.engagement || '',
+    experienceLevel: job.experienceLevel || '',
+    categoryName: job.categoryName || '',
+    subCategoryName: job.subCategoryName || '',
+    connectsPrice: job.connectsPrice || null,
+    talentPreference: job.talentPreference || '',
+    // Client information
+    country: client.location?.country || '',
+    city: client.location?.city || '',
+    timezone: client.location?.timezone || '',
+    paymentVerified: client.paymentVerified || false,
+    clientRating: client.stats?.feedbackScore || null,
+    totalSpent: client.stats?.totalSpent || 0,
+    hireRate: client.stats?.hireRate || null,
+    totalHires: client.stats?.totalHires || 0,
+    jobsPostedCount: client.stats?.jobsPostedCount || 0,
+    companyIndustry: client.company?.industry || '',
+    companySize: client.company?.size || '',
+    isEnterprise: client.company?.isEnterprise || false,
+    // Skills and tags
+    tags: skills,
+    skills: skills,
+    // Questions
+    questions: job.questions || [],
+    // Timestamps
+    createdOn: job.createdOn || '',
+    // GigRadar metadata
+    teamName: data.teamName || '',
+    teamId: data.teamId || '',
+    scannerName: data.scannerName || '',
+    scannerId: data.scannerId || '',
+    // Store original payload
+    rawPayload: payload
+  };
+};
+
+// Helper function to validate GigRadar payload
+const validateGigRadarPayload = (payload) => {
+  const errors = [];
+  const warnings = [];
+
+  if (!payload.type || payload.type !== 'GIGRADAR.PROPOSAL.UPDATE') {
+    warnings.push('Unexpected payload type - expected GIGRADAR.PROPOSAL.UPDATE');
+  }
+
+  if (!payload.data) {
+    errors.push('Missing data object in payload');
+    return { isValid: false, errors, warnings };
+  }
+
+  if (!payload.data.job) {
+    errors.push('Missing job object in data');
+    return { isValid: false, errors, warnings };
+  }
+
+  const job = payload.data.job;
+
+  if (!job.ciphertext) {
+    errors.push('Missing ciphertext - required for generating Upwork job URL');
+  }
+
+  if (!job.title) {
+    warnings.push('Job title is missing');
+  }
+
+  if (!job.description) {
+    warnings.push('Job description is missing');
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    warnings,
+    receivedFields: Object.keys(payload.data.job || {}),
+    expectedFields: ['ciphertext', 'title', 'description', 'budget', 'client', 'skills', 'experienceLevel', 'duration']
+  };
+};
+
+// GigRadar Webhook Callback
+// Called when GigRadar detects a new job matching criteria
+// Creates a job in the system and triggers the N8N proposal generator workflow
+router.post('/gigradar', authenticateApiKey, async (req, res) => {
+  try {
+    const payload = req.body;
+    const testMode = req.query.testMode === 'true';
+
+    // Validate payload
+    const validation = validateGigRadarPayload(payload);
+
+    if (!validation.isValid) {
+      return res.status(400).json({
+        error: validation.errors.join(', '),
+        validation
+      });
+    }
+
+    // Normalize payload
+    const normalized = normalizeGigRadarPayload(payload);
+
+    if (!normalized) {
+      return res.status(400).json({
+        error: 'Failed to normalize GigRadar payload'
+      });
+    }
+
+    // Generate jobId from ciphertext or UUID
+    const { v4: uuidv4 } = await import('uuid');
+    const jobId = normalized.ciphertext || uuidv4();
+
+    // If test mode, store data but don't save to database or call N8N
+    if (testMode) {
+      testModeData.set(jobId, {
+        type: 'gigradar',
+        payload,
+        normalized,
+        validation,
+        jobUrl: normalized.url,
+        timestamp: Date.now()
+      });
+
+      return res.json({
+        success: true,
+        testMode: true,
+        message: 'Test mode: GigRadar data received but NOT saved or sent to N8N',
+        jobId,
+        jobUrl: normalized.url,
+        validation,
+        normalizedPayload: normalized
+      });
+    }
+
+    // Resolve team by teamId or teamName from GigRadar data
+    let resolvedTeamId = null;
+    if (normalized.teamId) {
+      const team = await Team.findById(normalized.teamId).catch(() => null);
+      if (team) {
+        resolvedTeamId = team._id;
+      }
+    }
+    if (!resolvedTeamId && normalized.teamName) {
+      const team = await Team.findOne({ name: normalized.teamName, isActive: true });
+      if (team) {
+        resolvedTeamId = team._id;
+      }
+    }
+
+    // Check if job already exists (using ciphertext as unique identifier)
+    let job = await Job.findOne({ jobId });
+    let isNewJob = false;
+
+    if (!job) {
+      isNewJob = true;
+      job = new Job({
+        jobId,
+        title: normalized.title || 'Untitled GigRadar Job',
+        description: normalized.description || '',
+        url: normalized.url,
+        source: 'gigradar',
+        status: 'pending',
+        teamId: resolvedTeamId,
+        evaluationData: {
+          ...normalized,
+          source: 'gigradar',
+          receivedAt: new Date().toISOString()
+        }
+      });
+    } else {
+      // Update existing job with new GigRadar data
+      job.evaluationData = {
+        ...job.evaluationData,
+        ...normalized,
+        source: 'gigradar',
+        lastUpdatedAt: new Date().toISOString()
+      };
+      if (normalized.title) job.title = normalized.title;
+      if (normalized.description) job.description = normalized.description;
+      if (normalized.url) job.url = normalized.url;
+    }
+
+    await job.save();
+
+    // Get N8N webhook URL from settings to trigger proposal generation
+    let n8nTriggered = false;
+    let n8nError = null;
+
+    try {
+      // Find a user's settings with n8nWebhookUrl configured
+      const settings = await Settings.findOne({ n8nWebhookUrl: { $ne: '' } });
+
+      if (settings && settings.n8nWebhookUrl) {
+        // Prepare payload for N8N workflow
+        const n8nPayload = {
+          jobId: job.jobId,
+          title: job.title,
+          description: job.description,
+          url: job.url,
+          source: 'gigradar',
+          // Include additional metadata for the proposal generator
+          jobType: normalized.jobType,
+          price: normalized.price,
+          experienceLevel: normalized.experienceLevel,
+          skills: normalized.skills,
+          country: normalized.country,
+          clientRating: normalized.clientRating,
+          paymentVerified: normalized.paymentVerified,
+          totalSpent: normalized.totalSpent
+        };
+
+        // Call N8N webhook
+        const response = await fetch(settings.n8nWebhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(n8nPayload)
+        });
+
+        if (response.ok) {
+          n8nTriggered = true;
+        } else {
+          n8nError = `N8N returned status ${response.status}`;
+        }
+      } else {
+        n8nError = 'No N8N webhook URL configured in settings';
+      }
+    } catch (err) {
+      n8nError = err.message;
+      console.error('Error triggering N8N workflow:', err);
+    }
+
+    res.json({
+      success: true,
+      message: isNewJob ? 'GigRadar job created' : 'GigRadar job updated',
+      jobId: job.jobId,
+      jobUrl: normalized.url,
+      teamId: job.teamId,
+      isNewJob,
+      n8nTriggered,
+      n8nError: n8nError || undefined,
+      validation
+    });
+  } catch (error) {
+    console.error('GigRadar webhook error:', error);
+    res.status(500).json({ error: 'Failed to process GigRadar webhook' });
+  }
+});
+
 // Health check for webhooks
 router.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'webhooks' });

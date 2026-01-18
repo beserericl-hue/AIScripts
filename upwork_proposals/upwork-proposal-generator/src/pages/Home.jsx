@@ -12,7 +12,8 @@ import {
   CheckCircle,
   Trophy,
   XOctagon,
-  Send
+  Send,
+  Radar
 } from 'lucide-react';
 
 const Home = () => {
@@ -185,7 +186,15 @@ const Home = () => {
                   onClick={() => handleJobClick(job)}
                 >
                   <div className="job-item-main">
-                    <h4 className="job-item-title">{job.title}</h4>
+                    <div className="job-item-title-row">
+                      <h4 className="job-item-title">{job.title}</h4>
+                      {job.source === 'gigradar' && (
+                        <span className="source-badge source-gigradar" title="GigRadar">
+                          <Radar size={12} />
+                          GigRadar
+                        </span>
+                      )}
+                    </div>
                     <div className="job-item-meta">
                       {job.rating && renderStars(job.rating)}
                       <span className="job-item-date">{formatDate(job.createdAt)}</span>
@@ -240,7 +249,15 @@ const Home = () => {
                   onClick={() => handleJobClick(job)}
                 >
                   <div className="job-item-main">
-                    <h4 className="job-item-title">{job.title}</h4>
+                    <div className="job-item-title-row">
+                      <h4 className="job-item-title">{job.title}</h4>
+                      {job.source === 'gigradar' && (
+                        <span className="source-badge source-gigradar" title="GigRadar">
+                          <Radar size={12} />
+                          GigRadar
+                        </span>
+                      )}
+                    </div>
                     <div className="job-item-meta">
                       <span className={`status-badge status-${job.status}`}>
                         {getStatusIcon(job.status)}
