@@ -3,11 +3,13 @@ FROM node:20-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
+# Add libc6-compat for compatibility and vips for sharp
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json* ./
+# Install dependencies - sharp will be built for linux-musl
 RUN npm ci
 
 # Build the application

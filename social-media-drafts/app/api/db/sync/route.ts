@@ -21,13 +21,19 @@ interface SyncRequestBody {
 export async function POST(request: NextRequest): Promise<NextResponse<MongoSyncResponse>> {
   try {
     const body: SyncRequestBody = await request.json();
-    const { mongoUrl, mongoUsername, mongoPassword, mongoDatabaseName, data } = body;
+    const { data } = body;
+
+    // Use request body values, falling back to environment variables
+    const mongoUrl = body.mongoUrl || process.env.MONGODB_URL;
+    const mongoUsername = body.mongoUsername;
+    const mongoPassword = body.mongoPassword;
+    const mongoDatabaseName = body.mongoDatabaseName || process.env.MONGODB_DATABASE;
 
     // Validate MongoDB URL - if missing, return error
     if (!mongoUrl) {
       return NextResponse.json({
         success: false,
-        message: 'MongoDB URL not configured',
+        message: 'MongoDB URL not configured. Set MONGODB_URL environment variable or configure in settings.',
         timestamp: Date.now(),
       }, { status: 400 });
     }
@@ -110,16 +116,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<MongoSync
 export async function GET(request: NextRequest): Promise<NextResponse<MongoLoadResponse>> {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const mongoUrl = searchParams.get('mongoUrl');
+
+    // Use query params, falling back to environment variables
+    const mongoUrl = searchParams.get('mongoUrl') || process.env.MONGODB_URL;
     const mongoUsername = searchParams.get('mongoUsername') || undefined;
     const mongoPassword = searchParams.get('mongoPassword') || undefined;
-    const mongoDatabaseName = searchParams.get('mongoDatabaseName') || 'social_media_drafts';
+    const mongoDatabaseName = searchParams.get('mongoDatabaseName') || process.env.MONGODB_DATABASE || 'social_media_drafts';
 
     // Validate MongoDB URL - if missing, return error
     if (!mongoUrl) {
       return NextResponse.json({
         success: false,
-        message: 'MongoDB URL not configured',
+        message: 'MongoDB URL not configured. Set MONGODB_URL environment variable or configure in settings.',
         timestamp: Date.now(),
       }, { status: 400 });
     }

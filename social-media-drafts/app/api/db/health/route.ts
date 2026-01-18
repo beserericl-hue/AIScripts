@@ -8,10 +8,12 @@ import { MongoHealthResponse } from '@/lib/types';
 export async function GET(request: NextRequest): Promise<NextResponse<MongoHealthResponse>> {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const mongoUrl = searchParams.get('mongoUrl');
+
+    // Use query params, falling back to environment variables
+    const mongoUrl = searchParams.get('mongoUrl') || process.env.MONGODB_URL;
     const mongoUsername = searchParams.get('mongoUsername') || undefined;
     const mongoPassword = searchParams.get('mongoPassword') || undefined;
-    const mongoDatabaseName = searchParams.get('mongoDatabaseName') || 'social_media_drafts';
+    const mongoDatabaseName = searchParams.get('mongoDatabaseName') || process.env.MONGODB_DATABASE || 'social_media_drafts';
 
     // Check if URL is provided
     if (!mongoUrl) {
@@ -19,7 +21,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<MongoHealt
         connected: false,
         database: null,
         collections: [],
-        message: 'MongoDB URL not configured',
+        message: 'MongoDB URL not configured. Set MONGODB_URL environment variable or configure in settings.',
       });
     }
 
