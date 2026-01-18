@@ -10,11 +10,11 @@ dockerfilePath = "Dockerfile"
 # Number of instances (1 for hobby plan)
 numReplicas = 1
 
-# Health check path
-healthcheckPath = "/api/health"
+# Health check - use root path for simpler check
+healthcheckPath = "/"
 
 # Health check timeout in seconds
-healthcheckTimeout = 300
+healthcheckTimeout = 100
 
 # Restart policy on failure
 restartPolicyType = "ON_FAILURE"
