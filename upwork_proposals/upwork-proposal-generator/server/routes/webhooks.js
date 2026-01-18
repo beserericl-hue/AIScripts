@@ -235,9 +235,10 @@ const validateProposalResultPayload = (payload) => {
   const errors = [];
   const warnings = [];
 
-  // Required fields
-  if (!payload.jobId) {
-    errors.push('jobId is required');
+  // jobId is now optional - will be generated if not provided
+  // Required: either jobId OR title (to create a new job)
+  if (!payload.jobId && !payload.title) {
+    warnings.push('jobId is missing - a new job will be created with auto-generated ID');
   }
 
   // Recommended fields
@@ -254,20 +255,21 @@ const validateProposalResultPayload = (payload) => {
   }
 
   return {
-    isValid: errors.length === 0,
+    isValid: true, // Always valid now - we can create jobs if needed
     errors,
     warnings,
     receivedFields: Object.keys(payload),
-    expectedFields: ['jobId', 'coverLetter', 'docUrl', 'mermaidDiagram', 'mermaidImageUrl']
+    expectedFields: ['jobId', 'title', 'description', 'url', 'coverLetter', 'docUrl', 'mermaidDiagram', 'mermaidImageUrl', 'teamId', 'teamName']
   };
 };
 
 // N8N Proposal Result Callback
 // Called when N8N generates a proposal and sends back the results
+// Now supports creating new jobs if jobId doesn't exist (for GigRadar integration)
 router.post('/proposal-result', authenticateApiKey, async (req, res) => {
   try {
     const payload = req.body;
-    const { jobId, coverLetter, docUrl, mermaidDiagram, mermaidImageUrl } = payload;
+    const { jobId, title, description, url, coverLetter, docUrl, mermaidDiagram, mermaidImageUrl, teamId, teamName } = payload;
     const testMode = req.query.testMode === 'true';
 
     // Validate payload
@@ -280,11 +282,18 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
       });
     }
 
+    // Generate jobId if not provided
+    let resolvedJobId = jobId;
+    if (!resolvedJobId) {
+      const { v4: uuidv4 } = await import('uuid');
+      resolvedJobId = uuidv4();
+    }
+
     // If test mode, store data but don't save to database
     if (testMode) {
-      testModeData.set(jobId, {
+      testModeData.set(resolvedJobId, {
         type: 'proposal-result',
-        payload,
+        payload: { ...payload, jobId: resolvedJobId },
         validation,
         timestamp: Date.now()
       });
@@ -293,16 +302,42 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
         success: true,
         testMode: true,
         message: 'Test mode: Proposal result received but NOT saved to database',
-        jobId,
+        jobId: resolvedJobId,
         validation,
         receivedPayload: payload
       });
     }
 
-    const job = await Job.findOne({ jobId });
+    // Try to find existing job
+    let job = await Job.findOne({ jobId: resolvedJobId });
+    let isNewJob = false;
 
+    // If job doesn't exist, create a new one
     if (!job) {
-      return res.status(404).json({ error: 'Job not found' });
+      isNewJob = true;
+
+      // Resolve team by teamId or teamName
+      let resolvedTeamId = null;
+      if (teamId) {
+        const team = await Team.findById(teamId);
+        if (team) {
+          resolvedTeamId = team._id;
+        }
+      } else if (teamName) {
+        const team = await Team.findOne({ name: teamName, isActive: true });
+        if (team) {
+          resolvedTeamId = team._id;
+        }
+      }
+
+      job = new Job({
+        jobId: resolvedJobId,
+        title: title || 'Untitled Job',
+        description: description || '',
+        url: url || '',
+        status: 'proposal_generated',
+        teamId: resolvedTeamId
+      });
     }
 
     // Update job with proposal data
@@ -324,9 +359,10 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Proposal result received',
+      message: isNewJob ? 'Proposal result received and new job created' : 'Proposal result received',
       jobId: job.jobId,
-      teamId: job.teamId
+      teamId: job.teamId,
+      isNewJob
     });
   } catch (error) {
     console.error('Proposal result webhook error:', error);
