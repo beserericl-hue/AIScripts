@@ -26,6 +26,60 @@ const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+// Notify all administrators when a new user registers
+const notifyAdminsOfNewUser = async (newUser) => {
+  try {
+    // Find all administrators
+    const admins = await User.find({ role: 'administrator' });
+
+    if (admins.length === 0) {
+      console.log('No administrators to notify');
+      return;
+    }
+
+    const transporter = createTransporter();
+    const adminEmails = admins.map(admin => admin.email);
+
+    const appUrl = process.env.APP_URL || 'http://localhost:5173';
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: adminEmails.join(', '),
+      subject: 'New User Registration - Upwork Proposal Generator',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #14a800;">New User Registration</h2>
+          <p>A new user has registered for the Upwork Proposal Generator:</p>
+          <table style="border-collapse: collapse; margin: 20px 0;">
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Name:</td>
+              <td style="padding: 8px;">${newUser.name}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Email:</td>
+              <td style="padding: 8px;">${newUser.email}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Role:</td>
+              <td style="padding: 8px;">${newUser.role}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px; font-weight: bold;">Registered:</td>
+              <td style="padding: 8px;">${new Date().toLocaleString()}</td>
+            </tr>
+          </table>
+          <p>You can assign this user to a team and update their role in the <a href="${appUrl}/settings" style="color: #14a800;">Settings</a> page.</p>
+        </div>
+      `
+    });
+
+    console.log(`Admin notification sent to: ${adminEmails.join(', ')}`);
+  } catch (error) {
+    console.error('Failed to send admin notification:', error);
+    throw error;
+  }
+};
+
 // Send verification email endpoint
 router.post('/send-verification', async (req, res) => {
   try {
@@ -108,10 +162,10 @@ router.post('/verify-code', async (req, res) => {
   }
 });
 
-// Register new user (admin only after first user, requires email verification)
+// Register new user (self-registration allowed with 'user' role, requires email verification)
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, name, role } = req.body;
+    const { email, password, name } = req.body;
 
     // Check if email was verified
     const verification = verificationCodes.get(email);
@@ -119,45 +173,33 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email must be verified before registration' });
     }
 
-    // Check if this is the first user
-    const userCount = await User.countDocuments();
-
-    // If not first user, require authentication
-    if (userCount > 0) {
-      const token = req.cookies.token || req.headers.authorization?.replace('Bearer ', '');
-      if (!token) {
-        return res.status(401).json({ error: 'Only administrators can create new users' });
-      }
-
-      try {
-        const jwt = await import('jsonwebtoken');
-        const decoded = jwt.default.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
-        const adminUser = await User.findById(decoded.userId);
-
-        if (!adminUser || adminUser.role !== 'administrator') {
-          return res.status(403).json({ error: 'Only administrators can create new users' });
-        }
-      } catch (err) {
-        return res.status(401).json({ error: 'Invalid authentication' });
-      }
-    }
-
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
+    // Check if this is the first user (first user becomes administrator)
+    const userCount = await User.countDocuments();
+    const isFirstUser = userCount === 0;
+
     const user = new User({
       email,
       password,
       name,
-      role: userCount === 0 ? 'administrator' : (role || 'user')
+      role: isFirstUser ? 'administrator' : 'user'
     });
 
     await user.save();
 
     // Clean up verification code after successful registration
     verificationCodes.delete(email);
+
+    // If not the first user, notify all administrators about new registration
+    if (!isFirstUser) {
+      notifyAdminsOfNewUser(user).catch(err => {
+        console.error('Failed to notify admins of new user:', err);
+      });
+    }
 
     const token = generateToken(user._id);
 
