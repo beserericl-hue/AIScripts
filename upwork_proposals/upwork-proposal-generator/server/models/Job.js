@@ -30,7 +30,7 @@ const jobSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'proposal_generated', 'rejected', 'submitted', 'won', 'lost'],
+    enum: ['pending', 'proposal_generated', 'rejected', 'submitted', 'won', 'lost', 'private'],
     default: 'pending'
   },
   profile: {

@@ -26,7 +26,8 @@ import {
   Tag,
   MessageSquare,
   ScrollText,
-  Image
+  Image,
+  Lock
 } from 'lucide-react';
 
 const Proposal = () => {
@@ -356,6 +357,8 @@ const Proposal = () => {
         return 'Lost';
       case 'pending':
         return 'Pending';
+      case 'private':
+        return "Can't Bid";
       default:
         return status;
     }
@@ -371,6 +374,8 @@ const Proposal = () => {
         return <Trophy size={14} />;
       case 'lost':
         return <XOctagon size={14} />;
+      case 'private':
+        return <Lock size={14} />;
       default:
         return <FileText size={14} />;
     }
@@ -762,6 +767,14 @@ const Proposal = () => {
                       >
                         <XOctagon size={14} />
                         Lost
+                      </button>
+                      <button
+                        className={`btn-status btn-private ${currentStatus === 'private' ? 'active' : ''}`}
+                        onClick={() => handleStatusChange('private')}
+                        disabled={updatingStatus}
+                      >
+                        <Lock size={14} />
+                        Can't Bid
                       </button>
                     </div>
                   </div>

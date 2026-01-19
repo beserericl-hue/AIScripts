@@ -14,7 +14,8 @@ import {
   XOctagon,
   Send,
   Radar,
-  User
+  User,
+  Lock
 } from 'lucide-react';
 
 const Home = () => {
@@ -125,6 +126,8 @@ const Home = () => {
         return <Trophy size={14} />;
       case 'lost':
         return <XOctagon size={14} />;
+      case 'private':
+        return <Lock size={14} />;
       default:
         return <Clock size={14} />;
     }
@@ -140,6 +143,8 @@ const Home = () => {
         return 'Won';
       case 'lost':
         return 'Lost';
+      case 'private':
+        return "Can't Bid";
       default:
         return status;
     }

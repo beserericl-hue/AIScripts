@@ -1169,6 +1169,11 @@ button {
   color: #ef4444;
 }
 
+.status-badge.status-private {
+  background: rgba(107, 114, 128, 0.1);
+  color: #6b7280;
+}
+
 /* Job Preview Panel (Home Page) */
 .job-preview-panel {
   margin-top: 1.5rem;
@@ -1652,6 +1657,23 @@ button {
   background: rgba(239, 68, 68, 0.1);
   border-color: #ef4444;
   color: #ef4444;
+}
+
+.btn-status.btn-private {
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.btn-status.btn-private:hover {
+  background: rgba(107, 114, 128, 0.1);
+  border-color: #6b7280;
+  color: #6b7280;
+}
+
+.btn-status.btn-private.active {
+  background: rgba(107, 114, 128, 0.1);
+  border-color: #6b7280;
+  color: #6b7280;
 }
 
 .proposal-form-container {

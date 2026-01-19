@@ -72,11 +72,11 @@ router.get('/pending', authenticate, async (req, res) => {
   }
 });
 
-// Get jobs with proposals (proposal_generated, submitted, won, lost) - filtered by team
+// Get jobs with proposals (proposal_generated, submitted, won, lost, private) - filtered by team
 router.get('/with-proposals', authenticate, async (req, res) => {
   try {
     let query = {
-      status: { $in: ['proposal_generated', 'submitted', 'won', 'lost'] }
+      status: { $in: ['proposal_generated', 'submitted', 'won', 'lost', 'private'] }
     };
 
     // Add team filter
@@ -98,7 +98,7 @@ router.get('/with-proposals', authenticate, async (req, res) => {
 router.post('/:id/status', authenticate, async (req, res) => {
   try {
     const { status } = req.body;
-    const validStatuses = ['pending', 'proposal_generated', 'rejected', 'submitted', 'won', 'lost'];
+    const validStatuses = ['pending', 'proposal_generated', 'rejected', 'submitted', 'won', 'lost', 'private'];
 
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
