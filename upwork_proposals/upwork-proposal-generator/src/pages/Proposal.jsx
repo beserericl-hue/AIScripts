@@ -68,6 +68,43 @@ const Proposal = () => {
     fetchUserProfiles(user._id);
   }, []);
 
+  // Subscribe to real-time proposal updates via SSE
+  useEffect(() => {
+    if (!jobId) return;
+
+    const token = localStorage.getItem('token') || document.cookie.split('token=')[1]?.split(';')[0];
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    const eventSource = new EventSource(`${baseUrl}/api/events/proposals?token=${token}`);
+
+    eventSource.onmessage = async (event) => {
+      const data = JSON.parse(event.data);
+      // Check if this update is for our current job
+      if (data.type === 'proposal_updated' && data.jobId === jobId) {
+        // Fetch the updated job data
+        try {
+          const response = await api.get(`/jobs/by-job-id/${jobId}`);
+          const updatedJob = response.data;
+
+          if (updatedJob.proposalData) {
+            setProposalData(updatedJob.proposalData);
+            setCurrentStatus(updatedJob.status);
+            setSuccess('Proposal generated! The results are now available.');
+          }
+        } catch (err) {
+          console.error('Failed to fetch updated job:', err);
+        }
+      }
+    };
+
+    eventSource.onerror = () => {
+      console.log('SSE connection error, will auto-reconnect');
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [jobId]);
+
   // When team members load, ensure current user is still selected
   useEffect(() => {
     if (teamMembers.length > 0) {

@@ -84,7 +84,8 @@ router.get('/with-proposals', authenticate, async (req, res) => {
 
     const jobs = await Job.find(query)
       .sort({ updatedAt: -1 })
-      .select('jobId title rating status url createdAt updatedAt teamId proposalData description source');
+      .select('jobId title rating status url createdAt updatedAt teamId proposalData description source createdBy')
+      .populate('createdBy', 'name');
 
     res.json(jobs);
   } catch (error) {

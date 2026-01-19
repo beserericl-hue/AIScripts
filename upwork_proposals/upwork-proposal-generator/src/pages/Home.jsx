@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
@@ -13,7 +13,8 @@ import {
   Trophy,
   XOctagon,
   Send,
-  Radar
+  Radar,
+  User
 } from 'lucide-react';
 
 const Home = () => {
@@ -24,7 +25,7 @@ const Home = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     try {
       setLoading(true);
       const [pendingResponse, proposalResponse] = await Promise.all([
@@ -39,11 +40,35 @@ const Home = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchJobs();
-  }, []);
+  }, [fetchJobs]);
+
+  // Subscribe to real-time proposal updates via SSE
+  useEffect(() => {
+    const token = localStorage.getItem('token') || document.cookie.split('token=')[1]?.split(';')[0];
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    const eventSource = new EventSource(`${baseUrl}/api/events/proposals?token=${token}`);
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'proposal_updated') {
+        // Refresh the jobs list when a proposal is updated
+        fetchJobs();
+      }
+    };
+
+    eventSource.onerror = () => {
+      // Silently handle SSE connection errors - will auto-reconnect
+      console.log('SSE connection error, will auto-reconnect');
+    };
+
+    return () => {
+      eventSource.close();
+    };
+  }, [fetchJobs]);
 
   const handleJobClick = async (job) => {
     try {
@@ -265,6 +290,12 @@ const Home = () => {
                       </span>
                       <span className="job-item-date">{formatDate(job.updatedAt)}</span>
                     </div>
+                    {job.createdBy?.name && (
+                      <div className="job-item-creator">
+                        <User size={12} />
+                        <span>{job.createdBy.name}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="job-item-actions">
                     <button

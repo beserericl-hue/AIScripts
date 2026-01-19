@@ -3,6 +3,7 @@ import Job from '../models/Job.js';
 import Team from '../models/Team.js';
 import Settings from '../models/Settings.js';
 import { authenticateApiKey, authenticateAny } from '../middleware/auth.js';
+import { broadcastProposalUpdate } from './events.js';
 
 const router = express.Router();
 
@@ -364,6 +365,13 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
     };
 
     await job.save();
+
+    // Broadcast real-time update to connected clients
+    broadcastProposalUpdate(job.jobId, {
+      title: job.title,
+      status: job.status,
+      teamId: job.teamId
+    });
 
     res.json({
       success: true,

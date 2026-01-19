@@ -1065,6 +1065,19 @@ button {
   color: var(--text-muted);
 }
 
+.job-item-creator {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.job-item-creator svg {
+  opacity: 0.7;
+}
+
 .job-item-actions {
   display: flex;
   gap: 0.5rem;
