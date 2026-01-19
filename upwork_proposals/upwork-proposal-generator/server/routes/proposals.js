@@ -11,12 +11,17 @@ router.post('/generate', authenticate, async (req, res) => {
   try {
     const { jobId, title, description, profile, url } = req.body;
 
-    // Get user settings for webhook URL
+    // Get settings - first try user's settings, then fall back to any settings with webhook configured
     let settings = await Settings.findOne({ userId: req.user._id });
+
+    // If user doesn't have settings or webhook not configured, find global/admin settings
+    if (!settings || !settings.n8nWebhookUrl) {
+      settings = await Settings.findOne({ n8nWebhookUrl: { $exists: true, $ne: '' } });
+    }
 
     if (!settings || !settings.n8nWebhookUrl) {
       return res.status(400).json({
-        error: 'N8N webhook URL not configured. Please configure it in Settings.'
+        error: 'N8N webhook URL not configured. Please ask an administrator to configure it in Settings.'
       });
     }
 
