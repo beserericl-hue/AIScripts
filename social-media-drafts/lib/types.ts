@@ -57,6 +57,8 @@ export interface AppSettings {
   mongoUsername?: string;
   mongoPassword?: string;
   mongoDatabaseName?: string; // Default: 'social_media_drafts'
+  // UI preferences
+  editorTextareaHeight?: number; // Height in pixels for the post editor textarea
 }
 
 // MongoDB sync status types

@@ -18,7 +18,7 @@ const TONE_DESCRIPTIONS = {
 const PLATFORM_LIMITS = {
   twitter: 280,
   instagram: 2200,
-  linkedin: 3000,
+  linkedin: 4000,
   facebook: 63206,
   tiktok: 2200,
 };

@@ -2,7 +2,7 @@ import { Platform, PostStatus } from './types';
 
 export const CHARACTER_LIMITS: Record<Platform, number> = {
   twitter: 280,
-  linkedin: 3000,
+  linkedin: 4000,
   instagram: 2200,
   facebook: 63206,
   tiktok: 2200,

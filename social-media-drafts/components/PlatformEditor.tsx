@@ -1,11 +1,16 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Wand2, Loader2 } from 'lucide-react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { Wand2, Loader2, GripHorizontal } from 'lucide-react';
 import { Platform } from '@/lib/types';
 import { CHARACTER_LIMITS, PLATFORM_LABELS } from '@/lib/constants';
+import { useAppStore } from '@/lib/store';
 
 type Tone = 'professional' | 'casual' | 'humorous' | 'inspirational' | 'educational';
+
+const DEFAULT_TEXTAREA_HEIGHT = 200;
+const MIN_TEXTAREA_HEIGHT = 100;
+const MAX_TEXTAREA_HEIGHT = 800;
 
 interface PlatformEditorProps {
   platform: Platform;
@@ -25,6 +30,60 @@ export default function PlatformEditor({
   const [showQuickGenerate, setShowQuickGenerate] = useState(false);
   const [quickIdea, setQuickIdea] = useState('');
   const [quickTone, setQuickTone] = useState<Tone>('casual');
+
+  const { settings, updateSettings } = useAppStore();
+  const [textareaHeight, setTextareaHeight] = useState(
+    settings.editorTextareaHeight || DEFAULT_TEXTAREA_HEIGHT
+  );
+  const isResizing = useRef(false);
+  const startY = useRef(0);
+  const startHeight = useRef(0);
+
+  // Sync height with settings when they change (e.g., loaded from MongoDB)
+  useEffect(() => {
+    if (settings.editorTextareaHeight && settings.editorTextareaHeight !== textareaHeight) {
+      setTextareaHeight(settings.editorTextareaHeight);
+    }
+  }, [settings.editorTextareaHeight]);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    startY.current = e.clientY;
+    startHeight.current = textareaHeight;
+    document.body.style.cursor = 'ns-resize';
+    document.body.style.userSelect = 'none';
+  }, [textareaHeight]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return;
+      const delta = e.clientY - startY.current;
+      const newHeight = Math.min(
+        MAX_TEXTAREA_HEIGHT,
+        Math.max(MIN_TEXTAREA_HEIGHT, startHeight.current + delta)
+      );
+      setTextareaHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      if (isResizing.current) {
+        isResizing.current = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        // Persist the height to settings (which syncs to MongoDB)
+        updateSettings({ editorTextareaHeight: textareaHeight });
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [textareaHeight, updateSettings]);
 
   const limit = CHARACTER_LIMITS[platform];
   const charCount = content.length;
@@ -73,7 +132,8 @@ export default function PlatformEditor({
           value={content}
           onChange={(e) => onChange(e.target.value)}
           placeholder={`Write your ${PLATFORM_LABELS[platform]} post...`}
-          className="flex-1 w-full p-4 bg-[#0a0a0a] border border-[#262626] rounded-lg text-white placeholder-[#525252] resize-none focus:outline-none focus:border-[#D4AF37] min-h-[200px]"
+          className="flex-1 w-full p-4 bg-[#0a0a0a] border border-[#262626] rounded-lg text-white placeholder-[#525252] resize-none focus:outline-none focus:border-[#D4AF37]"
+          style={{ height: `${textareaHeight}px` }}
         />
 
         {/* Wand button for quick AI generation */}
@@ -132,8 +192,17 @@ export default function PlatformEditor({
         )}
       </div>
 
+      {/* Resize handle */}
+      <div
+        onMouseDown={handleResizeStart}
+        className="flex items-center justify-center h-4 cursor-ns-resize group hover:bg-[#1a1a1a] rounded-b-lg transition-colors -mt-1"
+        title="Drag to resize"
+      >
+        <GripHorizontal className="w-4 h-4 text-[#525252] group-hover:text-[#D4AF37] transition-colors" />
+      </div>
+
       {/* Character Counter */}
-      <div className="flex items-center justify-between mt-3">
+      <div className="flex items-center justify-between mt-2">
         <div className="flex items-center gap-3">
           {/* Progress Bar */}
           <div className="w-32 h-1.5 bg-[#1a1a1a] rounded-full overflow-hidden">
