@@ -1242,6 +1242,17 @@ button {
   gap: 1rem;
 }
 
+.btn-nobid {
+  border-color: #6b7280;
+  color: #6b7280;
+}
+
+.btn-nobid:hover {
+  background: rgba(107, 114, 128, 0.1);
+  border-color: #4b5563;
+  color: #4b5563;
+}
+
 /* Proposal Page */
 .proposal-page {
   padding-top: 0.5rem;

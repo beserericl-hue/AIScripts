@@ -49,6 +49,8 @@ router.post('/generate', authenticate, async (req, res) => {
       job.url = url;
     }
 
+    // Mark job as 'generated' to remove it from pending list
+    job.status = 'generated';
     await job.save();
 
     // Call N8N webhook

@@ -15,7 +15,8 @@ import {
   Send,
   Radar,
   User,
-  Lock
+  Lock,
+  Ban
 } from 'lucide-react';
 
 const Home = () => {
@@ -100,6 +101,19 @@ const Home = () => {
 
   const handleViewProposal = (job) => {
     navigate('/proposal', { state: { job, viewMode: true } });
+  };
+
+  const handleNoBid = async (job) => {
+    try {
+      await api.post(`/jobs/${job._id}/status`, { status: 'nobid' });
+      // Remove from pending list
+      setPendingJobs(prev => prev.filter(j => j._id !== job._id));
+      if (selectedJob?._id === job._id) {
+        setSelectedJob(null);
+      }
+    } catch (err) {
+      setError('Failed to mark job as No Bid');
+    }
   };
 
   const renderStars = (rating) => {
@@ -363,13 +377,22 @@ const Home = () => {
           </div>
           <div className="preview-actions">
             {selectedJob.status === 'pending' ? (
-              <button
-                className="btn-primary"
-                onClick={() => handleCreateProposal(selectedJob)}
-              >
-                <FileText size={18} />
-                Create Proposal
-              </button>
+              <>
+                <button
+                  className="btn-primary"
+                  onClick={() => handleCreateProposal(selectedJob)}
+                >
+                  <FileText size={18} />
+                  Create Proposal
+                </button>
+                <button
+                  className="btn-secondary btn-nobid"
+                  onClick={() => handleNoBid(selectedJob)}
+                >
+                  <Ban size={18} />
+                  No Bid
+                </button>
+              </>
             ) : (
               <button
                 className="btn-primary"

@@ -98,7 +98,7 @@ router.get('/with-proposals', authenticate, async (req, res) => {
 router.post('/:id/status', authenticate, async (req, res) => {
   try {
     const { status } = req.body;
-    const validStatuses = ['pending', 'proposal_generated', 'rejected', 'submitted', 'won', 'lost', 'private'];
+    const validStatuses = ['pending', 'proposal_generated', 'rejected', 'submitted', 'won', 'lost', 'private', 'generated', 'nobid'];
 
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid status value' });
