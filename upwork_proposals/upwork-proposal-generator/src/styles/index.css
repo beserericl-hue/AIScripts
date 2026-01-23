@@ -3012,6 +3012,129 @@ button {
   margin-bottom: 0.25rem;
 }
 
+/* List Search and Filter Styles */
+.list-filters {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.search-box .search-icon {
+  position: absolute;
+  left: 0.75rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 0.5rem 2rem 0.5rem 2.25rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: var(--transition);
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(20, 168, 0, 0.1);
+}
+
+.search-box input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-clear {
+  position: absolute;
+  right: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: var(--bg-tertiary);
+  border: none;
+  border-radius: 50%;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.search-clear:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
+}
+
+.date-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.date-filter-option {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.date-filter-option input[type="radio"] {
+  display: none;
+}
+
+.date-filter-option span {
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  transition: var(--transition);
+}
+
+.date-filter-option:hover span {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.date-filter-option input[type="radio"]:checked + span {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+/* Responsive filter styles */
+@media (max-width: 640px) {
+  .list-filters {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .search-box input {
+    font-size: 0.8125rem;
+    padding: 0.4rem 1.75rem 0.4rem 2rem;
+  }
+
+  .date-filter-group {
+    gap: 0.125rem;
+  }
+
+  .date-filter-option span {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.6875rem;
+  }
+}
+
 /* Pagination Styles */
 .pagination {
   display: flex;

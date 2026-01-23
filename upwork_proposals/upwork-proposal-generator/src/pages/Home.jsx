@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import {
@@ -20,8 +20,68 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Search,
+  X
 } from 'lucide-react';
+
+// Date filter options
+const DATE_FILTERS = {
+  all: 'All',
+  today: 'Today',
+  thisWeek: 'This Week',
+  thisMonth: 'This Month',
+  lastMonth: 'Last Month'
+};
+
+// Helper function to check if a date falls within a filter range
+const isDateInRange = (dateString, filter) => {
+  if (filter === 'all') return true;
+
+  const date = new Date(dateString);
+  const now = new Date();
+
+  // Reset time to start of day for comparisons
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  switch (filter) {
+    case 'today':
+      return date >= startOfToday;
+
+    case 'thisWeek': {
+      const dayOfWeek = now.getDay();
+      const startOfWeek = new Date(startOfToday);
+      startOfWeek.setDate(startOfWeek.getDate() - dayOfWeek);
+      return date >= startOfWeek;
+    }
+
+    case 'thisMonth': {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      return date >= startOfMonth;
+    }
+
+    case 'lastMonth': {
+      const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      return date >= startOfLastMonth && date < startOfThisMonth;
+    }
+
+    default:
+      return true;
+  }
+};
+
+// Helper function to test regex safely
+const testRegex = (pattern, text) => {
+  if (!pattern) return true;
+  try {
+    const regex = new RegExp(pattern, 'i');
+    return regex.test(text);
+  } catch {
+    // If regex is invalid, fall back to simple includes
+    return text.toLowerCase().includes(pattern.toLowerCase());
+  }
+};
 
 const ITEMS_PER_PAGE = 10;
 
@@ -145,23 +205,60 @@ const Home = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Search and filter state
+  const [pendingSearch, setPendingSearch] = useState('');
+  const [proposalsSearch, setProposalsSearch] = useState('');
+  const [pendingDateFilter, setPendingDateFilter] = useState('all');
+  const [proposalsDateFilter, setProposalsDateFilter] = useState('all');
+
   // Get page numbers from URL params
   const pendingPage = parseInt(searchParams.get('pendingPage')) || 1;
   const proposalsPage = parseInt(searchParams.get('proposalsPage')) || 1;
 
-  // Calculate pagination
-  const pendingTotalPages = Math.ceil(pendingJobs.length / ITEMS_PER_PAGE);
-  const proposalsTotalPages = Math.ceil(proposalJobs.length / ITEMS_PER_PAGE);
+  // Filter pending jobs by search and date
+  const filteredPendingJobs = useMemo(() => {
+    return pendingJobs.filter(job => {
+      const matchesSearch = testRegex(pendingSearch, job.title);
+      const matchesDate = isDateInRange(job.createdAt, pendingDateFilter);
+      return matchesSearch && matchesDate;
+    });
+  }, [pendingJobs, pendingSearch, pendingDateFilter]);
 
-  // Get paginated data
-  const paginatedPendingJobs = pendingJobs.slice(
+  // Filter proposal jobs by search and date
+  const filteredProposalJobs = useMemo(() => {
+    return proposalJobs.filter(job => {
+      const matchesSearch = testRegex(proposalsSearch, job.title);
+      const matchesDate = isDateInRange(job.updatedAt, proposalsDateFilter);
+      return matchesSearch && matchesDate;
+    });
+  }, [proposalJobs, proposalsSearch, proposalsDateFilter]);
+
+  // Calculate pagination based on filtered data
+  const pendingTotalPages = Math.ceil(filteredPendingJobs.length / ITEMS_PER_PAGE);
+  const proposalsTotalPages = Math.ceil(filteredProposalJobs.length / ITEMS_PER_PAGE);
+
+  // Get paginated data from filtered results
+  const paginatedPendingJobs = filteredPendingJobs.slice(
     (pendingPage - 1) * ITEMS_PER_PAGE,
     pendingPage * ITEMS_PER_PAGE
   );
-  const paginatedProposalJobs = proposalJobs.slice(
+  const paginatedProposalJobs = filteredProposalJobs.slice(
     (proposalsPage - 1) * ITEMS_PER_PAGE,
     proposalsPage * ITEMS_PER_PAGE
   );
+
+  // Reset to page 1 when search or filter changes
+  useEffect(() => {
+    if (pendingPage > 1 && pendingPage > pendingTotalPages) {
+      setPendingPageParam(1);
+    }
+  }, [filteredPendingJobs.length]);
+
+  useEffect(() => {
+    if (proposalsPage > 1 && proposalsPage > proposalsTotalPages) {
+      setProposalsPageParam(1);
+    }
+  }, [filteredProposalJobs.length]);
 
   // Update page in URL params
   const setPendingPageParam = (page) => {
@@ -366,14 +463,50 @@ const Home = () => {
               <Clock size={20} />
               Pending Jobs
             </h2>
-            <span className="count-badge">{pendingJobs.length}</span>
+            <span className="count-badge">{filteredPendingJobs.length}</span>
+          </div>
+
+          {/* Search and Filter Controls */}
+          <div className="list-filters">
+            <div className="search-box">
+              <Search size={16} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search by title (regex supported)..."
+                value={pendingSearch}
+                onChange={(e) => setPendingSearch(e.target.value)}
+              />
+              {pendingSearch && (
+                <button
+                  className="search-clear"
+                  onClick={() => setPendingSearch('')}
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <div className="date-filter-group">
+              {Object.entries(DATE_FILTERS).map(([value, label]) => (
+                <label key={value} className="date-filter-option">
+                  <input
+                    type="radio"
+                    name="pendingDateFilter"
+                    value={value}
+                    checked={pendingDateFilter === value}
+                    onChange={(e) => setPendingDateFilter(e.target.value)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="jobs-list">
-            {pendingJobs.length === 0 ? (
+            {filteredPendingJobs.length === 0 ? (
               <div className="empty-state-small">
                 <FileText size={32} />
-                <p>No pending jobs</p>
+                <p>{pendingJobs.length === 0 ? 'No pending jobs' : 'No jobs match your search/filter'}</p>
               </div>
             ) : (
               paginatedPendingJobs.map((job) => (
@@ -436,14 +569,50 @@ const Home = () => {
               <CheckCircle size={20} />
               Proposals
             </h2>
-            <span className="count-badge">{proposalJobs.length}</span>
+            <span className="count-badge">{filteredProposalJobs.length}</span>
+          </div>
+
+          {/* Search and Filter Controls */}
+          <div className="list-filters">
+            <div className="search-box">
+              <Search size={16} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search by title (regex supported)..."
+                value={proposalsSearch}
+                onChange={(e) => setProposalsSearch(e.target.value)}
+              />
+              {proposalsSearch && (
+                <button
+                  className="search-clear"
+                  onClick={() => setProposalsSearch('')}
+                  title="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <div className="date-filter-group">
+              {Object.entries(DATE_FILTERS).map(([value, label]) => (
+                <label key={value} className="date-filter-option">
+                  <input
+                    type="radio"
+                    name="proposalsDateFilter"
+                    value={value}
+                    checked={proposalsDateFilter === value}
+                    onChange={(e) => setProposalsDateFilter(e.target.value)}
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
           </div>
 
           <div className="jobs-list">
-            {proposalJobs.length === 0 ? (
+            {filteredProposalJobs.length === 0 ? (
               <div className="empty-state-small">
                 <FileText size={32} />
-                <p>No proposals yet</p>
+                <p>{proposalJobs.length === 0 ? 'No proposals yet' : 'No proposals match your search/filter'}</p>
               </div>
             ) : (
               paginatedProposalJobs.map((job) => (
