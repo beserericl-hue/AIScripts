@@ -1,0 +1,572 @@
+# Upwork Proposal Generator - User Guide
+
+## Table of Contents
+1. [Overview](#overview)
+2. [Getting Started](#getting-started)
+3. [Login Screen](#login-screen)
+4. [Home Dashboard](#home-dashboard)
+5. [Proposal Screen](#proposal-screen)
+6. [Settings Screen](#settings-screen-admin-only)
+7. [Integration Workflow](#integration-workflow)
+8. [Understanding Job Statuses](#understanding-job-statuses)
+
+---
+
+## Overview
+
+The Upwork Proposal Generator is a web application designed to streamline the process of creating and managing proposals for Upwork job postings. The application integrates with N8N workflows and GigRadar to automate job discovery, evaluation, and proposal generation.
+
+### Key Features
+- Automated job discovery via GigRadar integration
+- AI-powered proposal generation via N8N workflows
+- Team-based job management and filtering
+- Real-time updates when proposals are generated
+- Profile management for consistent proposal content
+- Comprehensive job tracking with status management
+
+---
+
+## Getting Started
+
+### First-Time Setup
+1. Navigate to the application URL
+2. Click "Create an account" on the login screen
+3. Enter your email address and click "Send Verification Code"
+4. Check your email for a 6-digit verification code
+5. Enter the code and complete registration with your name and password
+6. The first user to register automatically becomes an administrator
+
+### System Requirements
+- Modern web browser (Chrome, Firefox, Safari, Edge)
+- Internet connection
+- Valid email address for registration
+
+---
+
+## Login Screen
+
+The login screen provides secure access to the application.
+
+### Features
+
+#### Email/Password Login
+1. Enter your registered email address
+2. Enter your password
+3. Click "Sign In"
+
+#### Google OAuth Login
+- Click the Google sign-in button to authenticate with your Google account
+
+#### New User Registration
+1. Click "Create an account"
+2. Enter your email address
+3. Click "Send Verification Code"
+4. Enter the 6-digit code received via email (valid for 10 minutes)
+5. Complete the form with:
+   - Full Name
+   - Password (minimum 6 characters)
+6. Click "Create Account"
+
+### Notes
+- The first user to register becomes an administrator
+- Administrators are notified via email when new users register
+- Verification codes expire after 10 minutes
+
+---
+
+## Home Dashboard
+
+The Home Dashboard is the main workspace showing all jobs and proposals.
+
+### Layout
+
+The dashboard displays two side-by-side panels:
+
+#### Left Panel: Pending Jobs
+Shows jobs that are awaiting proposal creation.
+
+#### Right Panel: Proposals
+Shows jobs that have proposals in various states (Generated, Submitted, Won, Lost, Can't Bid).
+
+### Search and Filter Controls
+
+Each panel has independent search and filter controls:
+
+#### Search Box
+- Located at the top of each panel
+- Supports regular expression patterns for advanced searching
+- Searches job titles only
+- Click the X button to clear the search
+- Examples:
+  - `automation` - finds jobs with "automation" in the title
+  - `^AI` - finds jobs starting with "AI"
+  - `python|node` - finds jobs with "python" or "node"
+
+#### Date Filters
+Radio buttons to filter by date:
+- **All** - Shows all jobs (default)
+- **Today** - Jobs created/updated today
+- **This Week** - Jobs from the current week (Sunday to Saturday)
+- **This Month** - Jobs from the current calendar month
+- **Last Month** - Jobs from the previous calendar month
+
+### Job List Items
+
+Each job in the list displays:
+- **Title** - The job posting title
+- **Rating** - Star rating (1-5 stars) based on job evaluation
+- **Date** - Created date for pending jobs, updated date for proposals
+- **Source Badge** - Shows "GigRadar" if the job came from GigRadar
+- **Status Badge** (Proposals only) - Current status with icon
+- **User Name** (Proposals only) - Who created the proposal
+
+### Actions
+
+#### Pending Jobs Panel
+- **Click job** - View job details in the preview panel below
+- **X button** - Reject the job (removes from pending list)
+- **Document button** - Create a proposal for this job
+
+#### Proposals Panel
+- **Click job** - View job details in the preview panel
+- **External link button** - View the proposal details
+
+### Job Preview Panel
+
+When you click on a job, a preview panel appears below the lists showing:
+- Job title with "View on Upwork" link
+- Rating (star display)
+- Current status
+- Full job description
+
+**Actions in Preview:**
+- **Create Proposal** - Navigate to proposal creation (pending jobs)
+- **No Bid** - Mark the job as not bidding (pending jobs)
+- **View Proposal** - Navigate to proposal view (proposals)
+
+### Pagination
+
+When lists exceed 10 items, pagination controls appear:
+- `<<` - Go to first page
+- `<` - Go to previous page
+- Page numbers with ellipsis for large page counts
+- `>` - Go to next page
+- `>>` - Go to last page
+
+### Real-Time Updates
+
+The dashboard automatically updates when:
+- New jobs are discovered via GigRadar
+- Proposals are generated by N8N workflows
+- No manual refresh needed (updates via Server-Sent Events)
+
+---
+
+## Proposal Screen
+
+The Proposal screen is where you create and view proposals for jobs.
+
+### Layout
+
+Two-column layout:
+- **Left Column** - Proposal creation form
+- **Right Column** - Generated proposal content
+
+### Left Column: Create Proposal
+
+#### Job Reference Section (Read-Only)
+Displays evaluation data from N8N:
+- **Score** - Rating out of 10 with reasoning
+- **Job Type** - Type of work (e.g., Hourly, Fixed)
+- **Price** - Budget or hourly rate
+- **Country** - Client's location
+- **Skills** - Required skills as tags
+
+#### Form Fields
+
+**Title of Job**
+- Pre-filled from the job posting
+- Editable if needed
+- 4000 character limit
+
+**Full Description of the Job**
+- Complete job description
+- No character limit
+- Pre-filled from the job posting
+
+**Profile Selection Section**
+- **Team Member** - Select yourself or a team member
+- **Profile Name** - Select an existing profile or create new
+- **+ New Profile** - Create a new profile with custom name
+
+**Profile Content**
+- Your professional profile/expertise text
+- 4000 character limit (Upwork limitation)
+- Save Profile button to store changes
+
+**Job URL**
+- Link to the Upwork job posting
+- "View on Upwork" button opens in new tab
+
+#### Create Proposal Button
+Clicking this button:
+1. Sends job data to N8N workflow
+2. Changes job status to "Generated"
+3. Removes job from Pending Jobs list
+4. Displays "Proposal generation initiated" message
+
+### Right Column: Generated Proposal
+
+#### Status Badge
+Shows current proposal status with icon.
+
+#### Upwork Quick Links (when job URL is available)
+- **Job URL** - Direct link to the job posting
+- **Message Room** - Link to Upwork messages
+- **Proposals** - Link to your Upwork proposals page
+
+#### Status Update Buttons
+Update the proposal status:
+- **Submitted** - Mark as submitted to Upwork
+- **Won** - Mark as won contract
+- **Lost** - Mark as lost/rejected
+- **Can't Bid** - Mark as unable to bid (private job)
+
+#### Generated Content
+
+**Google Document**
+- Link to the generated proposal document
+- "Open" button to view in new tab
+
+**Cover Letter**
+- Full generated cover letter text
+- "Copy" button to copy to clipboard
+
+**Workflow Diagram (Mermaid)**
+- Mermaid code for the workflow diagram
+- "Copy" button to copy the code
+- Visual preview of the diagram image
+- Image action buttons:
+  - External link icon - Open image in new tab
+  - Image icon - Copy image to clipboard
+
+### Waiting for Generation
+
+If the proposal hasn't been generated yet:
+- Shows placeholder message
+- Real-time updates will populate content when N8N completes
+- No need to refresh the page
+
+### Back Navigation
+
+The "Back to Dashboard" button returns to the Home page, preserving your pagination position.
+
+---
+
+## Settings Screen (Admin Only)
+
+The Settings screen is accessible only to administrators and provides system configuration options.
+
+### Accessing Settings
+Click "Settings" in the navigation bar (visible only to admins).
+
+### Tabs
+
+#### 1. Webhooks Tab
+
+**N8N Webhook URL**
+- URL for the N8N proposal generation workflow
+- Used when "Create Proposal" is clicked
+
+**N8N Evaluation Webhook URL**
+- URL for the N8N job evaluation workflow
+- Used for scoring and analyzing jobs
+
+**Callback Team Assignment**
+- Select which team receives jobs from webhook callbacks
+- Important for multi-team setups
+
+**Test Mode Toggle**
+- When enabled, webhook data is stored in memory instead of database
+- Useful for testing and debugging
+- Data auto-clears after 1 hour
+
+**Pending Webhook Data** (Test Mode)
+- Shows webhook data waiting for review
+- "View" button to inspect the data
+- Options to Confirm (save to DB) or Discard
+
+#### 2. API Keys Tab
+
+API keys are used by N8N and GigRadar to authenticate webhook calls.
+
+**Generate New API Key**
+1. Enter a name for the key
+2. Click "Generate"
+3. Copy the displayed key immediately (shown only once)
+
+**Existing Keys Table**
+- Name, Key prefix, Status, Last Used, Created date
+- Toggle button to activate/deactivate
+- Delete button to remove
+
+#### 3. Database Tab
+
+MongoDB connection configuration:
+- **Connection URL** - MongoDB server URL
+- **Username** - Database username
+- **Password** - Database password (masked)
+- **Database Name** - Name of the database
+
+#### 4. Teams Tab
+
+Manage teams for multi-tenant job filtering.
+
+**Create New Team**
+1. Enter team name
+2. Enter optional description
+3. Click "Create Team"
+
+**Team Cards**
+- Click to select a team
+- Shows team name, description, member count
+- Team ID (copyable) for webhook configuration
+
+**Team Members Section** (when team selected)
+- Current Members list with remove button
+- Add Members section showing unassigned users
+
+#### 5. Users Tab
+
+Manage user accounts.
+
+**Add New User**
+1. Enter Name, Email, Password
+2. Select Role (User or Administrator)
+3. Optionally assign to a Team
+4. Click "Add User"
+
+**Users Table**
+- Name, Email, Role (editable dropdown), Team, Created date
+- Delete button (cannot delete yourself)
+- Inline editing for user details
+
+---
+
+## Integration Workflow
+
+### How Proposals Are Generated
+
+The proposal generation process involves multiple systems working together:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      PROPOSAL GENERATION FLOW                        │
+└─────────────────────────────────────────────────────────────────────┘
+
+1. JOB DISCOVERY
+   ┌──────────┐     Webhook      ┌──────────────────┐
+   │ GigRadar │ ───────────────► │ Upwork Proposal  │
+   └──────────┘                  │    Generator     │
+        │                        └──────────────────┘
+        │                               │
+        ▼                               ▼
+   Scans Upwork                  Creates job in DB
+   for new jobs                  with status "pending"
+
+2. JOB EVALUATION (Optional)
+   ┌──────────────────┐     Webhook      ┌─────────┐
+   │ Upwork Proposal  │ ───────────────► │   N8N   │
+   │    Generator     │                  │ Workflow│
+   └──────────────────┘                  └─────────┘
+                                              │
+                                              ▼
+                                         Evaluates job,
+                                         assigns score,
+                                         returns reasoning
+                                              │
+   ┌──────────────────┐     Callback     ◄────┘
+   │ Upwork Proposal  │ ◄────────────────
+   │    Generator     │   Score + data
+   └──────────────────┘
+
+3. PROPOSAL CREATION
+   User clicks               ┌─────────┐
+   "Create Proposal"  ─────► │   N8N   │
+                             │ Workflow│
+                             └─────────┘
+                                  │
+                                  ▼
+                             AI generates:
+                             - Cover letter
+                             - Google Doc
+                             - Mermaid diagram
+                                  │
+   ┌──────────────────┐     Callback     ◄────┘
+   │ Upwork Proposal  │ ◄────────────────
+   │    Generator     │   Proposal data
+   └──────────────────┘
+         │
+         ▼
+   Updates job with
+   proposal content,
+   broadcasts via SSE
+
+4. REAL-TIME UPDATE
+   ┌──────────────────┐      SSE       ┌──────────┐
+   │ Upwork Proposal  │ ─────────────► │  Browser │
+   │    Generator     │                │    UI    │
+   └──────────────────┘                └──────────┘
+                                            │
+                                            ▼
+                                       UI updates
+                                       automatically
+```
+
+### Step-by-Step Process
+
+#### Automatic Job Discovery (GigRadar)
+1. GigRadar scans Upwork for new jobs matching your criteria
+2. When a job is found, GigRadar sends it to the Upwork Proposal Generator via webhook
+3. The job appears in your Pending Jobs list with a "GigRadar" badge
+
+#### Manual Job Entry
+1. You can also manually create jobs by navigating to the Proposal page
+2. Enter the job details and click "Create Proposal"
+
+#### Proposal Generation
+1. Click on a pending job to view its details
+2. Click "Create Proposal" to navigate to the Proposal screen
+3. Review/edit the job information if needed
+4. Select your profile (or create a new one)
+5. Click "Create Proposal" button
+6. The system:
+   - Sends job data to N8N webhook
+   - N8N workflow generates cover letter, document, and diagram
+   - N8N sends results back via callback webhook
+   - UI updates automatically via real-time SSE connection
+7. The generated proposal appears in the right column
+
+#### Submission Tracking
+1. Copy the cover letter to Upwork
+2. Click "Submitted" to update the status
+3. When you hear back:
+   - Click "Won" if you got the contract
+   - Click "Lost" if rejected
+   - Click "Can't Bid" if the job is private or unavailable
+
+---
+
+## Understanding Job Statuses
+
+Jobs progress through various statuses:
+
+| Status | Icon | Description |
+|--------|------|-------------|
+| **Pending** | Clock | New job awaiting proposal creation |
+| **Generated** | Document | Proposal is being generated (hidden from UI) |
+| **Proposal Generated** | Document | Proposal has been generated and is ready |
+| **Submitted** | Send | Proposal has been submitted to Upwork |
+| **Won** | Trophy | Contract was awarded |
+| **Lost** | X-Octagon | Proposal was rejected |
+| **Can't Bid** | Lock | Unable to bid (private job, invite-only, etc.) |
+| **Rejected** | - | User rejected the job (not interested) |
+| **No Bid** | - | User chose not to bid on the job |
+
+### Status Flow
+
+```
+                    ┌───────────┐
+                    │  Pending  │
+                    └─────┬─────┘
+                          │
+          ┌───────────────┼───────────────┐
+          │               │               │
+          ▼               ▼               ▼
+    ┌──────────┐   ┌───────────┐   ┌──────────┐
+    │ Rejected │   │ Generated │   │  No Bid  │
+    └──────────┘   └─────┬─────┘   └──────────┘
+                         │
+                         ▼
+              ┌───────────────────┐
+              │ Proposal Generated│
+              └─────────┬─────────┘
+                        │
+          ┌─────────────┼─────────────┐
+          │             │             │
+          ▼             ▼             ▼
+    ┌───────────┐ ┌───────────┐ ┌───────────┐
+    │ Submitted │ │ Can't Bid │ │   (wait)  │
+    └─────┬─────┘ └───────────┘ └───────────┘
+          │
+    ┌─────┴─────┐
+    │           │
+    ▼           ▼
+┌───────┐   ┌───────┐
+│  Won  │   │ Lost  │
+└───────┘   └───────┘
+```
+
+---
+
+## Tips and Best Practices
+
+### Profile Management
+- Create multiple profiles for different types of work
+- Keep profiles under 4000 characters (Upwork limit)
+- Use the "Save Profile" button after making changes
+
+### Efficient Workflow
+1. Review pending jobs daily
+2. Use date filters to focus on recent jobs
+3. Use search to find specific job types
+4. Reject irrelevant jobs promptly to keep the list clean
+
+### Team Collaboration
+- Assign team members to appropriate teams
+- Configure callback team in Settings for proper job routing
+- Check who created each proposal via the user name display
+
+### Real-Time Updates
+- Keep the browser tab open to receive instant updates
+- The SSE connection auto-reconnects if interrupted
+- No need to manually refresh the page
+
+---
+
+## Troubleshooting
+
+### Proposal Not Appearing
+1. Check that N8N webhook URL is configured in Settings
+2. Verify N8N workflow is active and running
+3. Check the browser console for SSE connection errors
+4. Try refreshing the page
+
+### Jobs Not Showing
+1. Check your date filter settings (might be filtering out jobs)
+2. Clear any search text
+3. Verify you're assigned to the correct team
+
+### API Key Issues
+1. Ensure the API key is active (toggle in Settings)
+2. Verify the key is correctly configured in N8N/GigRadar
+3. Generate a new key if the old one is compromised
+
+### Login Problems
+1. Verify your email address is correct
+2. Check for the verification email in spam folder
+3. Request a new verification code if expired (10 minutes)
+4. Contact an administrator if locked out
+
+---
+
+## Support
+
+For technical issues or questions:
+1. Check the troubleshooting section above
+2. Contact your system administrator
+3. Report bugs via the project's issue tracker
+
+---
+
+*Last Updated: January 2026*
