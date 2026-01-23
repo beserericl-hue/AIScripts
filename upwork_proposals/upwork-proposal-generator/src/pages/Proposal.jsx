@@ -35,6 +35,7 @@ const Proposal = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const initialJob = location.state?.job;
+  const returnParams = location.state?.returnParams || '';
 
   // Form data for creating proposal
   const [formData, setFormData] = useState({
@@ -387,7 +388,7 @@ const Proposal = () => {
   return (
     <div className="page-container proposal-page">
       {/* Back button */}
-      <button className="btn-back" onClick={() => navigate('/')}>
+      <button className="btn-back" onClick={() => navigate(returnParams ? `/?${returnParams}` : '/')}>
         <ArrowLeft size={18} />
         Back to Dashboard
       </button>

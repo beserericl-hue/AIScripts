@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import {
   ExternalLink,
@@ -16,8 +16,125 @@ import {
   Radar,
   User,
   Lock,
-  Ban
+  Ban,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight
 } from 'lucide-react';
+
+const ITEMS_PER_PAGE = 10;
+
+// Pagination Component
+const Pagination = ({ currentPage, totalPages, onPageChange }) => {
+  if (totalPages <= 1) return null;
+
+  const getPageNumbers = () => {
+    const pages = [];
+    const showEllipsisStart = currentPage > 4;
+    const showEllipsisEnd = currentPage < totalPages - 3;
+
+    // Always show page 1
+    pages.push(1);
+
+    // Start ellipsis
+    if (showEllipsisStart) {
+      pages.push('...');
+    }
+
+    // Calculate range around current page
+    let start = Math.max(2, currentPage - 2);
+    let end = Math.min(totalPages - 1, currentPage + 2);
+
+    // Adjust range if near start
+    if (currentPage <= 4) {
+      start = 2;
+      end = Math.min(5, totalPages - 1);
+    }
+
+    // Adjust range if near end
+    if (currentPage >= totalPages - 3) {
+      start = Math.max(2, totalPages - 4);
+      end = totalPages - 1;
+    }
+
+    for (let i = start; i <= end; i++) {
+      if (i > 1 && i < totalPages && !pages.includes(i)) {
+        pages.push(i);
+      }
+    }
+
+    // End ellipsis
+    if (showEllipsisEnd && !pages.includes('...', pages.lastIndexOf('...') + 1)) {
+      // Check if we need end ellipsis
+      const lastNum = pages.filter(p => typeof p === 'number').pop();
+      if (lastNum < totalPages - 1) {
+        pages.push('...');
+      }
+    }
+
+    // Always show last page
+    if (totalPages > 1 && !pages.includes(totalPages)) {
+      pages.push(totalPages);
+    }
+
+    return pages;
+  };
+
+  return (
+    <div className="pagination">
+      <button
+        className="pagination-btn pagination-first"
+        onClick={() => onPageChange(1)}
+        disabled={currentPage === 1}
+        title="First page"
+      >
+        <ChevronsLeft size={16} />
+      </button>
+      <button
+        className="pagination-btn pagination-prev"
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        title="Previous page"
+      >
+        <ChevronLeft size={16} />
+      </button>
+
+      <div className="pagination-numbers">
+        {getPageNumbers().map((page, index) =>
+          page === '...' ? (
+            <span key={`ellipsis-${index}`} className="pagination-ellipsis">...</span>
+          ) : (
+            <button
+              key={page}
+              className={`pagination-btn pagination-number ${currentPage === page ? 'active' : ''}`}
+              onClick={() => onPageChange(page)}
+            >
+              {page}
+            </button>
+          )
+        )}
+      </div>
+
+      <button
+        className="pagination-btn pagination-next"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        title="Next page"
+      >
+        <ChevronRight size={16} />
+      </button>
+      <button
+        className="pagination-btn pagination-last"
+        onClick={() => onPageChange(totalPages)}
+        disabled={currentPage === totalPages}
+        title="Last page"
+      >
+        <ChevronsRight size={16} />
+      </button>
+    </div>
+  );
+};
 
 const Home = () => {
   const [pendingJobs, setPendingJobs] = useState([]);
@@ -26,6 +143,42 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Get page numbers from URL params
+  const pendingPage = parseInt(searchParams.get('pendingPage')) || 1;
+  const proposalsPage = parseInt(searchParams.get('proposalsPage')) || 1;
+
+  // Calculate pagination
+  const pendingTotalPages = Math.ceil(pendingJobs.length / ITEMS_PER_PAGE);
+  const proposalsTotalPages = Math.ceil(proposalJobs.length / ITEMS_PER_PAGE);
+
+  // Get paginated data
+  const paginatedPendingJobs = pendingJobs.slice(
+    (pendingPage - 1) * ITEMS_PER_PAGE,
+    pendingPage * ITEMS_PER_PAGE
+  );
+  const paginatedProposalJobs = proposalJobs.slice(
+    (proposalsPage - 1) * ITEMS_PER_PAGE,
+    proposalsPage * ITEMS_PER_PAGE
+  );
+
+  // Update page in URL params
+  const setPendingPageParam = (page) => {
+    setSearchParams(prev => {
+      const newParams = new URLSearchParams(prev);
+      newParams.set('pendingPage', page.toString());
+      return newParams;
+    });
+  };
+
+  const setProposalsPageParam = (page) => {
+    setSearchParams(prev => {
+      const newParams = new URLSearchParams(prev);
+      newParams.set('proposalsPage', page.toString());
+      return newParams;
+    });
+  };
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -96,11 +249,11 @@ const Home = () => {
   };
 
   const handleCreateProposal = (job) => {
-    navigate('/proposal', { state: { job } });
+    navigate('/proposal', { state: { job, returnParams: searchParams.toString() } });
   };
 
   const handleViewProposal = (job) => {
-    navigate('/proposal', { state: { job, viewMode: true } });
+    navigate('/proposal', { state: { job, viewMode: true, returnParams: searchParams.toString() } });
   };
 
   const handleNoBid = async (job) => {
@@ -223,7 +376,7 @@ const Home = () => {
                 <p>No pending jobs</p>
               </div>
             ) : (
-              pendingJobs.map((job) => (
+              paginatedPendingJobs.map((job) => (
                 <div
                   key={job._id}
                   className={`job-list-item ${selectedJob?._id === job._id ? 'selected' : ''}`}
@@ -267,6 +420,13 @@ const Home = () => {
               ))
             )}
           </div>
+          {pendingTotalPages > 1 && (
+            <Pagination
+              currentPage={pendingPage}
+              totalPages={pendingTotalPages}
+              onPageChange={setPendingPageParam}
+            />
+          )}
         </div>
 
         {/* Proposals List */}
@@ -286,7 +446,7 @@ const Home = () => {
                 <p>No proposals yet</p>
               </div>
             ) : (
-              proposalJobs.map((job) => (
+              paginatedProposalJobs.map((job) => (
                 <div
                   key={job._id}
                   className={`job-list-item ${selectedJob?._id === job._id ? 'selected' : ''}`}
@@ -332,6 +492,13 @@ const Home = () => {
               ))
             )}
           </div>
+          {proposalsTotalPages > 1 && (
+            <Pagination
+              currentPage={proposalsPage}
+              totalPages={proposalsTotalPages}
+              onPageChange={setProposalsPageParam}
+            />
+          )}
         </div>
       </div>
 
