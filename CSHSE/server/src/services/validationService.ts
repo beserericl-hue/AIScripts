@@ -101,9 +101,11 @@ export class ValidationService {
     }
 
     // Build the validation request
-    const callbackUrl = process.env.APP_URL
-      ? `${process.env.APP_URL}/api/webhooks/n8n/callback`
-      : 'http://localhost:8080/api/webhooks/n8n/callback';
+    // Priority: APP_URL > RAILWAY_PUBLIC_DOMAIN > localhost fallback
+    const baseUrl = process.env.APP_URL
+      || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
+      || `http://localhost:${process.env.PORT || 8080}`;
+    const callbackUrl = `${baseUrl}/api/webhooks/n8n/callback`;
 
     const request: ValidationRequest = {
       submissionId,
