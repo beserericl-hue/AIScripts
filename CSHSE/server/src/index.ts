@@ -43,9 +43,36 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Health check
+// Track database connection status for health checks
+let dbConnected = false;
+let dbError: string | null = null;
+
+// Liveness check - always returns 200 if server is running
+// Used by container orchestrators (Docker/Railway) to verify process is alive
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Readiness check - returns 200 only if all dependencies are ready
+// Use this to check if the server can handle requests
+app.get('/ready', (_req, res) => {
+  if (dbConnected) {
+    res.status(200).json({
+      status: 'ready',
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    });
+  } else {
+    res.status(503).json({
+      status: 'not_ready',
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      ...(dbError && { error: dbError })
+    });
+  }
 });
 
 // API Routes
@@ -78,20 +105,24 @@ app.use(globalErrorHandler);
 
 // Start server
 const startServer = async () => {
+  // Start HTTP server immediately so healthchecks work
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+
+  // Connect to database in background
   try {
-    // Connect to database
     await connectDatabase();
+    dbConnected = true;
+    console.log('Database connected successfully');
 
     // Initialize superuser account if configured via environment variables
     await initializeSuperuser();
-
-    app.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    });
   } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
+    dbError = error instanceof Error ? error.message : 'Unknown database error';
+    console.error('Database connection failed:', dbError);
+    // Don't exit - keep server running for healthchecks to report degraded status
   }
 };
 
