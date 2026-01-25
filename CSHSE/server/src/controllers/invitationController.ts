@@ -122,7 +122,7 @@ export const createInvitation = async (req: AuthenticatedRequest, res: Response)
     await invitation.save();
 
     // TODO: Send invitation email
-    // const inviteUrl = `${process.env.FRONTEND_URL}/accept-invitation?token=${invitation.token}`;
+    // const inviteUrl = `${process.env.APP_URL}/accept-invitation?token=${invitation.token}`;
     // await sendEmail({
     //   to: email,
     //   subject: 'You have been invited to CSHSE Accreditation System',

@@ -101,9 +101,9 @@ export class ValidationService {
     }
 
     // Build the validation request
-    const callbackUrl = process.env.API_URL
-      ? `${process.env.API_URL}/api/webhooks/n8n/callback`
-      : 'http://localhost:5000/api/webhooks/n8n/callback';
+    const callbackUrl = process.env.APP_URL
+      ? `${process.env.APP_URL}/api/webhooks/n8n/callback`
+      : 'http://localhost:8080/api/webhooks/n8n/callback';
 
     const request: ValidationRequest = {
       submissionId,

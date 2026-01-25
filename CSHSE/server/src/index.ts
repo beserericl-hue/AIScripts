@@ -7,6 +7,7 @@ import {
   notFoundHandler,
   setupProcessErrorHandlers
 } from './middleware/errorHandler';
+import { initializeSuperuser } from './services/superuserInit';
 
 // Import routes
 import importsRouter from './routes/imports';
@@ -80,6 +81,9 @@ const startServer = async () => {
   try {
     // Connect to database
     await connectDatabase();
+
+    // Initialize superuser account if configured via environment variables
+    await initializeSuperuser();
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);

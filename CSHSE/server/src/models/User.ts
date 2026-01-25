@@ -25,6 +25,7 @@ export interface IUser extends Document {
   permissions: Permission[];
   assignedSubmissions: mongoose.Types.ObjectId[];
   isActive: boolean;
+  isSuperuser: boolean; // Superuser has visibility to everything in the system
   lastLogin?: Date;
   invitedAt?: Date;
   invitedBy?: mongoose.Types.ObjectId;
@@ -101,6 +102,11 @@ const UserSchema = new Schema<IUser>({
   isActive: {
     type: Boolean,
     default: true
+  },
+  isSuperuser: {
+    type: Boolean,
+    default: false,
+    index: true
   },
   lastLogin: Date,
   invitedAt: Date,

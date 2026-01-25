@@ -1,0 +1,43 @@
+# Dependencies
+**/node_modules/
+
+# Build output (will be built in container)
+server/dist/
+
+# Environment files (should be set via Railway)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Development files
+**/*.log
+**/npm-debug.log*
+**/.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+
+# Git
+.git/
+.gitignore
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+**/__tests__/
+**/coverage/
+
+# Documentation (keep README)
+*.md
+!README.md
+!server/README.md
+
+# Client directory (not needed for server deployment)
+client/
+
+# CSHSE parts (sample documents)
+cshse-parts/
+
+# Claude settings
+.claude/
