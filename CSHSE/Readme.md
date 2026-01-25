@@ -23,6 +23,50 @@ This application enables educational institutions to prepare and submit accredit
 
 ---
 
+## Key Features
+
+### Self-Study Import System
+- **Document Parsing**: Import legacy self-studies from PDF, DOCX, and PPTX formats
+- **Auto-Mapping**: AI-assisted section detection with confidence scores
+- **Manual Assignment**: Review and assign unmapped content to standards
+
+### Self-Study Editor
+- **Rich Text Editing**: TipTap-powered editor with formatting toolbar
+- **Auto-Save**: 2-second debounced auto-save with visual indicators
+- **Manual Save + Validation**: Trigger N8N validation on demand
+- **Progress Tracking**: Visual indicators for standard completion status
+
+### Curriculum Matrix Editor
+- **Spreadsheet Interface**: Add/remove course columns dynamically
+- **Assessment Cells**: Type (I/T/K/S) and Depth (L/M/H) per specification
+- **Import/Export**: CSV export and Excel import support
+
+### Evidence Management
+- **File Upload**: Drag-drop support for Word, PDF, PPT, images
+- **URL Evidence**: Link external resources and documents
+- **Linking**: Associate evidence with specific standards/specifications
+
+### N8N Validation Integration
+- **Webhook Integration**: Real-time validation via N8N workflows
+- **AI Analysis**: Pass/fail results with feedback and suggestions
+- **Incremental Revalidation**: Only revalidate failed sections
+
+### Reader/Reviewer Portal
+- **Split-Screen View**: Standards + narrative on left, documents on right
+- **Compliance Assessment**: Y/N/NA toggles per specification
+- **Comments**: Rich text comments with evidence references
+- **Bookmarks & Flags**: Mark items for follow-up
+- **Final Assessment**: Recommendation with strengths/weaknesses
+
+### Lead Reader Portal
+- **Multi-Reader Comparison**: Side-by-side view of all reader assessments
+- **Disagreement Detection**: Automatic flagging of conflicting assessments
+- **Consensus Determination**: Set final determinations with rationale
+- **Communication Threads**: Discussion threads with readers
+- **PDF Reports**: Generate compilation reports
+
+---
+
 ## Architecture
 
 ### Technology Stack
@@ -32,67 +76,98 @@ This application enables educational institutions to prepare and submit accredit
 - Vite (build tool)
 - React Router v6 (navigation)
 - TipTap (rich text editor)
-- react-pdf (PDF viewing)
-- CSS Modules (styling)
+- TanStack Query (data fetching)
+- Tailwind CSS (styling)
+- Lucide React (icons)
 
 **Backend**
 - Node.js with Express
+- TypeScript
 - JWT Authentication (bcrypt for passwords)
 - Multer (file uploads)
+- PDFKit (PDF generation)
+
+**Document Parsing**
+- pdf-parse (PDF text extraction)
+- mammoth (DOCX parsing)
+- pptx-parser (PowerPoint parsing)
 
 **Storage**
 - **Local Development**: JSON file-based storage
 - **Production (Docker)**: MongoDB with Mongoose
 
 **Integration**
-- N8N workflow webhooks for AI-powered text comparison
+- N8N workflow webhooks for AI-powered validation
 
 ### Project Structure
 
 ```
 /CSHSE
-├── client/                          # React frontend
-│   ├── public/
-│   │   └── logo.png                # CSHSE logo
+├── client/                              # React frontend
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── common/             # Reusable UI (Badge, Button, Table, etc.)
-│   │   │   ├── editor/             # NarrativeEditor, AutoSaveIndicator
-│   │   │   ├── layout/             # TopNav, Sidebar, PageLayout
-│   │   │   ├── review/             # SplitView, DocumentViewer, ComplianceToggle
-│   │   │   └── standards/          # StandardsNav, StandardsMatrix
+│   │   ├── components/                  # Reusable UI components
 │   │   ├── features/
-│   │   │   ├── auth/               # Login, authentication
-│   │   │   ├── dashboard/          # Home dashboard
-│   │   │   ├── selfStudy/          # Coordinator portal
-│   │   │   ├── review/             # Reader portal
-│   │   │   ├── leadReview/         # Lead reader portal
-│   │   │   └── submissions/        # Submission management
-│   │   ├── hooks/                  # useAutoSave, useAuth, etc.
-│   │   ├── services/               # API client
-│   │   ├── store/                  # React Context state
-│   │   ├── styles/                 # Global CSS, theme variables
-│   │   ├── types/                  # TypeScript interfaces
-│   │   └── utils/                  # Helper functions
+│   │   │   ├── admin/
+│   │   │   │   └── WebhookSettings/     # N8N configuration UI
+│   │   │   └── selfStudy/
+│   │   │       ├── Editor/              # TipTap narrative editor
+│   │   │       ├── MatrixEditor/        # Curriculum matrix UI
+│   │   │       ├── EvidenceManager/     # File/URL evidence UI
+│   │   │       └── SubmissionWorkflow/  # Progress & validation UI
+│   │   ├── hooks/
+│   │   │   ├── useAutoSave.ts           # Debounced auto-save hook
+│   │   │   └── useValidationStatus.ts   # Validation tracking hook
+│   │   ├── services/                    # API client
+│   │   ├── store/                       # React Context state
+│   │   ├── styles/                      # Global CSS
+│   │   ├── types/                       # TypeScript interfaces
+│   │   └── utils/                       # Helper functions
 │   └── package.json
-├── server/                          # Express backend
+├── server/                              # Express backend
 │   ├── src/
-│   │   ├── config/                 # Database, JWT config
-│   │   ├── controllers/            # Route handlers
-│   │   ├── middleware/             # Auth, error handling
-│   │   ├── models/                 # Data models
-│   │   ├── routes/                 # API routes
-│   │   ├── services/               # Business logic
-│   │   └── utils/                  # Helpers
+│   │   ├── config/
+│   │   │   └── database.ts              # MongoDB/JSON connection
+│   │   ├── controllers/
+│   │   │   ├── adminController.ts       # Admin settings
+│   │   │   ├── evidenceController.ts    # Evidence CRUD
+│   │   │   ├── importController.ts      # Document import
+│   │   │   ├── leadReaderController.ts  # Lead reader operations
+│   │   │   ├── matrixController.ts      # Curriculum matrix
+│   │   │   ├── reportController.ts      # PDF generation
+│   │   │   ├── reviewController.ts      # Reader operations
+│   │   │   ├── submissionController.ts  # Submission workflow
+│   │   │   └── webhookController.ts     # N8N integration
+│   │   ├── models/
+│   │   │   ├── CurriculumMatrix.ts      # Course/standard mapping
+│   │   │   ├── LeadReaderCompilation.ts # Multi-reader aggregation
+│   │   │   ├── Review.ts                # Reader assessments
+│   │   │   ├── SelfStudyImport.ts       # Import tracking
+│   │   │   ├── Submission.ts            # Main submission
+│   │   │   ├── SupportingEvidence.ts    # Documents/URLs/images
+│   │   │   ├── User.ts                  # User accounts
+│   │   │   ├── ValidationResult.ts      # N8N results
+│   │   │   └── WebhookSettings.ts       # N8N configuration
+│   │   ├── routes/
+│   │   │   ├── admin.ts                 # /api/admin/*
+│   │   │   ├── evidence.ts              # /api/submissions/:id/evidence/*
+│   │   │   ├── imports.ts               # /api/imports/*
+│   │   │   ├── leadReviews.ts           # /api/lead-reviews/*
+│   │   │   ├── matrix.ts                # /api/submissions/:id/matrix/*
+│   │   │   ├── reports.ts               # /api/reports/*
+│   │   │   ├── reviews.ts               # /api/reviews/*
+│   │   │   ├── submissions.ts           # /api/submissions/*
+│   │   │   └── webhooks.ts              # /api/webhooks/*
+│   │   ├── services/
+│   │   │   ├── documentParser.ts        # PDF/DOCX/PPTX parsing
+│   │   │   ├── pdfGenerator.ts          # Report generation
+│   │   │   ├── sectionMapper.ts         # Auto-mapping logic
+│   │   │   └── validationService.ts     # N8N webhook calls
+│   │   └── index.ts                     # Express app entry
 │   └── package.json
-├── data/                            # Local storage (dev)
-│   ├── standards/                  # Standards JSON files
-│   ├── submissions/                # Submission data
-│   ├── reviews/                    # Review data
-│   ├── uploads/                    # Uploaded documents
-│   └── users.json                  # User accounts
-├── docker-compose.yml              # Production deployment
-└── package.json                    # Root workspace
+├── cshse-parts/                         # Reference data (split self-study)
+├── data/                                # Local storage (dev)
+├── docker-compose.yml                   # Production deployment
+└── package.json                         # Root workspace
 ```
 
 ---
@@ -107,11 +182,12 @@ interface User {
   passwordHash: string;
   firstName: string;
   lastName: string;
-  role: 'coordinator' | 'reader' | 'lead_reader' | 'admin';
+  role: 'program_coordinator' | 'reader' | 'lead_reader' | 'admin';
   institutionId?: string;
+  assignedSubmissions: string[];
   isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -123,26 +199,33 @@ interface Submission {
   institutionName: string;
   programName: string;
   programLevel: 'associate' | 'bachelors' | 'masters';
-  submitterId: string;
+  coordinatorId: string;
   type: 'initial' | 'reaccreditation' | 'extension';
   status: SubmissionStatus;
-  narratives: {
-    [standardCode: string]: {
-      [specCode: string]: {
-        content: string;             // Rich text HTML
-        lastModified: string;
-        isComplete: boolean;
-        linkedDocuments: string[];
-      };
-    };
-  };
-  documents: Document[];
+  narrativeContent: NarrativeContent[];
+  standardsStatus: Record<string, StandardStatusInfo>;
+  imports: string[];                 // SelfStudyImport references
+  curriculumMatrices: string[];      // CurriculumMatrix references
+  selfStudyProgress: SelfStudyProgress;
   decision?: Decision;
   assignedReaders: string[];
-  leadReader?: string;
-  submittedAt?: string;
-  createdAt: string;
-  updatedAt: string;
+  leadReaderId?: string;
+  submittedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface NarrativeContent {
+  standardCode: string;
+  specCode: string;
+  content: string;                   // Rich text HTML
+  lastModified: Date;
+}
+
+interface StandardStatusInfo {
+  status: 'not_started' | 'in_progress' | 'complete' | 'submitted' | 'validated';
+  validationStatus?: 'pending' | 'pass' | 'fail';
+  submittedAt?: Date;
 }
 
 type SubmissionStatus =
@@ -152,174 +235,220 @@ type SubmissionStatus =
   | 'under_review'
   | 'readers_assigned'
   | 'review_complete'
-  | 'compliant'
-  | 'non_compliant';
+  | 'approved'
+  | 'denied'
+  | 'conditional';
 ```
 
-### Review
+### Review (Reader Assessment)
 ```typescript
 interface Review {
   id: string;
   submissionId: string;
   reviewerId: string;
-  status: 'assigned' | 'in_progress' | 'complete';
-  assessments: {
-    [standardCode: string]: {
-      [specCode: string]: {
-        compliance: 'compliant' | 'non_compliant' | 'not_applicable' | null;
-        comments: string;
-        reviewedAt: string;
-      };
-    };
-  };
-  finalAssessment?: {
-    recommendation: 'approve' | 'deny' | 'conditional';
-    strengths: string;
-    weaknesses: string;
-    additionalComments: string;
-  };
-  assignedAt: string;
-  completedAt?: string;
+  reviewerNumber: number;            // 1, 2, or 3
+  totalReviewers: number;
+  institutionName: string;
+  programName: string;
+  programLevel: string;
+  status: 'assigned' | 'in_progress' | 'complete' | 'submitted';
+  reviewDate?: Date;
+  assessments: StandardAssessment[];
+  finalAssessment?: FinalAssessment;
+  progress: ReaderProgress;
+  bookmarkedItems: string[];         // "11.a", "12.b"
+  flaggedItems: FlaggedItem[];
+  createdAt: Date;
+  updatedAt: Date;
 }
+
+interface StandardAssessment {
+  standardCode: string;
+  specifications: SpecificationAssessment[];
+  isComplete: boolean;
+  completedAt?: Date;
+}
+
+interface SpecificationAssessment {
+  specCode: string;
+  compliance: 'compliant' | 'non_compliant' | 'not_applicable' | null;
+  comments: string;
+  internalNotes?: string;
+  evidenceRefs: string[];
+  reviewedAt?: Date;
+}
+
+interface FinalAssessment {
+  recommendation: RecommendationType;
+  overallStrengths: string;
+  overallWeaknesses: string;
+  conditionsForApproval?: string;
+  additionalComments?: string;
+  submittedAt?: Date;
+}
+
+type RecommendationType =
+  | 'accreditation_no_conditions'
+  | 'conditional_accreditation'
+  | 'deny_accreditation'
+  | 'hold_decision';
 ```
 
-### Standards Template
+### Lead Reader Compilation
 ```typescript
-interface StandardsTemplate {
-  programLevel: 'associate' | 'bachelors' | 'masters';
-  version: string;
-  effectiveDate: string;
-  sections: Section[];
+interface LeadReaderCompilation {
+  id: string;
+  submissionId: string;
+  leadReaderId: string;
+  institutionName: string;
+  programName: string;
+  programLevel: string;
+  totalReaders: number;
+  completedReviews: number;
+  readerIds: string[];
+  status: 'pending_reviews' | 'ready_for_compilation' | 'in_progress' | 'submitted';
+  compiledAssessments: StandardCompilation[];
+  readerRecommendations: ReaderRecommendation[];
+  finalCompilation?: FinalCompilation;
+  commentThreads: CommentThread[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-interface Section {
-  code: string;                      // "I", "II"
-  title: string;
-  standards: Standard[];
+interface StandardCompilation {
+  standardCode: string;
+  specifications: SpecificationCompilation[];
 }
 
-interface Standard {
-  code: string;                      // "1", "2", etc.
-  title: string;
-  context: string;
-  statement: string;
-  specifications: Specification[];
+interface SpecificationCompilation {
+  specCode: string;
+  readerVotes: ReaderComplianceVote[];
+  consensus: 'unanimous' | 'majority' | 'split' | 'pending';
+  hasDisagreement: boolean;
+  finalDetermination?: 'compliant' | 'non_compliant' | 'not_applicable';
+  leadReaderRationale?: string;
 }
 
-interface Specification {
-  code: string;                      // "a", "b", "c"
-  text: string;
-  subSpecifications?: SubSpecification[];
+interface ReaderComplianceVote {
+  readerId: string;
+  readerNumber: number;
+  compliance: 'compliant' | 'non_compliant' | 'not_applicable' | null;
+  comments: string;
 }
 
-interface SubSpecification {
-  code: string;                      // "1", "2" or "a", "b"
-  text: string;
-}
-```
-
----
-
-## MongoDB Schema (Production)
-
-### Collections
-
-**users**
-```javascript
-{
-  _id: ObjectId,
-  email: { type: String, unique: true, required: true },
-  passwordHash: { type: String, required: true },
-  firstName: String,
-  lastName: String,
-  role: { type: String, enum: ['coordinator', 'reader', 'lead_reader', 'admin'] },
-  institutionId: ObjectId,
-  isActive: { type: Boolean, default: true },
-  createdAt: Date,
-  updatedAt: Date
+interface FinalCompilation {
+  overallStrengths: string;
+  overallWeaknesses: string;
+  recommendation: RecommendationType;
+  conditionsForApproval?: string;
+  additionalComments?: string;
+  submittedAt?: Date;
 }
 ```
 
-**submissions**
-```javascript
-{
-  _id: ObjectId,
-  submissionId: { type: String, unique: true },
-  institutionName: String,
-  programName: String,
-  programLevel: { type: String, enum: ['associate', 'bachelors', 'masters'] },
-  submitterId: { type: ObjectId, ref: 'User' },
-  type: { type: String, enum: ['initial', 'reaccreditation', 'extension'] },
-  status: String,
-  narratives: Schema.Types.Mixed,
-  documents: [{
-    _id: ObjectId,
-    filename: String,
-    originalName: String,
-    mimeType: String,
-    size: Number,
-    uploadedAt: Date,
-    type: { type: String, enum: ['file', 'url'] },
-    url: String
-  }],
-  decision: {
-    outcome: String,
-    decidedBy: ObjectId,
-    decidedAt: Date,
-    comments: String
-  },
-  assignedReaders: [{ type: ObjectId, ref: 'User' }],
-  leadReader: { type: ObjectId, ref: 'User' },
-  submittedAt: Date,
-  createdAt: Date,
-  updatedAt: Date
+### Curriculum Matrix
+```typescript
+interface CurriculumMatrix {
+  id: string;
+  submissionId: string;
+  courses: CourseEntry[];
+  standards: StandardMapping[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface CourseEntry {
+  id: string;
+  coursePrefix: string;              // "HUS", "PSY"
+  courseNumber: string;              // "101", "310"
+  courseName: string;
+  credits: number;
+  order: number;
+}
+
+interface StandardMapping {
+  standardCode: string;
+  specCode: string;
+  courseAssessments: CourseAssessment[];
+}
+
+interface CourseAssessment {
+  courseId: string;
+  type: 'I' | 'T' | 'K' | 'S' | null;  // Introduction, Theory, Knowledge, Skills
+  depth: 'L' | 'M' | 'H' | null;        // Low, Medium, High
 }
 ```
 
-**reviews**
-```javascript
-{
-  _id: ObjectId,
-  submissionId: { type: ObjectId, ref: 'Submission' },
-  reviewerId: { type: ObjectId, ref: 'User' },
-  status: { type: String, enum: ['assigned', 'in_progress', 'complete'] },
-  assessments: Schema.Types.Mixed,
-  finalAssessment: {
-    recommendation: String,
-    strengths: String,
-    weaknesses: String,
-    additionalComments: String
-  },
-  assignedAt: Date,
-  completedAt: Date
+### Supporting Evidence
+```typescript
+interface SupportingEvidence {
+  id: string;
+  submissionId: string;
+  standardCode?: string;
+  specCode?: string;
+  evidenceType: 'document' | 'url' | 'image';
+  file?: {
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+    storagePath: string;
+  };
+  url?: {
+    href: string;
+    title: string;
+    description: string;
+  };
+  imageMetadata?: {
+    sourceType: 'fax' | 'letter' | 'certificate' | 'other';
+    description: string;
+  };
+  uploadedBy: string;
+  createdAt: Date;
 }
 ```
 
-**standards_templates**
-```javascript
-{
-  _id: ObjectId,
-  programLevel: { type: String, enum: ['associate', 'bachelors', 'masters'] },
-  version: String,
-  effectiveDate: Date,
-  sections: [{
-    code: String,
-    title: String,
-    standards: [{
-      code: String,
-      title: String,
-      context: String,
-      statement: String,
-      specifications: [{
-        code: String,
-        text: String,
-        subSpecifications: [{
-          code: String,
-          text: String
-        }]
-      }]
-    }]
-  }]
+### Validation Result
+```typescript
+interface ValidationResult {
+  id: string;
+  submissionId: string;
+  standardCode: string;
+  specCode: string;
+  validationType: 'auto_save' | 'manual_save' | 'submit';
+  result: {
+    status: 'pass' | 'fail' | 'pending';
+    score: number;
+    feedback: string;
+    suggestions: string[];
+    missingElements: string[];
+  };
+  n8nExecutionId?: string;
+  attemptNumber: number;
+  previousValidationId?: string;
+  createdAt: Date;
+}
+```
+
+### Webhook Settings
+```typescript
+interface WebhookSettings {
+  id: string;
+  settingType: 'n8n_validation';
+  webhookUrl: string;
+  isActive: boolean;
+  authentication: {
+    type: 'api_key' | 'bearer';
+    apiKey: string;
+  };
+  callbackUrl: string;
+  retryConfig: {
+    maxRetries: number;
+    retryDelayMs: number;
+    backoffMultiplier: number;
+  };
+  createdAt: Date;
+  updatedAt: Date;
 }
 ```
 
@@ -339,83 +468,168 @@ interface SubSpecification {
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/submissions` | List submissions (with filters) |
-| POST | `/api/submissions` | Create new submission |
 | GET | `/api/submissions/:id` | Get submission details |
-| PUT | `/api/submissions/:id` | Update submission |
-| PATCH | `/api/submissions/:id/narrative` | Auto-save narrative (debounced) |
-| POST | `/api/submissions/:id/submit` | Submit for review |
-| GET | `/api/submissions/:id/documents` | List documents |
-| POST | `/api/submissions/:id/documents` | Upload document |
-| DELETE | `/api/submissions/:id/documents/:docId` | Remove document |
+| GET | `/api/submissions/:id/progress` | Get detailed progress |
+| PATCH | `/api/submissions/:id/narrative` | Save narrative content |
+| POST | `/api/submissions/:id/standards/:code/submit` | Submit standard for validation |
+| POST | `/api/submissions/:id/standards/:code/complete` | Mark standard complete |
+| POST | `/api/submissions/:id/revalidate` | Revalidate failed sections |
+| GET | `/api/submissions/:id/failed` | Get failed validations |
 
-### Standards
+### Document Import
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/standards/:level` | Get standards for program level |
-| POST | `/api/admin/standards` | Create/update standards (admin) |
+| POST | `/api/imports/upload` | Upload PDF/DOCX/PPTX for parsing |
+| GET | `/api/imports/:id` | Get import status and content |
+| POST | `/api/imports/:id/map` | Map extracted section to standard |
+| POST | `/api/imports/:id/apply` | Apply all mappings to submission |
+| GET | `/api/imports/:id/unmapped` | Get unmapped content |
+| PUT | `/api/imports/:id/unmapped/:sectionId` | Assign/discard unmapped |
 
-### Reviews
+### Curriculum Matrix
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/reviews` | My assigned reviews |
-| GET | `/api/reviews/:id` | Get review details |
-| PATCH | `/api/reviews/:id/assessment` | Save assessment |
-| POST | `/api/reviews/:id/complete` | Submit completed review |
+| GET | `/api/submissions/:id/matrix` | Get curriculum matrix |
+| GET | `/api/submissions/:id/matrix/:matrixId` | Get specific matrix |
+| POST | `/api/submissions/:id/matrix/:matrixId/course` | Add course column |
+| DELETE | `/api/submissions/:id/matrix/:matrixId/course/:courseId` | Remove course |
+| PUT | `/api/submissions/:id/matrix/:matrixId/assessment` | Update cell assessment |
+| PUT | `/api/submissions/:id/matrix/:matrixId/reorder` | Reorder courses |
+| POST | `/api/submissions/:id/matrix/:matrixId/import` | Import from CSV |
+| GET | `/api/submissions/:id/matrix/:matrixId/export` | Export to CSV/JSON |
 
-### Lead Reviews
+### Evidence Management
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/lead-reviews` | Submissions ready for compilation |
-| GET | `/api/lead-reviews/:submissionId` | Aggregated reader view |
-| POST | `/api/lead-reviews/:submissionId/compile` | Save compilation |
-| POST | `/api/lead-reviews/:submissionId/decision` | Final decision |
+| GET | `/api/submissions/:id/evidence` | List evidence (with filters) |
+| GET | `/api/submissions/:id/evidence/stats` | Get evidence statistics |
+| GET | `/api/submissions/:id/evidence/:evidenceId` | Get evidence details |
+| POST | `/api/submissions/:id/evidence/upload` | Upload document/image |
+| POST | `/api/submissions/:id/evidence/url` | Add URL evidence |
+| PATCH | `/api/submissions/:id/evidence/:evidenceId` | Update metadata |
+| DELETE | `/api/submissions/:id/evidence/:evidenceId` | Delete evidence |
+| GET | `/api/submissions/:id/evidence/:evidenceId/download` | Download file |
+| POST | `/api/submissions/:id/evidence/:evidenceId/link` | Link to standard |
+| POST | `/api/submissions/:id/evidence/:evidenceId/unlink` | Unlink from standard |
+
+### Reviews (Reader Portal)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/reviews` | Get my assigned reviews |
+| GET | `/api/reviews/:reviewId` | Get review details |
+| GET | `/api/reviews/:reviewId/workspace` | Get workspace data (split-view) |
+| GET | `/api/reviews/:reviewId/progress` | Get progress summary |
+| PATCH | `/api/reviews/:reviewId/assessment` | Save assessment |
+| PATCH | `/api/reviews/:reviewId/assessments/bulk` | Bulk save assessments |
+| PATCH | `/api/reviews/:reviewId/final-assessment` | Save final assessment |
+| POST | `/api/reviews/:reviewId/bookmark` | Toggle bookmark |
+| POST | `/api/reviews/:reviewId/flag` | Flag specification |
+| POST | `/api/reviews/:reviewId/standard-complete` | Mark standard complete |
+| POST | `/api/reviews/:reviewId/submit` | Submit completed review |
+| POST | `/api/reviews/submissions/:submissionId/assign` | Assign readers (admin) |
+| GET | `/api/reviews/submissions/:submissionId` | Get all reviews for submission |
+
+### Lead Reviews (Lead Reader Portal)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/lead-reviews` | Get my compilations |
+| GET | `/api/lead-reviews/ready` | Get submissions ready for compilation |
+| POST | `/api/lead-reviews/submissions/:submissionId` | Create/get compilation |
+| GET | `/api/lead-reviews/:compilationId` | Get compilation details |
+| GET | `/api/lead-reviews/:compilationId/comparison` | Get side-by-side comparison |
+| GET | `/api/lead-reviews/:compilationId/disagreements` | Get all disagreements |
+| GET | `/api/lead-reviews/:compilationId/export` | Export compilation (JSON/CSV) |
+| PATCH | `/api/lead-reviews/:compilationId/determination` | Set final determination |
+| PATCH | `/api/lead-reviews/:compilationId/determinations/bulk` | Bulk set determinations |
+| PATCH | `/api/lead-reviews/:compilationId/final` | Save final compilation |
+| POST | `/api/lead-reviews/:compilationId/submit` | Submit compilation |
+| POST | `/api/lead-reviews/:compilationId/threads` | Create comment thread |
+| POST | `/api/lead-reviews/:compilationId/threads/:threadId/messages` | Add message |
+| PATCH | `/api/lead-reviews/:compilationId/threads/:threadId/resolve` | Toggle resolved |
+| POST | `/api/lead-reviews/:compilationId/reminder` | Send reader reminder |
+
+### Reports (PDF Generation)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/reports/reader/:reviewId/pdf` | Generate reader report PDF |
+| GET | `/api/reports/reader/:reviewId/preview` | Get preview data |
+| GET | `/api/reports/submission/:submissionId/all-readers/pdf` | Generate all readers PDF |
+| GET | `/api/reports/compilation/:compilationId/pdf` | Generate compilation PDF |
+| GET | `/api/reports/compilation/:compilationId/preview` | Get preview data |
+
+### Webhooks (N8N Integration)
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/webhooks/n8n/validate` | Trigger N8N validation |
+| POST | `/api/webhooks/n8n/callback` | Receive validation result |
+| GET | `/api/webhooks/validation/latest` | Get latest validation |
+| GET | `/api/webhooks/validation/standard/:submissionId/:standardCode` | Get standard status |
 
 ### Admin
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/admin/users` | List users |
-| POST | `/api/admin/users` | Create user |
-| PUT | `/api/admin/users/:id` | Update user |
-| POST | `/api/admin/submissions/:id/assign-readers` | Assign readers |
-
-### N8N Integration
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/webhooks/n8n/compare-text` | Trigger AI text comparison |
+| GET | `/api/admin/stats` | Get system statistics |
+| GET | `/api/admin/webhook-settings` | Get webhook settings |
+| PUT | `/api/admin/webhook-settings` | Update webhook settings |
+| POST | `/api/admin/webhook-test` | Test webhook connection |
 
 ---
 
 ## N8N Workflow Integration
 
-The application integrates with N8N workflows to provide AI-powered analysis of narrative text against standards.
+The application integrates with N8N workflows to provide AI-powered validation of narrative content against standards.
 
-### Webhook Request
+### Validation Webhook Request
 ```json
-POST /api/webhooks/n8n/compare-text
+POST [N8N_WEBHOOK_URL]
 {
   "submissionId": "sub_123",
-  "standardCode": "1",
+  "standardCode": "11",
   "specCode": "a",
-  "narrativeText": "The program is part of...",
-  "standardText": "The primary program objective shall be...",
-  "specificationText": "Provide evidence that the program is part of..."
+  "narrativeText": "The curriculum provides...",
+  "standardText": "The curriculum shall provide theoretical and applied content...",
+  "supportingEvidence": [
+    { "filename": "syllabus.pdf", "type": "document" }
+  ],
+  "validationType": "manual_save",
+  "callbackUrl": "https://api/webhooks/n8n/callback"
 }
 ```
 
-### Webhook Response
+### Callback Webhook Response
 ```json
+POST /api/webhooks/n8n/callback
 {
-  "score": 85,
-  "feedback": "The narrative adequately addresses regional accreditation but could provide more specific documentation references.",
-  "suggestions": [
-    "Include the specific accrediting body name",
-    "Reference the date of most recent accreditation"
-  ],
-  "missingElements": [
-    "Accreditation certificate reference"
-  ]
+  "executionId": "exec_456",
+  "submissionId": "sub_123",
+  "standardCode": "11",
+  "specCode": "a",
+  "result": {
+    "status": "pass",
+    "score": 85,
+    "feedback": "The narrative adequately addresses the requirement but could include more specific course references.",
+    "suggestions": [
+      "Add specific course numbers from the curriculum",
+      "Reference the curriculum matrix"
+    ],
+    "missingElements": []
+  }
 }
 ```
+
+### Webhook Settings Configuration
+
+Configure via Admin UI at `/admin/webhook-settings`:
+
+| Setting | Description |
+|---------|-------------|
+| **Webhook URL** | N8N webhook endpoint URL |
+| **Callback URL** | URL for N8N to send results back |
+| **Auth Type** | `api_key` (X-API-Key header) or `bearer` (Authorization) |
+| **API Key** | Authentication token |
+| **Max Retries** | Retry attempts on failure (default: 3) |
+| **Retry Delay** | Initial delay in ms (default: 1000) |
+| **Backoff Multiplier** | Exponential backoff factor (default: 2) |
 
 ---
 
@@ -424,98 +638,64 @@ POST /api/webhooks/n8n/compare-text
 ### Color Palette
 ```css
 /* Primary - Teal/Dark Green */
---primary-500: #1a5e4a;      /* Main brand color */
---primary-600: #165641;      /* Hover state */
---primary-400: #4ca58c;      /* Light accent */
+--primary-500: #0d9488;      /* Main brand color */
+--primary-600: #0f766e;      /* Hover state */
+--primary-400: #2dd4bf;      /* Light accent */
 
 /* Program Level Badges */
 --level-bachelors: #059669;  /* Green */
---level-associate: #d97706;  /* Yellow/Amber */
+--level-associate: #d97706;  /* Amber */
 --level-masters: #2563eb;    /* Blue */
 
 /* Status Colors */
 --status-draft: #9ca3af;
---status-in-progress: #2563eb;
---status-submitted: #7c3aed;
---status-under-review: #d97706;
---status-complete: #059669;
---status-compliant: #059669;
---status-non-compliant: #dc2626;
-```
+--status-in-progress: #f59e0b;
+--status-submitted: #3b82f6;
+--status-complete: #10b981;
+--status-pass: #22c55e;
+--status-fail: #ef4444;
 
-### Typography
-```css
---font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
---font-mono: "JetBrains Mono", "Fira Code", monospace;
+/* Compliance Colors */
+--compliant: #22c55e;
+--non-compliant: #ef4444;
+--not-applicable: #9ca3af;
 ```
 
 ### Key UI Components
 
-**TopNav**
-- CSHSE logo (green snowflake symbol)
-- Navigation: Home, Self Study Report, Self Study Read, Settings
-- Panel selector dropdown
-- User menu with role indicator
+**Self-Study Editor**
+- Standards navigation sidebar with progress indicators
+- TipTap rich text editor with formatting toolbar
+- Auto-save status indicator (Saving... / Saved / Unsaved changes)
+- Validation panel showing pass/fail with feedback
 
-**Standards Navigation**
-- Collapsible sections (I. General, II. Curriculum)
-- Standards list with completion indicators
-- Click to expand specifications
+**Curriculum Matrix**
+- Spreadsheet-like grid interface
+- Course columns with prefix/number/name
+- Assessment cells with Type/Depth popover editor
+- Add/remove course functionality
+- Export to CSV button
 
-**Narrative Editor**
-- TipTap rich text editor
-- Formatting toolbar (bold, italic, lists, links)
-- Auto-save indicator ("Saving...", "Saved at HH:MM")
-- Word count display
-- Document linking interface
+**Evidence Manager**
+- Two-panel layout (list + preview)
+- Drag-drop file upload zone
+- URL input with auto-title detection
+- Filter by type and linked status
+- Evidence preview with download
 
-**Split-View Review Workspace**
-- Left panel: Standard info + narrative content
-- Right panel: Document viewer/list
-- Resizable divider
-- Full-screen mode
+**Reader Workspace**
+- Split-screen: left (standards/narrative), right (documents)
+- Compliance toggle (Y/N/NA) per specification
+- Rich text comment field
+- Bookmark and flag buttons
+- Progress indicator
 
-**Submissions Table**
-- Sortable columns (ID, Institution, Level, Status, Decision)
-- Color-coded level badges
-- Status labels with icons
-- Search and filter controls
-- Pagination
-
----
-
-## Routing Structure
-
-```
-/login                              # Login page
-
-# Coordinator Routes
-/dashboard                          # Home dashboard
-/self-study                         # My submissions list
-/self-study/new                     # Create new submission
-/self-study/:id                     # Edit submission
-/self-study/:id/standards/:stdId    # Narrative editor
-/self-study/:id/documents           # Document management
-/self-study/:id/preview             # Preview before submit
-
-# Reader Routes
-/reviews                            # Assigned reviews
-/reviews/:id                        # Review workspace
-/reviews/:id/assessment             # Final assessment form
-
-# Lead Reader Routes
-/lead-reviews                       # Ready for compilation
-/lead-reviews/:id                   # Aggregated view
-/lead-reviews/:id/compile           # Compilation interface
-/lead-reviews/:id/decision          # Final decision
-
-# Admin Routes
-/admin/submissions                  # All submissions
-/admin/users                        # User management
-/admin/standards                    # Standards configuration
-
-/settings                           # User settings
-```
+**Lead Reader Comparison**
+- Side-by-side reader columns
+- Consensus indicator badges
+- Disagreement highlighting
+- Final determination selector
+- Communication threads
 
 ---
 
@@ -528,12 +708,17 @@ POST /api/webhooks/n8n/compare-text
 ### Local Development (JSON Storage)
 ```bash
 # Install dependencies
-npm install
+cd server && npm install
+cd ../client && npm install
 
 # Start development servers
-npm run dev
-# Client: http://localhost:3000
+# Terminal 1: Server
+cd server && npm run dev
 # Server: http://localhost:5000
+
+# Terminal 2: Client
+cd client && npm run dev
+# Client: http://localhost:3000
 ```
 
 ### Docker Deployment (MongoDB)
@@ -551,7 +736,7 @@ docker-compose up -d
 ### Environment Variables
 
 **Server (.env)**
-```
+```bash
 NODE_ENV=development
 PORT=5000
 JWT_SECRET=your-secret-key
@@ -560,72 +745,18 @@ JWT_EXPIRES_IN=7d
 # MongoDB (production only)
 MONGODB_URI=mongodb://admin:password@localhost:27017/cshse?authSource=admin
 
+# File uploads
+UPLOAD_DIR=uploads/evidence
+MAX_FILE_SIZE=52428800  # 50MB
+
 # N8N Integration
-N8N_WEBHOOK_URL=https://your-n8n-instance/webhook/compare-text
+N8N_WEBHOOK_URL=https://your-n8n-instance.com/webhook/validate
+N8N_API_KEY=your-n8n-api-key
 ```
 
 **Client (.env)**
-```
+```bash
 VITE_API_URL=http://localhost:5000/api
-```
-
----
-
-## Docker Compose Configuration
-
-```yaml
-version: '3.8'
-
-services:
-  mongodb:
-    image: mongo:7.0
-    container_name: cshse-mongodb
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
-      MONGO_INITDB_DATABASE: cshse
-
-  mongo-express:
-    image: mongo-express:latest
-    container_name: cshse-mongo-express
-    ports:
-      - "8081:8081"
-    environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
-      ME_CONFIG_MONGODB_ADMINPASSWORD: password
-      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongodb:27017/
-    depends_on:
-      - mongodb
-
-  server:
-    build: ./server
-    container_name: cshse-server
-    ports:
-      - "5000:5000"
-    environment:
-      NODE_ENV: production
-      PORT: 5000
-      MONGODB_URI: mongodb://admin:password@mongodb:27017/cshse?authSource=admin
-      JWT_SECRET: production-secret-change-this
-    depends_on:
-      - mongodb
-
-  client:
-    build: ./client
-    container_name: cshse-client
-    ports:
-      - "3000:80"
-    environment:
-      VITE_API_URL: http://localhost:5000/api
-    depends_on:
-      - server
-
-volumes:
-  mongodb_data:
 ```
 
 ---
@@ -670,6 +801,32 @@ Focus on administrative, leadership, and research:
 - Standards 11-18 cover curriculum
 - Standard 18: Culminating Experiences (field or capstone)
 - Emphasis on organizational management
+
+---
+
+## Curriculum Matrix Guide
+
+### Coverage Types
+| Code | Type | Description |
+|------|------|-------------|
+| **I** | Introduction | Basic exposure to concepts |
+| **T** | Theory | Theoretical understanding and frameworks |
+| **K** | Knowledge | Factual knowledge and comprehension |
+| **S** | Skills | Practical application and competencies |
+
+### Coverage Depth
+| Code | Depth | Description |
+|------|-------|-------------|
+| **L** | Low | Minimal coverage (brief mention) |
+| **M** | Medium | Moderate coverage (dedicated content) |
+| **H** | High | Comprehensive coverage (major focus) |
+
+### Example Matrix Entry
+| Course | Standard 11.a | Standard 12.b |
+|--------|--------------|---------------|
+| HUS 101 | I/M | T/L |
+| PSY 210 | K/H | K/M |
+| HUS 310 | S/H | S/H |
 
 ---
 
