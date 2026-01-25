@@ -2,8 +2,16 @@ import { Request, Response } from 'express';
 import { Invitation } from '../models/Invitation';
 import { User } from '../models/User';
 import { Institution } from '../models/Institution';
+import { emailService } from '../services/emailService';
 import mongoose from 'mongoose';
 import crypto from 'crypto';
+
+// Helper to get base URL for invitation links
+function getBaseUrl(): string {
+  return process.env.APP_URL
+    || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
+    || `http://localhost:${process.env.PORT || 3000}`;
+}
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -121,17 +129,22 @@ export const createInvitation = async (req: AuthenticatedRequest, res: Response)
 
     await invitation.save();
 
-    // TODO: Send invitation email
-    // const inviteUrl = `${process.env.APP_URL}/accept-invitation?token=${invitation.token}`;
-    // await sendEmail({
-    //   to: email,
-    //   subject: 'You have been invited to CSHSE Accreditation System',
-    //   template: 'invitation',
-    //   data: { name, role, inviteUrl, customMessage }
-    // });
+    // Send invitation email
+    const invitationLink = `${getBaseUrl()}/accept-invitation?token=${invitation.token}`;
+    const emailSent = await emailService.sendInvitationEmail({
+      recipientName: name,
+      recipientEmail: email,
+      inviterName: req.user!.name,
+      role: role,
+      institutionName: institutionName,
+      invitationLink,
+      expiresAt: invitation.expiresAt
+    });
 
-    invitation.emailSentAt = new Date();
-    await invitation.save();
+    if (emailSent) {
+      invitation.emailSentAt = new Date();
+      await invitation.save();
+    }
 
     return res.status(201).json({
       message: 'Invitation created and sent',
@@ -317,17 +330,31 @@ export const resendInvitation = async (req: AuthenticatedRequest, res: Response)
 
     await invitation.save();
 
-    // TODO: Resend email
-    invitation.emailSentAt = new Date();
-    await invitation.save();
+    // Resend email
+    const invitationLink = `${getBaseUrl()}/accept-invitation?token=${newToken}`;
+    const emailSent = await emailService.sendInvitationEmail({
+      recipientName: invitation.name,
+      recipientEmail: invitation.email,
+      inviterName: req.user!.name || 'Administrator',
+      role: invitation.role,
+      institutionName: invitation.institutionName,
+      invitationLink,
+      expiresAt: invitation.expiresAt
+    });
+
+    if (emailSent) {
+      invitation.emailSentAt = new Date();
+      await invitation.save();
+    }
 
     return res.json({
-      message: 'Invitation resent successfully',
+      message: emailSent ? 'Invitation resent successfully' : 'Invitation updated but email failed to send',
       invitation: {
         id: invitation._id,
         email: invitation.email,
         expiresAt: invitation.expiresAt,
-        resendCount: invitation.emailResendCount
+        resendCount: invitation.emailResendCount,
+        emailSent
       }
     });
   } catch (error) {
