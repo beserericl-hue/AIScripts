@@ -3,6 +3,7 @@
 
 # Build output (will be built in container)
 server/dist/
+client/dist/
 
 # Environment files (should be set via Railway)
 **/.env
@@ -32,9 +33,6 @@ server/dist/
 *.md
 !README.md
 !server/README.md
-
-# Client directory (not needed for server deployment)
-client/
 
 # CSHSE parts (sample documents)
 cshse-parts/
