@@ -13,6 +13,8 @@ import matrixRouter from './routes/matrix';
 import evidenceRouter from './routes/evidence';
 import submissionsRouter from './routes/submissions';
 import adminRouter from './routes/admin';
+import commentsRouter from './routes/comments';
+import readerLockRouter from './routes/readerLock';
 
 // Load environment variables
 dotenv.config();
@@ -40,6 +42,8 @@ app.use('/api', matrixRouter);
 app.use('/api', evidenceRouter);
 app.use('/api/submissions', submissionsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api', commentsRouter);
+app.use('/api', readerLockRouter);
 
 // TODO: Add remaining routes
 // app.use('/api/auth', authRouter);

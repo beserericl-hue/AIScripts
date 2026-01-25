@@ -62,6 +62,17 @@ export interface IDecision {
   comments: string;
 }
 
+export interface IReaderLock {
+  isLocked: boolean;
+  lockedBy?: mongoose.Types.ObjectId;
+  lockedByName?: string;
+  lockedByRole?: 'reader' | 'lead_reader';
+  lockedAt?: Date;
+  lockReason?: 'reader_review' | 'lead_reader_review' | 'sent_back_for_correction';
+  sentBackAt?: Date;
+  sentBackReason?: string;
+}
+
 export interface ISubmission extends Document {
   submissionId: string;
   institutionName: string;
@@ -82,6 +93,9 @@ export interface ISubmission extends Document {
   standardsStatus: Record<string, IStandardStatusInfo>;
   imports: mongoose.Types.ObjectId[];
   curriculumMatrices: mongoose.Types.ObjectId[];
+
+  // Reader lock
+  readerLock: IReaderLock;
 
   createdAt: Date;
   updatedAt: Date;
@@ -138,6 +152,20 @@ const DecisionSchema = new Schema<IDecision>({
   decidedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   decidedAt: { type: Date, required: true },
   comments: { type: String, default: '' }
+}, { _id: false });
+
+const ReaderLockSchema = new Schema<IReaderLock>({
+  isLocked: { type: Boolean, default: false },
+  lockedBy: { type: Schema.Types.ObjectId, ref: 'User' },
+  lockedByName: { type: String },
+  lockedByRole: { type: String, enum: ['reader', 'lead_reader'] },
+  lockedAt: { type: Date },
+  lockReason: {
+    type: String,
+    enum: ['reader_review', 'lead_reader_review', 'sent_back_for_correction']
+  },
+  sentBackAt: { type: Date },
+  sentBackReason: { type: String }
 }, { _id: false });
 
 const SubmissionSchema = new Schema<ISubmission>({
@@ -221,7 +249,15 @@ const SubmissionSchema = new Schema<ISubmission>({
   curriculumMatrices: [{
     type: Schema.Types.ObjectId,
     ref: 'CurriculumMatrix'
-  }]
+  }],
+
+  // Reader lock for preventing program coordinator edits during review
+  readerLock: {
+    type: ReaderLockSchema,
+    default: {
+      isLocked: false
+    }
+  }
 }, {
   timestamps: true
 });
