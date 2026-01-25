@@ -127,7 +127,7 @@ UserSchema.index({ institutionId: 1 });
 
 // Hash password before saving
 UserSchema.pre('save', async function(next) {
-  if (!this.isModified('passwordHash')) {
+  if (!this.isModified('passwordHash') || !this.passwordHash) {
     return next();
   }
 

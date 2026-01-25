@@ -85,8 +85,8 @@ export class ValidationService {
     }
 
     // Get narrative content
-    const narratives = submission.narratives as Map<string, Map<string, any>>;
-    const standardNarratives = narratives.get(standardCode);
+    const narratives = submission.narratives;
+    const standardNarratives = narratives?.get(standardCode);
     const narrative = standardNarratives?.get(specCode);
 
     if (!narrative || !narrative.content) {
@@ -222,10 +222,12 @@ export class ValidationService {
 
       // Add custom headers
       if (settings.headers) {
-        const headerMap = settings.headers as Map<string, string>;
-        headerMap.forEach((value, key) => {
-          headers[key] = value;
-        });
+        const headerMap = settings.headers as unknown as Map<string, string>;
+        if (headerMap.forEach) {
+          headerMap.forEach((value, key) => {
+            headers[key] = value;
+          });
+        }
       }
 
       const response = await fetch(settings.webhookUrl, {
@@ -245,7 +247,7 @@ export class ValidationService {
         };
       }
 
-      const data = await response.json();
+      const data = await response.json() as { executionId?: string; id?: string };
 
       return {
         success: true,
@@ -273,8 +275,8 @@ export class ValidationService {
     const submission = await Submission.findById(submissionId);
     if (!submission) return;
 
-    const standardsStatus = submission.standardsStatus as Map<string, any>;
-    const currentStatus = standardsStatus.get(standardCode) || {
+    const standardsStatus = submission.standardsStatus;
+    const currentStatus = standardsStatus?.get(standardCode) || {
       status: 'in_progress',
       completionPercentage: 0,
       lastModified: new Date()
@@ -353,8 +355,8 @@ export class ValidationService {
       throw new Error('Submission not found');
     }
 
-    const narratives = submission.narratives as Map<string, Map<string, any>>;
-    const standardNarratives = narratives.get(standardCode);
+    const narratives = submission.narratives;
+    const standardNarratives = narratives?.get(standardCode);
 
     if (!standardNarratives) {
       return [];

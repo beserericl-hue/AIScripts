@@ -81,7 +81,7 @@ export interface ISubmission extends Document {
   submitterId: mongoose.Types.ObjectId;
   type: 'initial' | 'reaccreditation' | 'extension';
   status: SubmissionStatus;
-  narratives: Record<string, Record<string, INarrativeContent>>;
+  narratives: Map<string, Map<string, INarrativeContent>>;
   documents: IDocumentRef[];
   decision?: IDecision;
   assignedReaders: mongoose.Types.ObjectId[];
@@ -90,7 +90,7 @@ export interface ISubmission extends Document {
 
   // Self-study specific extensions
   selfStudyProgress: ISelfStudyProgress;
-  standardsStatus: Record<string, IStandardStatusInfo>;
+  standardsStatus: Map<string, IStandardStatusInfo>;
   imports: mongoose.Types.ObjectId[];
   curriculumMatrices: mongoose.Types.ObjectId[];
 
@@ -99,6 +99,10 @@ export interface ISubmission extends Document {
 
   createdAt: Date;
   updatedAt: Date;
+
+  // Methods
+  updateStandardStatus(standardCode: string, status: Partial<IStandardStatusInfo>): void;
+  recalculateProgress(): void;
 }
 
 const DocumentRefSchema = new Schema<IDocumentRef>({
