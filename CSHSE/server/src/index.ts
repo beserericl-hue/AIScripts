@@ -15,6 +15,12 @@ import submissionsRouter from './routes/submissions';
 import adminRouter from './routes/admin';
 import commentsRouter from './routes/comments';
 import readerLockRouter from './routes/readerLock';
+import authRouter from './routes/auth';
+import usersRouter from './routes/users';
+import institutionsRouter from './routes/institutions';
+import apiKeysRouter from './routes/apiKeys';
+import siteVisitsRouter from './routes/siteVisits';
+import changeRequestsRouter from './routes/changeRequests';
 
 // Load environment variables
 dotenv.config();
@@ -44,10 +50,12 @@ app.use('/api/submissions', submissionsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', commentsRouter);
 app.use('/api', readerLockRouter);
-
-// TODO: Add remaining routes
-// app.use('/api/auth', authRouter);
-// app.use('/api/standards', standardsRouter);
+app.use('/api/auth', authRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/institutions', institutionsRouter);
+app.use('/api/admin/api-keys', apiKeysRouter);
+app.use('/api/site-visits', siteVisitsRouter);
+app.use('/api/change-requests', changeRequestsRouter);
 
 // Error handling middleware
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

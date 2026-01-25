@@ -1,18 +1,34 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcrypt';
 
-export type UserRole = 'coordinator' | 'reader' | 'lead_reader' | 'admin';
+export type UserRole = 'program_coordinator' | 'reader' | 'lead_reader' | 'admin';
+export type UserStatus = 'pending' | 'active' | 'disabled';
+export type Permission =
+  | 'edit_self_study'
+  | 'view_comments'
+  | 'add_comments'
+  | 'manage_users'
+  | 'manage_institutions'
+  | 'assign_readers'
+  | 'schedule_site_visits'
+  | 'approve_changes';
 
 export interface IUser extends Document {
   email: string;
-  passwordHash: string;
+  passwordHash?: string;
   firstName: string;
   lastName: string;
   role: UserRole;
   institutionId?: mongoose.Types.ObjectId;
   institutionName?: string;
+  status: UserStatus;
+  permissions: Permission[];
+  assignedSubmissions: mongoose.Types.ObjectId[];
   isActive: boolean;
   lastLogin?: Date;
+  invitedAt?: Date;
+  invitedBy?: mongoose.Types.ObjectId;
+  accountCreatedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 
@@ -36,8 +52,8 @@ const UserSchema = new Schema<IUser>({
     }
   },
   passwordHash: {
-    type: String,
-    required: true
+    type: String
+    // Not required initially - set when user accepts invitation
   },
   firstName: {
     type: String,
@@ -51,20 +67,48 @@ const UserSchema = new Schema<IUser>({
   },
   role: {
     type: String,
-    enum: ['coordinator', 'reader', 'lead_reader', 'admin'],
+    enum: ['program_coordinator', 'reader', 'lead_reader', 'admin'],
     required: true,
-    default: 'coordinator'
+    default: 'program_coordinator'
   },
   institutionId: {
     type: Schema.Types.ObjectId,
     ref: 'Institution'
   },
   institutionName: String,
+  status: {
+    type: String,
+    enum: ['pending', 'active', 'disabled'],
+    default: 'pending'
+  },
+  permissions: [{
+    type: String,
+    enum: [
+      'edit_self_study',
+      'view_comments',
+      'add_comments',
+      'manage_users',
+      'manage_institutions',
+      'assign_readers',
+      'schedule_site_visits',
+      'approve_changes'
+    ]
+  }],
+  assignedSubmissions: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Submission'
+  }],
   isActive: {
     type: Boolean,
     default: true
   },
-  lastLogin: Date
+  lastLogin: Date,
+  invitedAt: Date,
+  invitedBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  accountCreatedAt: Date
 }, {
   timestamps: true
 });
