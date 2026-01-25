@@ -1,3 +1,7 @@
+# CSHSE Full-Stack Application - Multi-stage Docker Build
+# Builds both React client and Express server
+# Last updated: 2026-01-25
+
 # Build stage for client
 FROM node:20-alpine AS client-builder
 
