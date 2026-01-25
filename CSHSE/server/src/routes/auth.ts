@@ -53,8 +53,9 @@ router.post('/login', async (req: Request, res: Response) => {
     user.lastLogin = new Date();
     await user.save();
 
-    // Generate JWT
+    // Generate JWT - 30 day expiration for convenience
     const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
+    const thirtyDaysInSeconds = 30 * 24 * 60 * 60;
     const token = jwt.sign(
       {
         id: user._id,
@@ -64,7 +65,7 @@ router.post('/login', async (req: Request, res: Response) => {
         institutionId: user.institutionId
       },
       jwtSecret,
-      { expiresIn: '24h' }
+      { expiresIn: '30d' }
     );
 
     return res.json({
@@ -78,7 +79,7 @@ router.post('/login', async (req: Request, res: Response) => {
         institutionName: user.institutionName,
         permissions: user.permissions
       },
-      expiresIn: 86400 // 24 hours in seconds
+      expiresIn: thirtyDaysInSeconds
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -124,7 +125,8 @@ router.post('/refresh', async (req: Request, res: Response) => {
         return res.status(401).json({ error: 'User not found or inactive' });
       }
 
-      // Generate new token
+      // Generate new token - 30 day expiration
+      const thirtyDaysInSeconds = 30 * 24 * 60 * 60;
       const newToken = jwt.sign(
         {
           id: user._id,
@@ -134,12 +136,12 @@ router.post('/refresh', async (req: Request, res: Response) => {
           institutionId: user.institutionId
         },
         jwtSecret,
-        { expiresIn: '24h' }
+        { expiresIn: '30d' }
       );
 
       return res.json({
         token: newToken,
-        expiresIn: 86400
+        expiresIn: thirtyDaysInSeconds
       });
     } catch (jwtError) {
       return res.status(401).json({ error: 'Invalid token' });
