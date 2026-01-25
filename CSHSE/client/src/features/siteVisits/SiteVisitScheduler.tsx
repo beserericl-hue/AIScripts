@@ -196,12 +196,12 @@ export function SiteVisitScheduler({
       scheduledDate: format(new Date(visit.scheduledDate), 'yyyy-MM-dd'),
       scheduledTime: visit.scheduledTime || '09:00',
       duration: visit.duration || 480,
-      location: visit.location || {
-        address: '',
-        city: '',
-        state: '',
-        zipCode: '',
-        notes: '',
+      location: {
+        address: visit.location?.address || '',
+        city: visit.location?.city || '',
+        state: visit.location?.state || '',
+        zipCode: visit.location?.zipCode || '',
+        notes: visit.location?.notes || '',
       },
       teamMembers: visit.teamMembers || [],
       agenda: visit.agenda || '',

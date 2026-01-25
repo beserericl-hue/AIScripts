@@ -1,10 +1,10 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 import dotenv from 'dotenv';
 import { connectDatabase } from './config/database';
 import {
   globalErrorHandler,
-  notFoundHandler,
   setupProcessErrorHandlers
 } from './middleware/errorHandler';
 import { initializeSuperuser } from './services/superuserInit';
@@ -28,6 +28,7 @@ import apiKeysRouter from './routes/apiKeys';
 import siteVisitsRouter from './routes/siteVisits';
 import changeRequestsRouter from './routes/changeRequests';
 import errorLogsRouter from './routes/errorLogs';
+import invitationsRouter from './routes/invitations';
 
 // Load environment variables
 dotenv.config();
@@ -94,9 +95,22 @@ app.use('/api/admin/api-keys', apiKeysRouter);
 app.use('/api/site-visits', siteVisitsRouter);
 app.use('/api/change-requests', changeRequestsRouter);
 app.use('/api/admin/error-logs', errorLogsRouter);
+app.use('/api/invitations', invitationsRouter);
 
-// 404 handler - must be before error handler
-app.use(notFoundHandler);
+// Serve static files from React app build
+const publicPath = path.join(__dirname, '..', 'public');
+app.use(express.static(publicPath));
+
+// SPA catch-all: serve index.html for any non-API routes
+// This enables client-side routing in React
+app.get('*', (req, res, next) => {
+  // Skip API routes - they should 404 if not matched above
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API endpoint not found' });
+  }
+  // Serve React app for all other routes
+  res.sendFile(path.join(publicPath, 'index.html'));
+});
 
 // Global error handler - must be last middleware
 // Logs errors with full context for debugging while only showing
