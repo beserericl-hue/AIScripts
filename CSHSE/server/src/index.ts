@@ -2,6 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { connectDatabase } from './config/database';
+import {
+  globalErrorHandler,
+  notFoundHandler,
+  setupProcessErrorHandlers
+} from './middleware/errorHandler';
 
 // Import routes
 import importsRouter from './routes/imports';
@@ -21,9 +26,13 @@ import institutionsRouter from './routes/institutions';
 import apiKeysRouter from './routes/apiKeys';
 import siteVisitsRouter from './routes/siteVisits';
 import changeRequestsRouter from './routes/changeRequests';
+import errorLogsRouter from './routes/errorLogs';
 
 // Load environment variables
 dotenv.config();
+
+// Setup process-level error handlers for uncaught exceptions/rejections
+setupProcessErrorHandlers();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -56,20 +65,15 @@ app.use('/api/institutions', institutionsRouter);
 app.use('/api/admin/api-keys', apiKeysRouter);
 app.use('/api/site-visits', siteVisitsRouter);
 app.use('/api/change-requests', changeRequestsRouter);
+app.use('/api/admin/error-logs', errorLogsRouter);
 
-// Error handling middleware
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Server error:', err);
-  res.status(500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
+// 404 handler - must be before error handler
+app.use(notFoundHandler);
 
-// 404 handler
-app.use((_req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
+// Global error handler - must be last middleware
+// Logs errors with full context for debugging while only showing
+// safe messages to users
+app.use(globalErrorHandler);
 
 // Start server
 const startServer = async () => {
