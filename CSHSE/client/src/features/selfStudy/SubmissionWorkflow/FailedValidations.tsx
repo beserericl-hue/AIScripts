@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   AlertCircle,
   RefreshCw,
@@ -57,7 +57,7 @@ export function FailedValidations({
     queryFn: async () => {
       const params = new URLSearchParams();
       if (standardCode) params.append('standardCode', standardCode);
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/failed?${params}`
       );
       return response.data;
@@ -67,7 +67,7 @@ export function FailedValidations({
   // Revalidate mutation
   const revalidateMutation = useMutation({
     mutationFn: async () => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/revalidate`,
         { standardCode }
       );

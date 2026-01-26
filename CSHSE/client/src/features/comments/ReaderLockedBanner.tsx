@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../services/api';
 import {
   Lock,
   Unlock,
@@ -48,7 +48,7 @@ export function ReaderLockedBanner({
   const { data: lockStatus, isLoading } = useQuery<LockStatus>({
     queryKey: ['lock-status', submissionId],
     queryFn: async () => {
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/lock`
       );
       return response.data;
@@ -66,7 +66,7 @@ export function ReaderLockedBanner({
   // Lock submission mutation
   const lockMutation = useMutation({
     mutationFn: async () => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/lock`,
         { reason: currentUserRole === 'lead_reader' ? 'lead_reader_review' : 'reader_review' }
       );
@@ -80,7 +80,7 @@ export function ReaderLockedBanner({
   // Unlock submission mutation
   const unlockMutation = useMutation({
     mutationFn: async () => {
-      const response = await axios.delete(
+      const response = await api.delete(
         `${API_BASE}/submissions/${submissionId}/lock`
       );
       return response.data;
@@ -93,7 +93,7 @@ export function ReaderLockedBanner({
   // Send back for correction mutation
   const sendBackMutation = useMutation({
     mutationFn: async (reason: string) => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/send-back`,
         { reason }
       );
@@ -109,7 +109,7 @@ export function ReaderLockedBanner({
   // Clear sent back status mutation
   const clearSentBackMutation = useMutation({
     mutationFn: async () => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/clear-sent-back`
       );
       return response.data;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import { X, Link, Loader2, ExternalLink } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -31,7 +31,7 @@ export function URLInput({
   // Add URL mutation
   const addUrlMutation = useMutation({
     mutationFn: async () => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/evidence/url`,
         {
           url,

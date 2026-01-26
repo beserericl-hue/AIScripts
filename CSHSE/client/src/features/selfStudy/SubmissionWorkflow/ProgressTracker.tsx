@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   CheckCircle2,
   Circle,
@@ -48,7 +48,7 @@ export function ProgressTracker({
   const { data: progress, isLoading, refetch } = useQuery<ProgressData>({
     queryKey: ['submission-progress', submissionId],
     queryFn: async () => {
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/progress`
       );
       return response.data;

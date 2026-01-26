@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../services/api';
 import {
   Clock,
   Calendar,
@@ -47,7 +47,7 @@ export function ChangeRequestForm({
   const { data: siteVisitsData } = useQuery({
     queryKey: ['site-visits', submissionId],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/site-visits`, {
+      const response = await api.get(`${API_BASE}/site-visits`, {
         params: { submissionId },
       });
       return response.data;
@@ -69,7 +69,7 @@ export function ChangeRequestForm({
       if (requestType === 'site_visit') {
         payload.siteVisitId = selectedSiteVisit;
       }
-      const response = await axios.post(`${API_BASE}/change-requests`, payload);
+      const response = await api.post(`${API_BASE}/change-requests`, payload);
       return response.data;
     },
     onSuccess: () => {

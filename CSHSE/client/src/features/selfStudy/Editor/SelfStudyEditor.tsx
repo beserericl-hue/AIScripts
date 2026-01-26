@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import {
   Send,
   Loader2,
@@ -122,7 +121,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const { data: submission, isLoading: loadingSubmission } = useQuery<SubmissionData>({
     queryKey: ['submission', submissionId],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/submissions/${submissionId}`);
+      const response = await api.get(`${API_BASE}/submissions/${submissionId}`);
       return response.data;
     },
   });
@@ -131,7 +130,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const { data: standards, isLoading: loadingStandards } = useQuery<StandardDefinition[]>({
     queryKey: ['standards'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/standards`);
+      const response = await api.get(`${API_BASE}/standards`);
       return response.data;
     },
   });
@@ -147,7 +146,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       specCode: string;
       content: string;
     }) => {
-      await axios.patch(`${API_BASE}/submissions/${submissionId}/narrative`, {
+      await api.patch(`${API_BASE}/submissions/${submissionId}/narrative`, {
         standardCode,
         specCode,
         content,
@@ -161,7 +160,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   // Submit standard mutation
   const submitStandardMutation = useMutation({
     mutationFn: async (standardCode: string) => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/standards/${standardCode}/submit`
       );
       return response.data;

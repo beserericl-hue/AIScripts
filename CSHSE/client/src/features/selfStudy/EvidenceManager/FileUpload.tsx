@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   X,
   Upload,
@@ -71,7 +71,7 @@ export function FileUpload({
       if (specCode) formData.append('specCode', specCode);
       if (description) formData.append('description', description);
 
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/evidence/upload`,
         formData,
         {

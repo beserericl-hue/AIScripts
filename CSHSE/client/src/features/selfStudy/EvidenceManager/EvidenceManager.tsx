@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   Upload,
   Link,
@@ -91,7 +91,7 @@ export function EvidenceManager({
       if (standardCode) params.append('standardCode', standardCode);
       if (specCode) params.append('specCode', specCode);
 
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/evidence?${params}`
       );
       return response.data;
@@ -102,7 +102,7 @@ export function EvidenceManager({
   const { data: stats } = useQuery<EvidenceStats>({
     queryKey: ['evidence-stats', submissionId],
     queryFn: async () => {
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/evidence/stats`
       );
       return response.data;
@@ -112,7 +112,7 @@ export function EvidenceManager({
   // Delete evidence mutation
   const deleteMutation = useMutation({
     mutationFn: async (evidenceId: string) => {
-      await axios.delete(
+      await api.delete(
         `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}`
       );
     },
@@ -133,7 +133,7 @@ export function EvidenceManager({
       standardCode: string;
       specCode: string;
     }) => {
-      await axios.post(
+      await api.post(
         `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}/link`,
         { standardCode, specCode }
       );

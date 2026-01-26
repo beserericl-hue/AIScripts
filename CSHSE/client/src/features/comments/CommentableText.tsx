@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../services/api';
 import { MessageSquare, Trash2, X } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -82,7 +82,7 @@ export function CommentableText({
       selectionEnd: number;
       content: string;
     }) => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/comments`,
         {
           standardCode,
@@ -108,7 +108,7 @@ export function CommentableText({
   // Delete comment mutation
   const deleteCommentMutation = useMutation({
     mutationFn: async (commentId: string) => {
-      await axios.delete(`${API_BASE}/comments/${commentId}`);
+      await api.delete(`${API_BASE}/comments/${commentId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

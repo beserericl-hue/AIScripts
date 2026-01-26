@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../services/api';
 
 interface ValidationResult {
   status: 'pass' | 'fail' | 'pending';
@@ -55,7 +55,7 @@ export function useValidationStatus({
           standardCode,
           ...(specCode && { specCode }),
         });
-        const response = await axios.get(
+        const response = await api.get(
           `${API_BASE}/webhooks/validation/latest?${params}`
         );
         return response.data;
@@ -73,7 +73,7 @@ export function useValidationStatus({
   const validateMutation = useMutation({
     mutationFn: async ({ narrativeText, validationType }: TriggerValidationParams) => {
       setIsValidating(true);
-      const response = await axios.post(`${API_BASE}/webhooks/n8n/validate`, {
+      const response = await api.post(`${API_BASE}/webhooks/n8n/validate`, {
         submissionId,
         standardCode,
         specCode,
@@ -102,7 +102,7 @@ export function useValidationStatus({
 
   // Get validation status summary for a standard
   const getStandardValidationStatus = useCallback(async () => {
-    const response = await axios.get(
+    const response = await api.get(
       `${API_BASE}/webhooks/validation/standard/${submissionId}/${standardCode}`
     );
     return response.data;

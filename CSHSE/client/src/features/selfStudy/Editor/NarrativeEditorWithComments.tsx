@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import { Lock, Eye, MessageSquare } from 'lucide-react';
 import { NarrativeEditor } from './NarrativeEditor';
 import {
@@ -78,7 +78,7 @@ export function NarrativeEditorWithComments({
       params.append('standardCode', standardCode);
       if (specCode) params.append('specCode', specCode);
 
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/comments?${params}`
       );
       return response.data;

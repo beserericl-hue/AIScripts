@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   Plus,
   Trash2,
@@ -78,7 +78,7 @@ export function CurriculumMatrixEditor({
       const url = matrixId
         ? `${API_BASE}/submissions/${submissionId}/matrix/${matrixId}`
         : `${API_BASE}/submissions/${submissionId}/matrix`;
-      const response = await axios.get(url);
+      const response = await api.get(url);
       return response.data;
     },
   });
@@ -87,7 +87,7 @@ export function CurriculumMatrixEditor({
   const { data: standards } = useQuery<StandardDefinition[]>({
     queryKey: ['standards'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/standards`);
+      const response = await api.get(`${API_BASE}/standards`);
       return response.data;
     },
   });
@@ -101,7 +101,7 @@ export function CurriculumMatrixEditor({
   // Add course mutation
   const addCourseMutation = useMutation({
     mutationFn: async (courseData: Omit<Course, 'id' | 'order'>) => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/matrix/${matrix?._id}/course`,
         courseData
       );
@@ -115,7 +115,7 @@ export function CurriculumMatrixEditor({
   // Delete course mutation
   const deleteCourseMutation = useMutation({
     mutationFn: async (courseId: string) => {
-      await axios.delete(
+      await api.delete(
         `${API_BASE}/submissions/${submissionId}/matrix/${matrix?._id}/course/${courseId}`
       );
     },
@@ -139,7 +139,7 @@ export function CurriculumMatrixEditor({
       type: CoverageType;
       depth: CoverageDepth;
     }) => {
-      await axios.put(
+      await api.put(
         `${API_BASE}/submissions/${submissionId}/matrix/${matrix?._id}/assessment`,
         { standardCode, specCode, courseId, type, depth }
       );

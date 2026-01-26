@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../services/api';
 import {
   Bell,
   CheckCircle,
@@ -77,7 +77,7 @@ export function ChangeRequestsList({
       if (statusFilter) params.status = statusFilter;
       if (typeFilter) params.type = typeFilter;
       if (submissionId) params.submissionId = submissionId;
-      const response = await axios.get(`${API_BASE}/change-requests`, { params });
+      const response = await api.get(`${API_BASE}/change-requests`, { params });
       return response.data;
     },
   });
@@ -87,7 +87,7 @@ export function ChangeRequestsList({
   // Approve mutation
   const approveMutation = useMutation({
     mutationFn: async ({ id, comments }: { id: string; comments?: string }) => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/change-requests/${id}/approve`,
         { comments }
       );
@@ -103,7 +103,7 @@ export function ChangeRequestsList({
   // Deny mutation
   const denyMutation = useMutation({
     mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/change-requests/${id}/deny`,
         { reason }
       );

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../services/api';
 import {
   Calendar,
   MapPin,
@@ -99,7 +99,7 @@ export function SiteVisitScheduler({
       const params: any = {};
       if (submissionId) params.submissionId = submissionId;
       if (institutionId) params.institutionId = institutionId;
-      const response = await axios.get(`${API_BASE}/site-visits`, { params });
+      const response = await api.get(`${API_BASE}/site-visits`, { params });
       return response.data;
     },
   });
@@ -108,7 +108,7 @@ export function SiteVisitScheduler({
   const { data: institutionsData } = useQuery({
     queryKey: ['institutions-list'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/institutions`, {
+      const response = await api.get(`${API_BASE}/institutions`, {
         params: { limit: 200 },
       });
       return response.data;
@@ -120,7 +120,7 @@ export function SiteVisitScheduler({
   const { data: usersData } = useQuery({
     queryKey: ['users-readers'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/users`, {
+      const response = await api.get(`${API_BASE}/users`, {
         params: { roles: ['reader', 'lead_reader', 'admin'] },
       });
       return response.data;
@@ -134,7 +134,7 @@ export function SiteVisitScheduler({
   // Create site visit mutation
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
-      const response = await axios.post(`${API_BASE}/site-visits`, data);
+      const response = await api.post(`${API_BASE}/site-visits`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -146,7 +146,7 @@ export function SiteVisitScheduler({
   // Update site visit mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await axios.put(`${API_BASE}/site-visits/${id}`, data);
+      const response = await api.put(`${API_BASE}/site-visits/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -158,7 +158,7 @@ export function SiteVisitScheduler({
   // Delete site visit mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await axios.delete(`${API_BASE}/site-visits/${id}`);
+      const response = await api.delete(`${API_BASE}/site-visits/${id}`);
       return response.data;
     },
     onSuccess: () => {

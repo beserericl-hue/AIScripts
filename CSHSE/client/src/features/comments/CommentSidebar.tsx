@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../services/api';
 import {
   MessageSquare,
   Reply,
@@ -84,7 +84,7 @@ export function CommentSidebar({
       params.append('standardCode', standardCode);
       if (specCode) params.append('specCode', specCode);
 
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/comments?${params}`
       );
       return response.data;
@@ -94,7 +94,7 @@ export function CommentSidebar({
   // Add reply mutation
   const addReplyMutation = useMutation({
     mutationFn: async ({ commentId, content }: { commentId: string; content: string }) => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/comments/${commentId}/replies`,
         { content }
       );
@@ -112,7 +112,7 @@ export function CommentSidebar({
   // Delete reply mutation
   const deleteReplyMutation = useMutation({
     mutationFn: async ({ commentId, replyId }: { commentId: string; replyId: string }) => {
-      await axios.delete(`${API_BASE}/comments/${commentId}/replies/${replyId}`);
+      await api.delete(`${API_BASE}/comments/${commentId}/replies/${replyId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -124,7 +124,7 @@ export function CommentSidebar({
   // Toggle resolve mutation
   const toggleResolveMutation = useMutation({
     mutationFn: async (commentId: string) => {
-      const response = await axios.post(`${API_BASE}/comments/${commentId}/resolve`);
+      const response = await api.post(`${API_BASE}/comments/${commentId}/resolve`);
       return response.data;
     },
     onSuccess: () => {
@@ -137,7 +137,7 @@ export function CommentSidebar({
   // Delete comment mutation
   const deleteCommentMutation = useMutation({
     mutationFn: async (commentId: string) => {
-      await axios.delete(`${API_BASE}/comments/${commentId}`);
+      await api.delete(`${API_BASE}/comments/${commentId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

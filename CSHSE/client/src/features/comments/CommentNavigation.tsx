@@ -1,6 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../services/api';
 import {
   MessageSquare,
   ChevronsLeft,
@@ -72,7 +72,7 @@ export function CommentNavigation({
   const { data: summary, isLoading: summaryLoading } = useQuery<CommentSummary>({
     queryKey: ['comments-summary', submissionId],
     queryFn: async () => {
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/comments/summary`
       );
       return response.data;
@@ -83,7 +83,7 @@ export function CommentNavigation({
   const { data: navData, isLoading: navLoading } = useQuery<NavigationData>({
     queryKey: ['comments-navigate', submissionId, currentPage],
     queryFn: async () => {
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/comments/navigate?page=${currentPage}&limit=10`
       );
       return response.data;

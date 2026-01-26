@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   Paperclip,
   Link2,
@@ -58,7 +58,7 @@ export function EvidencePanel({
       const params = new URLSearchParams();
       params.append('standardCode', standardCode);
       params.append('specCode', specCode);
-      const response = await axios.get(
+      const response = await api.get(
         `${API_BASE}/submissions/${submissionId}/evidence?${params}`
       );
       return response.data;
@@ -76,7 +76,7 @@ export function EvidencePanel({
       formData.append('specCode', specCode);
       formData.append('title', file.name);
 
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/evidence/upload`,
         formData,
         { headers: { 'Content-Type': 'multipart/form-data' } }
@@ -97,7 +97,7 @@ export function EvidencePanel({
   // Add URL mutation
   const addUrlMutation = useMutation({
     mutationFn: async (data: { url: string; title: string; description?: string }) => {
-      const response = await axios.post(
+      const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/evidence/url`,
         {
           ...data,
@@ -119,7 +119,7 @@ export function EvidencePanel({
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async (evidenceId: string) => {
-      await axios.delete(
+      await api.delete(
         `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}`
       );
     },
