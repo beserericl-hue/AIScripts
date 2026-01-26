@@ -106,6 +106,11 @@ app.get('/ready', (_req, res) => {
 });
 
 // API Routes
+// Auth routes MUST be first - they're public and other /api routers have authenticate middleware
+app.use('/api/auth', authRouter);
+app.use('/api/invitations', invitationsRouter);
+
+// All other routes (protected)
 app.use('/api/imports', importsRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/reviews', reviewsRouter);
@@ -117,14 +122,12 @@ app.use('/api/submissions', submissionsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', commentsRouter);
 app.use('/api', readerLockRouter);
-app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/institutions', institutionsRouter);
 app.use('/api/admin/api-keys', apiKeysRouter);
 app.use('/api/site-visits', siteVisitsRouter);
 app.use('/api/change-requests', changeRequestsRouter);
 app.use('/api/admin/error-logs', errorLogsRouter);
-app.use('/api/invitations', invitationsRouter);
 app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
 
