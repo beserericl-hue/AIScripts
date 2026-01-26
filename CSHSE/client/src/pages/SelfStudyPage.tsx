@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
+import { api } from '../services/api';
 import {
   FileText,
   Upload,
@@ -12,12 +13,23 @@ import {
   ChevronRight,
   Clock,
   CheckCircle,
-  FileCheck
+  FileCheck,
+  X,
+  Download,
+  AlertCircle
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { SelfStudyEditor } from '../features/selfStudy/Editor/SelfStudyEditor';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
+interface UploadedFile {
+  _id: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+}
 
 interface Submission {
   _id: string;
@@ -45,6 +57,11 @@ export default function SelfStudyPage() {
   const { user, getEffectiveRole, getEffectiveUser } = useAuthStore();
   const [showImportModal, setShowImportModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const effectiveRole = getEffectiveRole();
   const effectiveUser = getEffectiveUser();
@@ -103,6 +120,73 @@ export default function SelfStudyPage() {
   const institution: Institution | null = institutionData?.institution || null;
   const submissions: Submission[] = submissionsData?.submissions || [];
   const isLoading = institutionLoading || submissionsLoading;
+
+  // File upload handlers
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setUploadError(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      const allowedTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+      ];
+      if (allowedTypes.includes(file.type)) {
+        setSelectedFile(file);
+        setUploadError(null);
+      } else {
+        setUploadError('Please upload a PDF, Word, or PowerPoint file');
+      }
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!selectedFile || !effectiveUser?.institutionId) return;
+
+    setIsUploading(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('category', 'self_study_import');
+      formData.append('description', `Self-study import for ${institution?.name || 'institution'}`);
+
+      const response = await api.post('/api/files', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setUploadedFile(response.data.file);
+      setSelectedFile(null);
+    } catch (err: any) {
+      setUploadError(err.response?.data?.error || 'Failed to upload file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const resetImportModal = () => {
+    setShowImportModal(false);
+    setSelectedFile(null);
+    setUploadedFile(null);
+    setUploadError(null);
+  };
 
   // If viewing a specific submission
   if (submissionId) {
@@ -322,41 +406,145 @@ export default function SelfStudyPage() {
         {showImportModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
-              <div className="p-6 border-b border-gray-200">
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">
                   Import Self-Study Document
                 </h3>
+                <button
+                  onClick={resetImportModal}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-5 h-5" />
+                </button>
               </div>
               <div className="p-6">
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-primary-400 transition-colors">
-                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 mb-2">
-                    Drag and drop your file here, or click to browse
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Supports PDF, DOCX, and PPTX files
-                  </p>
-                  <input
-                    type="file"
-                    accept=".pdf,.docx,.pptx"
-                    className="hidden"
-                    onChange={(e) => {
-                      // TODO: Handle file upload
-                      console.log('File selected:', e.target.files?.[0]);
-                    }}
-                  />
-                  <button className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                    Select File
-                  </button>
-                </div>
+                {/* Error display */}
+                {uploadError && (
+                  <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <span className="text-sm">{uploadError}</span>
+                  </div>
+                )}
+
+                {/* Upload success - show uploaded file */}
+                {uploadedFile ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <FileCheck className="w-8 h-8 text-green-600" />
+                        <div>
+                          <p className="font-medium text-green-800">{uploadedFile.originalName}</p>
+                          <p className="text-sm text-green-600">{formatFileSize(uploadedFile.size)}</p>
+                        </div>
+                      </div>
+                      <a
+                        href={`/api/files/${uploadedFile._id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 text-green-600 hover:text-green-800"
+                      >
+                        <Download className="w-5 h-5" />
+                      </a>
+                    </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm text-blue-700">
+                        Your document has been uploaded successfully. You can now use this file as a reference
+                        while completing your self-study. The content will need to be organized according to
+                        the CSHSE standards in the editor.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Upload area */
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                      selectedFile ? 'border-teal-400 bg-teal-50' : 'border-gray-300 hover:border-primary-400'
+                    }`}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleDrop}
+                  >
+                    {selectedFile ? (
+                      <>
+                        <FileText className="w-12 h-12 text-teal-600 mx-auto mb-4" />
+                        <p className="text-teal-700 font-medium mb-1">{selectedFile.name}</p>
+                        <p className="text-sm text-teal-600 mb-4">
+                          {formatFileSize(selectedFile.size)}
+                        </p>
+                        <div className="flex items-center justify-center gap-3">
+                          <button
+                            onClick={() => setSelectedFile(null)}
+                            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+                          >
+                            Remove
+                          </button>
+                          <button
+                            onClick={handleUpload}
+                            disabled={isUploading}
+                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                          >
+                            {isUploading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Uploading...
+                              </>
+                            ) : (
+                              <>
+                                <Upload className="w-4 h-4" />
+                                Upload
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                        <p className="text-gray-600 mb-2">
+                          Drag and drop your file here, or click to browse
+                        </p>
+                        <p className="text-sm text-gray-500 mb-4">
+                          Supports PDF, Word (.doc, .docx), and PowerPoint (.ppt, .pptx) files (max 50MB)
+                        </p>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                          className="hidden"
+                          onChange={handleFileSelect}
+                        />
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                        >
+                          Select File
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
                 <button
-                  onClick={() => setShowImportModal(false)}
+                  onClick={resetImportModal}
                   className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
                 >
-                  Cancel
+                  {uploadedFile ? 'Close' : 'Cancel'}
                 </button>
+                {uploadedFile && (
+                  <button
+                    onClick={() => {
+                      // If there's an existing submission, navigate to it
+                      const currentSubmission = submissions[0];
+                      if (currentSubmission) {
+                        navigate(`/self-study/${currentSubmission._id}`);
+                      }
+                      resetImportModal();
+                    }}
+                    className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+                  >
+                    Continue to Self-Study
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -12,7 +12,10 @@ import {
   Archive,
   Clock,
   Building2,
-  AlertCircle
+  AlertCircle,
+  Upload,
+  X,
+  Download
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -22,6 +25,7 @@ interface Spec {
   version: string;
   description?: string;
   documentUrl?: string;
+  documentFileId?: string;
   standardsCount: number;
   status: 'active' | 'archived' | 'draft';
   uploadedAt: string;
@@ -34,17 +38,29 @@ interface Spec {
   updatedAt: string;
 }
 
+interface UploadedFile {
+  _id: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+}
+
 export function SpecManagement() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingSpec, setEditingSpec] = useState<Spec | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     version: '',
     description: '',
     documentUrl: '',
+    documentFileId: '',
     standardsCount: 21
   });
 
@@ -113,8 +129,51 @@ export function SpecManagement() {
       version: '',
       description: '',
       documentUrl: '',
+      documentFileId: '',
       standardsCount: 21
     });
+    setSelectedFile(null);
+    setUploadedFile(null);
+  };
+
+  // Upload file to MongoDB
+  const handleFileUpload = async () => {
+    if (!selectedFile) return;
+
+    setIsUploading(true);
+    setError(null);
+
+    try {
+      const uploadData = new FormData();
+      uploadData.append('file', selectedFile);
+      uploadData.append('category', 'spec_document');
+      uploadData.append('description', `Spec document for ${formData.name || 'New Spec'}`);
+
+      const response = await api.post('/api/files', uploadData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      const file = response.data.file;
+      setUploadedFile(file);
+      setFormData(prev => ({ ...prev, documentFileId: file._id }));
+      setSelectedFile(null);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to upload file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setUploadedFile(null);
+    setSelectedFile(null);
+    setFormData(prev => ({ ...prev, documentFileId: '' }));
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleCreate = () => {
@@ -137,8 +196,12 @@ export function SpecManagement() {
       version: spec.version,
       description: spec.description || '',
       documentUrl: spec.documentUrl || '',
+      documentFileId: spec.documentFileId || '',
       standardsCount: spec.standardsCount
     });
+    // Clear file states when editing
+    setSelectedFile(null);
+    setUploadedFile(null);
   };
 
   const specs: Spec[] = specsData?.specs || [];
@@ -326,7 +389,7 @@ export function SpecManagement() {
 
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Document URL
+                    Document URL (optional)
                   </label>
                   <input
                     type="url"
@@ -336,8 +399,85 @@ export function SpecManagement() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Link to the official spec document (PDF)
+                    External link to the spec document (e.g., Google Docs)
                   </p>
+                </div>
+
+                {/* File Upload Section */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Upload Document (optional)
+                  </label>
+
+                  {/* Show uploaded file info */}
+                  {(uploadedFile || formData.documentFileId) && (
+                    <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg mb-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-green-600" />
+                        <div>
+                          <p className="text-sm font-medium text-green-800">
+                            {uploadedFile?.originalName || 'Document uploaded'}
+                          </p>
+                          {uploadedFile && (
+                            <p className="text-xs text-green-600">
+                              {formatFileSize(uploadedFile.size)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`/api/files/${formData.documentFileId || uploadedFile?._id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1 text-green-600 hover:text-green-800"
+                          title="Download"
+                        >
+                          <Download className="w-4 h-4" />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={handleRemoveFile}
+                          className="p-1 text-red-500 hover:text-red-700"
+                          title="Remove"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* File input and upload button */}
+                  {!uploadedFile && !formData.documentFileId && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="file"
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                          className="flex-1 text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-teal-50 file:text-teal-700 hover:file:bg-teal-100"
+                        />
+                        {selectedFile && (
+                          <button
+                            type="button"
+                            onClick={handleFileUpload}
+                            disabled={isUploading}
+                            className="flex items-center gap-1 px-3 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                          >
+                            {isUploading ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Upload className="w-4 h-4" />
+                            )}
+                            Upload
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Supported: PDF, Word, Excel, PowerPoint (max 50MB)
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -433,6 +573,29 @@ function SpecRow({ spec, onEdit, onArchive, isArchiving }: SpecRowProps) {
               <span className="text-gray-400">
                 by {spec.uploadedBy.firstName} {spec.uploadedBy.lastName}
               </span>
+            )}
+            {/* Document links */}
+            {spec.documentFileId && (
+              <a
+                href={`/api/files/${spec.documentFileId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-teal-600 hover:text-teal-700"
+              >
+                <Download className="w-4 h-4" />
+                Download Document
+              </a>
+            )}
+            {spec.documentUrl && (
+              <a
+                href={spec.documentUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-blue-600 hover:text-blue-700"
+              >
+                <FileText className="w-4 h-4" />
+                View External Link
+              </a>
             )}
           </div>
 

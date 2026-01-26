@@ -8,6 +8,7 @@ export interface ISpec extends Document {
   description?: string;
   documentUrl?: string;
   documentKey?: string;
+  documentFileId?: mongoose.Types.ObjectId; // Reference to uploaded file in File collection
   uploadedAt: Date;
   uploadedBy: mongoose.Types.ObjectId;
   status: SpecStatus;
@@ -33,6 +34,10 @@ const SpecSchema = new Schema<ISpec>({
   },
   documentUrl: String,
   documentKey: String,
+  documentFileId: {
+    type: Schema.Types.ObjectId,
+    ref: 'File'
+  },
   uploadedAt: {
     type: Date,
     default: Date.now

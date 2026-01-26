@@ -31,6 +31,7 @@ import changeRequestsRouter from './routes/changeRequests';
 import errorLogsRouter from './routes/errorLogs';
 import invitationsRouter from './routes/invitations';
 import specsRouter from './routes/specs';
+import filesRouter from './routes/files';
 
 // Load environment variables
 dotenv.config();
@@ -99,6 +100,7 @@ app.use('/api/change-requests', changeRequestsRouter);
 app.use('/api/admin/error-logs', errorLogsRouter);
 app.use('/api/invitations', invitationsRouter);
 app.use('/api/specs', specsRouter);
+app.use('/api/files', filesRouter);
 
 // Serve static files from React app build
 const publicPath = path.join(__dirname, '..', 'public');

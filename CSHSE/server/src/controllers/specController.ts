@@ -62,7 +62,7 @@ export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { name, version, description, documentUrl, documentKey, standardsCount } = req.body;
+    const { name, version, description, documentUrl, documentKey, documentFileId, standardsCount } = req.body;
 
     if (!name || !version) {
       return res.status(400).json({ error: 'Name and version are required' });
@@ -80,6 +80,7 @@ export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
       description,
       documentUrl,
       documentKey,
+      documentFileId,
       standardsCount: standardsCount || 21,
       uploadedBy: req.user.id,
       status: 'active'
@@ -106,7 +107,7 @@ export const updateSpec = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { name, version, description, documentUrl, documentKey, standardsCount, status } = req.body;
+    const { name, version, description, documentUrl, documentKey, documentFileId, standardsCount, status } = req.body;
 
     const spec = await Spec.findById(req.params.id);
     if (!spec) {
@@ -131,6 +132,7 @@ export const updateSpec = async (req: AuthenticatedRequest, res: Response) => {
     if (description !== undefined) spec.description = description;
     if (documentUrl !== undefined) spec.documentUrl = documentUrl;
     if (documentKey !== undefined) spec.documentKey = documentKey;
+    if (documentFileId !== undefined) spec.documentFileId = documentFileId;
     if (standardsCount) spec.standardsCount = standardsCount;
     if (status) spec.status = status;
 
