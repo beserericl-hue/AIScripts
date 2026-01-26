@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { Spec } from '../models/Spec';
 import { Institution } from '../models/Institution';
+import { User } from '../models/User';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -9,6 +11,50 @@ interface AuthenticatedRequest extends Request {
     name: string;
     role: string;
   };
+}
+
+interface UserPayload {
+  id: string;
+  email: string;
+  role: string;
+}
+
+/**
+ * Extract and verify user from JWT token
+ */
+async function getUserFromToken(req: Request): Promise<{
+  id: string;
+  role: string;
+  isSuperuser?: boolean;
+} | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.slice(7);
+  const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
+
+  try {
+    const decoded = jwt.verify(token, jwtSecret) as UserPayload;
+    const user = await User.findById(decoded.id).select('role isSuperuser');
+    if (!user) return null;
+
+    return {
+      id: decoded.id,
+      role: user.role,
+      isSuperuser: user.isSuperuser
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Check if user has admin privileges (admin role OR superuser)
+ */
+function hasAdminAccess(user: { role: string; isSuperuser?: boolean }): boolean {
+  return user.role === 'admin' || user.isSuperuser === true;
 }
 
 /**
@@ -54,11 +100,16 @@ export const getSpec = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 /**
- * Create a new spec (admin only)
+ * Create a new spec (admin or superuser only)
  */
 export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (req.user?.role !== 'admin') {
+    const authUser = await getUserFromToken(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!hasAdminAccess(authUser)) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -82,7 +133,7 @@ export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
       documentKey,
       documentFileId,
       standardsCount: standardsCount || 21,
-      uploadedBy: req.user.id,
+      uploadedBy: authUser.id,
       status: 'active'
     });
 
@@ -99,11 +150,16 @@ export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 /**
- * Update a spec (admin only)
+ * Update a spec (admin or superuser only)
  */
 export const updateSpec = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (req.user?.role !== 'admin') {
+    const authUser = await getUserFromToken(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!hasAdminAccess(authUser)) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -157,11 +213,16 @@ export const updateSpec = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 /**
- * Archive a spec (admin only)
+ * Archive a spec (admin or superuser only)
  */
 export const archiveSpec = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (req.user?.role !== 'admin') {
+    const authUser = await getUserFromToken(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    if (!hasAdminAccess(authUser)) {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
