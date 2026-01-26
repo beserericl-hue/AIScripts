@@ -177,10 +177,20 @@ export function SpecManagement() {
   };
 
   const handleCreate = () => {
+    // Validate: if a file is selected but not uploaded, show error
+    if (selectedFile && !uploadedFile) {
+      setError('Please upload the selected file before creating the spec, or remove it.');
+      return;
+    }
     createMutation.mutate(formData);
   };
 
   const handleUpdate = () => {
+    // Validate: if a file is selected but not uploaded, show error
+    if (selectedFile && !uploadedFile) {
+      setError('Please upload the selected file before updating the spec, or remove it.');
+      return;
+    }
     if (editingSpec) {
       updateMutation.mutate({
         id: editingSpec._id,
@@ -476,6 +486,13 @@ export function SpecManagement() {
                       <p className="text-xs text-gray-500">
                         Supported: PDF, Word, Excel, PowerPoint (max 50MB)
                       </p>
+                      {/* Warning if file selected but not uploaded */}
+                      {selectedFile && !uploadedFile && (
+                        <div className="flex items-center gap-1 text-amber-600 text-xs mt-1">
+                          <AlertCircle className="w-3 h-3" />
+                          <span>Click "Upload" to save the file before creating the spec</span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
