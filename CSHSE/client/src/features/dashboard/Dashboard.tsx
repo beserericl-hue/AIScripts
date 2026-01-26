@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../services/api';
 import {
   LayoutDashboard,
   Bell,
@@ -114,7 +114,7 @@ export function Dashboard() {
   const { data: institutionsData, isLoading: institutionsLoading } = useQuery({
     queryKey: ['institutions-dashboard'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/institutions`, {
+      const response = await api.get(`${API_BASE}/institutions`, {
         params: { limit: 200 },
       });
       return response.data;
@@ -127,7 +127,7 @@ export function Dashboard() {
     queryKey: ['my-institution', effectiveUser?.institutionId],
     queryFn: async () => {
       if (!effectiveUser?.institutionId) return null;
-      const response = await axios.get(`${API_BASE}/institutions/${effectiveUser.institutionId}`);
+      const response = await api.get(`${API_BASE}/institutions/${effectiveUser.institutionId}`);
       return response.data;
     },
     enabled: isProgramCoordinator && !!effectiveUser?.institutionId
@@ -138,7 +138,7 @@ export function Dashboard() {
     queryKey: ['my-submission', effectiveUser?.institutionId],
     queryFn: async () => {
       if (!effectiveUser?.institutionId) return null;
-      const response = await axios.get(`${API_BASE}/submissions`, {
+      const response = await api.get(`${API_BASE}/submissions`, {
         params: { institutionId: effectiveUser.institutionId, limit: 1 }
       });
       return response.data;
@@ -150,7 +150,7 @@ export function Dashboard() {
   const { data: changeRequestsData, isLoading: changeRequestsLoading } = useQuery({
     queryKey: ['pending-change-requests'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/change-requests/pending`);
+      const response = await api.get(`${API_BASE}/change-requests/pending`);
       return response.data;
     },
   });
@@ -159,7 +159,7 @@ export function Dashboard() {
   const { data: siteVisitsData, isLoading: siteVisitsLoading } = useQuery({
     queryKey: ['upcoming-site-visits'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/site-visits`, {
+      const response = await api.get(`${API_BASE}/site-visits`, {
         params: { upcoming: true, limit: 20 },
       });
       return response.data;
@@ -170,7 +170,7 @@ export function Dashboard() {
   const { data: usersData } = useQuery({
     queryKey: ['users-readers'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/users`, {
+      const response = await api.get(`${API_BASE}/users`, {
         params: { roles: ['reader', 'lead_reader'] },
       });
       return response.data;
