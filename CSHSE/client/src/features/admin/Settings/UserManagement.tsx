@@ -81,7 +81,7 @@ export function UserManagement() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (roleFilter) params.append('role', roleFilter);
-      const response = await api.get(`/users?${params}`);
+      const response = await api.get(`/api/users?${params}`);
       return response.data;
     }
   });
@@ -90,7 +90,7 @@ export function UserManagement() {
   const { data: invitationsData, isLoading: invitationsLoading } = useQuery({
     queryKey: ['invitations'],
     queryFn: async () => {
-      const response = await api.get('/users/invitations');
+      const response = await api.get('/api/users/invitations');
       return response.data;
     }
   });
@@ -99,7 +99,7 @@ export function UserManagement() {
   const { data: readersData, isLoading: readersLoading } = useQuery({
     queryKey: ['readers-committee'],
     queryFn: async () => {
-      const response = await api.get('/users/readers-committee');
+      const response = await api.get('/api/users/readers-committee');
       return response.data;
     }
   });
@@ -108,7 +108,7 @@ export function UserManagement() {
   const { data: institutionsData } = useQuery({
     queryKey: ['institutions'],
     queryFn: async () => {
-      const response = await api.get('/institutions');
+      const response = await api.get('/api/institutions');
       return response.data;
     }
   });
@@ -116,7 +116,7 @@ export function UserManagement() {
   // Create invitation mutation
   const inviteMutation = useMutation({
     mutationFn: async (data: typeof inviteForm) => {
-      const response = await api.post('/users/invite', data);
+      const response = await api.post('/api/users/invite', data);
       return response.data;
     },
     onSuccess: () => {
@@ -130,7 +130,7 @@ export function UserManagement() {
   // Resend invitation mutation
   const resendMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await api.post(`/users/invitations/${id}/resend`);
+      const response = await api.post(`/api/users/invitations/${id}/resend`);
       return response.data;
     },
     onSuccess: () => {
@@ -141,7 +141,7 @@ export function UserManagement() {
   // Disable user mutation
   const disableMutation = useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/users/${id}`);
+      await api.delete(`/api/users/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });

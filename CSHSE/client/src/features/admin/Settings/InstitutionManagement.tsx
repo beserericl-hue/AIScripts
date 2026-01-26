@@ -91,7 +91,7 @@ export function InstitutionManagement() {
   const { data: institutionsData, isLoading } = useQuery({
     queryKey: ['institutions'],
     queryFn: async () => {
-      const response = await api.get('/institutions');
+      const response = await api.get('/api/institutions');
       return response.data;
     }
   });
@@ -100,7 +100,7 @@ export function InstitutionManagement() {
   const { data: leadReadersData } = useQuery({
     queryKey: ['lead-readers'],
     queryFn: async () => {
-      const response = await api.get('/users?role=lead_reader');
+      const response = await api.get('/api/users?role=lead_reader');
       return response.data;
     }
   });
@@ -109,7 +109,7 @@ export function InstitutionManagement() {
   const { data: specsData } = useQuery({
     queryKey: ['specs'],
     queryFn: async () => {
-      const response = await api.get('/specs?status=active');
+      const response = await api.get('/api/specs?status=active');
       return response.data;
     }
   });
@@ -117,7 +117,7 @@ export function InstitutionManagement() {
   // Create institution mutation
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const response = await api.post('/institutions', data);
+      const response = await api.post('/api/institutions', data);
       return response.data;
     },
     onSuccess: () => {
@@ -130,7 +130,7 @@ export function InstitutionManagement() {
   // Update institution mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await api.put(`/institutions/${id}`, data);
+      const response = await api.put(`/api/institutions/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -143,7 +143,7 @@ export function InstitutionManagement() {
   // Assign lead reader mutation
   const assignLeadReaderMutation = useMutation({
     mutationFn: async ({ institutionId, leadReaderId }: { institutionId: string; leadReaderId: string }) => {
-      const response = await api.post(`/institutions/${institutionId}/lead-reader`, { leadReaderId });
+      const response = await api.post(`/api/institutions/${institutionId}/lead-reader`, { leadReaderId });
       return response.data;
     },
     onSuccess: () => {
@@ -154,7 +154,7 @@ export function InstitutionManagement() {
   // Archive institution mutation
   const archiveMutation = useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/institutions/${id}`);
+      await api.delete(`/api/institutions/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['institutions'] });
