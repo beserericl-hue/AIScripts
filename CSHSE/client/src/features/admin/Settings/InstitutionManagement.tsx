@@ -61,6 +61,18 @@ interface Spec {
   status: string;
 }
 
+// Format phone number as (XXX) XXX-XXXX
+const formatPhoneNumber = (value: string): string => {
+  // Remove all non-digits
+  const digits = value.replace(/\D/g, '');
+
+  // Format based on length
+  if (digits.length === 0) return '';
+  if (digits.length <= 3) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+};
+
 export function InstitutionManagement() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -542,9 +554,9 @@ export function InstitutionManagement() {
                     value={formData.primaryContact.phone}
                     onChange={(e) => setFormData({
                       ...formData,
-                      primaryContact: { ...formData.primaryContact, phone: e.target.value }
+                      primaryContact: { ...formData.primaryContact, phone: formatPhoneNumber(e.target.value) }
                     })}
-                    placeholder="Phone *"
+                    placeholder="Phone * (XXX) XXX-XXXX"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
