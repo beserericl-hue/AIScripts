@@ -27,7 +27,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Don't redirect to login for auth routes - let them handle their own errors
+    const isAuthRoute = error.config?.url?.includes('/api/auth/');
+
+    if (error.response?.status === 401 && !isAuthRoute) {
       localStorage.removeItem('auth-storage');
       window.location.href = '/login';
     }
