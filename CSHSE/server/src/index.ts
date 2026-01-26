@@ -47,6 +47,32 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Request logging middleware - logs all API requests for debugging
+app.use((req, res, next) => {
+  const start = Date.now();
+  const originalSend = res.send;
+
+  res.send = function (body: any) {
+    res.send = originalSend;
+    const duration = Date.now() - start;
+    const statusCode = res.statusCode;
+
+    // Only log API requests, skip static files
+    if (req.path.startsWith('/api/')) {
+      const logLevel = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
+      const logMethod = logLevel === 'error' ? console.error : logLevel === 'warn' ? console.warn : console.log;
+
+      logMethod(`[${new Date().toISOString()}] ${req.method} ${req.path} - ${statusCode} (${duration}ms)${
+        statusCode >= 400 ? ` - ${typeof body === 'string' ? body.substring(0, 200) : ''}` : ''
+      }`);
+    }
+
+    return originalSend.call(this, body);
+  };
+
+  next();
+});
+
 // Track database connection status for health checks
 let dbConnected = false;
 let dbError: string | null = null;

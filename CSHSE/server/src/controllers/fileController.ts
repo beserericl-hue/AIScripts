@@ -1,8 +1,18 @@
 import { Request, Response } from 'express';
 import { File, FileAccessScope, FileCategory } from '../models/File';
 import { Institution } from '../models/Institution';
+import { User } from '../models/User';
 import { v4 as uuidv4 } from 'uuid';
 import mongoose from 'mongoose';
+import jwt from 'jsonwebtoken';
+
+interface UserPayload {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  institutionId?: string;
+}
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -17,23 +27,62 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
+ * Extract and verify user from JWT token in Authorization header
+ */
+async function getUserFromToken(req: Request): Promise<{
+  id: string;
+  role: string;
+  institutionId?: string;
+  isSuperuser?: boolean;
+} | null> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.slice(7);
+  const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
+
+  try {
+    const decoded = jwt.verify(token, jwtSecret) as UserPayload;
+
+    // Fetch full user to get isSuperuser flag
+    const user = await User.findById(decoded.id).select('role institutionId isSuperuser');
+    if (!user) {
+      return null;
+    }
+
+    return {
+      id: decoded.id,
+      role: user.role,
+      institutionId: user.institutionId?.toString(),
+      isSuperuser: user.isSuperuser
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Upload a file
  */
 export const uploadFile = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Verify authentication
+    const authUser = await getUserFromToken(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     if (!req.file) {
       return res.status(400).json({ error: 'No file provided' });
     }
 
     const { category, description, relatedEntityId, relatedEntityType, institutionId: targetInstitutionId } = req.body;
-    const userRole = req.user?.role || '';
-    const userId = req.user?.id || req.user?._id;
-    const userInstitutionId = req.user?.institutionId;
-    const isSuperuser = req.user?.isSuperuser;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
+    const userRole = authUser.role;
+    const userId = authUser.id;
+    const userInstitutionId = authUser.institutionId;
+    const isSuperuser = authUser.isSuperuser;
 
     // Determine access scope and institution ID
     let accessScope: FileAccessScope;
@@ -112,11 +161,17 @@ export const uploadFile = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const getFile = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Verify authentication
+    const authUser = await getUserFromToken(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     const { id } = req.params;
-    const userId = req.user?.id || req.user?._id;
-    const userRole = req.user?.role || '';
-    const userInstitutionId = req.user?.institutionId;
-    const isSuperuser = req.user?.isSuperuser;
+    const userId = authUser.id;
+    const userRole = authUser.role;
+    const userInstitutionId = authUser.institutionId;
+    const isSuperuser = authUser.isSuperuser;
 
     const file = await File.findById(id);
     if (!file) {
@@ -126,7 +181,7 @@ export const getFile = async (req: AuthenticatedRequest, res: Response) => {
     // Check access permissions
     const canAccess = await checkFileAccess(
       file,
-      userId as string,
+      userId,
       userRole,
       userInstitutionId,
       isSuperuser
@@ -153,11 +208,17 @@ export const getFile = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const getFileMetadata = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Verify authentication
+    const authUser = await getUserFromToken(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     const { id } = req.params;
-    const userId = req.user?.id || req.user?._id;
-    const userRole = req.user?.role || '';
-    const userInstitutionId = req.user?.institutionId;
-    const isSuperuser = req.user?.isSuperuser;
+    const userId = authUser.id;
+    const userRole = authUser.role;
+    const userInstitutionId = authUser.institutionId;
+    const isSuperuser = authUser.isSuperuser;
 
     const file = await File.findById(id)
       .select('-data')
@@ -171,7 +232,7 @@ export const getFileMetadata = async (req: AuthenticatedRequest, res: Response) 
     // Check access permissions
     const canAccess = await checkFileAccess(
       file,
-      userId as string,
+      userId,
       userRole,
       userInstitutionId,
       isSuperuser
@@ -193,11 +254,16 @@ export const getFileMetadata = async (req: AuthenticatedRequest, res: Response) 
  */
 export const listFiles = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Verify authentication
+    const authUser = await getUserFromToken(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     const { category, institutionId, relatedEntityId, page = '1', limit = '20' } = req.query;
-    const userId = req.user?.id || req.user?._id;
-    const userRole = req.user?.role || '';
-    const userInstitutionId = req.user?.institutionId;
-    const isSuperuser = req.user?.isSuperuser;
+    const userRole = authUser.role;
+    const userInstitutionId = authUser.institutionId;
+    const isSuperuser = authUser.isSuperuser;
 
     const pageNum = parseInt(page as string, 10);
     const limitNum = parseInt(limit as string, 10);
@@ -259,10 +325,16 @@ export const listFiles = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const deleteFile = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Verify authentication
+    const authUser = await getUserFromToken(req);
+    if (!authUser) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
     const { id } = req.params;
-    const userId = req.user?.id || req.user?._id;
-    const userRole = req.user?.role || '';
-    const isSuperuser = req.user?.isSuperuser;
+    const userId = authUser.id;
+    const userRole = authUser.role;
+    const isSuperuser = authUser.isSuperuser;
 
     const file = await File.findById(id);
     if (!file) {
