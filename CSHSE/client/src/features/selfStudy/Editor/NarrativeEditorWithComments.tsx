@@ -36,10 +36,14 @@ interface NarrativeEditorWithCommentsProps {
   standardCode: string;
   specCode: string;
   initialContent: string;
+  standardTitle: string;
+  standardDescription: string;
+  specTitle: string;
   standardText: string;
   placeholder?: string;
   onSave: (content: string) => Promise<void>;
   onContentChange?: (content: string) => void;
+  onCancel?: () => void;
   currentUserId: string;
   currentUserRole: 'reader' | 'lead_reader' | 'program_coordinator' | 'admin';
 }
@@ -49,10 +53,14 @@ export function NarrativeEditorWithComments({
   standardCode,
   specCode,
   initialContent,
+  standardTitle,
+  standardDescription,
+  specTitle,
   standardText,
   placeholder,
   onSave,
   onContentChange,
+  onCancel,
   currentUserId,
   currentUserRole
 }: NarrativeEditorWithCommentsProps) {
@@ -292,10 +300,14 @@ export function NarrativeEditorWithComments({
                 standardCode={standardCode}
                 specCode={specCode}
                 initialContent={initialContent}
+                standardTitle={standardTitle}
+                standardDescription={standardDescription}
+                specTitle={specTitle}
                 standardText={standardText}
                 placeholder={placeholder}
                 onSave={onSave}
                 onContentChange={onContentChange}
+                onCancel={onCancel}
                 readOnly={false}
               />
             </div>
@@ -346,10 +358,14 @@ export function NarrativeEditorWithComments({
             standardCode={standardCode}
             specCode={specCode}
             initialContent={initialContent}
+            standardTitle={standardTitle}
+            standardDescription={standardDescription}
+            specTitle={specTitle}
             standardText={standardText}
             placeholder={placeholder}
             onSave={onSave}
             onContentChange={onContentChange}
+            onCancel={onCancel}
             readOnly={!canEdit}
           />
         </div>
