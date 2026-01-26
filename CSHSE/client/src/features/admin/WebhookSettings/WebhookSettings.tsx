@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   Settings,
   Save,
@@ -14,8 +14,6 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 interface WebhookSettingsData {
   settingType: string;
@@ -55,7 +53,7 @@ export function WebhookSettings() {
   const { data: settings, isLoading } = useQuery<WebhookSettingsData>({
     queryKey: ['webhook-settings'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/admin/webhook-settings`);
+      const response = await api.get('/admin/webhook-settings');
       return response.data;
     },
   });
@@ -71,7 +69,7 @@ export function WebhookSettings() {
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: Partial<WebhookSettingsData>) => {
-      const response = await axios.put(`${API_BASE}/admin/webhook-settings`, data);
+      const response = await api.put('/admin/webhook-settings', data);
       return response.data;
     },
     onSuccess: () => {
@@ -83,7 +81,7 @@ export function WebhookSettings() {
   // Test mutation
   const testMutation = useMutation({
     mutationFn: async () => {
-      const response = await axios.post(`${API_BASE}/admin/webhook-test`, {
+      const response = await api.post('/admin/webhook-test', {
         webhookUrl: formData.webhookUrl,
         authentication: formData.authentication,
       });

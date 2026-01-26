@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   Building2,
   Plus,
@@ -19,8 +19,6 @@ import {
   UserCheck,
   FileText
 } from 'lucide-react';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 interface Institution {
   _id: string;
@@ -93,7 +91,7 @@ export function InstitutionManagement() {
   const { data: institutionsData, isLoading } = useQuery({
     queryKey: ['institutions'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/institutions`);
+      const response = await api.get('/institutions');
       return response.data;
     }
   });
@@ -102,7 +100,7 @@ export function InstitutionManagement() {
   const { data: leadReadersData } = useQuery({
     queryKey: ['lead-readers'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/users?role=lead_reader`);
+      const response = await api.get('/users?role=lead_reader');
       return response.data;
     }
   });
@@ -111,7 +109,7 @@ export function InstitutionManagement() {
   const { data: specsData } = useQuery({
     queryKey: ['specs'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/specs?status=active`);
+      const response = await api.get('/specs?status=active');
       return response.data;
     }
   });
@@ -119,7 +117,7 @@ export function InstitutionManagement() {
   // Create institution mutation
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const response = await axios.post(`${API_BASE}/institutions`, data);
+      const response = await api.post('/institutions', data);
       return response.data;
     },
     onSuccess: () => {
@@ -132,7 +130,7 @@ export function InstitutionManagement() {
   // Update institution mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await axios.put(`${API_BASE}/institutions/${id}`, data);
+      const response = await api.put(`/institutions/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
@@ -145,7 +143,7 @@ export function InstitutionManagement() {
   // Assign lead reader mutation
   const assignLeadReaderMutation = useMutation({
     mutationFn: async ({ institutionId, leadReaderId }: { institutionId: string; leadReaderId: string }) => {
-      const response = await axios.post(`${API_BASE}/institutions/${institutionId}/lead-reader`, { leadReaderId });
+      const response = await api.post(`/institutions/${institutionId}/lead-reader`, { leadReaderId });
       return response.data;
     },
     onSuccess: () => {
@@ -156,7 +154,7 @@ export function InstitutionManagement() {
   // Archive institution mutation
   const archiveMutation = useMutation({
     mutationFn: async (id: string) => {
-      await axios.delete(`${API_BASE}/institutions/${id}`);
+      await api.delete(`/institutions/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['institutions'] });

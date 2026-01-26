@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   Key,
   Plus,
@@ -15,8 +15,6 @@ import {
   Clock,
   Shield
 } from 'lucide-react';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 interface APIKey {
   _id: string;
@@ -53,7 +51,7 @@ export function APIKeySettings() {
   const { data: apiKeysData, isLoading } = useQuery({
     queryKey: ['api-keys'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/admin/api-keys`);
+      const response = await api.get('/admin/api-keys');
       return response.data;
     }
   });
@@ -61,7 +59,7 @@ export function APIKeySettings() {
   // Create API key mutation
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const response = await axios.post(`${API_BASE}/admin/api-keys`, data);
+      const response = await api.post('/admin/api-keys', data);
       return response.data;
     },
     onSuccess: (data) => {
@@ -83,7 +81,7 @@ export function APIKeySettings() {
   // Revoke API key mutation
   const revokeMutation = useMutation({
     mutationFn: async (id: string) => {
-      await axios.delete(`${API_BASE}/admin/api-keys/${id}`);
+      await api.delete(`/admin/api-keys/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
@@ -93,7 +91,7 @@ export function APIKeySettings() {
   // Rotate API key mutation
   const rotateMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await axios.post(`${API_BASE}/admin/api-keys/${id}/rotate`);
+      const response = await api.post(`/admin/api-keys/${id}/rotate`);
       return response.data;
     },
     onSuccess: (data) => {
