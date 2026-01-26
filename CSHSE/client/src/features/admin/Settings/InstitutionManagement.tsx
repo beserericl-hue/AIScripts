@@ -16,7 +16,8 @@ import {
   Search,
   CheckCircle,
   Clock,
-  UserCheck
+  UserCheck,
+  FileText
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -38,6 +39,8 @@ interface Institution {
   };
   website?: string;
   accreditationDeadline?: string;
+  specId?: string;
+  specName?: string;
   programCoordinatorId?: {
     _id: string;
     firstName: string;
@@ -51,6 +54,13 @@ interface Institution {
   };
   status: string;
   currentSubmissionId?: string;
+}
+
+interface Spec {
+  _id: string;
+  name: string;
+  version: string;
+  status: string;
 }
 
 export function InstitutionManagement() {
@@ -74,6 +84,7 @@ export function InstitutionManagement() {
     },
     website: '',
     accreditationDeadline: '',
+    specId: '',
     programCoordinatorEmail: '',
     programCoordinatorName: ''
   });
@@ -92,6 +103,15 @@ export function InstitutionManagement() {
     queryKey: ['lead-readers'],
     queryFn: async () => {
       const response = await axios.get(`${API_BASE}/users?role=lead_reader`);
+      return response.data;
+    }
+  });
+
+  // Fetch specs for assignment
+  const { data: specsData } = useQuery({
+    queryKey: ['specs'],
+    queryFn: async () => {
+      const response = await axios.get(`${API_BASE}/specs?status=active`);
       return response.data;
     }
   });
@@ -151,6 +171,7 @@ export function InstitutionManagement() {
       primaryContact: { name: '', email: '', phone: '' },
       website: '',
       accreditationDeadline: '',
+      specId: '',
       programCoordinatorEmail: '',
       programCoordinatorName: ''
     });
@@ -180,6 +201,7 @@ export function InstitutionManagement() {
       accreditationDeadline: institution.accreditationDeadline
         ? new Date(institution.accreditationDeadline).toISOString().split('T')[0]
         : '',
+      specId: institution.specId || '',
       programCoordinatorEmail: '',
       programCoordinatorName: ''
     });
@@ -187,6 +209,7 @@ export function InstitutionManagement() {
 
   const institutions: Institution[] = institutionsData?.institutions || [];
   const leadReaders = leadReadersData?.users || [];
+  const specs: Spec[] = specsData?.specs || [];
 
   const filteredInstitutions = institutions.filter(inst =>
     inst.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -293,6 +316,12 @@ export function InstitutionManagement() {
                         <Calendar className="w-4 h-4" />
                         Deadline: {formatDate(institution.accreditationDeadline)}
                       </span>
+                      {institution.specName && (
+                        <span className="flex items-center gap-1 text-primary-600">
+                          <FileText className="w-4 h-4" />
+                          {institution.specName}
+                        </span>
+                      )}
                     </div>
 
                     <div className="mt-3 flex items-center gap-4">
@@ -504,14 +533,36 @@ export function InstitutionManagement() {
               {/* Accreditation */}
               <div>
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">Accreditation</h4>
-                <div>
-                  <label className="block text-sm text-gray-600 mb-1">Deadline</label>
-                  <input
-                    type="date"
-                    value={formData.accreditationDeadline}
-                    onChange={(e) => setFormData({ ...formData, accreditationDeadline: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Spec Document *</label>
+                    <select
+                      value={formData.specId}
+                      onChange={(e) => setFormData({ ...formData, specId: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    >
+                      <option value="">Select a spec...</option>
+                      {specs.map((spec) => (
+                        <option key={spec._id} value={spec._id}>
+                          {spec.name} v{spec.version}
+                        </option>
+                      ))}
+                    </select>
+                    {specs.length === 0 && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        No specs available. Add specs in Settings first.
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Deadline</label>
+                    <input
+                      type="date"
+                      value={formData.accreditationDeadline}
+                      onChange={(e) => setFormData({ ...formData, accreditationDeadline: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -20,8 +20,10 @@ import {
   RefreshCw,
   Eye,
   Loader2,
+  ClipboardCheck,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isWithinInterval, addDays } from 'date-fns';
+import { useAuthStore } from '../../store/authStore';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -34,6 +36,8 @@ interface Institution {
   assignedLeadReaderId?: { _id: string; firstName: string; lastName: string };
   assignedReaderIds: Array<{ _id: string; firstName: string; lastName: string }>;
   currentSubmissionId?: string;
+  specId?: string;
+  specName?: string;
 }
 
 interface ChangeRequest {
@@ -69,6 +73,7 @@ interface Submission {
   submissionId: string;
   institutionName: string;
   status: string;
+  standardsStatus?: Record<string, { status: string; validationStatus: string }>;
   readerLock?: {
     isLocked: boolean;
     lockedByName?: string;
@@ -92,6 +97,11 @@ interface DashboardFilters {
 }
 
 export function Dashboard() {
+  const { getEffectiveRole, getEffectiveUser } = useAuthStore();
+  const effectiveRole = getEffectiveRole();
+  const effectiveUser = getEffectiveUser();
+  const isProgramCoordinator = effectiveRole === 'program_coordinator';
+
   const [filters, setFilters] = useState<DashboardFilters>({
     institutionType: '',
     institutionId: '',
@@ -109,6 +119,31 @@ export function Dashboard() {
       });
       return response.data;
     },
+    enabled: !isProgramCoordinator
+  });
+
+  // Fetch user's institution for Program Coordinator
+  const { data: myInstitutionData, isLoading: myInstitutionLoading } = useQuery({
+    queryKey: ['my-institution', effectiveUser?.institutionId],
+    queryFn: async () => {
+      if (!effectiveUser?.institutionId) return null;
+      const response = await axios.get(`${API_BASE}/institutions/${effectiveUser.institutionId}`);
+      return response.data;
+    },
+    enabled: isProgramCoordinator && !!effectiveUser?.institutionId
+  });
+
+  // Fetch submission for Program Coordinator
+  const { data: mySubmissionData, isLoading: mySubmissionLoading } = useQuery({
+    queryKey: ['my-submission', effectiveUser?.institutionId],
+    queryFn: async () => {
+      if (!effectiveUser?.institutionId) return null;
+      const response = await axios.get(`${API_BASE}/submissions`, {
+        params: { institutionId: effectiveUser.institutionId, limit: 1 }
+      });
+      return response.data;
+    },
+    enabled: isProgramCoordinator && !!effectiveUser?.institutionId
   });
 
   // Fetch pending change requests
@@ -131,7 +166,7 @@ export function Dashboard() {
     },
   });
 
-  // Fetch users (readers and lead readers)
+  // Fetch users (readers and lead readers) - only for non-PC roles
   const { data: usersData } = useQuery({
     queryKey: ['users-readers'],
     queryFn: async () => {
@@ -140,14 +175,17 @@ export function Dashboard() {
       });
       return response.data;
     },
+    enabled: !isProgramCoordinator
   });
 
   const institutions: Institution[] = institutionsData?.institutions || [];
+  const myInstitution: Institution | null = myInstitutionData?.institution || null;
+  const mySubmission: Submission | null = mySubmissionData?.submissions?.[0] || null;
   const changeRequests: ChangeRequest[] = changeRequestsData?.pendingRequests || [];
   const siteVisits: SiteVisit[] = siteVisitsData?.siteVisits || [];
   const users: User[] = usersData?.users || [];
 
-  // Filter institutions
+  // Filter institutions (for non-PC roles)
   const filteredInstitutions = useMemo(() => {
     return institutions.filter((inst) => {
       if (filters.institutionType && inst.type !== filters.institutionType) {
@@ -178,8 +216,15 @@ export function Dashboard() {
     });
   }, [institutions, filters]);
 
-  // Filter change requests by institution filters
+  // Filter change requests
   const filteredChangeRequests = useMemo(() => {
+    if (isProgramCoordinator && effectiveUser?.institutionId) {
+      // For PC, only show their institution's requests
+      return changeRequests.filter((cr) => {
+        const instName = cr.institutionName || cr.submissionId?.institutionName;
+        return instName?.toLowerCase() === myInstitution?.name?.toLowerCase();
+      });
+    }
     if (!filters.institutionId && !filters.search) {
       return changeRequests;
     }
@@ -195,9 +240,37 @@ export function Dashboard() {
       }
       return true;
     });
-  }, [changeRequests, filters]);
+  }, [changeRequests, filters, isProgramCoordinator, effectiveUser, myInstitution]);
 
-  // Calculate statistics
+  // Filter site visits for PC
+  const filteredSiteVisits = useMemo(() => {
+    if (isProgramCoordinator && effectiveUser?.institutionId) {
+      return siteVisits.filter((sv) => {
+        const instName = sv.institutionName || sv.institutionId?.name;
+        return instName?.toLowerCase() === myInstitution?.name?.toLowerCase();
+      });
+    }
+    return siteVisits;
+  }, [siteVisits, isProgramCoordinator, effectiveUser, myInstitution]);
+
+  // Calculate statistics for PC
+  const pcStats = useMemo(() => {
+    if (!mySubmission?.standardsStatus) {
+      return { completedItems: 0, totalItems: 21 }; // 21 standards by default
+    }
+
+    const statuses = Object.values(mySubmission.standardsStatus);
+    const completedItems = statuses.filter(
+      (s) => s.status === 'complete' || s.status === 'submitted' || s.status === 'validated'
+    ).length;
+
+    return {
+      completedItems,
+      totalItems: statuses.length || 21
+    };
+  }, [mySubmission]);
+
+  // Calculate statistics for Admin/other roles
   const stats = useMemo(() => {
     const upcomingDeadlines = filteredInstitutions.filter((inst) => {
       if (!inst.accreditationDeadline) return false;
@@ -227,8 +300,252 @@ export function Dashboard() {
   const leadReaders = users.filter((u) => u.role === 'lead_reader');
   const readers = users.filter((u) => u.role === 'reader');
 
-  const isLoading = institutionsLoading || changeRequestsLoading || siteVisitsLoading;
+  const isLoading = institutionsLoading || changeRequestsLoading || siteVisitsLoading ||
+    (isProgramCoordinator && (myInstitutionLoading || mySubmissionLoading));
 
+  // Program Coordinator Dashboard
+  if (isProgramCoordinator) {
+    // Unassigned state
+    if (!effectiveUser?.institutionId) {
+      return (
+        <div className="min-h-screen bg-gray-50">
+          <div className="max-w-4xl mx-auto px-6 py-12">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+              <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertTriangle className="w-8 h-8 text-amber-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                Unassigned University
+              </h1>
+              <p className="text-gray-600">
+                You have not been assigned to a university yet. Please contact your administrator.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Spec Name Banner */}
+        {myInstitution?.specName && (
+          <div className="bg-primary-600 text-white">
+            <div className="max-w-7xl mx-auto px-6 py-3">
+              <div className="flex items-center gap-2">
+                <FileCheck className="w-5 h-5" />
+                <span className="font-medium">{myInstitution.specName}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200">
+          <div className="max-w-7xl mx-auto px-6 py-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <LayoutDashboard className="w-8 h-8 text-primary" />
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {myInstitution?.name || effectiveUser?.institutionName || 'My Dashboard'}
+                  </h1>
+                  <p className="text-sm text-gray-500">
+                    Self-Study Progress Dashboard
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Refresh
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Items In Spec Completed</p>
+                  <p className="text-3xl font-bold text-primary-600">
+                    {pcStats.completedItems}/{pcStats.totalItems}
+                  </p>
+                </div>
+                <ClipboardCheck className="w-12 h-12 text-primary-100" />
+              </div>
+              <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary-500 rounded-full transition-all"
+                  style={{ width: `${(pcStats.completedItems / pcStats.totalItems) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Pending Requests</p>
+                  <p className="text-3xl font-bold text-amber-600">
+                    {filteredChangeRequests.length}
+                  </p>
+                </div>
+                <Bell className="w-12 h-12 text-amber-100" />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Deadline</p>
+                  <p className="text-lg font-bold text-red-600">
+                    {myInstitution?.accreditationDeadline
+                      ? format(new Date(myInstitution.accreditationDeadline), 'MMM d, yyyy')
+                      : 'Not set'}
+                  </p>
+                </div>
+                <Clock className="w-12 h-12 text-red-100" />
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-gray-500">Site Visit</p>
+                  <p className="text-lg font-bold text-blue-600">
+                    {filteredSiteVisits.length > 0
+                      ? format(new Date(filteredSiteVisits[0].scheduledDate), 'MMM d, yyyy')
+                      : 'Not scheduled'}
+                  </p>
+                </div>
+                <Calendar className="w-12 h-12 text-blue-100" />
+              </div>
+            </div>
+          </div>
+
+          {isLoading && (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+            </div>
+          )}
+
+          {!isLoading && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* My Change Requests */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-amber-500" />
+                    <h2 className="font-semibold text-gray-900">
+                      My Change Requests
+                    </h2>
+                  </div>
+                </div>
+                <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+                  {filteredChangeRequests.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500">
+                      <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-300" />
+                      <p>No pending change requests</p>
+                    </div>
+                  ) : (
+                    filteredChangeRequests.map((cr) => (
+                      <div key={cr._id} className="p-4 hover:bg-gray-50">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                              cr.type === 'deadline'
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'bg-blue-100 text-blue-700'
+                            }`}>
+                              {cr.type === 'deadline' ? 'Deadline Change' : 'Site Visit Change'}
+                            </span>
+                            <p className="text-sm text-gray-500 mt-1">
+                              {cr.currentValue} → {cr.requestedValue}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {formatDistanceToNow(new Date(cr.createdAt), { addSuffix: true })}
+                            </p>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="flex items-center gap-1">
+                              {cr.approvals?.admin?.approved === true ? (
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                              ) : cr.approvals?.admin?.approved === false ? (
+                                <XCircle className="w-4 h-4 text-red-500" />
+                              ) : (
+                                <HourglassIcon className="w-4 h-4 text-gray-400" />
+                              )}
+                              <span className="text-xs text-gray-500">Admin</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* My Site Visits */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <CalendarClock className="w-5 h-5 text-blue-500" />
+                    <h2 className="font-semibold text-gray-900">
+                      Scheduled Site Visits
+                    </h2>
+                  </div>
+                </div>
+                <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+                  {filteredSiteVisits.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500">
+                      <Calendar className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p>No scheduled site visits</p>
+                    </div>
+                  ) : (
+                    filteredSiteVisits.map((sv) => (
+                      <div key={sv._id} className="p-4 hover:bg-gray-50">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <p className="font-medium text-gray-900">
+                              {format(new Date(sv.scheduledDate), 'EEEE, MMMM d, yyyy')}
+                            </p>
+                            {sv.teamMembers && sv.teamMembers.length > 0 && (
+                              <div className="flex items-center gap-1 mt-2">
+                                <Users className="w-3 h-3 text-gray-400" />
+                                <span className="text-xs text-gray-500">
+                                  {sv.teamMembers.map((m) => m.userName).join(', ')}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+                            sv.status === 'confirmed'
+                              ? 'bg-green-100 text-green-700'
+                              : sv.status === 'scheduled'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {sv.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Admin/Lead Reader/Reader Dashboard
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}

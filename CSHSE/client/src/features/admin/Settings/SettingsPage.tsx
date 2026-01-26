@@ -5,15 +5,17 @@ import {
   Key,
   Users,
   Building2,
-  ChevronRight
+  ChevronRight,
+  FileText
 } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
 import { WebhookSettings } from '../WebhookSettings';
 import { APIKeySettings } from './APIKeySettings';
 import { UserManagement } from './UserManagement';
 import { InstitutionManagement } from './InstitutionManagement';
+import { SpecManagement } from './SpecManagement';
 
-type SettingsSection = 'webhook' | 'api-keys' | 'users' | 'institutions';
+type SettingsSection = 'webhook' | 'api-keys' | 'users' | 'institutions' | 'specs';
 
 interface NavItem {
   id: SettingsSection;
@@ -51,6 +53,13 @@ const allNavItems: NavItem[] = [
     label: 'Institutions',
     icon: <Building2 className="w-5 h-5" />,
     description: 'Manage colleges and universities',
+    access: 'admin'
+  },
+  {
+    id: 'specs',
+    label: 'Spec Documents',
+    icon: <FileText className="w-5 h-5" />,
+    description: 'Manage accreditation spec versions',
     access: 'admin'
   }
 ];
@@ -100,6 +109,8 @@ export function SettingsPage() {
         return <UserManagement />;
       case 'institutions':
         return <InstitutionManagement />;
+      case 'specs':
+        return <SpecManagement />;
       default:
         return null;
     }
@@ -109,7 +120,7 @@ export function SettingsPage() {
     if (isActuallySuperuser) {
       return 'Configure webhook integration and API keys';
     }
-    return 'Manage users and institutions';
+    return 'Manage users, institutions, and spec documents';
   };
 
   return (

@@ -80,3 +80,10 @@ export {
   IFinalCompilation,
   ICommentThread
 } from './LeadReaderCompilation';
+
+// Spec models
+export {
+  Spec,
+  ISpec,
+  SpecStatus
+} from './Spec';

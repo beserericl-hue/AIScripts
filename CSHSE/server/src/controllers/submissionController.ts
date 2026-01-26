@@ -456,9 +456,14 @@ export const markStandardComplete = async (req: AuthenticatedRequest, res: Respo
  */
 export const listSubmissions = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { status, limit = 10, offset = 0 } = req.query;
+    const { status, limit = 10, offset = 0, institutionId } = req.query;
 
     const filter: any = {};
+
+    // Filter by institution ID if provided
+    if (institutionId) {
+      filter.institutionId = institutionId;
+    }
 
     // Filter by role
     if (req.user?.role === 'program_coordinator') {
@@ -472,7 +477,7 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
 
     const [submissions, total] = await Promise.all([
       Submission.find(filter)
-        .select('institutionName programName programLevel status createdAt standardsStatus')
+        .select('submissionId institutionName programName programLevel status createdAt updatedAt standardsStatus readerLock')
         .sort({ createdAt: -1 })
         .skip(Number(offset))
         .limit(Number(limit)),
@@ -487,5 +492,63 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
   } catch (error) {
     console.error('List submissions error:', error);
     return res.status(500).json({ error: 'Failed to list submissions' });
+  }
+};
+
+/**
+ * Create a new submission
+ */
+export const createSubmission = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const {
+      institutionId,
+      institutionName,
+      programName,
+      programLevel,
+      type = 'initial'
+    } = req.body;
+
+    if (!institutionName || !programName) {
+      return res.status(400).json({ error: 'Institution name and program name are required' });
+    }
+
+    // Initialize standards status for 21 standards
+    const standardsStatus: Record<string, any> = {};
+    for (let i = 1; i <= 21; i++) {
+      standardsStatus[String(i)] = {
+        status: 'not_started',
+        completionPercentage: 0,
+        lastModified: new Date()
+      };
+    }
+
+    const submission = new Submission({
+      institutionId,
+      institutionName,
+      programName,
+      programLevel: programLevel || 'bachelors',
+      submitterId: req.user!.id,
+      type,
+      status: 'draft',
+      standardsStatus,
+      selfStudyProgress: {
+        totalSections: 21,
+        completedSections: 0,
+        validatedSections: 0,
+        passedSections: 0,
+        failedSections: 0,
+        lastActivity: new Date()
+      }
+    });
+
+    await submission.save();
+
+    return res.status(201).json({
+      submission,
+      message: 'Self-study created successfully'
+    });
+  } catch (error) {
+    console.error('Create submission error:', error);
+    return res.status(500).json({ error: 'Failed to create submission' });
   }
 };

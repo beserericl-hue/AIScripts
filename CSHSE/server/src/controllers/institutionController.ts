@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Institution } from '../models/Institution';
 import { Invitation } from '../models/Invitation';
 import { User } from '../models/User';
+import { Spec } from '../models/Spec';
 import mongoose from 'mongoose';
 
 interface AuthenticatedRequest extends Request {
@@ -68,13 +69,14 @@ export const getInstitution = async (req: AuthenticatedRequest, res: Response) =
       .populate('assignedLeadReaderId', 'firstName lastName email')
       .populate('assignedReaderIds', 'firstName lastName email')
       .populate('currentSubmissionId')
+      .populate('specId', 'name version status')
       .lean();
 
     if (!institution) {
       return res.status(404).json({ error: 'Institution not found' });
     }
 
-    return res.json(institution);
+    return res.json({ institution });
   } catch (error) {
     console.error('Get institution error:', error);
     return res.status(500).json({ error: 'Failed to get institution' });
@@ -97,6 +99,7 @@ export const createInstitution = async (req: AuthenticatedRequest, res: Response
       primaryContact,
       website,
       accreditationDeadline,
+      specId,
       programCoordinatorEmail,
       programCoordinatorName
     } = req.body;
@@ -107,6 +110,15 @@ export const createInstitution = async (req: AuthenticatedRequest, res: Response
       return res.status(409).json({ error: 'Institution with this name already exists' });
     }
 
+    // Get spec name if specId provided
+    let specName: string | undefined;
+    if (specId) {
+      const spec = await Spec.findById(specId);
+      if (spec) {
+        specName = `${spec.name} v${spec.version}`;
+      }
+    }
+
     // Create institution
     const institution = new Institution({
       name,
@@ -115,6 +127,8 @@ export const createInstitution = async (req: AuthenticatedRequest, res: Response
       primaryContact,
       website,
       accreditationDeadline: accreditationDeadline ? new Date(accreditationDeadline) : undefined,
+      specId: specId ? new mongoose.Types.ObjectId(specId) : undefined,
+      specName,
       status: 'active'
     });
 
@@ -170,6 +184,19 @@ export const updateInstitution = async (req: AuthenticatedRequest, res: Response
     const institution = await Institution.findById(id);
     if (!institution) {
       return res.status(404).json({ error: 'Institution not found' });
+    }
+
+    // Handle specId update - get spec name
+    if (updates.specId && updates.specId !== institution.specId?.toString()) {
+      const spec = await Spec.findById(updates.specId);
+      if (spec) {
+        updates.specName = `${spec.name} v${spec.version}`;
+        updates.specId = new mongoose.Types.ObjectId(updates.specId);
+      }
+    } else if (updates.specId === '') {
+      // Clear spec assignment
+      updates.specId = undefined;
+      updates.specName = undefined;
     }
 
     // Apply updates

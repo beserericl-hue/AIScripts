@@ -25,6 +25,10 @@ export interface IInstitution extends Document {
   primaryContact: IPrimaryContact;
   website?: string;
 
+  // Spec assignment
+  specId?: mongoose.Types.ObjectId;
+  specName?: string;
+
   // Accreditation info
   accreditationDeadline?: Date;
   currentSubmissionId?: mongoose.Types.ObjectId;
@@ -87,6 +91,13 @@ const InstitutionSchema = new Schema<IInstitution>({
   },
   website: String,
 
+  // Spec assignment
+  specId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Spec'
+  },
+  specName: String,
+
   // Accreditation
   accreditationDeadline: Date,
   currentSubmissionId: {
@@ -138,6 +149,7 @@ const InstitutionSchema = new Schema<IInstitution>({
 InstitutionSchema.index({ name: 1 });
 InstitutionSchema.index({ type: 1 });
 InstitutionSchema.index({ status: 1 });
+InstitutionSchema.index({ specId: 1 });
 InstitutionSchema.index({ programCoordinatorId: 1 });
 InstitutionSchema.index({ assignedLeadReaderId: 1 });
 InstitutionSchema.index({ accreditationDeadline: 1 });

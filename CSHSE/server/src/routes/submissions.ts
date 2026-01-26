@@ -7,7 +7,8 @@ import {
   revalidateFailed,
   getFailedValidations,
   markStandardComplete,
-  listSubmissions
+  listSubmissions,
+  createSubmission
 } from '../controllers/submissionController';
 
 const router = Router();
@@ -23,8 +24,16 @@ const router = Router();
  * @query   status - Filter by status
  * @query   limit - Number of results (default 10)
  * @query   offset - Pagination offset
+ * @query   institutionId - Filter by institution
  */
 router.get('/', listSubmissions);
+
+/**
+ * @route   POST /api/submissions
+ * @desc    Create a new submission/self-study
+ * @access  Private (Program Coordinator)
+ */
+router.post('/', createSubmission);
 
 /**
  * @route   GET /api/submissions/:submissionId
