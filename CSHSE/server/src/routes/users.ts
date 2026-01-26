@@ -21,7 +21,7 @@ import {
 const router = Router();
 
 // ============================================
-// USER ROUTES
+// USER ROUTES (static paths first, then dynamic)
 // ============================================
 
 /**
@@ -37,6 +37,42 @@ router.get('/', getUsers);
  * @access  Private (Admin, Lead Reader)
  */
 router.get('/readers-committee', getReadersCommittee);
+
+// ============================================
+// INVITATION ROUTES (must be before /:id routes)
+// ============================================
+
+/**
+ * @route   GET /api/users/invitations
+ * @desc    Get all invitations
+ * @access  Private (Admin only)
+ */
+router.get('/invitations', getInvitations);
+
+/**
+ * @route   POST /api/users/invite
+ * @desc    Create and send invitation
+ * @access  Private (Admin, Lead Reader for readers)
+ */
+router.post('/invite', createInvitation);
+
+/**
+ * @route   POST /api/users/invitations/:id/resend
+ * @desc    Resend invitation email
+ * @access  Private (Admin only)
+ */
+router.post('/invitations/:id/resend', resendInvitation);
+
+/**
+ * @route   DELETE /api/users/invitations/:id
+ * @desc    Revoke invitation
+ * @access  Private (Admin only)
+ */
+router.delete('/invitations/:id', revokeInvitation);
+
+// ============================================
+// DYNAMIC USER ROUTES (must be after static paths)
+// ============================================
 
 /**
  * @route   GET /api/users/:id
@@ -79,37 +115,5 @@ router.post('/:id/assign', assignToSubmission);
  * @access  Private (Admin, Lead Reader)
  */
 router.post('/:id/unassign', removeFromSubmission);
-
-// ============================================
-// INVITATION ROUTES
-// ============================================
-
-/**
- * @route   GET /api/users/invitations
- * @desc    Get all invitations
- * @access  Private (Admin only)
- */
-router.get('/invitations', getInvitations);
-
-/**
- * @route   POST /api/users/invite
- * @desc    Create and send invitation
- * @access  Private (Admin, Lead Reader for readers)
- */
-router.post('/invite', createInvitation);
-
-/**
- * @route   POST /api/users/invitations/:id/resend
- * @desc    Resend invitation email
- * @access  Private (Admin only)
- */
-router.post('/invitations/:id/resend', resendInvitation);
-
-/**
- * @route   DELETE /api/users/invitations/:id
- * @desc    Revoke invitation
- * @access  Private (Admin only)
- */
-router.delete('/invitations/:id', revokeInvitation);
 
 export default router;
