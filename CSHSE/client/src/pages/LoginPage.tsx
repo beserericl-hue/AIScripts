@@ -26,32 +26,34 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-lg">
-        <div className="text-center">
-          <img
-            src="/cshse-logo.svg"
-            alt="CSHSE"
-            className="mx-auto h-20 w-20"
-          />
-          <h1 className="mt-4 text-2xl font-bold text-gray-900">
-            Self-Study Portal
-          </h1>
-          <h2 className="mt-1 text-gray-600">
-            Sign in to your account
-          </h2>
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="card max-w-md w-full">
+        <div className="p-8">
+          {/* Logo and Title */}
+          <div className="text-center mb-8">
+            <img
+              src="/cshse-logo.svg"
+              alt="CSHSE"
+              className="mx-auto h-20 w-20"
+            />
+            <h1 className="mt-4 text-2xl font-bold text-gray-900">
+              Self-Study Portal
+            </h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Sign in to your account
+            </p>
+          </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
+          {/* Login Form */}
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            {error && (
+              <div className="alert alert-error">
+                {error}
+              </div>
+            )}
 
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <div className="form-group">
+              <label htmlFor="email" className="form-label">
                 Email address
               </label>
               <input
@@ -62,13 +64,13 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
+                className="form-input"
                 placeholder="you@example.com"
               />
             </div>
 
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+            <div className="form-group">
+              <label htmlFor="password" className="form-label">
                 Password
               </label>
               <input
@@ -79,24 +81,32 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-                placeholder="••••••••"
+                className="form-input"
+                placeholder="Enter your password"
               />
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-[#006B3F] hover:bg-[#005530] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#006B3F] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isLoading ? 'Signing in...' : 'Sign in'}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="btn btn-primary w-full"
+            >
+              {isLoading ? (
+                <>
+                  <span className="spinner w-4 h-4 mr-2"></span>
+                  Signing in...
+                </>
+              ) : (
+                'Sign in'
+              )}
+            </button>
+          </form>
 
-        <p className="mt-4 text-center text-sm text-gray-500">
-          Council for Standards in Human Service Education
-        </p>
+          {/* Footer */}
+          <p className="mt-6 text-center text-xs text-gray-400">
+            Council for Standards in Human Service Education
+          </p>
+        </div>
       </div>
     </div>
   );

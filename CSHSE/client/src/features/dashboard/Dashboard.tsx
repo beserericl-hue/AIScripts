@@ -236,7 +236,7 @@ export function Dashboard() {
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <LayoutDashboard className="w-8 h-8 text-teal-600" />
+              <LayoutDashboard className="w-8 h-8 text-primary" />
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
                 <p className="text-sm text-gray-500">
@@ -273,7 +273,7 @@ export function Dashboard() {
                 onChange={(e) =>
                   setFilters((f) => ({ ...f, search: e.target.value }))
                 }
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
               />
             </div>
 
@@ -283,7 +283,7 @@ export function Dashboard() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, institutionType: e.target.value }))
               }
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
               <option value="">All Institution Types</option>
               <option value="university">University</option>
@@ -297,7 +297,7 @@ export function Dashboard() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, institutionId: e.target.value }))
               }
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
               <option value="">All Institutions</option>
               {institutions.map((inst) => (
@@ -313,7 +313,7 @@ export function Dashboard() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, leadReaderId: e.target.value }))
               }
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
               <option value="">All Lead Readers</option>
               {leadReaders.map((user) => (
@@ -329,7 +329,7 @@ export function Dashboard() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, readerId: e.target.value }))
               }
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             >
               <option value="">All Readers</option>
               {readers.map((user) => (
@@ -354,7 +354,7 @@ export function Dashboard() {
                   search: '',
                 })
               }
-              className="mt-4 text-sm text-teal-600 hover:text-teal-700"
+              className="mt-4 text-sm text-primary-600 hover:text-primary-700"
             >
               Clear all filters
             </button>
@@ -371,7 +371,7 @@ export function Dashboard() {
                   {stats.totalInstitutions}
                 </p>
               </div>
-              <Building2 className="w-12 h-12 text-teal-100" />
+              <Building2 className="w-12 h-12 text-primary-100" />
             </div>
           </div>
 
@@ -414,7 +414,7 @@ export function Dashboard() {
 
         {isLoading && (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-teal-600" />
+            <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
           </div>
         )}
 
@@ -508,7 +508,7 @@ export function Dashboard() {
               </div>
               {filteredChangeRequests.length > 0 && (
                 <div className="p-4 border-t border-gray-200">
-                  <button className="w-full text-sm text-teal-600 hover:text-teal-700">
+                  <button className="w-full text-sm text-primary-600 hover:text-primary-700">
                     View all change requests
                   </button>
                 </div>
@@ -589,7 +589,7 @@ export function Dashboard() {
               </div>
               {siteVisits.length > 0 && (
                 <div className="p-4 border-t border-gray-200">
-                  <button className="w-full text-sm text-teal-600 hover:text-teal-700">
+                  <button className="w-full text-sm text-primary-600 hover:text-primary-700">
                     View all site visits
                   </button>
                 </div>
@@ -709,7 +709,7 @@ export function Dashboard() {
                               )}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <button className="text-teal-600 hover:text-teal-700">
+                              <button className="text-primary-600 hover:text-primary-700">
                                 <Eye className="w-4 h-4" />
                               </button>
                             </td>
