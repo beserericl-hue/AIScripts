@@ -110,6 +110,7 @@ app.get('/ready', (_req, res) => {
 // Auth routes MUST be first - they're public and other /api routers have authenticate middleware
 app.use('/api/auth', authRouter);
 app.use('/api/invitations', invitationsRouter);
+app.use('/api/standards', standardsRouter); // Public endpoint - standard definitions
 
 // All other routes (protected)
 app.use('/api/imports', importsRouter);
@@ -131,7 +132,6 @@ app.use('/api/change-requests', changeRequestsRouter);
 app.use('/api/admin/error-logs', errorLogsRouter);
 app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
-app.use('/api/standards', standardsRouter);
 
 // Serve static files from React app build
 const publicPath = path.join(__dirname, '..', 'public');
