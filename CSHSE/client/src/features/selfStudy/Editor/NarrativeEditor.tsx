@@ -27,10 +27,14 @@ interface NarrativeEditorProps {
   standardCode: string;
   specCode: string;
   initialContent: string;
+  standardTitle: string;
+  standardDescription: string;
+  specTitle: string;
   standardText: string;
   placeholder?: string;
   onSave: (content: string) => Promise<void>;
   onContentChange?: (content: string) => void;
+  onCancel?: () => void;
   readOnly?: boolean;
 }
 
@@ -43,10 +47,14 @@ export function NarrativeEditor({
   standardCode,
   specCode,
   initialContent,
+  standardTitle,
+  standardDescription,
+  specTitle,
   standardText,
   placeholder = 'Enter your narrative response here...',
   onSave,
   onContentChange,
+  onCancel,
   readOnly = false,
 }: NarrativeEditorProps) {
   const [content, setContent] = useState(initialContent);
@@ -137,12 +145,25 @@ export function NarrativeEditor({
 
   return (
     <div className="narrative-editor flex flex-col h-full">
-      {/* Standard Text Reference */}
-      <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-4">
-        <h4 className="text-sm font-semibold text-teal-800 mb-2">
-          Standard {standardCode}{specCode ? `.${specCode}` : ''} Requirement
-        </h4>
-        <p className="text-sm text-teal-700">{standardText}</p>
+      {/* Standard and Specification Guidance */}
+      <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-4 space-y-3">
+        {/* Standard Header */}
+        <div>
+          <h4 className="text-sm font-bold text-teal-900 mb-1">
+            Standard {standardCode}: {standardTitle}
+          </h4>
+          <p className="text-sm text-teal-800">{standardDescription}</p>
+        </div>
+
+        {/* Specification */}
+        {specCode && (
+          <div className="pt-3 border-t border-teal-200">
+            <h5 className="text-sm font-semibold text-teal-800 mb-1">
+              {standardCode}.{specCode} - {specTitle}
+            </h5>
+            <p className="text-sm text-teal-700">{standardText}</p>
+          </div>
+        )}
       </div>
 
       {/* Toolbar */}
@@ -237,20 +258,31 @@ export function NarrativeEditor({
             error={saveError}
           />
 
-          {/* Manual Save Button */}
+          {/* Cancel & Save Buttons */}
           {!readOnly && (
-            <button
-              onClick={handleManualSave}
-              disabled={isSaving || isValidating}
-              className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white text-sm rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSaving || isValidating ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Save className="w-4 h-4" />
+            <div className="flex items-center gap-2">
+              {onCancel && (
+                <button
+                  onClick={onCancel}
+                  disabled={isSaving || isValidating}
+                  className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
               )}
-              Save & Validate
-            </button>
+              <button
+                onClick={handleManualSave}
+                disabled={isSaving || isValidating}
+                className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white text-sm rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSaving || isValidating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Save className="w-4 h-4" />
+                )}
+                Save & Validate
+              </button>
+            </div>
           )}
         </div>
       </div>

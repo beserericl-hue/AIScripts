@@ -10,7 +10,9 @@ import {
   ChevronRight,
   FileUp,
   Paperclip,
+  Home,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 
@@ -56,6 +58,7 @@ interface StandardDefinition {
  */
 export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [selectedStandard, setSelectedStandard] = useState('1');
   const [selectedSpec, setSelectedSpec] = useState<string | null>('a');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -122,14 +125,40 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     return narrative?.content || '';
   }, [submission, selectedStandard, selectedSpec]);
 
-  // Get current standard text
-  const getCurrentStandardText = useCallback(() => {
-    if (!standards || !selectedSpec) return '';
+  // Get current standard data for the editor
+  const getCurrentStandardData = useCallback(() => {
+    if (!standards) return {
+      standardTitle: '',
+      standardDescription: '',
+      specTitle: '',
+      specText: ''
+    };
+
     const standard = standards.find((s) => s.code === selectedStandard);
-    if (!standard) return '';
-    const spec = standard.specifications.find((sp) => sp.code === selectedSpec);
-    return spec?.text || standard.description;
+    if (!standard) return {
+      standardTitle: '',
+      standardDescription: '',
+      specTitle: '',
+      specText: ''
+    };
+
+    const spec = selectedSpec
+      ? standard.specifications.find((sp) => sp.code === selectedSpec)
+      : null;
+
+    return {
+      standardTitle: standard.title,
+      standardDescription: standard.description,
+      specTitle: spec?.title || '',
+      specText: spec?.text || ''
+    };
   }, [standards, selectedStandard, selectedSpec]);
+
+  // Get current standard text (for backwards compatibility)
+  const getCurrentStandardText = useCallback(() => {
+    const data = getCurrentStandardData();
+    return data.specText || data.standardDescription;
+  }, [getCurrentStandardData]);
 
   // Build navigation data from standards
   const navigationData = React.useMemo(() => {
@@ -228,13 +257,22 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       {/* Header */}
       <header className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">
-              Self-Study Editor
-            </h1>
-            <p className="text-sm text-gray-500">
-              {submission?.institutionName} - {submission?.programName}
-            </p>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate('/self-study')}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Back to Self-Study"
+            >
+              <Home className="w-5 h-5 text-gray-600" />
+            </button>
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">
+                Self-Study Editor
+              </h1>
+              <p className="text-sm text-gray-500">
+                {submission?.institutionName} - {submission?.programName}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             {/* Overall Progress */}
@@ -338,8 +376,12 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                 standardCode={selectedStandard}
                 specCode={selectedSpec}
                 initialContent={getCurrentContent()}
-                standardText={getCurrentStandardText()}
+                standardTitle={getCurrentStandardData().standardTitle}
+                standardDescription={getCurrentStandardData().standardDescription}
+                specTitle={getCurrentStandardData().specTitle}
+                standardText={getCurrentStandardData().specText}
                 onSave={handleSave}
+                onCancel={() => navigate('/self-study')}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-gray-500">
