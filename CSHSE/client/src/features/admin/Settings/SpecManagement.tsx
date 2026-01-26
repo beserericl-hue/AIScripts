@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import { api } from '../../../services/api';
 import {
   FileText,
   Plus,
@@ -11,11 +11,10 @@ import {
   CheckCircle,
   Archive,
   Clock,
-  Building2
+  Building2,
+  AlertCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 interface Spec {
   _id: string;
@@ -40,6 +39,7 @@ export function SpecManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingSpec, setEditingSpec] = useState<Spec | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     version: '',
@@ -49,10 +49,10 @@ export function SpecManagement() {
   });
 
   // Fetch specs
-  const { data: specsData, isLoading } = useQuery({
+  const { data: specsData, isLoading, error: fetchError } = useQuery({
     queryKey: ['specs-management'],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/specs`);
+      const response = await api.get('/api/specs');
       return response.data;
     }
   });
@@ -60,42 +60,50 @@ export function SpecManagement() {
   // Create spec mutation
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const response = await axios.post(`${API_BASE}/specs`, data);
+      const response = await api.post('/api/specs', data);
       return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['specs-management'] });
       queryClient.invalidateQueries({ queryKey: ['specs'] });
       setShowCreateModal(false);
+      setError(null);
       resetForm();
+    },
+    onError: (err: any) => {
+      setError(err.response?.data?.error || 'Failed to create spec');
     }
   });
 
   // Update spec mutation
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: any }) => {
-      const response = await axios.put(`${API_BASE}/specs/${id}`, data);
+      const response = await api.put(`/api/specs/${id}`, data);
       return response.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['specs-management'] });
       queryClient.invalidateQueries({ queryKey: ['specs'] });
       setEditingSpec(null);
+      setError(null);
       resetForm();
+    },
+    onError: (err: any) => {
+      setError(err.response?.data?.error || 'Failed to update spec');
     }
   });
 
   // Archive spec mutation
   const archiveMutation = useMutation({
     mutationFn: async (id: string) => {
-      await axios.delete(`${API_BASE}/specs/${id}`);
+      await api.delete(`/api/specs/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['specs-management'] });
       queryClient.invalidateQueries({ queryKey: ['specs'] });
     },
-    onError: (error: any) => {
-      alert(error.response?.data?.error || 'Failed to archive spec');
+    onError: (err: any) => {
+      alert(err.response?.data?.error || 'Failed to archive spec');
     }
   });
 
@@ -168,7 +176,10 @@ export function SpecManagement() {
             </div>
           </div>
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              setShowCreateModal(true);
+              setError(null);
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -251,6 +262,14 @@ export function SpecManagement() {
             </div>
 
             <div className="p-6 space-y-4">
+              {/* Error Display */}
+              {error && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <span className="text-sm">{error}</span>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -328,6 +347,7 @@ export function SpecManagement() {
                 onClick={() => {
                   setShowCreateModal(false);
                   setEditingSpec(null);
+                  setError(null);
                   resetForm();
                 }}
                 className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
@@ -371,7 +391,7 @@ function SpecRow({ spec, onEdit, onArchive, isArchiving }: SpecRowProps) {
   const { data: institutionsData } = useQuery({
     queryKey: ['spec-institutions', spec._id],
     queryFn: async () => {
-      const response = await axios.get(`${API_BASE}/specs/${spec._id}/institutions`);
+      const response = await api.get(`/api/specs/${spec._id}/institutions`);
       return response.data;
     },
     enabled: showInstitutions
