@@ -1,7 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { api } from '../services/api';
 import {
   FileText,
@@ -15,21 +14,14 @@ import {
   CheckCircle,
   FileCheck,
   X,
-  Download,
-  AlertCircle
+  AlertCircle,
+  MapPin,
+  Check,
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { SelfStudyEditor } from '../features/selfStudy/Editor/SelfStudyEditor';
-
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
-
-interface UploadedFile {
-  _id: string;
-  filename: string;
-  originalName: string;
-  mimeType: string;
-  size: number;
-}
 
 interface Submission {
   _id: string;
@@ -50,6 +42,64 @@ interface Institution {
   currentSubmissionId?: string;
 }
 
+interface ImportStatus {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  originalFilename: string;
+  fileType: string;
+  error?: string;
+  extractedContent?: {
+    pageCount: number;
+    metadata: { title?: string; author?: string };
+    sectionCount: number;
+  };
+  mappedCount: number;
+  unmappedCount: number;
+}
+
+interface ExtractedSection {
+  id: string;
+  pageNumber: number;
+  sectionType: string;
+  content: string;
+  fullContentLength: number;
+  suggestedStandard?: string;
+  confidence: number;
+  mapping?: {
+    standardCode: string;
+    specCode: string;
+    fieldType: string;
+    mappedBy: 'auto' | 'manual';
+  };
+  unmappedReason?: string;
+  status: 'mapped' | 'unmapped' | 'pending';
+}
+
+// Standard names for display
+const STANDARD_NAMES: Record<string, string> = {
+  '1': 'Program Identity',
+  '2': 'Program Objectives',
+  '3': 'Organizational Structure',
+  '4': 'Budgetary Support',
+  '5': 'Administrative Support',
+  '6': 'Faculty',
+  '7': 'Faculty Development',
+  '8': 'Practicum/Field Experience Supervisors',
+  '9': 'Student Services',
+  '10': 'Admissions',
+  '11': 'Curriculum',
+  '12': 'Professional Practice',
+  '13': 'Program Assessment',
+  '14': 'Student Learning Outcomes',
+  '15': 'Student Portfolio',
+  '16': 'Program Advisory Committee',
+  '17': 'Diversity',
+  '18': 'Ethics',
+  '19': 'Supervision',
+  '20': 'Technology',
+  '21': 'Field Experience'
+};
+
 export default function SelfStudyPage() {
   const { submissionId } = useParams();
   const navigate = useNavigate();
@@ -58,10 +108,16 @@ export default function SelfStudyPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Import workflow state
+  const [importId, setImportId] = useState<string | null>(null);
+  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const [importStep, setImportStep] = useState<'upload' | 'processing' | 'review' | 'applying'>('upload');
+  const [extractedSections, setExtractedSections] = useState<ExtractedSection[]>([]);
+  const [isApplying, setIsApplying] = useState(false);
 
   const effectiveRole = getEffectiveRole();
   const effectiveUser = getEffectiveUser();
@@ -75,7 +131,7 @@ export default function SelfStudyPage() {
       programName: string;
       programLevel: string;
     }) => {
-      const response = await axios.post(`${API_BASE}/submissions`, data);
+      const response = await api.post('/api/submissions', data);
       return response.data;
     },
     onSuccess: (data) => {
@@ -97,7 +153,7 @@ export default function SelfStudyPage() {
     queryKey: ['my-institution', effectiveUser?.institutionId],
     queryFn: async () => {
       if (!effectiveUser?.institutionId) return null;
-      const response = await axios.get(`${API_BASE}/institutions/${effectiveUser.institutionId}`);
+      const response = await api.get(`/api/institutions/${effectiveUser.institutionId}`);
       return response.data;
     },
     enabled: isProgramCoordinator && !!effectiveUser?.institutionId
@@ -111,7 +167,7 @@ export default function SelfStudyPage() {
       if (isProgramCoordinator && effectiveUser?.institutionId) {
         params.institutionId = effectiveUser.institutionId;
       }
-      const response = await axios.get(`${API_BASE}/submissions`, { params });
+      const response = await api.get('/api/submissions', { params });
       return response.data;
     },
     enabled: !submissionId
@@ -120,6 +176,35 @@ export default function SelfStudyPage() {
   const institution: Institution | null = institutionData?.institution || null;
   const submissions: Submission[] = submissionsData?.submissions || [];
   const isLoading = institutionLoading || submissionsLoading;
+
+  // Poll import status
+  useEffect(() => {
+    if (!importId || importStep !== 'processing') return;
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await api.get(`/api/imports/${importId}`);
+        const status = response.data as ImportStatus;
+        setImportStatus(status);
+
+        if (status.status === 'completed') {
+          clearInterval(pollInterval);
+          // Fetch sections
+          const sectionsResponse = await api.get(`/api/imports/${importId}/sections`);
+          setExtractedSections(sectionsResponse.data.sections);
+          setImportStep('review');
+        } else if (status.status === 'failed') {
+          clearInterval(pollInterval);
+          setUploadError(status.error || 'Document processing failed');
+          setImportStep('upload');
+        }
+      } catch (err) {
+        console.error('Failed to poll import status:', err);
+      }
+    }, 2000);
+
+    return () => clearInterval(pollInterval);
+  }, [importId, importStep]);
 
   // File upload handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -151,7 +236,36 @@ export default function SelfStudyPage() {
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !effectiveUser?.institutionId) return;
+    if (!selectedFile) return;
+
+    // Need a submission to import into
+    let targetSubmissionId = submissions[0]?._id;
+
+    // If no existing submission, create one first
+    if (!targetSubmissionId && institution) {
+      setIsUploading(true);
+      setUploadError(null);
+
+      try {
+        const createResponse = await api.post('/api/submissions', {
+          institutionId: institution._id,
+          institutionName: institution.name,
+          programName: institution.specName || 'Self-Study',
+          programLevel: 'bachelors'
+        });
+        targetSubmissionId = createResponse.data.submission._id;
+        queryClient.invalidateQueries({ queryKey: ['my-submissions'] });
+      } catch (err: any) {
+        setUploadError(err.response?.data?.error || 'Failed to create submission');
+        setIsUploading(false);
+        return;
+      }
+    }
+
+    if (!targetSubmissionId) {
+      setUploadError('No submission available. Please contact your administrator.');
+      return;
+    }
 
     setIsUploading(true);
     setUploadError(null);
@@ -159,19 +273,63 @@ export default function SelfStudyPage() {
     try {
       const formData = new FormData();
       formData.append('file', selectedFile);
-      formData.append('category', 'self_study_import');
-      formData.append('description', `Self-study import for ${institution?.name || 'institution'}`);
+      formData.append('submissionId', targetSubmissionId);
 
-      const response = await api.post('/api/files', formData, {
+      const response = await api.post('/api/imports/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
-      setUploadedFile(response.data.file);
+      setImportId(response.data.importId);
+      setImportStep('processing');
       setSelectedFile(null);
     } catch (err: any) {
       setUploadError(err.response?.data?.error || 'Failed to upload file');
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleApplyMappings = async () => {
+    if (!importId) return;
+
+    setIsApplying(true);
+    try {
+      const response = await api.post(`/api/imports/${importId}/apply`);
+
+      // Success - navigate to editor
+      const currentSubmission = submissions[0];
+      if (currentSubmission) {
+        queryClient.invalidateQueries({ queryKey: ['my-submissions'] });
+        navigate(`/self-study/${currentSubmission._id}`);
+      }
+      resetImportModal();
+    } catch (err: any) {
+      setUploadError(err.response?.data?.error || 'Failed to apply mappings');
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
+  const handleDiscardSection = async (sectionId: string) => {
+    if (!importId) return;
+
+    try {
+      await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+        action: 'discard'
+      });
+
+      // Update local state
+      setExtractedSections(sections =>
+        sections.map(s =>
+          s.id === sectionId ? { ...s, status: 'pending' as const, mapping: undefined } : s
+        )
+      );
+
+      // Refresh status
+      const statusResponse = await api.get(`/api/imports/${importId}`);
+      setImportStatus(statusResponse.data);
+    } catch (err) {
+      console.error('Failed to discard section:', err);
     }
   };
 
@@ -184,8 +342,11 @@ export default function SelfStudyPage() {
   const resetImportModal = () => {
     setShowImportModal(false);
     setSelectedFile(null);
-    setUploadedFile(null);
     setUploadError(null);
+    setImportId(null);
+    setImportStatus(null);
+    setImportStep('upload');
+    setExtractedSections([]);
   };
 
   // If viewing a specific submission
@@ -324,7 +485,7 @@ export default function SelfStudyPage() {
                     </h3>
                     <p className="text-sm text-gray-500 mt-1">
                       Upload a PDF, Word, or PowerPoint file. We'll extract the content
-                      and help you map it to the standards.
+                      and automatically map it to the standards.
                     </p>
                   </div>
                   <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-teal-600 transition-colors" />
@@ -404,12 +565,19 @@ export default function SelfStudyPage() {
 
         {/* Import Modal */}
         {showImportModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4">
-              <div className="p-6 border-b border-gray-200 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Import Self-Study Document
-                </h3>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col">
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    Import Self-Study Document
+                  </h3>
+                  {importStep !== 'upload' && importStatus && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {importStatus.originalFilename}
+                    </p>
+                  )}
+                </div>
                 <button
                   onClick={resetImportModal}
                   className="text-gray-400 hover:text-gray-600"
@@ -417,7 +585,8 @@ export default function SelfStudyPage() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="p-6">
+
+              <div className="p-6 overflow-y-auto flex-1">
                 {/* Error display */}
                 {uploadError && (
                   <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
@@ -426,36 +595,8 @@ export default function SelfStudyPage() {
                   </div>
                 )}
 
-                {/* Upload success - show uploaded file */}
-                {uploadedFile ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <FileCheck className="w-8 h-8 text-green-600" />
-                        <div>
-                          <p className="font-medium text-green-800">{uploadedFile.originalName}</p>
-                          <p className="text-sm text-green-600">{formatFileSize(uploadedFile.size)}</p>
-                        </div>
-                      </div>
-                      <a
-                        href={`/api/files/${uploadedFile._id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-2 text-green-600 hover:text-green-800"
-                      >
-                        <Download className="w-5 h-5" />
-                      </a>
-                    </div>
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <p className="text-sm text-blue-700">
-                        Your document has been uploaded successfully. You can now use this file as a reference
-                        while completing your self-study. The content will need to be organized according to
-                        the CSHSE standards in the editor.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  /* Upload area */
+                {/* Step: Upload */}
+                {importStep === 'upload' && (
                   <div
                     className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
                       selectedFile ? 'border-teal-400 bg-teal-50' : 'border-gray-300 hover:border-primary-400'
@@ -490,7 +631,7 @@ export default function SelfStudyPage() {
                             ) : (
                               <>
                                 <Upload className="w-4 h-4" />
-                                Upload
+                                Upload & Process
                               </>
                             )}
                           </button>
@@ -503,12 +644,12 @@ export default function SelfStudyPage() {
                           Drag and drop your file here, or click to browse
                         </p>
                         <p className="text-sm text-gray-500 mb-4">
-                          Supports PDF, Word (.doc, .docx), and PowerPoint (.ppt, .pptx) files (max 50MB)
+                          Supports PDF, Word (.docx), and PowerPoint (.pptx) files (max 50MB)
                         </p>
                         <input
                           ref={fileInputRef}
                           type="file"
-                          accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                          accept=".pdf,.docx,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                           className="hidden"
                           onChange={handleFileSelect}
                         />
@@ -522,27 +663,153 @@ export default function SelfStudyPage() {
                     )}
                   </div>
                 )}
+
+                {/* Step: Processing */}
+                {importStep === 'processing' && (
+                  <div className="text-center py-8">
+                    <Loader2 className="w-12 h-12 text-teal-600 mx-auto mb-4 animate-spin" />
+                    <h4 className="text-lg font-medium text-gray-900 mb-2">
+                      Processing Document
+                    </h4>
+                    <p className="text-sm text-gray-500 mb-4">
+                      We're extracting content and analyzing your document...
+                    </p>
+                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      This may take a moment
+                    </div>
+                  </div>
+                )}
+
+                {/* Step: Review Mappings */}
+                {importStep === 'review' && importStatus && (
+                  <div className="space-y-4">
+                    {/* Summary */}
+                    <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle className="w-6 h-6 text-teal-600" />
+                        <div>
+                          <h4 className="font-medium text-teal-900">Document Processed Successfully</h4>
+                          <p className="text-sm text-teal-700">
+                            {importStatus.extractedContent?.pageCount} pages • {importStatus.extractedContent?.sectionCount} sections extracted
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Mapping Stats */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-5 h-5 text-green-600" />
+                          <span className="text-2xl font-bold text-green-700">{importStatus.mappedCount}</span>
+                        </div>
+                        <p className="text-sm text-green-600 mt-1">Sections auto-mapped to standards</p>
+                      </div>
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-5 h-5 text-amber-600" />
+                          <span className="text-2xl font-bold text-amber-700">{importStatus.unmappedCount}</span>
+                        </div>
+                        <p className="text-sm text-amber-600 mt-1">Sections need review</p>
+                      </div>
+                    </div>
+
+                    {/* Section List */}
+                    <div>
+                      <h5 className="font-medium text-gray-900 mb-3">Extracted Sections</h5>
+                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                        {extractedSections.map((section) => (
+                          <div
+                            key={section.id}
+                            className={`p-3 rounded-lg border ${
+                              section.status === 'mapped'
+                                ? 'bg-green-50 border-green-200'
+                                : 'bg-amber-50 border-amber-200'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  {section.status === 'mapped' ? (
+                                    <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
+                                  ) : (
+                                    <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                                  )}
+                                  <span className="text-sm font-medium text-gray-900">
+                                    {section.mapping ? (
+                                      <>Standard {section.mapping.standardCode}{section.mapping.specCode ? `.${section.mapping.specCode}` : ''}: {STANDARD_NAMES[section.mapping.standardCode] || 'Unknown'}</>
+                                    ) : (
+                                      <span className="text-amber-700">{section.unmappedReason || 'Needs manual mapping'}</span>
+                                    )}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-500 truncate">
+                                  {section.content}
+                                </p>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-xs text-gray-400">Page {section.pageNumber}</span>
+                                  <span className="text-xs text-gray-400">•</span>
+                                  <span className="text-xs text-gray-400 capitalize">{section.sectionType}</span>
+                                  {section.mapping?.mappedBy === 'auto' && (
+                                    <>
+                                      <span className="text-xs text-gray-400">•</span>
+                                      <span className="text-xs text-green-600">Auto-mapped ({Math.round(section.confidence * 100)}%)</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                              {section.status === 'unmapped' && (
+                                <button
+                                  onClick={() => handleDiscardSection(section.id)}
+                                  className="p-1 text-gray-400 hover:text-red-600"
+                                  title="Discard section"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Info */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <p className="text-sm text-blue-700">
+                        <strong>Note:</strong> You can review and edit the imported content after it's applied to your self-study.
+                        Unmapped sections can be manually assigned in the editor.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
+
+              {/* Footer */}
+              <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
                 <button
                   onClick={resetImportModal}
                   className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
                 >
-                  {uploadedFile ? 'Close' : 'Cancel'}
+                  Cancel
                 </button>
-                {uploadedFile && (
+                {importStep === 'review' && (
                   <button
-                    onClick={() => {
-                      // If there's an existing submission, navigate to it
-                      const currentSubmission = submissions[0];
-                      if (currentSubmission) {
-                        navigate(`/self-study/${currentSubmission._id}`);
-                      }
-                      resetImportModal();
-                    }}
-                    className="px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700"
+                    onClick={handleApplyMappings}
+                    disabled={isApplying}
+                    className="flex items-center gap-2 px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
                   >
-                    Continue to Self-Study
+                    {isApplying ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Applying...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        Apply to Self-Study
+                      </>
+                    )}
                   </button>
                 )}
               </div>
