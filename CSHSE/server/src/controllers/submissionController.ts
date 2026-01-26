@@ -522,7 +522,15 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
       };
     }
 
+    // Generate submissionId before creating (Mongoose validation runs before pre-save hooks)
+    const year = new Date().getFullYear();
+    const count = await Submission.countDocuments({
+      submissionId: new RegExp(`^${year}-`)
+    });
+    const submissionId = `${year}-${String(count + 1).padStart(3, '0')}`;
+
     const submission = new Submission({
+      submissionId,
       institutionId,
       institutionName,
       programName,
