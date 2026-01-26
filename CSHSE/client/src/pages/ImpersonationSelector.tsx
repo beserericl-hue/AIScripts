@@ -9,6 +9,7 @@ interface UserOption {
   firstName: string;
   lastName: string;
   role: 'admin' | 'program_coordinator' | 'lead_reader' | 'reader';
+  institutionId?: string;
   institutionName?: string;
 }
 
@@ -122,6 +123,7 @@ export default function ImpersonationSelector() {
       firstName: selectedUser.firstName,
       lastName: selectedUser.lastName,
       role: selectedUser.role,
+      institutionId: selectedUser.institutionId,
       institutionName: selectedUser.institutionName,
     };
     startImpersonation(selectedUser.role, userObj);

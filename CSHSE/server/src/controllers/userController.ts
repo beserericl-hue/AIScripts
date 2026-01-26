@@ -60,11 +60,16 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response) => {
     ]);
 
     return res.json({
-      users: users.map(user => ({
-        ...user,
-        name: `${user.firstName} ${user.lastName}`,
-        institutionName: (user.institutionId as any)?.name || user.institutionName
-      })),
+      users: users.map(user => {
+        const populatedInstitution = user.institutionId as any;
+        return {
+          ...user,
+          name: `${user.firstName} ${user.lastName}`,
+          // Extract the raw institutionId from the populated object
+          institutionId: populatedInstitution?._id?.toString() || null,
+          institutionName: populatedInstitution?.name || user.institutionName
+        };
+      }),
       pagination: {
         page: pageNum,
         limit: limitNum,
