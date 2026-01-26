@@ -73,11 +73,13 @@ router.post('/login', async (req: Request, res: Response) => {
       user: {
         id: user._id,
         email: user.email,
-        name: `${user.firstName} ${user.lastName}`,
+        firstName: user.firstName,
+        lastName: user.lastName,
         role: user.role,
         institutionId: user.institutionId,
         institutionName: user.institutionName,
-        permissions: user.permissions
+        permissions: user.permissions,
+        isSuperuser: user.isSuperuser
       },
       expiresIn: thirtyDaysInSeconds
     });
@@ -189,17 +191,19 @@ router.get('/me', async (req: Request, res: Response) => {
     }
 
     return res.json({
-      id: user._id,
-      email: user.email,
-      name: `${user.firstName} ${user.lastName}`,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      role: user.role,
-      institutionId: user.institutionId,
-      institutionName: user.institutionName,
-      permissions: user.permissions,
-      status: user.status,
-      lastLogin: user.lastLogin
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        institutionId: user.institutionId,
+        institutionName: user.institutionName,
+        permissions: user.permissions,
+        status: user.status,
+        lastLogin: user.lastLogin,
+        isSuperuser: user.isSuperuser
+      }
     });
   } catch (error) {
     console.error('Get me error:', error);
