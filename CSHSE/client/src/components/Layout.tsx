@@ -27,21 +27,76 @@ const LogoutIcon = () => (
   </svg>
 );
 
+const SwitchIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+  </svg>
+);
+
 export default function Layout() {
   const location = useLocation();
-  const { user, logout } = useAuthStore();
+  const {
+    user,
+    logout,
+    impersonation,
+    stopImpersonation,
+    getEffectiveRole,
+    getEffectiveUser,
+    canAccessAdminSettings,
+    isSuperuser,
+  } = useAuthStore();
+
+  const effectiveRole = getEffectiveRole();
+  const effectiveUser = getEffectiveUser();
+  const showSettings = canAccessAdminSettings();
+  const isCurrentlySuperuser = isSuperuser();
 
   const navigation = [
     { name: 'Home', href: '/dashboard', icon: HomeIcon },
     { name: 'Self-Study', href: '/self-study', icon: DocumentIcon },
   ];
 
-  if (user?.role === 'admin') {
+  // Show Settings for admin role or superuser (not impersonating)
+  if (showSettings) {
     navigation.push({ name: 'Settings', href: '/admin', icon: CogIcon });
   }
 
+  const displayName = effectiveUser
+    ? `${effectiveUser.firstName} ${effectiveUser.lastName}`
+    : `${user?.firstName} ${user?.lastName}`;
+
+  const displayRole = impersonation.isImpersonating
+    ? impersonation.impersonatedRole
+    : user?.role;
+
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Impersonation Banner */}
+      {impersonation.isImpersonating && (
+        <div className="bg-amber-500 text-white px-4 py-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="text-sm font-medium">
+                Viewing as:{' '}
+                {impersonation.impersonatedUser
+                  ? `${impersonation.impersonatedUser.firstName} ${impersonation.impersonatedUser.lastName} (${impersonation.impersonatedRole?.replace('_', ' ')})`
+                  : impersonation.impersonatedRole?.replace('_', ' ')}
+              </span>
+            </div>
+            <button
+              onClick={stopImpersonation}
+              className="flex items-center space-x-1 text-sm font-medium hover:text-amber-100 transition-colors"
+            >
+              <SwitchIcon />
+              <span>Switch Role</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="app-header">
         <div className="app-header-content">
@@ -52,7 +107,7 @@ export default function Layout() {
                 <img
                   src="/cshse-logo.svg"
                   alt="CSHSE"
-                  className="app-logo-img"
+                  className="h-14 w-14"
                 />
                 <span className="app-logo-text hidden md:block">Self-Study Portal</span>
               </Link>
@@ -81,10 +136,10 @@ export default function Layout() {
             {/* User Menu */}
             <div className="user-menu">
               <span className="user-name hidden sm:block">
-                {user?.firstName} {user?.lastName}
+                {displayName}
               </span>
-              <span className="user-role-badge">
-                {user?.role?.replace('_', ' ')}
+              <span className={`user-role-badge ${isCurrentlySuperuser ? 'bg-purple-100 text-purple-700' : ''}`}>
+                {isCurrentlySuperuser ? 'Superuser' : displayRole?.replace('_', ' ')}
               </span>
               <button
                 onClick={logout}

@@ -34,7 +34,7 @@ export default function LoginPage() {
             <img
               src="/cshse-logo.svg"
               alt="CSHSE"
-              className="mx-auto h-20 w-20"
+              className="mx-auto h-24 w-24"
             />
             <h1 className="mt-4 text-2xl font-bold text-gray-900">
               Self-Study Portal
