@@ -111,16 +111,24 @@ export function NarrativeEditor({
     },
   });
 
-  // Handle manual save with validation
-  const handleManualSave = useCallback(async () => {
+  // Handle save only (no validation workflow)
+  const handleSaveOnly = useCallback(async () => {
+    if (!editor) return;
+
+    const currentContent = editor.getHTML();
+    await saveNow(currentContent);
+  }, [editor, saveNow]);
+
+  // Handle save and validate (triggers validation workflow)
+  const handleSaveAndValidate = useCallback(async () => {
     if (!editor) return;
 
     const currentContent = editor.getHTML();
 
-    // Save the content
+    // Save the content first
     await saveNow(currentContent);
 
-    // Trigger validation
+    // Then trigger validation workflow
     await triggerValidation({
       narrativeText: currentContent,
       validationType: 'manual_save',
@@ -258,7 +266,7 @@ export function NarrativeEditor({
             error={saveError}
           />
 
-          {/* Cancel & Save Buttons */}
+          {/* Cancel, Save & Validate Buttons */}
           {!readOnly && (
             <div className="flex items-center gap-2">
               {onCancel && (
@@ -271,16 +279,28 @@ export function NarrativeEditor({
                 </button>
               )}
               <button
-                onClick={handleManualSave}
+                onClick={handleSaveOnly}
                 disabled={isSaving || isValidating}
-                className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white text-sm rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 bg-white text-gray-700 text-sm rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {isSaving || isValidating ? (
+                {isSaving && !isValidating ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Save className="w-4 h-4" />
                 )}
-                Save & Validate
+                Save
+              </button>
+              <button
+                onClick={handleSaveAndValidate}
+                disabled={isSaving || isValidating}
+                className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white text-sm rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {isValidating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-4 h-4" />
+                )}
+                Validate
               </button>
             </div>
           )}

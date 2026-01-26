@@ -193,12 +193,27 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     [saveMutation, selectedStandard, selectedSpec]
   );
 
-  // Handle submit standard
+  // Handle submit standard for review (triggers validation workflow)
   const handleSubmitStandard = useCallback(async () => {
-    if (window.confirm(`Submit Standard ${selectedStandard} for validation?`)) {
+    const confirmMessage = `Submit Standard ${selectedStandard} for Review?\n\nThis will trigger the validation workflow. Make sure you have saved all your changes first.`;
+    if (window.confirm(confirmMessage)) {
       await submitStandardMutation.mutateAsync(selectedStandard);
     }
   }, [submitStandardMutation, selectedStandard]);
+
+  // Check if all specifications in the selected standard are validated
+  const isStandardReadyForSubmit = React.useMemo(() => {
+    if (!standards || !submission?.standardsStatus) return false;
+
+    const currentStandard = standards.find(s => s.code === selectedStandard);
+    if (!currentStandard) return false;
+
+    // Check if all specs have passed validation
+    return currentStandard.specifications.every(spec => {
+      const status = submission.standardsStatus[`${selectedStandard}.${spec.code}`];
+      return status?.validationStatus === 'pass';
+    });
+  }, [standards, submission, selectedStandard]);
 
   // Navigate to next/prev spec
   const navigateSpec = useCallback(
@@ -278,18 +293,23 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
             {/* Overall Progress */}
             <ProgressIndicator submission={submission} />
 
-            {/* Submit Standard Button */}
+            {/* Submit for Review Button - triggers workflow */}
             <button
               onClick={handleSubmitStandard}
-              disabled={submitStandardMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+              disabled={submitStandardMutation.isPending || !isStandardReadyForSubmit}
+              className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              title={
+                isStandardReadyForSubmit
+                  ? "Submit this standard for review - this action triggers the validation workflow"
+                  : "All specifications must be validated before submitting for review"
+              }
             >
               {submitStandardMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Send className="w-4 h-4" />
               )}
-              Submit Standard {selectedStandard}
+              Submit Standard {selectedStandard} for Review
             </button>
           </div>
         </div>
