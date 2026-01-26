@@ -129,9 +129,9 @@ export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
       name,
       version,
       description,
-      documentUrl,
-      documentKey,
-      documentFileId,
+      documentUrl: documentUrl || undefined,
+      documentKey: documentKey || undefined,
+      documentFileId: documentFileId || undefined, // Don't pass empty string
       standardsCount: standardsCount || 21,
       uploadedBy: authUser.id,
       status: 'active'
@@ -186,9 +186,9 @@ export const updateSpec = async (req: AuthenticatedRequest, res: Response) => {
     if (name) spec.name = name;
     if (version) spec.version = version;
     if (description !== undefined) spec.description = description;
-    if (documentUrl !== undefined) spec.documentUrl = documentUrl;
-    if (documentKey !== undefined) spec.documentKey = documentKey;
-    if (documentFileId !== undefined) spec.documentFileId = documentFileId;
+    if (documentUrl !== undefined) spec.documentUrl = documentUrl || undefined;
+    if (documentKey !== undefined) spec.documentKey = documentKey || undefined;
+    if (documentFileId !== undefined) spec.documentFileId = documentFileId || undefined; // Empty string = clear
     if (standardsCount) spec.standardsCount = standardsCount;
     if (status) spec.status = status;
 
