@@ -9,8 +9,19 @@ import {
   getFailedSections,
   revalidateFailedSections
 } from '../controllers/webhookController';
+import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
+
+/**
+ * @route   POST /api/webhooks/n8n/callback
+ * @desc    Receive validation result callback from N8N
+ * @access  Public (webhook callback)
+ */
+router.post('/n8n/callback', receiveCallback);
+
+// All routes below require authentication
+router.use(authenticate);
 
 /**
  * @route   POST /api/webhooks/n8n/validate
@@ -20,32 +31,25 @@ const router = Router();
 router.post('/n8n/validate', triggerValidation);
 
 /**
- * @route   POST /api/webhooks/n8n/callback
- * @desc    Receive validation result callback from N8N
- * @access  Public (webhook callback)
- */
-router.post('/n8n/callback', receiveCallback);
-
-/**
  * @route   GET /api/webhooks/settings
  * @desc    Get all webhook settings
  * @access  Private (Admin)
  */
-router.get('/settings', getWebhookSettings);
+router.get('/settings', requireAdmin, getWebhookSettings);
 
 /**
  * @route   PUT /api/webhooks/settings
  * @desc    Create or update webhook settings
  * @access  Private (Admin)
  */
-router.put('/settings', updateWebhookSettings);
+router.put('/settings', requireAdmin, updateWebhookSettings);
 
 /**
  * @route   POST /api/webhooks/settings/:settingType/test
  * @desc    Test webhook connection
  * @access  Private (Admin)
  */
-router.post('/settings/:settingType/test', testWebhookConnection);
+router.post('/settings/:settingType/test', requireAdmin, testWebhookConnection);
 
 /**
  * @route   GET /api/webhooks/validation/:submissionId/:standardCode/:specCode

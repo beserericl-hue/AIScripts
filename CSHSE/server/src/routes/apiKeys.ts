@@ -6,8 +6,13 @@ import {
   revokeAPIKey,
   rotateAPIKey
 } from '../controllers/apiKeyController';
+import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication and admin access
+router.use(authenticate);
+router.use(requireAdmin);
 
 // ============================================
 // API KEY ROUTES (Admin only)

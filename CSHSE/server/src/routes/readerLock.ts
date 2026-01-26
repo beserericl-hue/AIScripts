@@ -6,8 +6,12 @@ import {
   sendBackForCorrection,
   clearSentBack
 } from '../controllers/readerLockController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // ============================================
 // READER LOCK ROUTES

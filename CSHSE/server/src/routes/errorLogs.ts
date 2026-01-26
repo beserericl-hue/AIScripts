@@ -2,33 +2,21 @@ import { Router, Request, Response } from 'express';
 import { ErrorLog } from '../models/ErrorLog';
 import { errorLogger } from '../services/errorLogger';
 import { asyncHandler } from '../middleware/errorHandler';
-import { AuthorizationError, NotFoundError } from '../services/errorLogger';
+import { NotFoundError } from '../services/errorLogger';
+import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 
 const router = Router();
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role: string;
-  };
-}
-
-/**
- * Middleware to ensure only admins can access error logs
- */
-const adminOnly = (req: AuthenticatedRequest, res: Response, next: Function) => {
-  if (req.user?.role !== 'admin') {
-    throw new AuthorizationError('Admin access required');
-  }
-  next();
-};
+// All routes require authentication and admin access
+router.use(authenticate);
+router.use(requireAdmin);
 
 /**
  * @route   GET /api/admin/error-logs
  * @desc    Get recent error logs with filtering
  * @access  Admin only
  */
-router.get('/', adminOnly, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/',  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const {
     limit = '50',
     severity,
@@ -58,7 +46,7 @@ router.get('/', adminOnly, asyncHandler(async (req: AuthenticatedRequest, res: R
  * @desc    Get error statistics
  * @access  Admin only
  */
-router.get('/stats', adminOnly, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/stats',  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { days = '7' } = req.query;
   const stats = await errorLogger.getErrorStats(parseInt(days as string, 10));
 
@@ -70,7 +58,7 @@ router.get('/stats', adminOnly, asyncHandler(async (req: AuthenticatedRequest, r
  * @desc    Get a specific error log by error ID
  * @access  Admin only
  */
-router.get('/:errorId', adminOnly, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:errorId',  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { errorId } = req.params;
 
   const errorLog = await ErrorLog.findOne({ errorId }).lean();
@@ -86,7 +74,7 @@ router.get('/:errorId', adminOnly, asyncHandler(async (req: AuthenticatedRequest
  * @desc    Mark an error as resolved
  * @access  Admin only
  */
-router.post('/:errorId/resolve', adminOnly, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:errorId/resolve',  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { errorId } = req.params;
   const { resolution } = req.body;
   const userId = req.user!.id;
@@ -109,7 +97,7 @@ router.post('/:errorId/resolve', adminOnly, asyncHandler(async (req: Authenticat
  * @desc    Search error logs by message or metadata
  * @access  Admin only
  */
-router.get('/search', adminOnly, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/search',  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { q, limit = '50' } = req.query;
 
   if (!q) {
@@ -140,7 +128,7 @@ router.get('/search', adminOnly, asyncHandler(async (req: AuthenticatedRequest, 
  * @desc    Delete an error log (use sparingly)
  * @access  Admin only
  */
-router.delete('/:errorId', adminOnly, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.delete('/:errorId',  asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { errorId } = req.params;
 
   const result = await ErrorLog.deleteOne({ errorId });

@@ -7,8 +7,12 @@ import {
   cancelSiteVisit,
   confirmAttendance
 } from '../controllers/siteVisitController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // ============================================
 // SITE VISIT ROUTES

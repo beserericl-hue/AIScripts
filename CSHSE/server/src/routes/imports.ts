@@ -9,8 +9,12 @@ import {
   getUnmappedContent,
   handleUnmapped
 } from '../controllers/importController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // Configure multer for file uploads
 const storage = multer.memoryStorage();

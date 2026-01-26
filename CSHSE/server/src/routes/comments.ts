@@ -10,8 +10,12 @@ import {
   toggleResolve,
   getCommentsForNavigation
 } from '../controllers/commentController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // ============================================
 // COMMENT ROUTES

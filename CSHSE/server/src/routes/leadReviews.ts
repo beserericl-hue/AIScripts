@@ -16,8 +16,12 @@ import {
   sendReaderReminder,
   exportCompilation
 } from '../controllers/leadReaderController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // ============================================
 // LEAD READER DASHBOARD ROUTES

@@ -17,8 +17,12 @@ import {
   resendInvitation,
   revokeInvitation
 } from '../controllers/invitationController';
+import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // ============================================
 // USER ROUTES (static paths first, then dynamic)

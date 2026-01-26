@@ -1,61 +1,7 @@
-import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import { Response } from 'express';
 import { Spec } from '../models/Spec';
 import { Institution } from '../models/Institution';
-import { User } from '../models/User';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    _id: string;
-    name: string;
-    role: string;
-  };
-}
-
-interface UserPayload {
-  id: string;
-  email: string;
-  role: string;
-}
-
-/**
- * Extract and verify user from JWT token
- */
-async function getUserFromToken(req: Request): Promise<{
-  id: string;
-  role: string;
-  isSuperuser?: boolean;
-} | null> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
-
-  try {
-    const decoded = jwt.verify(token, jwtSecret) as UserPayload;
-    const user = await User.findById(decoded.id).select('role isSuperuser');
-    if (!user) return null;
-
-    return {
-      id: decoded.id,
-      role: user.role,
-      isSuperuser: user.isSuperuser
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if user has admin privileges (admin role OR superuser)
- */
-function hasAdminAccess(user: { role: string; isSuperuser?: boolean }): boolean {
-  return user.role === 'admin' || user.isSuperuser === true;
-}
+import { AuthenticatedRequest } from '../middleware/auth';
 
 /**
  * Get all specs
@@ -100,19 +46,10 @@ export const getSpec = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 /**
- * Create a new spec (admin or superuser only)
+ * Create a new spec (admin or superuser only - enforced by route middleware)
  */
 export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const authUser = await getUserFromToken(req);
-    if (!authUser) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    if (!hasAdminAccess(authUser)) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     const { name, version, description, documentUrl, documentKey, documentFileId, standardsCount } = req.body;
 
     if (!name || !version) {
@@ -133,7 +70,7 @@ export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
       documentKey: documentKey || undefined,
       documentFileId: documentFileId || undefined, // Don't pass empty string
       standardsCount: standardsCount || 21,
-      uploadedBy: authUser.id,
+      uploadedBy: req.user!.id,
       status: 'active'
     });
 
@@ -150,19 +87,10 @@ export const createSpec = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 /**
- * Update a spec (admin or superuser only)
+ * Update a spec (admin or superuser only - enforced by route middleware)
  */
 export const updateSpec = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const authUser = await getUserFromToken(req);
-    if (!authUser) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    if (!hasAdminAccess(authUser)) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     const { name, version, description, documentUrl, documentKey, documentFileId, standardsCount, status } = req.body;
 
     const spec = await Spec.findById(req.params.id);
@@ -213,19 +141,10 @@ export const updateSpec = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 /**
- * Archive a spec (admin or superuser only)
+ * Archive a spec (admin or superuser only - enforced by route middleware)
  */
 export const archiveSpec = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const authUser = await getUserFromToken(req);
-    if (!authUser) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    if (!hasAdminAccess(authUser)) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     const spec = await Spec.findById(req.params.id);
     if (!spec) {
       return res.status(404).json({ error: 'Spec not found' });

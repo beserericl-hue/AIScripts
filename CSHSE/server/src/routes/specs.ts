@@ -7,8 +7,12 @@ import {
   archiveSpec,
   getSpecInstitutions
 } from '../controllers/specController';
+import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // ============================================
 // SPEC ROUTES
@@ -33,21 +37,21 @@ router.get('/:id', getSpec);
  * @desc    Create a new spec
  * @access  Private (Admin only)
  */
-router.post('/', createSpec);
+router.post('/', requireAdmin, createSpec);
 
 /**
  * @route   PUT /api/specs/:id
  * @desc    Update a spec
  * @access  Private (Admin only)
  */
-router.put('/:id', updateSpec);
+router.put('/:id', requireAdmin, updateSpec);
 
 /**
  * @route   DELETE /api/specs/:id
  * @desc    Archive a spec
  * @access  Private (Admin only)
  */
-router.delete('/:id', archiveSpec);
+router.delete('/:id', requireAdmin, archiveSpec);
 
 /**
  * @route   GET /api/specs/:id/institutions

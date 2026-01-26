@@ -5,8 +5,13 @@ import {
   testWebhookConnection,
   getSystemStats
 } from '../controllers/adminController';
+import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication and admin access
+router.use(authenticate);
+router.use(requireAdmin);
 
 // ============================================
 // ADMIN ROUTES

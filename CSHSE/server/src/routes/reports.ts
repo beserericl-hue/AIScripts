@@ -6,8 +6,12 @@ import {
   previewReaderReport,
   previewCompilationReport
 } from '../controllers/reportController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // ============================================
 // READER REPORT PDF ROUTES

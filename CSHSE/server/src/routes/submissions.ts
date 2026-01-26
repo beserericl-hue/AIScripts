@@ -10,8 +10,12 @@ import {
   listSubmissions,
   createSubmission
 } from '../controllers/submissionController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // ============================================
 // SUBMISSION ROUTES

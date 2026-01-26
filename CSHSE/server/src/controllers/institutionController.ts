@@ -1,64 +1,10 @@
-import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import { Response } from 'express';
 import { Institution } from '../models/Institution';
 import { Invitation } from '../models/Invitation';
 import { User } from '../models/User';
 import { Spec } from '../models/Spec';
 import mongoose from 'mongoose';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    name: string;
-    role: string;
-  };
-}
-
-interface UserPayload {
-  id: string;
-  email: string;
-  role: string;
-}
-
-/**
- * Extract and verify user from JWT token
- */
-async function getUserFromToken(req: Request): Promise<{
-  id: string;
-  name: string;
-  role: string;
-  isSuperuser?: boolean;
-} | null> {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.slice(7);
-  const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
-
-  try {
-    const decoded = jwt.verify(token, jwtSecret) as UserPayload;
-    const user = await User.findById(decoded.id).select('firstName lastName role isSuperuser');
-    if (!user) return null;
-
-    return {
-      id: decoded.id,
-      name: `${user.firstName} ${user.lastName}`,
-      role: user.role,
-      isSuperuser: user.isSuperuser
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Check if user has admin privileges (admin role OR superuser)
- */
-function hasAdminAccess(user: { role: string; isSuperuser?: boolean }): boolean {
-  return user.role === 'admin' || user.isSuperuser === true;
-}
+import { AuthenticatedRequest } from '../middleware/auth';
 
 /**
  * Get all institutions
@@ -131,19 +77,10 @@ export const getInstitution = async (req: AuthenticatedRequest, res: Response) =
 };
 
 /**
- * Create a new institution (Admin or superuser only)
+ * Create a new institution (Admin or superuser only - enforced by route middleware)
  */
 export const createInstitution = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const authUser = await getUserFromToken(req);
-    if (!authUser) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    if (!hasAdminAccess(authUser)) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     const {
       name,
       type,
@@ -195,8 +132,8 @@ export const createInstitution = async (req: AuthenticatedRequest, res: Response
         role: 'program_coordinator',
         institutionId: institution._id,
         institutionName: institution.name,
-        invitedBy: authUser.id,
-        invitedByName: authUser.name,
+        invitedBy: req.user!.id,
+        invitedByName: req.user!.name,
         expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) // 14 days
       });
 
@@ -222,19 +159,10 @@ export const createInstitution = async (req: AuthenticatedRequest, res: Response
 };
 
 /**
- * Update an institution (Admin or superuser only)
+ * Update an institution (Admin or superuser only - enforced by route middleware)
  */
 export const updateInstitution = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const authUser = await getUserFromToken(req);
-    if (!authUser) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    if (!hasAdminAccess(authUser)) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     const { id } = req.params;
     const updates = req.body;
 
@@ -276,19 +204,10 @@ export const updateInstitution = async (req: AuthenticatedRequest, res: Response
 };
 
 /**
- * Archive an institution (Admin or superuser only)
+ * Archive an institution (Admin or superuser only - enforced by route middleware)
  */
 export const archiveInstitution = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const authUser = await getUserFromToken(req);
-    if (!authUser) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    if (!hasAdminAccess(authUser)) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     const { id } = req.params;
 
     const institution = await Institution.findById(id);
@@ -310,19 +229,10 @@ export const archiveInstitution = async (req: AuthenticatedRequest, res: Respons
 };
 
 /**
- * Assign lead reader to institution (Admin or superuser only)
+ * Assign lead reader to institution (Admin or superuser only - enforced by route middleware)
  */
 export const assignLeadReader = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const authUser = await getUserFromToken(req);
-    if (!authUser) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    if (!hasAdminAccess(authUser)) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
     const { id } = req.params;
     const { leadReaderId } = req.body;
 
@@ -352,20 +262,10 @@ export const assignLeadReader = async (req: AuthenticatedRequest, res: Response)
 };
 
 /**
- * Assign readers to institution (Admin, superuser, or Lead Reader)
+ * Assign readers to institution (Admin or superuser only - enforced by route middleware)
  */
 export const assignReaders = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const authUser = await getUserFromToken(req);
-    if (!authUser) {
-      return res.status(401).json({ error: 'Authentication required' });
-    }
-
-    const canAssign = hasAdminAccess(authUser) || authUser.role === 'lead_reader';
-    if (!canAssign) {
-      return res.status(403).json({ error: 'Admin or Lead Reader access required' });
-    }
-
     const { id } = req.params;
     const { readerIds } = req.body;
 

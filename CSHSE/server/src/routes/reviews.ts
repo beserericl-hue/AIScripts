@@ -14,8 +14,12 @@ import {
   assignReaders,
   getSubmissionReviews
 } from '../controllers/reviewController';
+import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
 
 // ============================================
 // READER ROUTES
