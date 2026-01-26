@@ -152,8 +152,18 @@ export const createInstitution = async (req: AuthenticatedRequest, res: Response
         expiresAt: invitation.expiresAt
       } : undefined
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Create institution error:', error);
+
+    // Handle Mongoose validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map((e: any) => e.message);
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: messages
+      });
+    }
+
     return res.status(500).json({ error: 'Failed to create institution' });
   }
 };

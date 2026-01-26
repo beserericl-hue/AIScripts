@@ -66,6 +66,7 @@ export function InstitutionManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingInstitution, setEditingInstitution] = useState<Institution | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     type: 'university' as 'college' | 'university',
@@ -123,7 +124,13 @@ export function InstitutionManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['institutions'] });
       setShowCreateModal(false);
+      setFormError(null);
       resetForm();
+    },
+    onError: (error: any) => {
+      const details = error.response?.data?.details;
+      const message = error.response?.data?.error || 'Failed to create institution';
+      setFormError(details ? `${message}: ${details.join(', ')}` : message);
     }
   });
 
@@ -136,7 +143,13 @@ export function InstitutionManagement() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['institutions'] });
       setEditingInstitution(null);
+      setFormError(null);
       resetForm();
+    },
+    onError: (error: any) => {
+      const details = error.response?.data?.details;
+      const message = error.response?.data?.error || 'Failed to update institution';
+      setFormError(details ? `${message}: ${details.join(', ')}` : message);
     }
   });
 
@@ -173,6 +186,7 @@ export function InstitutionManagement() {
       programCoordinatorEmail: '',
       programCoordinatorName: ''
     });
+    setFormError(null);
   };
 
   const handleCreate = () => {
@@ -190,6 +204,7 @@ export function InstitutionManagement() {
 
   const openEditModal = (institution: Institution) => {
     setEditingInstitution(institution);
+    setFormError(null);
     setFormData({
       name: institution.name,
       type: institution.type,
@@ -398,6 +413,13 @@ export function InstitutionManagement() {
             </div>
 
             <div className="p-6 space-y-6 max-h-[60vh] overflow-y-auto">
+              {/* Error Display */}
+              {formError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                  <span className="text-sm">{formError}</span>
+                </div>
+              )}
+
               {/* Basic Info */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
@@ -440,7 +462,7 @@ export function InstitutionManagement() {
 
               {/* Address */}
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Address</h4>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Address *</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <input
@@ -450,7 +472,7 @@ export function InstitutionManagement() {
                         ...formData,
                         address: { ...formData.address, street: e.target.value }
                       })}
-                      placeholder="Street Address"
+                      placeholder="Street Address *"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
@@ -461,7 +483,7 @@ export function InstitutionManagement() {
                       ...formData,
                       address: { ...formData.address, city: e.target.value }
                     })}
-                    placeholder="City"
+                    placeholder="City *"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                   <div className="grid grid-cols-2 gap-4">
@@ -472,7 +494,7 @@ export function InstitutionManagement() {
                         ...formData,
                         address: { ...formData.address, state: e.target.value }
                       })}
-                      placeholder="State"
+                      placeholder="State *"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                     <input
@@ -482,7 +504,7 @@ export function InstitutionManagement() {
                         ...formData,
                         address: { ...formData.address, zip: e.target.value }
                       })}
-                      placeholder="ZIP"
+                      placeholder="ZIP *"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
@@ -491,7 +513,7 @@ export function InstitutionManagement() {
 
               {/* Primary Contact */}
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Primary Contact</h4>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">Primary Contact *</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <input
@@ -501,7 +523,7 @@ export function InstitutionManagement() {
                         ...formData,
                         primaryContact: { ...formData.primaryContact, name: e.target.value }
                       })}
-                      placeholder="Contact Name"
+                      placeholder="Contact Name *"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                     />
                   </div>
@@ -512,7 +534,7 @@ export function InstitutionManagement() {
                       ...formData,
                       primaryContact: { ...formData.primaryContact, email: e.target.value }
                     })}
-                    placeholder="Email"
+                    placeholder="Email *"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                   <input
@@ -522,7 +544,7 @@ export function InstitutionManagement() {
                       ...formData,
                       primaryContact: { ...formData.primaryContact, phone: e.target.value }
                     })}
-                    placeholder="Phone"
+                    placeholder="Phone *"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
@@ -533,7 +555,7 @@ export function InstitutionManagement() {
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">Accreditation</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm text-gray-600 mb-1">Spec Document *</label>
+                    <label className="block text-sm text-gray-600 mb-1">Spec Document</label>
                     <select
                       value={formData.specId}
                       onChange={(e) => setFormData({ ...formData, specId: e.target.value })}
@@ -608,7 +630,13 @@ export function InstitutionManagement() {
                 onClick={editingInstitution ? handleUpdate : handleCreate}
                 disabled={
                   !formData.name ||
+                  !formData.address.street ||
                   !formData.address.city ||
+                  !formData.address.state ||
+                  !formData.address.zip ||
+                  !formData.primaryContact.name ||
+                  !formData.primaryContact.email ||
+                  !formData.primaryContact.phone ||
                   createMutation.isPending ||
                   updateMutation.isPending
                 }
