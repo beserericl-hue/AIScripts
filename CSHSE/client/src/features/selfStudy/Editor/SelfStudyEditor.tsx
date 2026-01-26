@@ -3,18 +3,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import {
   Send,
-  CheckCircle,
-  AlertTriangle,
   Loader2,
   ChevronLeft,
   ChevronRight,
   FileUp,
-  Paperclip,
   Home,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
+import { EvidencePanel } from './EvidencePanel';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -411,13 +409,16 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
             )}
           </div>
 
-          {/* Evidence Quick Actions */}
-          <div className="mt-4 flex items-center gap-4">
-            <button className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm">
-              <Paperclip className="w-4 h-4" />
-              Attach Evidence
-            </button>
-          </div>
+          {/* Evidence Panel */}
+          {selectedSpec && (
+            <div className="mt-4">
+              <EvidencePanel
+                submissionId={submissionId}
+                standardCode={selectedStandard}
+                specCode={selectedSpec}
+              />
+            </div>
+          )}
         </main>
       </div>
     </div>
