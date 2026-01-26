@@ -22,7 +22,12 @@ export default function Layout() {
           <div className="flex justify-between h-16">
             <div className="flex">
               <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold text-blue-600">CSHSE</h1>
+                <img
+                  src="/cshse-logo.svg"
+                  alt="CSHSE"
+                  className="h-10 w-10"
+                />
+                <span className="ml-2 text-lg font-semibold text-gray-800">Self-Study Portal</span>
               </div>
               <nav className="hidden sm:ml-8 sm:flex sm:space-x-4">
                 {navigation.map((item) => {
@@ -33,7 +38,7 @@ export default function Layout() {
                       to={item.href}
                       className={`inline-flex items-center px-3 py-2 text-sm font-medium rounded-md ${
                         isActive
-                          ? 'bg-blue-50 text-blue-700'
+                          ? 'bg-[#E8F5E9] text-[#006B3F]'
                           : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                       }`}
                     >
