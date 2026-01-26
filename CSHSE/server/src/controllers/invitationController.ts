@@ -111,6 +111,10 @@ export const createInvitation = async (req: AuthenticatedRequest, res: Response)
       institutionName = institution.name;
     }
 
+    // Generate token and hash before creating invitation (must be done before validation)
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
     // Create invitation
     const invitation = new Invitation({
       email: email.toLowerCase(),
@@ -118,6 +122,8 @@ export const createInvitation = async (req: AuthenticatedRequest, res: Response)
       role,
       institutionId: institutionId ? new mongoose.Types.ObjectId(institutionId) : undefined,
       institutionName,
+      token,
+      tokenHash,
       invitedBy: req.user!.id,
       invitedByName: req.user!.name,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
