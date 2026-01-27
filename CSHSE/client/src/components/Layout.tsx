@@ -40,6 +40,7 @@ export default function Layout() {
     logout,
     impersonation,
     stopImpersonation,
+    openImpersonationSelector,
     getEffectiveRole,
     getEffectiveUser,
     canAccessAdminSettings,
@@ -141,6 +142,17 @@ export default function Layout() {
               <span className={`user-role-badge ${isCurrentlySuperuser ? 'bg-purple-100 text-purple-700' : ''}`}>
                 {isCurrentlySuperuser ? 'Superuser' : displayRole?.replace('_', ' ')}
               </span>
+              {/* Switch Role button for superusers not currently impersonating */}
+              {user?.isSuperuser && !impersonation.isImpersonating && (
+                <button
+                  onClick={openImpersonationSelector}
+                  className="flex items-center space-x-1 px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-md transition-colors"
+                  title="Switch to a different role"
+                >
+                  <SwitchIcon />
+                  <span className="hidden sm:inline">Switch Role</span>
+                </button>
+              )}
               <button
                 onClick={logout}
                 className="logout-btn"

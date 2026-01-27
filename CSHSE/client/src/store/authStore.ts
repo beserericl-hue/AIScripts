@@ -33,6 +33,7 @@ interface AuthState {
   startImpersonation: (role: string, user?: User | null) => void;
   stopImpersonation: () => void;
   skipImpersonation: () => void;
+  openImpersonationSelector: () => void;
   getEffectiveRole: () => string;
   getEffectiveUser: () => User | null;
   isSuperuser: () => boolean;
@@ -158,6 +159,13 @@ export const useAuthStore = create<AuthState>()(
       skipImpersonation: () => {
         // SU chooses to continue as themselves
         set({ needsImpersonationSelection: false });
+      },
+
+      openImpersonationSelector: () => {
+        // Allow superuser to open impersonation selector at any time
+        const { user } = get();
+        if (!user?.isSuperuser) return;
+        set({ needsImpersonationSelection: true });
       },
 
       getEffectiveRole: () => {
