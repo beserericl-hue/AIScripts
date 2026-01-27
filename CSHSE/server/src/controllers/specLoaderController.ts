@@ -67,9 +67,24 @@ export const triggerSpecLoad = async (req: AuthenticatedRequest, res: Response) 
     // Construct callback URL
     const callbackUrl = getCallbackUrl(req, '/api/webhooks/spec-loader/callback');
 
+    // Debug: Log file info
+    console.log('[SpecLoader] Preparing to send file:', {
+      filename: file.originalName,
+      mimeType: file.mimeType,
+      dataLength: file.data?.length || 0,
+      specId: spec._id.toString(),
+      specName: spec.name,
+      specVersion: spec.version,
+      callbackUrl
+    });
+
     // Create form data with the PDF binary
     const formData = new FormData();
-    formData.append('data', file.data, {
+
+    // Ensure file.data is a Buffer
+    const fileBuffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data);
+
+    formData.append('data', fileBuffer, {
       filename: file.originalName,
       contentType: file.mimeType
     });
@@ -78,7 +93,7 @@ export const triggerSpecLoad = async (req: AuthenticatedRequest, res: Response) 
     formData.append('specVersion', spec.version);
     formData.append('callbackUrl', callbackUrl);
 
-    // Build headers
+    // Build headers - form-data package provides the correct Content-Type with boundary
     const headers: Record<string, string> = {
       ...formData.getHeaders()
     };
@@ -89,11 +104,20 @@ export const triggerSpecLoad = async (req: AuthenticatedRequest, res: Response) 
       headers['Authorization'] = `Bearer ${webhookSettings.authentication.bearerToken}`;
     }
 
+    // Get the form data as a buffer - required for native fetch to work with form-data package
+    const formBuffer = formData.getBuffer();
+
+    console.log('[SpecLoader] Sending request:', {
+      url: webhookSettings.webhookUrl,
+      contentType: headers['content-type'],
+      bodyLength: formBuffer.length
+    });
+
     // Send to n8n webhook
     const response = await fetch(webhookSettings.webhookUrl, {
       method: 'POST',
       headers,
-      body: formData as any,
+      body: formBuffer,
       signal: AbortSignal.timeout(webhookSettings.timeoutMs)
     });
 
