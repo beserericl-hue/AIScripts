@@ -51,9 +51,12 @@ export const triggerSpecLoad = async (req: AuthenticatedRequest, res: Response) 
     }
 
     // Get webhook settings for spec_loader
-    const webhookSettings = await WebhookSettings.findOne({ settingType: 'spec_loader', isActive: true });
-    if (!webhookSettings) {
-      return res.status(400).json({ error: 'Spec Loader webhook is not configured. Please configure it in Settings.' });
+    const webhookSettings = await WebhookSettings.findOne({ settingType: 'spec_loader' });
+    if (!webhookSettings || !webhookSettings.webhookUrl) {
+      return res.status(400).json({ error: 'Spec Loader webhook URL is not configured. Please configure it in Settings.' });
+    }
+    if (!webhookSettings.isActive) {
+      return res.status(400).json({ error: 'Spec Loader webhook is configured but not enabled. Please enable it in Settings.' });
     }
 
     // Update spec status to loading
