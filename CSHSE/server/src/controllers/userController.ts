@@ -101,16 +101,21 @@ export const getUser = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Permission check
+    // Permission check - extract ID from potentially populated object
+    const populatedInstitution = user.institutionId as any;
+    const institutionIdStr = populatedInstitution?._id?.toString() || populatedInstitution?.toString() || null;
+
     if (userRole !== 'admin') {
-      if (userRole === 'program_coordinator' && user.institutionId?.toString() !== req.user?.institutionId) {
+      if (userRole === 'program_coordinator' && institutionIdStr !== req.user?.institutionId) {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
 
     return res.json({
       ...user,
-      name: `${user.firstName} ${user.lastName}`
+      name: `${user.firstName} ${user.lastName}`,
+      institutionId: institutionIdStr,
+      institutionName: populatedInstitution?.name || user.institutionName
     });
   } catch (error) {
     console.error('Get user error:', error);

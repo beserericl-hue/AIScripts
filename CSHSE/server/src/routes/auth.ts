@@ -62,7 +62,7 @@ router.post('/login', async (req: Request, res: Response) => {
         email: user.email,
         name: `${user.firstName} ${user.lastName}`,
         role: user.role,
-        institutionId: user.institutionId
+        institutionId: user.institutionId?.toString() || null
       },
       jwtSecret,
       { expiresIn: '30d' }
@@ -76,7 +76,7 @@ router.post('/login', async (req: Request, res: Response) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
-        institutionId: user.institutionId,
+        institutionId: user.institutionId?.toString() || null,
         institutionName: user.institutionName,
         permissions: user.permissions,
         isSuperuser: user.isSuperuser
@@ -135,7 +135,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
           email: user.email,
           name: `${user.firstName} ${user.lastName}`,
           role: user.role,
-          institutionId: user.institutionId
+          institutionId: user.institutionId?.toString() || null
         },
         jwtSecret,
         { expiresIn: '30d' }
@@ -190,6 +190,11 @@ router.get('/me', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Extract institutionId as string from populated object or raw value
+    const populatedInstitution = user.institutionId as any;
+    const institutionIdStr = populatedInstitution?._id?.toString() || populatedInstitution?.toString() || null;
+    const institutionNameStr = populatedInstitution?.name || user.institutionName;
+
     return res.json({
       user: {
         id: user._id,
@@ -197,8 +202,8 @@ router.get('/me', async (req: Request, res: Response) => {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
-        institutionId: user.institutionId,
-        institutionName: user.institutionName,
+        institutionId: institutionIdStr,
+        institutionName: institutionNameStr,
         permissions: user.permissions,
         status: user.status,
         lastLogin: user.lastLogin,
