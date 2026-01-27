@@ -266,7 +266,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   // Get current content for selected standard/spec
   const getCurrentContent = useCallback(() => {
     if (!submission || !selectedSpec) return '';
-    const narrative = submission.narrativeContent.find(
+    const narrative = (submission.narrativeContent || []).find(
       (n) => n.standardCode === selectedStandard && n.specCode === selectedSpec
     );
     return narrative?.content || '';
