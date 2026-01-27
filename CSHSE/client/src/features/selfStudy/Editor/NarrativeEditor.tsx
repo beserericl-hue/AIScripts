@@ -3,6 +3,17 @@ import { useEditor, EditorContent, BubbleMenu } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
+import TextAlign from '@tiptap/extension-text-align';
+import TextStyle from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
+import Link from '@tiptap/extension-link';
+import Subscript from '@tiptap/extension-subscript';
+import Superscript from '@tiptap/extension-superscript';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
 import {
   Bold,
   Italic,
@@ -18,6 +29,17 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Link as LinkIcon,
+  Unlink,
+  Subscript as SubscriptIcon,
+  Superscript as SuperscriptIcon,
+  Highlighter,
+  Table as TableIcon,
+  Strikethrough,
 } from 'lucide-react';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useValidationStatus } from '../../../hooks/useValidationStatus';
@@ -87,7 +109,11 @@ export function NarrativeEditor({
     specCode,
   });
 
-  // Initialize TipTap editor
+  // State for link dialog
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+
+  // Initialize TipTap editor with Word paste support
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -100,6 +126,46 @@ export function NarrativeEditor({
         placeholder,
         emptyEditorClass: 'is-editor-empty',
       }),
+      // Text alignment for Word paste support
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+        alignments: ['left', 'center', 'right', 'justify'],
+      }),
+      // Text styling for colors
+      TextStyle,
+      Color,
+      // Highlight/background color
+      Highlight.configure({
+        multicolor: true,
+      }),
+      // Links
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-teal-600 underline hover:text-teal-800',
+        },
+      }),
+      // Subscript and superscript
+      Subscript,
+      Superscript,
+      // Tables for Word paste support
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: 'border-collapse border border-gray-300',
+        },
+      }),
+      TableRow,
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 bg-gray-100 px-3 py-2 font-semibold',
+        },
+      }),
+      TableCell.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 px-3 py-2',
+        },
+      }),
     ],
     content: initialContent,
     editable: !readOnly,
@@ -109,7 +175,41 @@ export function NarrativeEditor({
       onContentChange?.(html);
       triggerAutoSave(html);
     },
+    // Handle paste from Word/external sources
+    editorProps: {
+      handlePaste: (view, event) => {
+        // Let TipTap handle the paste by default
+        // The extensions will handle formatting preservation
+        return false;
+      },
+    },
   });
+
+  // Handle adding a link
+  const handleAddLink = useCallback(() => {
+    if (!editor) return;
+
+    const previousUrl = editor.getAttributes('link').href;
+    setLinkUrl(previousUrl || '');
+    setShowLinkDialog(true);
+  }, [editor]);
+
+  const handleSetLink = useCallback(() => {
+    if (!editor) return;
+
+    if (linkUrl === '') {
+      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+    } else {
+      editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl }).run();
+    }
+    setShowLinkDialog(false);
+    setLinkUrl('');
+  }, [editor, linkUrl]);
+
+  const handleRemoveLink = useCallback(() => {
+    if (!editor) return;
+    editor.chain().focus().unsetLink().run();
+  }, [editor]);
 
   // Handle save only (no validation workflow)
   const handleSaveOnly = useCallback(async () => {
@@ -174,90 +274,238 @@ export function NarrativeEditor({
         )}
       </div>
 
-      {/* Toolbar */}
-      <div className="editor-toolbar flex items-center gap-1 p-2 bg-gray-100 rounded-t-lg border border-gray-200 border-b-0">
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          isActive={editor.isActive('bold')}
-          title="Bold"
-        >
-          <Bold className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          isActive={editor.isActive('italic')}
-          title="Italic"
-        >
-          <Italic className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-          isActive={editor.isActive('underline')}
-          title="Underline"
-        >
-          <UnderlineIcon className="w-4 h-4" />
-        </ToolbarButton>
+      {/* Toolbar - Two rows for better organization */}
+      <div className="editor-toolbar bg-gray-100 rounded-t-lg border border-gray-200 border-b-0">
+        {/* Primary toolbar row */}
+        <div className="flex flex-wrap items-center gap-1 p-2 border-b border-gray-200">
+          {/* Text formatting */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            isActive={editor.isActive('bold')}
+            title="Bold (Ctrl+B)"
+          >
+            <Bold className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            isActive={editor.isActive('italic')}
+            title="Italic (Ctrl+I)"
+          >
+            <Italic className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            isActive={editor.isActive('underline')}
+            title="Underline (Ctrl+U)"
+          >
+            <UnderlineIcon className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+            isActive={editor.isActive('strike')}
+            title="Strikethrough"
+          >
+            <Strikethrough className="w-4 h-4" />
+          </ToolbarButton>
 
-        <div className="w-px h-6 bg-gray-300 mx-1" />
+          <div className="w-px h-6 bg-gray-300 mx-1" />
 
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          isActive={editor.isActive('heading', { level: 1 })}
-          title="Heading 1"
-        >
-          <Heading1 className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          isActive={editor.isActive('heading', { level: 2 })}
-          title="Heading 2"
-        >
-          <Heading2 className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          isActive={editor.isActive('heading', { level: 3 })}
-          title="Heading 3"
-        >
-          <Heading3 className="w-4 h-4" />
-        </ToolbarButton>
+          {/* Subscript/Superscript */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleSubscript().run()}
+            isActive={editor.isActive('subscript')}
+            title="Subscript"
+          >
+            <SubscriptIcon className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleSuperscript().run()}
+            isActive={editor.isActive('superscript')}
+            title="Superscript"
+          >
+            <SuperscriptIcon className="w-4 h-4" />
+          </ToolbarButton>
 
-        <div className="w-px h-6 bg-gray-300 mx-1" />
+          <div className="w-px h-6 bg-gray-300 mx-1" />
 
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          isActive={editor.isActive('bulletList')}
-          title="Bullet List"
-        >
-          <List className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          isActive={editor.isActive('orderedList')}
-          title="Numbered List"
-        >
-          <ListOrdered className="w-4 h-4" />
-        </ToolbarButton>
+          {/* Highlight */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHighlight({ color: '#fef08a' }).run()}
+            isActive={editor.isActive('highlight')}
+            title="Highlight"
+          >
+            <Highlighter className="w-4 h-4" />
+          </ToolbarButton>
 
-        <div className="w-px h-6 bg-gray-300 mx-1" />
+          <div className="w-px h-6 bg-gray-300 mx-1" />
 
-        <ToolbarButton
-          onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().undo()}
-          title="Undo"
-        >
-          <Undo className="w-4 h-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().redo()}
-          title="Redo"
-        >
-          <Redo className="w-4 h-4" />
-        </ToolbarButton>
+          {/* Headings */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            isActive={editor.isActive('heading', { level: 1 })}
+            title="Heading 1"
+          >
+            <Heading1 className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            isActive={editor.isActive('heading', { level: 2 })}
+            title="Heading 2"
+          >
+            <Heading2 className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            isActive={editor.isActive('heading', { level: 3 })}
+            title="Heading 3"
+          >
+            <Heading3 className="w-4 h-4" />
+          </ToolbarButton>
 
-        {/* Save Button & Status */}
-        <div className="ml-auto flex items-center gap-2">
+          <div className="w-px h-6 bg-gray-300 mx-1" />
+
+          {/* Lists */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            isActive={editor.isActive('bulletList')}
+            title="Bullet List"
+          >
+            <List className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            isActive={editor.isActive('orderedList')}
+            title="Numbered List"
+          >
+            <ListOrdered className="w-4 h-4" />
+          </ToolbarButton>
+
+          <div className="w-px h-6 bg-gray-300 mx-1" />
+
+          {/* Text alignment */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().setTextAlign('left').run()}
+            isActive={editor.isActive({ textAlign: 'left' })}
+            title="Align Left"
+          >
+            <AlignLeft className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().setTextAlign('center').run()}
+            isActive={editor.isActive({ textAlign: 'center' })}
+            title="Align Center"
+          >
+            <AlignCenter className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().setTextAlign('right').run()}
+            isActive={editor.isActive({ textAlign: 'right' })}
+            title="Align Right"
+          >
+            <AlignRight className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+            isActive={editor.isActive({ textAlign: 'justify' })}
+            title="Justify"
+          >
+            <AlignJustify className="w-4 h-4" />
+          </ToolbarButton>
+
+          <div className="w-px h-6 bg-gray-300 mx-1" />
+
+          {/* Links */}
+          <ToolbarButton
+            onClick={handleAddLink}
+            isActive={editor.isActive('link')}
+            title="Add Link"
+          >
+            <LinkIcon className="w-4 h-4" />
+          </ToolbarButton>
+          {editor.isActive('link') && (
+            <ToolbarButton
+              onClick={handleRemoveLink}
+              title="Remove Link"
+            >
+              <Unlink className="w-4 h-4" />
+            </ToolbarButton>
+          )}
+
+          <div className="w-px h-6 bg-gray-300 mx-1" />
+
+          {/* Table */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+            title="Insert Table"
+          >
+            <TableIcon className="w-4 h-4" />
+          </ToolbarButton>
+
+          <div className="w-px h-6 bg-gray-300 mx-1" />
+
+          {/* Undo/Redo */}
+          <ToolbarButton
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor.can().undo()}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo className="w-4 h-4" />
+          </ToolbarButton>
+          <ToolbarButton
+            onClick={() => editor.chain().focus().redo().run()}
+            disabled={!editor.can().redo()}
+            title="Redo (Ctrl+Y)"
+          >
+            <Redo className="w-4 h-4" />
+          </ToolbarButton>
+        </div>
+
+        {/* Secondary toolbar row - Table controls (when table selected) and Status/Actions */}
+        <div className="flex items-center gap-2 px-2 py-1.5">
+          {/* Table controls - only show when inside a table */}
+          {editor.isActive('table') && (
+            <div className="flex items-center gap-1 pr-2 border-r border-gray-300">
+              <span className="text-xs text-gray-500 mr-1">Table:</span>
+              <button
+                onClick={() => editor.chain().focus().addColumnBefore().run()}
+                className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+                title="Add column before"
+              >
+                + Col
+              </button>
+              <button
+                onClick={() => editor.chain().focus().addRowAfter().run()}
+                className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+                title="Add row after"
+              >
+                + Row
+              </button>
+              <button
+                onClick={() => editor.chain().focus().deleteColumn().run()}
+                className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 text-red-600"
+                title="Delete column"
+              >
+                - Col
+              </button>
+              <button
+                onClick={() => editor.chain().focus().deleteRow().run()}
+                className="px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 text-red-600"
+                title="Delete row"
+              >
+                - Row
+              </button>
+              <button
+                onClick={() => editor.chain().focus().deleteTable().run()}
+                className="px-2 py-1 text-xs bg-red-50 border border-red-300 rounded hover:bg-red-100 text-red-600"
+                title="Delete table"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+
+          {/* Save Button & Status */}
+          <div className="ml-auto flex items-center gap-2">
           {/* Save Status Indicator */}
           <SaveStatusIndicator
             isSaving={isSaving}
@@ -305,7 +553,43 @@ export function NarrativeEditor({
             </div>
           )}
         </div>
+        </div>
       </div>
+
+      {/* Link Dialog Modal */}
+      {showLinkDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-96">
+            <h3 className="text-lg font-semibold mb-4">Insert Link</h3>
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://example.com"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-teal-500"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleSetLink();
+                if (e.key === 'Escape') setShowLinkDialog(false);
+              }}
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setShowLinkDialog(false)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSetLink}
+                className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700"
+              >
+                {linkUrl ? 'Update Link' : 'Remove Link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bubble Menu for text selection */}
       <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
@@ -328,14 +612,27 @@ export function NarrativeEditor({
           >
             <UnderlineIcon className="w-4 h-4" />
           </BubbleButton>
+          <div className="w-px h-4 bg-gray-600 mx-1" />
+          <BubbleButton
+            onClick={() => editor.chain().focus().toggleHighlight({ color: '#fef08a' }).run()}
+            isActive={editor.isActive('highlight')}
+          >
+            <Highlighter className="w-4 h-4" />
+          </BubbleButton>
+          <BubbleButton
+            onClick={handleAddLink}
+            isActive={editor.isActive('link')}
+          >
+            <LinkIcon className="w-4 h-4" />
+          </BubbleButton>
         </div>
       </BubbleMenu>
 
       {/* Editor Content */}
-      <div className="editor-content flex-1 border border-gray-200 rounded-b-lg overflow-hidden">
+      <div className="editor-content flex-1 border border-gray-200 rounded-b-lg overflow-auto">
         <EditorContent
           editor={editor}
-          className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none"
+          className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[300px]"
         />
       </div>
 
