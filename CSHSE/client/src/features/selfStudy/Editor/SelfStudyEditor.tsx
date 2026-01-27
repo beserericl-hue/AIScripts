@@ -436,7 +436,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   }
 
   return (
-    <div className="self-study-editor flex flex-col bg-gray-50 -mx-4 sm:-mx-6 lg:-mx-8 -my-6" style={{ height: 'calc(100vh - 80px)' }}>
+    <div className="self-study-editor flex flex-col bg-gray-50">
       {/* Header */}
       <header className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
@@ -520,7 +520,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex min-h-[600px]">
         {/* Standards Editor View */}
         {activeView === 'standards' && (
           <>
@@ -561,7 +561,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
             </button>
 
             {/* Editor Area */}
-            <main className="flex-1 min-w-0 overflow-auto flex flex-col p-6">
+            <main className="flex-1 flex flex-col p-6">
               {/* Navigation Breadcrumb */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2 text-sm text-gray-500">
