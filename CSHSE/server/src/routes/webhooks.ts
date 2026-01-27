@@ -6,6 +6,8 @@ import {
   updateWebhookSettings,
   testWebhookConnection,
   getValidationStatus,
+  getLatestValidation,
+  getStandardValidation,
   getFailedSections,
   revalidateFailedSections
 } from '../controllers/webhookController';
@@ -66,6 +68,20 @@ router.put('/settings', requireAdmin, updateWebhookSettings);
  * @access  Private (Admin)
  */
 router.post('/settings/:settingType/test', requireAdmin, testWebhookConnection);
+
+/**
+ * @route   GET /api/webhooks/validation/latest
+ * @desc    Get latest validation status (query params: submissionId, standardCode, specCode)
+ * @access  Private
+ */
+router.get('/validation/latest', getLatestValidation);
+
+/**
+ * @route   GET /api/webhooks/validation/standard/:submissionId/:standardCode
+ * @desc    Get validation summary for a standard
+ * @access  Private
+ */
+router.get('/validation/standard/:submissionId/:standardCode', getStandardValidation);
 
 /**
  * @route   GET /api/webhooks/validation/:submissionId/:standardCode/:specCode

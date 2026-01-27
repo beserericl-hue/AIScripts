@@ -200,7 +200,7 @@ export const testWebhookConnection = async (req: Request, res: Response) => {
 };
 
 /**
- * Get validation status for a section
+ * Get validation status for a section (path params)
  */
 export const getValidationStatus = async (req: Request, res: Response) => {
   try {
@@ -229,6 +229,82 @@ export const getValidationStatus = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Get validation status error:', error);
     return res.status(500).json({ error: 'Failed to get validation status' });
+  }
+};
+
+/**
+ * Get latest validation status (query params version)
+ * Called by client: GET /api/webhooks/validation/latest?submissionId=X&standardCode=Y&specCode=Z
+ */
+export const getLatestValidation = async (req: Request, res: Response) => {
+  try {
+    const { submissionId, standardCode, specCode } = req.query;
+
+    if (!submissionId || !standardCode) {
+      return res.status(400).json({ error: 'Missing required query params: submissionId, standardCode' });
+    }
+
+    const result = await validationService.getLatestValidation(
+      submissionId as string,
+      standardCode as string,
+      specCode as string | undefined
+    );
+
+    if (!result) {
+      return res.status(404).json({ status: 'not_validated' });
+    }
+
+    return res.json({
+      _id: result._id,
+      submissionId: result.submissionId,
+      standardCode: result.standardCode,
+      specCode: result.specCode,
+      validationType: result.validationType,
+      result: result.result,
+      attemptNumber: result.attemptNumber,
+      createdAt: result.createdAt
+    });
+  } catch (error) {
+    console.error('Get latest validation error:', error);
+    return res.status(500).json({ error: 'Failed to get validation status' });
+  }
+};
+
+/**
+ * Get validation summary for a standard
+ * Called by client: GET /api/webhooks/validation/standard/:submissionId/:standardCode
+ */
+export const getStandardValidation = async (req: Request, res: Response) => {
+  try {
+    const { submissionId, standardCode } = req.params;
+
+    // Get all validations for this standard
+    const validations = await validationService.getValidationsForStandard(
+      submissionId,
+      standardCode
+    );
+
+    // Calculate summary
+    const passCount = validations.filter(v => v.result.status === 'pass').length;
+    const failCount = validations.filter(v => v.result.status === 'fail').length;
+    const pendingCount = validations.filter(v => v.result.status === 'pending').length;
+
+    return res.json({
+      standardCode,
+      totalSpecs: validations.length,
+      passCount,
+      failCount,
+      pendingCount,
+      validations: validations.map(v => ({
+        specCode: v.specCode,
+        status: v.result.status,
+        score: v.result.score,
+        validatedAt: v.validatedAt
+      }))
+    });
+  } catch (error) {
+    console.error('Get standard validation error:', error);
+    return res.status(500).json({ error: 'Failed to get standard validation' });
   }
 };
 

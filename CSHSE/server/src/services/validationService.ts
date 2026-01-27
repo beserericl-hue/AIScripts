@@ -302,13 +302,45 @@ export class ValidationService {
   async getLatestValidation(
     submissionId: string,
     standardCode: string,
-    specCode: string
+    specCode?: string
   ): Promise<IValidationResult | null> {
-    return ValidationResult.findOne({
+    const query: any = {
       submissionId: new mongoose.Types.ObjectId(submissionId),
-      standardCode,
-      specCode
-    }).sort({ validatedAt: -1 });
+      standardCode
+    };
+    if (specCode) {
+      query.specCode = specCode;
+    }
+    return ValidationResult.findOne(query).sort({ validatedAt: -1 });
+  }
+
+  /**
+   * Get all validations for a standard
+   */
+  async getValidationsForStandard(
+    submissionId: string,
+    standardCode: string
+  ): Promise<IValidationResult[]> {
+    // Get latest validation per specCode for this standard
+    const results = await ValidationResult.aggregate([
+      {
+        $match: {
+          submissionId: new mongoose.Types.ObjectId(submissionId),
+          standardCode
+        }
+      },
+      { $sort: { validatedAt: -1 as const } },
+      {
+        $group: {
+          _id: '$specCode',
+          latestValidation: { $first: '$$ROOT' }
+        }
+      },
+      { $replaceRoot: { newRoot: '$latestValidation' } },
+      { $sort: { specCode: 1 as const } }
+    ]);
+
+    return results;
   }
 
   /**
