@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import FormData from 'form-data';
 import { Spec } from '../models/Spec';
 import { File } from '../models/File';
 import { WebhookSettings } from '../models/WebhookSettings';
@@ -67,35 +66,36 @@ export const triggerSpecLoad = async (req: AuthenticatedRequest, res: Response) 
     // Construct callback URL
     const callbackUrl = getCallbackUrl(req, '/api/webhooks/spec-loader/callback');
 
-    // Debug: Log file info
-    console.log('[SpecLoader] Preparing to send file:', {
+    // Ensure file.data is a Buffer and convert to base64
+    const fileBuffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data);
+    const base64Data = fileBuffer.toString('base64');
+
+    // Build JSON payload
+    const payload = {
+      data: base64Data,
       filename: file.originalName,
       mimeType: file.mimeType,
-      dataLength: file.data?.length || 0,
+      specId: spec._id.toString(),
+      specName: spec.name,
+      specVersion: spec.version,
+      callbackUrl
+    };
+
+    // Debug: Log request info
+    console.log('[SpecLoader] Preparing to send:', {
+      filename: file.originalName,
+      mimeType: file.mimeType,
+      dataLength: fileBuffer.length,
+      base64Length: base64Data.length,
       specId: spec._id.toString(),
       specName: spec.name,
       specVersion: spec.version,
       callbackUrl
     });
 
-    // Create form data with the PDF binary
-    const formData = new FormData();
-
-    // Ensure file.data is a Buffer
-    const fileBuffer = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data);
-
-    formData.append('data', fileBuffer, {
-      filename: file.originalName,
-      contentType: file.mimeType
-    });
-    formData.append('specId', spec._id.toString());
-    formData.append('specName', spec.name);
-    formData.append('specVersion', spec.version);
-    formData.append('callbackUrl', callbackUrl);
-
-    // Build headers - form-data package provides the correct Content-Type with boundary
+    // Build headers
     const headers: Record<string, string> = {
-      ...formData.getHeaders()
+      'Content-Type': 'application/json'
     };
 
     if (webhookSettings.authentication?.type === 'api_key' && webhookSettings.authentication.apiKey) {
@@ -104,20 +104,13 @@ export const triggerSpecLoad = async (req: AuthenticatedRequest, res: Response) 
       headers['Authorization'] = `Bearer ${webhookSettings.authentication.bearerToken}`;
     }
 
-    // Get the form data as a buffer - required for native fetch to work with form-data package
-    const formBuffer = formData.getBuffer();
+    console.log('[SpecLoader] Sending JSON request to:', webhookSettings.webhookUrl);
 
-    console.log('[SpecLoader] Sending request:', {
-      url: webhookSettings.webhookUrl,
-      contentType: headers['content-type'],
-      bodyLength: formBuffer.length
-    });
-
-    // Send to n8n webhook
+    // Send to n8n webhook as JSON
     const response = await fetch(webhookSettings.webhookUrl, {
       method: 'POST',
       headers,
-      body: formBuffer,
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(webhookSettings.timeoutMs)
     });
 
