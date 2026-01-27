@@ -9,6 +9,8 @@ import {
   getFailedSections,
   revalidateFailedSections
 } from '../controllers/webhookController';
+import { receiveSpecLoaderCallback } from '../controllers/specLoaderController';
+import { receiveDocumentMatcherCallback } from '../controllers/documentMatcherController';
 import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -19,6 +21,20 @@ const router = Router();
  * @access  Public (webhook callback)
  */
 router.post('/n8n/callback', receiveCallback);
+
+/**
+ * @route   POST /api/webhooks/spec-loader/callback
+ * @desc    Receive spec loading completion callback from N8N
+ * @access  Public (webhook callback)
+ */
+router.post('/spec-loader/callback', receiveSpecLoaderCallback);
+
+/**
+ * @route   POST /api/webhooks/document-matcher/callback
+ * @desc    Receive document section mapping callback from N8N
+ * @access  Public (webhook callback)
+ */
+router.post('/document-matcher/callback', receiveDocumentMatcherCallback);
 
 // All routes below require authentication
 router.use(authenticate);

@@ -7,6 +7,7 @@ import {
   archiveSpec,
   getSpecInstitutions
 } from '../controllers/specController';
+import { triggerSpecLoad, getSpecAIStatus } from '../controllers/specLoaderController';
 import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -59,5 +60,19 @@ router.delete('/:id', requireAdmin, archiveSpec);
  * @access  Private
  */
 router.get('/:id/institutions', getSpecInstitutions);
+
+/**
+ * @route   POST /api/specs/:id/load-to-ai
+ * @desc    Trigger loading spec document to AI via n8n
+ * @access  Private (Admin only)
+ */
+router.post('/:id/load-to-ai', requireAdmin, triggerSpecLoad);
+
+/**
+ * @route   GET /api/specs/:id/ai-status
+ * @desc    Get AI loading status for a spec
+ * @access  Private
+ */
+router.get('/:id/ai-status', getSpecAIStatus);
 
 export default router;

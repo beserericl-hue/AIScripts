@@ -11,8 +11,10 @@ export interface IRetryConfig {
   retryDelayMs: number;
 }
 
+export type WebhookSettingType = 'n8n_validation' | 'notification' | 'lead_reader_notification' | 'spec_loader' | 'document_matcher';
+
 export interface IWebhookSettings extends Document {
-  settingType: 'n8n_validation' | 'notification' | 'lead_reader_notification';
+  settingType: WebhookSettingType;
   name: string;
   description?: string;
   webhookUrl: string;
@@ -45,7 +47,7 @@ const RetryConfigSchema = new Schema<IRetryConfig>({
 const WebhookSettingsSchema = new Schema<IWebhookSettings>({
   settingType: {
     type: String,
-    enum: ['n8n_validation', 'notification', 'lead_reader_notification'],
+    enum: ['n8n_validation', 'notification', 'lead_reader_notification', 'spec_loader', 'document_matcher'],
     required: true
   },
   name: { type: String, required: true },
@@ -98,7 +100,7 @@ WebhookSettingsSchema.index({ settingType: 1 }, { unique: true });
 
 // Static method to get active webhook by type
 WebhookSettingsSchema.statics.getActiveWebhook = async function(
-  settingType: 'n8n_validation' | 'notification' | 'lead_reader_notification'
+  settingType: WebhookSettingType
 ) {
   return this.findOne({ settingType, isActive: true });
 };

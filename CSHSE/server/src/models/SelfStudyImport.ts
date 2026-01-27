@@ -40,6 +40,8 @@ export interface ISelfStudyImport extends Document {
   processingStartedAt?: Date;
   processingCompletedAt?: Date;
   error?: string;
+  // N8N Document Matcher integration
+  n8nExecutionId?: string;
   extractedContent: {
     rawText: string;
     pageCount: number;
@@ -126,6 +128,8 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   processingStartedAt: Date,
   processingCompletedAt: Date,
   error: String,
+  // N8N Document Matcher integration
+  n8nExecutionId: String,
   extractedContent: {
     rawText: { type: String, default: '' },
     pageCount: { type: Number, default: 0 },

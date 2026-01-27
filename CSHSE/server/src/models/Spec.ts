@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export type SpecStatus = 'active' | 'archived' | 'draft';
+export type AILoadingStatus = 'not_loaded' | 'loading' | 'loaded' | 'error';
 
 export interface ISpec extends Document {
   name: string;
@@ -13,6 +14,10 @@ export interface ISpec extends Document {
   uploadedBy: mongoose.Types.ObjectId;
   status: SpecStatus;
   standardsCount: number;
+  // AI Loading status for n8n integration
+  aiLoadingStatus: AILoadingStatus;
+  aiLoadedAt?: Date;
+  aiLoadError?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -55,7 +60,15 @@ const SpecSchema = new Schema<ISpec>({
   standardsCount: {
     type: Number,
     default: 21
-  }
+  },
+  // AI Loading status for n8n integration
+  aiLoadingStatus: {
+    type: String,
+    enum: ['not_loaded', 'loading', 'loaded', 'error'],
+    default: 'not_loaded'
+  },
+  aiLoadedAt: Date,
+  aiLoadError: String
 }, {
   timestamps: true
 });

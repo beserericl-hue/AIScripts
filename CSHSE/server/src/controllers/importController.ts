@@ -3,8 +3,18 @@ import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 import { SelfStudyImport, ISelfStudyImport } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
+import { WebhookSettings } from '../models/WebhookSettings';
 import { documentParserService } from '../services/documentParser';
 import { sectionMapperService } from '../services/sectionMapper';
+
+/**
+ * Construct callback URL from request headers
+ */
+function getCallbackUrl(req: Request, callbackPath: string): string {
+  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const host = req.get('host');
+  return `${protocol}://${host}${callbackPath}`;
+}
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -52,8 +62,17 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
 
     await importRecord.save();
 
+    // Construct callback URL for n8n
+    const callbackUrl = getCallbackUrl(req, '/api/webhooks/document-matcher/callback');
+
     // Start processing asynchronously
-    processDocumentAsync(importRecord._id as mongoose.Types.ObjectId, file.buffer, file.originalname, submission.programLevel);
+    processDocumentAsync(
+      importRecord._id as mongoose.Types.ObjectId,
+      file.buffer,
+      file.originalname,
+      submission.programLevel,
+      callbackUrl
+    );
 
     return res.status(202).json({
       importId: importRecord._id,
@@ -68,12 +87,15 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
 
 /**
  * Process document asynchronously
+ * If n8n Document Matcher webhook is configured, sends to n8n for AI-powered mapping.
+ * Otherwise, falls back to local section mapping.
  */
 async function processDocumentAsync(
   importId: mongoose.Types.ObjectId,
   buffer: Buffer,
   filename: string,
-  programLevel: 'associate' | 'bachelors' | 'masters'
+  programLevel: 'associate' | 'bachelors' | 'masters',
+  callbackUrl: string
 ) {
   const importRecord = await SelfStudyImport.findById(importId);
   if (!importRecord) return;
@@ -123,65 +145,21 @@ async function processDocumentAsync(
       });
     }
 
-    // Auto-map sections
-    const suggestions = await sectionMapperService.autoMap(parsed.sections, programLevel);
+    // Check if n8n Document Matcher webhook is configured
+    const webhookSettings = await WebhookSettings.findOne({
+      settingType: 'document_matcher',
+      isActive: true
+    });
 
-    // Apply auto-mappings
-    for (const suggestion of suggestions) {
-      if (suggestion.confidence >= 0.6) {
-        importRecord.mappedSections.push({
-          extractedSectionId: suggestion.sectionId,
-          standardCode: suggestion.suggestedStandardCode,
-          specCode: suggestion.suggestedSpecCode,
-          fieldType: 'narrative',
-          mappedBy: 'auto',
-          mappedAt: new Date()
-        });
-      } else {
-        importRecord.unmappedContent.push({
-          extractedSectionId: suggestion.sectionId,
-          reason: `Low confidence mapping (${Math.round(suggestion.confidence * 100)}%)`,
-          action: 'pending'
-        });
-      }
+    if (webhookSettings) {
+      // Use n8n Document Matcher for AI-powered mapping
+      await sendToN8nDocumentMatcher(importRecord, parsed, callbackUrl, webhookSettings);
+      // Processing will be completed when callback is received
+      return;
     }
 
-    // Map tables
-    for (const table of parsed.tables) {
-      const tableMapping = sectionMapperService.mapTable(table);
-      if (tableMapping && tableMapping.confidence >= 0.6) {
-        importRecord.mappedSections.push({
-          extractedSectionId: table.id,
-          standardCode: tableMapping.suggestedStandardCode,
-          specCode: tableMapping.suggestedSpecCode,
-          fieldType: table.tableType === 'curriculum_matrix' ? 'matrix' : 'table',
-          mappedBy: 'auto',
-          mappedAt: new Date()
-        });
-      } else {
-        importRecord.unmappedContent.push({
-          extractedSectionId: table.id,
-          reason: 'Table could not be auto-mapped',
-          action: 'pending'
-        });
-      }
-    }
-
-    // Find sections not mapped or in unmapped
-    const allMappedIds = new Set([
-      ...importRecord.mappedSections.map(m => m.extractedSectionId),
-      ...importRecord.unmappedContent.map(u => u.extractedSectionId)
-    ]);
-
-    for (const section of importRecord.extractedContent.sections) {
-      if (!allMappedIds.has(section.id)) {
-        importRecord.unmappedContent.push({
-          extractedSectionId: section.id,
-          reason: 'No matching standard pattern found',
-          action: 'pending'
-        });
-      }
-    }
+    // Fallback to local section mapping if n8n is not configured
+    await processWithLocalMapper(importRecord, parsed, programLevel);
 
     importRecord.status = 'completed';
     importRecord.processingCompletedAt = new Date();
@@ -191,6 +169,134 @@ async function processDocumentAsync(
     importRecord.error = error instanceof Error ? error.message : 'Unknown error';
     importRecord.processingCompletedAt = new Date();
     await importRecord.save();
+  }
+}
+
+/**
+ * Send document to n8n Document Matcher for AI-powered mapping
+ */
+async function sendToN8nDocumentMatcher(
+  importRecord: ISelfStudyImport,
+  parsed: any,
+  callbackUrl: string,
+  webhookSettings: any
+) {
+  // Build headers
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  };
+
+  if (webhookSettings.authentication?.type === 'api_key' && webhookSettings.authentication.apiKey) {
+    headers['X-API-Key'] = webhookSettings.authentication.apiKey;
+  } else if (webhookSettings.authentication?.type === 'bearer' && webhookSettings.authentication.bearerToken) {
+    headers['Authorization'] = `Bearer ${webhookSettings.authentication.bearerToken}`;
+  }
+
+  // Prepare payload for n8n
+  const payload = {
+    importId: importRecord._id.toString(),
+    filename: importRecord.originalFilename,
+    htmlContent: parsed.rawText, // The parsed document content
+    sections: importRecord.extractedContent.sections.map(s => ({
+      sectionId: s.id,
+      content: s.content,
+      pageNumber: s.pageNumber,
+      sectionType: s.sectionType
+    })),
+    callbackUrl
+  };
+
+  // Send to n8n
+  const response = await fetch(webhookSettings.webhookUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(webhookSettings.timeoutMs || 30000)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`n8n returned ${response.status}: ${errorText}`);
+  }
+
+  // Parse response to get execution ID if provided
+  try {
+    const responseData = await response.json();
+    if (responseData.executionId) {
+      importRecord.n8nExecutionId = responseData.executionId;
+      await importRecord.save();
+    }
+  } catch {
+    // Response may not be JSON, which is fine
+  }
+}
+
+/**
+ * Process document with local section mapper (fallback)
+ */
+async function processWithLocalMapper(
+  importRecord: ISelfStudyImport,
+  parsed: any,
+  programLevel: 'associate' | 'bachelors' | 'masters'
+) {
+  // Auto-map sections using local mapper
+  const suggestions = await sectionMapperService.autoMap(parsed.sections, programLevel);
+
+  // Apply auto-mappings
+  for (const suggestion of suggestions) {
+    if (suggestion.confidence >= 0.6) {
+      importRecord.mappedSections.push({
+        extractedSectionId: suggestion.sectionId,
+        standardCode: suggestion.suggestedStandardCode,
+        specCode: suggestion.suggestedSpecCode,
+        fieldType: 'narrative',
+        mappedBy: 'auto',
+        mappedAt: new Date()
+      });
+    } else {
+      importRecord.unmappedContent.push({
+        extractedSectionId: suggestion.sectionId,
+        reason: `Low confidence mapping (${Math.round(suggestion.confidence * 100)}%)`,
+        action: 'pending'
+      });
+    }
+  }
+
+  // Map tables
+  for (const table of parsed.tables) {
+    const tableMapping = sectionMapperService.mapTable(table);
+    if (tableMapping && tableMapping.confidence >= 0.6) {
+      importRecord.mappedSections.push({
+        extractedSectionId: table.id,
+        standardCode: tableMapping.suggestedStandardCode,
+        specCode: tableMapping.suggestedSpecCode,
+        fieldType: table.tableType === 'curriculum_matrix' ? 'matrix' : 'table',
+        mappedBy: 'auto',
+        mappedAt: new Date()
+      });
+    } else {
+      importRecord.unmappedContent.push({
+        extractedSectionId: table.id,
+        reason: 'Table could not be auto-mapped',
+        action: 'pending'
+      });
+    }
+  }
+
+  // Find sections not mapped or in unmapped
+  const allMappedIds = new Set([
+    ...importRecord.mappedSections.map(m => m.extractedSectionId),
+    ...importRecord.unmappedContent.map(u => u.extractedSectionId)
+  ]);
+
+  for (const section of importRecord.extractedContent.sections) {
+    if (!allMappedIds.has(section.id)) {
+      importRecord.unmappedContent.push({
+        extractedSectionId: section.id,
+        reason: 'No matching standard pattern found',
+        action: 'pending'
+      });
+    }
   }
 }
 
