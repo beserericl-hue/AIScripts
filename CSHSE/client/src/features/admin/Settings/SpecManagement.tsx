@@ -576,9 +576,25 @@ function SpecRow({ spec, onEdit, onArchive, isArchiving }: SpecRowProps) {
     }
   });
 
+  // Reset AI status mutation (cancel/retry)
+  const resetAIStatusMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post(`/api/specs/${spec._id}/reset-ai-status`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['specs-management'] });
+      queryClient.invalidateQueries({ queryKey: ['specs'] });
+    },
+    onError: (err: any) => {
+      alert(err.response?.data?.error || 'Failed to reset AI status');
+    }
+  });
+
   const aiStatus = spec.aiLoadingStatus || 'not_loaded';
   const canLoadToAI = spec.documentFileId && spec.status !== 'archived';
   const isLoading = aiStatus === 'loading' || loadToAIMutation.isPending;
+  const isResetting = resetAIStatusMutation.isPending;
 
   return (
     <div className="p-6 hover:bg-gray-50">
@@ -689,6 +705,25 @@ function SpecRow({ spec, onEdit, onArchive, isArchiving }: SpecRowProps) {
                   <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
                   Retry
                 </button>
+              ) : isLoading ? (
+                <div className="flex items-center gap-1">
+                  <span className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Loading...
+                  </span>
+                  <button
+                    onClick={() => resetAIStatusMutation.mutate()}
+                    disabled={isResetting}
+                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                    title="Cancel loading and reset"
+                  >
+                    {isResetting ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <X className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
               ) : (
                 <button
                   onClick={() => loadToAIMutation.mutate()}
@@ -696,12 +731,8 @@ function SpecRow({ spec, onEdit, onArchive, isArchiving }: SpecRowProps) {
                   className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 hover:bg-purple-200 rounded text-xs disabled:opacity-50"
                   title="Load specification document to AI for intelligent matching"
                 >
-                  {isLoading ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Brain className="w-3 h-3" />
-                  )}
-                  {isLoading ? 'Loading...' : 'Load To AI'}
+                  <Brain className="w-3 h-3" />
+                  Load To AI
                 </button>
               )}
             </>

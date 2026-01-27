@@ -7,7 +7,7 @@ import {
   archiveSpec,
   getSpecInstitutions
 } from '../controllers/specController';
-import { triggerSpecLoad, getSpecAIStatus } from '../controllers/specLoaderController';
+import { triggerSpecLoad, getSpecAIStatus, resetSpecAIStatus } from '../controllers/specLoaderController';
 import { authenticate, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -74,5 +74,12 @@ router.post('/:id/load-to-ai', requireAdmin, triggerSpecLoad);
  * @access  Private
  */
 router.get('/:id/ai-status', getSpecAIStatus);
+
+/**
+ * @route   POST /api/specs/:id/reset-ai-status
+ * @desc    Reset AI loading status (cancel loading/retry)
+ * @access  Private (Admin only)
+ */
+router.post('/:id/reset-ai-status', requireAdmin, resetSpecAIStatus);
 
 export default router;

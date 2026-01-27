@@ -211,3 +211,35 @@ export const getSpecAIStatus = async (req: Request, res: Response) => {
     return res.status(500).json({ error: 'Failed to get spec AI status' });
   }
 };
+
+/**
+ * Reset spec AI loading status (cancel/retry)
+ */
+export const resetSpecAIStatus = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const spec = await Spec.findById(id);
+    if (!spec) {
+      return res.status(404).json({ error: 'Spec not found' });
+    }
+
+    // Reset to not_loaded so user can try again
+    spec.aiLoadingStatus = 'not_loaded';
+    spec.aiLoadedAt = undefined;
+    spec.aiLoadError = undefined;
+    await spec.save();
+
+    console.log('[SpecLoader] Reset AI status for spec:', id);
+
+    return res.json({
+      success: true,
+      specId: spec._id,
+      aiLoadingStatus: spec.aiLoadingStatus,
+      message: 'AI loading status reset. You can now try loading again.'
+    });
+  } catch (error) {
+    console.error('Reset spec AI status error:', error);
+    return res.status(500).json({ error: 'Failed to reset spec AI status' });
+  }
+};
