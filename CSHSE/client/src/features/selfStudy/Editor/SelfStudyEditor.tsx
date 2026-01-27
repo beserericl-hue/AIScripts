@@ -25,7 +25,7 @@ import { NarrativeEditor } from './NarrativeEditor';
 import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+// Use consistent API paths without relying on environment variable
 
 interface SelfStudyEditorProps {
   submissionId: string;
@@ -118,19 +118,19 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [isApplying, setIsApplying] = useState(false);
 
   // Fetch submission data
-  const { data: submission, isLoading: loadingSubmission } = useQuery<SubmissionData>({
+  const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
     queryKey: ['submission', submissionId],
     queryFn: async () => {
-      const response = await api.get(`${API_BASE}/submissions/${submissionId}`);
+      const response = await api.get(`/api/submissions/${submissionId}`);
       return response.data;
     },
   });
 
   // Fetch standards definitions
-  const { data: standards, isLoading: loadingStandards } = useQuery<StandardDefinition[]>({
+  const { data: standards, isLoading: loadingStandards, isError: standardsError } = useQuery<StandardDefinition[]>({
     queryKey: ['standards'],
     queryFn: async () => {
-      const response = await api.get(`${API_BASE}/standards`);
+      const response = await api.get(`/api/standards`);
       return response.data;
     },
   });
@@ -146,7 +146,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       specCode: string;
       content: string;
     }) => {
-      await api.patch(`${API_BASE}/submissions/${submissionId}/narrative`, {
+      await api.patch(`/api/submissions/${submissionId}/narrative`, {
         standardCode,
         specCode,
         content,
@@ -161,7 +161,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const submitStandardMutation = useMutation({
     mutationFn: async (standardCode: string) => {
       const response = await api.post(
-        `${API_BASE}/submissions/${submissionId}/standards/${standardCode}/submit`
+        `/api/submissions/${submissionId}/standards/${standardCode}/submit`
       );
       return response.data;
     },
@@ -405,7 +405,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
   if (loadingSubmission || loadingStandards) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center min-h-[60vh] bg-gray-50">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-teal-600 mx-auto mb-4" />
           <p className="text-gray-600">Loading self-study editor...</p>
@@ -414,8 +414,29 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     );
   }
 
+  // Handle errors
+  if (submissionError || standardsError) {
+    const errorMessage = (submissionErrorDetails as any)?.response?.data?.error || 'Failed to load submission data';
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] bg-gray-50">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Self-Study</h2>
+          <p className="text-gray-600 mb-4">{errorMessage}</p>
+          <button
+            onClick={() => navigate('/self-study')}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            <Home className="w-4 h-4" />
+            Back to Self-Study List
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="self-study-editor h-screen flex flex-col bg-gray-50">
+    <div className="self-study-editor min-h-[calc(100vh-160px)] flex flex-col bg-gray-50 -mx-4 sm:-mx-6 lg:-mx-8 -my-6">
       {/* Header */}
       <header className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between">
