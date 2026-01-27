@@ -3,9 +3,18 @@ import mongoose from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 import { SelfStudyImport, ISelfStudyImport } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
+import { Institution } from '../models/Institution';
 import { WebhookSettings } from '../models/WebhookSettings';
 import { documentParserService } from '../services/documentParser';
 import { sectionMapperService } from '../services/sectionMapper';
+
+// Debug logging helper
+const DEBUG = process.env.DEBUG_IMPORT === 'true' || process.env.NODE_ENV === 'development';
+function debugLog(message: string, data?: any) {
+  if (DEBUG) {
+    console.log(`[ImportController] ${message}`, data ? JSON.stringify(data, null, 2) : '');
+  }
+}
 
 /**
  * Construct callback URL from request headers
@@ -61,9 +70,16 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
     });
 
     await importRecord.save();
+    debugLog('Import record created', { importId: importRecord._id, submissionId });
 
     // Construct callback URL for n8n
     const callbackUrl = getCallbackUrl(req, '/api/webhooks/document-matcher/callback');
+    debugLog('Callback URL constructed', { callbackUrl });
+
+    // Get specName from institution
+    const institution = await Institution.findOne({ name: submission.institutionName });
+    const specName = institution?.specName || 'CSHSE Standards';
+    debugLog('Spec name resolved', { institutionName: submission.institutionName, specName });
 
     // Start processing asynchronously
     processDocumentAsync(
@@ -71,7 +87,8 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
       file.buffer,
       file.originalname,
       submission.programLevel,
-      callbackUrl
+      callbackUrl,
+      specName
     );
 
     return res.status(202).json({
@@ -95,16 +112,24 @@ async function processDocumentAsync(
   buffer: Buffer,
   filename: string,
   programLevel: 'associate' | 'bachelors' | 'masters',
-  callbackUrl: string
+  callbackUrl: string,
+  specName: string
 ) {
+  debugLog('Starting async document processing', { importId: importId.toString(), filename, specName });
+
   const importRecord = await SelfStudyImport.findById(importId);
-  if (!importRecord) return;
+  if (!importRecord) {
+    console.error('[ImportController] Import record not found:', importId);
+    return;
+  }
 
   try {
     // Update status to processing
     importRecord.status = 'processing';
     importRecord.processingStartedAt = new Date();
+    importRecord.specName = specName;
     await importRecord.save();
+    debugLog('Import record status updated to processing');
 
     // Parse the document
     const parsed = await documentParserService.parse(buffer, filename);
@@ -153,10 +178,15 @@ async function processDocumentAsync(
 
     if (webhookSettings) {
       // Use n8n Document Matcher for AI-powered mapping
-      await sendToN8nDocumentMatcher(importRecord, parsed, callbackUrl, webhookSettings);
+      debugLog('n8n Document Matcher webhook found, sending to n8n', {
+        webhookUrl: webhookSettings.webhookUrl,
+        specName
+      });
+      await sendToN8nDocumentMatcher(importRecord, parsed, callbackUrl, webhookSettings, specName);
       // Processing will be completed when callback is received
       return;
     }
+    debugLog('No n8n webhook configured, using local mapper');
 
     // Fallback to local section mapping if n8n is not configured
     await processWithLocalMapper(importRecord, parsed, programLevel);
@@ -174,13 +204,32 @@ async function processDocumentAsync(
 
 /**
  * Send document to n8n Document Matcher for AI-powered mapping
+ *
+ * Request payload format:
+ * {
+ *   "callbackUrl": "https://your-app.com/api/webhooks/document-matcher/callback",
+ *   "specName": "CSHSE Standards 2024",
+ *   "documentId": "doc-12345",
+ *   "htmlContent": "<h1>Program Overview</h1>...",
+ *   "options": {
+ *     "batchSize": 10,
+ *     "confidenceThreshold": 50
+ *   }
+ * }
  */
 async function sendToN8nDocumentMatcher(
   importRecord: ISelfStudyImport,
   parsed: any,
   callbackUrl: string,
-  webhookSettings: any
+  webhookSettings: any,
+  specName: string
 ) {
+  debugLog('Preparing n8n Document Matcher request', {
+    importId: importRecord._id.toString(),
+    specName,
+    callbackUrl
+  });
+
   // Build headers
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
@@ -188,23 +237,29 @@ async function sendToN8nDocumentMatcher(
 
   if (webhookSettings.authentication?.type === 'api_key' && webhookSettings.authentication.apiKey) {
     headers['X-API-Key'] = webhookSettings.authentication.apiKey;
+    debugLog('Using API key authentication');
   } else if (webhookSettings.authentication?.type === 'bearer' && webhookSettings.authentication.bearerToken) {
     headers['Authorization'] = `Bearer ${webhookSettings.authentication.bearerToken}`;
+    debugLog('Using Bearer token authentication');
   }
 
-  // Prepare payload for n8n
+  // Prepare payload for n8n using the required format
   const payload = {
-    importId: importRecord._id.toString(),
-    filename: importRecord.originalFilename,
-    htmlContent: parsed.rawText, // The parsed document content
-    sections: importRecord.extractedContent.sections.map(s => ({
-      sectionId: s.id,
-      content: s.content,
-      pageNumber: s.pageNumber,
-      sectionType: s.sectionType
-    })),
-    callbackUrl
+    callbackUrl,
+    specName,
+    documentId: importRecord._id.toString(),
+    htmlContent: parsed.rawText, // The parsed document content as HTML
+    options: {
+      batchSize: 10,
+      confidenceThreshold: 50
+    }
   };
+
+  debugLog('Sending request to n8n webhook', {
+    webhookUrl: webhookSettings.webhookUrl,
+    payloadSize: JSON.stringify(payload).length,
+    htmlContentLength: parsed.rawText?.length || 0
+  });
 
   // Send to n8n
   const response = await fetch(webhookSettings.webhookUrl, {
@@ -214,20 +269,39 @@ async function sendToN8nDocumentMatcher(
     signal: AbortSignal.timeout(webhookSettings.timeoutMs || 30000)
   });
 
+  debugLog('n8n response received', {
+    status: response.status,
+    statusText: response.statusText
+  });
+
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('[ImportController] n8n webhook error:', {
+      status: response.status,
+      error: errorText
+    });
     throw new Error(`n8n returned ${response.status}: ${errorText}`);
   }
 
-  // Parse response to get execution ID if provided
+  // Parse response to get execution ID or job ID if provided
   try {
-    const responseData = await response.json();
+    const responseData = await response.json() as { executionId?: string; jobId?: string };
+    debugLog('n8n response data', responseData);
+
     if (responseData.executionId) {
       importRecord.n8nExecutionId = responseData.executionId;
-      await importRecord.save();
     }
+    if (responseData.jobId) {
+      importRecord.n8nJobId = responseData.jobId;
+    }
+    await importRecord.save();
+    debugLog('Import record updated with n8n IDs', {
+      executionId: importRecord.n8nExecutionId,
+      jobId: importRecord.n8nJobId
+    });
   } catch {
     // Response may not be JSON, which is fine
+    debugLog('n8n response was not JSON (this is okay)');
   }
 }
 

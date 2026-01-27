@@ -42,6 +42,10 @@ export interface ISelfStudyImport extends Document {
   error?: string;
   // N8N Document Matcher integration
   n8nExecutionId?: string;
+  n8nJobId?: string;
+  n8nTotalSections?: number;
+  n8nReceivedSections?: number;
+  specName?: string;
   extractedContent: {
     rawText: string;
     pageCount: number;
@@ -130,6 +134,10 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   error: String,
   // N8N Document Matcher integration
   n8nExecutionId: String,
+  n8nJobId: String,
+  n8nTotalSections: { type: Number, default: 0 },
+  n8nReceivedSections: { type: Number, default: 0 },
+  specName: String,
   extractedContent: {
     rawText: { type: String, default: '' },
     pageCount: { type: Number, default: 0 },
