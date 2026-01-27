@@ -290,7 +290,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     };
 
     const spec = selectedSpec
-      ? standard.specifications.find((sp) => sp.code === selectedSpec)
+      ? (standard.specifications || []).find((sp) => sp.code === selectedSpec)
       : null;
 
     return {
@@ -315,14 +315,14 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       standardTitle: standard.title,
       status:
         submission?.standardsStatus[standard.code]?.status || 'not_started',
-      specifications: standard.specifications.map((spec) => ({
+      specifications: (standard.specifications || []).map((spec) => ({
         specCode: spec.code,
         specTitle: spec.title,
         status:
-          submission?.standardsStatus[`${standard.code}.${spec.code}`]?.status ||
+          submission?.standardsStatus?.[`${standard.code}.${spec.code}`]?.status ||
           'not_started',
         validationStatus:
-          submission?.standardsStatus[`${standard.code}.${spec.code}`]?.validationStatus,
+          submission?.standardsStatus?.[`${standard.code}.${spec.code}`]?.validationStatus,
       })),
     }));
   }, [standards, submission]);
@@ -356,8 +356,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     if (!currentStandard) return false;
 
     // Check if all specs have passed validation
-    return currentStandard.specifications.every(spec => {
-      const status = submission.standardsStatus[`${selectedStandard}.${spec.code}`];
+    return (currentStandard.specifications || []).every(spec => {
+      const status = submission?.standardsStatus?.[`${selectedStandard}.${spec.code}`];
       return status?.validationStatus === 'pass';
     });
   }, [standards, submission, selectedStandard]);
@@ -369,32 +369,32 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       const currentStandard = standards.find((s) => s.code === selectedStandard);
       if (!currentStandard) return;
 
-      const currentIndex = currentStandard.specifications.findIndex(
-        (s) => s.code === selectedSpec
-      );
+      const specs = currentStandard.specifications || [];
+      const currentIndex = specs.findIndex((s) => s.code === selectedSpec);
 
       if (direction === 'next') {
-        if (currentIndex < currentStandard.specifications.length - 1) {
-          setSelectedSpec(currentStandard.specifications[currentIndex + 1].code);
+        if (currentIndex < specs.length - 1) {
+          setSelectedSpec(specs[currentIndex + 1].code);
         } else {
           // Move to next standard
           const standardIndex = standards.findIndex((s) => s.code === selectedStandard);
           if (standardIndex < standards.length - 1) {
             const nextStandard = standards[standardIndex + 1];
             setSelectedStandard(nextStandard.code);
-            setSelectedSpec(nextStandard.specifications[0]?.code || null);
+            setSelectedSpec((nextStandard.specifications || [])[0]?.code || null);
           }
         }
       } else {
         if (currentIndex > 0) {
-          setSelectedSpec(currentStandard.specifications[currentIndex - 1].code);
+          setSelectedSpec(specs[currentIndex - 1].code);
         } else {
           // Move to prev standard
           const standardIndex = standards.findIndex((s) => s.code === selectedStandard);
           if (standardIndex > 0) {
             const prevStandard = standards[standardIndex - 1];
             setSelectedStandard(prevStandard.code);
-            const lastSpec = prevStandard.specifications[prevStandard.specifications.length - 1];
+            const prevSpecs = prevStandard.specifications || [];
+            const lastSpec = prevSpecs[prevSpecs.length - 1];
             setSelectedSpec(lastSpec?.code || null);
           }
         }
@@ -570,7 +570,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                   onSelectStandard={(code) => {
                     setSelectedStandard(code);
                     const standard = standards?.find((s) => s.code === code);
-                    setSelectedSpec(standard?.specifications[0]?.code || null);
+                    setSelectedSpec((standard?.specifications || [])[0]?.code || null);
                   }}
                   onSelectSpec={(standardCode, specCode) => {
                     setSelectedStandard(standardCode);
