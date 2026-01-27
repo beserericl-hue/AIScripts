@@ -403,6 +403,17 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     [standards, selectedStandard, selectedSpec]
   );
 
+  // Debug: Log render state
+  console.log('SelfStudyEditor render:', {
+    loadingSubmission,
+    loadingStandards,
+    submissionError,
+    standardsError,
+    hasSubmission: !!submission,
+    hasStandards: !!standards,
+    submissionId
+  });
+
   if (loadingSubmission || loadingStandards) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] bg-gray-50">
@@ -423,6 +434,27 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
           <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-lg font-semibold text-gray-900 mb-2">Unable to Load Self-Study</h2>
           <p className="text-gray-600 mb-4">{errorMessage}</p>
+          <button
+            onClick={() => navigate('/self-study')}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+          >
+            <Home className="w-4 h-4" />
+            Back to Self-Study List
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle case where data is missing (shouldn't happen but safety check)
+  if (!submission || !standards) {
+    console.error('SelfStudyEditor: Data missing after loading completed', { submission, standards });
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] bg-gray-50">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Data Not Available</h2>
+          <p className="text-gray-600 mb-4">The submission data could not be loaded. Please try again.</p>
           <button
             onClick={() => navigate('/self-study')}
             className="inline-flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
