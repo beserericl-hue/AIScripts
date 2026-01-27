@@ -28,8 +28,10 @@ export const getMatrix = async (req: AuthenticatedRequest, res: Response) => {
       if (!matrix) {
         matrix = await CurriculumMatrix.create({
           submissionId,
+          name: 'Curriculum Matrix',
           courses: [],
-          standards: []
+          standards: [],
+          lastModifiedBy: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : new mongoose.Types.ObjectId(submissionId)
         });
       }
     }
@@ -184,6 +186,7 @@ export const updateAssessment = async (req: AuthenticatedRequest, res: Response)
       standardMapping = {
         standardCode,
         specCode,
+        specText: '', // Will be populated from spec template if needed
         courseAssessments: []
       };
       matrix.standards.push(standardMapping);
@@ -325,6 +328,7 @@ export const importMatrix = async (req: AuthenticatedRequest, res: Response) => 
           standardMapping = {
             standardCode,
             specCode,
+            specText: '', // Will be populated from spec template if needed
             courseAssessments: []
           };
           matrix.standards.push(standardMapping);
