@@ -814,6 +814,8 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
 
 /**
  * Cancel/abort an in-progress import
+ * Deletes the import record and all associated data (extracted HTML, sections, mappings)
+ * to free up space since the user will try again
  */
 export const cancelImport = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -826,7 +828,7 @@ export const cancelImport = async (req: AuthenticatedRequest, res: Response) => 
       return res.status(404).json({ error: 'Import not found' });
     }
 
-    // Only allow canceling if still processing
+    // Only allow canceling if still processing or pending
     if (importRecord.status !== 'processing' && importRecord.status !== 'pending') {
       debugLog('Import cannot be cancelled - not in processing state', {
         importId,
@@ -837,23 +839,26 @@ export const cancelImport = async (req: AuthenticatedRequest, res: Response) => 
       });
     }
 
-    // Update status to failed with cancellation message
-    importRecord.status = 'failed';
-    importRecord.error = 'Import cancelled by user';
-    importRecord.processingCompletedAt = new Date();
-    await importRecord.save();
-
-    debugLog('Import cancelled successfully', {
+    // Log what we're about to delete for debugging
+    debugLog('Deleting import record and all associated data', {
       importId,
-      previousStatus: 'processing',
-      newStatus: 'failed'
+      filename: importRecord.originalFilename,
+      extractedContentSize: importRecord.extractedContent?.rawText?.length || 0,
+      sectionsCount: importRecord.extractedContent?.sections?.length || 0,
+      mappedCount: importRecord.mappedSections?.length || 0,
+      unmappedCount: importRecord.unmappedContent?.length || 0
     });
+
+    // Delete the entire import record to free up space
+    // This removes: extracted HTML, sections, mappings, and all metadata
+    await SelfStudyImport.findByIdAndDelete(importId);
+
+    debugLog('Import record deleted successfully', { importId });
 
     return res.json({
       success: true,
-      message: 'Import cancelled successfully',
-      importId: importRecord._id,
-      status: importRecord.status
+      message: 'Import cancelled and data cleaned up',
+      importId
     });
   } catch (error) {
     console.error('Cancel import error:', error);
