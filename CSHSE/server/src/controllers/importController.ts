@@ -14,6 +14,60 @@ function debugLog(message: string, data?: any) {
 }
 
 /**
+ * Split HTML content into sections by h1 tags
+ * Each section includes the h1 and all content until the next h1
+ * Returns array of { heading: string, content: string }
+ */
+function splitHtmlBySections(html: string): { heading: string; content: string }[] {
+  const sections: { heading: string; content: string }[] = [];
+
+  // Regex to match h1 tags and capture the heading text
+  const h1Regex = /<h1[^>]*>(.*?)<\/h1>/gi;
+  const matches = [...html.matchAll(h1Regex)];
+
+  if (matches.length === 0) {
+    // No h1 tags found - return entire content as single section
+    debugLog('No h1 tags found in HTML, treating as single section', {
+      contentLength: html.length
+    });
+    return [{ heading: 'Document Content', content: html }];
+  }
+
+  debugLog('Found h1 sections in HTML', { count: matches.length });
+
+  // Get content before first h1 (if any)
+  const firstH1Index = matches[0].index!;
+  if (firstH1Index > 0) {
+    const preamble = html.substring(0, firstH1Index).trim();
+    if (preamble.length > 100) { // Only include if substantial
+      sections.push({
+        heading: 'Preamble',
+        content: preamble
+      });
+    }
+  }
+
+  // Split by h1 sections
+  for (let i = 0; i < matches.length; i++) {
+    const match = matches[i];
+    const heading = match[1].replace(/<[^>]*>/g, '').trim(); // Strip any inner tags
+    const startIndex = match.index!;
+    const endIndex = i < matches.length - 1 ? matches[i + 1].index! : html.length;
+
+    const content = html.substring(startIndex, endIndex).trim();
+
+    sections.push({ heading, content });
+  }
+
+  debugLog('Split HTML into sections', {
+    totalSections: sections.length,
+    sectionHeadings: sections.map(s => s.heading.substring(0, 50))
+  });
+
+  return sections;
+}
+
+/**
  * Construct callback URL from request headers
  */
 function getCallbackUrl(req: Request, callbackPath: string): string {
@@ -202,7 +256,10 @@ async function processDocumentAsync(
 /**
  * Send document to n8n Document Matcher for AI-powered mapping
  *
- * ==================== REQUEST PAYLOAD ====================
+ * Large documents are split by h1 tags and sent as multiple smaller requests
+ * to avoid 413 Payload Too Large errors.
+ *
+ * ==================== REQUEST PAYLOAD (per section) ====================
  * POST {webhookUrl}
  * Content-Type: application/json
  *
@@ -210,29 +267,27 @@ async function processDocumentAsync(
  *   "callbackUrl": "https://your-app.com/api/webhooks/document-matcher/callback",
  *   "specName": "CSHSE Standards 2024",
  *   "documentId": "mongo-import-id",
+ *   "sectionIndex": 0,
+ *   "totalSections": 15,
+ *   "sectionHeading": "STANDARD 1: Program Identity",
  *   "htmlContent": "BASE64_ENCODED_HTML_STRING",
  *   "htmlContentEncoding": "base64",
+ *   "moreData": true,
  *   "options": {
- *     "batchSize": 10,
  *     "confidenceThreshold": 50
  *   }
  * }
  *
- * Note: htmlContent is proper HTML with header tags (h1, h2, h3, etc.) for sections.
+ * Note: htmlContent is proper HTML with header tags (h1, h2, h3, etc.) for this section.
  * The HTML is base64 encoded for safe transport.
  * Decode in n8n using: Buffer.from(htmlContent, 'base64').toString('utf8')
- *
- * Example HTML structure after decoding:
- * <h1>STANDARD 1: Program Identity</h1>
- * <p>The program is located in...</p>
- * <h2>Specification a: Regional Accreditation</h2>
- * <p>Our program is regionally accredited by...</p>
  *
  * ==================== EXPECTED RESPONSE ====================
  * n8n should return immediately with:
  * {
  *   "jobId": "uuid-generated-by-n8n",
- *   "status": "accepted"
+ *   "status": "accepted",
+ *   "sectionIndex": 0
  * }
  *
  * ==================== CALLBACK PAYLOAD ====================
@@ -289,76 +344,106 @@ async function sendToN8nDocumentMatcher(
   // Use the properly formatted HTML content with headers (h1, h2, etc.)
   // Fall back to rawText if htmlContent is not available
   const htmlContent = parsed.htmlContent || parsed.rawText || '';
-  const htmlContentBase64 = Buffer.from(htmlContent, 'utf8').toString('base64');
 
-  // Prepare payload for n8n using the required format
-  const payload = {
-    callbackUrl,
-    specName,
-    documentId: importRecord._id.toString(),
-    htmlContent: htmlContentBase64,
-    htmlContentEncoding: 'base64', // Signal to n8n that content is base64 encoded
-    options: {
-      batchSize: 10,
-      confidenceThreshold: 50
-    }
-  };
+  // Split HTML into sections by h1 tags to avoid payload size limits
+  const sections = splitHtmlBySections(htmlContent);
+  const totalSections = sections.length;
 
-  debugLog('Sending request to n8n webhook', {
-    webhookUrl: webhookSettings.webhookUrl,
-    payloadSize: JSON.stringify(payload).length,
-    htmlContentLength: htmlContent.length,
-    htmlContentBase64Length: htmlContentBase64.length,
-    hasHeaders: /<h[1-6]/i.test(htmlContent)
+  debugLog('Document split into sections for n8n', {
+    totalSections,
+    totalHtmlLength: htmlContent.length,
+    sectionSizes: sections.map(s => s.content.length)
   });
+
+  // Generate a job ID for tracking all sections of this document
+  const jobId = uuidv4();
 
   // Mark that we're sending to n8n BEFORE the request (so we track it even if response parsing fails)
   importRecord.n8nSentAt = new Date();
+  importRecord.n8nJobId = jobId;
+  importRecord.n8nTotalSections = totalSections;
+  importRecord.n8nReceivedSections = 0;
   await importRecord.save();
-  debugLog('Marked n8nSentAt timestamp');
-
-  // Send to n8n
-  const response = await fetch(webhookSettings.webhookUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-    signal: AbortSignal.timeout(webhookSettings.timeoutMs || 30000)
+  debugLog('Marked n8nSentAt timestamp and initialized section tracking', {
+    jobId,
+    totalSections
   });
 
-  debugLog('n8n response received', {
-    status: response.status,
-    statusText: response.statusText
-  });
+  // Send each section separately
+  for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+    const section = sections[sectionIndex];
+    const isLastSection = sectionIndex === sections.length - 1;
+    const sectionContentBase64 = Buffer.from(section.content, 'utf8').toString('base64');
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('[ImportController] n8n webhook error:', {
+    // Prepare payload for this section
+    const payload = {
+      callbackUrl,
+      specName,
+      documentId: importRecord._id.toString(),
+      jobId, // Same job ID for all sections of this document
+      sectionIndex,
+      totalSections,
+      sectionHeading: section.heading,
+      htmlContent: sectionContentBase64,
+      htmlContentEncoding: 'base64',
+      moreData: !isLastSection,
+      options: {
+        confidenceThreshold: 50
+      }
+    };
+
+    const payloadSize = JSON.stringify(payload).length;
+    debugLog(`Sending section ${sectionIndex + 1}/${totalSections} to n8n`, {
+      sectionIndex,
+      heading: section.heading.substring(0, 50),
+      payloadSize,
+      sectionContentLength: section.content.length,
+      base64Length: sectionContentBase64.length,
+      moreData: !isLastSection
+    });
+
+    // Send this section to n8n
+    const response = await fetch(webhookSettings.webhookUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(webhookSettings.timeoutMs || 30000)
+    });
+
+    debugLog(`n8n response for section ${sectionIndex}`, {
       status: response.status,
-      error: errorText
+      statusText: response.statusText
     });
-    throw new Error(`n8n returned ${response.status}: ${errorText}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[ImportController] n8n webhook error for section ${sectionIndex}:`, {
+        status: response.status,
+        error: errorText
+      });
+      throw new Error(`n8n returned ${response.status} for section ${sectionIndex}: ${errorText}`);
+    }
+
+    // Parse response to verify acceptance
+    try {
+      const responseData = await response.json() as { status?: string; sectionIndex?: number };
+      debugLog(`n8n accepted section ${sectionIndex}`, responseData);
+    } catch {
+      // Response may not be JSON, which is fine
+      debugLog(`n8n response for section ${sectionIndex} was not JSON (this is okay)`);
+    }
+
+    // Small delay between sections to avoid overwhelming n8n
+    if (!isLastSection) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
   }
 
-  // Parse response to get execution ID or job ID if provided
-  try {
-    const responseData = await response.json() as { executionId?: string; jobId?: string };
-    debugLog('n8n response data', responseData);
-
-    if (responseData.executionId) {
-      importRecord.n8nExecutionId = responseData.executionId;
-    }
-    if (responseData.jobId) {
-      importRecord.n8nJobId = responseData.jobId;
-    }
-    await importRecord.save();
-    debugLog('Import record updated with n8n IDs', {
-      executionId: importRecord.n8nExecutionId,
-      jobId: importRecord.n8nJobId
-    });
-  } catch {
-    // Response may not be JSON, which is fine
-    debugLog('n8n response was not JSON (this is okay)');
-  }
+  debugLog('All sections sent to n8n successfully', {
+    documentId: importRecord._id.toString(),
+    jobId,
+    totalSections
+  });
 }
 
 /**
@@ -494,16 +579,19 @@ export const getImport = async (req: Request, res: Response) => {
         const n8nElapsedSeconds = Math.floor(n8nElapsedMs / 1000);
         const n8nMinutes = Math.floor(n8nElapsedSeconds / 60);
 
+        const totalSections = importRecord.n8nTotalSections || 0;
+        const sectionInfo = totalSections > 0 ? ` (${totalSections} sections)` : '';
+
         if (n8nMinutes >= 5) {
-          stepDescription = `Waiting for AI analysis... (${n8nMinutes} minutes) - Large documents may take longer`;
+          stepDescription = `Waiting for AI analysis${sectionInfo}... (${n8nMinutes} minutes) - Large documents may take longer`;
         } else if (n8nMinutes >= 1) {
-          stepDescription = `AI is analyzing document structure... (${n8nMinutes}m ${n8nElapsedSeconds % 60}s)`;
+          stepDescription = `AI is analyzing document sections${sectionInfo}... (${n8nMinutes}m ${n8nElapsedSeconds % 60}s)`;
         } else {
-          stepDescription = 'AI is analyzing document structure...';
+          stepDescription = `Sent ${totalSections} sections to AI for analysis...`;
         }
       } else {
         processingStep = 'matching';
-        stepDescription = `Matching sections to standards (${importRecord.n8nReceivedSections}/${importRecord.n8nTotalSections || '?'})...`;
+        stepDescription = `Receiving AI matches (${importRecord.n8nReceivedSections}/${importRecord.n8nTotalSections || '?'} sections)...`;
       }
     } else if (importRecord.status === 'completed') {
       processingStep = 'complete';

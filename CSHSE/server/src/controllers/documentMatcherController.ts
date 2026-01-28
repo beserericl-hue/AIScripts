@@ -118,7 +118,9 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
     }
 
     // Update job tracking info on first callback
-    if (payload.sectionIndex === 0 || !importRecord.n8nJobId) {
+    // Only reset if this is truly a new job (different jobId or first callback for this document)
+    const isNewJob = !importRecord.n8nJobId || importRecord.n8nJobId !== payload.jobId;
+    if (payload.sectionIndex === 0 || isNewJob) {
       importRecord.n8nJobId = payload.jobId;
       importRecord.n8nTotalSections = payload.totalSections;
       importRecord.n8nReceivedSections = 0;
@@ -127,9 +129,13 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
       importRecord.mappedSections = importRecord.mappedSections.filter(m => m.mappedBy === 'manual');
       importRecord.unmappedContent = [];
 
-      debugLog('Initialized job tracking', {
+      // Clear extracted sections since n8n provides the authoritative sections
+      importRecord.extractedContent.sections = [];
+
+      debugLog('Initialized job tracking (first callback)', {
         jobId: payload.jobId,
-        totalSections: payload.totalSections
+        totalSections: payload.totalSections,
+        isNewJob
       });
     }
 
