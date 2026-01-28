@@ -218,8 +218,15 @@ async function processDocumentAsync(
  *   }
  * }
  *
- * Note: htmlContent is base64 encoded to handle binary/special characters.
+ * Note: htmlContent is proper HTML with header tags (h1, h2, h3, etc.) for sections.
+ * The HTML is base64 encoded for safe transport.
  * Decode in n8n using: Buffer.from(htmlContent, 'base64').toString('utf8')
+ *
+ * Example HTML structure after decoding:
+ * <h1>STANDARD 1: Program Identity</h1>
+ * <p>The program is located in...</p>
+ * <h2>Specification a: Regional Accreditation</h2>
+ * <p>Our program is regionally accredited by...</p>
  *
  * ==================== EXPECTED RESPONSE ====================
  * n8n should return immediately with:
@@ -279,9 +286,10 @@ async function sendToN8nDocumentMatcher(
     debugLog('Using Bearer token authentication');
   }
 
-  // Base64 encode the HTML content to handle binary/special characters
-  const rawText = parsed.rawText || '';
-  const htmlContentBase64 = Buffer.from(rawText, 'utf8').toString('base64');
+  // Use the properly formatted HTML content with headers (h1, h2, etc.)
+  // Fall back to rawText if htmlContent is not available
+  const htmlContent = parsed.htmlContent || parsed.rawText || '';
+  const htmlContentBase64 = Buffer.from(htmlContent, 'utf8').toString('base64');
 
   // Prepare payload for n8n using the required format
   const payload = {
@@ -299,8 +307,9 @@ async function sendToN8nDocumentMatcher(
   debugLog('Sending request to n8n webhook', {
     webhookUrl: webhookSettings.webhookUrl,
     payloadSize: JSON.stringify(payload).length,
-    htmlContentLength: rawText.length,
-    htmlContentBase64Length: htmlContentBase64.length
+    htmlContentLength: htmlContent.length,
+    htmlContentBase64Length: htmlContentBase64.length,
+    hasHeaders: /<h[1-6]/i.test(htmlContent)
   });
 
   // Mark that we're sending to n8n BEFORE the request (so we track it even if response parsing fails)
