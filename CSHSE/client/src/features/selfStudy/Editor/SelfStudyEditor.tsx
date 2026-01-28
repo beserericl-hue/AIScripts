@@ -76,6 +76,19 @@ const STANDARD_NAMES: Record<string, string> = {
   '19': 'Supervision', '20': 'Technology', '21': 'Field Experience'
 };
 
+interface ImportProgress {
+  step: 'initializing' | 'parsing' | 'analyzing' | 'matching' | 'complete' | 'error';
+  stepDescription: string;
+  totalSections: number;
+  receivedSections: number;
+  percentComplete: number;
+  recentMappings: Array<{
+    standardCode: string;
+    specCode: string;
+    mappedBy: string;
+  }>;
+}
+
 interface ImportStatus {
   id: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
@@ -83,6 +96,8 @@ interface ImportStatus {
   mappedCount: number;
   unmappedCount: number;
   error?: string;
+  specName?: string;
+  progress?: ImportProgress;
   extractedContent?: { pageCount: number; sectionCount: number };
 }
 
@@ -779,24 +794,125 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                 </div>
               )}
 
-              {/* Processing Step */}
+              {/* Processing Step - Detailed Progress */}
               {importStep === 'processing' && (
-                <div className="text-center py-12 space-y-6">
-                  <Loader2 className="w-16 h-16 animate-spin text-teal-600 mx-auto" />
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                <div className="space-y-6">
+                  {/* Header with filename */}
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
                       Processing Document
                     </h3>
-                    <p className="text-gray-600">
-                      {importStatus?.originalFilename || 'Your document'} is being analyzed...
+                    <p className="text-sm text-gray-500">
+                      {importStatus?.originalFilename || 'Your document'}
                     </p>
                   </div>
-                  {importStatus?.extractedContent && (
-                    <div className="bg-gray-50 rounded-lg p-4 inline-block">
-                      <p className="text-sm text-gray-600">
-                        Found {importStatus.extractedContent.pageCount} pages,{' '}
-                        {importStatus.extractedContent.sectionCount} sections
-                      </p>
+
+                  {/* Progress Steps */}
+                  <div className="bg-gray-50 rounded-lg p-6">
+                    {/* Step indicators */}
+                    <div className="flex items-center justify-center gap-2 mb-6">
+                      {['parsing', 'analyzing', 'matching'].map((step, index) => {
+                        const currentStepIndex = ['initializing', 'parsing', 'analyzing', 'matching'].indexOf(
+                          importStatus?.progress?.step || 'initializing'
+                        );
+                        const stepIndex = index + 1;
+                        const isActive = stepIndex === currentStepIndex;
+                        const isComplete = stepIndex < currentStepIndex;
+                        return (
+                          <React.Fragment key={step}>
+                            {index > 0 && (
+                              <div className={`w-8 h-0.5 ${isComplete ? 'bg-teal-500' : 'bg-gray-300'}`} />
+                            )}
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
+                                isComplete
+                                  ? 'bg-teal-500 text-white'
+                                  : isActive
+                                  ? 'bg-teal-100 text-teal-700 border-2 border-teal-500'
+                                  : 'bg-gray-200 text-gray-500'
+                              }`}
+                            >
+                              {isComplete ? <Check className="w-4 h-4" /> : index + 1}
+                            </div>
+                          </React.Fragment>
+                        );
+                      })}
+                    </div>
+
+                    {/* Step labels */}
+                    <div className="flex justify-between text-xs text-gray-500 mb-6 px-2">
+                      <span>Parsing</span>
+                      <span>Analyzing</span>
+                      <span>Matching</span>
+                    </div>
+
+                    {/* Current action with spinner */}
+                    <div className="flex items-center justify-center gap-3 mb-4">
+                      <Loader2 className="w-5 h-5 animate-spin text-teal-600" />
+                      <span className="text-gray-700 font-medium">
+                        {importStatus?.progress?.stepDescription || 'Initializing...'}
+                      </span>
+                    </div>
+
+                    {/* Progress bar (when matching) */}
+                    {importStatus?.progress?.step === 'matching' && importStatus.progress.totalSections > 0 && (
+                      <div className="mt-4">
+                        <div className="flex justify-between text-sm text-gray-600 mb-1">
+                          <span>Sections processed</span>
+                          <span>{importStatus.progress.receivedSections} / {importStatus.progress.totalSections}</span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-teal-500 transition-all duration-500"
+                            style={{ width: `${importStatus.progress.percentComplete}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Stats summary */}
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-gray-900">
+                        {importStatus?.extractedContent?.pageCount || 0}
+                      </div>
+                      <div className="text-xs text-gray-500">Pages</div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-teal-600">
+                        {importStatus?.mappedCount || 0}
+                      </div>
+                      <div className="text-xs text-gray-500">Mapped</div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
+                      <div className="text-2xl font-bold text-amber-600">
+                        {importStatus?.unmappedCount || 0}
+                      </div>
+                      <div className="text-xs text-gray-500">Unmapped</div>
+                    </div>
+                  </div>
+
+                  {/* Recent mappings */}
+                  {importStatus?.progress?.recentMappings && importStatus.progress.recentMappings.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                        <h4 className="text-sm font-medium text-gray-700">Recent Mappings</h4>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {importStatus.progress.recentMappings.map((mapping, index) => (
+                          <div key={index} className="px-4 py-2 flex items-center gap-2 text-sm">
+                            <MapPin className="w-4 h-4 text-green-500 flex-shrink-0" />
+                            <span className="font-medium text-gray-900">
+                              Standard {mapping.standardCode}.{mapping.specCode}
+                            </span>
+                            <span className="text-gray-500">-</span>
+                            <span className="text-gray-600 truncate">
+                              {STANDARD_NAMES[mapping.standardCode] || 'Unknown Standard'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>

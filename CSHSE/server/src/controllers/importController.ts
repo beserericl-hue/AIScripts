@@ -398,7 +398,7 @@ function formatTableAsText(table: { headers: string[]; rows: string[][] }): stri
 }
 
 /**
- * Get import status and content
+ * Get import status and content with detailed progress
  */
 export const getImport = async (req: Request, res: Response) => {
   try {
@@ -409,6 +409,57 @@ export const getImport = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Import not found' });
     }
 
+    // Calculate processing step
+    let processingStep = 'initializing';
+    let stepDescription = 'Initializing document processing...';
+
+    if (importRecord.status === 'processing') {
+      if (!importRecord.n8nJobId) {
+        processingStep = 'parsing';
+        stepDescription = 'Parsing document and extracting text...';
+      } else if (importRecord.n8nReceivedSections === 0) {
+        processingStep = 'analyzing';
+        stepDescription = 'AI is analyzing document structure...';
+      } else {
+        processingStep = 'matching';
+        stepDescription = `Matching sections to standards (${importRecord.n8nReceivedSections}/${importRecord.n8nTotalSections || '?'})...`;
+      }
+    } else if (importRecord.status === 'completed') {
+      processingStep = 'complete';
+      stepDescription = 'Processing complete!';
+    } else if (importRecord.status === 'failed') {
+      processingStep = 'error';
+      stepDescription = importRecord.error || 'An error occurred during processing';
+    }
+
+    // Get recent mappings for progress display (last 5)
+    const recentMappings = importRecord.mappedSections
+      .slice(-5)
+      .reverse()
+      .map(m => ({
+        standardCode: m.standardCode,
+        specCode: m.specCode,
+        mappedBy: m.mappedBy
+      }));
+
+    // Build detailed progress info
+    const progress = {
+      step: processingStep,
+      stepDescription,
+      totalSections: importRecord.n8nTotalSections || 0,
+      receivedSections: importRecord.n8nReceivedSections || 0,
+      percentComplete: importRecord.n8nTotalSections
+        ? Math.round((importRecord.n8nReceivedSections || 0) / importRecord.n8nTotalSections * 100)
+        : 0,
+      recentMappings
+    };
+
+    debugLog('getImport response', {
+      importId,
+      status: importRecord.status,
+      progress
+    });
+
     return res.json({
       id: importRecord._id,
       status: importRecord.status,
@@ -418,11 +469,13 @@ export const getImport = async (req: Request, res: Response) => {
       processingStartedAt: importRecord.processingStartedAt,
       processingCompletedAt: importRecord.processingCompletedAt,
       error: importRecord.error,
-      extractedContent: importRecord.status === 'completed' ? {
-        pageCount: importRecord.extractedContent.pageCount,
-        metadata: importRecord.extractedContent.metadata,
-        sectionCount: importRecord.extractedContent.sections.length
-      } : null,
+      specName: importRecord.specName,
+      progress,
+      extractedContent: {
+        pageCount: importRecord.extractedContent?.pageCount || 0,
+        metadata: importRecord.extractedContent?.metadata || {},
+        sectionCount: importRecord.extractedContent?.sections?.length || 0
+      },
       mappedCount: importRecord.mappedSections.length,
       unmappedCount: importRecord.unmappedContent.filter(u => u.action === 'pending').length
     });
