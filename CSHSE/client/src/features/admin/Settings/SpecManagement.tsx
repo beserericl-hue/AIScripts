@@ -591,26 +591,35 @@ function SpecRow({ spec, onEdit, onArchive, isArchiving }: SpecRowProps) {
     }
   });
 
-  const aiStatus = spec.aiLoadingStatus || 'not_loaded';
+  const specAiStatus = spec.aiLoadingStatus || 'not_loaded';
 
   // Poll for AI status when loading
   const { data: aiStatusData } = useQuery({
     queryKey: ['spec-ai-status', spec._id],
     queryFn: async () => {
       const response = await api.get(`/api/specs/${spec._id}/ai-status`);
+      console.log('[SpecManagement] Polled AI status:', response.data);
       return response.data;
     },
-    enabled: aiStatus === 'loading',
-    refetchInterval: 3000, // Poll every 3 seconds
+    enabled: specAiStatus === 'loading',
+    refetchInterval: 2000, // Poll every 2 seconds
+    staleTime: 0, // Always consider data stale
   });
 
-  // When polled status changes from loading, refresh the specs list
+  // Use polled status if available and we're loading, otherwise use spec status
+  const aiStatus = (specAiStatus === 'loading' && aiStatusData?.aiLoadingStatus)
+    ? aiStatusData.aiLoadingStatus
+    : specAiStatus;
+
+  // When polled status changes from loading, force refresh the specs list
   useEffect(() => {
     if (aiStatusData?.aiLoadingStatus && aiStatusData.aiLoadingStatus !== 'loading') {
-      queryClient.invalidateQueries({ queryKey: ['specs-management'] });
-      queryClient.invalidateQueries({ queryKey: ['specs'] });
+      console.log('[SpecManagement] Status changed to:', aiStatusData.aiLoadingStatus, '- refetching specs');
+      queryClient.refetchQueries({ queryKey: ['specs-management'] });
+      queryClient.refetchQueries({ queryKey: ['specs'] });
     }
   }, [aiStatusData?.aiLoadingStatus, queryClient]);
+
   const canLoadToAI = spec.documentFileId && spec.status !== 'archived';
   const isLoading = aiStatus === 'loading' || loadToAIMutation.isPending;
   const isResetting = resetAIStatusMutation.isPending;

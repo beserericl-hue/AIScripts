@@ -170,7 +170,7 @@ export const receiveSpecLoaderCallback = async (req: Request, res: Response) => 
     console.log('[SpecLoader Callback] Spec found, current status:', spec.aiLoadingStatus);
     console.log('[SpecLoader Callback] Callback status:', status);
 
-    if (status === 'success' || status === 'loaded') {
+    if (status === 'success' || status === 'loaded' || status === 'completed') {
       spec.aiLoadingStatus = 'loaded';
       spec.aiLoadedAt = new Date();
       spec.aiLoadError = undefined;
