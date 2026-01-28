@@ -43,6 +43,7 @@ export interface ISelfStudyImport extends Document {
   // N8N Document Matcher integration
   n8nExecutionId?: string;
   n8nJobId?: string;
+  n8nSentAt?: Date;  // When document was sent to n8n webhook
   n8nTotalSections?: number;
   n8nReceivedSections?: number;
   specName?: string;
@@ -135,6 +136,7 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   // N8N Document Matcher integration
   n8nExecutionId: String,
   n8nJobId: String,
+  n8nSentAt: Date,  // When document was sent to n8n webhook
   n8nTotalSections: { type: Number, default: 0 },
   n8nReceivedSections: { type: Number, default: 0 },
   specName: String,

@@ -82,6 +82,9 @@ interface ImportProgress {
   totalSections: number;
   receivedSections: number;
   percentComplete: number;
+  elapsedTime?: string;
+  elapsedMs?: number;
+  n8nSentAt?: string;
   recentMappings: Array<{
     standardCode: string;
     specCode: string;
@@ -812,7 +815,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
               {/* Processing Step - Detailed Progress */}
               {importStep === 'processing' && (
                 <div className="space-y-6">
-                  {/* Header with filename */}
+                  {/* Header with filename and elapsed time */}
                   <div className="text-center">
                     <h3 className="text-lg font-semibold text-gray-900 mb-1">
                       Processing Document
@@ -820,6 +823,11 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                     <p className="text-sm text-gray-500">
                       {importStatus?.originalFilename || 'Your document'}
                     </p>
+                    {importStatus?.progress?.elapsedTime && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Elapsed: {importStatus.progress.elapsedTime}
+                      </p>
+                    )}
                   </div>
 
                   {/* Progress Steps */}
@@ -862,11 +870,21 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                     </div>
 
                     {/* Current action with spinner */}
-                    <div className="flex items-center justify-center gap-3 mb-4">
-                      <Loader2 className="w-5 h-5 animate-spin text-teal-600" />
-                      <span className="text-gray-700 font-medium">
-                        {importStatus?.progress?.stepDescription || 'Initializing...'}
-                      </span>
+                    <div className="flex flex-col items-center justify-center gap-2 mb-4">
+                      <div className="flex items-center gap-3">
+                        <Loader2 className="w-5 h-5 animate-spin text-teal-600" />
+                        <span className="text-gray-700 font-medium">
+                          {importStatus?.progress?.stepDescription || 'Initializing...'}
+                        </span>
+                      </div>
+                      {/* Show helpful message when waiting for AI analysis */}
+                      {importStatus?.progress?.step === 'analyzing' &&
+                       importStatus?.progress?.elapsedMs &&
+                       importStatus.progress.elapsedMs > 60000 && (
+                        <p className="text-xs text-gray-500 text-center mt-2 max-w-xs">
+                          AI analysis is in progress. Large documents may take several minutes to process.
+                        </p>
+                      )}
                     </div>
 
                     {/* Progress bar (when matching) */}

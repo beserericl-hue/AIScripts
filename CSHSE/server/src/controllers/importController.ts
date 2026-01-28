@@ -258,6 +258,11 @@ async function sendToN8nDocumentMatcher(
     htmlContentLength: parsed.rawText?.length || 0
   });
 
+  // Mark that we're sending to n8n BEFORE the request (so we track it even if response parsing fails)
+  importRecord.n8nSentAt = new Date();
+  await importRecord.save();
+  debugLog('Marked n8nSentAt timestamp');
+
   // Send to n8n
   const response = await fetch(webhookSettings.webhookUrl, {
     method: 'POST',
@@ -409,17 +414,39 @@ export const getImport = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Import not found' });
     }
 
-    // Calculate processing step
+    // Calculate processing step and elapsed time
     let processingStep = 'initializing';
     let stepDescription = 'Initializing document processing...';
+    let elapsedMs = 0;
+    let elapsedDisplay = '';
+
+    if (importRecord.processingStartedAt) {
+      elapsedMs = Date.now() - importRecord.processingStartedAt.getTime();
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+      const minutes = Math.floor(elapsedSeconds / 60);
+      const seconds = elapsedSeconds % 60;
+      elapsedDisplay = minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
+    }
 
     if (importRecord.status === 'processing') {
-      if (!importRecord.n8nJobId) {
+      // Use n8nSentAt to track if document was sent to n8n (more reliable than n8nJobId)
+      if (!importRecord.n8nSentAt) {
         processingStep = 'parsing';
         stepDescription = 'Parsing document and extracting text...';
-      } else if (importRecord.n8nReceivedSections === 0) {
+      } else if ((importRecord.n8nReceivedSections || 0) === 0) {
         processingStep = 'analyzing';
-        stepDescription = 'AI is analyzing document structure...';
+        // Calculate time waiting for n8n
+        const n8nElapsedMs = Date.now() - importRecord.n8nSentAt.getTime();
+        const n8nElapsedSeconds = Math.floor(n8nElapsedMs / 1000);
+        const n8nMinutes = Math.floor(n8nElapsedSeconds / 60);
+
+        if (n8nMinutes >= 5) {
+          stepDescription = `Waiting for AI analysis... (${n8nMinutes} minutes) - Large documents may take longer`;
+        } else if (n8nMinutes >= 1) {
+          stepDescription = `AI is analyzing document structure... (${n8nMinutes}m ${n8nElapsedSeconds % 60}s)`;
+        } else {
+          stepDescription = 'AI is analyzing document structure...';
+        }
       } else {
         processingStep = 'matching';
         stepDescription = `Matching sections to standards (${importRecord.n8nReceivedSections}/${importRecord.n8nTotalSections || '?'})...`;
@@ -451,6 +478,9 @@ export const getImport = async (req: Request, res: Response) => {
       percentComplete: importRecord.n8nTotalSections
         ? Math.round((importRecord.n8nReceivedSections || 0) / importRecord.n8nTotalSections * 100)
         : 0,
+      elapsedTime: elapsedDisplay,
+      elapsedMs,
+      n8nSentAt: importRecord.n8nSentAt,
       recentMappings
     };
 
