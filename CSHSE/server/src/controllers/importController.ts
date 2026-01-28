@@ -202,17 +202,56 @@ async function processDocumentAsync(
 /**
  * Send document to n8n Document Matcher for AI-powered mapping
  *
- * Request payload format:
+ * ==================== REQUEST PAYLOAD ====================
+ * POST {webhookUrl}
+ * Content-Type: application/json
+ *
  * {
  *   "callbackUrl": "https://your-app.com/api/webhooks/document-matcher/callback",
  *   "specName": "CSHSE Standards 2024",
- *   "documentId": "doc-12345",
- *   "htmlContent": "<h1>Program Overview</h1>...",
+ *   "documentId": "mongo-import-id",
+ *   "htmlContent": "BASE64_ENCODED_HTML_STRING",
+ *   "htmlContentEncoding": "base64",
  *   "options": {
  *     "batchSize": 10,
  *     "confidenceThreshold": 50
  *   }
  * }
+ *
+ * Note: htmlContent is base64 encoded to handle binary/special characters.
+ * Decode in n8n using: Buffer.from(htmlContent, 'base64').toString('utf8')
+ *
+ * ==================== EXPECTED RESPONSE ====================
+ * n8n should return immediately with:
+ * {
+ *   "jobId": "uuid-generated-by-n8n",
+ *   "status": "accepted"
+ * }
+ *
+ * ==================== CALLBACK PAYLOAD ====================
+ * n8n sends callbacks to callbackUrl for each section:
+ * {
+ *   "type": "section_result",
+ *   "jobId": "uuid-from-response",
+ *   "documentId": "mongo-import-id",
+ *   "specName": "CSHSE Standards 2024",
+ *   "moreData": true,
+ *   "sectionIndex": 0,
+ *   "totalSections": 15,
+ *   "section": {
+ *     "heading": "Program Overview",
+ *     "richTextContent": "<p>Our program is regionally accredited...</p>",
+ *     "match": {
+ *       "status": "matched",
+ *       "standard": { "code": "1", "title": "Program Identity" },
+ *       "subspecification": { "code": "a", "title": "Regional Accreditation" },
+ *       "confidence": 92,
+ *       "rationale": "This section describes regional accreditation status."
+ *     }
+ *   }
+ * }
+ *
+ * Final callback should have moreData: false
  */
 async function sendToN8nDocumentMatcher(
   importRecord: ISelfStudyImport,
@@ -240,12 +279,17 @@ async function sendToN8nDocumentMatcher(
     debugLog('Using Bearer token authentication');
   }
 
+  // Base64 encode the HTML content to handle binary/special characters
+  const rawText = parsed.rawText || '';
+  const htmlContentBase64 = Buffer.from(rawText, 'utf8').toString('base64');
+
   // Prepare payload for n8n using the required format
   const payload = {
     callbackUrl,
     specName,
     documentId: importRecord._id.toString(),
-    htmlContent: parsed.rawText, // The parsed document content as HTML
+    htmlContent: htmlContentBase64,
+    htmlContentEncoding: 'base64', // Signal to n8n that content is base64 encoded
     options: {
       batchSize: 10,
       confidenceThreshold: 50
@@ -255,7 +299,8 @@ async function sendToN8nDocumentMatcher(
   debugLog('Sending request to n8n webhook', {
     webhookUrl: webhookSettings.webhookUrl,
     payloadSize: JSON.stringify(payload).length,
-    htmlContentLength: parsed.rawText?.length || 0
+    htmlContentLength: rawText.length,
+    htmlContentBase64Length: htmlContentBase64.length
   });
 
   // Mark that we're sending to n8n BEFORE the request (so we track it even if response parsing fails)
