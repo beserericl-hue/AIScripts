@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import {
@@ -592,6 +592,25 @@ function SpecRow({ spec, onEdit, onArchive, isArchiving }: SpecRowProps) {
   });
 
   const aiStatus = spec.aiLoadingStatus || 'not_loaded';
+
+  // Poll for AI status when loading
+  const { data: aiStatusData } = useQuery({
+    queryKey: ['spec-ai-status', spec._id],
+    queryFn: async () => {
+      const response = await api.get(`/api/specs/${spec._id}/ai-status`);
+      return response.data;
+    },
+    enabled: aiStatus === 'loading',
+    refetchInterval: 3000, // Poll every 3 seconds
+  });
+
+  // When polled status changes from loading, refresh the specs list
+  useEffect(() => {
+    if (aiStatusData?.aiLoadingStatus && aiStatusData.aiLoadingStatus !== 'loading') {
+      queryClient.invalidateQueries({ queryKey: ['specs-management'] });
+      queryClient.invalidateQueries({ queryKey: ['specs'] });
+    }
+  }, [aiStatusData?.aiLoadingStatus, queryClient]);
   const canLoadToAI = spec.documentFileId && spec.status !== 'archived';
   const isLoading = aiStatus === 'loading' || loadToAIMutation.isPending;
   const isResetting = resetAIStatusMutation.isPending;
