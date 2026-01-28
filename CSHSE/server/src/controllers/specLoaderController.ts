@@ -151,16 +151,24 @@ export const triggerSpecLoad = async (req: AuthenticatedRequest, res: Response) 
  */
 export const receiveSpecLoaderCallback = async (req: Request, res: Response) => {
   try {
+    console.log('[SpecLoader Callback] Received body:', JSON.stringify(req.body));
+
     const { specId, status, error: loadError } = req.body;
 
     if (!specId) {
+      console.log('[SpecLoader Callback] Missing specId');
       return res.status(400).json({ error: 'Missing specId in callback' });
     }
 
+    console.log('[SpecLoader Callback] Looking up spec:', specId);
     const spec = await Spec.findById(specId);
     if (!spec) {
+      console.log('[SpecLoader Callback] Spec not found:', specId);
       return res.status(404).json({ error: 'Spec not found' });
     }
+
+    console.log('[SpecLoader Callback] Spec found, current status:', spec.aiLoadingStatus);
+    console.log('[SpecLoader Callback] Callback status:', status);
 
     if (status === 'success' || status === 'loaded') {
       spec.aiLoadingStatus = 'loaded';
@@ -171,11 +179,17 @@ export const receiveSpecLoaderCallback = async (req: Request, res: Response) => 
       spec.aiLoadError = loadError || 'Unknown error from AI service';
     } else {
       // Default to loaded if status is unclear but we got a callback
+      console.log('[SpecLoader Callback] Unknown status, defaulting to loaded');
       spec.aiLoadingStatus = 'loaded';
       spec.aiLoadedAt = new Date();
     }
 
+    console.log('[SpecLoader Callback] Saving spec with status:', spec.aiLoadingStatus);
     await spec.save();
+
+    // Verify the save worked by re-reading
+    const verifySpec = await Spec.findById(specId);
+    console.log('[SpecLoader Callback] Verified saved status:', verifySpec?.aiLoadingStatus);
 
     return res.json({
       success: true,
@@ -199,6 +213,8 @@ export const getSpecAIStatus = async (req: Request, res: Response) => {
     if (!spec) {
       return res.status(404).json({ error: 'Spec not found' });
     }
+
+    console.log('[SpecLoader] AI status poll for', id, ':', spec.aiLoadingStatus);
 
     return res.json({
       specId: spec._id,
