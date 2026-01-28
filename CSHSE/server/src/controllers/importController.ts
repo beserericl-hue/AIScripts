@@ -736,3 +736,52 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
     return res.status(500).json({ error: 'Failed to handle unmapped content' });
   }
 };
+
+/**
+ * Cancel/abort an in-progress import
+ */
+export const cancelImport = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+
+    debugLog('Cancel import requested', { importId, userId: req.user?.id });
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    // Only allow canceling if still processing
+    if (importRecord.status !== 'processing' && importRecord.status !== 'pending') {
+      debugLog('Import cannot be cancelled - not in processing state', {
+        importId,
+        currentStatus: importRecord.status
+      });
+      return res.status(400).json({
+        error: `Import cannot be cancelled. Current status: ${importRecord.status}`
+      });
+    }
+
+    // Update status to failed with cancellation message
+    importRecord.status = 'failed';
+    importRecord.error = 'Import cancelled by user';
+    importRecord.processingCompletedAt = new Date();
+    await importRecord.save();
+
+    debugLog('Import cancelled successfully', {
+      importId,
+      previousStatus: 'processing',
+      newStatus: 'failed'
+    });
+
+    return res.json({
+      success: true,
+      message: 'Import cancelled successfully',
+      importId: importRecord._id,
+      status: importRecord.status
+    });
+  } catch (error) {
+    console.error('Cancel import error:', error);
+    return res.status(500).json({ error: 'Failed to cancel import' });
+  }
+};

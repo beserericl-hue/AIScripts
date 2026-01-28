@@ -131,6 +131,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [importStep, setImportStep] = useState<'upload' | 'processing' | 'review' | 'applying'>('upload');
   const [extractedSections, setExtractedSections] = useState<ExtractedSection[]>([]);
   const [isApplying, setIsApplying] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -259,6 +260,20 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       setUploadError(err.response?.data?.error || 'Failed to apply mappings');
     } finally {
       setIsApplying(false);
+    }
+  };
+
+  const handleCancelImport = async () => {
+    if (!importId) return;
+
+    setIsCancelling(true);
+    try {
+      await api.post(`/api/imports/${importId}/cancel`);
+      resetImportModal();
+    } catch (err: any) {
+      setUploadError(err.response?.data?.error || 'Failed to cancel import');
+    } finally {
+      setIsCancelling(false);
     }
   };
 
@@ -1008,12 +1023,33 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
             {/* Modal Footer */}
             <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
-              <button
-                onClick={resetImportModal}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
+              {/* Close/Cancel button - different behavior based on step */}
+              {importStep === 'processing' ? (
+                <button
+                  onClick={handleCancelImport}
+                  disabled={isCancelling}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {isCancelling ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Cancelling...
+                    </>
+                  ) : (
+                    <>
+                      <X className="w-4 h-4" />
+                      Cancel Import
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={resetImportModal}
+                  className="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  {importStep === 'review' ? 'Close' : 'Cancel'}
+                </button>
+              )}
 
               {importStep === 'upload' && (
                 <button

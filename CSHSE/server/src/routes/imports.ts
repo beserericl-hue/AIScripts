@@ -7,7 +7,8 @@ import {
   mapSection,
   applyMappings,
   getUnmappedContent,
-  handleUnmapped
+  handleUnmapped,
+  cancelImport
 } from '../controllers/importController';
 import { authenticate } from '../middleware/auth';
 
@@ -86,5 +87,12 @@ router.get('/:importId/unmapped', getUnmappedContent);
  * @access  Private (Coordinator)
  */
 router.put('/:importId/unmapped/:sectionId', handleUnmapped);
+
+/**
+ * @route   POST /api/imports/:importId/cancel
+ * @desc    Cancel an in-progress import
+ * @access  Private (Coordinator)
+ */
+router.post('/:importId/cancel', cancelImport);
 
 export default router;
