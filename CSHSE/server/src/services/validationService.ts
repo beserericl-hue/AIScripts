@@ -43,12 +43,25 @@ export class ValidationService {
     specCode: string,
     validationType: 'auto_save' | 'manual_save' | 'submit' = 'manual_save'
   ): Promise<IValidationResult> {
+    console.log('[ValidationService] triggerValidation called:', {
+      submissionId,
+      standardCode,
+      specCode,
+      validationType
+    });
+
     // Create pending validation result
     const previousValidation = await ValidationResult.findOne({
       submissionId: new mongoose.Types.ObjectId(submissionId),
       standardCode,
       specCode
     }).sort({ validatedAt: -1 });
+
+    console.log('[ValidationService] Previous validation:', previousValidation ? {
+      id: previousValidation._id,
+      attemptNumber: previousValidation.attemptNumber,
+      status: previousValidation.result?.status
+    } : 'none');
 
     const validationResult = new ValidationResult({
       submissionId: new mongoose.Types.ObjectId(submissionId),
@@ -61,12 +74,21 @@ export class ValidationService {
     });
 
     await validationResult.save();
+    console.log('[ValidationService] Created validation result:', {
+      validationId: validationResult._id,
+      attemptNumber: validationResult.attemptNumber
+    });
 
     // Get the submission data
     const submission = await Submission.findById(submissionId);
     if (!submission) {
+      console.error('[ValidationService] Submission not found:', submissionId);
       throw new Error('Submission not found');
     }
+    console.log('[ValidationService] Found submission:', {
+      submissionId: submission._id,
+      programLevel: submission.programLevel
+    });
 
     // Get webhook settings
     const webhookSettings = await WebhookSettings.findOne({
@@ -75,6 +97,7 @@ export class ValidationService {
     });
 
     if (!webhookSettings) {
+      console.log('[ValidationService] No active validation webhook configured');
       // No webhook configured - mark as pending for manual review
       validationResult.result = {
         status: 'pending',
@@ -83,6 +106,11 @@ export class ValidationService {
       await validationResult.save();
       return validationResult;
     }
+    console.log('[ValidationService] Found webhook settings:', {
+      webhookUrl: webhookSettings.webhookUrl,
+      isActive: webhookSettings.isActive,
+      hasAuth: !!webhookSettings.authentication?.type
+    });
 
     // Get narrative content
     const narratives = submission.narratives;
@@ -90,6 +118,7 @@ export class ValidationService {
     const narrative = standardNarratives?.get(specCode);
 
     if (!narrative || !narrative.content) {
+      console.log('[ValidationService] No narrative content found for:', { standardCode, specCode });
       validationResult.result = {
         status: 'fail',
         score: 0,
@@ -99,6 +128,11 @@ export class ValidationService {
       await validationResult.save();
       return validationResult;
     }
+    console.log('[ValidationService] Found narrative content:', {
+      standardCode,
+      specCode,
+      contentLength: narrative.content.length
+    });
 
     // Build the validation request
     // Priority: APP_URL > RAILWAY_PUBLIC_DOMAIN > localhost fallback
@@ -106,6 +140,8 @@ export class ValidationService {
       || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
       || `http://localhost:${process.env.PORT || 8080}`;
     const callbackUrl = `${baseUrl}/api/webhooks/n8n/callback`;
+
+    console.log('[ValidationService] Callback URL:', callbackUrl);
 
     const request: ValidationRequest = {
       submissionId,
@@ -122,14 +158,27 @@ export class ValidationService {
       callbackUrl
     };
 
+    console.log('[ValidationService] Sending webhook request:', {
+      submissionId: request.submissionId,
+      programLevel: request.programLevel,
+      standardCode: request.standardCode,
+      specCode: request.specCode,
+      narrativeLength: request.narrativeText.length,
+      callbackUrl: request.callbackUrl
+    });
+
     // Call the webhook
     try {
       const webhookResult = await this.callWebhook(webhookSettings, request);
 
+      console.log('[ValidationService] Webhook call result:', webhookResult);
+
       if (webhookResult.success && webhookResult.executionId) {
         validationResult.n8nExecutionId = webhookResult.executionId;
         await validationResult.save();
+        console.log('[ValidationService] Saved execution ID:', webhookResult.executionId);
       } else {
+        console.log('[ValidationService] Webhook call failed:', webhookResult.error);
         validationResult.result = {
           status: 'pending',
           feedback: webhookResult.error || 'Webhook call failed. Will retry.'
@@ -137,12 +186,18 @@ export class ValidationService {
         await validationResult.save();
       }
     } catch (error) {
+      console.error('[ValidationService] Exception calling webhook:', error);
       validationResult.result = {
         status: 'pending',
         feedback: error instanceof Error ? error.message : 'Unknown error'
       };
       await validationResult.save();
     }
+
+    console.log('[ValidationService] triggerValidation complete:', {
+      validationId: validationResult._id,
+      status: validationResult.result.status
+    });
 
     return validationResult;
   }
@@ -151,12 +206,27 @@ export class ValidationService {
    * Process callback from N8N webhook
    */
   async processCallback(response: ValidationResponse): Promise<IValidationResult | null> {
+    console.log('[ValidationService] processCallback called:', {
+      executionId: response.executionId,
+      submissionId: response.submissionId,
+      standardCode: response.standardCode,
+      specCode: response.specCode,
+      resultStatus: response.result?.status,
+      resultScore: response.result?.score
+    });
+
     // Find the pending validation
     const validation = await ValidationResult.findOne({
       n8nExecutionId: response.executionId
     });
 
+    console.log('[ValidationService] Lookup by executionId:', validation ? {
+      validationId: validation._id,
+      status: validation.result?.status
+    } : 'not found');
+
     if (!validation) {
+      console.log('[ValidationService] Trying fallback lookup by submission/section');
       // Try to find by submission and section
       const validation2 = await ValidationResult.findOne({
         submissionId: new mongoose.Types.ObjectId(response.submissionId),
@@ -166,14 +236,30 @@ export class ValidationService {
       }).sort({ validatedAt: -1 });
 
       if (!validation2) {
-        console.error('No pending validation found for callback:', response);
+        console.error('[ValidationService] No pending validation found for callback:', {
+          executionId: response.executionId,
+          submissionId: response.submissionId,
+          standardCode: response.standardCode,
+          specCode: response.specCode
+        });
         return null;
       }
+
+      console.log('[ValidationService] Found validation via fallback:', {
+        validationId: validation2._id,
+        previousStatus: validation2.result?.status
+      });
 
       validation2.n8nExecutionId = response.executionId;
       validation2.result = response.result;
       validation2.validatedAt = new Date();
       await validation2.save();
+
+      console.log('[ValidationService] Updated validation (fallback):', {
+        validationId: validation2._id,
+        newStatus: validation2.result?.status,
+        score: validation2.result?.score
+      });
 
       // Update submission status
       await this.updateSubmissionValidationStatus(
@@ -183,12 +269,25 @@ export class ValidationService {
         response.result.status === 'pass' ? 'pass' : 'fail'
       );
 
+      console.log('[ValidationService] Submission status updated');
+
       return validation2;
     }
+
+    console.log('[ValidationService] Found validation by executionId:', {
+      validationId: validation._id,
+      previousStatus: validation.result?.status
+    });
 
     validation.result = response.result;
     validation.validatedAt = new Date();
     await validation.save();
+
+    console.log('[ValidationService] Updated validation:', {
+      validationId: validation._id,
+      newStatus: validation.result?.status,
+      score: validation.result?.score
+    });
 
     // Update submission status
     await this.updateSubmissionValidationStatus(
@@ -197,6 +296,11 @@ export class ValidationService {
       response.specCode,
       response.result.status === 'pass' ? 'pass' : 'fail'
     );
+
+    console.log('[ValidationService] processCallback complete:', {
+      validationId: validation._id,
+      finalStatus: validation.result?.status
+    });
 
     return validation;
   }
@@ -210,6 +314,12 @@ export class ValidationService {
   ): Promise<WebhookCallResult> {
     const startTime = Date.now();
 
+    console.log('[ValidationService] callWebhook starting:', {
+      webhookUrl: settings.webhookUrl,
+      authType: settings.authentication?.type || 'none',
+      timeoutMs: settings.timeoutMs || 30000
+    });
+
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json'
@@ -218,8 +328,10 @@ export class ValidationService {
       // Add authentication
       if (settings.authentication?.type === 'api_key' && settings.authentication.apiKey) {
         headers['X-API-Key'] = settings.authentication.apiKey;
+        console.log('[ValidationService] Using API key authentication');
       } else if (settings.authentication?.type === 'bearer' && settings.authentication.bearerToken) {
         headers['Authorization'] = `Bearer ${settings.authentication.bearerToken}`;
+        console.log('[ValidationService] Using Bearer token authentication');
       }
 
       // Add custom headers
@@ -230,7 +342,10 @@ export class ValidationService {
             headers[key] = value;
           });
         }
+        console.log('[ValidationService] Added custom headers');
       }
+
+      console.log('[ValidationService] Sending POST to:', settings.webhookUrl);
 
       const response = await fetch(settings.webhookUrl, {
         method: 'POST',
@@ -241,7 +356,15 @@ export class ValidationService {
 
       const responseTimeMs = Date.now() - startTime;
 
+      console.log('[ValidationService] Webhook response:', {
+        status: response.status,
+        statusText: response.statusText,
+        responseTimeMs
+      });
+
       if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[ValidationService] Webhook error response:', errorText);
         return {
           success: false,
           error: `Webhook returned ${response.status}: ${response.statusText}`,
@@ -251,16 +374,20 @@ export class ValidationService {
 
       const data = await response.json() as { executionId?: string; id?: string };
 
+      console.log('[ValidationService] Webhook success response:', data);
+
       return {
         success: true,
         executionId: data.executionId || data.id,
         responseTimeMs
       };
     } catch (error) {
+      const responseTimeMs = Date.now() - startTime;
+      console.error('[ValidationService] Webhook exception:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
-        responseTimeMs: Date.now() - startTime
+        responseTimeMs
       };
     }
   }

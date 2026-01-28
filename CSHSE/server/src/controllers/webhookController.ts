@@ -17,7 +17,15 @@ export const triggerValidation = async (req: AuthenticatedRequest, res: Response
   try {
     const { submissionId, standardCode, specCode } = req.body;
 
+    console.log('[Validation] Trigger request received:', {
+      submissionId,
+      standardCode,
+      specCode,
+      userId: req.user?.id
+    });
+
     if (!submissionId || !standardCode || !specCode) {
+      console.log('[Validation] Missing required fields');
       return res.status(400).json({
         error: 'Missing required fields: submissionId, standardCode, specCode'
       });
@@ -30,13 +38,18 @@ export const triggerValidation = async (req: AuthenticatedRequest, res: Response
       'manual_save'
     );
 
+    console.log('[Validation] Validation triggered successfully:', {
+      validationId: result._id,
+      status: result.result.status
+    });
+
     return res.json({
       validationId: result._id,
       status: result.result.status,
       message: 'Validation triggered successfully'
     });
   } catch (error) {
-    console.error('Trigger validation error:', error);
+    console.error('[Validation] Trigger validation error:', error);
     return res.status(500).json({ error: 'Failed to trigger validation' });
   }
 };
@@ -46,17 +59,35 @@ export const triggerValidation = async (req: AuthenticatedRequest, res: Response
  */
 export const receiveCallback = async (req: Request, res: Response) => {
   try {
+    console.log('[Validation Callback] Received body:', JSON.stringify(req.body));
+
     const callback = req.body as ValidationResponse;
 
     if (!callback.executionId && !callback.submissionId) {
+      console.log('[Validation Callback] Missing execution ID or submission ID');
       return res.status(400).json({ error: 'Missing execution ID or submission ID' });
     }
+
+    console.log('[Validation Callback] Processing callback:', {
+      executionId: callback.executionId,
+      submissionId: callback.submissionId,
+      standardCode: callback.standardCode,
+      specCode: callback.specCode,
+      resultStatus: callback.result?.status
+    });
 
     const result = await validationService.processCallback(callback);
 
     if (!result) {
+      console.log('[Validation Callback] No pending validation found for this callback');
       return res.status(404).json({ error: 'No pending validation found for this callback' });
     }
+
+    console.log('[Validation Callback] Callback processed successfully:', {
+      validationId: result._id,
+      status: result.result.status,
+      score: result.result.score
+    });
 
     return res.json({
       success: true,
@@ -64,7 +95,7 @@ export const receiveCallback = async (req: Request, res: Response) => {
       status: result.result.status
     });
   } catch (error) {
-    console.error('Callback error:', error);
+    console.error('[Validation Callback] Error processing callback:', error);
     return res.status(500).json({ error: 'Failed to process callback' });
   }
 };

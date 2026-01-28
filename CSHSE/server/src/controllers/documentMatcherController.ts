@@ -2,12 +2,9 @@ import { Request, Response } from 'express';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { v4 as uuidv4 } from 'uuid';
 
-// Debug logging helper
-const DEBUG = process.env.DEBUG_IMPORT === 'true' || process.env.NODE_ENV === 'development';
+// Always log for visibility in production
 function debugLog(message: string, data?: any) {
-  if (DEBUG) {
-    console.log(`[DocumentMatcherCallback] ${message}`, data ? JSON.stringify(data, null, 2) : '');
-  }
+  console.log(`[DocumentMatcher] ${message}`, data ? JSON.stringify(data) : '');
 }
 
 /**

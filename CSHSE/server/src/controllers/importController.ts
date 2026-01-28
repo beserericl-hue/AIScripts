@@ -8,12 +8,9 @@ import { WebhookSettings } from '../models/WebhookSettings';
 import { documentParserService } from '../services/documentParser';
 import { sectionMapperService } from '../services/sectionMapper';
 
-// Debug logging helper
-const DEBUG = process.env.DEBUG_IMPORT === 'true' || process.env.NODE_ENV === 'development';
+// Always log for visibility in production
 function debugLog(message: string, data?: any) {
-  if (DEBUG) {
-    console.log(`[ImportController] ${message}`, data ? JSON.stringify(data, null, 2) : '');
-  }
+  console.log(`[Import] ${message}`, data ? JSON.stringify(data) : '');
 }
 
 /**
