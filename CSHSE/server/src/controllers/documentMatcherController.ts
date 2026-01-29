@@ -149,8 +149,11 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
         heading: section.heading,
         matchStatus: section.match?.status,
         standardCode: section.match?.standard?.code,
+        standardTitle: section.match?.standard?.title,
         specCode: section.match?.subspecification?.code,
-        confidence: section.match?.confidence
+        specTitle: section.match?.subspecification?.title,
+        confidence: section.match?.confidence,
+        rationale: section.match?.rationale?.substring(0, 100)
       });
 
       // Create extracted section from the callback data
@@ -175,18 +178,20 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
       importRecord.extractedContent.sections.push(extractedSection);
 
       // Process based on match status
-      if (section.match?.status === 'matched' &&
-          section.match.standard?.code &&
-          section.match.subspecification?.code) {
+      // Get standard and subspecification codes, treating empty strings as missing
+      const standardCode = section.match?.standard?.code?.trim() || null;
+      const subspecificationCode = section.match?.subspecification?.code?.trim() || null;
+      const confidence = (section.match?.confidence || 0) / 100; // Convert to 0-1 scale
 
-        const confidence = (section.match.confidence || 0) / 100; // Convert to 0-1 scale
+      if (section.match?.status === 'matched' && standardCode) {
+        // We have a matched standard
 
-        // Confidence threshold: 50% (0.5) since n8n uses 0-100 scale
-        if (confidence >= 0.5) {
+        if (subspecificationCode && confidence >= 0.5) {
+          // Full match with sufficient confidence - add to mapped sections
           importRecord.mappedSections.push({
             extractedSectionId: sectionId,
-            standardCode: section.match.standard.code,
-            specCode: section.match.subspecification.code,
+            standardCode: standardCode,
+            specCode: subspecificationCode,
             fieldType: 'narrative',
             mappedBy: 'auto',
             mappedAt: new Date()
@@ -194,20 +199,42 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
 
           debugLog('Section mapped', {
             sectionId,
-            standardCode: section.match.standard.code,
-            specCode: section.match.subspecification.code,
+            standardCode,
+            specCode: subspecificationCode,
             confidence
           });
-        } else {
-          // Low confidence - add to unmapped for review
+        } else if (subspecificationCode && confidence < 0.5) {
+          // Has subspecification but low confidence - add to unmapped for review
+          // Include suggested match info so user can approve it
           importRecord.unmappedContent.push({
             extractedSectionId: sectionId,
-            reason: section.match.rationale || `Low confidence match (${section.match.confidence}%)`,
+            reason: section.match.rationale || `Low confidence match (${section.match.confidence}%) to Standard ${standardCode}${subspecificationCode}`,
+            suggestedStandardCode: standardCode,
+            suggestedSpecCode: subspecificationCode,
+            suggestedConfidence: section.match.confidence,
             action: 'pending'
           });
 
           debugLog('Section added to unmapped (low confidence)', {
             sectionId,
+            standardCode,
+            specCode: subspecificationCode,
+            confidence,
+            rationale: section.match.rationale
+          });
+        } else {
+          // Has standard but no subspecification - add to unmapped with partial match info
+          importRecord.unmappedContent.push({
+            extractedSectionId: sectionId,
+            reason: section.match.rationale || `Matched to Standard ${standardCode} but no subspecification identified`,
+            suggestedStandardCode: standardCode,
+            suggestedConfidence: section.match.confidence,
+            action: 'pending'
+          });
+
+          debugLog('Section added to unmapped (no subspecification)', {
+            sectionId,
+            standardCode,
             confidence,
             rationale: section.match.rationale
           });

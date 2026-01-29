@@ -25,6 +25,10 @@ export interface IMappedSection {
 export interface IUnmappedContent {
   extractedSectionId: string;
   reason: string;
+  // AI-suggested match info (for review by user)
+  suggestedStandardCode?: string;
+  suggestedSpecCode?: string;
+  suggestedConfidence?: number;
   reviewedBy?: mongoose.Types.ObjectId;
   reviewedAt?: Date;
   action?: 'assigned' | 'discarded' | 'pending';
@@ -98,6 +102,10 @@ const MappedSectionSchema = new Schema<IMappedSection>({
 const UnmappedContentSchema = new Schema<IUnmappedContent>({
   extractedSectionId: { type: String, required: true },
   reason: { type: String, required: true },
+  // AI-suggested match info (for review by user)
+  suggestedStandardCode: String,
+  suggestedSpecCode: String,
+  suggestedConfidence: Number,
   reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   reviewedAt: Date,
   action: {
