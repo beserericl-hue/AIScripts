@@ -14,6 +14,66 @@ function debugLog(message: string, data?: any) {
 }
 
 /**
+ * Clean HTML content before sending to n8n
+ * Removes:
+ * - Base64 encoded images (data:image/...)
+ * - Long encoded data strings (likely binary data)
+ * - Excessive whitespace
+ * - HTML comments
+ * - Empty tags
+ */
+function cleanHtmlContent(html: string): string {
+  let cleaned = html;
+
+  // Remove base64 embedded images (common pattern: <img src="data:image/png;base64,...")
+  cleaned = cleaned.replace(/<img[^>]*src=["']data:image\/[^;]+;base64,[^"']*["'][^>]*\/?>/gi, '[image]');
+
+  // Remove any remaining base64 image data patterns
+  cleaned = cleaned.replace(/data:image\/[^;]+;base64,[a-zA-Z0-9+\/=]+/gi, '[image-data-removed]');
+
+  // Remove any other base64 encoded data (like fonts, etc.)
+  cleaned = cleaned.replace(/data:[^;]+;base64,[a-zA-Z0-9+\/=]+/gi, '[encoded-data-removed]');
+
+  // Remove very long strings of alphanumeric characters (likely encoded binary data or garbage)
+  // This catches things like long hex strings, base64 without proper prefix, etc.
+  cleaned = cleaned.replace(/[a-zA-Z0-9+\/=]{500,}/g, '[long-encoded-data-removed]');
+
+  // Remove HTML comments
+  cleaned = cleaned.replace(/<!--[\s\S]*?-->/g, '');
+
+  // Remove empty tags (except br and hr)
+  cleaned = cleaned.replace(/<(?!br|hr)[^>]+>\s*<\/[^>]+>/gi, '');
+
+  // Remove Microsoft Office specific XML/markup that sometimes leaks into HTML
+  cleaned = cleaned.replace(/<o:[^>]*>[\s\S]*?<\/o:[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<w:[^>]*>[\s\S]*?<\/w:[^>]*>/gi, '');
+  cleaned = cleaned.replace(/<m:[^>]*>[\s\S]*?<\/m:[^>]*>/gi, '');
+
+  // Remove style attributes with very long values (often contain encoded fonts/images)
+  cleaned = cleaned.replace(/style="[^"]{500,}"/gi, '');
+
+  // Remove script tags entirely
+  cleaned = cleaned.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+
+  // Remove style tags entirely
+  cleaned = cleaned.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+
+  // Normalize whitespace - collapse multiple spaces/newlines
+  cleaned = cleaned.replace(/\s+/g, ' ');
+
+  // Remove leading/trailing whitespace from tag contents
+  cleaned = cleaned.replace(/>\s+</g, '><');
+
+  // Add back single spaces after block elements for readability
+  cleaned = cleaned.replace(/(<\/(?:p|div|h[1-6]|li|tr|td|th)>)/gi, '$1 ');
+
+  // Trim the final result
+  cleaned = cleaned.trim();
+
+  return cleaned;
+}
+
+/**
  * Split HTML content into sections by h1 tags
  * Each section includes the h1 and all content until the next h1
  * Returns array of { heading: string, content: string }
@@ -254,10 +314,71 @@ async function processDocumentAsync(
 }
 
 /**
+ * Wait for callback to be received for a specific section
+ * Polls the import record to check if n8nReceivedSections has incremented
+ *
+ * @param importId - The import record ID to poll
+ * @param expectedSections - The number of sections that should have been received
+ * @param timeoutMs - Maximum time to wait (default 120 seconds)
+ * @param pollIntervalMs - How often to check (default 2 seconds)
+ * @returns true if callback received, false if timeout
+ */
+async function waitForCallback(
+  importId: mongoose.Types.ObjectId,
+  expectedSections: number,
+  timeoutMs: number = 120000,
+  pollIntervalMs: number = 2000
+): Promise<boolean> {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    // Fetch fresh import record
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      debugLog('Import record not found while waiting for callback', { importId: importId.toString() });
+      return false;
+    }
+
+    const receivedSections = importRecord.n8nReceivedSections || 0;
+    debugLog(`Waiting for callback: received ${receivedSections}/${expectedSections}`, {
+      importId: importId.toString(),
+      elapsed: Date.now() - startTime
+    });
+
+    if (receivedSections >= expectedSections) {
+      debugLog(`Callback received for section ${expectedSections}`, { importId: importId.toString() });
+      return true;
+    }
+
+    // Check if import failed
+    if (importRecord.status === 'failed') {
+      debugLog('Import failed while waiting for callback', {
+        importId: importId.toString(),
+        error: importRecord.error
+      });
+      return false;
+    }
+
+    // Wait before polling again
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+  }
+
+  debugLog('Timeout waiting for callback', {
+    importId: importId.toString(),
+    expectedSections,
+    timeoutMs
+  });
+  return false;
+}
+
+/**
  * Send document to n8n Document Matcher for AI-powered mapping
  *
  * Large documents are split by h1 tags and sent as multiple smaller requests
  * to avoid 413 Payload Too Large errors.
+ *
+ * IMPORTANT: This function waits for each section's callback before sending
+ * the next section to avoid overwhelming n8n.
  *
  * ==================== REQUEST PAYLOAD (per section) ====================
  * POST {webhookUrl}
@@ -343,15 +464,23 @@ async function sendToN8nDocumentMatcher(
 
   // Use the properly formatted HTML content with headers (h1, h2, etc.)
   // Fall back to rawText if htmlContent is not available
-  const htmlContent = parsed.htmlContent || parsed.rawText || '';
+  const rawHtmlContent = parsed.htmlContent || parsed.rawText || '';
+
+  // CRITICAL: Clean HTML content to remove base64 images, encoded data, and garbage
+  const cleanedHtml = cleanHtmlContent(rawHtmlContent);
+  debugLog('HTML content cleaned', {
+    originalLength: rawHtmlContent.length,
+    cleanedLength: cleanedHtml.length,
+    reduction: `${Math.round((1 - cleanedHtml.length / rawHtmlContent.length) * 100)}%`
+  });
 
   // Split HTML into sections by h1 tags to avoid payload size limits
-  const sections = splitHtmlBySections(htmlContent);
+  const sections = splitHtmlBySections(cleanedHtml);
   const totalSections = sections.length;
 
   debugLog('Document split into sections for n8n', {
     totalSections,
-    totalHtmlLength: htmlContent.length,
+    totalHtmlLength: cleanedHtml.length,
     sectionSizes: sections.map(s => s.content.length)
   });
 
@@ -369,11 +498,17 @@ async function sendToN8nDocumentMatcher(
     totalSections
   });
 
-  // Send each section separately
+  // Timeout per section (2 minutes default, can be overridden)
+  const callbackTimeoutMs = webhookSettings.callbackTimeoutMs || 120000;
+
+  // Send each section separately, waiting for callback before sending next
   for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
     const section = sections[sectionIndex];
     const isLastSection = sectionIndex === sections.length - 1;
-    const sectionContentBase64 = Buffer.from(section.content, 'utf8').toString('base64');
+
+    // Clean each section content individually as well (in case section splitting introduced issues)
+    const cleanedSectionContent = cleanHtmlContent(section.content);
+    const sectionContentBase64 = Buffer.from(cleanedSectionContent, 'utf8').toString('base64');
 
     // Prepare payload for this section
     const payload = {
@@ -397,7 +532,8 @@ async function sendToN8nDocumentMatcher(
       sectionIndex,
       heading: section.heading.substring(0, 50),
       payloadSize,
-      sectionContentLength: section.content.length,
+      originalContentLength: section.content.length,
+      cleanedContentLength: cleanedSectionContent.length,
       base64Length: sectionContentBase64.length,
       moreData: !isLastSection
     });
@@ -433,9 +569,21 @@ async function sendToN8nDocumentMatcher(
       debugLog(`n8n response for section ${sectionIndex} was not JSON (this is okay)`);
     }
 
-    // Small delay between sections to avoid overwhelming n8n
+    // CRITICAL: Wait for callback before sending next section
+    // This prevents overwhelming n8n and ensures proper sequential processing
     if (!isLastSection) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      debugLog(`Waiting for callback for section ${sectionIndex} before sending next...`);
+      const callbackReceived = await waitForCallback(
+        importRecord._id as mongoose.Types.ObjectId,
+        sectionIndex + 1, // We expect (sectionIndex + 1) sections to be received after this one completes
+        callbackTimeoutMs
+      );
+
+      if (!callbackReceived) {
+        console.error(`[ImportController] Timeout waiting for callback for section ${sectionIndex}. Continuing anyway.`);
+        // Continue anyway - the callback might still come, and we don't want to block forever
+        // But log this as a warning
+      }
     }
   }
 
