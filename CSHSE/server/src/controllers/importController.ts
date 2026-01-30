@@ -286,29 +286,53 @@ async function processDocumentAsync(
     });
 
     // Store extracted content using TOC-based sections
+    // NOTE: To avoid MongoDB's 16MB document limit:
+    // - Don't store full rawText (not needed after parsing)
+    // - Truncate section content to 50KB max each (enough for display and mapping)
+    const MAX_SECTION_CONTENT_LENGTH = 50000; // 50KB per section
+    const MAX_RAW_TEXT_LENGTH = 5000; // Keep just first 5KB for metadata/preview
+
+    let truncatedSections = 0;
     importRecord.extractedContent = {
-      rawText: parsed.rawText,
+      rawText: parsed.rawText.substring(0, MAX_RAW_TEXT_LENGTH), // Only store preview
       pageCount: parsed.metadata.pageCount,
       metadata: {
         title: parsed.metadata.title,
         author: parsed.metadata.author,
         createdDate: parsed.metadata.createdDate
       },
-      sections: tocSections.map(section => ({
-        id: section.id,
-        pageNumber: section.tocEntry.pageNumber || 1,
-        startPosition: section.startPosition,
-        endPosition: section.endPosition,
-        sectionType: section.tocEntry.isMatrix ? 'matrix' :
-                     section.tocEntry.isSupportingEvidence ? 'supporting_evidence' :
-                     section.tocEntry.sectionType === 'standard' ? 'narrative' : 'general',
-        content: section.content,
-        confidence: section.tocEntry.standardCode ? 0.8 : 0.5,
-        suggestedStandard: section.tocEntry.standardCode ?
-          `${section.tocEntry.standardCode}${section.tocEntry.specCode ? '.' + section.tocEntry.specCode : ''}` :
-          undefined
-      }))
+      sections: tocSections.map(section => {
+        const content = section.content;
+        const needsTruncation = content.length > MAX_SECTION_CONTENT_LENGTH;
+        if (needsTruncation) {
+          truncatedSections++;
+        }
+        return {
+          id: section.id,
+          pageNumber: section.tocEntry.pageNumber || 1,
+          startPosition: section.startPosition,
+          endPosition: section.endPosition,
+          sectionType: section.tocEntry.isMatrix ? 'matrix' :
+                       section.tocEntry.isSupportingEvidence ? 'supporting_evidence' :
+                       section.tocEntry.sectionType === 'standard' ? 'narrative' : 'general',
+          content: needsTruncation
+            ? content.substring(0, MAX_SECTION_CONTENT_LENGTH) + '\n\n[Content truncated for storage - full content sent to AI]'
+            : content,
+          confidence: section.tocEntry.standardCode ? 0.8 : 0.5,
+          suggestedStandard: section.tocEntry.standardCode ?
+            `${section.tocEntry.standardCode}${section.tocEntry.specCode ? '.' + section.tocEntry.specCode : ''}` :
+            undefined
+        };
+      })
     };
+
+    if (truncatedSections > 0) {
+      debugLog('Content truncated for MongoDB storage', {
+        truncatedSections,
+        totalSections: tocSections.length,
+        maxSectionLength: MAX_SECTION_CONTENT_LENGTH
+      });
+    }
 
     // Add tables as sections (in addition to TOC sections)
     for (const table of parsed.tables) {

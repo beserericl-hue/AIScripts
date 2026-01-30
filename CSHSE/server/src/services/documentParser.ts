@@ -896,7 +896,9 @@ export class DocumentParserService {
       if (!pageMatch) {
         // Try concatenated pattern: title ending directly with digits
         // Must have at least some text before the number
-        pageMatch = line.match(/^(.{5,})(\d{1,3})\s*$/);
+        // Use NON-GREEDY quantifier (.{5,}?) to avoid capturing digits in the title
+        // E.g., "Standard 4 – Program Evaluation20" should extract "20" not "0"
+        pageMatch = line.match(/^(.{5,}?)(\d{1,3})\s*$/);
         if (pageMatch) {
           // Reformat match to be consistent
           pageMatch = [pageMatch[2], pageMatch[2]];
