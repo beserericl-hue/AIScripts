@@ -1102,7 +1102,7 @@ export class DocumentParserService {
 
   /**
    * Split document content into sections based on TOC entries
-   * Each section contains the content from one TOC entry to the next
+   * Uses HTML headers from document body (not TOC) to find section boundaries
    */
   splitDocumentByTOC(text: string, htmlContent: string, tocEntries: TOCEntry[]): TOCBasedSection[] {
     const sections: TOCBasedSection[] = [];
@@ -1125,38 +1125,47 @@ export class DocumentParserService {
       }];
     }
 
-    // Remove TOC from the text first
-    const tocEndMarkers = ['certification of the self-study', 'introductory information', 'part i:'];
-    let contentStartIndex = 0;
+    // Step 1: Find all HTML headers in the document
+    const htmlHeaders = this.extractHtmlHeaders(htmlContent);
+    console.log(`[DocumentParser] Found ${htmlHeaders.length} HTML headers in document`);
 
-    for (const marker of tocEndMarkers) {
-      const idx = text.toLowerCase().indexOf(marker);
-      if (idx > 0 && idx < text.length / 4) {  // TOC should be in first quarter
-        contentStartIndex = idx;
-        break;
-      }
-    }
+    // Step 2: Find where TOC ends - look for first content header after TOC
+    // TOC headers typically contain "table of contents" or have page numbers like "...1"
+    const tocEndIndex = this.findTocEndIndex(htmlHeaders);
+    console.log(`[DocumentParser] TOC ends at header index ${tocEndIndex}`);
 
-    const contentText = text.substring(contentStartIndex);
+    // Step 3: Get only the content headers (after TOC)
+    const contentHeaders = htmlHeaders.slice(tocEndIndex);
+    console.log(`[DocumentParser] ${contentHeaders.length} content headers after TOC`);
 
-    // For each TOC entry, find its content in the document
+    // Step 4: For each TOC entry, find matching header in document body and extract content
     for (let i = 0; i < tocEntries.length; i++) {
       const entry = tocEntries[i];
-      const nextEntry = tocEntries[i + 1];
 
-      // Skip TOC itself and very short entries
+      // Skip TOC itself
       if (entry.title.toLowerCase().includes('table of contents')) {
         continue;
       }
 
-      // Find the section content
-      const sectionContent = this.extractSectionContent(
-        contentText,
-        entry.title,
-        nextEntry?.title
-      );
+      // Find matching header in content (after TOC)
+      const matchingHeaderIndex = this.findMatchingHeader(entry.title, contentHeaders);
 
-      if (sectionContent.content.length > 50) {  // Only include substantial sections
+      if (matchingHeaderIndex === -1) {
+        console.log(`[DocumentParser] No matching header found for TOC entry: ${entry.title.substring(0, 40)}`);
+        continue;
+      }
+
+      const matchingHeader = contentHeaders[matchingHeaderIndex];
+      const nextHeader = contentHeaders[matchingHeaderIndex + 1];
+
+      // Extract HTML content from this header to the next header
+      const startPos = matchingHeader.position;
+      const endPos = nextHeader ? nextHeader.position : htmlContent.length;
+
+      const sectionHtml = htmlContent.substring(startPos, endPos);
+      const sectionText = sectionHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+      if (sectionText.length > 50) {  // Only include substantial sections
         // Build standard hint for AI
         let standardHint = '';
         let specHint = '';
@@ -1171,13 +1180,15 @@ export class DocumentParserService {
         sections.push({
           id: uuidv4(),
           tocEntry: entry,
-          content: sectionContent.content,
-          htmlContent: sectionContent.htmlContent,
-          startPosition: sectionContent.startPosition,
-          endPosition: sectionContent.endPosition,
+          content: sectionText,
+          htmlContent: sectionHtml,
+          startPosition: startPos,
+          endPosition: endPos,
           standardHint,
           specHint
         });
+
+        console.log(`[DocumentParser] Extracted section "${entry.title.substring(0, 30)}..." (${sectionText.length} chars)`);
       }
     }
 
@@ -1186,73 +1197,166 @@ export class DocumentParserService {
   }
 
   /**
-   * Extract content for a section based on its title and the next section's title
+   * Extract all HTML headers (h1-h4) from HTML content with their positions
    */
-  private extractSectionContent(
-    text: string,
-    sectionTitle: string,
-    nextSectionTitle?: string
-  ): { content: string; htmlContent: string; startPosition: number; endPosition: number } {
-    // Truncate BEFORE escaping to avoid cutting in the middle of escape sequences
-    // Also sanitize: remove problematic characters that could break regex
-    const sanitizedTitle = sectionTitle
-      .substring(0, 40)  // Take first 40 chars of original
-      .replace(/[^\w\s\-:.,]/g, '.');  // Replace special chars with dots for flexible matching
+  private extractHtmlHeaders(htmlContent: string): Array<{ level: number; text: string; position: number }> {
+    const headers: Array<{ level: number; text: string; position: number }> = [];
 
-    let startPosition = 0;
-    let endPosition = text.length;
+    // Match h1-h4 tags
+    const headerRegex = /<h([1-4])[^>]*>(.*?)<\/h\1>/gi;
+    let match;
 
-    try {
-      // Create regex to find section title (case insensitive)
-      const escapedTitle = sanitizedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const titleRegex = new RegExp(escapedTitle, 'i');
+    while ((match = headerRegex.exec(htmlContent)) !== null) {
+      const level = parseInt(match[1], 10);
+      const rawText = match[2];
+      // Strip any inner HTML tags and trim
+      const text = rawText.replace(/<[^>]*>/g, '').trim();
 
-      const startMatch = text.match(titleRegex);
-      if (startMatch) {
-        startPosition = text.indexOf(startMatch[0]);
+      headers.push({
+        level,
+        text,
+        position: match.index
+      });
+    }
+
+    return headers;
+  }
+
+  /**
+   * Find where the TOC ends by looking for first substantive content header
+   * TOC entries often have page numbers (dots followed by number) or are in the first headers
+   */
+  private findTocEndIndex(headers: Array<{ level: number; text: string; position: number }>): number {
+    // Look for markers that indicate end of TOC / start of content
+    const contentStartMarkers = [
+      /certification\s+of\s+the\s+self.?study/i,
+      /introductory\s+information/i,
+      /part\s+i[:\s]/i,
+      /^standard\s+\d/i,
+      /^I\.\s+/,
+    ];
+
+    // TOC entries typically have page numbers like "...1" or "....42"
+    const tocEntryPattern = /\.{2,}\s*\d+\s*$/;
+
+    for (let i = 0; i < headers.length; i++) {
+      const header = headers[i];
+
+      // Check if this looks like a content header (not a TOC entry)
+      // TOC entries have page numbers, content headers don't
+      const hasTocPageNumber = tocEntryPattern.test(header.text);
+
+      if (!hasTocPageNumber) {
+        // Check if it matches a content start marker
+        for (const marker of contentStartMarkers) {
+          if (marker.test(header.text)) {
+            console.log(`[DocumentParser] Found content start marker at header ${i}: "${header.text.substring(0, 40)}"`);
+            return i;
+          }
+        }
       }
-    } catch (e) {
-      // If regex fails, fall back to simple string search
-      console.log('[DocumentParser] Regex failed for title, using string search:', sectionTitle.substring(0, 30));
-      const simpleSearch = text.toLowerCase().indexOf(sectionTitle.substring(0, 20).toLowerCase());
-      if (simpleSearch >= 0) {
-        startPosition = simpleSearch;
+
+      // After the first few headers, if we haven't found TOC indicators, assume TOC has ended
+      // Most TOCs are in the first 20-30 headers
+      if (i > 5 && !hasTocPageNumber) {
+        // This header doesn't look like a TOC entry, content might be starting
+        const nextFewHeaders = headers.slice(i, i + 3);
+        const anyTocLike = nextFewHeaders.some(h => tocEntryPattern.test(h.text));
+
+        if (!anyTocLike) {
+          console.log(`[DocumentParser] TOC appears to end around header ${i}: "${header.text.substring(0, 40)}"`);
+          return i;
+        }
       }
     }
 
-    // If there's a next section, find where it starts
-    if (nextSectionTitle) {
-      try {
-        const sanitizedNextTitle = nextSectionTitle
-          .substring(0, 40)
-          .replace(/[^\w\s\-:.,]/g, '.');
-        const escapedNextTitle = sanitizedNextTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const nextTitleRegex = new RegExp(escapedNextTitle, 'i');
-        const nextMatch = text.substring(startPosition + 100).match(nextTitleRegex);  // +100 to skip current title
+    // Default: assume first 5 headers are TOC-related
+    return Math.min(5, headers.length);
+  }
 
-        if (nextMatch) {
-          endPosition = startPosition + 100 + text.substring(startPosition + 100).indexOf(nextMatch[0]);
-        }
-      } catch (e) {
-        // If regex fails, fall back to simple string search
-        const simpleSearch = text.toLowerCase().indexOf(nextSectionTitle.substring(0, 20).toLowerCase(), startPosition + 100);
-        if (simpleSearch >= 0) {
-          endPosition = simpleSearch;
+  /**
+   * Find the header in the document body that matches a TOC entry title
+   */
+  private findMatchingHeader(
+    tocTitle: string,
+    contentHeaders: Array<{ level: number; text: string; position: number }>
+  ): number {
+    // Normalize the TOC title for comparison
+    const normalizedTocTitle = this.normalizeTitle(tocTitle);
+
+    // First pass: look for exact or near-exact match
+    for (let i = 0; i < contentHeaders.length; i++) {
+      const normalizedHeader = this.normalizeTitle(contentHeaders[i].text);
+
+      // Exact match
+      if (normalizedHeader === normalizedTocTitle) {
+        return i;
+      }
+
+      // Check if one contains the other (for cases like "Standard 1 – Title" vs "Standard 1 - Title")
+      if (normalizedHeader.includes(normalizedTocTitle) || normalizedTocTitle.includes(normalizedHeader)) {
+        // Make sure it's a significant overlap (not just matching "Standard")
+        const minLength = Math.min(normalizedHeader.length, normalizedTocTitle.length);
+        if (minLength >= 10) {
+          return i;
         }
       }
     }
 
-    const content = text.substring(startPosition, endPosition).trim();
+    // Second pass: fuzzy match on key components
+    // Extract standard code from TOC title if present
+    const tocStandardMatch = tocTitle.match(/standard\s*(\d+)/i);
+    const tocSpecMatch = tocTitle.match(/\b([a-z])\.\s/i) || tocTitle.match(/specification\s*([a-z])/i);
 
-    // Generate HTML for this section
-    const htmlContent = this.convertTextToHtml(content);
+    if (tocStandardMatch) {
+      const standardNum = tocStandardMatch[1];
 
-    return {
-      content,
-      htmlContent,
-      startPosition,
-      endPosition
-    };
+      for (let i = 0; i < contentHeaders.length; i++) {
+        const headerText = contentHeaders[i].text;
+        const headerStandardMatch = headerText.match(/standard\s*(\d+)/i);
+
+        if (headerStandardMatch && headerStandardMatch[1] === standardNum) {
+          // Check if spec codes also match (if present)
+          if (tocSpecMatch) {
+            const headerSpecMatch = headerText.match(/\b([a-z])\.\s/i) || headerText.match(/specification\s*([a-z])/i);
+            if (headerSpecMatch && headerSpecMatch[1].toLowerCase() === tocSpecMatch[1].toLowerCase()) {
+              return i;
+            }
+          } else {
+            // No spec code to match, just match on standard
+            return i;
+          }
+        }
+      }
+    }
+
+    // Third pass: match on first significant words
+    const tocWords = normalizedTocTitle.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
+    if (tocWords.length >= 2) {
+      for (let i = 0; i < contentHeaders.length; i++) {
+        const headerWords = this.normalizeTitle(contentHeaders[i].text).split(/\s+/).filter(w => w.length > 3);
+
+        // Check how many words match
+        const matchingWords = tocWords.filter(w => headerWords.includes(w));
+        if (matchingWords.length >= Math.min(3, tocWords.length)) {
+          return i;
+        }
+      }
+    }
+
+    return -1;
+  }
+
+  /**
+   * Normalize a title for comparison by removing special chars and extra whitespace
+   */
+  private normalizeTitle(title: string): string {
+    return title
+      .toLowerCase()
+      .replace(/[–—-]/g, ' ')  // Normalize dashes
+      .replace(/[^\w\s]/g, '') // Remove special chars
+      .replace(/\s+/g, ' ')    // Normalize whitespace
+      .trim();
   }
 
   /**
