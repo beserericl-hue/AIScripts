@@ -779,7 +779,12 @@ export class DocumentParserService {
         const hasPageNumberPattern = /[.\s…]+\d{1,3}\s*$/.test(line) || /\d{1,3}\s*$/.test(line);
         if (!hasPageNumberPattern && tocEntries.length > 5) {
           // This might be content, not TOC - check if it looks like a title
-          const looksTocLike = /^(standard|part|section|appendix|chapter|\d+\.|[a-z][\.\)])/i.test(line);
+          // Handle leading whitespace for indented TOC entries
+          const trimmedLine = line.trim();
+          const looksTocLike = /^(standard|part|section|appendix|chapter)/i.test(trimmedLine) ||
+                               /^\d+[\.\)\t]/i.test(trimmedLine) ||     // numbered: "1. Title" or "1	Title"
+                               /^[a-z][\.\)\t]/i.test(trimmedLine) ||   // lettered: "a. Title" or "a	Title"
+                               /^\([a-z]\)/i.test(trimmedLine);         // parenthesized: "(a) Title"
           if (!looksTocLike) {
             consecutiveNonTocLines++;
             if (consecutiveNonTocLines >= maxConsecutiveNonToc) {
@@ -889,15 +894,21 @@ export class DocumentParserService {
       }
 
       // STRICT VALIDATION: If no page number, must be a recognizable header pattern
-      const isRecognizedHeader = /^(standard|part|section|appendix|chapter|introduction|conclusion|certification|curriculum)/i.test(title) ||
-                                  /^[a-z][\.\)]\s+/i.test(title) ||  // lettered subsection
-                                  /^\d+[\.\)]\s+/i.test(title) ||    // numbered subsection
-                                  /^(Part\s+[IVX]+|Section\s+\d)/i.test(title);  // Roman numerals
+      // NOTE: Handle leading whitespace (tabs/spaces) for indented TOC sub-entries
+      const trimmedTitle = title.trim();
+      const isRecognizedHeader = /^(standard|part|section|appendix|chapter|introduction|conclusion|certification|curriculum)/i.test(trimmedTitle) ||
+                                  /^[a-z][\.\)\t]\s*/i.test(trimmedTitle) ||  // lettered subsection: "a. Title" or "a) Title" or "a	Title"
+                                  /^\d+[\.\)\t]\s*/i.test(trimmedTitle) ||    // numbered subsection: "1. Title" or "1) Title" or "1	Title"
+                                  /^(Part\s+[IVX]+|Section\s+\d)/i.test(trimmedTitle) ||  // Roman numerals
+                                  /^\([a-z]\)/i.test(trimmedTitle);  // parenthesized letter: "(a) Title"
 
       if (!hasPageNumber && !isRecognizedHeader) {
         // Neither page number nor recognized pattern - not a TOC entry
         return null;
       }
+
+      // Use trimmed title for further processing
+      title = trimmedTitle;
 
       // Determine level and extract spec code from subsection patterns
       let level = 1;
