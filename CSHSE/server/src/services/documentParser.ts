@@ -775,7 +775,8 @@ export class DocumentParserService {
         }
 
         // 2. Lines without any page number pattern are suspicious after we have some entries
-        const hasPageNumberPattern = /[.\s…]+\d+\s*$/.test(line) || /\d+\s*$/.test(line);
+        // Check for both separator-based and concatenated page numbers
+        const hasPageNumberPattern = /[.\s…]+\d{1,3}\s*$/.test(line) || /\d{1,3}\s*$/.test(line);
         if (!hasPageNumberPattern && tocEntries.length > 5) {
           // This might be content, not TOC - check if it looks like a title
           const looksTocLike = /^(standard|part|section|appendix|chapter|\d+\.|[a-z][\.\)])/i.test(line);
@@ -845,22 +846,39 @@ export class DocumentParserService {
         return null;
       }
 
-      // Extract page number if present (usually at end with dots, ellipsis, or spaces)
+      // Extract page number if present
       let title = line;
       let pageNumber: number | undefined;
       let hasPageNumber = false;
 
-      // Pattern: "Title...123" or "Title … 123" or "Title    123" (page numbers typically at end)
-      const pageMatch = line.match(/[.\s…]+(\d{1,3})\s*$/);
+      // Try multiple patterns for page numbers:
+      // 1. With separator: "Title...123" or "Title … 123" or "Title    123"
+      // 2. Direct concatenation: "Title123" (common in Word TOC exports)
+      let pageMatch = line.match(/[.\s…]+(\d{1,3})\s*$/);
+
+      if (!pageMatch) {
+        // Try concatenated pattern: title ending directly with digits
+        // Must have at least some text before the number
+        pageMatch = line.match(/^(.{5,})(\d{1,3})\s*$/);
+        if (pageMatch) {
+          // Reformat match to be consistent
+          pageMatch = [pageMatch[2], pageMatch[2]];
+          title = line.replace(/\d{1,3}\s*$/, '').trim();
+        }
+      }
+
       if (pageMatch) {
         const parsedPage = parseInt(pageMatch[1], 10);
         // Reasonable page numbers are 1-500
         if (parsedPage >= 1 && parsedPage <= 500) {
           pageNumber = parsedPage;
           hasPageNumber = true;
-          const matchIndex = line.indexOf(pageMatch[0]);
-          if (matchIndex > 0) {
-            title = line.substring(0, matchIndex).trim();
+          // Only extract title from match if we haven't already (non-concatenated case)
+          if (title === line) {
+            const matchIndex = line.indexOf(pageMatch[0]);
+            if (matchIndex > 0) {
+              title = line.substring(0, matchIndex).trim();
+            }
           }
         }
       }
