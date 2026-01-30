@@ -1102,11 +1102,9 @@ export class DocumentParserService {
 
   /**
    * Split document content into sections based on TOC entries
-   * Uses HTML headers from document body (not TOC) to find section boundaries
+   * First tries HTML headers, then falls back to text-based extraction
    */
   splitDocumentByTOC(text: string, htmlContent: string, tocEntries: TOCEntry[]): TOCBasedSection[] {
-    const sections: TOCBasedSection[] = [];
-
     if (tocEntries.length === 0) {
       console.log('[DocumentParser] No TOC entries, returning single section');
       return [{
@@ -1125,12 +1123,37 @@ export class DocumentParserService {
       }];
     }
 
+    // Try HTML header-based extraction first
+    const htmlSections = this.extractSectionsViaHtmlHeaders(htmlContent, tocEntries);
+
+    if (htmlSections.length > 0) {
+      console.log(`[DocumentParser] HTML header extraction succeeded: ${htmlSections.length} sections`);
+      return htmlSections;
+    }
+
+    // Fallback: Use text-based extraction
+    console.log('[DocumentParser] HTML header matching failed, falling back to text-based extraction');
+    const textSections = this.extractSectionsViaText(text, htmlContent, tocEntries);
+
+    console.log(`[DocumentParser] Text-based extraction: ${textSections.length} sections`);
+    return textSections;
+  }
+
+  /**
+   * Extract sections by matching TOC entries to HTML headers
+   */
+  private extractSectionsViaHtmlHeaders(htmlContent: string, tocEntries: TOCEntry[]): TOCBasedSection[] {
+    const sections: TOCBasedSection[] = [];
+
     // Step 1: Find all HTML headers in the document
     const htmlHeaders = this.extractHtmlHeaders(htmlContent);
     console.log(`[DocumentParser] Found ${htmlHeaders.length} HTML headers in document`);
 
+    if (htmlHeaders.length === 0) {
+      return sections;
+    }
+
     // Step 2: Find where TOC ends - look for first content header after TOC
-    // TOC headers typically contain "table of contents" or have page numbers like "...1"
     const tocEndIndex = this.findTocEndIndex(htmlHeaders);
     console.log(`[DocumentParser] TOC ends at header index ${tocEndIndex}`);
 
@@ -1192,8 +1215,248 @@ export class DocumentParserService {
       }
     }
 
-    console.log(`[DocumentParser] Split document into ${sections.length} TOC-based sections`);
     return sections;
+  }
+
+  /**
+   * Extract sections by searching for TOC entry titles in raw text
+   * This is a fallback when HTML headers don't match
+   * Key: Find section headers in body (no page numbers), not TOC entries (have page numbers)
+   */
+  private extractSectionsViaText(text: string, htmlContent: string, tocEntries: TOCEntry[]): TOCBasedSection[] {
+    const sections: TOCBasedSection[] = [];
+
+    // Find where the TOC listing ends
+    // TOC entries have page numbers; actual section headers don't
+    // Look for the first section title that appears WITHOUT a page number following it
+
+    // First, find where "Table of Contents" heading ends
+    const tocHeadingMatch = text.match(/table\s+of\s+contents/i);
+    let searchStartPos = tocHeadingMatch ? tocHeadingMatch.index! + tocHeadingMatch[0].length : 0;
+
+    // Now find where actual content begins
+    // Strategy: Look for first TOC entry title that appears as a standalone line (no page number)
+    // The first TOC entry (after skipping "Table of Contents") is usually the first content section
+    const firstContentEntry = tocEntries.find(e =>
+      !e.title.toLowerCase().includes('table of contents')
+    );
+
+    let tocEndPosition = 0;
+
+    if (firstContentEntry) {
+      // Search for this title appearing WITHOUT trailing digits/dots
+      // This indicates it's the section header, not the TOC entry
+      const titleWords = firstContentEntry.title.split(/\s+/).slice(0, 4).join('\\s+');
+      const sectionHeaderPattern = new RegExp(
+        titleWords + '(?!\\s*[.…]+\\s*\\d)',  // Negative lookahead for page number
+        'i'
+      );
+
+      // Search in the document, skipping the TOC heading area
+      const searchText = text.substring(searchStartPos);
+      let match = searchText.match(sectionHeaderPattern);
+
+      if (match && match.index !== undefined) {
+        // Found the pattern - but is this the TOC entry or the section header?
+        // Check if there's substantial content after this (>200 chars before next section)
+        const potentialStart = searchStartPos + match.index;
+        const nextChunk = text.substring(potentialStart, potentialStart + 500);
+
+        // If this chunk contains multiple TOC-like entries (short lines with page numbers), skip ahead
+        const tocLikeLines = nextChunk.split('\n').filter(line =>
+          /[.…]+\s*\d+\s*$/.test(line.trim())
+        ).length;
+
+        if (tocLikeLines > 3) {
+          // Still in TOC, look for the next occurrence
+          const afterFirstMatch = text.substring(potentialStart + match[0].length);
+          const secondMatch = afterFirstMatch.match(sectionHeaderPattern);
+          if (secondMatch && secondMatch.index !== undefined) {
+            tocEndPosition = potentialStart + match[0].length + secondMatch.index;
+            console.log(`[DocumentParser] Found content start at position ${tocEndPosition} (second occurrence)`);
+          }
+        } else {
+          tocEndPosition = potentialStart;
+          console.log(`[DocumentParser] Found content start at position ${tocEndPosition} (first occurrence)`);
+        }
+      }
+    }
+
+    // Fallback: estimate TOC ends at first substantial paragraph break after initial 10%
+    if (tocEndPosition === 0) {
+      const minPos = Math.floor(text.length * 0.05);
+      const searchArea = text.substring(minPos, Math.floor(text.length * 0.25));
+
+      // Look for certification signature block or similar content marker
+      const contentMarkers = [
+        /I certify that/i,
+        /This self-study/i,
+        /Program Director/i,
+        /Dean signature/i,
+        /We, the undersigned/i,
+      ];
+
+      for (const marker of contentMarkers) {
+        const markerMatch = searchArea.match(marker);
+        if (markerMatch && markerMatch.index !== undefined) {
+          tocEndPosition = minPos + markerMatch.index;
+          console.log(`[DocumentParser] Found content via marker at position ${tocEndPosition}`);
+          break;
+        }
+      }
+
+      if (tocEndPosition === 0) {
+        tocEndPosition = Math.floor(text.length * 0.10);
+        console.log(`[DocumentParser] Using estimated TOC end at ${tocEndPosition} (10% of document)`);
+      }
+    }
+
+    const contentText = text.substring(tocEndPosition);
+
+    // For each TOC entry, find its content
+    for (let i = 0; i < tocEntries.length; i++) {
+      const entry = tocEntries[i];
+      const nextEntry = tocEntries[i + 1];
+
+      // Skip TOC itself
+      if (entry.title.toLowerCase().includes('table of contents')) {
+        continue;
+      }
+
+      // Find section start in content (searching AFTER the TOC)
+      const sectionContent = this.extractSectionContent(contentText, entry.title, nextEntry?.title);
+
+      if (sectionContent.content.length > 50) {
+        // Build standard hint for AI
+        let standardHint = '';
+        let specHint = '';
+
+        if (entry.standardCode) {
+          standardHint = `Standard ${entry.standardCode}`;
+          if (entry.specCode) {
+            specHint = `Specification ${entry.specCode}`;
+          }
+        }
+
+        sections.push({
+          id: uuidv4(),
+          tocEntry: entry,
+          content: sectionContent.content,
+          htmlContent: sectionContent.htmlContent,
+          startPosition: tocEndPosition + sectionContent.startPosition,
+          endPosition: tocEndPosition + sectionContent.endPosition,
+          standardHint,
+          specHint
+        });
+
+        console.log(`[DocumentParser] Text extraction: "${entry.title.substring(0, 30)}..." (${sectionContent.content.length} chars)`);
+      }
+    }
+
+    return sections;
+  }
+
+  /**
+   * Extract content for a section based on its title and the next section's title
+   * Finds the section header and extracts content up to the next section or a max limit
+   */
+  private extractSectionContent(
+    text: string,
+    sectionTitle: string,
+    nextSectionTitle?: string
+  ): { content: string; htmlContent: string; startPosition: number; endPosition: number } {
+    // Maximum section size to prevent extracting entire document
+    const MAX_SECTION_SIZE = 50000; // 50KB max per section
+
+    // Truncate and sanitize title for matching
+    const sanitizedTitle = sectionTitle
+      .substring(0, 40)
+      .replace(/[^\w\s\-:.,]/g, '.');
+
+    let startPosition = 0;
+    let endPosition = text.length;
+
+    try {
+      // Create regex to find section title (case insensitive)
+      const escapedTitle = sanitizedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const titleRegex = new RegExp(escapedTitle, 'i');
+
+      const startMatch = text.match(titleRegex);
+      if (startMatch && startMatch.index !== undefined) {
+        startPosition = startMatch.index;
+      }
+    } catch (e) {
+      // Fallback to simple string search
+      const simpleSearch = text.toLowerCase().indexOf(sectionTitle.substring(0, 20).toLowerCase());
+      if (simpleSearch >= 0) {
+        startPosition = simpleSearch;
+      }
+    }
+
+    // If we couldn't find the section title, return empty
+    if (startPosition === 0 && !text.toLowerCase().startsWith(sectionTitle.substring(0, 10).toLowerCase())) {
+      console.log(`[DocumentParser] Section title not found: ${sectionTitle.substring(0, 30)}`);
+      return { content: '', htmlContent: '', startPosition: 0, endPosition: 0 };
+    }
+
+    // Determine end position - try next section title first
+    let foundNextSection = false;
+
+    if (nextSectionTitle) {
+      try {
+        const sanitizedNextTitle = nextSectionTitle
+          .substring(0, 40)
+          .replace(/[^\w\s\-:.,]/g, '.');
+        const escapedNextTitle = sanitizedNextTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nextTitleRegex = new RegExp(escapedNextTitle, 'i');
+        const searchStart = startPosition + 100; // Skip current title
+        const nextMatch = text.substring(searchStart).match(nextTitleRegex);
+
+        if (nextMatch && nextMatch.index !== undefined) {
+          endPosition = searchStart + nextMatch.index;
+          foundNextSection = true;
+        }
+      } catch (e) {
+        const simpleSearch = text.toLowerCase().indexOf(
+          nextSectionTitle.substring(0, 20).toLowerCase(),
+          startPosition + 100
+        );
+        if (simpleSearch >= 0) {
+          endPosition = simpleSearch;
+          foundNextSection = true;
+        }
+      }
+    }
+
+    // If no next section found, look for common section boundary patterns
+    if (!foundNextSection) {
+      const searchText = text.substring(startPosition + 100);
+
+      // Look for next "Standard X" pattern
+      const standardPattern = /(?:^|\n)\s*Standard\s+\d+\s*[–\-:]/im;
+      const standardMatch = searchText.match(standardPattern);
+
+      if (standardMatch && standardMatch.index !== undefined) {
+        endPosition = startPosition + 100 + standardMatch.index;
+        foundNextSection = true;
+      }
+    }
+
+    // Apply maximum section size limit
+    if (!foundNextSection || (endPosition - startPosition) > MAX_SECTION_SIZE) {
+      endPosition = Math.min(endPosition, startPosition + MAX_SECTION_SIZE);
+      console.log(`[DocumentParser] Section capped at ${MAX_SECTION_SIZE} chars`);
+    }
+
+    const content = text.substring(startPosition, endPosition).trim();
+    const htmlContent = this.convertTextToHtml(content);
+
+    return {
+      content,
+      htmlContent,
+      startPosition,
+      endPosition
+    };
   }
 
   /**
