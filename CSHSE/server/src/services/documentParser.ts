@@ -756,6 +756,8 @@ export class DocumentParserService {
       let consecutiveNonTocLines = 0;
       const maxConsecutiveNonToc = 5; // If we see 5 non-TOC lines in a row, we've left the TOC
 
+      console.log(`[DocumentParser] Starting TOC parsing from line ${tocStartIndex}`);
+
       // Parse TOC entries until we hit content that's clearly not TOC
       for (let i = tocStartIndex; i < maxLines && tocEntries.length < maxEntries; i++) {
         const line = lines[i].trim();
@@ -766,6 +768,7 @@ export class DocumentParserService {
         // STRONG END DETECTION: Lines that are clearly content, not TOC
         // 1. Very long lines (>120 chars) are paragraphs, not TOC entries
         if (line.length > 120) {
+          console.log(`[DocumentParser] Line ${i}: TOO LONG (${line.length} chars): "${line.substring(0, 50)}..."`);
           consecutiveNonTocLines++;
           if (consecutiveNonTocLines >= maxConsecutiveNonToc) {
             console.log(`[DocumentParser] Stopping TOC parsing: ${consecutiveNonTocLines} consecutive non-TOC lines`);
@@ -776,9 +779,22 @@ export class DocumentParserService {
 
         // 2. Lines without page numbers are NOT TOC entries - they're sub-items that should stay as content
         // Check for both separator-based and concatenated page numbers
-        const hasPageNumberPattern = /[.\s…]+\d{1,3}\s*$/.test(line) || /\d{1,3}\s*$/.test(line);
+        // Pattern 1: separator then digits: "Title...123" or "Title    123"
+        // Pattern 2: just ends with digits: "Title123" or "Title 123"
+        const separatorPattern = /[.\s…\t]+(\d{1,3})\s*$/.test(line);
+        const endsWithDigits = /\d{1,3}\s*$/.test(line);
+        const hasPageNumberPattern = separatorPattern || endsWithDigits;
+
         if (!hasPageNumberPattern) {
-          // No page number = not a TOC entry, skip it (sub-entries stay as document content)
+          // Check if this is a section header like "PART I: GENERAL STANDARDS" - don't count these against consecutive limit
+          const isSectionHeader = /^(PART\s+[IVX]+|SECTION\s+\d+)/i.test(line);
+          if (isSectionHeader) {
+            console.log(`[DocumentParser] Line ${i}: SECTION HEADER (skipping): "${line.substring(0, 60)}"`);
+            // Don't increment consecutiveNonTocLines for section headers
+            continue;
+          }
+
+          console.log(`[DocumentParser] Line ${i}: NO PAGE NUMBER (${consecutiveNonTocLines + 1}/${maxConsecutiveNonToc}): "${line.substring(0, 60)}"`);
           consecutiveNonTocLines++;
           if (consecutiveNonTocLines >= maxConsecutiveNonToc) {
             console.log(`[DocumentParser] Stopping TOC parsing: no page numbers detected`);
@@ -786,6 +802,9 @@ export class DocumentParserService {
           }
           continue;
         }
+
+        // Log successful pattern match
+        console.log(`[DocumentParser] Line ${i}: HAS PAGE NUMBER: "${line.substring(0, 60)}"`)
 
         // Parse TOC entry, passing current standard for subsection inheritance
         try {
@@ -835,11 +854,13 @@ export class DocumentParserService {
     try {
       // Skip if line is too short or looks like page number only
       if (!line || line.length < 3 || /^\d+$/.test(line.trim())) {
+        console.log(`[DocumentParser] parseTOCEntry: REJECTED (too short or digits only): "${line}"`);
         return null;
       }
 
       // Skip lines that are too long to be TOC entries (likely paragraphs)
       if (line.length > 100) {
+        console.log(`[DocumentParser] parseTOCEntry: REJECTED (too long): "${line.substring(0, 50)}..."`);
         return null;
       }
 
@@ -882,14 +903,18 @@ export class DocumentParserService {
 
       // Skip if title is empty after removing page number
       if (!title || title.length < 2) {
+        console.log(`[DocumentParser] parseTOCEntry: REJECTED (empty title after page extraction): "${line.substring(0, 50)}"`);
         return null;
       }
 
       // STRICT VALIDATION: REQUIRE page number for all TOC entries
       // Sub-entries without page numbers (like "1. Title" or "a. Title") stay as document content
       if (!hasPageNumber) {
+        console.log(`[DocumentParser] parseTOCEntry: REJECTED (no page number found): "${line.substring(0, 50)}"`);
         return null;
       }
+
+      console.log(`[DocumentParser] parseTOCEntry: ACCEPTED "${title.substring(0, 40)}" page=${pageNumber}`);
 
       // Use trimmed title for further processing
       title = title.trim();
