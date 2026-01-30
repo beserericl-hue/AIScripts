@@ -473,6 +473,47 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setIsBatchMoving(false);
   };
 
+  // Batch discard handler
+  const handleBatchDiscardUnmapped = async () => {
+    if (!importId || selectedUnmappedIds.size === 0) return;
+
+    if (!window.confirm(`Discard ${selectedUnmappedIds.size} selected section(s)? This content will not be imported.`)) {
+      return;
+    }
+
+    setIsBatchMoving(true);
+    setUploadError(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const sectionId of selectedUnmappedIds) {
+      try {
+        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+          action: 'discard'
+        });
+        successCount++;
+      } catch (err) {
+        failCount++;
+        console.error(`Failed to discard section ${sectionId}:`, err);
+      }
+    }
+
+    // Remove successfully discarded sections from list
+    if (successCount > 0) {
+      setExtractedSections(prev =>
+        prev.filter(s => !selectedUnmappedIds.has(s.id))
+      );
+    }
+    setSelectedUnmappedIds(new Set());
+
+    if (failCount > 0) {
+      setUploadError(`Discarded ${successCount} section(s), ${failCount} failed`);
+    }
+
+    setIsBatchMoving(false);
+  };
+
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -1253,6 +1294,19 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             <Check className="w-4 h-4" />
                           )}
                           Move Selected ({selectedUnmappedIds.size})
+                        </button>
+
+                        <button
+                          onClick={handleBatchDiscardUnmapped}
+                          disabled={isBatchMoving || selectedUnmappedIds.size === 0}
+                          className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                        >
+                          {isBatchMoving ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                          Discard Selected
                         </button>
                       </div>
                     </div>
