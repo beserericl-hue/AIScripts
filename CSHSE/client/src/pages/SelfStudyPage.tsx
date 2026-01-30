@@ -119,6 +119,15 @@ export default function SelfStudyPage() {
   const [extractedSections, setExtractedSections] = useState<ExtractedSection[]>([]);
   const [isApplying, setIsApplying] = useState(false);
 
+  // Batch assignment state for unmapped sections
+  const [selectedUnmappedIds, setSelectedUnmappedIds] = useState<Set<string>>(new Set());
+  const [batchAssignment, setBatchAssignment] = useState<{
+    standardCode: string;
+    specCode: string;
+    toSupportingEvidence: boolean;
+  }>({ standardCode: '', specCode: '', toSupportingEvidence: false });
+  const [isBatchMoving, setIsBatchMoving] = useState(false);
+
   const effectiveRole = getEffectiveRole();
   const effectiveUser = getEffectiveUser();
   const isProgramCoordinator = effectiveRole === 'program_coordinator';
@@ -330,6 +339,92 @@ export default function SelfStudyPage() {
       setImportStatus(statusResponse.data);
     } catch (err) {
       console.error('Failed to discard section:', err);
+    }
+  };
+
+  // Batch selection handlers
+  const selectAllUnmapped = () => {
+    const unmappedIds = extractedSections
+      .filter(s => s.status === 'unmapped')
+      .map(s => s.id);
+    setSelectedUnmappedIds(new Set(unmappedIds));
+  };
+
+  const selectNoneUnmapped = () => {
+    setSelectedUnmappedIds(new Set());
+  };
+
+  const toggleUnmappedSelection = (sectionId: string) => {
+    setSelectedUnmappedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(sectionId)) {
+        newSet.delete(sectionId);
+      } else {
+        newSet.add(sectionId);
+      }
+      return newSet;
+    });
+  };
+
+  // Batch move selected unmapped sections to a standard
+  const handleBatchMoveUnmapped = async () => {
+    if (!importId || selectedUnmappedIds.size === 0 || !batchAssignment.standardCode || !batchAssignment.specCode) return;
+
+    setIsBatchMoving(true);
+    try {
+      // Map each selected section to the chosen standard/spec
+      for (const sectionId of selectedUnmappedIds) {
+        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+          action: 'map',
+          standardCode: batchAssignment.standardCode,
+          specCode: batchAssignment.specCode,
+          fieldType: batchAssignment.toSupportingEvidence ? 'supportingEvidence' : 'narrative'
+        });
+      }
+
+      // Refresh sections and status
+      const [sectionsResponse, statusResponse] = await Promise.all([
+        api.get(`/api/imports/${importId}/sections`),
+        api.get(`/api/imports/${importId}`)
+      ]);
+
+      setExtractedSections(sectionsResponse.data.sections);
+      setImportStatus(statusResponse.data);
+      setSelectedUnmappedIds(new Set());
+      setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false });
+    } catch (err) {
+      console.error('Failed to batch move sections:', err);
+    } finally {
+      setIsBatchMoving(false);
+    }
+  };
+
+  // Batch discard selected unmapped sections
+  const handleBatchDiscardUnmapped = async () => {
+    if (!importId || selectedUnmappedIds.size === 0) return;
+
+    setIsBatchMoving(true);
+    try {
+      // Discard each selected section
+      for (const sectionId of selectedUnmappedIds) {
+        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+          action: 'discard'
+        });
+      }
+
+      // Refresh sections and status
+      const [sectionsResponse, statusResponse] = await Promise.all([
+        api.get(`/api/imports/${importId}/sections`),
+        api.get(`/api/imports/${importId}`)
+      ]);
+
+      setExtractedSections(sectionsResponse.data.sections);
+      setImportStatus(statusResponse.data);
+      setSelectedUnmappedIds(new Set());
+    } catch (err) {
+      console.error('Failed to batch discard sections:', err);
+    } finally {
+      setIsBatchMoving(false);
     }
   };
 
@@ -715,6 +810,115 @@ export default function SelfStudyPage() {
                       </div>
                     </div>
 
+                    {/* Batch Assignment UI for Unmapped Sections */}
+                    {extractedSections.some(s => s.status === 'unmapped') && (
+                      <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium text-amber-800">
+                            Assign Unmapped Sections
+                          </h4>
+                          <div className="flex items-center gap-2 text-sm">
+                            <button
+                              onClick={selectAllUnmapped}
+                              className="text-teal-600 hover:text-teal-700 underline"
+                            >
+                              Select All
+                            </button>
+                            <span className="text-gray-400">|</span>
+                            <button
+                              onClick={selectNoneUnmapped}
+                              className="text-teal-600 hover:text-teal-700 underline"
+                            >
+                              Select None
+                            </button>
+                            <span className="text-gray-500 ml-2">
+                              ({selectedUnmappedIds.size} selected)
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-3">
+                          <select
+                            value={batchAssignment.standardCode}
+                            onChange={(e) => setBatchAssignment(prev => ({
+                              ...prev,
+                              standardCode: e.target.value,
+                              specCode: '' // Reset spec when standard changes
+                            }))}
+                            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                          >
+                            <option value="">Select Standard...</option>
+                            {Object.entries(STANDARD_NAMES).map(([code, name]) => (
+                              <option key={code} value={code}>
+                                Std {code}: {name}
+                              </option>
+                            ))}
+                          </select>
+
+                          <select
+                            value={batchAssignment.specCode}
+                            onChange={(e) => setBatchAssignment(prev => ({
+                              ...prev,
+                              specCode: e.target.value
+                            }))}
+                            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            disabled={!batchAssignment.standardCode}
+                          >
+                            <option value="">Select Spec...</option>
+                            {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
+                              <option key={spec} value={spec}>
+                                Spec {spec}
+                              </option>
+                            ))}
+                          </select>
+
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={batchAssignment.toSupportingEvidence}
+                              onChange={(e) => setBatchAssignment(prev => ({
+                                ...prev,
+                                toSupportingEvidence: e.target.checked
+                              }))}
+                              className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                            />
+                            To Supporting Evidence
+                          </label>
+
+                          <button
+                            onClick={handleBatchMoveUnmapped}
+                            disabled={
+                              isBatchMoving ||
+                              selectedUnmappedIds.size === 0 ||
+                              !batchAssignment.standardCode ||
+                              !batchAssignment.specCode
+                            }
+                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                          >
+                            {isBatchMoving ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Check className="w-4 h-4" />
+                            )}
+                            Move Selected ({selectedUnmappedIds.size})
+                          </button>
+
+                          <button
+                            onClick={handleBatchDiscardUnmapped}
+                            disabled={isBatchMoving || selectedUnmappedIds.size === 0}
+                            className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                          >
+                            {isBatchMoving ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                            Discard Selected
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Section List */}
                     <div>
                       <h5 className="font-medium text-gray-900 mb-3">Extracted Sections</h5>
@@ -729,21 +933,31 @@ export default function SelfStudyPage() {
                             }`}
                           >
                             <div className="flex items-start justify-between">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  {section.status === 'mapped' ? (
-                                    <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                  ) : (
-                                    <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                                  )}
-                                  <span className="text-sm font-medium text-gray-900">
-                                    {section.mapping ? (
-                                      <>Standard {section.mapping.standardCode}{section.mapping.specCode ? `.${section.mapping.specCode}` : ''}: {STANDARD_NAMES[section.mapping.standardCode] || 'Unknown'}</>
+                              <div className="flex items-start gap-2 flex-1 min-w-0">
+                                {/* Checkbox for batch selection (unmapped sections only) */}
+                                {section.status === 'unmapped' && (
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedUnmappedIds.has(section.id)}
+                                    onChange={() => toggleUnmappedSelection(section.id)}
+                                    className="mt-1 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer flex-shrink-0"
+                                  />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    {section.status === 'mapped' ? (
+                                      <Check className="w-4 h-4 text-green-600 flex-shrink-0" />
                                     ) : (
-                                      <span className="text-amber-700">{section.unmappedReason || 'Needs manual mapping'}</span>
+                                      <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
                                     )}
-                                  </span>
-                                </div>
+                                    <span className="text-sm font-medium text-gray-900">
+                                      {section.mapping ? (
+                                        <>Standard {section.mapping.standardCode}{section.mapping.specCode ? `.${section.mapping.specCode}` : ''}: {STANDARD_NAMES[section.mapping.standardCode] || 'Unknown'}</>
+                                      ) : (
+                                        <span className="text-amber-700">{section.unmappedReason || 'Needs manual mapping'}</span>
+                                      )}
+                                    </span>
+                                  </div>
                                 <p className="text-xs text-gray-500 truncate">
                                   {section.content}
                                 </p>
@@ -757,6 +971,7 @@ export default function SelfStudyPage() {
                                       <span className="text-xs text-green-600">Auto-mapped ({Math.round(section.confidence * 100)}%)</span>
                                     </>
                                   )}
+                                </div>
                                 </div>
                               </div>
                               {section.status === 'unmapped' && (
