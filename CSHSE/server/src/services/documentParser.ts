@@ -57,6 +57,34 @@ export interface StandardPattern {
   confidence: number;
 }
 
+/**
+ * Table of Contents entry parsed from document
+ */
+export interface TOCEntry {
+  title: string;
+  pageNumber?: number;
+  level: number;  // 1 = main section, 2 = subsection, etc.
+  standardCode?: string;
+  specCode?: string;
+  sectionType: 'standard' | 'matrix' | 'supporting_evidence' | 'intro' | 'appendix' | 'general';
+  isMatrix: boolean;
+  isSupportingEvidence: boolean;
+}
+
+/**
+ * A section of content based on TOC parsing
+ */
+export interface TOCBasedSection {
+  id: string;
+  tocEntry: TOCEntry;
+  content: string;
+  htmlContent: string;
+  startPosition: number;
+  endPosition: number;
+  standardHint?: string;  // e.g., "Standard 7" to help AI
+  specHint?: string;      // e.g., "Specification b" to help AI
+}
+
 // Standard detection patterns for CSHSE standards
 const STANDARD_PATTERNS = [
   { pattern: /Standard\s*(\d{1,2})([a-z])?/gi, type: 'explicit' },
@@ -685,6 +713,397 @@ export class DocumentParserService {
         return `<h${headerLevel}>${content}</h${headerLevel}>`;
       }
       return match;
+    });
+  }
+
+  // ==================== TOC-BASED PARSING METHODS ====================
+
+  /**
+   * Extract Table of Contents from document text
+   * Looks for patterns like "Table of Contents" followed by entries
+   */
+  extractTableOfContents(text: string): TOCEntry[] {
+    const tocEntries: TOCEntry[] = [];
+    const lines = text.split('\n');
+
+    // Find TOC start
+    let tocStartIndex = -1;
+    let tocEndIndex = -1;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim().toLowerCase();
+      if (line.includes('table of contents') || line === 'contents') {
+        tocStartIndex = i + 1;
+        break;
+      }
+    }
+
+    if (tocStartIndex === -1) {
+      console.log('[DocumentParser] No Table of Contents found');
+      return tocEntries;
+    }
+
+    // Parse TOC entries until we hit content that's clearly not TOC
+    for (let i = tocStartIndex; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // Skip empty lines
+      if (!line) continue;
+
+      // Stop if we hit a major section that's not a TOC entry
+      // (e.g., the actual content starting)
+      if (/^(Certification|Introductory Information|Part\s+[IVX]+:|Part\s+\d+:)/i.test(line) && tocEntries.length > 5) {
+        tocEndIndex = i;
+        break;
+      }
+
+      // Parse TOC entry
+      const entry = this.parseTOCEntry(line);
+      if (entry) {
+        tocEntries.push(entry);
+      }
+    }
+
+    console.log(`[DocumentParser] Extracted ${tocEntries.length} TOC entries`);
+    return tocEntries;
+  }
+
+  /**
+   * Parse a single TOC entry line
+   */
+  private parseTOCEntry(line: string): TOCEntry | null {
+    // Skip if line is too short or looks like page number only
+    if (line.length < 3 || /^\d+$/.test(line.trim())) {
+      return null;
+    }
+
+    // Extract page number if present (usually at end with dots or spaces)
+    let title = line;
+    let pageNumber: number | undefined;
+
+    // Pattern: "Title...123" or "Title 123"
+    const pageMatch = line.match(/[.\s]+(\d+)\s*$/);
+    if (pageMatch) {
+      pageNumber = parseInt(pageMatch[1], 10);
+      title = line.substring(0, line.indexOf(pageMatch[0])).trim();
+    }
+
+    // Skip if title is empty after removing page number
+    if (!title || title.length < 2) {
+      return null;
+    }
+
+    // Determine level based on indentation or numbering
+    let level = 1;
+    if (/^[a-z][\.\)]\s/i.test(title) || title.startsWith('\t') || title.startsWith('  ')) {
+      level = 2;
+    }
+
+    // Extract standard and spec codes
+    const { standardCode, specCode } = this.extractStandardFromTOCTitle(title);
+
+    // Determine section type
+    const sectionType = this.determineSectionType(title, standardCode);
+    const isMatrix = this.isTOCEntryMatrix(title);
+    const isSupportingEvidence = this.isTOCSupportingEvidence(title);
+
+    return {
+      title: title.replace(/^[\t\s]+/, '').trim(),
+      pageNumber,
+      level,
+      standardCode,
+      specCode,
+      sectionType,
+      isMatrix,
+      isSupportingEvidence
+    };
+  }
+
+  /**
+   * Extract standard code and spec code from TOC title
+   */
+  private extractStandardFromTOCTitle(title: string): { standardCode?: string; specCode?: string } {
+    // Pattern: "Standard 1", "Standard 11", etc.
+    const standardMatch = title.match(/Standard\s*(\d{1,2})/i);
+    if (standardMatch) {
+      const standardCode = standardMatch[1];
+
+      // Check for spec in same line: "1.a" or "Standard 1a" or "Specification a"
+      const specMatch = title.match(/(\d{1,2})[.\s]*([a-z])\b/i) ||
+                        title.match(/Specification\s*([a-z])/i);
+      const specCode = specMatch ? specMatch[specMatch.length === 3 ? 2 : 1].toLowerCase() : undefined;
+
+      return { standardCode, specCode };
+    }
+
+    // Pattern: "Part II: Curriculum" -> Standards 11-20
+    if (/Part\s*II.*Curriculum/i.test(title)) {
+      return { standardCode: '11' };
+    }
+
+    return {};
+  }
+
+  /**
+   * Determine section type from TOC title
+   */
+  private determineSectionType(title: string, standardCode?: string): TOCEntry['sectionType'] {
+    const lowerTitle = title.toLowerCase();
+
+    if (standardCode) {
+      return 'standard';
+    }
+
+    if (lowerTitle.includes('matrix')) {
+      return 'matrix';
+    }
+
+    if (
+      lowerTitle.includes('appendix') ||
+      lowerTitle.includes('appendices') ||
+      lowerTitle.includes('supporting document') ||
+      lowerTitle.includes('course syllabi') ||
+      lowerTitle.includes('syllabus') ||
+      lowerTitle.includes('materials')
+    ) {
+      return 'supporting_evidence';
+    }
+
+    if (
+      lowerTitle.includes('introductory') ||
+      lowerTitle.includes('introduction') ||
+      lowerTitle.includes('glossary') ||
+      lowerTitle.includes('certification')
+    ) {
+      return 'intro';
+    }
+
+    return 'general';
+  }
+
+  /**
+   * Check if TOC entry is for a curriculum matrix
+   */
+  private isTOCEntryMatrix(title: string): boolean {
+    const lowerTitle = title.toLowerCase();
+    return lowerTitle.includes('matrix') ||
+           (lowerTitle.includes('curriculum') && !lowerTitle.includes('standard'));
+  }
+
+  /**
+   * Check if TOC entry is for supporting evidence
+   */
+  private isTOCSupportingEvidence(title: string): boolean {
+    const lowerTitle = title.toLowerCase();
+    return lowerTitle.includes('appendix') ||
+           lowerTitle.includes('appendices') ||
+           lowerTitle.includes('supporting document') ||
+           lowerTitle.includes('course syllabi') ||
+           lowerTitle.includes('syllabus') ||
+           lowerTitle.includes('materials') ||
+           lowerTitle.includes('cv') ||
+           lowerTitle.includes('vitae');
+  }
+
+  /**
+   * Split document content into sections based on TOC entries
+   * Each section contains the content from one TOC entry to the next
+   */
+  splitDocumentByTOC(text: string, htmlContent: string, tocEntries: TOCEntry[]): TOCBasedSection[] {
+    const sections: TOCBasedSection[] = [];
+
+    if (tocEntries.length === 0) {
+      console.log('[DocumentParser] No TOC entries, returning single section');
+      return [{
+        id: uuidv4(),
+        tocEntry: {
+          title: 'Full Document',
+          level: 1,
+          sectionType: 'general',
+          isMatrix: false,
+          isSupportingEvidence: false
+        },
+        content: text,
+        htmlContent: htmlContent,
+        startPosition: 0,
+        endPosition: text.length
+      }];
+    }
+
+    // Remove TOC from the text first
+    const tocEndMarkers = ['certification of the self-study', 'introductory information', 'part i:'];
+    let contentStartIndex = 0;
+
+    for (const marker of tocEndMarkers) {
+      const idx = text.toLowerCase().indexOf(marker);
+      if (idx > 0 && idx < text.length / 4) {  // TOC should be in first quarter
+        contentStartIndex = idx;
+        break;
+      }
+    }
+
+    const contentText = text.substring(contentStartIndex);
+
+    // For each TOC entry, find its content in the document
+    for (let i = 0; i < tocEntries.length; i++) {
+      const entry = tocEntries[i];
+      const nextEntry = tocEntries[i + 1];
+
+      // Skip TOC itself and very short entries
+      if (entry.title.toLowerCase().includes('table of contents')) {
+        continue;
+      }
+
+      // Find the section content
+      const sectionContent = this.extractSectionContent(
+        contentText,
+        entry.title,
+        nextEntry?.title
+      );
+
+      if (sectionContent.content.length > 50) {  // Only include substantial sections
+        // Build standard hint for AI
+        let standardHint = '';
+        let specHint = '';
+
+        if (entry.standardCode) {
+          standardHint = `Standard ${entry.standardCode}`;
+          if (entry.specCode) {
+            specHint = `Specification ${entry.specCode}`;
+          }
+        }
+
+        sections.push({
+          id: uuidv4(),
+          tocEntry: entry,
+          content: sectionContent.content,
+          htmlContent: sectionContent.htmlContent,
+          startPosition: sectionContent.startPosition,
+          endPosition: sectionContent.endPosition,
+          standardHint,
+          specHint
+        });
+      }
+    }
+
+    console.log(`[DocumentParser] Split document into ${sections.length} TOC-based sections`);
+    return sections;
+  }
+
+  /**
+   * Extract content for a section based on its title and the next section's title
+   */
+  private extractSectionContent(
+    text: string,
+    sectionTitle: string,
+    nextSectionTitle?: string
+  ): { content: string; htmlContent: string; startPosition: number; endPosition: number } {
+    // Create regex to find section title (case insensitive, allowing for some variation)
+    const escapedTitle = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const titleRegex = new RegExp(escapedTitle.substring(0, Math.min(30, escapedTitle.length)), 'i');
+
+    const startMatch = text.match(titleRegex);
+    let startPosition = startMatch ? text.indexOf(startMatch[0]) : 0;
+
+    let endPosition = text.length;
+
+    // If there's a next section, find where it starts
+    if (nextSectionTitle) {
+      const escapedNextTitle = nextSectionTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nextTitleRegex = new RegExp(escapedNextTitle.substring(0, Math.min(30, escapedNextTitle.length)), 'i');
+      const nextMatch = text.substring(startPosition + 100).match(nextTitleRegex);  // +100 to skip current title
+
+      if (nextMatch) {
+        endPosition = startPosition + 100 + text.substring(startPosition + 100).indexOf(nextMatch[0]);
+      }
+    }
+
+    const content = text.substring(startPosition, endPosition).trim();
+
+    // Generate HTML for this section
+    const htmlContent = this.convertTextToHtml(content);
+
+    return {
+      content,
+      htmlContent,
+      startPosition,
+      endPosition
+    };
+  }
+
+  /**
+   * Enhanced parse method that uses TOC for intelligent sectioning
+   * This should be called instead of the basic parse() for self-study documents
+   */
+  async parseWithTOC(buffer: Buffer, filename: string): Promise<{
+    document: ParsedDocument;
+    tocEntries: TOCEntry[];
+    sections: TOCBasedSection[];
+  }> {
+    // First, do the basic parse
+    const document = await this.parse(buffer, filename);
+
+    // Extract TOC
+    const tocEntries = this.extractTableOfContents(document.rawText);
+
+    // Split document by TOC
+    const sections = this.splitDocumentByTOC(
+      document.rawText,
+      document.htmlContent,
+      tocEntries
+    );
+
+    return {
+      document,
+      tocEntries,
+      sections
+    };
+  }
+
+  /**
+   * Format section content for AI processing
+   * Adds hints about standard/spec and section type
+   */
+  formatSectionForAI(section: TOCBasedSection): string {
+    let formattedContent = '';
+
+    // Add section title as heading
+    formattedContent += `# ${section.tocEntry.title}\n\n`;
+
+    // Add standard/spec hints if available
+    if (section.standardHint) {
+      formattedContent += `[STANDARD HINT: ${section.standardHint}`;
+      if (section.specHint) {
+        formattedContent += ` - ${section.specHint}`;
+      }
+      formattedContent += ']\n\n';
+    }
+
+    // Add section type hint
+    if (section.tocEntry.isMatrix) {
+      formattedContent += '[SECTION TYPE: CURRICULUM MATRIX - This should be imported into the curriculum matrix grid]\n\n';
+    } else if (section.tocEntry.isSupportingEvidence) {
+      formattedContent += '[SECTION TYPE: SUPPORTING EVIDENCE - This is supplementary documentation]\n\n';
+    }
+
+    // Add the actual content
+    formattedContent += section.content;
+
+    return formattedContent;
+  }
+
+  /**
+   * Get sections filtered by type for specific processing
+   */
+  filterSectionsByType(sections: TOCBasedSection[], type: 'standard' | 'matrix' | 'supporting_evidence'): TOCBasedSection[] {
+    return sections.filter(s => {
+      if (type === 'matrix') {
+        return s.tocEntry.isMatrix;
+      }
+      if (type === 'supporting_evidence') {
+        return s.tocEntry.isSupportingEvidence;
+      }
+      return s.tocEntry.sectionType === type;
     });
   }
 }

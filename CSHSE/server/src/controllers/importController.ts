@@ -5,7 +5,7 @@ import { SelfStudyImport, ISelfStudyImport } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { WebhookSettings } from '../models/WebhookSettings';
-import { documentParserService } from '../services/documentParser';
+import { documentParserService, TOCBasedSection, ParsedDocument } from '../services/documentParser';
 import { sectionMapperService } from '../services/sectionMapper';
 
 // Always log for visibility in production
@@ -242,10 +242,20 @@ async function processDocumentAsync(
     await importRecord.save();
     debugLog('Import record status updated to processing');
 
-    // Parse the document
-    const parsed = await documentParserService.parse(buffer, filename);
+    // Parse the document using TOC-based parsing for intelligent sectioning
+    debugLog('Parsing document with TOC-based sectioning');
+    const { document: parsed, tocEntries, sections: tocSections } = await documentParserService.parseWithTOC(buffer, filename);
 
-    // Store extracted content
+    debugLog('TOC parsing complete', {
+      tocEntriesFound: tocEntries.length,
+      sectionsCreated: tocSections.length,
+      sectionTypes: tocSections.reduce((acc, s) => {
+        acc[s.tocEntry.sectionType] = (acc[s.tocEntry.sectionType] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>)
+    });
+
+    // Store extracted content using TOC-based sections
     importRecord.extractedContent = {
       rawText: parsed.rawText,
       pageCount: parsed.metadata.pageCount,
@@ -254,19 +264,23 @@ async function processDocumentAsync(
         author: parsed.metadata.author,
         createdDate: parsed.metadata.createdDate
       },
-      sections: parsed.sections.map(section => ({
+      sections: tocSections.map(section => ({
         id: section.id,
-        pageNumber: section.pageNumber,
-        startPosition: 0,
-        endPosition: section.content.length,
-        sectionType: detectSectionType(section.content, parsed.tables),
+        pageNumber: section.tocEntry.pageNumber || 1,
+        startPosition: section.startPosition,
+        endPosition: section.endPosition,
+        sectionType: section.tocEntry.isMatrix ? 'matrix' :
+                     section.tocEntry.isSupportingEvidence ? 'supporting_evidence' :
+                     section.tocEntry.sectionType === 'standard' ? 'narrative' : 'general',
         content: section.content,
-        confidence: section.suggestedStandard?.confidence || 0,
-        suggestedStandard: section.suggestedStandard?.code
+        confidence: section.tocEntry.standardCode ? 0.8 : 0.5,
+        suggestedStandard: section.tocEntry.standardCode ?
+          `${section.tocEntry.standardCode}${section.tocEntry.specCode ? '.' + section.tocEntry.specCode : ''}` :
+          undefined
       }))
     };
 
-    // Add tables as sections
+    // Add tables as sections (in addition to TOC sections)
     for (const table of parsed.tables) {
       const tableContent = formatTableAsText(table);
       importRecord.extractedContent.sections.push({
@@ -291,9 +305,10 @@ async function processDocumentAsync(
       // Use n8n Document Matcher for AI-powered mapping
       debugLog('n8n Document Matcher webhook found, sending to n8n', {
         webhookUrl: webhookSettings.webhookUrl,
-        specName
+        specName,
+        totalTocSections: tocSections.length
       });
-      await sendToN8nDocumentMatcher(importRecord, parsed, callbackUrl, webhookSettings, specName);
+      await sendToN8nDocumentMatcher(importRecord, parsed, tocSections, callbackUrl, webhookSettings, specName);
       // Processing will be completed when callback is received
       return;
     }
@@ -438,15 +453,17 @@ async function waitForCallback(
  */
 async function sendToN8nDocumentMatcher(
   importRecord: ISelfStudyImport,
-  parsed: any,
+  parsed: ParsedDocument,
+  tocSections: TOCBasedSection[],
   callbackUrl: string,
   webhookSettings: any,
   specName: string
 ) {
-  debugLog('Preparing n8n Document Matcher request', {
+  debugLog('Preparing n8n Document Matcher request with TOC-based sections', {
     importId: importRecord._id.toString(),
     specName,
-    callbackUrl
+    callbackUrl,
+    totalTocSections: tocSections.length
   });
 
   // Build headers
@@ -462,26 +479,39 @@ async function sendToN8nDocumentMatcher(
     debugLog('Using Bearer token authentication');
   }
 
-  // Use the properly formatted HTML content with headers (h1, h2, etc.)
-  // Fall back to rawText if htmlContent is not available
-  const rawHtmlContent = parsed.htmlContent || parsed.rawText || '';
+  // Filter sections to send to AI:
+  // - Exclude TOC itself (title contains "table of contents")
+  // - Exclude very short sections
+  // - Exclude supporting evidence sections (they don't need AI matching)
+  const sectionsToSend = tocSections.filter(section => {
+    const title = section.tocEntry.title.toLowerCase();
 
-  // CRITICAL: Clean HTML content to remove base64 images, encoded data, and garbage
-  const cleanedHtml = cleanHtmlContent(rawHtmlContent);
-  debugLog('HTML content cleaned', {
-    originalLength: rawHtmlContent.length,
-    cleanedLength: cleanedHtml.length,
-    reduction: `${Math.round((1 - cleanedHtml.length / rawHtmlContent.length) * 100)}%`
+    // Exclude Table of Contents
+    if (title.includes('table of contents') || title === 'contents') {
+      debugLog('Excluding TOC section from AI processing', { title: section.tocEntry.title });
+      return false;
+    }
+
+    // Exclude very short sections (less than 100 chars)
+    if (section.content.length < 100) {
+      debugLog('Excluding short section from AI processing', {
+        title: section.tocEntry.title,
+        length: section.content.length
+      });
+      return false;
+    }
+
+    // Include all other sections (even supporting evidence - AI can help categorize)
+    return true;
   });
 
-  // Split HTML into sections by h1 tags to avoid payload size limits
-  const sections = splitHtmlBySections(cleanedHtml);
-  const totalSections = sections.length;
+  const totalSections = sectionsToSend.length;
 
-  debugLog('Document split into sections for n8n', {
+  debugLog('TOC sections prepared for n8n', {
     totalSections,
-    totalHtmlLength: cleanedHtml.length,
-    sectionSizes: sections.map(s => s.content.length)
+    originalTocSections: tocSections.length,
+    sectionTypes: sectionsToSend.map(s => s.tocEntry.sectionType),
+    sectionTitles: sectionsToSend.map(s => s.tocEntry.title.substring(0, 50))
   });
 
   // Generate a job ID for tracking all sections of this document
@@ -501,14 +531,32 @@ async function sendToN8nDocumentMatcher(
   // Timeout per section (2 minutes default, can be overridden)
   const callbackTimeoutMs = webhookSettings.callbackTimeoutMs || 120000;
 
-  // Send each section separately, waiting for callback before sending next
-  for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
-    const section = sections[sectionIndex];
-    const isLastSection = sectionIndex === sections.length - 1;
+  // Send each TOC section separately, waiting for callback before sending next
+  for (let sectionIndex = 0; sectionIndex < sectionsToSend.length; sectionIndex++) {
+    const tocSection = sectionsToSend[sectionIndex];
+    const isLastSection = sectionIndex === sectionsToSend.length - 1;
 
-    // Clean each section content individually as well (in case section splitting introduced issues)
-    const cleanedSectionContent = cleanHtmlContent(section.content);
-    const sectionContentBase64 = Buffer.from(cleanedSectionContent, 'utf8').toString('base64');
+    // Clean the HTML content
+    const cleanedSectionContent = cleanHtmlContent(tocSection.htmlContent);
+
+    // Format content with standard hints for AI
+    // Add hints at the beginning to help AI understand the context
+    let contentWithHints = '';
+    if (tocSection.standardHint) {
+      contentWithHints += `<!-- STANDARD HINT: ${tocSection.standardHint} -->\n`;
+      if (tocSection.specHint) {
+        contentWithHints += `<!-- SPECIFICATION HINT: ${tocSection.specHint} -->\n`;
+      }
+    }
+    if (tocSection.tocEntry.isMatrix) {
+      contentWithHints += `<!-- SECTION TYPE: CURRICULUM MATRIX -->\n`;
+    }
+    if (tocSection.tocEntry.isSupportingEvidence) {
+      contentWithHints += `<!-- SECTION TYPE: SUPPORTING EVIDENCE -->\n`;
+    }
+    contentWithHints += cleanedSectionContent;
+
+    const sectionContentBase64 = Buffer.from(contentWithHints, 'utf8').toString('base64');
 
     // Prepare payload for this section
     const payload = {
@@ -518,21 +566,31 @@ async function sendToN8nDocumentMatcher(
       jobId, // Same job ID for all sections of this document
       sectionIndex,
       totalSections,
-      sectionHeading: section.heading,
+      sectionHeading: tocSection.tocEntry.title,
       htmlContent: sectionContentBase64,
       htmlContentEncoding: 'base64',
       moreData: !isLastSection,
+      // Include TOC metadata for better AI processing
+      tocMetadata: {
+        standardCode: tocSection.tocEntry.standardCode,
+        specCode: tocSection.tocEntry.specCode,
+        sectionType: tocSection.tocEntry.sectionType,
+        isMatrix: tocSection.tocEntry.isMatrix,
+        isSupportingEvidence: tocSection.tocEntry.isSupportingEvidence
+      },
       options: {
         confidenceThreshold: 50
       }
     };
 
     const payloadSize = JSON.stringify(payload).length;
-    debugLog(`Sending section ${sectionIndex + 1}/${totalSections} to n8n`, {
+    debugLog(`Sending TOC section ${sectionIndex + 1}/${totalSections} to n8n`, {
       sectionIndex,
-      heading: section.heading.substring(0, 50),
+      heading: tocSection.tocEntry.title.substring(0, 50),
+      standardHint: tocSection.standardHint,
+      sectionType: tocSection.tocEntry.sectionType,
       payloadSize,
-      originalContentLength: section.content.length,
+      originalContentLength: tocSection.htmlContent.length,
       cleanedContentLength: cleanedSectionContent.length,
       base64Length: sectionContentBase64.length,
       moreData: !isLastSection
