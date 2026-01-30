@@ -758,6 +758,16 @@ export class DocumentParserService {
 
       console.log(`[DocumentParser] Starting TOC parsing from line ${tocStartIndex}`);
 
+      // DEBUG: Log the first 30 lines after TOC start to see what we're working with
+      console.log('[DocumentParser] === FIRST 30 LINES AFTER TOC START ===');
+      for (let debugIdx = tocStartIndex; debugIdx < Math.min(tocStartIndex + 30, lines.length); debugIdx++) {
+        const debugLine = lines[debugIdx];
+        const trimmed = debugLine.trim();
+        const endsWithNum = /\d{1,3}\s*$/.test(trimmed);
+        console.log(`[DocumentParser] L${debugIdx}: [${trimmed.length}ch] ${endsWithNum ? '✓NUM' : '     '} "${trimmed.substring(0, 70)}${trimmed.length > 70 ? '...' : ''}"`);
+      }
+      console.log('[DocumentParser] === END DEBUG ===');
+
       // Parse TOC entries until we hit content that's clearly not TOC
       for (let i = tocStartIndex; i < maxLines && tocEntries.length < maxEntries; i++) {
         const line = lines[i].trim();
