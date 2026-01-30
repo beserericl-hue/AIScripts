@@ -113,6 +113,17 @@ interface ExtractedSection {
   mapping?: { standardCode: string; specCode: string; mappedBy: string };
   unmappedReason?: string;
   status: 'mapped' | 'unmapped' | 'pending';
+  // AI suggestions for unmapped sections
+  suggestedStandardCode?: string;
+  suggestedSpecCode?: string;
+  suggestedConfidence?: number;
+}
+
+// Type for tracking unmapped section assignments
+interface UnmappedAssignment {
+  standardCode: string;
+  specCode: string;
+  toSupportingEvidence: boolean;
 }
 
 export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
@@ -135,6 +146,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [extractedSections, setExtractedSections] = useState<ExtractedSection[]>([]);
   const [isApplying, setIsApplying] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
+  // State for managing unmapped section assignments
+  const [unmappedAssignments, setUnmappedAssignments] = useState<Record<string, UnmappedAssignment>>({});
+  const [movingSection, setMovingSection] = useState<string | null>(null);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -288,6 +302,84 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setImportStatus(null);
     setImportStep('upload');
     setExtractedSections([]);
+    setUnmappedAssignments({});
+    setMovingSection(null);
+  };
+
+  // Handle moving an unmapped section to a spec
+  const handleMoveUnmapped = async (sectionId: string) => {
+    if (!importId) return;
+
+    const assignment = unmappedAssignments[sectionId];
+    if (!assignment || !assignment.standardCode || !assignment.specCode) {
+      setUploadError('Please select a standard and specification');
+      return;
+    }
+
+    setMovingSection(sectionId);
+    setUploadError(null);
+
+    try {
+      await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+        action: 'assign',
+        standardCode: assignment.standardCode,
+        specCode: assignment.specCode,
+        toSupportingEvidence: assignment.toSupportingEvidence
+      });
+
+      // Remove from extracted sections list
+      setExtractedSections(prev => prev.filter(s => s.id !== sectionId));
+
+      // Clear the assignment
+      setUnmappedAssignments(prev => {
+        const newAssignments = { ...prev };
+        delete newAssignments[sectionId];
+        return newAssignments;
+      });
+
+      // Refresh submission data
+      queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+    } catch (err: any) {
+      setUploadError(err.response?.data?.error || 'Failed to move content');
+    } finally {
+      setMovingSection(null);
+    }
+  };
+
+  // Handle discarding an unmapped section
+  const handleDiscardUnmapped = async (sectionId: string) => {
+    if (!importId) return;
+
+    if (!window.confirm('Discard this content? It will not be imported.')) {
+      return;
+    }
+
+    setMovingSection(sectionId);
+    try {
+      await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+        action: 'discard'
+      });
+
+      // Remove from extracted sections list
+      setExtractedSections(prev => prev.filter(s => s.id !== sectionId));
+    } catch (err: any) {
+      setUploadError(err.response?.data?.error || 'Failed to discard content');
+    } finally {
+      setMovingSection(null);
+    }
+  };
+
+  // Update unmapped assignment
+  const updateUnmappedAssignment = (sectionId: string, update: Partial<UnmappedAssignment>) => {
+    setUnmappedAssignments(prev => ({
+      ...prev,
+      [sectionId]: {
+        standardCode: prev[sectionId]?.standardCode || '',
+        specCode: prev[sectionId]?.specCode || '',
+        toSupportingEvidence: prev[sectionId]?.toSupportingEvidence || false,
+        ...update
+      }
+    }));
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -980,7 +1072,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                   </div>
 
                   {/* Sections List */}
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto">
                     {extractedSections.map((section) => (
                       <div
                         key={section.id}
@@ -1015,14 +1107,110 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             {Math.round(section.confidence * 100)}% confidence
                           </span>
                         </div>
-                        <p className="text-sm text-gray-700 line-clamp-3">
-                          {section.content.substring(0, 300)}
-                          {section.content.length > 300 ? '...' : ''}
-                        </p>
+
+                        {/* Content preview */}
+                        <div
+                          className="text-sm text-gray-700 mb-3 max-h-32 overflow-y-auto border border-gray-200 bg-white rounded p-2"
+                          dangerouslySetInnerHTML={{
+                            __html: section.content.substring(0, 500) + (section.content.length > 500 ? '...' : '')
+                          }}
+                        />
+
                         {section.unmappedReason && (
-                          <p className="text-xs text-amber-600 mt-2">
+                          <p className="text-xs text-amber-600 mb-3">
                             {section.unmappedReason}
                           </p>
+                        )}
+
+                        {/* Unmapped section controls */}
+                        {section.status === 'unmapped' && (
+                          <div className="border-t border-amber-200 pt-3 mt-3 space-y-3">
+                            {/* AI suggestion if available */}
+                            {section.suggestedStandardCode && (
+                              <p className="text-xs text-blue-600">
+                                💡 AI suggests: Standard {section.suggestedStandardCode}
+                                {section.suggestedSpecCode && `.${section.suggestedSpecCode}`}
+                                {section.suggestedConfidence && ` (${section.suggestedConfidence}% confidence)`}
+                              </p>
+                            )}
+
+                            {/* Standard/Spec dropdowns */}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <select
+                                value={unmappedAssignments[section.id]?.standardCode || section.suggestedStandardCode || ''}
+                                onChange={(e) => {
+                                  updateUnmappedAssignment(section.id, {
+                                    standardCode: e.target.value,
+                                    specCode: '' // Reset spec when standard changes
+                                  });
+                                }}
+                                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                              >
+                                <option value="">Select Standard...</option>
+                                {Object.entries(STANDARD_NAMES).map(([code, name]) => (
+                                  <option key={code} value={code}>
+                                    Std {code}: {name}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <select
+                                value={unmappedAssignments[section.id]?.specCode || section.suggestedSpecCode || ''}
+                                onChange={(e) => {
+                                  updateUnmappedAssignment(section.id, { specCode: e.target.value });
+                                }}
+                                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                disabled={!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode}
+                              >
+                                <option value="">Select Spec...</option>
+                                {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
+                                  <option key={spec} value={spec}>
+                                    Spec {spec}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <label className="flex items-center gap-1 text-xs text-gray-600">
+                                <input
+                                  type="checkbox"
+                                  checked={unmappedAssignments[section.id]?.toSupportingEvidence || false}
+                                  onChange={(e) => {
+                                    updateUnmappedAssignment(section.id, { toSupportingEvidence: e.target.checked });
+                                  }}
+                                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                />
+                                Supporting Evidence
+                              </label>
+                            </div>
+
+                            {/* Action buttons */}
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleMoveUnmapped(section.id)}
+                                disabled={
+                                  movingSection === section.id ||
+                                  (!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode) ||
+                                  (!unmappedAssignments[section.id]?.specCode && !section.suggestedSpecCode)
+                                }
+                                className="flex items-center gap-1 px-3 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {movingSection === section.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Check className="w-3 h-3" />
+                                )}
+                                Move to Spec
+                              </button>
+                              <button
+                                onClick={() => handleDiscardUnmapped(section.id)}
+                                disabled={movingSection === section.id}
+                                className="flex items-center gap-1 px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                Discard
+                              </button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     ))}

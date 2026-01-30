@@ -896,43 +896,67 @@ export const mapSection = async (req: AuthenticatedRequest, res: Response) => {
 
 /**
  * Apply all mappings to the submission
+ * Writes matched content to the narrative rich text editor for each spec
  */
 export const applyMappings = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
+
+    debugLog('applyMappings called', { importId });
 
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       return res.status(404).json({ error: 'Import not found' });
     }
 
+    debugLog('Found import record', {
+      mappedSections: importRecord.mappedSections.length,
+      extractedSections: importRecord.extractedContent?.sections?.length || 0
+    });
+
     const submission = await Submission.findById(importRecord.submissionId);
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    // Apply each mapping
-    const narratives = submission.narratives as Map<string, Map<string, any>>;
+    debugLog('Found submission', { submissionId: submission._id });
+
+    // Initialize narratives map if not present
+    if (!submission.narratives) {
+      submission.narratives = new Map();
+    }
+
     let appliedCount = 0;
+    const appliedMappings: { standardCode: string; specCode: string; contentLength: number }[] = [];
 
     for (const mapping of importRecord.mappedSections) {
       const section = importRecord.extractedContent.sections.find(
         s => s.id === mapping.extractedSectionId
       );
 
-      if (!section) continue;
-
-      // Get or create standard map
-      if (!narratives.has(mapping.standardCode)) {
-        narratives.set(mapping.standardCode, new Map());
+      if (!section) {
+        debugLog('Section not found for mapping', { extractedSectionId: mapping.extractedSectionId });
+        continue;
       }
 
-      const standardNarratives = narratives.get(mapping.standardCode)!;
-
-      // Get or create spec
-      const existingNarrative = standardNarratives.get(mapping.specCode);
+      debugLog('Processing mapping', {
+        standardCode: mapping.standardCode,
+        specCode: mapping.specCode,
+        fieldType: mapping.fieldType,
+        contentLength: section.content?.length || 0
+      });
 
       if (mapping.fieldType === 'narrative') {
+        // Get or create standard map
+        let standardNarratives = submission.narratives.get(mapping.standardCode);
+        if (!standardNarratives) {
+          standardNarratives = new Map();
+          submission.narratives.set(mapping.standardCode, standardNarratives);
+        }
+
+        // Get existing narrative or create new
+        const existingNarrative = standardNarratives.get(mapping.specCode);
+
         // Append or set narrative content
         const newContent = existingNarrative?.content
           ? `${existingNarrative.content}\n\n${section.content}`
@@ -942,24 +966,47 @@ export const applyMappings = async (req: AuthenticatedRequest, res: Response) =>
           content: newContent,
           lastModified: new Date(),
           isComplete: false,
-          linkedDocuments: existingNarrative?.linkedDocuments || []
+          linkedDocuments: existingNarrative?.linkedDocuments || [],
+          supportingEvidenceText: existingNarrative?.supportingEvidenceText || ''
         });
 
         appliedCount++;
+        appliedMappings.push({
+          standardCode: mapping.standardCode,
+          specCode: mapping.specCode,
+          contentLength: newContent.length
+        });
+
+        debugLog('Applied narrative mapping', {
+          standardCode: mapping.standardCode,
+          specCode: mapping.specCode,
+          newContentLength: newContent.length
+        });
       }
     }
+
+    // CRITICAL: Mark the nested map as modified for Mongoose to save it
+    submission.markModified('narratives');
 
     // Add import reference to submission
     if (!submission.imports) {
       submission.imports = [];
     }
-    submission.imports.push(importRecord._id as mongoose.Types.ObjectId);
+    if (!submission.imports.some(id => id.toString() === (importRecord._id as mongoose.Types.ObjectId).toString())) {
+      submission.imports.push(importRecord._id as mongoose.Types.ObjectId);
+    }
 
     await submission.save();
+
+    debugLog('Submission saved successfully', {
+      appliedCount,
+      appliedMappings
+    });
 
     return res.json({
       success: true,
       appliedCount,
+      appliedMappings,
       message: `Applied ${appliedCount} mappings to submission`
     });
   } catch (error) {
@@ -970,6 +1017,7 @@ export const applyMappings = async (req: AuthenticatedRequest, res: Response) =>
 
 /**
  * Get unmapped content for review
+ * Returns full content and any AI suggestions for each unmapped section
  */
 export const getUnmappedContent = async (req: Request, res: Response) => {
   try {
@@ -990,10 +1038,15 @@ export const getUnmappedContent = async (req: Request, res: Response) => {
         return {
           extractedSectionId: u.extractedSectionId,
           reason: u.reason,
-          content: section?.content.substring(0, 500) || '',
-          fullContentLength: section?.content.length || 0,
+          // Return full content for display and moving
+          content: section?.content || '',
+          fullContentLength: section?.content?.length || 0,
           sectionType: section?.sectionType,
-          pageNumber: section?.pageNumber
+          pageNumber: section?.pageNumber,
+          // Include AI suggestions if available
+          suggestedStandardCode: (u as any).suggestedStandardCode,
+          suggestedSpecCode: (u as any).suggestedSpecCode,
+          suggestedConfidence: (u as any).suggestedConfidence
         };
       });
 
@@ -1005,12 +1058,19 @@ export const getUnmappedContent = async (req: Request, res: Response) => {
 };
 
 /**
- * Handle unmapped content (assign or discard)
+ * Handle unmapped content - assign to narrative, supporting evidence, or discard
+ *
+ * Actions:
+ * - 'assign': Move to narrative rich text for specified standard/spec
+ * - 'assign_evidence': Move to supporting evidence text for specified standard/spec
+ * - 'discard': Mark as discarded
  */
 export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId, sectionId } = req.params;
-    const { action, standardCode, specCode } = req.body;
+    const { action, standardCode, specCode, toSupportingEvidence } = req.body;
+
+    debugLog('handleUnmapped called', { importId, sectionId, action, standardCode, specCode, toSupportingEvidence });
 
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
@@ -1025,8 +1085,79 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
       return res.status(404).json({ error: 'Unmapped content not found' });
     }
 
+    // Get the section content
+    const section = importRecord.extractedContent.sections.find(
+      s => s.id === sectionId
+    );
+
     if (action === 'assign' && standardCode && specCode) {
-      // Move to mapped
+      // Get the submission to write content immediately
+      const submission = await Submission.findById(importRecord.submissionId);
+      if (!submission) {
+        return res.status(404).json({ error: 'Submission not found' });
+      }
+
+      // Initialize narratives map if not present
+      if (!submission.narratives) {
+        submission.narratives = new Map();
+      }
+
+      // Get or create standard map
+      let standardNarratives = submission.narratives.get(standardCode);
+      if (!standardNarratives) {
+        standardNarratives = new Map();
+        submission.narratives.set(standardCode, standardNarratives);
+      }
+
+      // Get existing narrative
+      const existingNarrative = standardNarratives.get(specCode);
+
+      if (toSupportingEvidence) {
+        // Move to supporting evidence text
+        const existingEvidence = existingNarrative?.supportingEvidenceText || '';
+        const newEvidence = existingEvidence
+          ? `${existingEvidence}\n\n${section?.content || ''}`
+          : section?.content || '';
+
+        standardNarratives.set(specCode, {
+          content: existingNarrative?.content || '',
+          lastModified: new Date(),
+          isComplete: existingNarrative?.isComplete || false,
+          linkedDocuments: existingNarrative?.linkedDocuments || [],
+          supportingEvidenceText: newEvidence
+        });
+
+        debugLog('Moved to supporting evidence', {
+          standardCode,
+          specCode,
+          newEvidenceLength: newEvidence.length
+        });
+      } else {
+        // Move to narrative content
+        const newContent = existingNarrative?.content
+          ? `${existingNarrative.content}\n\n${section?.content || ''}`
+          : section?.content || '';
+
+        standardNarratives.set(specCode, {
+          content: newContent,
+          lastModified: new Date(),
+          isComplete: existingNarrative?.isComplete || false,
+          linkedDocuments: existingNarrative?.linkedDocuments || [],
+          supportingEvidenceText: existingNarrative?.supportingEvidenceText || ''
+        });
+
+        debugLog('Moved to narrative', {
+          standardCode,
+          specCode,
+          newContentLength: newContent.length
+        });
+      }
+
+      // Mark narratives as modified and save
+      submission.markModified('narratives');
+      await submission.save();
+
+      // Update import record
       importRecord.unmappedContent[unmappedIndex].action = 'assigned';
       importRecord.unmappedContent[unmappedIndex].reviewedBy = new mongoose.Types.ObjectId(req.user?.id);
       importRecord.unmappedContent[unmappedIndex].reviewedAt = new Date();
@@ -1035,11 +1166,12 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
         extractedSectionId: sectionId,
         standardCode,
         specCode,
-        fieldType: 'narrative',
+        fieldType: toSupportingEvidence ? 'evidence' : 'narrative',
         mappedBy: 'manual',
         mappedByUserId: new mongoose.Types.ObjectId(req.user?.id),
         mappedAt: new Date()
       });
+
     } else if (action === 'discard') {
       importRecord.unmappedContent[unmappedIndex].action = 'discarded';
       importRecord.unmappedContent[unmappedIndex].reviewedBy = new mongoose.Types.ObjectId(req.user?.id);
@@ -1048,9 +1180,16 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
       return res.status(400).json({ error: 'Invalid action or missing parameters' });
     }
 
+    importRecord.markModified('unmappedContent');
+    importRecord.markModified('mappedSections');
     await importRecord.save();
 
-    return res.json({ success: true, message: `Content ${action}ed successfully` });
+    return res.json({
+      success: true,
+      message: toSupportingEvidence
+        ? 'Content moved to supporting evidence'
+        : `Content ${action}ed successfully`
+    });
   } catch (error) {
     console.error('Handle unmapped error:', error);
     return res.status(500).json({ error: 'Failed to handle unmapped content' });

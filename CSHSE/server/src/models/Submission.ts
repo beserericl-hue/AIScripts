@@ -35,6 +35,7 @@ export interface INarrativeContent {
   lastModified: Date;
   isComplete: boolean;
   linkedDocuments: string[];
+  supportingEvidenceText?: string; // Rich text content moved from imports or manually added
 }
 
 export interface IStandardStatusInfo {
@@ -119,7 +120,8 @@ const NarrativeContentSchema = new Schema<INarrativeContent>({
   content: { type: String, default: '' },
   lastModified: { type: Date, default: Date.now },
   isComplete: { type: Boolean, default: false },
-  linkedDocuments: [{ type: String }]
+  linkedDocuments: [{ type: String }],
+  supportingEvidenceText: { type: String, default: '' }
 }, { _id: false });
 
 const StandardStatusInfoSchema = new Schema<IStandardStatusInfo>({
