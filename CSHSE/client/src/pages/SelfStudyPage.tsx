@@ -42,12 +42,32 @@ interface Institution {
   currentSubmissionId?: string;
 }
 
+interface ParsingDetails {
+  tocEntriesFound?: number;
+  tocTitles?: string[];
+  sectionsCreated?: number;
+  sectionTitles?: string[];
+  currentSectionIndex?: number;
+}
+
+interface ImportProgress {
+  step: string;
+  stepDescription: string;
+  totalSections: number;
+  receivedSections: number;
+  percentComplete: number;
+  elapsedTime: string;
+  elapsedMs: number;
+  parsingDetails?: ParsingDetails;
+}
+
 interface ImportStatus {
   id: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   originalFilename: string;
   fileType: string;
   error?: string;
+  progress?: ImportProgress;
   extractedContent?: {
     pageCount: number;
     metadata: { title?: string; author?: string };
@@ -800,18 +820,69 @@ export default function SelfStudyPage() {
 
                 {/* Step: Processing */}
                 {importStep === 'processing' && (
-                  <div className="text-center py-8">
-                    <Loader2 className="w-12 h-12 text-teal-600 mx-auto mb-4 animate-spin" />
-                    <h4 className="text-lg font-medium text-gray-900 mb-2">
-                      Processing Document
-                    </h4>
-                    <p className="text-sm text-gray-500 mb-4">
-                      We're extracting content and analyzing your document...
-                    </p>
-                    <div className="flex items-center justify-center gap-2 text-sm text-gray-500">
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      This may take a moment
+                  <div className="py-6 space-y-4">
+                    <div className="text-center">
+                      <Loader2 className="w-10 h-10 text-teal-600 mx-auto mb-3 animate-spin" />
+                      <h4 className="text-lg font-medium text-gray-900 mb-1">
+                        Processing Document
+                      </h4>
+                      <p className="text-sm text-gray-600">
+                        {importStatus?.progress?.stepDescription || 'Extracting content and analyzing your document...'}
+                      </p>
+                      {importStatus?.progress?.elapsedTime && (
+                        <p className="text-xs text-gray-400 mt-1">
+                          Elapsed: {importStatus.progress.elapsedTime}
+                        </p>
+                      )}
                     </div>
+
+                    {/* Show discovered sections during parsing */}
+                    {importStatus?.progress?.parsingDetails?.sectionsCreated && importStatus.progress.parsingDetails.sectionsCreated > 0 && (
+                      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mx-auto max-w-md">
+                        <div className="px-3 py-2 bg-teal-50 border-b border-gray-200 flex items-center justify-between">
+                          <span className="text-sm font-medium text-teal-800">
+                            Sections Discovered
+                          </span>
+                          <span className="text-xs text-teal-600 bg-teal-100 px-2 py-0.5 rounded-full">
+                            {importStatus.progress.parsingDetails.sectionsCreated} found
+                          </span>
+                        </div>
+                        <div className="max-h-40 overflow-y-auto">
+                          {importStatus.progress.parsingDetails.sectionTitles?.map((title: string, idx: number) => (
+                            <div
+                              key={idx}
+                              className="px-3 py-1.5 text-xs text-gray-600 border-b border-gray-100 last:border-b-0 flex items-center gap-2"
+                            >
+                              <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-gray-100 rounded text-gray-500 text-xs">
+                                {idx + 1}
+                              </span>
+                              <span className="truncate">{title}</span>
+                            </div>
+                          ))}
+                          {importStatus.progress.parsingDetails.sectionsCreated > (importStatus.progress.parsingDetails.sectionTitles?.length || 0) && (
+                            <div className="px-3 py-1.5 text-xs text-gray-400 italic">
+                              ... and {importStatus.progress.parsingDetails.sectionsCreated - (importStatus.progress.parsingDetails.sectionTitles?.length || 0)} more
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Progress bar when sections are being sent to AI */}
+                    {importStatus?.progress?.parsingDetails?.currentSectionIndex !== undefined && importStatus.progress.parsingDetails.sectionsCreated && (
+                      <div className="max-w-md mx-auto">
+                        <div className="flex justify-between text-xs text-gray-500 mb-1">
+                          <span>Sending to AI</span>
+                          <span>{(importStatus.progress.parsingDetails.currentSectionIndex || 0) + 1} / {importStatus.progress.parsingDetails.sectionsCreated}</span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-teal-500 transition-all duration-300"
+                            style={{ width: `${Math.round(((importStatus.progress.parsingDetails.currentSectionIndex || 0) + 1) / importStatus.progress.parsingDetails.sectionsCreated * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

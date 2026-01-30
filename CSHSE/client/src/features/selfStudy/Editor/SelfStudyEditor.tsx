@@ -77,8 +77,16 @@ const STANDARD_NAMES: Record<string, string> = {
   '19': 'Supervision', '20': 'Technology', '21': 'Field Experience'
 };
 
+interface ParsingDetails {
+  tocEntriesFound?: number;
+  tocTitles?: string[];
+  sectionsCreated?: number;
+  sectionTitles?: string[];
+  currentSectionIndex?: number;
+}
+
 interface ImportProgress {
-  step: 'initializing' | 'parsing' | 'analyzing' | 'matching' | 'complete' | 'error';
+  step: 'initializing' | 'parsing' | 'analyzing' | 'matching' | 'complete' | 'error' | string;
   stepDescription: string;
   totalSections: number;
   receivedSections: number;
@@ -91,6 +99,7 @@ interface ImportProgress {
     specCode: string;
     mappedBy: string;
   }>;
+  parsingDetails?: ParsingDetails;
 }
 
 interface ImportStatus {
@@ -1157,6 +1166,38 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                         </p>
                       )}
                     </div>
+
+                    {/* Show discovered sections during parsing */}
+                    {importStatus?.progress?.parsingDetails?.sectionsCreated && importStatus.progress.parsingDetails.sectionsCreated > 0 && (
+                      <div className="mt-4 bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <div className="px-3 py-2 bg-teal-50 border-b border-gray-200 flex items-center justify-between">
+                          <span className="text-sm font-medium text-teal-800">
+                            Sections Discovered
+                          </span>
+                          <span className="text-xs text-teal-600 bg-teal-100 px-2 py-0.5 rounded-full">
+                            {importStatus.progress.parsingDetails.sectionsCreated} found
+                          </span>
+                        </div>
+                        <div className="max-h-32 overflow-y-auto">
+                          {importStatus.progress.parsingDetails.sectionTitles?.map((title, idx) => (
+                            <div
+                              key={idx}
+                              className="px-3 py-1.5 text-xs text-gray-600 border-b border-gray-100 last:border-b-0 flex items-center gap-2"
+                            >
+                              <span className="w-5 h-5 flex-shrink-0 flex items-center justify-center bg-gray-100 rounded text-gray-500 text-xs">
+                                {idx + 1}
+                              </span>
+                              <span className="truncate">{title}</span>
+                            </div>
+                          ))}
+                          {importStatus.progress.parsingDetails.sectionsCreated > (importStatus.progress.parsingDetails.sectionTitles?.length || 0) && (
+                            <div className="px-3 py-1.5 text-xs text-gray-400 italic">
+                              ... and {importStatus.progress.parsingDetails.sectionsCreated - (importStatus.progress.parsingDetails.sectionTitles?.length || 0)} more
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Progress bar (when matching) */}
                     {importStatus?.progress?.step === 'matching' && importStatus.progress.totalSections > 0 && (

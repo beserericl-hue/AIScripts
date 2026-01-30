@@ -235,16 +235,45 @@ async function processDocumentAsync(
   }
 
   try {
-    // Update status to processing
+    // Update status to processing with initial progress
     importRecord.status = 'processing';
     importRecord.processingStartedAt = new Date();
     importRecord.specName = specName;
+    importRecord.parsingProgress = {
+      step: 'extracting_text',
+      stepDescription: 'Extracting text from document...'
+    };
     await importRecord.save();
     debugLog('Import record status updated to processing');
+
+    // Update progress: extracting TOC
+    importRecord.parsingProgress = {
+      step: 'extracting_toc',
+      stepDescription: 'Searching for Table of Contents...'
+    };
+    importRecord.markModified('parsingProgress');
+    await importRecord.save();
 
     // Parse the document using TOC-based parsing for intelligent sectioning
     debugLog('Parsing document with TOC-based sectioning');
     const { document: parsed, tocEntries, sections: tocSections } = await documentParserService.parseWithTOC(buffer, filename);
+
+    // Update progress with TOC/section discovery results
+    const tocTitles = tocEntries.slice(0, 8).map(e => e.title.substring(0, 60));
+    const sectionTitles = tocSections.slice(0, 10).map(s => s.tocEntry.title.substring(0, 60));
+
+    importRecord.parsingProgress = {
+      step: 'creating_sections',
+      stepDescription: tocEntries.length > 0
+        ? `Found Table of Contents with ${tocEntries.length} entries`
+        : `Using header-based splitting (${tocSections.length} sections detected)`,
+      tocEntriesFound: tocEntries.length,
+      tocTitles,
+      sectionsCreated: tocSections.length,
+      sectionTitles
+    };
+    importRecord.markModified('parsingProgress');
+    await importRecord.save();
 
     debugLog('TOC parsing complete', {
       tocEntriesFound: tocEntries.length,
@@ -302,6 +331,15 @@ async function processDocumentAsync(
     });
 
     if (webhookSettings) {
+      // Update progress: preparing to send to AI
+      importRecord.parsingProgress = {
+        ...importRecord.parsingProgress,
+        step: 'preparing_ai',
+        stepDescription: `Preparing ${tocSections.length} sections for AI analysis...`
+      };
+      importRecord.markModified('parsingProgress');
+      await importRecord.save();
+
       // Use n8n Document Matcher for AI-powered mapping
       debugLog('n8n Document Matcher webhook found, sending to n8n', {
         webhookUrl: webhookSettings.webhookUrl,
@@ -535,6 +573,19 @@ async function sendToN8nDocumentMatcher(
   for (let sectionIndex = 0; sectionIndex < sectionsToSend.length; sectionIndex++) {
     const tocSection = sectionsToSend[sectionIndex];
     const isLastSection = sectionIndex === sectionsToSend.length - 1;
+
+    // Update progress: sending current section to AI
+    importRecord.parsingProgress = {
+      step: 'sending_to_ai',
+      stepDescription: `Sending section ${sectionIndex + 1}/${totalSections} to AI...`,
+      tocEntriesFound: importRecord.parsingProgress?.tocEntriesFound,
+      tocTitles: importRecord.parsingProgress?.tocTitles,
+      sectionsCreated: importRecord.parsingProgress?.sectionsCreated,
+      sectionTitles: importRecord.parsingProgress?.sectionTitles,
+      currentSectionIndex: sectionIndex
+    };
+    importRecord.markModified('parsingProgress');
+    await importRecord.save();
 
     // Clean the HTML content
     const cleanedSectionContent = cleanHtmlContent(tocSection.htmlContent);
@@ -774,8 +825,15 @@ export const getImport = async (req: Request, res: Response) => {
     }
 
     if (importRecord.status === 'processing') {
-      // Use n8nSentAt to track if document was sent to n8n (more reliable than n8nJobId)
-      if (!importRecord.n8nSentAt) {
+      // Use parsingProgress if available for detailed status
+      const pp = importRecord.parsingProgress;
+
+      if (pp && pp.step && !importRecord.n8nSentAt) {
+        // Still in parsing phase - use parsingProgress
+        processingStep = pp.step;
+        stepDescription = pp.stepDescription || 'Processing...';
+      } else if (!importRecord.n8nSentAt) {
+        // Fallback if parsingProgress not set
         processingStep = 'parsing';
         stepDescription = 'Parsing document and extracting text...';
       } else if ((importRecord.n8nReceivedSections || 0) === 0) {
@@ -786,12 +844,14 @@ export const getImport = async (req: Request, res: Response) => {
         const n8nMinutes = Math.floor(n8nElapsedSeconds / 60);
 
         const totalSections = importRecord.n8nTotalSections || 0;
-        const sectionInfo = totalSections > 0 ? ` (${totalSections} sections)` : '';
+        const currentSection = pp?.currentSectionIndex !== undefined ? pp.currentSectionIndex + 1 : 0;
 
-        if (n8nMinutes >= 5) {
-          stepDescription = `Waiting for AI analysis${sectionInfo}... (${n8nMinutes} minutes) - Large documents may take longer`;
+        if (currentSection > 0 && currentSection <= totalSections) {
+          stepDescription = `Sending section ${currentSection}/${totalSections} to AI for analysis...`;
+        } else if (n8nMinutes >= 5) {
+          stepDescription = `Waiting for AI analysis (${totalSections} sections)... (${n8nMinutes} minutes) - Large documents may take longer`;
         } else if (n8nMinutes >= 1) {
-          stepDescription = `AI is analyzing document sections${sectionInfo}... (${n8nMinutes}m ${n8nElapsedSeconds % 60}s)`;
+          stepDescription = `AI is analyzing document sections (${totalSections} sections)... (${n8nMinutes}m ${n8nElapsedSeconds % 60}s)`;
         } else {
           stepDescription = `Sent ${totalSections} sections to AI for analysis...`;
         }
@@ -818,6 +878,7 @@ export const getImport = async (req: Request, res: Response) => {
       }));
 
     // Build detailed progress info
+    const pp = importRecord.parsingProgress;
     const progress = {
       step: processingStep,
       stepDescription,
@@ -829,7 +890,15 @@ export const getImport = async (req: Request, res: Response) => {
       elapsedTime: elapsedDisplay,
       elapsedMs,
       n8nSentAt: importRecord.n8nSentAt,
-      recentMappings
+      recentMappings,
+      // Include parsing progress details for UI feedback
+      parsingDetails: pp ? {
+        tocEntriesFound: pp.tocEntriesFound,
+        tocTitles: pp.tocTitles,
+        sectionsCreated: pp.sectionsCreated,
+        sectionTitles: pp.sectionTitles,
+        currentSectionIndex: pp.currentSectionIndex
+      } : null
     };
 
     debugLog('getImport response', {

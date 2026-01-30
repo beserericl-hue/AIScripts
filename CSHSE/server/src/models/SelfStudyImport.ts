@@ -34,6 +34,16 @@ export interface IUnmappedContent {
   action?: 'assigned' | 'discarded' | 'pending';
 }
 
+export interface IParsingProgress {
+  step: 'extracting_text' | 'extracting_toc' | 'creating_sections' | 'preparing_ai' | 'sending_to_ai';
+  stepDescription: string;
+  tocEntriesFound?: number;
+  tocTitles?: string[];  // First few TOC entry titles for display
+  sectionsCreated?: number;
+  sectionTitles?: string[];  // First few section titles for display
+  currentSectionIndex?: number;  // Which section is being sent to AI
+}
+
 export interface ISelfStudyImport extends Document {
   submissionId: mongoose.Types.ObjectId;
   originalFilename: string;
@@ -44,6 +54,8 @@ export interface ISelfStudyImport extends Document {
   processingStartedAt?: Date;
   processingCompletedAt?: Date;
   error?: string;
+  // Parsing progress (for real-time UI feedback)
+  parsingProgress?: IParsingProgress;
   // N8N Document Matcher integration
   n8nExecutionId?: string;
   n8nJobId?: string;
@@ -141,6 +153,19 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   processingStartedAt: Date,
   processingCompletedAt: Date,
   error: String,
+  // Parsing progress (for real-time UI feedback)
+  parsingProgress: {
+    step: {
+      type: String,
+      enum: ['extracting_text', 'extracting_toc', 'creating_sections', 'preparing_ai', 'sending_to_ai']
+    },
+    stepDescription: String,
+    tocEntriesFound: Number,
+    tocTitles: [String],
+    sectionsCreated: Number,
+    sectionTitles: [String],
+    currentSectionIndex: Number
+  },
   // N8N Document Matcher integration
   n8nExecutionId: String,
   n8nJobId: String,
