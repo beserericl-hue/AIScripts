@@ -144,6 +144,22 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
       const section = payload.section;
       const sectionId = uuidv4(); // Generate unique ID for this section
 
+      // IMPORTANT: Truncate content to avoid MongoDB document size limits
+      // The richTextContent from n8n can be huge if the AI includes too much context
+      const MAX_SECTION_CONTENT = 100000; // 100KB max per section
+      let sectionContent = section.richTextContent || '';
+      const originalContentLength = sectionContent.length;
+
+      if (sectionContent.length > MAX_SECTION_CONTENT) {
+        debugLog('WARNING: Section content truncated', {
+          sectionIndex: payload.sectionIndex,
+          heading: section.heading,
+          originalLength: originalContentLength,
+          truncatedTo: MAX_SECTION_CONTENT
+        });
+        sectionContent = sectionContent.substring(0, MAX_SECTION_CONTENT) + '\n\n[Content truncated - original was ' + originalContentLength + ' chars]';
+      }
+
       debugLog('Processing section', {
         sectionIndex: payload.sectionIndex,
         heading: section.heading,
@@ -153,7 +169,9 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
         specCode: section.match?.subspecification?.code,
         specTitle: section.match?.subspecification?.title,
         confidence: section.match?.confidence,
-        rationale: section.match?.rationale?.substring(0, 100)
+        rationale: section.match?.rationale?.substring(0, 100),
+        contentLength: sectionContent.length,
+        originalContentLength
       });
 
       // Create extracted section from the callback data
@@ -161,16 +179,16 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
         id: sectionId,
         pageNumber: payload.sectionIndex + 1, // Use index as page approximation
         startPosition: 0,
-        endPosition: section.richTextContent?.length || 0,
+        endPosition: sectionContent.length,
         sectionType: 'narrative' as const,
-        content: section.richTextContent || '',
+        content: sectionContent,
         confidence: (section.match?.confidence || 0) / 100, // Convert from 0-100 to 0-1
         suggestedStandard: section.match?.standard?.code
       };
 
       // Add section heading to content if provided
-      if (section.heading && section.richTextContent) {
-        extractedSection.content = `<h2>${section.heading}</h2>\n${section.richTextContent}`;
+      if (section.heading && sectionContent) {
+        extractedSection.content = `<h2>${section.heading}</h2>\n${sectionContent}`;
         extractedSection.endPosition = extractedSection.content.length;
       }
 
@@ -302,8 +320,25 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
       unmappedCount: importRecord.unmappedContent.filter(u => u.action === 'pending').length,
       moreExpected: payload.moreData
     });
-  } catch (error) {
-    console.error('[DocumentMatcherCallback] Error processing callback:', error);
-    return res.status(500).json({ error: 'Failed to process callback' });
+  } catch (error: any) {
+    // Enhanced error logging
+    console.error('[DocumentMatcherCallback] Error processing callback:', {
+      errorMessage: error?.message,
+      errorName: error?.name,
+      errorCode: error?.code,
+      documentId: req.body?.documentId,
+      sectionIndex: req.body?.sectionIndex,
+      stack: error?.stack?.substring(0, 500)
+    });
+
+    // Check for specific MongoDB errors
+    if (error?.code === 11000) {
+      return res.status(409).json({ error: 'Duplicate key error' });
+    }
+    if (error?.message?.includes('document is larger than')) {
+      return res.status(413).json({ error: 'Document too large to save' });
+    }
+
+    return res.status(500).json({ error: 'Failed to process callback', details: error?.message });
   }
 };
