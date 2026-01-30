@@ -5,7 +5,7 @@ export interface IExtractedSection {
   pageNumber: number;
   startPosition: number;
   endPosition: number;
-  sectionType: 'narrative' | 'table' | 'matrix' | 'syllabus' | 'cv' | 'form' | 'unknown';
+  sectionType: 'narrative' | 'table' | 'matrix' | 'syllabus' | 'cv' | 'form' | 'unknown' | 'general' | 'intro' | 'supporting_evidence';
   content: string;
   confidence: number;
   suggestedStandard?: string;
@@ -84,7 +84,7 @@ const ExtractedSectionSchema = new Schema<IExtractedSection>({
   endPosition: { type: Number, required: true },
   sectionType: {
     type: String,
-    enum: ['narrative', 'table', 'matrix', 'syllabus', 'cv', 'form', 'unknown'],
+    enum: ['narrative', 'table', 'matrix', 'syllabus', 'cv', 'form', 'unknown', 'general', 'intro', 'supporting_evidence'],
     default: 'unknown'
   },
   content: { type: String, required: true },

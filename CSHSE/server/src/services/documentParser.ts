@@ -804,6 +804,15 @@ export class DocumentParserService {
             continue;
           }
 
+          // Check if this looks like a TOC sub-entry (short, no punctuation at end, likely a nested item)
+          // Sub-entries are part of TOC structure but don't have page numbers - don't count against limit
+          const looksLikeTocSubEntry = line.length < 60 && !/[.!?]$/.test(line) && !/^\d+\.\s/.test(line);
+          if (looksLikeTocSubEntry) {
+            console.log(`[DocumentParser] Line ${i}: TOC SUB-ENTRY (skipping, not counting): "${line.substring(0, 60)}"`);
+            // Don't increment consecutiveNonTocLines for TOC sub-entries
+            continue;
+          }
+
           console.log(`[DocumentParser] Line ${i}: NO PAGE NUMBER (${consecutiveNonTocLines + 1}/${maxConsecutiveNonToc}): "${line.substring(0, 60)}"`);
           consecutiveNonTocLines++;
           if (consecutiveNonTocLines >= maxConsecutiveNonToc) {
