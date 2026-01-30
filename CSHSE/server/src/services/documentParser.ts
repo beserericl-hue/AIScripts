@@ -721,6 +721,7 @@ export class DocumentParserService {
   /**
    * Extract Table of Contents from document text
    * Looks for patterns like "Table of Contents" followed by entries
+   * Handles both main sections and subsections (a. Title, 1. Title, etc.)
    */
   extractTableOfContents(text: string): TOCEntry[] {
     const tocEntries: TOCEntry[] = [];
@@ -743,6 +744,9 @@ export class DocumentParserService {
       return tocEntries;
     }
 
+    // Track current standard for subsection inheritance
+    let currentStandardCode: string | undefined;
+
     // Parse TOC entries until we hit content that's clearly not TOC
     for (let i = tocStartIndex; i < lines.length; i++) {
       const line = lines[i].trim();
@@ -751,27 +755,44 @@ export class DocumentParserService {
       if (!line) continue;
 
       // Stop if we hit a major section that's not a TOC entry
-      // (e.g., the actual content starting)
-      if (/^(Certification|Introductory Information|Part\s+[IVX]+:|Part\s+\d+:)/i.test(line) && tocEntries.length > 5) {
-        tocEndIndex = i;
-        break;
+      // (e.g., the actual content starting after TOC)
+      // Be more lenient - only stop if we see repeated content patterns
+      if (/^(Certification of the Self-Study|Introductory Information)/i.test(line) && tocEntries.length > 10) {
+        // Check if this looks like actual content (has multiple paragraphs after)
+        let contentLineCount = 0;
+        for (let j = i + 1; j < Math.min(i + 10, lines.length); j++) {
+          if (lines[j].trim().length > 50) contentLineCount++;
+        }
+        if (contentLineCount > 3) {
+          tocEndIndex = i;
+          break;
+        }
       }
 
-      // Parse TOC entry
-      const entry = this.parseTOCEntry(line);
+      // Parse TOC entry, passing current standard for subsection inheritance
+      const entry = this.parseTOCEntry(line, currentStandardCode);
       if (entry) {
         tocEntries.push(entry);
+
+        // Update current standard if this entry has one (for subsection inheritance)
+        if (entry.standardCode && entry.level === 1) {
+          currentStandardCode = entry.standardCode;
+        }
       }
     }
 
     console.log(`[DocumentParser] Extracted ${tocEntries.length} TOC entries`);
+    if (tocEntries.length > 0) {
+      console.log(`[DocumentParser] First 5 entries:`, tocEntries.slice(0, 5).map(e => `${e.title} (L${e.level}, Std:${e.standardCode || '-'}, Spec:${e.specCode || '-'})`));
+    }
     return tocEntries;
   }
 
   /**
    * Parse a single TOC entry line
+   * Handles both main sections (Standard 1, Part I) and subsections (a. Title, 1. Title)
    */
-  private parseTOCEntry(line: string): TOCEntry | null {
+  private parseTOCEntry(line: string, currentStandardCode?: string): TOCEntry | null {
     // Skip if line is too short or looks like page number only
     if (line.length < 3 || /^\d+$/.test(line.trim())) {
       return null;
@@ -781,7 +802,7 @@ export class DocumentParserService {
     let title = line;
     let pageNumber: number | undefined;
 
-    // Pattern: "Title...123" or "Title 123"
+    // Pattern: "Title...123" or "Title 123" (page numbers typically at end)
     const pageMatch = line.match(/[.\s]+(\d+)\s*$/);
     if (pageMatch) {
       pageNumber = parseInt(pageMatch[1], 10);
@@ -793,14 +814,50 @@ export class DocumentParserService {
       return null;
     }
 
-    // Determine level based on indentation or numbering
+    // Determine level and extract spec code from subsection patterns
     let level = 1;
-    if (/^[a-z][\.\)]\s/i.test(title) || title.startsWith('\t') || title.startsWith('  ')) {
+    let specCode: string | undefined;
+
+    // Check for lettered subsections: "a. Title", "b) Title", "(a) Title"
+    const letteredMatch = title.match(/^([a-z])[\.\)]\s+(.+)/i) ||
+                          title.match(/^\(([a-z])\)\s+(.+)/i);
+    if (letteredMatch) {
       level = 2;
+      specCode = letteredMatch[1].toLowerCase();
+      title = letteredMatch[2].trim();
     }
 
-    // Extract standard and spec codes
-    const { standardCode, specCode } = this.extractStandardFromTOCTitle(title);
+    // Check for numbered subsections under standards: "1. Title", "2. Title"
+    // But NOT main numbered items like "Standard 1"
+    const numberedMatch = title.match(/^(\d+)[\.\)]\s+(.+)/);
+    if (numberedMatch && !title.toLowerCase().includes('standard')) {
+      level = 2;
+      // Map numbers to letters for spec codes (1->a, 2->b, etc.) if within range
+      const num = parseInt(numberedMatch[1], 10);
+      if (num >= 1 && num <= 26) {
+        specCode = String.fromCharCode(96 + num); // 1->a, 2->b, etc.
+      }
+      title = numberedMatch[2].trim();
+    }
+
+    // Check for indentation (tabs or multiple spaces)
+    if (line.startsWith('\t') || line.match(/^\s{2,}/)) {
+      level = Math.max(level, 2);
+    }
+
+    // Extract standard code from title (for main standard headers)
+    const extracted = this.extractStandardFromTOCTitle(title);
+    let standardCode = extracted.standardCode;
+
+    // If this is a subsection and we have a current standard, inherit it
+    if (level === 2 && !standardCode && currentStandardCode) {
+      standardCode = currentStandardCode;
+    }
+
+    // Use extracted spec code if we didn't get one from the pattern
+    if (!specCode && extracted.specCode) {
+      specCode = extracted.specCode;
+    }
 
     // Determine section type
     const sectionType = this.determineSectionType(title, standardCode);

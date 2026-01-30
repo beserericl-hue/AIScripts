@@ -259,8 +259,9 @@ async function processDocumentAsync(
     const { document: parsed, tocEntries, sections: tocSections } = await documentParserService.parseWithTOC(buffer, filename);
 
     // Update progress with TOC/section discovery results
-    const tocTitles = tocEntries.slice(0, 8).map(e => e.title.substring(0, 60));
-    const sectionTitles = tocSections.slice(0, 10).map(s => s.tocEntry.title.substring(0, 60));
+    // Send up to 20 titles for better UI feedback
+    const tocTitles = tocEntries.slice(0, 20).map(e => e.title.substring(0, 80));
+    const sectionTitles = tocSections.slice(0, 20).map(s => s.tocEntry.title.substring(0, 80));
 
     importRecord.parsingProgress = {
       step: 'creating_sections',

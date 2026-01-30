@@ -836,19 +836,26 @@ export default function SelfStudyPage() {
                       )}
                     </div>
 
-                    {/* Show discovered sections during parsing */}
-                    {importStatus?.progress?.parsingDetails?.sectionsCreated && importStatus.progress.parsingDetails.sectionsCreated > 0 && (
+                    {/* Show discovered sections during parsing - show tocTitles first, then sectionTitles when available */}
+                    {(importStatus?.progress?.parsingDetails?.tocEntriesFound && importStatus.progress.parsingDetails.tocEntriesFound > 0) ||
+                     (importStatus?.progress?.parsingDetails?.sectionsCreated && importStatus.progress.parsingDetails.sectionsCreated > 0) ? (
                       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mx-auto max-w-md">
                         <div className="px-3 py-2 bg-teal-50 border-b border-gray-200 flex items-center justify-between">
                           <span className="text-sm font-medium text-teal-800">
-                            Sections Discovered
+                            {importStatus?.progress?.parsingDetails?.sectionsCreated
+                              ? 'Sections to Process'
+                              : 'TOC Entries Found'}
                           </span>
                           <span className="text-xs text-teal-600 bg-teal-100 px-2 py-0.5 rounded-full">
-                            {importStatus.progress.parsingDetails.sectionsCreated} found
+                            {importStatus?.progress?.parsingDetails?.sectionsCreated || importStatus?.progress?.parsingDetails?.tocEntriesFound} found
                           </span>
                         </div>
                         <div className="max-h-40 overflow-y-auto">
-                          {importStatus.progress.parsingDetails.sectionTitles?.map((title: string, idx: number) => (
+                          {/* Show sectionTitles if available, otherwise show tocTitles */}
+                          {(importStatus?.progress?.parsingDetails?.sectionTitles && importStatus.progress.parsingDetails.sectionTitles.length > 0
+                            ? importStatus.progress.parsingDetails.sectionTitles
+                            : importStatus?.progress?.parsingDetails?.tocTitles || []
+                          ).map((title: string, idx: number) => (
                             <div
                               key={idx}
                               className="px-3 py-1.5 text-xs text-gray-600 border-b border-gray-100 last:border-b-0 flex items-center gap-2"
@@ -859,14 +866,24 @@ export default function SelfStudyPage() {
                               <span className="truncate">{title}</span>
                             </div>
                           ))}
-                          {importStatus.progress.parsingDetails.sectionsCreated > (importStatus.progress.parsingDetails.sectionTitles?.length || 0) && (
+                          {/* Show "and X more" for sections */}
+                          {importStatus?.progress?.parsingDetails?.sectionsCreated &&
+                           importStatus.progress.parsingDetails.sectionsCreated > (importStatus.progress.parsingDetails.sectionTitles?.length || 0) && (
                             <div className="px-3 py-1.5 text-xs text-gray-400 italic">
                               ... and {importStatus.progress.parsingDetails.sectionsCreated - (importStatus.progress.parsingDetails.sectionTitles?.length || 0)} more
                             </div>
                           )}
+                          {/* Show "and X more" for TOC entries (when sections not yet created) */}
+                          {!importStatus?.progress?.parsingDetails?.sectionsCreated &&
+                           importStatus?.progress?.parsingDetails?.tocEntriesFound &&
+                           importStatus.progress.parsingDetails.tocEntriesFound > (importStatus.progress.parsingDetails.tocTitles?.length || 0) && (
+                            <div className="px-3 py-1.5 text-xs text-gray-400 italic">
+                              ... and {importStatus.progress.parsingDetails.tocEntriesFound - (importStatus.progress.parsingDetails.tocTitles?.length || 0)} more
+                            </div>
+                          )}
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     {/* Progress bar when sections are being sent to AI */}
                     {importStatus?.progress?.parsingDetails?.currentSectionIndex !== undefined && importStatus.progress.parsingDetails.sectionsCreated && (
