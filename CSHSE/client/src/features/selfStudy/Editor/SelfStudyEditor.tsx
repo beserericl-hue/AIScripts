@@ -36,6 +36,7 @@ interface NarrativeContent {
   specCode: string;
   content: string;
   lastModified?: Date;
+  supportingEvidenceText?: string;
 }
 
 interface SubmissionData {
@@ -192,6 +193,28 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         standardCode,
         specCode,
         content,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+    },
+  });
+
+  // Save supporting evidence mutation
+  const saveSupportingEvidenceMutation = useMutation({
+    mutationFn: async ({
+      standardCode,
+      specCode,
+      supportingEvidenceText,
+    }: {
+      standardCode: string;
+      specCode: string;
+      supportingEvidenceText: string;
+    }) => {
+      await api.patch(`/api/submissions/${submissionId}/narrative`, {
+        standardCode,
+        specCode,
+        supportingEvidenceText,
       });
     },
     onSuccess: () => {
@@ -529,6 +552,15 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     return narrative?.content || '';
   }, [submission, selectedStandard, selectedSpec]);
 
+  // Get current supporting evidence text for selected standard/spec
+  const getCurrentSupportingEvidence = useCallback(() => {
+    if (!submission || !selectedSpec) return '';
+    const narrative = (submission.narrativeContent || []).find(
+      (n) => n.standardCode === selectedStandard && n.specCode === selectedSpec
+    );
+    return narrative?.supportingEvidenceText || '';
+  }, [submission, selectedStandard, selectedSpec]);
+
   // Get current standard data for the editor
   const getCurrentStandardData = useCallback(() => {
     if (!standards) return {
@@ -595,6 +627,19 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       });
     },
     [saveMutation, selectedStandard, selectedSpec]
+  );
+
+  // Handle save supporting evidence
+  const handleSaveSupportingEvidence = useCallback(
+    async (supportingEvidenceText: string) => {
+      if (!selectedSpec) return;
+      await saveSupportingEvidenceMutation.mutateAsync({
+        standardCode: selectedStandard,
+        specCode: selectedSpec,
+        supportingEvidenceText,
+      });
+    },
+    [saveSupportingEvidenceMutation, selectedStandard, selectedSpec]
   );
 
   // Handle submit standard for review (triggers validation workflow)
@@ -892,11 +937,13 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                     standardCode={selectedStandard}
                     specCode={selectedSpec}
                     initialContent={getCurrentContent()}
+                    initialSupportingEvidence={getCurrentSupportingEvidence()}
                     standardTitle={getCurrentStandardData().standardTitle}
                     standardDescription={getCurrentStandardData().standardDescription}
                     specTitle={getCurrentStandardData().specTitle}
                     standardText={getCurrentStandardData().specText}
                     onSave={handleSave}
+                    onSaveSupportingEvidence={handleSaveSupportingEvidence}
                     onCancel={() => navigate('/self-study')}
                   />
                 ) : (

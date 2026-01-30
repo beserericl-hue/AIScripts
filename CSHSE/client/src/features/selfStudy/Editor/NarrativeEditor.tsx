@@ -40,6 +40,9 @@ import {
   Highlighter,
   Table as TableIcon,
   Strikethrough,
+  ChevronDown,
+  ChevronUp,
+  FileText,
 } from 'lucide-react';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useValidationStatus } from '../../../hooks/useValidationStatus';
@@ -49,12 +52,14 @@ interface NarrativeEditorProps {
   standardCode: string;
   specCode: string;
   initialContent: string;
+  initialSupportingEvidence?: string;
   standardTitle: string;
   standardDescription: string;
   specTitle: string;
   standardText: string;
   placeholder?: string;
   onSave: (content: string) => Promise<void>;
+  onSaveSupportingEvidence?: (content: string) => Promise<void>;
   onContentChange?: (content: string) => void;
   onCancel?: () => void;
   readOnly?: boolean;
@@ -69,17 +74,20 @@ export function NarrativeEditor({
   standardCode,
   specCode,
   initialContent,
+  initialSupportingEvidence = '',
   standardTitle,
   standardDescription,
   specTitle,
   standardText,
   placeholder = 'Enter your narrative response here...',
   onSave,
+  onSaveSupportingEvidence,
   onContentChange,
   onCancel,
   readOnly = false,
 }: NarrativeEditorProps) {
   const [content, setContent] = useState(initialContent);
+  const [supportingEvidenceCollapsed, setSupportingEvidenceCollapsed] = useState(false);
 
   // Auto-save hook with 2s debounce
   const {
@@ -93,6 +101,20 @@ export function NarrativeEditor({
     saveFn: onSave,
     debounceMs: 2000,
     enabled: !readOnly,
+  });
+
+  // Auto-save hook for supporting evidence
+  const {
+    triggerAutoSave: triggerSupportingEvidenceAutoSave,
+    saveNow: saveSupportingEvidenceNow,
+    isSaving: isSavingSupportingEvidence,
+    hasUnsavedChanges: hasSupportingEvidenceUnsavedChanges,
+    lastSavedAt: supportingEvidenceLastSavedAt,
+    error: supportingEvidenceSaveError,
+  } = useAutoSave({
+    saveFn: onSaveSupportingEvidence || (async () => {}),
+    debounceMs: 2000,
+    enabled: !readOnly && !!onSaveSupportingEvidence,
   });
 
   // Validation status hook
@@ -185,6 +207,62 @@ export function NarrativeEditor({
     },
   });
 
+  // Initialize TipTap editor for supporting evidence
+  const supportingEvidenceEditor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        heading: {
+          levels: [1, 2, 3],
+        },
+      }),
+      Underline,
+      Placeholder.configure({
+        placeholder: 'Enter supporting evidence text here...',
+        emptyEditorClass: 'is-editor-empty',
+      }),
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+        alignments: ['left', 'center', 'right', 'justify'],
+      }),
+      TextStyle,
+      Color,
+      Highlight.configure({
+        multicolor: true,
+      }),
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-teal-600 underline hover:text-teal-800',
+        },
+      }),
+      Subscript,
+      Superscript,
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: 'border-collapse border border-gray-300',
+        },
+      }),
+      TableRow,
+      TableHeader.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 bg-gray-100 px-3 py-2 font-semibold',
+        },
+      }),
+      TableCell.configure({
+        HTMLAttributes: {
+          class: 'border border-gray-300 px-3 py-2',
+        },
+      }),
+    ],
+    content: initialSupportingEvidence,
+    editable: !readOnly,
+    onUpdate: ({ editor }) => {
+      const html = editor.getHTML();
+      triggerSupportingEvidenceAutoSave(html);
+    },
+  });
+
   // Handle adding a link
   const handleAddLink = useCallback(() => {
     if (!editor) return;
@@ -242,6 +320,16 @@ export function NarrativeEditor({
       setContent(initialContent);
     }
   }, [editor, initialContent, content, hasUnsavedChanges]);
+
+  // Update supporting evidence editor content if initial content changes externally
+  useEffect(() => {
+    if (supportingEvidenceEditor && !hasSupportingEvidenceUnsavedChanges) {
+      const currentHtml = supportingEvidenceEditor.getHTML();
+      if (initialSupportingEvidence !== currentHtml) {
+        supportingEvidenceEditor.commands.setContent(initialSupportingEvidence);
+      }
+    }
+  }, [supportingEvidenceEditor, initialSupportingEvidence, hasSupportingEvidenceUnsavedChanges]);
 
   if (!editor) {
     return (
@@ -635,6 +723,63 @@ export function NarrativeEditor({
           className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[300px]"
         />
       </div>
+
+      {/* Supporting Evidence Section */}
+      {onSaveSupportingEvidence && (
+        <div className="mt-4 border border-blue-200 rounded-lg overflow-hidden">
+          {/* Header - Collapsible */}
+          <button
+            onClick={() => setSupportingEvidenceCollapsed(!supportingEvidenceCollapsed)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-blue-600" />
+              <span className="font-medium text-blue-900">Supporting Evidence Text</span>
+              {initialSupportingEvidence && (
+                <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+                  Has content
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {/* Save status for supporting evidence */}
+              <SaveStatusIndicator
+                isSaving={isSavingSupportingEvidence}
+                hasUnsavedChanges={hasSupportingEvidenceUnsavedChanges}
+                lastSavedAt={supportingEvidenceLastSavedAt}
+                error={supportingEvidenceSaveError}
+              />
+              {supportingEvidenceCollapsed ? (
+                <ChevronDown className="w-5 h-5 text-blue-600" />
+              ) : (
+                <ChevronUp className="w-5 h-5 text-blue-600" />
+              )}
+            </div>
+          </button>
+
+          {/* Editor Content - Collapsible */}
+          {!supportingEvidenceCollapsed && (
+            <div className="p-4 bg-white">
+              <p className="text-sm text-gray-600 mb-3">
+                This section contains additional supporting evidence imported from your document.
+                You can edit this content or use it as reference for your narrative.
+              </p>
+              {supportingEvidenceEditor ? (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <EditorContent
+                    editor={supportingEvidenceEditor}
+                    className="prose prose-sm max-w-none p-4 min-h-[150px] max-h-[400px] overflow-y-auto focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[150px]"
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-24 bg-gray-50 rounded-lg">
+                  <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Validation Panel */}
       <ValidationPanel
