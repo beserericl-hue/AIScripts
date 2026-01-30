@@ -774,25 +774,17 @@ export class DocumentParserService {
           continue;
         }
 
-        // 2. Lines without any page number pattern are suspicious after we have some entries
+        // 2. Lines without page numbers are NOT TOC entries - they're sub-items that should stay as content
         // Check for both separator-based and concatenated page numbers
         const hasPageNumberPattern = /[.\s…]+\d{1,3}\s*$/.test(line) || /\d{1,3}\s*$/.test(line);
-        if (!hasPageNumberPattern && tocEntries.length > 5) {
-          // This might be content, not TOC - check if it looks like a title
-          // Handle leading whitespace for indented TOC entries
-          const trimmedLine = line.trim();
-          const looksTocLike = /^(standard|part|section|appendix|chapter)/i.test(trimmedLine) ||
-                               /^\d+[\.\)\t]/i.test(trimmedLine) ||     // numbered: "1. Title" or "1	Title"
-                               /^[a-z][\.\)\t]/i.test(trimmedLine) ||   // lettered: "a. Title" or "a	Title"
-                               /^\([a-z]\)/i.test(trimmedLine);         // parenthesized: "(a) Title"
-          if (!looksTocLike) {
-            consecutiveNonTocLines++;
-            if (consecutiveNonTocLines >= maxConsecutiveNonToc) {
-              console.log(`[DocumentParser] Stopping TOC parsing: no page numbers detected`);
-              break;
-            }
-            continue;
+        if (!hasPageNumberPattern) {
+          // No page number = not a TOC entry, skip it (sub-entries stay as document content)
+          consecutiveNonTocLines++;
+          if (consecutiveNonTocLines >= maxConsecutiveNonToc) {
+            console.log(`[DocumentParser] Stopping TOC parsing: no page numbers detected`);
+            break;
           }
+          continue;
         }
 
         // Parse TOC entry, passing current standard for subsection inheritance
@@ -893,22 +885,14 @@ export class DocumentParserService {
         return null;
       }
 
-      // STRICT VALIDATION: If no page number, must be a recognizable header pattern
-      // NOTE: Handle leading whitespace (tabs/spaces) for indented TOC sub-entries
-      const trimmedTitle = title.trim();
-      const isRecognizedHeader = /^(standard|part|section|appendix|chapter|introduction|conclusion|certification|curriculum)/i.test(trimmedTitle) ||
-                                  /^[a-z][\.\)\t]\s*/i.test(trimmedTitle) ||  // lettered subsection: "a. Title" or "a) Title" or "a	Title"
-                                  /^\d+[\.\)\t]\s*/i.test(trimmedTitle) ||    // numbered subsection: "1. Title" or "1) Title" or "1	Title"
-                                  /^(Part\s+[IVX]+|Section\s+\d)/i.test(trimmedTitle) ||  // Roman numerals
-                                  /^\([a-z]\)/i.test(trimmedTitle);  // parenthesized letter: "(a) Title"
-
-      if (!hasPageNumber && !isRecognizedHeader) {
-        // Neither page number nor recognized pattern - not a TOC entry
+      // STRICT VALIDATION: REQUIRE page number for all TOC entries
+      // Sub-entries without page numbers (like "1. Title" or "a. Title") stay as document content
+      if (!hasPageNumber) {
         return null;
       }
 
       // Use trimmed title for further processing
-      title = trimmedTitle;
+      title = title.trim();
 
       // Determine level and extract spec code from subsection patterns
       let level = 1;
