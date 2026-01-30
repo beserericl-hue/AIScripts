@@ -15,6 +15,35 @@ interface AuthenticatedRequest extends Request {
 const validationService = new ValidationService();
 
 /**
+ * Convert narratives Map to array format for client
+ */
+function narrativesMapToArray(narratives: Map<string, Map<string, any>> | undefined): Array<{
+  standardCode: string;
+  specCode: string;
+  content: string;
+  lastModified?: Date;
+  supportingEvidenceText?: string;
+}> {
+  if (!narratives) return [];
+
+  const result: Array<any> = [];
+  narratives.forEach((specMap, standardCode) => {
+    if (specMap instanceof Map) {
+      specMap.forEach((narrativeContent, specCode) => {
+        result.push({
+          standardCode,
+          specCode,
+          content: narrativeContent.content || '',
+          lastModified: narrativeContent.lastModified,
+          supportingEvidenceText: narrativeContent.supportingEvidenceText || ''
+        });
+      });
+    }
+  });
+  return result;
+}
+
+/**
  * Get submission by ID
  */
 export const getSubmission = async (req: AuthenticatedRequest, res: Response) => {
@@ -26,7 +55,14 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    return res.json(submission);
+    // Convert nested Map to array format for client
+    const submissionObj = submission.toObject();
+    const narrativeContent = narrativesMapToArray(submission.narratives);
+
+    return res.json({
+      ...submissionObj,
+      narrativeContent
+    });
   } catch (error) {
     console.error('Get submission error:', error);
     return res.status(500).json({ error: 'Failed to get submission' });
@@ -123,48 +159,58 @@ export const saveNarrative = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    // Find or create narrative entry
-    const existingIndex = submission.narrativeContent?.findIndex(
-      n => n.standardCode === standardCode && n.specCode === (specCode || '')
-    ) ?? -1;
+    // Initialize narratives map if not present
+    if (!submission.narratives) {
+      submission.narratives = new Map();
+    }
 
-    if (existingIndex >= 0) {
-      submission.narrativeContent![existingIndex].content = content;
-      submission.narrativeContent![existingIndex].lastModified = new Date();
-    } else {
-      if (!submission.narrativeContent) {
-        submission.narrativeContent = [];
-      }
-      submission.narrativeContent.push({
-        standardCode,
-        specCode: specCode || '',
-        content,
+    // Get or create standard map
+    let standardNarratives = submission.narratives.get(standardCode);
+    if (!standardNarratives) {
+      standardNarratives = new Map();
+      submission.narratives.set(standardCode, standardNarratives);
+    }
+
+    // Get existing narrative or create new
+    const specKey = specCode || '';
+    const existingNarrative = standardNarratives.get(specKey);
+
+    // Update or create narrative content
+    standardNarratives.set(specKey, {
+      content,
+      lastModified: new Date(),
+      isComplete: existingNarrative?.isComplete || false,
+      linkedDocuments: existingNarrative?.linkedDocuments || [],
+      supportingEvidenceText: existingNarrative?.supportingEvidenceText || ''
+    });
+
+    // Update standard status to in_progress if not already complete
+    if (!submission.standardsStatus) {
+      submission.standardsStatus = new Map();
+    }
+    const statusKey = specCode ? `${standardCode}.${specCode}` : standardCode;
+    const currentStatus = submission.standardsStatus.get(statusKey);
+    if (!currentStatus || currentStatus.status === 'not_started') {
+      submission.standardsStatus.set(statusKey, {
+        status: 'in_progress',
+        completionPercentage: 0,
         lastModified: new Date()
       });
     }
 
-    // Update standard status to in_progress if not already complete
-    if (!submission.standardsStatus) {
-      submission.standardsStatus = {};
-    }
-    const statusKey = specCode ? `${standardCode}.${specCode}` : standardCode;
-    if (!submission.standardsStatus[statusKey] ||
-        submission.standardsStatus[statusKey].status === 'not_started') {
-      submission.standardsStatus[statusKey] = {
-        status: 'in_progress',
-        validationStatus: 'pending'
-      };
-    }
-
-    submission.markModified('narrativeContent');
+    // CRITICAL: Mark nested maps as modified for Mongoose to save them
+    submission.markModified('narratives');
     submission.markModified('standardsStatus');
     await submission.save();
 
     return res.json({
       message: 'Narrative saved successfully',
-      narrative: submission.narrativeContent![
-        existingIndex >= 0 ? existingIndex : submission.narrativeContent!.length - 1
-      ]
+      narrative: {
+        standardCode,
+        specCode: specKey,
+        content,
+        lastModified: new Date()
+      }
     });
   } catch (error) {
     console.error('Save narrative error:', error);
@@ -184,10 +230,19 @@ export const submitStandard = async (req: AuthenticatedRequest, res: Response) =
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    // Get all narratives for this standard
-    const standardNarratives = submission.narrativeContent?.filter(
-      n => n.standardCode === standardCode
-    ) || [];
+    // Get all narratives for this standard from the Map
+    const standardNarrativesMap = submission.narratives?.get(standardCode);
+    const standardNarratives: Array<{ standardCode: string; specCode: string; content: string }> = [];
+
+    if (standardNarrativesMap && standardNarrativesMap instanceof Map) {
+      standardNarrativesMap.forEach((narrativeContent, specCode) => {
+        standardNarratives.push({
+          standardCode,
+          specCode,
+          content: narrativeContent.content || ''
+        });
+      });
+    }
 
     if (standardNarratives.length === 0) {
       return res.status(400).json({
@@ -318,19 +373,18 @@ export const revalidateFailed = async (req: AuthenticatedRequest, res: Response)
     let failCount = 0;
 
     for (const [key, failedResult] of failedSpecsMap) {
-      const narrative = submission.narrativeContent?.find(
-        n => n.standardCode === failedResult.standardCode &&
-             n.specCode === failedResult.specCode
-      );
+      // Get narrative from the Map format
+      const standardNarrativesMap = submission.narratives?.get(failedResult.standardCode);
+      const narrativeContent = standardNarrativesMap?.get(failedResult.specCode);
 
-      if (!narrative) continue;
+      if (!narrativeContent?.content) continue;
 
       try {
         const result = await validationService.validateSection({
           submissionId,
           standardCode: failedResult.standardCode,
           specCode: failedResult.specCode,
-          narrativeText: narrative.content,
+          narrativeText: narrativeContent.content,
           validationType: 'submit',
           previousValidationId: failedResult._id.toString()
         });

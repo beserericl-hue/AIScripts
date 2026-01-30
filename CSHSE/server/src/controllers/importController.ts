@@ -840,7 +840,11 @@ export const getExtractedSections = async (req: Request, res: Response) => {
           mappedBy: mapping.mappedBy
         } : null,
         unmappedReason: unmapped?.reason,
-        status: mapping ? 'mapped' : (unmapped ? 'unmapped' : 'pending')
+        status: mapping ? 'mapped' : (unmapped ? 'unmapped' : 'pending'),
+        // Include AI suggestions for unmapped sections
+        suggestedStandardCode: unmapped?.suggestedStandardCode,
+        suggestedSpecCode: unmapped?.suggestedSpecCode,
+        suggestedConfidence: unmapped?.suggestedConfidence
       };
     });
 

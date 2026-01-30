@@ -150,6 +150,15 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [unmappedAssignments, setUnmappedAssignments] = useState<Record<string, UnmappedAssignment>>({});
   const [movingSection, setMovingSection] = useState<string | null>(null);
 
+  // Batch assignment state for unmapped sections
+  const [selectedUnmappedIds, setSelectedUnmappedIds] = useState<Set<string>>(new Set());
+  const [batchAssignment, setBatchAssignment] = useState<UnmappedAssignment>({
+    standardCode: '',
+    specCode: '',
+    toSupportingEvidence: false
+  });
+  const [isBatchMoving, setIsBatchMoving] = useState(false);
+
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
     queryKey: ['submission', submissionId],
@@ -304,14 +313,26 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setExtractedSections([]);
     setUnmappedAssignments({});
     setMovingSection(null);
+    // Reset batch assignment state
+    setSelectedUnmappedIds(new Set());
+    setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false });
+    setIsBatchMoving(false);
   };
 
   // Handle moving an unmapped section to a spec
   const handleMoveUnmapped = async (sectionId: string) => {
     if (!importId) return;
 
+    // Get the section to access AI suggestions
+    const section = extractedSections.find(s => s.id === sectionId);
     const assignment = unmappedAssignments[sectionId];
-    if (!assignment || !assignment.standardCode || !assignment.specCode) {
+
+    // Use user assignment if available, otherwise fall back to AI suggestions
+    const standardCode = assignment?.standardCode || section?.suggestedStandardCode || '';
+    const specCode = assignment?.specCode || section?.suggestedSpecCode || '';
+    const toSupportingEvidence = assignment?.toSupportingEvidence || false;
+
+    if (!standardCode || !specCode) {
       setUploadError('Please select a standard and specification');
       return;
     }
@@ -322,9 +343,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     try {
       await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
         action: 'assign',
-        standardCode: assignment.standardCode,
-        specCode: assignment.specCode,
-        toSupportingEvidence: assignment.toSupportingEvidence
+        standardCode,
+        specCode,
+        toSupportingEvidence
       });
 
       // Remove from extracted sections list
@@ -380,6 +401,76 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         ...update
       }
     }));
+  };
+
+  // Batch selection handlers
+  const toggleUnmappedSelection = (sectionId: string) => {
+    setSelectedUnmappedIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(sectionId)) {
+        newSet.delete(sectionId);
+      } else {
+        newSet.add(sectionId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllUnmapped = () => {
+    const unmappedIds = extractedSections
+      .filter(s => s.status === 'unmapped')
+      .map(s => s.id);
+    setSelectedUnmappedIds(new Set(unmappedIds));
+  };
+
+  const selectNoneUnmapped = () => {
+    setSelectedUnmappedIds(new Set());
+  };
+
+  // Batch move handler
+  const handleBatchMoveUnmapped = async () => {
+    if (!importId || selectedUnmappedIds.size === 0) return;
+
+    if (!batchAssignment.standardCode || !batchAssignment.specCode) {
+      setUploadError('Please select a standard and specification');
+      return;
+    }
+
+    setIsBatchMoving(true);
+    setUploadError(null);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const sectionId of selectedUnmappedIds) {
+      try {
+        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+          action: 'assign',
+          standardCode: batchAssignment.standardCode,
+          specCode: batchAssignment.specCode,
+          toSupportingEvidence: batchAssignment.toSupportingEvidence
+        });
+        successCount++;
+      } catch (err) {
+        failCount++;
+        console.error(`Failed to move section ${sectionId}:`, err);
+      }
+    }
+
+    // Remove successfully moved sections from list
+    setExtractedSections(prev =>
+      prev.filter(s => !selectedUnmappedIds.has(s.id) || failCount > 0)
+    );
+    setSelectedUnmappedIds(new Set());
+
+    // Refresh submission data
+    queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+
+    if (failCount > 0) {
+      setUploadError(`Moved ${successCount} section(s), ${failCount} failed`);
+    }
+
+    setIsBatchMoving(false);
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -1071,6 +1162,102 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                     </div>
                   </div>
 
+                  {/* Batch Assignment UI for Unmapped Sections */}
+                  {extractedSections.some(s => s.status === 'unmapped') && (
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-amber-800">
+                          Assign Unmapped Sections
+                        </h4>
+                        <div className="flex items-center gap-2 text-sm">
+                          <button
+                            onClick={selectAllUnmapped}
+                            className="text-teal-600 hover:text-teal-700 underline"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-gray-400">|</span>
+                          <button
+                            onClick={selectNoneUnmapped}
+                            className="text-teal-600 hover:text-teal-700 underline"
+                          >
+                            Select None
+                          </button>
+                          <span className="text-gray-500 ml-2">
+                            ({selectedUnmappedIds.size} selected)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3">
+                        <select
+                          value={batchAssignment.standardCode}
+                          onChange={(e) => setBatchAssignment(prev => ({
+                            ...prev,
+                            standardCode: e.target.value,
+                            specCode: '' // Reset spec when standard changes
+                          }))}
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                        >
+                          <option value="">Select Standard...</option>
+                          {Object.entries(STANDARD_NAMES).map(([code, name]) => (
+                            <option key={code} value={code}>
+                              Std {code}: {name}
+                            </option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={batchAssignment.specCode}
+                          onChange={(e) => setBatchAssignment(prev => ({
+                            ...prev,
+                            specCode: e.target.value
+                          }))}
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                          disabled={!batchAssignment.standardCode}
+                        >
+                          <option value="">Select Spec...</option>
+                          {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
+                            <option key={spec} value={spec}>
+                              Spec {spec}
+                            </option>
+                          ))}
+                        </select>
+
+                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={batchAssignment.toSupportingEvidence}
+                            onChange={(e) => setBatchAssignment(prev => ({
+                              ...prev,
+                              toSupportingEvidence: e.target.checked
+                            }))}
+                            className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                          />
+                          To Supporting Evidence
+                        </label>
+
+                        <button
+                          onClick={handleBatchMoveUnmapped}
+                          disabled={
+                            isBatchMoving ||
+                            selectedUnmappedIds.size === 0 ||
+                            !batchAssignment.standardCode ||
+                            !batchAssignment.specCode
+                          }
+                          className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                        >
+                          {isBatchMoving ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Check className="w-4 h-4" />
+                          )}
+                          Move Selected ({selectedUnmappedIds.size})
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Sections List */}
                   <div className="space-y-3 max-h-[500px] overflow-y-auto">
                     {extractedSections.map((section) => (
@@ -1084,6 +1271,15 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
+                            {/* Checkbox for batch selection (unmapped sections only) */}
+                            {section.status === 'unmapped' && (
+                              <input
+                                type="checkbox"
+                                checked={selectedUnmappedIds.has(section.id)}
+                                onChange={() => toggleUnmappedSelection(section.id)}
+                                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                              />
+                            )}
                             {section.status === 'mapped' ? (
                               <MapPin className="w-4 h-4 text-green-600" />
                             ) : (
