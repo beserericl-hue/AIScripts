@@ -1032,8 +1032,201 @@ export class DocumentParserService {
   }
 
   /**
+   * Split document by headers when no TOC is found
+   * Detects headers from HTML tags and text patterns
+   * Returns sections based on detected headers
+   */
+  splitByHeaders(htmlContent: string, rawText: string): TOCBasedSection[] {
+    const sections: TOCBasedSection[] = [];
+
+    // First, try to split by HTML header tags (h1, h2)
+    const headerRegex = /<h([1-2])[^>]*>(.*?)<\/h\1>/gi;
+    const matches = [...htmlContent.matchAll(headerRegex)];
+
+    console.log(`[DocumentParser] Found ${matches.length} HTML headers for header-based splitting`);
+
+    if (matches.length > 0) {
+      // Split by HTML headers
+      for (let i = 0; i < matches.length; i++) {
+        const match = matches[i];
+        const headerLevel = parseInt(match[1], 10);
+        const headerText = match[2].replace(/<[^>]*>/g, '').trim(); // Strip inner tags
+        const headerIndex = match.index!;
+
+        // Find end of this section (start of next header or end of document)
+        const nextMatch = matches[i + 1];
+        const endIndex = nextMatch ? nextMatch.index! : htmlContent.length;
+
+        // Extract content between headers
+        const sectionHtml = htmlContent.substring(headerIndex, endIndex);
+
+        // Try to detect standard code from header text
+        const { standardCode, specCode } = this.extractStandardFromTOCTitle(headerText);
+
+        // Determine section type
+        const sectionType = this.determineSectionType(headerText, standardCode);
+        const isMatrix = this.isTOCEntryMatrix(headerText);
+        const isSupportingEvidence = this.isTOCSupportingEvidence(headerText);
+
+        // Build hints for AI
+        let standardHint = '';
+        let specHint = '';
+        if (standardCode) {
+          standardHint = `Standard ${standardCode}`;
+          if (specCode) {
+            specHint = `Specification ${specCode}`;
+          }
+        }
+
+        sections.push({
+          id: uuidv4(),
+          tocEntry: {
+            title: headerText,
+            level: headerLevel,
+            standardCode,
+            specCode,
+            sectionType,
+            isMatrix,
+            isSupportingEvidence
+          },
+          content: sectionHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), // Plain text
+          htmlContent: sectionHtml,
+          startPosition: headerIndex,
+          endPosition: endIndex,
+          standardHint,
+          specHint
+        });
+      }
+
+      console.log(`[DocumentParser] Created ${sections.length} sections from HTML headers`);
+      return sections;
+    }
+
+    // Fallback: Try to detect headers from raw text patterns
+    console.log('[DocumentParser] No HTML headers found, trying text pattern detection');
+    const textSections = this.splitByTextPatterns(rawText);
+
+    if (textSections.length > 0) {
+      console.log(`[DocumentParser] Created ${textSections.length} sections from text patterns`);
+      return textSections;
+    }
+
+    // No structure found - return empty (caller should handle this)
+    console.log('[DocumentParser] No document structure detected');
+    return [];
+  }
+
+  /**
+   * Split document by text patterns when no HTML headers exist
+   * Detects patterns like "STANDARD X", "Standard X:", numbered sections, etc.
+   */
+  private splitByTextPatterns(rawText: string): TOCBasedSection[] {
+    const sections: TOCBasedSection[] = [];
+    const lines = rawText.split('\n');
+
+    // Patterns that indicate headers
+    const headerPatterns = [
+      /^STANDARD\s+\d+/i,                           // STANDARD 1, Standard 1
+      /^Standard\s+\d+[\s:.\-]/i,                   // Standard 1:, Standard 1 -
+      /^PART\s+[IVXLCDM]+[\s:.\-]/i,               // PART I:, Part II -
+      /^CHAPTER\s+\d+[\s:.\-]/i,                   // Chapter 1:
+      /^SECTION\s+[IVXLCDM\d]+[\s:.\-]/i,          // Section I:, Section 1:
+      /^[A-Z][A-Z\s]{10,}$/,                        // ALL CAPS HEADERS (min 10 chars)
+      /^\d+\.\s+[A-Z]/,                             // 1. Title (numbered sections)
+      /^\d+\.\d+\s+[A-Z]/,                          // 1.1 Title (sub-numbered sections)
+    ];
+
+    let currentSection: { title: string; startLine: number; content: string[] } | null = null;
+    let sectionIndex = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // Check if this line matches a header pattern
+      const isHeader = headerPatterns.some(pattern => pattern.test(line)) && line.length < 150;
+
+      if (isHeader) {
+        // Save previous section if exists
+        if (currentSection && currentSection.content.length > 0) {
+          const content = currentSection.content.join('\n').trim();
+          if (content.length > 50) { // Only save substantial sections
+            const { standardCode, specCode } = this.extractStandardFromTOCTitle(currentSection.title);
+            const sectionType = this.determineSectionType(currentSection.title, standardCode);
+
+            sections.push({
+              id: uuidv4(),
+              tocEntry: {
+                title: currentSection.title,
+                level: 1,
+                standardCode,
+                specCode,
+                sectionType,
+                isMatrix: this.isTOCEntryMatrix(currentSection.title),
+                isSupportingEvidence: this.isTOCSupportingEvidence(currentSection.title)
+              },
+              content: content,
+              htmlContent: this.convertTextToHtml(content),
+              startPosition: sectionIndex,
+              endPosition: i,
+              standardHint: standardCode ? `Standard ${standardCode}` : '',
+              specHint: specCode ? `Specification ${specCode}` : ''
+            });
+          }
+        }
+
+        // Start new section
+        currentSection = {
+          title: line,
+          startLine: i,
+          content: [line]
+        };
+        sectionIndex = i;
+      } else if (currentSection) {
+        // Add line to current section
+        currentSection.content.push(line);
+      }
+    }
+
+    // Save last section
+    if (currentSection && currentSection.content.length > 0) {
+      const content = currentSection.content.join('\n').trim();
+      if (content.length > 50) {
+        const { standardCode, specCode } = this.extractStandardFromTOCTitle(currentSection.title);
+        const sectionType = this.determineSectionType(currentSection.title, standardCode);
+
+        sections.push({
+          id: uuidv4(),
+          tocEntry: {
+            title: currentSection.title,
+            level: 1,
+            standardCode,
+            specCode,
+            sectionType,
+            isMatrix: this.isTOCEntryMatrix(currentSection.title),
+            isSupportingEvidence: this.isTOCSupportingEvidence(currentSection.title)
+          },
+          content: content,
+          htmlContent: this.convertTextToHtml(content),
+          startPosition: sectionIndex,
+          endPosition: lines.length,
+          standardHint: standardCode ? `Standard ${standardCode}` : '',
+          specHint: specCode ? `Specification ${specCode}` : ''
+        });
+      }
+    }
+
+    return sections;
+  }
+
+  /**
    * Enhanced parse method that uses TOC for intelligent sectioning
    * This should be called instead of the basic parse() for self-study documents
+   *
+   * Fallback order:
+   * 1. TOC-based parsing (if Table of Contents found)
+   * 2. Header-based parsing (split by h1, h2 or text patterns)
+   * 3. Error if no structure detected
    */
   async parseWithTOC(buffer: Buffer, filename: string): Promise<{
     document: ParsedDocument;
@@ -1046,18 +1239,43 @@ export class DocumentParserService {
     // Extract TOC
     const tocEntries = this.extractTableOfContents(document.rawText);
 
-    // Split document by TOC
-    const sections = this.splitDocumentByTOC(
-      document.rawText,
-      document.htmlContent,
-      tocEntries
-    );
+    // If TOC found, use TOC-based splitting
+    if (tocEntries.length > 0) {
+      console.log(`[DocumentParser] Using TOC-based parsing (${tocEntries.length} entries)`);
+      const sections = this.splitDocumentByTOC(
+        document.rawText,
+        document.htmlContent,
+        tocEntries
+      );
 
-    return {
-      document,
-      tocEntries,
-      sections
-    };
+      return {
+        document,
+        tocEntries,
+        sections
+      };
+    }
+
+    // No TOC found - fall back to header-based splitting
+    console.log('[DocumentParser] No TOC found, falling back to header-based splitting');
+    const headerSections = this.splitByHeaders(document.htmlContent, document.rawText);
+
+    if (headerSections.length > 1) {
+      console.log(`[DocumentParser] Header-based parsing found ${headerSections.length} sections`);
+      return {
+        document,
+        tocEntries: [], // No TOC
+        sections: headerSections
+      };
+    }
+
+    // No structure detected - throw error for documents that can't be processed
+    const isPDF = filename.toLowerCase().endsWith('.pdf');
+    const errorMessage = isPDF
+      ? 'PDF_NO_STRUCTURE: This PDF does not have recognizable section headers. Please use a document with clear section headings (e.g., "Standard 1: Program Identity", "STANDARD 1", or numbered sections like "1. Introduction") or convert to DOCX format with proper heading styles.'
+      : 'NO_STRUCTURE: This document does not have recognizable section headers. Please ensure your document has clear section headings using heading styles (Heading 1, Heading 2) or patterns like "Standard 1:", "SECTION I:", etc.';
+
+    console.error(`[DocumentParser] ${errorMessage}`);
+    throw new Error(errorMessage);
   }
 
   /**

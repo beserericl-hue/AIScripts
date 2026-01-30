@@ -684,10 +684,49 @@ export default function SelfStudyPage() {
               <div className="p-6 overflow-y-auto flex-1">
                 {/* Error display */}
                 {uploadError && (
-                  <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                    <span className="text-sm">{uploadError}</span>
-                  </div>
+                  uploadError.includes('NO_STRUCTURE') ? (
+                    <div className="p-4 mb-4 bg-amber-50 border border-amber-200 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-6 h-6 text-amber-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-medium text-amber-900 mb-2">
+                            Document Structure Not Detected
+                          </h4>
+                          <p className="text-sm text-amber-800 mb-3">
+                            {uploadError.includes('PDF_NO_STRUCTURE')
+                              ? 'This PDF does not have recognizable section headers that we can use to organize your self-study.'
+                              : 'This document does not have recognizable section headers.'}
+                          </p>
+                          <div className="bg-white/50 rounded-lg p-3 mb-3">
+                            <p className="text-sm font-medium text-amber-900 mb-2">To import successfully, your document should have:</p>
+                            <ul className="text-sm text-amber-800 space-y-1 ml-4 list-disc">
+                              <li>Clear section headings like <strong>"Standard 1: Program Identity"</strong></li>
+                              <li>Numbered sections like <strong>"1. Introduction"</strong> or <strong>"Section I"</strong></li>
+                              <li>ALL CAPS headers for major sections</li>
+                              {uploadError.includes('PDF_NO_STRUCTURE') && (
+                                <li>Or convert to <strong>DOCX format</strong> with proper Heading styles applied</li>
+                              )}
+                            </ul>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setUploadError(null);
+                              setSelectedFile(null);
+                              fileInputRef.current?.click();
+                            }}
+                            className="text-sm text-amber-700 hover:text-amber-900 font-medium underline"
+                          >
+                            Select a different file
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                      <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                      <span className="text-sm">{uploadError}</span>
+                    </div>
+                  )
                 )}
 
                 {/* Step: Upload */}
