@@ -1055,23 +1055,52 @@ export class DocumentParserService {
     sectionTitle: string,
     nextSectionTitle?: string
   ): { content: string; htmlContent: string; startPosition: number; endPosition: number } {
-    // Create regex to find section title (case insensitive, allowing for some variation)
-    const escapedTitle = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const titleRegex = new RegExp(escapedTitle.substring(0, Math.min(30, escapedTitle.length)), 'i');
+    // Truncate BEFORE escaping to avoid cutting in the middle of escape sequences
+    // Also sanitize: remove problematic characters that could break regex
+    const sanitizedTitle = sectionTitle
+      .substring(0, 40)  // Take first 40 chars of original
+      .replace(/[^\w\s\-:.,]/g, '.');  // Replace special chars with dots for flexible matching
 
-    const startMatch = text.match(titleRegex);
-    let startPosition = startMatch ? text.indexOf(startMatch[0]) : 0;
-
+    let startPosition = 0;
     let endPosition = text.length;
+
+    try {
+      // Create regex to find section title (case insensitive)
+      const escapedTitle = sanitizedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const titleRegex = new RegExp(escapedTitle, 'i');
+
+      const startMatch = text.match(titleRegex);
+      if (startMatch) {
+        startPosition = text.indexOf(startMatch[0]);
+      }
+    } catch (e) {
+      // If regex fails, fall back to simple string search
+      console.log('[DocumentParser] Regex failed for title, using string search:', sectionTitle.substring(0, 30));
+      const simpleSearch = text.toLowerCase().indexOf(sectionTitle.substring(0, 20).toLowerCase());
+      if (simpleSearch >= 0) {
+        startPosition = simpleSearch;
+      }
+    }
 
     // If there's a next section, find where it starts
     if (nextSectionTitle) {
-      const escapedNextTitle = nextSectionTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const nextTitleRegex = new RegExp(escapedNextTitle.substring(0, Math.min(30, escapedNextTitle.length)), 'i');
-      const nextMatch = text.substring(startPosition + 100).match(nextTitleRegex);  // +100 to skip current title
+      try {
+        const sanitizedNextTitle = nextSectionTitle
+          .substring(0, 40)
+          .replace(/[^\w\s\-:.,]/g, '.');
+        const escapedNextTitle = sanitizedNextTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const nextTitleRegex = new RegExp(escapedNextTitle, 'i');
+        const nextMatch = text.substring(startPosition + 100).match(nextTitleRegex);  // +100 to skip current title
 
-      if (nextMatch) {
-        endPosition = startPosition + 100 + text.substring(startPosition + 100).indexOf(nextMatch[0]);
+        if (nextMatch) {
+          endPosition = startPosition + 100 + text.substring(startPosition + 100).indexOf(nextMatch[0]);
+        }
+      } catch (e) {
+        // If regex fails, fall back to simple string search
+        const simpleSearch = text.toLowerCase().indexOf(nextSectionTitle.substring(0, 20).toLowerCase(), startPosition + 100);
+        if (simpleSearch >= 0) {
+          endPosition = simpleSearch;
+        }
       }
     }
 
