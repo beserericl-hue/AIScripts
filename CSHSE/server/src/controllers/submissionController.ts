@@ -148,10 +148,20 @@ export const getSubmissionProgress = async (req: AuthenticatedRequest, res: Resp
 export const saveNarrative = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
-    const { standardCode, specCode, content } = req.body;
+    const { standardCode, specCode, content, supportingEvidenceText } = req.body;
 
-    if (!standardCode || !content) {
-      return res.status(400).json({ error: 'standardCode and content are required' });
+    // Require standardCode, and at least one of content or supportingEvidenceText
+    // Note: content can be empty string (for clearing section)
+    if (!standardCode) {
+      return res.status(400).json({ error: 'standardCode is required' });
+    }
+
+    // Check if at least one field is being updated (content can be empty string, which is valid)
+    const hasContent = content !== undefined;
+    const hasSupportingEvidence = supportingEvidenceText !== undefined;
+
+    if (!hasContent && !hasSupportingEvidence) {
+      return res.status(400).json({ error: 'content or supportingEvidenceText is required' });
     }
 
     const submission = await Submission.findById(submissionId);
@@ -175,13 +185,13 @@ export const saveNarrative = async (req: AuthenticatedRequest, res: Response) =>
     const specKey = specCode || '';
     const existingNarrative = standardNarratives.get(specKey);
 
-    // Update or create narrative content
+    // Update only the provided fields, preserving others
     standardNarratives.set(specKey, {
-      content,
+      content: hasContent ? content : (existingNarrative?.content || ''),
       lastModified: new Date(),
       isComplete: existingNarrative?.isComplete || false,
       linkedDocuments: existingNarrative?.linkedDocuments || [],
-      supportingEvidenceText: existingNarrative?.supportingEvidenceText || ''
+      supportingEvidenceText: hasSupportingEvidence ? supportingEvidenceText : (existingNarrative?.supportingEvidenceText || '')
     });
 
     // Update standard status to in_progress if not already complete
@@ -203,12 +213,16 @@ export const saveNarrative = async (req: AuthenticatedRequest, res: Response) =>
     submission.markModified('standardsStatus');
     await submission.save();
 
+    // Get the saved narrative for the response
+    const savedNarrative = standardNarratives.get(specKey);
+
     return res.json({
       message: 'Narrative saved successfully',
       narrative: {
         standardCode,
         specCode: specKey,
-        content,
+        content: savedNarrative?.content || '',
+        supportingEvidenceText: savedNarrative?.supportingEvidenceText || '',
         lastModified: new Date()
       }
     });
