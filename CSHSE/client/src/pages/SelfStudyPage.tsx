@@ -159,7 +159,8 @@ export default function SelfStudyPage() {
   const [sectionEdit, setSectionEdit] = useState<{
     standardCode: string;
     specCode: string;
-  }>({ standardCode: '', specCode: '' });
+    toCurriculumMatrix: boolean;
+  }>({ standardCode: '', specCode: '', toCurriculumMatrix: false });
   const [isSavingSection, setIsSavingSection] = useState(false);
   const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null);
 
@@ -388,29 +389,43 @@ export default function SelfStudyPage() {
     setEditingSectionId(section.id);
     setSectionEdit({
       standardCode: section.mapping?.standardCode || '',
-      specCode: section.mapping?.specCode || ''
+      specCode: section.mapping?.specCode || '',
+      toCurriculumMatrix: false
     });
   };
 
   // Cancel editing
   const cancelEditingSection = () => {
     setEditingSectionId(null);
-    setSectionEdit({ standardCode: '', specCode: '' });
+    setSectionEdit({ standardCode: '', specCode: '', toCurriculumMatrix: false });
   };
 
   // Save individual section mapping change
   const handleSaveSectionMapping = async (sectionId: string) => {
-    if (!importId || !sectionEdit.standardCode || !sectionEdit.specCode) return;
+    // Allow save if either: (1) moving to curriculum matrix, or (2) standard and spec are selected
+    const canMoveToMatrix = sectionEdit.toCurriculumMatrix;
+    const canMoveToStandard = sectionEdit.standardCode && sectionEdit.specCode;
+
+    if (!importId || (!canMoveToMatrix && !canMoveToStandard)) return;
 
     setIsSavingSection(true);
     try {
-      // Use the map endpoint to reassign the section
-      await api.post(`/api/imports/${importId}/map`, {
-        extractedSectionId: sectionId,
-        standardCode: sectionEdit.standardCode,
-        specCode: sectionEdit.specCode,
-        fieldType: 'narrative'
-      });
+      if (sectionEdit.toCurriculumMatrix) {
+        // Move to curriculum matrix
+        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+          action: 'move_to_matrix',
+          toCurriculumMatrix: true,
+          matrixType: 'non_human_services_courses'
+        });
+      } else {
+        // Use the map endpoint to reassign the section
+        await api.post(`/api/imports/${importId}/map`, {
+          extractedSectionId: sectionId,
+          standardCode: sectionEdit.standardCode,
+          specCode: sectionEdit.specCode,
+          fieldType: 'narrative'
+        });
+      }
 
       // Refresh sections and status
       const [sectionsResponse, statusResponse] = await Promise.all([
@@ -421,7 +436,7 @@ export default function SelfStudyPage() {
       setExtractedSections(sectionsResponse.data.sections);
       setImportStatus(statusResponse.data);
       setEditingSectionId(null);
-      setSectionEdit({ standardCode: '', specCode: '' });
+      setSectionEdit({ standardCode: '', specCode: '', toCurriculumMatrix: false });
     } catch (err) {
       console.error('Failed to save section mapping:', err);
     } finally {
@@ -725,11 +740,12 @@ export default function SelfStudyPage() {
 
                           {/* Show edit form or current mapping */}
                           {editingSectionId === section.id ? (
-                            <div className="flex items-center gap-1 flex-1">
+                            <div className="flex items-center gap-1 flex-1 flex-wrap">
                               <select
                                 value={sectionEdit.standardCode}
-                                onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '' }))}
-                                className="flex-1 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500"
+                                onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '', toCurriculumMatrix: false }))}
+                                className="flex-1 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-50"
+                                disabled={sectionEdit.toCurriculumMatrix}
                               >
                                 <option value="">Std...</option>
                                 {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -739,14 +755,28 @@ export default function SelfStudyPage() {
                               <select
                                 value={sectionEdit.specCode}
                                 onChange={(e) => setSectionEdit(prev => ({ ...prev, specCode: e.target.value }))}
-                                className="w-14 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500"
-                                disabled={!sectionEdit.standardCode}
+                                className="w-14 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-50"
+                                disabled={!sectionEdit.standardCode || sectionEdit.toCurriculumMatrix}
                               >
                                 <option value="">Spec</option>
                                 {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
                                   <option key={spec} value={spec}>{spec}</option>
                                 ))}
                               </select>
+                              <label className="flex items-center gap-1 text-xs text-purple-700 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={sectionEdit.toCurriculumMatrix}
+                                  onChange={(e) => setSectionEdit(prev => ({
+                                    ...prev,
+                                    toCurriculumMatrix: e.target.checked,
+                                    standardCode: e.target.checked ? '' : prev.standardCode,
+                                    specCode: e.target.checked ? '' : prev.specCode
+                                  }))}
+                                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                />
+                                Matrix
+                              </label>
                             </div>
                           ) : (
                             <span className="text-xs font-medium text-gray-900 truncate">
@@ -792,9 +822,9 @@ export default function SelfStudyPage() {
                           <>
                             <button
                               onClick={() => handleSaveSectionMapping(section.id)}
-                              disabled={isSavingSection || !sectionEdit.standardCode || !sectionEdit.specCode}
-                              className="p-1 text-green-600 hover:text-green-700 disabled:opacity-50"
-                              title="Save"
+                              disabled={isSavingSection || (!sectionEdit.toCurriculumMatrix && (!sectionEdit.standardCode || !sectionEdit.specCode))}
+                              className={`p-1 disabled:opacity-50 ${sectionEdit.toCurriculumMatrix ? 'text-purple-600 hover:text-purple-700' : 'text-green-600 hover:text-green-700'}`}
+                              title={sectionEdit.toCurriculumMatrix ? 'Move to Matrix' : 'Save'}
                             >
                               {isSavingSection ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                             </button>
@@ -1067,14 +1097,31 @@ export default function SelfStudyPage() {
           </div>
         </div>
 
-        {/* Import Modal */}
+        {/* Import Modal/Side Panel */}
         {showImportModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 overflow-y-auto py-4">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl mx-4 max-h-[90vh] flex flex-col">
-              <div className="p-6 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+          <div className={`fixed inset-0 z-50 ${
+            importStep === 'review'
+              ? 'flex justify-end'
+              : 'flex items-center justify-center bg-black/50 overflow-y-auto py-4'
+          }`}>
+            {/* Backdrop for review mode - click to close */}
+            {importStep === 'review' && (
+              <div
+                className="absolute inset-0 bg-black/30"
+                onClick={resetImportModal}
+              />
+            )}
+            <div className={`bg-white shadow-xl flex flex-col relative ${
+              importStep === 'review'
+                ? 'w-[500px] h-full border-l border-gray-200'
+                : 'rounded-lg w-full max-w-3xl mx-4 max-h-[90vh]'
+            }`}>
+              <div className={`p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0 ${
+                importStep === 'review' ? 'bg-teal-50' : ''
+              }`}>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900">
-                    Import Self-Study Document
+                    {importStep === 'review' ? 'Import Review' : 'Import Self-Study Document'}
                   </h3>
                   {importStep !== 'upload' && importStatus && (
                     <p className="text-sm text-gray-500 mt-1">
@@ -1085,12 +1132,13 @@ export default function SelfStudyPage() {
                 <button
                   onClick={resetImportModal}
                   className="text-gray-400 hover:text-gray-600"
+                  title="Close"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="p-6 overflow-y-auto flex-1">
+              <div className={`overflow-y-auto flex-1 ${importStep === 'review' ? 'p-4' : 'p-6'}`}>
                 {/* Error display */}
                 {uploadError && (
                   uploadError.includes('NO_STRUCTURE') ? (
@@ -1294,35 +1342,22 @@ export default function SelfStudyPage() {
 
                 {/* Step: Review Mappings */}
                 {importStep === 'review' && importStatus && (
-                  <div className="space-y-4">
-                    {/* Summary */}
-                    <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
-                      <div className="flex items-center gap-3">
-                        <CheckCircle className="w-6 h-6 text-teal-600" />
-                        <div>
-                          <h4 className="font-medium text-teal-900">Document Processed Successfully</h4>
-                          <p className="text-sm text-teal-700">
-                            {importStatus.extractedContent?.pageCount} pages • {importStatus.extractedContent?.sectionCount} sections extracted
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Mapping Stats */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="space-y-3">
+                    {/* Summary Stats - Compact */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                         <div className="flex items-center gap-2">
-                          <MapPin className="w-5 h-5 text-green-600" />
-                          <span className="text-2xl font-bold text-green-700">{importStatus.mappedCount}</span>
+                          <MapPin className="w-4 h-4 text-green-600" />
+                          <span className="text-xl font-bold text-green-700">{importStatus.mappedCount}</span>
                         </div>
-                        <p className="text-sm text-green-600 mt-1">Sections auto-mapped to standards</p>
+                        <p className="text-xs text-green-600 mt-1">Auto-mapped</p>
                       </div>
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
                         <div className="flex items-center gap-2">
-                          <AlertCircle className="w-5 h-5 text-amber-600" />
-                          <span className="text-2xl font-bold text-amber-700">{importStatus.unmappedCount}</span>
+                          <AlertCircle className="w-4 h-4 text-amber-600" />
+                          <span className="text-xl font-bold text-amber-700">{importStatus.unmappedCount}</span>
                         </div>
-                        <p className="text-sm text-amber-600 mt-1">Sections need review</p>
+                        <p className="text-xs text-amber-600 mt-1">Need review</p>
                       </div>
                     </div>
 
@@ -1492,11 +1527,12 @@ export default function SelfStudyPage() {
 
                                     {/* Show edit form or current mapping */}
                                     {editingSectionId === section.id ? (
-                                      <div className="flex items-center gap-2 flex-1">
+                                      <div className="flex items-center gap-2 flex-1 flex-wrap">
                                         <select
                                           value={sectionEdit.standardCode}
-                                          onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '' }))}
-                                          className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500"
+                                          onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '', toCurriculumMatrix: false }))}
+                                          className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                                          disabled={sectionEdit.toCurriculumMatrix}
                                         >
                                           <option value="">Select Standard...</option>
                                           {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -1506,14 +1542,28 @@ export default function SelfStudyPage() {
                                         <select
                                           value={sectionEdit.specCode}
                                           onChange={(e) => setSectionEdit(prev => ({ ...prev, specCode: e.target.value }))}
-                                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500"
-                                          disabled={!sectionEdit.standardCode}
+                                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
+                                          disabled={!sectionEdit.standardCode || sectionEdit.toCurriculumMatrix}
                                         >
                                           <option value="">Spec</option>
                                           {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
                                             <option key={spec} value={spec}>{spec}</option>
                                           ))}
                                         </select>
+                                        <label className="flex items-center gap-1.5 text-sm text-purple-700 cursor-pointer whitespace-nowrap">
+                                          <input
+                                            type="checkbox"
+                                            checked={sectionEdit.toCurriculumMatrix}
+                                            onChange={(e) => setSectionEdit(prev => ({
+                                              ...prev,
+                                              toCurriculumMatrix: e.target.checked,
+                                              standardCode: e.target.checked ? '' : prev.standardCode,
+                                              specCode: e.target.checked ? '' : prev.specCode
+                                            }))}
+                                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                          />
+                                          To Matrix
+                                        </label>
                                       </div>
                                     ) : (
                                       <span className="text-sm font-medium text-gray-900">
@@ -1565,9 +1615,9 @@ export default function SelfStudyPage() {
                                   <>
                                     <button
                                       onClick={() => handleSaveSectionMapping(section.id)}
-                                      disabled={isSavingSection || !sectionEdit.standardCode || !sectionEdit.specCode}
-                                      className="p-1 text-green-600 hover:text-green-700 disabled:opacity-50"
-                                      title="Save"
+                                      disabled={isSavingSection || (!sectionEdit.toCurriculumMatrix && (!sectionEdit.standardCode || !sectionEdit.specCode))}
+                                      className={`p-1 disabled:opacity-50 ${sectionEdit.toCurriculumMatrix ? 'text-purple-600 hover:text-purple-700' : 'text-green-600 hover:text-green-700'}`}
+                                      title={sectionEdit.toCurriculumMatrix ? 'Move to Matrix' : 'Save'}
                                     >
                                       {isSavingSection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                     </button>
@@ -1616,30 +1666,41 @@ export default function SelfStudyPage() {
               </div>
 
               {/* Footer */}
-              <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
-                <button
-                  onClick={resetImportModal}
-                  className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
-                >
-                  Cancel
-                </button>
-                {importStep === 'review' && (
+              <div className={`flex gap-3 p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0 ${
+                importStep === 'review' ? 'flex-col' : 'justify-end'
+              }`}>
+                {importStep === 'review' ? (
+                  <>
+                    <button
+                      onClick={handleApplyMappings}
+                      disabled={isApplying}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 font-medium"
+                    >
+                      {isApplying ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Applying...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Apply {importStatus?.mappedCount || 0} Mappings
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={resetImportModal}
+                      className="w-full px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg"
+                    >
+                      Close Panel
+                    </button>
+                  </>
+                ) : (
                   <button
-                    onClick={handleApplyMappings}
-                    disabled={isApplying}
-                    className="flex items-center gap-2 px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
+                    onClick={resetImportModal}
+                    className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
                   >
-                    {isApplying ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Applying...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-4 h-4" />
-                        Apply to Self-Study
-                      </>
-                    )}
+                    Cancel
                   </button>
                 )}
               </div>
