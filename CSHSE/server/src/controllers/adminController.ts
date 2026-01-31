@@ -1,11 +1,16 @@
 import { Request, Response } from 'express';
 import { WebhookSettings } from '../models/WebhookSettings';
+import { Submission } from '../models/Submission';
+import { SelfStudyImport } from '../models/SelfStudyImport';
+import { CurriculumMatrix } from '../models/CurriculumMatrix';
+import { ValidationResult } from '../models/ValidationResult';
 import axios from 'axios';
 
 interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     role: string;
+    isSuperuser?: boolean;
   };
 }
 
@@ -293,5 +298,79 @@ export const getSystemStats = async (req: AuthenticatedRequest, res: Response) =
   } catch (error) {
     console.error('Get system stats error:', error);
     return res.status(500).json({ error: 'Failed to get system stats' });
+  }
+};
+
+/**
+ * Delete all self-study data for an institution
+ * SUPERUSER ONLY - Destructive operation
+ */
+export const deleteInstitutionData = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Only superusers can perform this action
+    if (!req.user?.isSuperuser) {
+      return res.status(403).json({ error: 'Superuser access required' });
+    }
+
+    const { institutionId } = req.params;
+
+    if (!institutionId) {
+      return res.status(400).json({ error: 'Institution ID is required' });
+    }
+
+    console.log(`[AdminController] Deleting all self-study data for institution: ${institutionId}`);
+
+    // Find all submissions for this institution
+    const submissions = await Submission.find({ institutionId });
+    const submissionIds = submissions.map(s => s._id);
+
+    console.log(`[AdminController] Found ${submissions.length} submissions to delete`);
+
+    // Delete related data
+    const deleteResults = {
+      submissions: 0,
+      imports: 0,
+      matrices: 0,
+      validations: 0
+    };
+
+    // 1. Delete all imports for these submissions
+    if (submissionIds.length > 0) {
+      const importsResult = await SelfStudyImport.deleteMany({
+        submissionId: { $in: submissionIds }
+      });
+      deleteResults.imports = importsResult.deletedCount;
+      console.log(`[AdminController] Deleted ${deleteResults.imports} imports`);
+
+      // 2. Delete all curriculum matrices for these submissions
+      const matricesResult = await CurriculumMatrix.deleteMany({
+        submissionId: { $in: submissionIds }
+      });
+      deleteResults.matrices = matricesResult.deletedCount;
+      console.log(`[AdminController] Deleted ${deleteResults.matrices} matrices`);
+
+      // 3. Delete all validation results for these submissions
+      const validationsResult = await ValidationResult.deleteMany({
+        submissionId: { $in: submissionIds }
+      });
+      deleteResults.validations = validationsResult.deletedCount;
+      console.log(`[AdminController] Deleted ${deleteResults.validations} validations`);
+    }
+
+    // 4. Delete all submissions for this institution
+    const submissionsResult = await Submission.deleteMany({ institutionId });
+    deleteResults.submissions = submissionsResult.deletedCount;
+    console.log(`[AdminController] Deleted ${deleteResults.submissions} submissions`);
+
+    console.log(`[AdminController] Delete operation complete:`, deleteResults);
+
+    return res.json({
+      success: true,
+      message: 'Self-study data deleted successfully',
+      deleted: deleteResults
+    });
+  } catch (error) {
+    console.error('Delete institution data error:', error);
+    return res.status(500).json({ error: 'Failed to delete institution data' });
   }
 };

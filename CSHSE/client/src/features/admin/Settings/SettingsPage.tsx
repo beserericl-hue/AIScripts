@@ -6,7 +6,8 @@ import {
   Users,
   Building2,
   ChevronRight,
-  FileText
+  FileText,
+  Database
 } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
 import { WebhookSettings } from '../WebhookSettings';
@@ -14,8 +15,9 @@ import { APIKeySettings } from './APIKeySettings';
 import { UserManagement } from './UserManagement';
 import { InstitutionManagement } from './InstitutionManagement';
 import { SpecManagement } from './SpecManagement';
+import { DataManagement } from './DataManagement';
 
-type SettingsSection = 'webhook' | 'api-keys' | 'users' | 'institutions' | 'specs';
+type SettingsSection = 'webhook' | 'api-keys' | 'data-management' | 'users' | 'institutions' | 'specs';
 
 interface NavItem {
   id: SettingsSection;
@@ -39,6 +41,13 @@ const allNavItems: NavItem[] = [
     label: 'API Keys',
     icon: <Key className="w-5 h-5" />,
     description: 'Manage API keys for webhook callbacks',
+    access: 'superuser'
+  },
+  {
+    id: 'data-management',
+    label: 'Data Management',
+    icon: <Database className="w-5 h-5" />,
+    description: 'Delete self-study data for cleanup',
     access: 'superuser'
   },
   {
@@ -105,6 +114,8 @@ export function SettingsPage() {
         return <WebhookSettings />;
       case 'api-keys':
         return <APIKeySettings />;
+      case 'data-management':
+        return <DataManagement />;
       case 'users':
         return <UserManagement />;
       case 'institutions':

@@ -151,6 +151,23 @@ export const requireAdmin = (
 };
 
 /**
+ * Middleware that requires superuser access only
+ */
+export const requireSuperuser = (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  if (!req.user.isSuperuser) {
+    return res.status(403).json({ error: 'Superuser access required' });
+  }
+  next();
+};
+
+/**
  * Middleware that requires one of the specified roles
  */
 export const requireRole = (...roles: string[]) => {
@@ -179,5 +196,6 @@ export default {
   optionalAuth,
   hasAdminAccess,
   requireAdmin,
+  requireSuperuser,
   requireRole
 };

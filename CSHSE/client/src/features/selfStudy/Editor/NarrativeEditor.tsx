@@ -43,6 +43,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  Trash2,
 } from 'lucide-react';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useValidationStatus } from '../../../hooks/useValidationStatus';
@@ -134,6 +135,9 @@ export function NarrativeEditor({
   // State for link dialog
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
+
+  // State for clear section confirmation
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Initialize TipTap editor with Word paste support
   const editor = useEditor({
@@ -288,6 +292,16 @@ export function NarrativeEditor({
     if (!editor) return;
     editor.chain().focus().unsetLink().run();
   }, [editor]);
+
+  // Handle clear section content
+  const handleClearSection = useCallback(async () => {
+    if (!editor) return;
+    // Clear all content
+    editor.commands.clearContent();
+    // Save the empty content
+    await saveNow('');
+    setShowClearConfirm(false);
+  }, [editor, saveNow]);
 
   // Handle save only (no validation workflow)
   const handleSaveOnly = useCallback(async () => {
@@ -602,9 +616,18 @@ export function NarrativeEditor({
             error={saveError}
           />
 
-          {/* Cancel, Save & Validate Buttons */}
+          {/* Clear, Cancel, Save & Validate Buttons */}
           {!readOnly && (
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                disabled={isSaving || isValidating}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-red-300 bg-red-50 text-red-600 text-sm rounded-md hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title="Clear all content from this section"
+              >
+                <Trash2 className="w-4 h-4" />
+                Clear
+              </button>
               {onCancel && (
                 <button
                   onClick={onCancel}
@@ -673,6 +696,32 @@ export function NarrativeEditor({
                 className="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700"
               >
                 {linkUrl ? 'Update Link' : 'Remove Link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Clear Section Confirmation Modal */}
+      {showClearConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-96">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Clear Section Content</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Are you sure you want to clear all content from this section? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-md"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearSection}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
+              >
+                Clear Section
               </button>
             </div>
           </div>
