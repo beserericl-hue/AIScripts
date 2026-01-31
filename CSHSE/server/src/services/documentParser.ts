@@ -1219,9 +1219,8 @@ export class DocumentParserService {
   }
 
   /**
-   * Extract sections by searching sequentially through the document
-   * Strategy: Find section 1, then from there find section 2, save section 1's content, etc.
-   * This naturally skips the TOC because we keep moving forward.
+   * Extract sections using page numbers from TOC to estimate positions
+   * Strategy: Use TOC page numbers to jump to approximate locations, skipping the TOC entirely
    */
   private extractSectionsViaText(text: string, htmlContent: string, tocEntries: TOCEntry[]): TOCBasedSection[] {
     const sections: TOCBasedSection[] = [];
@@ -1237,24 +1236,49 @@ export class DocumentParserService {
       return sections;
     }
 
-    // Find positions for all section titles sequentially
-    // Start searching from position 0, but we'll naturally skip TOC entries
-    // because we keep moving forward after each find
+    // Get the highest page number from TOC to estimate total pages
+    const maxPage = Math.max(...contentEntries.map(e => e.pageNumber || 1));
+    const textLength = text.length;
+
+    console.log(`[DocumentParser] Document stats: ${textLength} chars, max TOC page: ${maxPage}`);
+
+    // Find positions for all section titles using page-based estimation
     const sectionPositions: Array<{ entry: TOCEntry; position: number }> = [];
-    let currentSearchPos = 0;
 
     for (const entry of contentEntries) {
-      const position = this.findSectionTitlePosition(text, entry.title, currentSearchPos);
+      // Use page number to estimate starting position
+      // Add buffer to ensure we're past the TOC (TOC usually ends by page 5-10)
+      const pageNum = entry.pageNumber || 1;
+
+      // Estimate position based on page number
+      // chars_per_page ≈ total_chars / max_page
+      // estimated_pos = page_num * chars_per_page
+      const estimatedPos = Math.floor((pageNum / (maxPage + 5)) * textLength);
+
+      // Add a safety buffer - search starting 10% before estimated position
+      const searchStart = Math.max(0, estimatedPos - Math.floor(textLength * 0.05));
+
+      console.log(`[DocumentParser] "${entry.title.substring(0, 25)}..." page ${pageNum} → estimated pos ${estimatedPos}, searching from ${searchStart}`);
+
+      const position = this.findSectionTitlePosition(text, entry.title, searchStart);
 
       if (position !== -1) {
         sectionPositions.push({ entry, position });
-        // Move search position forward - next section must be AFTER this one
-        currentSearchPos = position + 50; // Skip past title
-        console.log(`[DocumentParser] Found "${entry.title.substring(0, 30)}..." at position ${position}`);
+        console.log(`[DocumentParser] Found at position ${position}`);
       } else {
-        console.log(`[DocumentParser] Could not find: ${entry.title.substring(0, 30)}`);
+        // Fallback: try searching from a much earlier position
+        const fallbackPos = this.findSectionTitlePosition(text, entry.title, Math.floor(textLength * 0.1));
+        if (fallbackPos !== -1) {
+          sectionPositions.push({ entry, position: fallbackPos });
+          console.log(`[DocumentParser] Found via fallback at position ${fallbackPos}`);
+        } else {
+          console.log(`[DocumentParser] Could not find: ${entry.title.substring(0, 30)}`);
+        }
       }
     }
+
+    // Sort by position to ensure correct order
+    sectionPositions.sort((a, b) => a.position - b.position);
 
     console.log(`[DocumentParser] Found ${sectionPositions.length} section positions out of ${contentEntries.length} TOC entries`);
 
