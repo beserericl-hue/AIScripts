@@ -1332,39 +1332,136 @@ export class DocumentParserService {
   /**
    * Find position of a section title in text, starting from a given position
    * Returns -1 if not found
+   *
+   * Uses multiple matching strategies since TOC titles often differ from actual headers:
+   * - "Standard 1 – Program Identity" vs "Standard 1: Program Identity"
+   * - Different dash types, spacing, punctuation
    */
   private findSectionTitlePosition(text: string, title: string, startFrom: number): number {
-    // Sanitize title for matching - take first 40 chars, replace special chars
-    const sanitizedTitle = title
-      .substring(0, 40)
-      .replace(/[–—]/g, '-')  // Normalize dashes first
-      .replace(/[^\w\s\-:.,]/g, '.');
-
     const searchText = text.substring(startFrom);
+    const searchTextLower = searchText.toLowerCase();
 
-    try {
-      // Create regex to find section title (case insensitive)
-      const escapedTitle = sanitizedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const titleRegex = new RegExp(escapedTitle, 'i');
-
-      const match = searchText.match(titleRegex);
+    // Strategy 1: Try to match on "Standard X" pattern specifically
+    const standardMatch = title.match(/standard\s*(\d+)/i);
+    if (standardMatch) {
+      const standardNum = standardMatch[1];
+      // Build a flexible regex: "Standard" + optional whitespace/separator + number
+      const standardRegex = new RegExp(`standard\\s*${standardNum}\\b`, 'i');
+      const match = searchText.match(standardRegex);
       if (match && match.index !== undefined) {
-        return startFrom + match.index;
+        // Found "Standard X" - verify it's not inside TOC by checking if followed by page number dots
+        const contextAfter = searchText.substring(match.index, match.index + 150);
+        const hasPageNumberDots = /^[^.\n]{0,50}\.{3,}\s*\d{1,3}/.test(contextAfter);
+        if (!hasPageNumberDots) {
+          console.log(`[DocumentParser] Matched on "Standard ${standardNum}" pattern`);
+          return startFrom + match.index;
+        }
       }
-    } catch (e) {
-      // Regex failed, try simple search
     }
 
-    // Fallback: simple case-insensitive search
-    const simpleSearch = searchText.toLowerCase().indexOf(
-      title.substring(0, 25).toLowerCase()
-    );
+    // Strategy 2: Normalize and match key words
+    // Extract key words from title (skip common words like "the", "and", "of")
+    const keyWords = this.extractKeyWords(title);
+    if (keyWords.length >= 2) {
+      // Try to find a sequence where multiple key words appear close together
+      const position = this.findKeyWordSequence(searchText, keyWords);
+      if (position !== -1) {
+        console.log(`[DocumentParser] Matched on key words: ${keyWords.slice(0, 3).join(', ')}`);
+        return startFrom + position;
+      }
+    }
 
-    if (simpleSearch >= 0) {
-      return startFrom + simpleSearch;
+    // Strategy 3: Normalize title completely and try exact match
+    const normalizedTitle = this.normalizeTitleForSearch(title);
+    const normalizedSearch = this.normalizeTitleForSearch(searchText.substring(0, Math.min(searchText.length, 500000)));
+
+    const normalizedPos = normalizedSearch.indexOf(normalizedTitle.substring(0, 30));
+    if (normalizedPos !== -1) {
+      // Map back to approximate position in original text
+      // Since we normalized both, the character count should be close
+      console.log(`[DocumentParser] Matched on normalized title`);
+      return startFrom + normalizedPos;
+    }
+
+    // Strategy 4: Simple substring match on first significant part of title
+    const firstPart = title.substring(0, 20).toLowerCase()
+      .replace(/[–—:;\-]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (firstPart.length >= 8) {
+      const simplePos = searchTextLower.indexOf(firstPart);
+      if (simplePos !== -1) {
+        console.log(`[DocumentParser] Matched on simple substring: "${firstPart}"`);
+        return startFrom + simplePos;
+      }
     }
 
     return -1;
+  }
+
+  /**
+   * Extract key words from a title (nouns, important words)
+   */
+  private extractKeyWords(title: string): string[] {
+    const stopWords = new Set(['the', 'and', 'of', 'in', 'to', 'for', 'a', 'an', 'with', 'on', 'at', 'by', 'is', 'are']);
+
+    return title
+      .toLowerCase()
+      .replace(/[–—:;\-.,()]/g, ' ')
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !stopWords.has(word))
+      .slice(0, 6); // Take first 6 significant words
+  }
+
+  /**
+   * Find a sequence of key words appearing close together in text
+   */
+  private findKeyWordSequence(text: string, keyWords: string[]): number {
+    if (keyWords.length < 2) return -1;
+
+    const textLower = text.toLowerCase();
+    const firstWord = keyWords[0];
+
+    // Find all occurrences of the first key word
+    let searchPos = 0;
+    while (searchPos < textLower.length) {
+      const pos = textLower.indexOf(firstWord, searchPos);
+      if (pos === -1) break;
+
+      // Check if other key words appear within reasonable distance (300 chars)
+      const windowStart = pos;
+      const windowEnd = Math.min(pos + 300, textLower.length);
+      const window = textLower.substring(windowStart, windowEnd);
+
+      // Count how many key words appear in this window
+      let matchCount = 0;
+      for (const word of keyWords) {
+        if (window.includes(word)) {
+          matchCount++;
+        }
+      }
+
+      // If at least 60% of key words found in window, consider it a match
+      if (matchCount >= Math.ceil(keyWords.length * 0.6)) {
+        return pos;
+      }
+
+      searchPos = pos + 1;
+    }
+
+    return -1;
+  }
+
+  /**
+   * Normalize a title for flexible search matching
+   */
+  private normalizeTitleForSearch(text: string): string {
+    return text
+      .toLowerCase()
+      .replace(/[–—:;\-.,()'"]/g, ' ')  // Replace separators with space
+      .replace(/\s+/g, ' ')              // Collapse whitespace
+      .trim();
   }
 
   /**
