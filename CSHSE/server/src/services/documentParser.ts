@@ -1334,14 +1334,43 @@ export class DocumentParserService {
    * Returns -1 if not found
    *
    * Uses multiple matching strategies since TOC titles often differ from actual headers:
-   * - "Standard 1 – Program Identity" vs "Standard 1: Program Identity"
+   * - TOC: "Standard 1 – Institutional Requirements..." but document header is just "Institutional Requirements..."
    * - Different dash types, spacing, punctuation
    */
   private findSectionTitlePosition(text: string, title: string, startFrom: number): number {
     const searchText = text.substring(startFrom);
     const searchTextLower = searchText.toLowerCase();
 
-    // Strategy 1: Try to match on "Standard X" pattern specifically
+    // IMPORTANT: Strip "Standard X –" prefix from title since document headers often don't include it
+    // TOC says "Standard 1 – Institutional Requirements" but header is just "Institutional Requirements"
+    const titleWithoutStandardPrefix = this.stripStandardPrefix(title);
+    console.log(`[DocumentParser] Searching for: "${title.substring(0, 40)}" → stripped: "${titleWithoutStandardPrefix.substring(0, 40)}"`);
+
+    // Strategy 1: Match on the title WITHOUT the Standard prefix (most common case)
+    if (titleWithoutStandardPrefix.length >= 10) {
+      const strippedKeyWords = this.extractKeyWords(titleWithoutStandardPrefix);
+      if (strippedKeyWords.length >= 2) {
+        const position = this.findKeyWordSequence(searchText, strippedKeyWords);
+        if (position !== -1) {
+          console.log(`[DocumentParser] Matched on stripped title key words: ${strippedKeyWords.slice(0, 3).join(', ')}`);
+          return startFrom + position;
+        }
+      }
+
+      // Try direct substring match on stripped title
+      const strippedNormalized = this.normalizeTitleForSearch(titleWithoutStandardPrefix);
+      const searchFirst30 = strippedNormalized.substring(0, 30);
+      if (searchFirst30.length >= 10) {
+        const normalizedSearch = this.normalizeTitleForSearch(searchText.substring(0, Math.min(searchText.length, 500000)));
+        const pos = normalizedSearch.indexOf(searchFirst30);
+        if (pos !== -1) {
+          console.log(`[DocumentParser] Matched on stripped normalized title`);
+          return startFrom + pos;
+        }
+      }
+    }
+
+    // Strategy 2: Try to match on "Standard X" pattern (for documents that DO include it)
     const standardMatch = title.match(/standard\s*(\d+)/i);
     if (standardMatch) {
       const standardNum = standardMatch[1];
@@ -1359,32 +1388,18 @@ export class DocumentParserService {
       }
     }
 
-    // Strategy 2: Normalize and match key words
-    // Extract key words from title (skip common words like "the", "and", "of")
+    // Strategy 3: Full key words match (original title)
     const keyWords = this.extractKeyWords(title);
     if (keyWords.length >= 2) {
-      // Try to find a sequence where multiple key words appear close together
       const position = this.findKeyWordSequence(searchText, keyWords);
       if (position !== -1) {
-        console.log(`[DocumentParser] Matched on key words: ${keyWords.slice(0, 3).join(', ')}`);
+        console.log(`[DocumentParser] Matched on full title key words: ${keyWords.slice(0, 3).join(', ')}`);
         return startFrom + position;
       }
     }
 
-    // Strategy 3: Normalize title completely and try exact match
-    const normalizedTitle = this.normalizeTitleForSearch(title);
-    const normalizedSearch = this.normalizeTitleForSearch(searchText.substring(0, Math.min(searchText.length, 500000)));
-
-    const normalizedPos = normalizedSearch.indexOf(normalizedTitle.substring(0, 30));
-    if (normalizedPos !== -1) {
-      // Map back to approximate position in original text
-      // Since we normalized both, the character count should be close
-      console.log(`[DocumentParser] Matched on normalized title`);
-      return startFrom + normalizedPos;
-    }
-
-    // Strategy 4: Simple substring match on first significant part of title
-    const firstPart = title.substring(0, 20).toLowerCase()
+    // Strategy 4: Simple substring match on first significant part
+    const firstPart = titleWithoutStandardPrefix.substring(0, 25).toLowerCase()
       .replace(/[–—:;\-]/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
@@ -1398,6 +1413,20 @@ export class DocumentParserService {
     }
 
     return -1;
+  }
+
+  /**
+   * Strip "Standard X –" or "Standard X:" prefix from a title
+   * TOC often has "Standard 1 – Title" but document header is just "Title"
+   */
+  private stripStandardPrefix(title: string): string {
+    // Match patterns like:
+    // "Standard 1 – Title"
+    // "Standard 1: Title"
+    // "Standard 1 - Title"
+    // "Standard 10 — Title"
+    const prefixPattern = /^standard\s*\d+\s*[–—:\-]\s*/i;
+    return title.replace(prefixPattern, '').trim();
   }
 
   /**
