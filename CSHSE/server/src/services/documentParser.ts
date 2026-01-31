@@ -1219,8 +1219,9 @@ export class DocumentParserService {
   }
 
   /**
-   * Extract sections using page numbers from TOC to estimate positions
-   * Strategy: Use TOC page numbers to jump to approximate locations, skipping the TOC entirely
+   * Extract sections by finding TOC entry titles in the document body
+   * Strategy: Find where TOC ends, then search globally for each section title
+   * Does NOT use page-based estimation (which is unreliable due to varying page lengths)
    */
   private extractSectionsViaText(text: string, htmlContent: string, tocEntries: TOCEntry[]): TOCBasedSection[] {
     const sections: TOCBasedSection[] = [];
@@ -1236,48 +1237,52 @@ export class DocumentParserService {
       return sections;
     }
 
-    // Get the highest page number from TOC to estimate total pages
-    const maxPage = Math.max(...contentEntries.map(e => e.pageNumber || 1));
     const textLength = text.length;
+    console.log(`[DocumentParser] Document stats: ${textLength} chars, ${contentEntries.length} TOC entries to find`);
 
-    console.log(`[DocumentParser] Document stats: ${textLength} chars, max TOC page: ${maxPage}`);
+    // Step 1: Find where the TOC ends in the document
+    // TOC is usually in the first 5-15% of the document
+    const tocEndPosition = this.findTocEndPosition(text);
+    console.log(`[DocumentParser] TOC ends at approximately position ${tocEndPosition} (${Math.round(tocEndPosition / textLength * 100)}% of document)`);
 
-    // Find positions for all section titles using page-based estimation
+    // Step 2: Search for each section title globally from TOC end
+    // Sort entries by page number to search in expected order
+    const sortedEntries = [...contentEntries].sort((a, b) => (a.pageNumber || 0) - (b.pageNumber || 0));
+
     const sectionPositions: Array<{ entry: TOCEntry; position: number }> = [];
+    let lastFoundPosition = tocEndPosition; // Track last found position to search sequentially
 
-    for (const entry of contentEntries) {
-      // Use page number to estimate starting position
-      // Add buffer to ensure we're past the TOC (TOC usually ends by page 5-10)
-      const pageNum = entry.pageNumber || 1;
+    for (const entry of sortedEntries) {
+      console.log(`[DocumentParser] Searching for: "${entry.title.substring(0, 40)}..." (page ${entry.pageNumber || '?'})`);
 
-      // Estimate position based on page number
-      // chars_per_page ≈ total_chars / max_page
-      // estimated_pos = page_num * chars_per_page
-      const estimatedPos = Math.floor((pageNum / (maxPage + 5)) * textLength);
-
-      // Add a safety buffer - search starting 10% before estimated position
-      const searchStart = Math.max(0, estimatedPos - Math.floor(textLength * 0.05));
-
-      console.log(`[DocumentParser] "${entry.title.substring(0, 25)}..." page ${pageNum} → estimated pos ${estimatedPos}, searching from ${searchStart}`);
-
-      const position = this.findSectionTitlePosition(text, entry.title, searchStart);
+      // Search from last found position (sections should appear in order)
+      let position = this.findSectionTitlePosition(text, entry.title, lastFoundPosition);
 
       if (position !== -1) {
         sectionPositions.push({ entry, position });
-        console.log(`[DocumentParser] Found at position ${position}`);
+        lastFoundPosition = position + 1; // Next section should be after this one
+        console.log(`[DocumentParser] ✓ Found at position ${position}`);
       } else {
-        // Fallback: try searching from a much earlier position
-        const fallbackPos = this.findSectionTitlePosition(text, entry.title, Math.floor(textLength * 0.1));
-        if (fallbackPos !== -1) {
-          sectionPositions.push({ entry, position: fallbackPos });
-          console.log(`[DocumentParser] Found via fallback at position ${fallbackPos}`);
+        // Fallback: search from TOC end (section might be out of expected order)
+        position = this.findSectionTitlePosition(text, entry.title, tocEndPosition);
+        if (position !== -1) {
+          sectionPositions.push({ entry, position });
+          console.log(`[DocumentParser] ✓ Found via global search at position ${position}`);
         } else {
-          console.log(`[DocumentParser] Could not find: ${entry.title.substring(0, 30)}`);
+          // Last resort: search entire document
+          position = this.findSectionTitlePosition(text, entry.title, 0);
+          if (position !== -1 && position > tocEndPosition * 0.5) {
+            // Only accept if it's after at least half the TOC area
+            sectionPositions.push({ entry, position });
+            console.log(`[DocumentParser] ✓ Found via full search at position ${position}`);
+          } else {
+            console.log(`[DocumentParser] ✗ Could not find: "${entry.title.substring(0, 30)}..."`);
+          }
         }
       }
     }
 
-    // Sort by position to ensure correct order
+    // Sort by position to ensure correct extraction order
     sectionPositions.sort((a, b) => a.position - b.position);
 
     console.log(`[DocumentParser] Found ${sectionPositions.length} section positions out of ${contentEntries.length} TOC entries`);
@@ -1330,12 +1335,93 @@ export class DocumentParserService {
   }
 
   /**
+   * Find where the Table of Contents ends in the document text
+   * TOC typically ends with patterns like page numbers, followed by actual content
+   * Returns the position after which content begins
+   */
+  private findTocEndPosition(text: string): number {
+    const textLower = text.toLowerCase();
+
+    // Strategy 1: Look for "Table of Contents" and find where it ends
+    const tocIndex = textLower.indexOf('table of contents');
+    if (tocIndex === -1) {
+      // No TOC found, assume content starts after first 5% of document
+      return Math.floor(text.length * 0.05);
+    }
+
+    // Strategy 2: After TOC header, look for markers that indicate content start
+    // Content typically starts with headers like "Certification", "Introductory", "Part I", "Standard 1"
+    const contentStartPatterns = [
+      /certification\s+of\s+the\s+self[\s-]*study/i,
+      /introductory\s+information/i,
+      /introductory\s+section/i,
+      /part\s+i\s*[:\-–—]/i,
+      /part\s+one\s*[:\-–—]/i,
+      /standard\s+1\s*[:\-–—]/i,
+      /general\s+standards/i,
+      /^\s*I\.\s+[A-Z]/m,
+      /^\s*1\.\s+[A-Z]/m
+    ];
+
+    // Search for content start patterns after the TOC header
+    // TOC entries usually span 2-8 pages worth of text (roughly 6000-24000 chars)
+    const searchStart = tocIndex + 500; // Start searching past "Table of Contents" text
+    const searchEnd = Math.min(tocIndex + 50000, text.length); // Don't search too far
+    const searchArea = text.substring(searchStart, searchEnd);
+
+    for (const pattern of contentStartPatterns) {
+      const match = searchArea.match(pattern);
+      if (match && match.index !== undefined) {
+        const position = searchStart + match.index;
+        console.log(`[DocumentParser] Found content start marker "${match[0].substring(0, 30)}" at position ${position}`);
+        return position;
+      }
+    }
+
+    // Strategy 3: Look for a blank line followed by non-TOC content
+    // TOC entries typically have page numbers at the end (e.g., "...12" or "....45")
+    // Content doesn't have these trailing numbers
+    const lines = text.substring(tocIndex, searchEnd).split('\n');
+    let lastTocLineIndex = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // TOC entries typically end with page numbers: "Title...12" or "Title    45"
+      const hasTocPageNumber = /[.\s…]+\d{1,3}\s*$/.test(line) || /\d{1,3}\s*$/.test(line);
+
+      if (hasTocPageNumber) {
+        lastTocLineIndex = i;
+      } else if (i > lastTocLineIndex + 3 && line.length > 50) {
+        // We've gone 3+ lines without TOC-style entries and found substantial content
+        // This is likely where content begins
+        const linesBeforeContent = lines.slice(0, i).join('\n');
+        const position = tocIndex + linesBeforeContent.length;
+        console.log(`[DocumentParser] Content appears to start at position ${position} (after line ${i})`);
+        return position;
+      }
+    }
+
+    // Fallback: estimate based on document size
+    // TOC is usually 2-5% of a self-study document
+    const estimatedTocEnd = Math.min(
+      tocIndex + 15000, // ~5 pages of TOC
+      Math.floor(text.length * 0.08) // 8% of document
+    );
+    console.log(`[DocumentParser] Using fallback TOC end estimate: ${estimatedTocEnd}`);
+    return estimatedTocEnd;
+  }
+
+  /**
    * Find position of a section title in text, starting from a given position
    * Returns -1 if not found
    *
    * Uses multiple matching strategies since TOC titles often differ from actual headers:
    * - TOC: "Standard 1 – Institutional Requirements..." but document header is just "Institutional Requirements..."
    * - Different dash types, spacing, punctuation
+   *
+   * IMPORTANT: Validates matches to ensure they're actual content headers, not TOC entries
    */
   private findSectionTitlePosition(text: string, title: string, startFrom: number): number {
     const searchText = text.substring(startFrom);
@@ -1346,13 +1432,29 @@ export class DocumentParserService {
     const titleWithoutPrefix = this.stripStandardPrefix(title);
     console.log(`[DocumentParser] Searching for: "${title.substring(0, 40)}" → stripped: "${titleWithoutPrefix.substring(0, 40)}"`);
 
+    // Helper to validate a match is not inside TOC (doesn't have trailing page numbers)
+    const isValidContentMatch = (pos: number): boolean => {
+      // Get the line at this position
+      const lineStart = searchText.lastIndexOf('\n', pos) + 1;
+      const lineEnd = searchText.indexOf('\n', pos);
+      const line = searchText.substring(lineStart, lineEnd !== -1 ? lineEnd : lineStart + 200);
+
+      // TOC entries have trailing page numbers like "...12" or "    45"
+      const hasTocPageNumber = /[.\s…]+\d{1,3}\s*$/.test(line.trim());
+      if (hasTocPageNumber) {
+        console.log(`[DocumentParser] Skipping TOC-like match: "${line.substring(0, 50)}..."`);
+        return false;
+      }
+      return true;
+    };
+
     // Strategy 1: Match on the title WITHOUT the prefix (most common case)
     if (titleWithoutPrefix.length >= 8) {
       // Try key word matching on stripped title
       const strippedKeyWords = this.extractKeyWords(titleWithoutPrefix);
       if (strippedKeyWords.length >= 2) {
         const position = this.findKeyWordSequence(searchText, strippedKeyWords);
-        if (position !== -1) {
+        if (position !== -1 && isValidContentMatch(position)) {
           console.log(`[DocumentParser] Matched on stripped title key words: ${strippedKeyWords.slice(0, 3).join(', ')}`);
           return startFrom + position;
         }
@@ -1365,7 +1467,7 @@ export class DocumentParserService {
         if (searchChunk.length >= 8) {
           const normalizedSearch = this.normalizeTitleForSearch(searchText.substring(0, Math.min(searchText.length, 500000)));
           const pos = normalizedSearch.indexOf(searchChunk);
-          if (pos !== -1) {
+          if (pos !== -1 && isValidContentMatch(pos)) {
             console.log(`[DocumentParser] Matched on stripped normalized title (${len} chars)`);
             return startFrom + pos;
           }
@@ -1378,13 +1480,11 @@ export class DocumentParserService {
     if (standardMatch) {
       const standardNum = standardMatch[1];
       // Build a flexible regex: "Standard" + optional whitespace/separator + number
-      const standardRegex = new RegExp(`standard\\s*${standardNum}\\b`, 'i');
-      const match = searchText.match(standardRegex);
-      if (match && match.index !== undefined) {
-        // Found "Standard X" - verify it's not inside TOC by checking if followed by page number dots
-        const contextAfter = searchText.substring(match.index, match.index + 150);
-        const hasPageNumberDots = /^[^.\n]{0,50}\.{3,}\s*\d{1,3}/.test(contextAfter);
-        if (!hasPageNumberDots) {
+      const standardRegex = new RegExp(`standard\\s*${standardNum}\\b`, 'gi');
+      let match;
+      while ((match = standardRegex.exec(searchText)) !== null) {
+        // Found "Standard X" - verify it's not inside TOC
+        if (isValidContentMatch(match.index)) {
           console.log(`[DocumentParser] Matched on "Standard ${standardNum}" pattern`);
           return startFrom + match.index;
         }
@@ -1395,7 +1495,7 @@ export class DocumentParserService {
     const keyWords = this.extractKeyWords(title);
     if (keyWords.length >= 2) {
       const position = this.findKeyWordSequence(searchText, keyWords);
-      if (position !== -1) {
+      if (position !== -1 && isValidContentMatch(position)) {
         console.log(`[DocumentParser] Matched on full title key words: ${keyWords.slice(0, 3).join(', ')}`);
         return startFrom + position;
       }
@@ -1408,10 +1508,15 @@ export class DocumentParserService {
       .trim();
 
     if (firstPart.length >= 8) {
-      const simplePos = searchTextLower.indexOf(firstPart);
-      if (simplePos !== -1) {
-        console.log(`[DocumentParser] Matched on simple substring: "${firstPart}"`);
-        return startFrom + simplePos;
+      let searchPos = 0;
+      while (searchPos < searchTextLower.length) {
+        const simplePos = searchTextLower.indexOf(firstPart, searchPos);
+        if (simplePos === -1) break;
+        if (isValidContentMatch(simplePos)) {
+          console.log(`[DocumentParser] Matched on simple substring: "${firstPart}"`);
+          return startFrom + simplePos;
+        }
+        searchPos = simplePos + 1;
       }
     }
 
@@ -1421,10 +1526,15 @@ export class DocumentParserService {
       .filter(w => w.length >= 6);  // Only words 6+ chars
 
     for (const word of significantWords.slice(0, 3)) {
-      const wordPos = searchTextLower.indexOf(word);
-      if (wordPos !== -1) {
-        console.log(`[DocumentParser] Matched on significant word: "${word}"`);
-        return startFrom + wordPos;
+      let searchPos = 0;
+      while (searchPos < searchTextLower.length) {
+        const wordPos = searchTextLower.indexOf(word, searchPos);
+        if (wordPos === -1) break;
+        if (isValidContentMatch(wordPos)) {
+          console.log(`[DocumentParser] Matched on significant word: "${word}"`);
+          return startFrom + wordPos;
+        }
+        searchPos = wordPos + 1;
       }
     }
 
@@ -1709,21 +1819,29 @@ export class DocumentParserService {
 
     // First, try to split by HTML header tags (h1, h2)
     const headerRegex = /<h([1-2])[^>]*>(.*?)<\/h\1>/gi;
-    const matches = [...htmlContent.matchAll(headerRegex)];
+    const matches: Array<{ level: number; text: string; index: number }> = [];
+    let match;
+    while ((match = headerRegex.exec(htmlContent)) !== null) {
+      matches.push({
+        level: parseInt(match[1], 10),
+        text: match[2].replace(/<[^>]*>/g, '').trim(),
+        index: match.index
+      });
+    }
 
     console.log(`[DocumentParser] Found ${matches.length} HTML headers for header-based splitting`);
 
     if (matches.length > 0) {
       // Split by HTML headers
       for (let i = 0; i < matches.length; i++) {
-        const match = matches[i];
-        const headerLevel = parseInt(match[1], 10);
-        const headerText = match[2].replace(/<[^>]*>/g, '').trim(); // Strip inner tags
-        const headerIndex = match.index!;
+        const matchItem = matches[i];
+        const headerLevel = matchItem.level;
+        const headerText = matchItem.text;
+        const headerIndex = matchItem.index;
 
         // Find end of this section (start of next header or end of document)
         const nextMatch = matches[i + 1];
-        const endIndex = nextMatch ? nextMatch.index! : htmlContent.length;
+        const endIndex = nextMatch ? nextMatch.index : htmlContent.length;
 
         // Extract content between headers
         const sectionHtml = htmlContent.substring(headerIndex, endIndex);

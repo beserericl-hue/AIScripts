@@ -8,6 +8,7 @@ import { WebhookSettings } from '../models/WebhookSettings';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { documentParserService, TOCBasedSection, ParsedDocument } from '../services/documentParser';
 import { sectionMapperService } from '../services/sectionMapper';
+import { saveWithRetry, withRetry } from '../utils/dbRetry';
 
 // Always log for visibility in production
 function debugLog(message: string, data?: any) {
@@ -383,12 +384,17 @@ async function processDocumentAsync(
 
     importRecord.status = 'completed';
     importRecord.processingCompletedAt = new Date();
-    await importRecord.save();
+    await saveWithRetry(importRecord);
   } catch (error) {
     importRecord.status = 'failed';
     importRecord.error = error instanceof Error ? error.message : 'Unknown error';
     importRecord.processingCompletedAt = new Date();
-    await importRecord.save();
+    // Use regular save for error state - if this fails too, we can't do much
+    try {
+      await importRecord.save();
+    } catch (saveError) {
+      console.error('[ImportController] Failed to save error state:', saveError);
+    }
   }
 }
 
@@ -1153,7 +1159,7 @@ export const applyMappings = async (req: AuthenticatedRequest, res: Response) =>
       submission.imports.push(importRecord._id as mongoose.Types.ObjectId);
     }
 
-    await submission.save();
+    await saveWithRetry(submission);
 
     debugLog('Submission saved successfully', {
       appliedCount,
@@ -1310,9 +1316,9 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
         });
       }
 
-      // Mark narratives as modified and save
+      // Mark narratives as modified and save with retry
       submission.markModified('narratives');
-      await submission.save();
+      await saveWithRetry(submission);
 
       // Update import record
       importRecord.unmappedContent[unmappedIndex].action = 'assigned';
@@ -1377,7 +1383,7 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
       });
 
       matrix.markModified('rawContent');
-      await matrix.save();
+      await saveWithRetry(matrix);
 
       // Update import record
       importRecord.unmappedContent[unmappedIndex].action = 'assigned';
@@ -1406,7 +1412,7 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
 
     importRecord.markModified('unmappedContent');
     importRecord.markModified('mappedSections');
-    await importRecord.save();
+    await saveWithRetry(importRecord);
 
     return res.json({
       success: true,

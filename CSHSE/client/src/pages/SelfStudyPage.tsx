@@ -10,6 +10,8 @@ import {
   AlertTriangle,
   Loader2,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Clock,
   CheckCircle,
   FileCheck,
@@ -18,7 +20,9 @@ import {
   MapPin,
   Check,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Edit2,
+  Save
 } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 import { SelfStudyEditor } from '../features/selfStudy/Editor/SelfStudyEditor';
@@ -134,6 +138,7 @@ export default function SelfStudyPage() {
 
   // Import workflow state
   const [importId, setImportId] = useState<string | null>(null);
+  const [importSubmissionId, setImportSubmissionId] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const [importStep, setImportStep] = useState<'upload' | 'processing' | 'review' | 'applying'>('upload');
   const [extractedSections, setExtractedSections] = useState<ExtractedSection[]>([]);
@@ -148,6 +153,15 @@ export default function SelfStudyPage() {
     toCurriculumMatrix: boolean;
   }>({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
   const [isBatchMoving, setIsBatchMoving] = useState(false);
+
+  // Individual section editing state
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [sectionEdit, setSectionEdit] = useState<{
+    standardCode: string;
+    specCode: string;
+  }>({ standardCode: '', specCode: '' });
+  const [isSavingSection, setIsSavingSection] = useState(false);
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null);
 
   const effectiveRole = getEffectiveRole();
   const effectiveUser = getEffectiveUser();
@@ -223,6 +237,12 @@ export default function SelfStudyPage() {
           const sectionsResponse = await api.get(`/api/imports/${importId}/sections`);
           setExtractedSections(sectionsResponse.data.sections);
           setImportStep('review');
+          setShowImportModal(false); // Close modal
+
+          // Navigate to submission to show editor with side panel
+          if (importSubmissionId) {
+            navigate(`/self-study/${importSubmissionId}`);
+          }
         } else if (status.status === 'failed') {
           clearInterval(pollInterval);
           setUploadError(status.error || 'Document processing failed');
@@ -234,7 +254,7 @@ export default function SelfStudyPage() {
     }, 2000);
 
     return () => clearInterval(pollInterval);
-  }, [importId, importStep]);
+  }, [importId, importStep, importSubmissionId, navigate]);
 
   // File upload handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -310,6 +330,7 @@ export default function SelfStudyPage() {
       });
 
       setImportId(response.data.importId);
+      setImportSubmissionId(targetSubmissionId);
       setImportStep('processing');
       setSelectedFile(null);
     } catch (err: any) {
@@ -324,14 +345,13 @@ export default function SelfStudyPage() {
 
     setIsApplying(true);
     try {
-      const response = await api.post(`/api/imports/${importId}/apply`);
+      await api.post(`/api/imports/${importId}/apply`);
 
-      // Success - navigate to editor
-      const currentSubmission = submissions[0];
-      if (currentSubmission) {
-        queryClient.invalidateQueries({ queryKey: ['my-submissions'] });
-        navigate(`/self-study/${currentSubmission._id}`);
-      }
+      // Invalidate queries to refresh data
+      queryClient.invalidateQueries({ queryKey: ['my-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['submission'] });
+
+      // Reset import state (closes the side panel)
       resetImportModal();
     } catch (err: any) {
       setUploadError(err.response?.data?.error || 'Failed to apply mappings');
@@ -361,6 +381,57 @@ export default function SelfStudyPage() {
     } catch (err) {
       console.error('Failed to discard section:', err);
     }
+  };
+
+  // Start editing a section's mapping
+  const startEditingSection = (section: ExtractedSection) => {
+    setEditingSectionId(section.id);
+    setSectionEdit({
+      standardCode: section.mapping?.standardCode || '',
+      specCode: section.mapping?.specCode || ''
+    });
+  };
+
+  // Cancel editing
+  const cancelEditingSection = () => {
+    setEditingSectionId(null);
+    setSectionEdit({ standardCode: '', specCode: '' });
+  };
+
+  // Save individual section mapping change
+  const handleSaveSectionMapping = async (sectionId: string) => {
+    if (!importId || !sectionEdit.standardCode || !sectionEdit.specCode) return;
+
+    setIsSavingSection(true);
+    try {
+      // Use the map endpoint to reassign the section
+      await api.post(`/api/imports/${importId}/map`, {
+        extractedSectionId: sectionId,
+        standardCode: sectionEdit.standardCode,
+        specCode: sectionEdit.specCode,
+        fieldType: 'narrative'
+      });
+
+      // Refresh sections and status
+      const [sectionsResponse, statusResponse] = await Promise.all([
+        api.get(`/api/imports/${importId}/sections`),
+        api.get(`/api/imports/${importId}`)
+      ]);
+
+      setExtractedSections(sectionsResponse.data.sections);
+      setImportStatus(statusResponse.data);
+      setEditingSectionId(null);
+      setSectionEdit({ standardCode: '', specCode: '' });
+    } catch (err) {
+      console.error('Failed to save section mapping:', err);
+    } finally {
+      setIsSavingSection(false);
+    }
+  };
+
+  // Toggle section expansion
+  const toggleSectionExpanded = (sectionId: string) => {
+    setExpandedSectionId(prev => prev === sectionId ? null : sectionId);
   };
 
   // Batch selection handlers
@@ -474,13 +545,316 @@ export default function SelfStudyPage() {
     setSelectedFile(null);
     setUploadError(null);
     setImportId(null);
+    setImportSubmissionId(null);
     setImportStatus(null);
     setImportStep('upload');
     setExtractedSections([]);
+    setSelectedUnmappedIds(new Set());
+    setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
   };
 
   // If viewing a specific submission
   if (submissionId) {
+    // If we're in review mode after import, show the editor with review panel
+    if (importStep === 'review' && importStatus && extractedSections.length > 0) {
+      return (
+        <div className="min-h-screen bg-gray-50 flex">
+          {/* Editor on the left */}
+          <div className="flex-1 overflow-auto">
+            <SelfStudyEditor submissionId={submissionId} />
+          </div>
+
+          {/* Review Panel on the right */}
+          <div className="w-[480px] bg-white border-l border-gray-200 flex flex-col h-screen sticky top-0">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0 bg-teal-50">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Import Review</h3>
+                <p className="text-sm text-gray-500">{importStatus.originalFilename}</p>
+              </div>
+              <button
+                onClick={resetImportModal}
+                className="text-gray-400 hover:text-gray-600"
+                title="Close review panel"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-green-600" />
+                    <span className="text-xl font-bold text-green-700">{importStatus.mappedCount}</span>
+                  </div>
+                  <p className="text-xs text-green-600 mt-1">Auto-mapped</p>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <span className="text-xl font-bold text-amber-700">{importStatus.unmappedCount}</span>
+                  </div>
+                  <p className="text-xs text-amber-600 mt-1">Need review</p>
+                </div>
+              </div>
+
+              {/* Batch Assignment UI for Unmapped Sections */}
+              {extractedSections.some(s => s.status === 'unmapped') && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-amber-800 text-sm">Assign Unmapped</h4>
+                    <div className="flex items-center gap-2 text-xs">
+                      <button onClick={selectAllUnmapped} className="text-teal-600 hover:text-teal-700 underline">All</button>
+                      <span className="text-gray-400">|</span>
+                      <button onClick={selectNoneUnmapped} className="text-teal-600 hover:text-teal-700 underline">None</button>
+                      <span className="text-gray-500 ml-1">({selectedUnmappedIds.size})</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <select
+                        value={batchAssignment.standardCode}
+                        onChange={(e) => setBatchAssignment(prev => ({ ...prev, standardCode: e.target.value, specCode: '' }))}
+                        className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
+                        disabled={batchAssignment.toCurriculumMatrix}
+                      >
+                        <option value="">Standard...</option>
+                        {Object.entries(STANDARD_NAMES).map(([code, name]) => (
+                          <option key={code} value={code}>Std {code}: {name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={batchAssignment.specCode}
+                        onChange={(e) => setBatchAssignment(prev => ({ ...prev, specCode: e.target.value }))}
+                        className="w-24 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
+                        disabled={!batchAssignment.standardCode || batchAssignment.toCurriculumMatrix}
+                      >
+                        <option value="">Spec...</option>
+                        {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
+                          <option key={spec} value={spec}>{spec}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-sm">
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={batchAssignment.toSupportingEvidence}
+                          onChange={(e) => setBatchAssignment(prev => ({
+                            ...prev,
+                            toSupportingEvidence: e.target.checked,
+                            toCurriculumMatrix: e.target.checked ? false : prev.toCurriculumMatrix
+                          }))}
+                          disabled={batchAssignment.toCurriculumMatrix}
+                          className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
+                        />
+                        <span className="text-gray-700">Evidence</span>
+                      </label>
+                      <label className="flex items-center gap-1.5">
+                        <input
+                          type="checkbox"
+                          checked={batchAssignment.toCurriculumMatrix}
+                          onChange={(e) => setBatchAssignment(prev => ({
+                            ...prev,
+                            toCurriculumMatrix: e.target.checked,
+                            standardCode: e.target.checked ? '' : prev.standardCode,
+                            specCode: e.target.checked ? '' : prev.specCode,
+                            toSupportingEvidence: e.target.checked ? false : prev.toSupportingEvidence
+                          }))}
+                          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="text-gray-700">Matrix</span>
+                      </label>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleBatchMoveUnmapped}
+                        disabled={isBatchMoving || selectedUnmappedIds.size === 0 || (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode))}
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-white rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
+                          batchAssignment.toCurriculumMatrix ? 'bg-purple-600 hover:bg-purple-700' : 'bg-teal-600 hover:bg-teal-700'
+                        }`}
+                      >
+                        {isBatchMoving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                        {batchAssignment.toCurriculumMatrix ? 'To Matrix' : 'Assign'}
+                      </button>
+                      <button
+                        onClick={handleBatchDiscardUnmapped}
+                        disabled={isBatchMoving || selectedUnmappedIds.size === 0}
+                        className="flex items-center justify-center gap-2 px-3 py-1.5 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Section List */}
+              <div className="space-y-2">
+                <h5 className="font-medium text-gray-900 text-sm">Sections ({extractedSections.length})</h5>
+                {extractedSections.map((section) => (
+                  <div
+                    key={section.id}
+                    className={`p-2 rounded border ${
+                      section.status === 'mapped'
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-amber-50 border-amber-200'
+                    }`}
+                  >
+                    {/* Header Row */}
+                    <div className="flex items-start gap-2">
+                      {section.status === 'unmapped' && (
+                        <input
+                          type="checkbox"
+                          checked={selectedUnmappedIds.has(section.id)}
+                          onChange={() => toggleUnmappedSelection(section.id)}
+                          className="mt-0.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          {section.status === 'mapped' ? (
+                            <Check className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
+                          ) : (
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                          )}
+
+                          {/* Show edit form or current mapping */}
+                          {editingSectionId === section.id ? (
+                            <div className="flex items-center gap-1 flex-1">
+                              <select
+                                value={sectionEdit.standardCode}
+                                onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '' }))}
+                                className="flex-1 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500"
+                              >
+                                <option value="">Std...</option>
+                                {Object.entries(STANDARD_NAMES).map(([code, name]) => (
+                                  <option key={code} value={code}>{code}: {name.substring(0, 15)}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={sectionEdit.specCode}
+                                onChange={(e) => setSectionEdit(prev => ({ ...prev, specCode: e.target.value }))}
+                                className="w-14 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500"
+                                disabled={!sectionEdit.standardCode}
+                              >
+                                <option value="">Spec</option>
+                                {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
+                                  <option key={spec} value={spec}>{spec}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ) : (
+                            <span className="text-xs font-medium text-gray-900 truncate">
+                              {section.mapping ? (
+                                <>Std {section.mapping.standardCode}.{section.mapping.specCode}: {STANDARD_NAMES[section.mapping.standardCode] || 'Unknown'}</>
+                              ) : (
+                                <span className="text-amber-700">Unmapped</span>
+                              )}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Content preview - click to expand */}
+                        <button
+                          onClick={() => toggleSectionExpanded(section.id)}
+                          className="text-left w-full"
+                        >
+                          <p className={`text-xs text-gray-500 ${expandedSectionId === section.id ? '' : 'line-clamp-2'}`}>
+                            {section.content}
+                          </p>
+                          {section.content.length > 100 && (
+                            <span className="text-xs text-teal-600 flex items-center gap-0.5 mt-0.5">
+                              {expandedSectionId === section.id ? (
+                                <><ChevronUp className="w-3 h-3" /> Less</>
+                              ) : (
+                                <><ChevronDown className="w-3 h-3" /> More</>
+                              )}
+                            </span>
+                          )}
+                        </button>
+
+                        {/* Confidence badge */}
+                        {section.confidence > 0 && (
+                          <span className="inline-block mt-1 text-[10px] px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded">
+                            {Math.round(section.confidence * 100)}% confidence
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {editingSectionId === section.id ? (
+                          <>
+                            <button
+                              onClick={() => handleSaveSectionMapping(section.id)}
+                              disabled={isSavingSection || !sectionEdit.standardCode || !sectionEdit.specCode}
+                              className="p-1 text-green-600 hover:text-green-700 disabled:opacity-50"
+                              title="Save"
+                            >
+                              {isSavingSection ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={cancelEditingSection}
+                              className="p-1 text-gray-400 hover:text-gray-600"
+                              title="Cancel"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => startEditingSection(section)}
+                              className="p-1 text-gray-400 hover:text-teal-600"
+                              title="Edit mapping"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDiscardSection(section.id)}
+                              className="p-1 text-gray-400 hover:text-red-600"
+                              title="Discard"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+              <button
+                onClick={handleApplyMappings}
+                disabled={isApplying}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50"
+              >
+                {isApplying ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Applying...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    Apply & Close
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return <SelfStudyEditor submissionId={submissionId} />;
   }
 
@@ -1085,9 +1459,9 @@ export default function SelfStudyPage() {
                     )}
 
                     {/* Section List */}
-                    <div>
+                    <div className="flex-1 min-h-0 flex flex-col">
                       <h5 className="font-medium text-gray-900 mb-3">Extracted Sections</h5>
-                      <div className="space-y-2 max-h-64 overflow-y-auto">
+                      <div className="space-y-2 flex-1 overflow-y-auto min-h-[200px] max-h-[400px] pr-1">
                         {extractedSections.map((section) => (
                           <div
                             key={section.id}
@@ -1115,39 +1489,115 @@ export default function SelfStudyPage() {
                                     ) : (
                                       <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
                                     )}
-                                    <span className="text-sm font-medium text-gray-900">
-                                      {section.mapping ? (
-                                        <>Standard {section.mapping.standardCode}{section.mapping.specCode ? `.${section.mapping.specCode}` : ''}: {STANDARD_NAMES[section.mapping.standardCode] || 'Unknown'}</>
-                                      ) : (
-                                        <span className="text-amber-700">{section.unmappedReason || 'Needs manual mapping'}</span>
-                                      )}
-                                    </span>
+
+                                    {/* Show edit form or current mapping */}
+                                    {editingSectionId === section.id ? (
+                                      <div className="flex items-center gap-2 flex-1">
+                                        <select
+                                          value={sectionEdit.standardCode}
+                                          onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '' }))}
+                                          className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500"
+                                        >
+                                          <option value="">Select Standard...</option>
+                                          {Object.entries(STANDARD_NAMES).map(([code, name]) => (
+                                            <option key={code} value={code}>Std {code}: {name}</option>
+                                          ))}
+                                        </select>
+                                        <select
+                                          value={sectionEdit.specCode}
+                                          onChange={(e) => setSectionEdit(prev => ({ ...prev, specCode: e.target.value }))}
+                                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500"
+                                          disabled={!sectionEdit.standardCode}
+                                        >
+                                          <option value="">Spec</option>
+                                          {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
+                                            <option key={spec} value={spec}>{spec}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    ) : (
+                                      <span className="text-sm font-medium text-gray-900">
+                                        {section.mapping ? (
+                                          <>Standard {section.mapping.standardCode}{section.mapping.specCode ? `.${section.mapping.specCode}` : ''}: {STANDARD_NAMES[section.mapping.standardCode] || 'Unknown'}</>
+                                        ) : (
+                                          <span className="text-amber-700">{section.unmappedReason || 'Needs manual mapping'}</span>
+                                        )}
+                                      </span>
+                                    )}
                                   </div>
-                                <p className="text-xs text-gray-500 truncate">
-                                  {section.content}
-                                </p>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <span className="text-xs text-gray-400">Page {section.pageNumber}</span>
-                                  <span className="text-xs text-gray-400">•</span>
-                                  <span className="text-xs text-gray-400 capitalize">{section.sectionType}</span>
-                                  {section.mapping?.mappedBy === 'auto' && (
-                                    <>
-                                      <span className="text-xs text-gray-400">•</span>
-                                      <span className="text-xs text-green-600">Auto-mapped ({Math.round(section.confidence * 100)}%)</span>
-                                    </>
-                                  )}
-                                </div>
+
+                                  {/* Content - click to expand */}
+                                  <button
+                                    onClick={() => toggleSectionExpanded(section.id)}
+                                    className="text-left w-full"
+                                  >
+                                    <p className={`text-xs text-gray-500 ${expandedSectionId === section.id ? '' : 'line-clamp-2'}`}>
+                                      {section.content}
+                                    </p>
+                                    {section.content.length > 150 && (
+                                      <span className="text-xs text-teal-600 flex items-center gap-0.5 mt-0.5">
+                                        {expandedSectionId === section.id ? (
+                                          <><ChevronUp className="w-3 h-3" /> Show less</>
+                                        ) : (
+                                          <><ChevronDown className="w-3 h-3" /> Show more</>
+                                        )}
+                                      </span>
+                                    )}
+                                  </button>
+
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-xs text-gray-400">Page {section.pageNumber}</span>
+                                    <span className="text-xs text-gray-400">•</span>
+                                    <span className="text-xs text-gray-400 capitalize">{section.sectionType}</span>
+                                    {section.mapping?.mappedBy === 'auto' && (
+                                      <>
+                                        <span className="text-xs text-gray-400">•</span>
+                                        <span className="text-xs text-green-600">Auto-mapped ({Math.round(section.confidence * 100)}%)</span>
+                                      </>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                              {section.status === 'unmapped' && (
-                                <button
-                                  onClick={() => handleDiscardSection(section.id)}
-                                  className="p-1 text-gray-400 hover:text-red-600"
-                                  title="Discard section"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
+
+                              {/* Action buttons */}
+                              <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                                {editingSectionId === section.id ? (
+                                  <>
+                                    <button
+                                      onClick={() => handleSaveSectionMapping(section.id)}
+                                      disabled={isSavingSection || !sectionEdit.standardCode || !sectionEdit.specCode}
+                                      className="p-1 text-green-600 hover:text-green-700 disabled:opacity-50"
+                                      title="Save"
+                                    >
+                                      {isSavingSection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    </button>
+                                    <button
+                                      onClick={cancelEditingSection}
+                                      className="p-1 text-gray-400 hover:text-gray-600"
+                                      title="Cancel"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => startEditingSection(section)}
+                                      className="p-1 text-gray-400 hover:text-teal-600"
+                                      title="Change mapping"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDiscardSection(section.id)}
+                                      className="p-1 text-gray-400 hover:text-red-600"
+                                      title="Discard section"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))}
