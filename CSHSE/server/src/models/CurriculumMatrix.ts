@@ -26,6 +26,16 @@ export interface IStandardMapping {
   courseAssessments: ICourseAssessment[];
 }
 
+export interface IRawMatrixContent {
+  id: string;
+  content: string;
+  sourceImportId?: string;
+  addedAt: Date;
+  addedBy: mongoose.Types.ObjectId;
+  processed: boolean;
+  processedAt?: Date;
+}
+
 export interface ICurriculumMatrix extends Document {
   submissionId: mongoose.Types.ObjectId;
   matrixType: 'human_services_courses' | 'non_human_services_courses' | 'custom';
@@ -35,6 +45,8 @@ export interface ICurriculumMatrix extends Document {
   lastModifiedBy: mongoose.Types.ObjectId;
   courses: ICourseEntry[];
   standards: IStandardMapping[];
+  // Raw imported content pending processing into structured data
+  rawContent?: IRawMatrixContent[];
 }
 
 const CourseEntrySchema = new Schema<ICourseEntry>({
@@ -67,6 +79,16 @@ const StandardMappingSchema = new Schema<IStandardMapping>({
   courseAssessments: [CourseAssessmentSchema]
 }, { _id: false });
 
+const RawMatrixContentSchema = new Schema<IRawMatrixContent>({
+  id: { type: String, required: true },
+  content: { type: String, required: true },
+  sourceImportId: String,
+  addedAt: { type: Date, default: Date.now },
+  addedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  processed: { type: Boolean, default: false },
+  processedAt: Date
+}, { _id: false });
+
 const CurriculumMatrixSchema = new Schema<ICurriculumMatrix>({
   submissionId: {
     type: Schema.Types.ObjectId,
@@ -87,7 +109,8 @@ const CurriculumMatrixSchema = new Schema<ICurriculumMatrix>({
     required: true
   },
   courses: [CourseEntrySchema],
-  standards: [StandardMappingSchema]
+  standards: [StandardMappingSchema],
+  rawContent: [RawMatrixContentSchema]
 }, {
   timestamps: true
 });

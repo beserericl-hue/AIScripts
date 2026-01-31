@@ -145,7 +145,8 @@ export default function SelfStudyPage() {
     standardCode: string;
     specCode: string;
     toSupportingEvidence: boolean;
-  }>({ standardCode: '', specCode: '', toSupportingEvidence: false });
+    toCurriculumMatrix: boolean;
+  }>({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
   const [isBatchMoving, setIsBatchMoving] = useState(false);
 
   const effectiveRole = getEffectiveRole();
@@ -386,20 +387,34 @@ export default function SelfStudyPage() {
     });
   };
 
-  // Batch move selected unmapped sections to a standard
+  // Batch move selected unmapped sections to a standard or curriculum matrix
   const handleBatchMoveUnmapped = async () => {
-    if (!importId || selectedUnmappedIds.size === 0 || !batchAssignment.standardCode || !batchAssignment.specCode) return;
+    // Allow move if either: (1) moving to curriculum matrix, or (2) standard and spec are selected
+    const canMoveToMatrix = batchAssignment.toCurriculumMatrix;
+    const canMoveToStandard = batchAssignment.standardCode && batchAssignment.specCode;
+
+    if (!importId || selectedUnmappedIds.size === 0 || (!canMoveToMatrix && !canMoveToStandard)) return;
 
     setIsBatchMoving(true);
     try {
-      // Map each selected section to the chosen standard/spec
+      // Map each selected section
       for (const sectionId of selectedUnmappedIds) {
-        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-          action: 'map',
-          standardCode: batchAssignment.standardCode,
-          specCode: batchAssignment.specCode,
-          fieldType: batchAssignment.toSupportingEvidence ? 'supportingEvidence' : 'narrative'
-        });
+        if (batchAssignment.toCurriculumMatrix) {
+          // Move to curriculum matrix
+          await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+            action: 'move_to_matrix',
+            toCurriculumMatrix: true,
+            matrixType: 'non_human_services_courses' // Default to non-HS courses
+          });
+        } else {
+          // Move to standard/spec
+          await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+            action: 'assign',
+            standardCode: batchAssignment.standardCode,
+            specCode: batchAssignment.specCode,
+            toSupportingEvidence: batchAssignment.toSupportingEvidence
+          });
+        }
       }
 
       // Refresh sections and status
@@ -411,7 +426,7 @@ export default function SelfStudyPage() {
       setExtractedSections(sectionsResponse.data.sections);
       setImportStatus(statusResponse.data);
       setSelectedUnmappedIds(new Set());
-      setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false });
+      setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
     } catch (err) {
       console.error('Failed to batch move sections:', err);
     } finally {
@@ -972,7 +987,8 @@ export default function SelfStudyPage() {
                               standardCode: e.target.value,
                               specCode: '' // Reset spec when standard changes
                             }))}
-                            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
+                            disabled={batchAssignment.toCurriculumMatrix}
                           >
                             <option value="">Select Standard...</option>
                             {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -988,8 +1004,8 @@ export default function SelfStudyPage() {
                               ...prev,
                               specCode: e.target.value
                             }))}
-                            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                            disabled={!batchAssignment.standardCode}
+                            className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
+                            disabled={!batchAssignment.standardCode || batchAssignment.toCurriculumMatrix}
                           >
                             <option value="">Select Spec...</option>
                             {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
@@ -1005,11 +1021,30 @@ export default function SelfStudyPage() {
                               checked={batchAssignment.toSupportingEvidence}
                               onChange={(e) => setBatchAssignment(prev => ({
                                 ...prev,
-                                toSupportingEvidence: e.target.checked
+                                toSupportingEvidence: e.target.checked,
+                                toCurriculumMatrix: e.target.checked ? false : prev.toCurriculumMatrix
                               }))}
-                              className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                              disabled={batchAssignment.toCurriculumMatrix}
+                              className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
                             />
                             To Supporting Evidence
+                          </label>
+
+                          <label className="flex items-center gap-2 text-sm text-gray-700">
+                            <input
+                              type="checkbox"
+                              checked={batchAssignment.toCurriculumMatrix}
+                              onChange={(e) => setBatchAssignment(prev => ({
+                                ...prev,
+                                toCurriculumMatrix: e.target.checked,
+                                // Clear standard/spec when moving to matrix
+                                standardCode: e.target.checked ? '' : prev.standardCode,
+                                specCode: e.target.checked ? '' : prev.specCode,
+                                toSupportingEvidence: e.target.checked ? false : prev.toSupportingEvidence
+                              }))}
+                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                            />
+                            To Curriculum Matrix
                           </label>
 
                           <button
@@ -1017,17 +1052,20 @@ export default function SelfStudyPage() {
                             disabled={
                               isBatchMoving ||
                               selectedUnmappedIds.size === 0 ||
-                              !batchAssignment.standardCode ||
-                              !batchAssignment.specCode
+                              (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode))
                             }
-                            className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                            className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium ${
+                              batchAssignment.toCurriculumMatrix
+                                ? 'bg-purple-600 hover:bg-purple-700'
+                                : 'bg-teal-600 hover:bg-teal-700'
+                            }`}
                           >
                             {isBatchMoving ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <Check className="w-4 h-4" />
                             )}
-                            Move Selected ({selectedUnmappedIds.size})
+                            {batchAssignment.toCurriculumMatrix ? 'Move to Matrix' : 'Move Selected'} ({selectedUnmappedIds.size})
                           </button>
 
                           <button

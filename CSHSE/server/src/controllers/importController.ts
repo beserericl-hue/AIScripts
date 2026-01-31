@@ -5,6 +5,7 @@ import { SelfStudyImport, ISelfStudyImport } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { WebhookSettings } from '../models/WebhookSettings';
+import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { documentParserService, TOCBasedSection, ParsedDocument } from '../services/documentParser';
 import { sectionMapperService } from '../services/sectionMapper';
 
@@ -1224,9 +1225,9 @@ export const getUnmappedContent = async (req: Request, res: Response) => {
 export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId, sectionId } = req.params;
-    const { action, standardCode, specCode, toSupportingEvidence } = req.body;
+    const { action, standardCode, specCode, toSupportingEvidence, toCurriculumMatrix, matrixType } = req.body;
 
-    debugLog('handleUnmapped called', { importId, sectionId, action, standardCode, specCode, toSupportingEvidence });
+    debugLog('handleUnmapped called', { importId, sectionId, action, standardCode, specCode, toSupportingEvidence, toCurriculumMatrix, matrixType });
 
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
@@ -1332,6 +1333,73 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
       importRecord.unmappedContent[unmappedIndex].action = 'discarded';
       importRecord.unmappedContent[unmappedIndex].reviewedBy = new mongoose.Types.ObjectId(req.user?.id);
       importRecord.unmappedContent[unmappedIndex].reviewedAt = new Date();
+
+    } else if (action === 'move_to_matrix' || toCurriculumMatrix) {
+      // Move content to curriculum matrix raw content
+      const targetMatrixType = matrixType || 'non_human_services_courses';
+
+      // Find or create curriculum matrix for this submission
+      let matrix = await CurriculumMatrix.findOne({
+        submissionId: importRecord.submissionId,
+        matrixType: targetMatrixType
+      });
+
+      if (!matrix) {
+        // Create new matrix if it doesn't exist
+        matrix = new CurriculumMatrix({
+          submissionId: importRecord.submissionId,
+          matrixType: targetMatrixType,
+          name: targetMatrixType === 'human_services_courses'
+            ? 'Human Services Courses'
+            : targetMatrixType === 'non_human_services_courses'
+              ? 'Non-Human Services Courses'
+              : 'Custom Matrix',
+          lastModifiedBy: new mongoose.Types.ObjectId(req.user?.id),
+          courses: [],
+          standards: [],
+          rawContent: []
+        });
+      }
+
+      // Initialize rawContent array if not present
+      if (!matrix.rawContent) {
+        matrix.rawContent = [];
+      }
+
+      // Add the section content to raw content
+      matrix.rawContent.push({
+        id: uuidv4(),
+        content: section?.content || '',
+        sourceImportId: importId,
+        addedAt: new Date(),
+        addedBy: new mongoose.Types.ObjectId(req.user?.id),
+        processed: false
+      });
+
+      matrix.markModified('rawContent');
+      await matrix.save();
+
+      // Update import record
+      importRecord.unmappedContent[unmappedIndex].action = 'assigned';
+      importRecord.unmappedContent[unmappedIndex].reviewedBy = new mongoose.Types.ObjectId(req.user?.id);
+      importRecord.unmappedContent[unmappedIndex].reviewedAt = new Date();
+
+      importRecord.mappedSections.push({
+        extractedSectionId: sectionId,
+        standardCode: 'MATRIX',
+        specCode: targetMatrixType,
+        fieldType: 'matrix',
+        mappedBy: 'manual',
+        mappedByUserId: new mongoose.Types.ObjectId(req.user?.id),
+        mappedAt: new Date()
+      });
+
+      debugLog('Moved to curriculum matrix', {
+        matrixType: targetMatrixType,
+        matrixId: matrix._id,
+        rawContentCount: matrix.rawContent.length
+      });
+
     } else {
       return res.status(400).json({ error: 'Invalid action or missing parameters' });
     }
@@ -1342,9 +1410,11 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
 
     return res.json({
       success: true,
-      message: toSupportingEvidence
-        ? 'Content moved to supporting evidence'
-        : `Content ${action}ed successfully`
+      message: toCurriculumMatrix || action === 'move_to_matrix'
+        ? 'Content moved to curriculum matrix'
+        : toSupportingEvidence
+          ? 'Content moved to supporting evidence'
+          : `Content ${action}ed successfully`
     });
   } catch (error) {
     console.error('Handle unmapped error:', error);
