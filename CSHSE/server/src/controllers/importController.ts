@@ -287,6 +287,18 @@ async function processDocumentAsync(
       }, {} as Record<string, number>)
     });
 
+    // Log matrix entries specifically for debugging
+    const matrixTocEntries = tocEntries.filter(e => e.isMatrix || e.title.toLowerCase().includes('matrix'));
+    const matrixSections = tocSections.filter(s => s.tocEntry.isMatrix || s.tocEntry.title.toLowerCase().includes('matrix'));
+    debugLog('MATRIX DEBUG', {
+      matrixTocEntriesFound: matrixTocEntries.map(e => ({ title: e.title.substring(0, 50), page: e.pageNumber })),
+      matrixSectionsExtracted: matrixSections.map(s => ({
+        title: s.tocEntry.title.substring(0, 50),
+        contentLength: s.content.length,
+        isMatrix: s.tocEntry.isMatrix
+      }))
+    });
+
     // Store extracted content using TOC-based sections
     // NOTE: To avoid MongoDB's 16MB document limit:
     // - Don't store full rawText (not needed after parsing)
@@ -335,6 +347,17 @@ async function processDocumentAsync(
         maxSectionLength: MAX_SECTION_CONTENT_LENGTH
       });
     }
+
+    // Log matrix sections that will be stored
+    const matrixStoredSections = importRecord.extractedContent.sections.filter(s => s.sectionType === 'matrix');
+    debugLog('MATRIX STORED SECTIONS', {
+      count: matrixStoredSections.length,
+      sections: matrixStoredSections.map(s => ({
+        id: s.id,
+        contentLength: s.content.length,
+        suggestedStandard: s.suggestedStandard
+      }))
+    });
 
     // Add tables as sections (in addition to TOC sections)
     for (const table of parsed.tables) {
