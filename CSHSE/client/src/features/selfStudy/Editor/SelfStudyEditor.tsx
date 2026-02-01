@@ -134,6 +134,7 @@ interface UnmappedAssignment {
   standardCode: string;
   specCode: string;
   toSupportingEvidence: boolean;
+  toCurriculumMatrix: boolean;
 }
 
 export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
@@ -165,7 +166,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [batchAssignment, setBatchAssignment] = useState<UnmappedAssignment>({
     standardCode: '',
     specCode: '',
-    toSupportingEvidence: false
+    toSupportingEvidence: false,
+    toCurriculumMatrix: false
   });
   const [isBatchMoving, setIsBatchMoving] = useState(false);
 
@@ -347,11 +349,11 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setMovingSection(null);
     // Reset batch assignment state
     setSelectedUnmappedIds(new Set());
-    setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false });
+    setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
     setIsBatchMoving(false);
   };
 
-  // Handle moving an unmapped section to a spec
+  // Handle moving an unmapped section to a spec or curriculum matrix
   const handleMoveUnmapped = async (sectionId: string) => {
     if (!importId) return;
 
@@ -359,12 +361,16 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     const section = extractedSections.find(s => s.id === sectionId);
     const assignment = unmappedAssignments[sectionId];
 
+    // Check if moving to curriculum matrix
+    const toCurriculumMatrix = assignment?.toCurriculumMatrix || false;
+
     // Use user assignment if available, otherwise fall back to AI suggestions
     const standardCode = assignment?.standardCode || section?.suggestedStandardCode || '';
     const specCode = assignment?.specCode || section?.suggestedSpecCode || '';
     const toSupportingEvidence = assignment?.toSupportingEvidence || false;
 
-    if (!standardCode || !specCode) {
+    // Require standard/spec selection unless moving to curriculum matrix
+    if (!toCurriculumMatrix && (!standardCode || !specCode)) {
       setUploadError('Please select a standard and specification');
       return;
     }
@@ -373,12 +379,22 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setUploadError(null);
 
     try {
-      await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-        action: 'assign',
-        standardCode,
-        specCode,
-        toSupportingEvidence
-      });
+      if (toCurriculumMatrix) {
+        // Move to curriculum matrix
+        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+          action: 'move_to_matrix',
+          toCurriculumMatrix: true,
+          matrixType: 'non_human_services_courses'
+        });
+      } else {
+        // Move to standard/spec
+        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+          action: 'assign',
+          standardCode,
+          specCode,
+          toSupportingEvidence
+        });
+      }
 
       // Remove from extracted sections list
       setExtractedSections(prev => prev.filter(s => s.id !== sectionId));
@@ -430,6 +446,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         standardCode: prev[sectionId]?.standardCode || '',
         specCode: prev[sectionId]?.specCode || '',
         toSupportingEvidence: prev[sectionId]?.toSupportingEvidence || false,
+        toCurriculumMatrix: prev[sectionId]?.toCurriculumMatrix || false,
         ...update
       }
     }));
@@ -463,7 +480,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const handleBatchMoveUnmapped = async () => {
     if (!importId || selectedUnmappedIds.size === 0) return;
 
-    if (!batchAssignment.standardCode || !batchAssignment.specCode) {
+    // Require standard/spec selection unless moving to curriculum matrix
+    if (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode)) {
       setUploadError('Please select a standard and specification');
       return;
     }
@@ -476,12 +494,22 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
     for (const sectionId of selectedUnmappedIds) {
       try {
-        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-          action: 'assign',
-          standardCode: batchAssignment.standardCode,
-          specCode: batchAssignment.specCode,
-          toSupportingEvidence: batchAssignment.toSupportingEvidence
-        });
+        if (batchAssignment.toCurriculumMatrix) {
+          // Move to curriculum matrix
+          await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+            action: 'move_to_matrix',
+            toCurriculumMatrix: true,
+            matrixType: 'non_human_services_courses'
+          });
+        } else {
+          // Move to standard/spec
+          await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+            action: 'assign',
+            standardCode: batchAssignment.standardCode,
+            specCode: batchAssignment.specCode,
+            toSupportingEvidence: batchAssignment.toSupportingEvidence
+          });
+        }
         successCount++;
       } catch (err) {
         failCount++;
@@ -1344,7 +1372,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             standardCode: e.target.value,
                             specCode: '' // Reset spec when standard changes
                           }))}
-                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
+                          disabled={batchAssignment.toCurriculumMatrix}
                         >
                           <option value="">Select Standard...</option>
                           {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -1360,8 +1389,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             ...prev,
                             specCode: e.target.value
                           }))}
-                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                          disabled={!batchAssignment.standardCode}
+                          className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
+                          disabled={!batchAssignment.standardCode || batchAssignment.toCurriculumMatrix}
                         >
                           <option value="">Select Spec...</option>
                           {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
@@ -1377,11 +1406,30 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             checked={batchAssignment.toSupportingEvidence}
                             onChange={(e) => setBatchAssignment(prev => ({
                               ...prev,
-                              toSupportingEvidence: e.target.checked
+                              toSupportingEvidence: e.target.checked,
+                              toCurriculumMatrix: e.target.checked ? false : prev.toCurriculumMatrix
                             }))}
-                            className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                            disabled={batchAssignment.toCurriculumMatrix}
+                            className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
                           />
-                          To Supporting Evidence
+                          Supporting Evidence
+                        </label>
+
+                        <label className="flex items-center gap-2 text-sm text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={batchAssignment.toCurriculumMatrix}
+                            onChange={(e) => setBatchAssignment(prev => ({
+                              ...prev,
+                              toCurriculumMatrix: e.target.checked,
+                              // Clear standard/spec when moving to matrix
+                              standardCode: e.target.checked ? '' : prev.standardCode,
+                              specCode: e.target.checked ? '' : prev.specCode,
+                              toSupportingEvidence: e.target.checked ? false : prev.toSupportingEvidence
+                            }))}
+                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                          />
+                          To Curriculum Matrix
                         </label>
 
                         <button
@@ -1389,17 +1437,20 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           disabled={
                             isBatchMoving ||
                             selectedUnmappedIds.size === 0 ||
-                            !batchAssignment.standardCode ||
-                            !batchAssignment.specCode
+                            (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode))
                           }
-                          className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                          className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium ${
+                            batchAssignment.toCurriculumMatrix
+                              ? 'bg-purple-600 hover:bg-purple-700'
+                              : 'bg-teal-600 hover:bg-teal-700'
+                          }`}
                         >
                           {isBatchMoving ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
                             <Check className="w-4 h-4" />
                           )}
-                          Move Selected ({selectedUnmappedIds.size})
+                          {batchAssignment.toCurriculumMatrix ? 'Move to Matrix' : 'Move Selected'} ({selectedUnmappedIds.size})
                         </button>
 
                         <button
@@ -1500,7 +1551,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                                     specCode: '' // Reset spec when standard changes
                                   });
                                 }}
-                                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
+                                disabled={unmappedAssignments[section.id]?.toCurriculumMatrix}
                               >
                                 <option value="">Select Standard...</option>
                                 {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -1515,8 +1567,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                                 onChange={(e) => {
                                   updateUnmappedAssignment(section.id, { specCode: e.target.value });
                                 }}
-                                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
-                                disabled={!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode}
+                                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
+                                disabled={(!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode) || unmappedAssignments[section.id]?.toCurriculumMatrix}
                               >
                                 <option value="">Select Spec...</option>
                                 {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
@@ -1531,11 +1583,33 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                                   type="checkbox"
                                   checked={unmappedAssignments[section.id]?.toSupportingEvidence || false}
                                   onChange={(e) => {
-                                    updateUnmappedAssignment(section.id, { toSupportingEvidence: e.target.checked });
+                                    updateUnmappedAssignment(section.id, {
+                                      toSupportingEvidence: e.target.checked,
+                                      toCurriculumMatrix: e.target.checked ? false : unmappedAssignments[section.id]?.toCurriculumMatrix
+                                    });
                                   }}
-                                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                                  disabled={unmappedAssignments[section.id]?.toCurriculumMatrix}
+                                  className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
                                 />
-                                Supporting Evidence
+                                Evidence
+                              </label>
+
+                              <label className="flex items-center gap-1 text-xs text-purple-700">
+                                <input
+                                  type="checkbox"
+                                  checked={unmappedAssignments[section.id]?.toCurriculumMatrix || false}
+                                  onChange={(e) => {
+                                    updateUnmappedAssignment(section.id, {
+                                      toCurriculumMatrix: e.target.checked,
+                                      // Clear standard/spec when moving to matrix
+                                      standardCode: e.target.checked ? '' : unmappedAssignments[section.id]?.standardCode,
+                                      specCode: e.target.checked ? '' : unmappedAssignments[section.id]?.specCode,
+                                      toSupportingEvidence: e.target.checked ? false : unmappedAssignments[section.id]?.toSupportingEvidence
+                                    });
+                                  }}
+                                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                                />
+                                Matrix
                               </label>
                             </div>
 
@@ -1545,17 +1619,22 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                                 onClick={() => handleMoveUnmapped(section.id)}
                                 disabled={
                                   movingSection === section.id ||
-                                  (!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode) ||
-                                  (!unmappedAssignments[section.id]?.specCode && !section.suggestedSpecCode)
+                                  (!unmappedAssignments[section.id]?.toCurriculumMatrix &&
+                                    ((!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode) ||
+                                    (!unmappedAssignments[section.id]?.specCode && !section.suggestedSpecCode)))
                                 }
-                                className="flex items-center gap-1 px-3 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`flex items-center gap-1 px-3 py-1 text-xs text-white rounded disabled:opacity-50 disabled:cursor-not-allowed ${
+                                  unmappedAssignments[section.id]?.toCurriculumMatrix
+                                    ? 'bg-purple-600 hover:bg-purple-700'
+                                    : 'bg-teal-600 hover:bg-teal-700'
+                                }`}
                               >
                                 {movingSection === section.id ? (
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                 ) : (
                                   <Check className="w-3 h-3" />
                                 )}
-                                Move to Spec
+                                {unmappedAssignments[section.id]?.toCurriculumMatrix ? 'Move to Matrix' : 'Move to Spec'}
                               </button>
                               <button
                                 onClick={() => handleDiscardUnmapped(section.id)}
