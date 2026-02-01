@@ -1181,7 +1181,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             {importStatus?.progress?.parsingDetails?.sectionsCreated || importStatus?.progress?.parsingDetails?.tocEntriesFound} found
                           </span>
                         </div>
-                        <div className="max-h-32 overflow-y-auto">
+                        <div className="max-h-64 overflow-y-auto">
                           {/* Show sectionTitles if available, otherwise show tocTitles */}
                           {(importStatus?.progress?.parsingDetails?.sectionTitles && importStatus.progress.parsingDetails.sectionTitles.length > 0
                             ? importStatus.progress.parsingDetails.sectionTitles
@@ -1258,10 +1258,11 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                   {/* Recent mappings */}
                   {importStatus?.progress?.recentMappings && importStatus.progress.recentMappings.length > 0 && (
                     <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                      <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                         <h4 className="text-sm font-medium text-gray-700">Recent Mappings</h4>
+                        <span className="text-xs text-gray-500">{importStatus.progress.recentMappings.length} mappings</span>
                       </div>
-                      <div className="divide-y divide-gray-100">
+                      <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
                         {importStatus.progress.recentMappings.map((mapping, index) => (
                           <div key={index} className="px-4 py-2 flex items-center gap-2 text-sm">
                             <MapPin className="w-4 h-4 text-green-500 flex-shrink-0" />
