@@ -813,7 +813,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   return (
     <div className="self-study-editor flex flex-col bg-gray-50">
       {/* Header */}
-      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-6 py-4">
+      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
@@ -938,7 +938,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
               </button>
 
               {/* Editor Area */}
-              <main className="flex-1 flex flex-col p-4 min-w-0">
+              <main className="flex-1 flex flex-col p-2 min-w-0">
               {/* Navigation Breadcrumb */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -973,7 +973,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
               </div>
 
               {/* Editor Content */}
-              <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-auto p-6">
+              <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-auto p-4">
                 {selectedSpec ? (
                   <NarrativeEditor
                     submissionId={submissionId}
@@ -1013,7 +1013,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
           {/* Curriculum Matrix View */}
           {activeView === 'curriculum' && (
-            <main className="flex-1 overflow-hidden p-4">
+            <main className="flex-1 overflow-hidden p-2">
               <CurriculumMatrixEditor submissionId={submissionId} />
             </main>
           )}
@@ -1021,7 +1021,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
         {/* Import Document Side Panel - Part of layout, not overlay */}
         {showImportModal && (
-          <div className="w-[480px] flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col">
+          <div className="w-[420px] flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col">
             {/* Panel Header */}
             <div className={`flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 ${
               importStep === 'review' ? 'bg-teal-50' : 'bg-gray-50'
@@ -1042,7 +1042,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
             </div>
 
             {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4">
               {/* Upload Step */}
               {importStep === 'upload' && (
                 <div className="space-y-6">
