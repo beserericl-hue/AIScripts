@@ -1017,26 +1017,16 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         )}
       </div>
 
-      {/* Import Document Modal/Side Panel */}
+      {/* Import Document Side Panel */}
       {showImportModal && (
-        <div className={`fixed inset-0 z-50 ${
-          importStep === 'review'
-            ? 'flex justify-end'
-            : 'flex items-center justify-center bg-black/50'
-        }`}>
-          {/* Backdrop for review mode - click to close */}
-          {importStep === 'review' && (
-            <div
-              className="absolute inset-0 bg-black/30"
-              onClick={resetImportModal}
-            />
-          )}
-          <div className={`bg-white shadow-2xl flex flex-col relative ${
-            importStep === 'review'
-              ? 'w-[480px] h-full border-l border-gray-200 animate-slide-in-right'
-              : 'rounded-xl w-full max-w-3xl mx-4 max-h-[90vh]'
-          }`}>
-            {/* Modal/Panel Header */}
+        <div className="fixed inset-0 z-50 flex justify-end">
+          {/* Backdrop - click to close */}
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={resetImportModal}
+          />
+          <div className="bg-white shadow-2xl flex flex-col relative w-[480px] h-full border-l border-gray-200 animate-slide-in-right">
+            {/* Panel Header */}
             <div className={`flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 ${
               importStep === 'review' ? 'bg-teal-50' : 'bg-gray-50'
             }`}>
