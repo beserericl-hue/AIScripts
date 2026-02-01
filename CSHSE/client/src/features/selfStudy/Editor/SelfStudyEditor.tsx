@@ -811,7 +811,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   }
 
   return (
-    <div className="self-study-editor flex flex-col bg-gray-50">
+    <div className="self-study-editor flex flex-col bg-gray-50 h-[calc(100vh-64px)]">
       {/* Header */}
       <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
         <div className="flex items-center justify-between">

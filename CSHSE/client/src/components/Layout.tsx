@@ -70,12 +70,15 @@ export default function Layout() {
     ? impersonation.impersonatedRole
     : user?.role;
 
+  // Check if we're on a full-width route (self-study editor with submissionId)
+  const isFullWidthRoute = location.pathname.match(/^\/self-study\/[^/]+/);
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Impersonation Banner */}
       {impersonation.isImpersonating && (
         <div className="bg-amber-500 text-white px-4 py-2">
-          <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className={isFullWidthRoute ? 'flex items-center justify-between' : 'max-w-7xl mx-auto flex items-center justify-between'}>
             <div className="flex items-center space-x-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -100,7 +103,7 @@ export default function Layout() {
 
       {/* Header */}
       <header className="app-header">
-        <div className="app-header-content">
+        <div className={isFullWidthRoute ? 'px-4' : 'app-header-content'}>
           <div className="app-header-inner">
             {/* Logo and Navigation */}
             <div className="flex items-center">
@@ -165,8 +168,8 @@ export default function Layout() {
         </div>
       </header>
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      {/* Main content - full width for self-study editor, constrained for other pages */}
+      <main className={isFullWidthRoute ? '' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'}>
         <Outlet />
       </main>
     </div>
