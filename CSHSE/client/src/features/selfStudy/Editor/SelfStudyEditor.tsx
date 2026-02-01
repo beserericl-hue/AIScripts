@@ -162,8 +162,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [unmappedAssignments, setUnmappedAssignments] = useState<Record<string, UnmappedAssignment>>({});
   const [movingSection, setMovingSection] = useState<string | null>(null);
 
-  // Batch assignment state for unmapped sections
-  const [selectedUnmappedIds, setSelectedUnmappedIds] = useState<Set<string>>(new Set());
+  // Batch assignment state for sections (both mapped and unmapped)
+  const [selectedSectionIds, setSelectedSectionIds] = useState<Set<string>>(new Set());
   const [batchAssignment, setBatchAssignment] = useState<UnmappedAssignment>({
     standardCode: '',
     specCode: '',
@@ -174,6 +174,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
   // State for viewing full section content
   const [expandedSection, setExpandedSection] = useState<ExtractedSection | null>(null);
+  const [loadingFullContent, setLoadingFullContent] = useState(false);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -352,9 +353,39 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setUnmappedAssignments({});
     setMovingSection(null);
     // Reset batch assignment state
-    setSelectedUnmappedIds(new Set());
+    setSelectedSectionIds(new Set());
     setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
     setIsBatchMoving(false);
+  };
+
+  // Fetch full section content and open modal
+  const handleViewFullContent = async (section: ExtractedSection) => {
+    if (!importId) {
+      // If no importId, just show the truncated content we have
+      setExpandedSection(section);
+      return;
+    }
+
+    setLoadingFullContent(true);
+    setExpandedSection(section); // Show modal immediately with loading state
+
+    try {
+      const response = await api.get(`/api/imports/${importId}/sections/${section.id}`);
+      // Update expandedSection with full content
+      setExpandedSection({
+        ...section,
+        content: response.data.content,
+        unmappedReason: response.data.unmappedReason,
+        suggestedStandardCode: response.data.suggestedStandardCode,
+        suggestedSpecCode: response.data.suggestedSpecCode,
+        suggestedConfidence: response.data.suggestedConfidence,
+      });
+    } catch (err) {
+      console.error('Failed to fetch full section content:', err);
+      // Keep showing the truncated content if fetch fails
+    } finally {
+      setLoadingFullContent(false);
+    }
   };
 
   // Handle moving an unmapped section to a spec or curriculum matrix
@@ -457,8 +488,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   };
 
   // Batch selection handlers
-  const toggleUnmappedSelection = (sectionId: string) => {
-    setSelectedUnmappedIds(prev => {
+  const toggleSectionSelection = (sectionId: string) => {
+    setSelectedSectionIds(prev => {
       const newSet = new Set(prev);
       if (newSet.has(sectionId)) {
         newSet.delete(sectionId);
@@ -469,20 +500,18 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     });
   };
 
-  const selectAllUnmapped = () => {
-    const unmappedIds = extractedSections
-      .filter(s => s.status === 'unmapped')
-      .map(s => s.id);
-    setSelectedUnmappedIds(new Set(unmappedIds));
+  const selectAllSections = () => {
+    const allIds = extractedSections.map(s => s.id);
+    setSelectedSectionIds(new Set(allIds));
   };
 
-  const selectNoneUnmapped = () => {
-    setSelectedUnmappedIds(new Set());
+  const selectNoneSections = () => {
+    setSelectedSectionIds(new Set());
   };
 
   // Batch move handler
-  const handleBatchMoveUnmapped = async () => {
-    if (!importId || selectedUnmappedIds.size === 0) return;
+  const handleBatchMoveSections = async () => {
+    if (!importId || selectedSectionIds.size === 0) return;
 
     // Require standard/spec selection unless moving to curriculum matrix
     if (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode)) {
@@ -496,7 +525,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     let successCount = 0;
     let failCount = 0;
 
-    for (const sectionId of selectedUnmappedIds) {
+    for (const sectionId of selectedSectionIds) {
       try {
         if (batchAssignment.toCurriculumMatrix) {
           // Move to curriculum matrix
@@ -523,9 +552,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
     // Remove successfully moved sections from list
     setExtractedSections(prev =>
-      prev.filter(s => !selectedUnmappedIds.has(s.id) || failCount > 0)
+      prev.filter(s => !selectedSectionIds.has(s.id) || failCount > 0)
     );
-    setSelectedUnmappedIds(new Set());
+    setSelectedSectionIds(new Set());
 
     // Refresh submission data
     queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
@@ -538,10 +567,10 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   };
 
   // Batch discard handler
-  const handleBatchDiscardUnmapped = async () => {
-    if (!importId || selectedUnmappedIds.size === 0) return;
+  const handleBatchDiscardSections = async () => {
+    if (!importId || selectedSectionIds.size === 0) return;
 
-    if (!window.confirm(`Discard ${selectedUnmappedIds.size} selected section(s)? This content will not be imported.`)) {
+    if (!window.confirm(`Discard ${selectedSectionIds.size} selected section(s)? This content will not be imported.`)) {
       return;
     }
 
@@ -551,7 +580,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     let successCount = 0;
     let failCount = 0;
 
-    for (const sectionId of selectedUnmappedIds) {
+    for (const sectionId of selectedSectionIds) {
       try {
         await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
           action: 'discard'
@@ -566,10 +595,10 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     // Remove successfully discarded sections from list
     if (successCount > 0) {
       setExtractedSections(prev =>
-        prev.filter(s => !selectedUnmappedIds.has(s.id))
+        prev.filter(s => !selectedSectionIds.has(s.id))
       );
     }
-    setSelectedUnmappedIds(new Set());
+    setSelectedSectionIds(new Set());
 
     if (failCount > 0) {
       setUploadError(`Discarded ${successCount} section(s), ${failCount} failed`);
@@ -1345,29 +1374,29 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                     </div>
                   </div>
 
-                  {/* Batch Assignment UI for Unmapped Sections */}
-                  {extractedSections.some(s => s.status === 'unmapped') && (
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+                  {/* Batch Assignment UI for All Sections */}
+                  {extractedSections.length > 0 && (
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-lg space-y-3">
                       <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-amber-800">
-                          Assign Unmapped Sections
+                        <h4 className="font-medium text-gray-800">
+                          Assign Sections
                         </h4>
                         <div className="flex items-center gap-2 text-sm">
                           <button
-                            onClick={selectAllUnmapped}
+                            onClick={selectAllSections}
                             className="text-teal-600 hover:text-teal-700 underline"
                           >
                             Select All
                           </button>
                           <span className="text-gray-400">|</span>
                           <button
-                            onClick={selectNoneUnmapped}
+                            onClick={selectNoneSections}
                             className="text-teal-600 hover:text-teal-700 underline"
                           >
                             Select None
                           </button>
                           <span className="text-gray-500 ml-2">
-                            ({selectedUnmappedIds.size} selected)
+                            ({selectedSectionIds.size} selected)
                           </span>
                         </div>
                       </div>
@@ -1441,10 +1470,10 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                         </label>
 
                         <button
-                          onClick={handleBatchMoveUnmapped}
+                          onClick={handleBatchMoveSections}
                           disabled={
                             isBatchMoving ||
-                            selectedUnmappedIds.size === 0 ||
+                            selectedSectionIds.size === 0 ||
                             (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode))
                           }
                           className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium ${
@@ -1458,12 +1487,12 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           ) : (
                             <Check className="w-4 h-4" />
                           )}
-                          {batchAssignment.toCurriculumMatrix ? 'Move to Matrix' : 'Move Selected'} ({selectedUnmappedIds.size})
+                          {batchAssignment.toCurriculumMatrix ? 'Move to Matrix' : 'Move Selected'} ({selectedSectionIds.size})
                         </button>
 
                         <button
-                          onClick={handleBatchDiscardUnmapped}
-                          disabled={isBatchMoving || selectedUnmappedIds.size === 0}
+                          onClick={handleBatchDiscardSections}
+                          disabled={isBatchMoving || selectedSectionIds.size === 0}
                           className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                         >
                           {isBatchMoving ? (
@@ -1490,15 +1519,13 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                       >
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-center gap-2">
-                            {/* Checkbox for batch selection (unmapped sections only) */}
-                            {section.status === 'unmapped' && (
-                              <input
-                                type="checkbox"
-                                checked={selectedUnmappedIds.has(section.id)}
-                                onChange={() => toggleUnmappedSelection(section.id)}
-                                className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
-                              />
-                            )}
+                            {/* Checkbox for batch selection (all sections) */}
+                            <input
+                              type="checkbox"
+                              checked={selectedSectionIds.has(section.id)}
+                              onChange={() => toggleSectionSelection(section.id)}
+                              className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 cursor-pointer"
+                            />
                             {section.status === 'mapped' ? (
                               <MapPin className="w-4 h-4 text-green-600" />
                             ) : (
@@ -1523,7 +1550,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                               {Math.round(section.confidence * 100)}% confidence
                             </span>
                             <button
-                              onClick={() => setExpandedSection(section)}
+                              onClick={() => handleViewFullContent(section)}
                               className="p-1 text-gray-400 hover:text-teal-600 hover:bg-gray-100 rounded transition-colors"
                               title="View full content"
                             >
@@ -1535,7 +1562,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                         {/* Content preview */}
                         <div
                           className="text-sm text-gray-700 mb-3 max-h-32 overflow-y-auto border border-gray-200 bg-white rounded p-2 cursor-pointer hover:border-teal-300"
-                          onClick={() => setExpandedSection(section)}
+                          onClick={() => handleViewFullContent(section)}
                           dangerouslySetInnerHTML={{
                             __html: section.content.substring(0, 500) + (section.content.length > 500 ? '...' : '')
                           }}
@@ -1804,10 +1831,17 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
               {/* Full content */}
               <div className="prose prose-sm max-w-none">
-                <div
-                  className="text-gray-700 leading-relaxed whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{ __html: expandedSection.content }}
-                />
+                {loadingFullContent ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-teal-600" />
+                    <span className="ml-2 text-gray-500">Loading full content...</span>
+                  </div>
+                ) : (
+                  <div
+                    className="text-gray-700 leading-relaxed whitespace-pre-wrap"
+                    dangerouslySetInnerHTML={{ __html: expandedSection.content }}
+                  />
+                )}
               </div>
             </div>
 

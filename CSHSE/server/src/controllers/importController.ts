@@ -1029,6 +1029,53 @@ export const getExtractedSections = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get full content for a specific section
+ * Used when viewing section details in the modal
+ */
+export const getSectionContent = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId, sectionId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    const section = importRecord.extractedContent.sections.find(s => s.id === sectionId);
+    if (!section) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+
+    // Get mapping/unmapped info for this section
+    const mapping = importRecord.mappedSections.find(m => m.extractedSectionId === sectionId);
+    const unmapped = importRecord.unmappedContent.find(u => u.extractedSectionId === sectionId);
+
+    return res.json({
+      id: section.id,
+      pageNumber: section.pageNumber,
+      sectionType: section.sectionType,
+      content: section.content, // Full content, not truncated
+      suggestedStandard: section.suggestedStandard,
+      confidence: section.confidence,
+      mapping: mapping ? {
+        standardCode: mapping.standardCode,
+        specCode: mapping.specCode,
+        fieldType: mapping.fieldType,
+        mappedBy: mapping.mappedBy
+      } : null,
+      unmappedReason: unmapped?.reason,
+      status: mapping ? 'mapped' : (unmapped ? 'unmapped' : 'pending'),
+      suggestedStandardCode: unmapped?.suggestedStandardCode,
+      suggestedSpecCode: unmapped?.suggestedSpecCode,
+      suggestedConfidence: unmapped?.suggestedConfidence
+    });
+  } catch (error) {
+    console.error('Get section content error:', error);
+    return res.status(500).json({ error: 'Failed to get section content' });
+  }
+};
+
+/**
  * Map a section to a standard
  */
 export const mapSection = async (req: AuthenticatedRequest, res: Response) => {

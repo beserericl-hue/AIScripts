@@ -4,6 +4,7 @@ import {
   uploadDocument,
   getImport,
   getExtractedSections,
+  getSectionContent,
   mapSection,
   applyMappings,
   getUnmappedContent,
@@ -59,6 +60,13 @@ router.get('/:importId', getImport);
  * @access  Private
  */
 router.get('/:importId/sections', getExtractedSections);
+
+/**
+ * @route   GET /api/imports/:importId/sections/:sectionId
+ * @desc    Get full content of a specific section
+ * @access  Private
+ */
+router.get('/:importId/sections/:sectionId', getSectionContent);
 
 /**
  * @route   POST /api/imports/:importId/map
