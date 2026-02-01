@@ -932,7 +932,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
             </button>
 
             {/* Editor Area */}
-            <main className="flex-1 flex flex-col p-6">
+            <main className="flex-1 flex flex-col p-4">
               {/* Navigation Breadcrumb */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -1007,27 +1007,45 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
         {/* Curriculum Matrix View */}
         {activeView === 'curriculum' && (
-          <main className="flex-1 overflow-hidden p-6">
+          <main className="flex-1 overflow-hidden p-4">
             <CurriculumMatrixEditor submissionId={submissionId} />
           </main>
         )}
       </div>
 
-      {/* Import Document Modal */}
+      {/* Import Document Modal/Side Panel */}
       {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+        <div className={`fixed inset-0 z-50 ${
+          importStep === 'review'
+            ? 'flex justify-end'
+            : 'flex items-center justify-center bg-black/50'
+        }`}>
+          {/* Backdrop for review mode - click to close */}
+          {importStep === 'review' && (
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={resetImportModal}
+            />
+          )}
+          <div className={`bg-white shadow-2xl flex flex-col relative ${
+            importStep === 'review'
+              ? 'w-[480px] h-full border-l border-gray-200 animate-slide-in-right'
+              : 'rounded-xl w-full max-w-3xl mx-4 max-h-[90vh]'
+          }`}>
+            {/* Modal/Panel Header */}
+            <div className={`flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 ${
+              importStep === 'review' ? 'bg-teal-50' : 'bg-gray-50'
+            }`}>
               <div className="flex items-center gap-3">
                 <Upload className="w-5 h-5 text-teal-600" />
                 <h2 className="text-lg font-semibold text-gray-900">
-                  Import Document
+                  {importStep === 'review' ? 'Import Review' : 'Import Document'}
                 </h2>
               </div>
               <button
                 onClick={resetImportModal}
                 className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                title="Close"
               >
                 <X className="w-5 h-5 text-gray-500" />
               </button>
