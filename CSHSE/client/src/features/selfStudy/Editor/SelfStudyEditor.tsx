@@ -17,6 +17,7 @@ import {
   RefreshCw,
   Grid3X3,
   BookOpen,
+  Maximize2,
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
@@ -170,6 +171,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     toCurriculumMatrix: false
   });
   const [isBatchMoving, setIsBatchMoving] = useState(false);
+
+  // State for viewing full section content
+  const [expandedSection, setExpandedSection] = useState<ExtractedSection | null>(null);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -1527,18 +1531,29 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                                 : 'Unmapped Section'}
                             </span>
                           </div>
-                          <span className="text-xs text-gray-500">
-                            Page {section.pageNumber} |{' '}
-                            {Math.round(section.confidence * 100)}% confidence
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">
+                              Page {section.pageNumber} |{' '}
+                              {Math.round(section.confidence * 100)}% confidence
+                            </span>
+                            <button
+                              onClick={() => setExpandedSection(section)}
+                              className="p-1 text-gray-400 hover:text-teal-600 hover:bg-gray-100 rounded transition-colors"
+                              title="View full content"
+                            >
+                              <Maximize2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </div>
 
                         {/* Content preview */}
                         <div
-                          className="text-sm text-gray-700 mb-3 max-h-32 overflow-y-auto border border-gray-200 bg-white rounded p-2"
+                          className="text-sm text-gray-700 mb-3 max-h-32 overflow-y-auto border border-gray-200 bg-white rounded p-2 cursor-pointer hover:border-teal-300"
+                          onClick={() => setExpandedSection(section)}
                           dangerouslySetInnerHTML={{
                             __html: section.content.substring(0, 500) + (section.content.length > 500 ? '...' : '')
                           }}
+                          title="Click to view full content"
                         />
 
                         {section.unmappedReason && (
@@ -1749,6 +1764,75 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                   )}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Content Viewer Modal */}
+      {expandedSection && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-teal-600" />
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">
+                    Section Content
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    Page {expandedSection.pageNumber} | {Math.round(expandedSection.confidence * 100)}% confidence
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setExpandedSection(null)}
+                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {/* Unmapped reason if available */}
+              {expandedSection.unmappedReason && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-700">
+                    <strong>AI Analysis:</strong> {expandedSection.unmappedReason}
+                  </p>
+                </div>
+              )}
+
+              {/* AI suggestion if available */}
+              {expandedSection.suggestedStandardCode && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-700">
+                    💡 <strong>AI Suggestion:</strong> Standard {expandedSection.suggestedStandardCode}
+                    {expandedSection.suggestedSpecCode && `.${expandedSection.suggestedSpecCode}`}
+                    {expandedSection.suggestedConfidence && ` (${expandedSection.suggestedConfidence}% confidence)`}
+                  </p>
+                </div>
+              )}
+
+              {/* Full content */}
+              <div className="prose prose-sm max-w-none">
+                <div
+                  className="text-gray-700 leading-relaxed whitespace-pre-wrap"
+                  dangerouslySetInnerHTML={{ __html: expandedSection.content }}
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 flex-shrink-0">
+              <button
+                onClick={() => setExpandedSection(null)}
+                className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
