@@ -2040,62 +2040,256 @@ export class DocumentParserService {
   }
 
   /**
-   * Enhanced parse method that uses TOC for intelligent sectioning
-   * This should be called instead of the basic parse() for self-study documents
+   * Enhanced parse method that uses HEADING STYLES as the PRIMARY method
+   * for sectioning, with TOC used only for enrichment (standard code hints).
    *
-   * Fallback order:
-   * 1. TOC-based parsing (if Table of Contents found)
-   * 2. Header-based parsing (split by h1, h2 or text patterns)
-   * 3. Error if no structure detected
+   * This approach is more reliable because:
+   * 1. Word heading styles (Heading 1, Heading 2) are preserved by mammoth as h1/h2
+   * 2. The Table of Contents is generated FROM heading styles, so headings are authoritative
+   * 3. Text matching TOC entries to document body is fragile and error-prone
+   *
+   * Process:
+   * 1. Parse document - mammoth converts Word heading styles to HTML h1/h2/h3
+   * 2. Split document by HTML headings (PRIMARY)
+   * 3. Extract TOC for standard code hints (SECONDARY - enrichment only)
+   * 4. Enrich sections with hints from TOC entries
    */
   async parseWithTOC(buffer: Buffer, filename: string): Promise<{
     document: ParsedDocument;
     tocEntries: TOCEntry[];
     sections: TOCBasedSection[];
   }> {
-    // First, do the basic parse
+    // 1. Parse document - mammoth converts Word heading styles to HTML headings
     const document = await this.parse(buffer, filename);
 
-    // Extract TOC
+    console.log(`[DocumentParser] Parsed document: ${document.rawText.length} chars, HTML: ${document.htmlContent.length} chars`);
+
+    // 2. PRIMARY: Split document by HTML headings (from Word heading styles)
+    // This is the authoritative structure - headings define sections
+    const sections = this.splitByHtmlHeadings(document.htmlContent);
+
+    console.log(`[DocumentParser] Found ${sections.length} sections from heading styles`);
+
+    if (sections.length === 0) {
+      // No headings found - try text pattern detection as fallback
+      console.log('[DocumentParser] No HTML headings found, trying text pattern detection');
+      const patternSections = this.splitByTextPatterns(document.rawText);
+
+      if (patternSections.length > 1) {
+        console.log(`[DocumentParser] Found ${patternSections.length} sections from text patterns`);
+
+        // Still try to extract TOC for hints
+        const tocEntries = this.extractTableOfContents(document.rawText);
+        this.enrichSectionsWithTocHints(patternSections, tocEntries);
+
+        return {
+          document,
+          tocEntries,
+          sections: patternSections
+        };
+      }
+
+      // No structure detected
+      const isPDF = filename.toLowerCase().endsWith('.pdf');
+      const errorMessage = isPDF
+        ? 'PDF_NO_STRUCTURE: This PDF does not have recognizable section headers. Please use a DOCX document with proper heading styles (Heading 1, Heading 2).'
+        : 'NO_STRUCTURE: This document does not have heading styles applied. Please ensure your document uses Word heading styles (Heading 1, Heading 2, etc.) for section headers.';
+
+      console.error(`[DocumentParser] ${errorMessage}`);
+      throw new Error(errorMessage);
+    }
+
+    // 3. SECONDARY: Extract TOC for standard code hints (enrichment only)
     const tocEntries = this.extractTableOfContents(document.rawText);
+    console.log(`[DocumentParser] Found ${tocEntries.length} TOC entries for enrichment`);
 
-    // If TOC found, use TOC-based splitting
-    if (tocEntries.length > 0) {
-      console.log(`[DocumentParser] Using TOC-based parsing (${tocEntries.length} entries)`);
-      const sections = this.splitDocumentByTOC(
-        document.rawText,
-        document.htmlContent,
-        tocEntries
-      );
+    // 4. Enrich sections with hints from TOC (standard codes, section types)
+    this.enrichSectionsWithTocHints(sections, tocEntries);
 
-      return {
-        document,
-        tocEntries,
-        sections
-      };
+    // Log section summary
+    const sectionSummary = sections.map(s => ({
+      title: s.tocEntry.title.substring(0, 50),
+      type: s.tocEntry.sectionType,
+      isMatrix: s.tocEntry.isMatrix,
+      standardHint: s.standardHint,
+      contentLength: s.content.length
+    }));
+    console.log('[DocumentParser] Section summary:', JSON.stringify(sectionSummary, null, 2));
+
+    return {
+      document,
+      tocEntries,
+      sections
+    };
+  }
+
+  /**
+   * Split document by HTML heading tags (h1, h2, h3)
+   * This is the PRIMARY method for sectioning - it uses the document's actual structure
+   * as defined by Word heading styles.
+   */
+  private splitByHtmlHeadings(htmlContent: string): TOCBasedSection[] {
+    const sections: TOCBasedSection[] = [];
+
+    // Match h1, h2, h3 tags - these come from Word heading styles
+    const headingRegex = /<h([1-3])[^>]*>(.*?)<\/h\1>/gi;
+    const matches: Array<{ level: number; text: string; index: number; fullMatch: string }> = [];
+    let match;
+
+    while ((match = headingRegex.exec(htmlContent)) !== null) {
+      const headingText = match[2].replace(/<[^>]*>/g, '').trim();
+
+      // Skip empty headings and TOC itself
+      if (!headingText || headingText.length < 2) continue;
+      if (headingText.toLowerCase().includes('table of contents')) continue;
+      if (headingText.toLowerCase() === 'contents') continue;
+
+      matches.push({
+        level: parseInt(match[1], 10),
+        text: headingText,
+        index: match.index,
+        fullMatch: match[0]
+      });
     }
 
-    // No TOC found - fall back to header-based splitting
-    console.log('[DocumentParser] No TOC found, falling back to header-based splitting');
-    const headerSections = this.splitByHeaders(document.htmlContent, document.rawText);
+    console.log(`[DocumentParser] Found ${matches.length} heading tags in HTML`);
 
-    if (headerSections.length > 1) {
-      console.log(`[DocumentParser] Header-based parsing found ${headerSections.length} sections`);
-      return {
-        document,
-        tocEntries: [], // No TOC
-        sections: headerSections
-      };
+    if (matches.length === 0) {
+      return sections;
     }
 
-    // No structure detected - throw error for documents that can't be processed
-    const isPDF = filename.toLowerCase().endsWith('.pdf');
-    const errorMessage = isPDF
-      ? 'PDF_NO_STRUCTURE: This PDF does not have recognizable section headers. Please use a document with clear section headings (e.g., "Standard 1: Program Identity", "STANDARD 1", or numbered sections like "1. Introduction") or convert to DOCX format with proper heading styles.'
-      : 'NO_STRUCTURE: This document does not have recognizable section headers. Please ensure your document has clear section headings using heading styles (Heading 1, Heading 2) or patterns like "Standard 1:", "SECTION I:", etc.';
+    // Create sections from headings
+    for (let i = 0; i < matches.length; i++) {
+      const currentMatch = matches[i];
+      const nextMatch = matches[i + 1];
 
-    console.error(`[DocumentParser] ${errorMessage}`);
-    throw new Error(errorMessage);
+      // Extract content from this heading to the next heading (or end of document)
+      const startPos = currentMatch.index;
+      const endPos = nextMatch ? nextMatch.index : htmlContent.length;
+      const sectionHtml = htmlContent.substring(startPos, endPos);
+
+      // Convert to plain text for content
+      const sectionText = sectionHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+      // Skip very short sections (likely just the heading with no content)
+      if (sectionText.length < 50) {
+        console.log(`[DocumentParser] Skipping short section: "${currentMatch.text.substring(0, 40)}..." (${sectionText.length} chars)`);
+        continue;
+      }
+
+      // Determine section type from title
+      const { standardCode, specCode } = this.extractStandardFromTOCTitle(currentMatch.text);
+      const sectionType = this.determineSectionType(currentMatch.text, standardCode);
+      const isMatrix = this.isTOCEntryMatrix(currentMatch.text);
+      const isSupportingEvidence = this.isTOCSupportingEvidence(currentMatch.text);
+
+      // Build hints
+      let standardHint = '';
+      let specHint = '';
+      if (standardCode) {
+        standardHint = `Standard ${standardCode}`;
+        if (specCode) {
+          specHint = `Specification ${specCode}`;
+        }
+      }
+
+      sections.push({
+        id: uuidv4(),
+        tocEntry: {
+          title: currentMatch.text,
+          level: currentMatch.level,
+          standardCode,
+          specCode,
+          sectionType,
+          isMatrix,
+          isSupportingEvidence
+        },
+        content: sectionText,
+        htmlContent: sectionHtml,
+        startPosition: startPos,
+        endPosition: endPos,
+        standardHint,
+        specHint
+      });
+    }
+
+    return sections;
+  }
+
+  /**
+   * Enrich sections with hints from TOC entries
+   * This matches section titles to TOC entries to get standard codes and section types
+   */
+  private enrichSectionsWithTocHints(sections: TOCBasedSection[], tocEntries: TOCEntry[]): void {
+    if (tocEntries.length === 0) return;
+
+    for (const section of sections) {
+      // Try to find a matching TOC entry
+      const matchingToc = this.findMatchingTocEntry(section.tocEntry.title, tocEntries);
+
+      if (matchingToc) {
+        // Update section with TOC info
+        if (matchingToc.standardCode && !section.tocEntry.standardCode) {
+          section.tocEntry.standardCode = matchingToc.standardCode;
+          section.standardHint = `Standard ${matchingToc.standardCode}`;
+        }
+        if (matchingToc.specCode && !section.tocEntry.specCode) {
+          section.tocEntry.specCode = matchingToc.specCode;
+          section.specHint = `Specification ${matchingToc.specCode}`;
+        }
+        if (matchingToc.isMatrix) {
+          section.tocEntry.isMatrix = true;
+          section.tocEntry.sectionType = 'matrix';
+        }
+        if (matchingToc.isSupportingEvidence) {
+          section.tocEntry.isSupportingEvidence = true;
+          section.tocEntry.sectionType = 'supporting_evidence';
+        }
+        if (matchingToc.sectionType !== 'general' && section.tocEntry.sectionType === 'general') {
+          section.tocEntry.sectionType = matchingToc.sectionType;
+        }
+
+        console.log(`[DocumentParser] Enriched section "${section.tocEntry.title.substring(0, 30)}..." with TOC hints: std=${matchingToc.standardCode}, matrix=${matchingToc.isMatrix}`);
+      }
+    }
+  }
+
+  /**
+   * Find a TOC entry that matches a section title
+   * Uses fuzzy matching to handle minor differences
+   */
+  private findMatchingTocEntry(sectionTitle: string, tocEntries: TOCEntry[]): TOCEntry | null {
+    const normalizedTitle = this.normalizeTitle(sectionTitle);
+
+    for (const entry of tocEntries) {
+      const normalizedEntry = this.normalizeTitle(entry.title);
+
+      // Exact match
+      if (normalizedEntry === normalizedTitle) {
+        return entry;
+      }
+
+      // One contains the other (for cases with numbering differences)
+      if (normalizedEntry.includes(normalizedTitle) || normalizedTitle.includes(normalizedEntry)) {
+        const minLength = Math.min(normalizedEntry.length, normalizedTitle.length);
+        if (minLength >= 10) {
+          return entry;
+        }
+      }
+
+      // Match on key words
+      const titleWords = normalizedTitle.split(/\s+/).filter(w => w.length > 3);
+      const entryWords = normalizedEntry.split(/\s+/).filter(w => w.length > 3);
+
+      if (titleWords.length >= 2 && entryWords.length >= 2) {
+        const matchingWords = titleWords.filter(w => entryWords.includes(w));
+        if (matchingWords.length >= Math.min(3, titleWords.length * 0.6)) {
+          return entry;
+        }
+      }
+    }
+
+    return null;
   }
 
   /**
