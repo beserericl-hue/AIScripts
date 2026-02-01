@@ -562,13 +562,27 @@ async function sendToN8nDocumentMatcher(
       return false;
     }
 
-    // Exclude very short sections (less than 100 chars)
-    if (section.content.length < 100) {
+    // Check if this is a matrix section (should be lenient with these)
+    const isMatrixSection = section.tocEntry.isMatrix || title.includes('matrix');
+
+    // Exclude very short sections, but be lenient with matrix sections
+    // (matrix tables can be short when converted to plain text)
+    const minLength = isMatrixSection ? 20 : 100;
+    if (section.content.length < minLength) {
       debugLog('Excluding short section from AI processing', {
+        title: section.tocEntry.title,
+        length: section.content.length,
+        isMatrix: isMatrixSection,
+        minLength
+      });
+      return false;
+    }
+
+    if (isMatrixSection) {
+      debugLog('Including matrix section for AI processing', {
         title: section.tocEntry.title,
         length: section.content.length
       });
-      return false;
     }
 
     // Include all other sections (even supporting evidence - AI can help categorize)

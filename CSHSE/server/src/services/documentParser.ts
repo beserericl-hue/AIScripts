@@ -1221,7 +1221,7 @@ export class DocumentParserService {
   /**
    * Extract sections by finding TOC entry titles in the document body
    * Strategy: Find where TOC ends, then search globally for each section title
-   * Does NOT use page-based estimation (which is unreliable due to varying page lengths)
+   * Uses page-based estimation as fallback for sections that can't be found by title
    */
   private extractSectionsViaText(text: string, htmlContent: string, tocEntries: TOCEntry[]): TOCBasedSection[] {
     const sections: TOCBasedSection[] = [];
@@ -1245,38 +1245,55 @@ export class DocumentParserService {
     const tocEndPosition = this.findTocEndPosition(text);
     console.log(`[DocumentParser] TOC ends at approximately position ${tocEndPosition} (${Math.round(tocEndPosition / textLength * 100)}% of document)`);
 
-    // Step 2: Search for each section title globally from TOC end
+    // Step 2: Estimate characters per page for page-number fallback
+    // Get max page number from TOC entries
+    const maxPage = Math.max(...contentEntries.map(e => e.pageNumber || 0), 1);
+    const charsPerPage = Math.round((textLength - tocEndPosition) / Math.max(maxPage, 1));
+    console.log(`[DocumentParser] Estimated ${charsPerPage} chars per page (max page: ${maxPage})`);
+
+    // Step 3: Search for each section title globally from TOC end
     // Sort entries by page number to search in expected order
     const sortedEntries = [...contentEntries].sort((a, b) => (a.pageNumber || 0) - (b.pageNumber || 0));
 
-    const sectionPositions: Array<{ entry: TOCEntry; position: number }> = [];
+    const sectionPositions: Array<{ entry: TOCEntry; position: number; foundByTitle: boolean }> = [];
     let lastFoundPosition = tocEndPosition; // Track last found position to search sequentially
 
     for (const entry of sortedEntries) {
-      console.log(`[DocumentParser] Searching for: "${entry.title.substring(0, 40)}..." (page ${entry.pageNumber || '?'})`);
+      const isMatrixEntry = this.isTOCEntryMatrix(entry.title);
+      console.log(`[DocumentParser] Searching for: "${entry.title.substring(0, 40)}..." (page ${entry.pageNumber || '?'})${isMatrixEntry ? ' [MATRIX]' : ''}`);
 
       // Search from last found position (sections should appear in order)
       let position = this.findSectionTitlePosition(text, entry.title, lastFoundPosition);
 
       if (position !== -1) {
-        sectionPositions.push({ entry, position });
+        sectionPositions.push({ entry, position, foundByTitle: true });
         lastFoundPosition = position + 1; // Next section should be after this one
         console.log(`[DocumentParser] ✓ Found at position ${position}`);
       } else {
         // Fallback: search from TOC end (section might be out of expected order)
         position = this.findSectionTitlePosition(text, entry.title, tocEndPosition);
         if (position !== -1) {
-          sectionPositions.push({ entry, position });
+          sectionPositions.push({ entry, position, foundByTitle: true });
           console.log(`[DocumentParser] ✓ Found via global search at position ${position}`);
         } else {
           // Last resort: search entire document
           position = this.findSectionTitlePosition(text, entry.title, 0);
           if (position !== -1 && position > tocEndPosition * 0.5) {
             // Only accept if it's after at least half the TOC area
-            sectionPositions.push({ entry, position });
+            sectionPositions.push({ entry, position, foundByTitle: true });
             console.log(`[DocumentParser] ✓ Found via full search at position ${position}`);
           } else {
-            console.log(`[DocumentParser] ✗ Could not find: "${entry.title.substring(0, 30)}..."`);
+            // PAGE NUMBER FALLBACK: Estimate position based on page number
+            // This is crucial for matrix sections that may not have matching headers
+            if (entry.pageNumber && entry.pageNumber > 0) {
+              const estimatedPosition = tocEndPosition + ((entry.pageNumber - 1) * charsPerPage);
+              // Clamp to document bounds
+              const clampedPosition = Math.min(Math.max(estimatedPosition, tocEndPosition), textLength - 100);
+              sectionPositions.push({ entry, position: clampedPosition, foundByTitle: false });
+              console.log(`[DocumentParser] ⚠ Using page-based estimate for "${entry.title.substring(0, 30)}..." at position ${clampedPosition} (page ${entry.pageNumber})`);
+            } else {
+              console.log(`[DocumentParser] ✗ Could not find: "${entry.title.substring(0, 30)}..." (no page number for fallback)`);
+            }
           }
         }
       }
@@ -1285,7 +1302,16 @@ export class DocumentParserService {
     // Sort by position to ensure correct extraction order
     sectionPositions.sort((a, b) => a.position - b.position);
 
-    console.log(`[DocumentParser] Found ${sectionPositions.length} section positions out of ${contentEntries.length} TOC entries`);
+    // Log summary of found vs estimated sections
+    const foundByTitle = sectionPositions.filter(s => s.foundByTitle).length;
+    const foundByPage = sectionPositions.filter(s => !s.foundByTitle).length;
+    console.log(`[DocumentParser] Found ${sectionPositions.length} section positions: ${foundByTitle} by title, ${foundByPage} by page estimate`);
+
+    // Log any matrix sections that were estimated
+    const matrixSections = sectionPositions.filter(s => this.isTOCEntryMatrix(s.entry.title));
+    if (matrixSections.length > 0) {
+      console.log(`[DocumentParser] Matrix sections found: ${matrixSections.map(s => `"${s.entry.title.substring(0, 30)}" (${s.foundByTitle ? 'title' : 'page estimate'})`).join(', ')}`);
+    }
 
     // Now extract content between consecutive sections
     for (let i = 0; i < sectionPositions.length; i++) {
@@ -1304,7 +1330,12 @@ export class DocumentParserService {
 
       const content = text.substring(startPos, endPos).trim();
 
-      if (content.length > 50) {
+      // Lower threshold for estimated sections (they might not start exactly at a header)
+      // Also, matrix sections often contain tables which might be short in text form
+      const isMatrixSection = this.isTOCEntryMatrix(current.entry.title);
+      const minContentLength = isMatrixSection ? 20 : 50;
+
+      if (content.length > minContentLength) {
         // Build standard hint for AI
         let standardHint = '';
         let specHint = '';
@@ -1327,7 +1358,10 @@ export class DocumentParserService {
           specHint
         });
 
-        console.log(`[DocumentParser] Extracted: "${current.entry.title.substring(0, 30)}..." (${content.length} chars)`);
+        const methodNote = current.foundByTitle ? '' : ' [PAGE ESTIMATE]';
+        console.log(`[DocumentParser] Extracted: "${current.entry.title.substring(0, 30)}..." (${content.length} chars)${methodNote}${isMatrixSection ? ' [MATRIX]' : ''}`);
+      } else {
+        console.log(`[DocumentParser] ⚠ Skipped short section: "${current.entry.title.substring(0, 30)}..." (${content.length} chars, min: ${minContentLength})`);
       }
     }
 

@@ -894,49 +894,51 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex min-h-[600px]">
-        {/* Standards Editor View */}
-        {activeView === 'standards' && (
-          <>
-            {/* Sidebar Navigation */}
-            <aside
-              className={`flex-shrink-0 transition-all duration-300 ${
-                sidebarCollapsed ? 'w-0' : 'w-72'
-              }`}
-            >
-              {!sidebarCollapsed && (
-                <StandardsNavigation
-                  standards={navigationData as any}
-                  selectedStandard={selectedStandard}
-                  selectedSpec={selectedSpec}
-                  onSelectStandard={(code) => {
-                    setSelectedStandard(code);
-                    const standard = standards?.find((s) => s.code === code);
-                    setSelectedSpec((standard?.specifications || [])[0]?.code || null);
-                  }}
-                  onSelectSpec={(standardCode, specCode) => {
-                    setSelectedStandard(standardCode);
-                    setSelectedSpec(specCode);
-                  }}
-                />
-              )}
-            </aside>
+      {/* Main Content - flex container that includes import panel */}
+      <div className="flex flex-1 min-h-[600px]">
+        {/* Main Editor/Content Area - shrinks when import panel is open */}
+        <div className="flex-1 flex min-w-0">
+          {/* Standards Editor View */}
+          {activeView === 'standards' && (
+            <>
+              {/* Sidebar Navigation */}
+              <aside
+                className={`flex-shrink-0 transition-all duration-300 ${
+                  sidebarCollapsed ? 'w-0' : 'w-72'
+                }`}
+              >
+                {!sidebarCollapsed && (
+                  <StandardsNavigation
+                    standards={navigationData as any}
+                    selectedStandard={selectedStandard}
+                    selectedSpec={selectedSpec}
+                    onSelectStandard={(code) => {
+                      setSelectedStandard(code);
+                      const standard = standards?.find((s) => s.code === code);
+                      setSelectedSpec((standard?.specifications || [])[0]?.code || null);
+                    }}
+                    onSelectSpec={(standardCode, specCode) => {
+                      setSelectedStandard(standardCode);
+                      setSelectedSpec(specCode);
+                    }}
+                  />
+                )}
+              </aside>
 
-            {/* Sidebar Toggle */}
-            <button
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="flex-shrink-0 w-6 bg-gray-100 hover:bg-gray-200 flex items-center justify-center border-l border-r border-gray-200 transition-colors"
-            >
-              {sidebarCollapsed ? (
-                <ChevronRight className="w-4 h-4 text-gray-600" />
-              ) : (
-                <ChevronLeft className="w-4 h-4 text-gray-600" />
-              )}
-            </button>
+              {/* Sidebar Toggle */}
+              <button
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                className="flex-shrink-0 w-6 bg-gray-100 hover:bg-gray-200 flex items-center justify-center border-l border-r border-gray-200 transition-colors"
+              >
+                {sidebarCollapsed ? (
+                  <ChevronRight className="w-4 h-4 text-gray-600" />
+                ) : (
+                  <ChevronLeft className="w-4 h-4 text-gray-600" />
+                )}
+              </button>
 
-            {/* Editor Area */}
-            <main className="flex-1 flex flex-col p-4">
+              {/* Editor Area */}
+              <main className="flex-1 flex flex-col p-4 min-w-0">
               {/* Navigation Breadcrumb */}
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2 text-sm text-gray-500">
@@ -1009,23 +1011,17 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
           </>
         )}
 
-        {/* Curriculum Matrix View */}
-        {activeView === 'curriculum' && (
-          <main className="flex-1 overflow-hidden p-4">
-            <CurriculumMatrixEditor submissionId={submissionId} />
-          </main>
-        )}
-      </div>
+          {/* Curriculum Matrix View */}
+          {activeView === 'curriculum' && (
+            <main className="flex-1 overflow-hidden p-4">
+              <CurriculumMatrixEditor submissionId={submissionId} />
+            </main>
+          )}
+        </div>
 
-      {/* Import Document Side Panel */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          {/* Backdrop - click to close */}
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={resetImportModal}
-          />
-          <div className="bg-white shadow-2xl flex flex-col relative w-[480px] h-full border-l border-gray-200 animate-slide-in-right">
+        {/* Import Document Side Panel - Part of layout, not overlay */}
+        {showImportModal && (
+          <div className="w-[480px] flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col">
             {/* Panel Header */}
             <div className={`flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 ${
               importStep === 'review' ? 'bg-teal-50' : 'bg-gray-50'
@@ -1756,8 +1752,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
               )}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Full Content Viewer Modal */}
       {expandedSection && (
