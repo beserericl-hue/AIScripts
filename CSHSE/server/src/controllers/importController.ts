@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
+import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import { SelfStudyImport, ISelfStudyImport } from '../models/SelfStudyImport';
+import { SelfStudyImport, ISelfStudyImport, IDetectedSection } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { WebhookSettings } from '../models/WebhookSettings';
@@ -9,6 +10,7 @@ import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { documentParserService, TOCBasedSection, ParsedDocument } from '../services/documentParser';
 import { sectionMapperService } from '../services/sectionMapper';
 import { saveWithRetry, withRetry } from '../utils/dbRetry';
+import * as tempFileService from '../services/tempFileService';
 
 // Always log for visibility in production
 function debugLog(message: string, data?: any) {
@@ -194,20 +196,17 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
     const specName = institution?.specName || 'CSHSE Standards';
     debugLog('Spec name resolved', { institutionName: submission.institutionName, specName });
 
-    // Start processing asynchronously
-    processDocumentAsync(
+    // Start processing for manual tagging workflow
+    processDocumentForManualTagging(
       importRecord._id as mongoose.Types.ObjectId,
       file.buffer,
-      file.originalname,
-      submission.programLevel,
-      callbackUrl,
-      specName
+      file.originalname
     );
 
     return res.status(202).json({
       importId: importRecord._id,
       status: 'processing',
-      message: 'Document upload started. Check status for progress.'
+      message: 'Document upload started. Preparing for manual section tagging.'
     });
   } catch (error) {
     console.error('Upload error:', error);
@@ -513,6 +512,99 @@ async function processDocumentAsync(
     importRecord.error = error instanceof Error ? error.message : 'Unknown error';
     importRecord.processingCompletedAt = new Date();
     // Use regular save for error state - if this fails too, we can't do much
+    try {
+      await importRecord.save();
+    } catch (saveError) {
+      console.error('[ImportController] Failed to save error state:', saveError);
+    }
+  }
+}
+
+/**
+ * Process document for manual tagging workflow
+ * This replaces the automated section detection with a visual tagging approach.
+ *
+ * Flow:
+ * 1. Parse document with mammoth (DOCX) or pdf-parse (PDF) to extract HTML with images
+ * 2. Save HTML to temp file (/tmp/imports/{importId}/content.html)
+ * 3. Save images to temp folder (/tmp/imports/{importId}/images/)
+ * 4. Store only metadata in MongoDB (not full content)
+ * 5. Set status to 'awaiting_selection' for manual tagging
+ */
+async function processDocumentForManualTagging(
+  importId: mongoose.Types.ObjectId,
+  buffer: Buffer,
+  filename: string
+) {
+  debugLog('Starting manual tagging document processing', { importId: importId.toString(), filename });
+
+  const importRecord = await SelfStudyImport.findById(importId);
+  if (!importRecord) {
+    console.error('[ImportController] Import record not found:', importId);
+    return;
+  }
+
+  try {
+    // Update status to processing
+    importRecord.status = 'processing';
+    importRecord.processingStartedAt = new Date();
+    importRecord.parsingProgress = {
+      step: 'extracting_text',
+      stepDescription: 'Extracting document content and images...'
+    };
+    await importRecord.save();
+
+    // Determine file type from filename
+    const extension = filename.toLowerCase().split('.').pop();
+    let result: { htmlContent: string; rawText: string; imageCount: number };
+
+    if (extension === 'docx') {
+      debugLog('Parsing DOCX for manual tagging');
+      result = await documentParserService.parseDOCXForManualTagging(buffer, importId.toString());
+    } else if (extension === 'pdf') {
+      debugLog('Parsing PDF for manual tagging');
+      result = await documentParserService.parsePDFForManualTagging(buffer, importId.toString());
+    } else {
+      throw new Error(`Unsupported file type: ${extension}. Please upload DOCX or PDF.`);
+    }
+
+    debugLog('Document parsed for manual tagging', {
+      importId: importId.toString(),
+      htmlLength: result.htmlContent.length,
+      rawTextLength: result.rawText.length,
+      imageCount: result.imageCount
+    });
+
+    // Store minimal metadata in MongoDB (full content is in temp files)
+    importRecord.extractedContent = {
+      rawText: result.rawText.substring(0, 5000), // Just a preview
+      pageCount: 0, // Will be updated if needed
+      metadata: {
+        title: filename
+      },
+      sections: [] // Sections will be populated via manual tagging
+    };
+
+    // Update progress to awaiting manual tagging
+    importRecord.parsingProgress = {
+      step: 'section_selection',
+      stepDescription: `Document ready for manual section tagging. ${result.imageCount} images extracted.`
+    };
+    importRecord.status = 'awaiting_selection';
+    importRecord.markModified('extractedContent');
+    importRecord.markModified('parsingProgress');
+
+    await importRecord.save();
+    debugLog('Document ready for manual tagging', {
+      importId: importId.toString(),
+      status: importRecord.status
+    });
+
+  } catch (error) {
+    console.error('[ImportController] Manual tagging processing error:', error);
+    importRecord.status = 'failed';
+    importRecord.error = error instanceof Error ? error.message : 'Unknown error during document processing';
+    importRecord.processingCompletedAt = new Date();
     try {
       await importRecord.save();
     } catch (saveError) {
@@ -2028,5 +2120,332 @@ export const getFullSectionContent = async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Get full section content error:', error);
     return res.status(500).json({ error: 'Failed to get section content' });
+  }
+};
+
+// ============================================
+// MANUAL TAGGING WORKFLOW CONTROLLERS
+// ============================================
+
+/**
+ * Get HTML document content from temp file
+ * Used by the document viewer for manual tagging
+ */
+export const getDocumentContent = async (req: Request, res: Response) => {
+  try {
+    const { importId } = req.params;
+
+    // Verify import exists
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    // Check if temp file exists
+    const exists = await tempFileService.tempDirectoryExists(importId);
+    if (!exists) {
+      return res.status(404).json({ error: 'Document content not found. Please re-upload the document.' });
+    }
+
+    // Read HTML content
+    const htmlContent = await tempFileService.readHtmlContent(importId);
+
+    // Return HTML content
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(htmlContent);
+  } catch (error: any) {
+    console.error('Get document content error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to get document content' });
+  }
+};
+
+/**
+ * Serve an image from the temp folder
+ */
+export const getDocumentImage = async (req: Request, res: Response) => {
+  try {
+    const { importId, filename } = req.params;
+
+    // Security: Validate filename
+    if (!filename || filename.includes('..') || filename.includes('/')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+
+    // Get image path
+    const imagePath = await tempFileService.getImagePath(importId, filename);
+
+    // Determine content type
+    const ext = path.extname(filename).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml'
+    };
+
+    res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+
+    return res.sendFile(imagePath);
+  } catch (error: any) {
+    console.error('Get document image error:', error);
+    if (error.message?.includes('not found')) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+    return res.status(500).json({ error: 'Failed to get image' });
+  }
+};
+
+/**
+ * Extract a section from the document and save to MongoDB
+ */
+export const extractSection = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+    const { startOffset, endOffset, sectionType, standardCode, specCode, title } = req.body;
+
+    // Validate input
+    if (typeof startOffset !== 'number' || typeof endOffset !== 'number') {
+      return res.status(400).json({ error: 'startOffset and endOffset are required numbers' });
+    }
+    if (startOffset >= endOffset) {
+      return res.status(400).json({ error: 'startOffset must be less than endOffset' });
+    }
+    if (!sectionType || !['standard', 'matrix', 'appendix', 'skip'].includes(sectionType)) {
+      return res.status(400).json({ error: 'sectionType must be standard, matrix, appendix, or skip' });
+    }
+    if (!title && sectionType !== 'skip') {
+      return res.status(400).json({ error: 'title is required for non-skip sections' });
+    }
+
+    // Verify import exists
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    // Read current HTML content
+    const htmlContent = await tempFileService.readHtmlContent(importId);
+
+    // Validate offsets are within bounds
+    if (startOffset < 0 || endOffset > htmlContent.length) {
+      return res.status(400).json({ error: 'Offsets are out of bounds' });
+    }
+
+    // Extract the section content
+    const extractedHtml = htmlContent.substring(startOffset, endOffset);
+    const extractedText = extractedHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    // Create section object (skip sections are not saved)
+    if (sectionType !== 'skip') {
+      const sectionId = uuidv4();
+      const newSection: IDetectedSection = {
+        id: sectionId,
+        level: 1,
+        headerType: sectionType === 'standard' ? 'standard' :
+                    sectionType === 'matrix' ? 'heading' : 'appendix',
+        headerText: title,
+        previewText: extractedText.substring(0, 200) + (extractedText.length > 200 ? '...' : ''),
+        fullContent: extractedText,
+        htmlContent: extractedHtml,
+        startPosition: startOffset,
+        endPosition: endOffset,
+        isAppendix: sectionType === 'appendix',
+        isSelected: true,
+        children: []
+      };
+
+      // Add metadata for standard/matrix
+      if (sectionType === 'standard' && standardCode) {
+        (newSection as any).standardCode = standardCode;
+        if (specCode) {
+          (newSection as any).specCode = specCode;
+        }
+      }
+      if (sectionType === 'matrix') {
+        (newSection as any).isMatrix = true;
+      }
+
+      // Initialize detectedSections array if needed
+      if (!importRecord.detectedSections) {
+        importRecord.detectedSections = [];
+      }
+
+      // Add the new section
+      importRecord.detectedSections.push(newSection);
+      importRecord.markModified('detectedSections');
+    }
+
+    // Remove the extracted content from HTML
+    const beforeContent = htmlContent.substring(0, startOffset);
+    const afterContent = htmlContent.substring(endOffset);
+
+    // Insert a marker where content was extracted (for visual feedback)
+    const marker = sectionType !== 'skip'
+      ? `<div style="background:#e8f5e9;padding:8px;margin:8px 0;border-left:4px solid #4caf50;color:#2e7d32;">
+          <strong>Section Saved:</strong> ${title} (${sectionType})
+        </div>`
+      : `<div style="background:#fff3e0;padding:8px;margin:8px 0;border-left:4px solid #ff9800;color:#e65100;">
+          <strong>Content Skipped</strong>
+        </div>`;
+
+    const updatedHtml = beforeContent + marker + afterContent;
+
+    // Save updated HTML to temp file
+    await tempFileService.updateHtmlContent(importId, updatedHtml);
+
+    // Save import record
+    await importRecord.save();
+
+    console.log(`[Import] Section extracted: ${sectionType} - "${title}" (${extractedText.length} chars)`);
+
+    return res.json({
+      success: true,
+      sectionId: sectionType !== 'skip' ? importRecord.detectedSections![importRecord.detectedSections!.length - 1].id : null,
+      sectionType,
+      title,
+      contentLength: extractedText.length,
+      remainingContentLength: updatedHtml.length
+    });
+  } catch (error: any) {
+    console.error('Extract section error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to extract section' });
+  }
+};
+
+/**
+ * Get list of manually tagged sections
+ */
+export const getTaggedSections = async (req: Request, res: Response) => {
+  try {
+    const { importId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId)
+      .select('detectedSections status originalFilename');
+
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    const sections = (importRecord.detectedSections || []).map((s: any) => ({
+      id: s.id,
+      headerText: s.headerText,
+      headerType: s.headerType,
+      previewText: s.previewText,
+      contentLength: s.fullContent?.length || 0,
+      isAppendix: s.isAppendix || false,
+      isMatrix: s.isMatrix || false,
+      standardCode: s.standardCode,
+      specCode: s.specCode
+    }));
+
+    return res.json({
+      sections,
+      totalSections: sections.length,
+      status: importRecord.status,
+      filename: importRecord.originalFilename
+    });
+  } catch (error) {
+    console.error('Get tagged sections error:', error);
+    return res.status(500).json({ error: 'Failed to get tagged sections' });
+  }
+};
+
+/**
+ * Delete a tagged section
+ */
+export const deleteTaggedSection = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId, sectionId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    if (!importRecord.detectedSections) {
+      return res.status(404).json({ error: 'No sections found' });
+    }
+
+    const sectionIndex = importRecord.detectedSections.findIndex(
+      (s: any) => s.id === sectionId
+    );
+
+    if (sectionIndex === -1) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+
+    // Remove the section
+    const removedSection = importRecord.detectedSections.splice(sectionIndex, 1)[0];
+    importRecord.markModified('detectedSections');
+    await importRecord.save();
+
+    console.log(`[Import] Section deleted: ${removedSection.headerText}`);
+
+    return res.json({
+      success: true,
+      deletedSectionId: sectionId,
+      remainingSections: importRecord.detectedSections.length
+    });
+  } catch (error) {
+    console.error('Delete tagged section error:', error);
+    return res.status(500).json({ error: 'Failed to delete section' });
+  }
+};
+
+/**
+ * Finish manual tagging and proceed to processing
+ */
+export const finishTagging = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+    const { processWithAI } = req.body;
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    const sections = importRecord.detectedSections || [];
+    if (sections.length === 0) {
+      return res.status(400).json({ error: 'No sections have been tagged. Please tag at least one section.' });
+    }
+
+    console.log(`[Import] Finishing tagging for ${importId}: ${sections.length} sections`);
+
+    if (processWithAI) {
+      // Update status and send to n8n for AI processing
+      importRecord.status = 'processing';
+      importRecord.parsingProgress = {
+        step: 'sending_to_ai',
+        stepDescription: `Sending ${sections.length} tagged sections to AI for mapping...`,
+        sectionsCreated: sections.length
+      };
+      importRecord.markModified('parsingProgress');
+      await importRecord.save();
+
+      // TODO: Send sections to n8n for processing
+      // For now, mark as completed
+      importRecord.status = 'completed';
+      await importRecord.save();
+    } else {
+      // Skip AI processing, mark as completed
+      importRecord.status = 'completed';
+      await importRecord.save();
+    }
+
+    return res.json({
+      success: true,
+      status: importRecord.status,
+      sectionsCount: sections.length,
+      message: processWithAI
+        ? 'Sections sent to AI for processing'
+        : 'Tagging completed without AI processing'
+    });
+  } catch (error) {
+    console.error('Finish tagging error:', error);
+    return res.status(500).json({ error: 'Failed to finish tagging' });
   }
 };

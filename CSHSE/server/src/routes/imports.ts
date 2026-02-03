@@ -10,12 +10,19 @@ import {
   getUnmappedContent,
   handleUnmapped,
   cancelImport,
-  // Part 6: Section selection before AI processing
+  // Part 6: Section selection before AI processing (legacy - to be replaced)
   getDetectedSections,
   updateSectionSelections,
   confirmSectionSelections,
   getAppendix,
-  getFullSectionContent
+  getFullSectionContent,
+  // Manual tagging workflow
+  getDocumentContent,
+  getDocumentImage,
+  extractSection,
+  getTaggedSections,
+  deleteTaggedSection,
+  finishTagging
 } from '../controllers/importController';
 import { authenticate } from '../middleware/auth';
 
@@ -147,5 +154,51 @@ router.get('/:importId/appendix', getAppendix);
  * @access  Private
  */
 router.get('/:importId/full-section/:sectionId', getFullSectionContent);
+
+// ============================================
+// MANUAL TAGGING WORKFLOW
+// ============================================
+
+/**
+ * @route   GET /api/imports/:importId/content
+ * @desc    Get HTML document content from temp file for viewing
+ * @access  Private
+ */
+router.get('/:importId/content', getDocumentContent);
+
+/**
+ * @route   GET /api/imports/:importId/images/:filename
+ * @desc    Serve an image from the temp folder
+ * @access  Private
+ */
+router.get('/:importId/images/:filename', getDocumentImage);
+
+/**
+ * @route   POST /api/imports/:importId/extract-section
+ * @desc    Extract a section from the document and save to MongoDB
+ * @access  Private (Coordinator)
+ */
+router.post('/:importId/extract-section', extractSection);
+
+/**
+ * @route   GET /api/imports/:importId/tagged-sections
+ * @desc    Get list of manually tagged sections
+ * @access  Private
+ */
+router.get('/:importId/tagged-sections', getTaggedSections);
+
+/**
+ * @route   DELETE /api/imports/:importId/tagged-sections/:sectionId
+ * @desc    Delete a tagged section
+ * @access  Private (Coordinator)
+ */
+router.delete('/:importId/tagged-sections/:sectionId', deleteTaggedSection);
+
+/**
+ * @route   POST /api/imports/:importId/finish-tagging
+ * @desc    Finish manual tagging and proceed to processing
+ * @access  Private (Coordinator)
+ */
+router.post('/:importId/finish-tagging', finishTagging);
 
 export default router;

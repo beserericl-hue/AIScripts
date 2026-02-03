@@ -1,6 +1,7 @@
 import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse';
 import { v4 as uuidv4 } from 'uuid';
+import * as tempFileService from './tempFileService';
 
 export interface ParsedMetadata {
   title?: string;
@@ -239,6 +240,166 @@ export class DocumentParserService {
       images: [],
       rawText: result.value,
       htmlContent
+    };
+  }
+
+  /**
+   * Parse DOCX document for manual tagging workflow
+   * Extracts HTML with images saved to temp files
+   * Images are referenced via API URLs for serving
+   */
+  async parseDOCXForManualTagging(
+    buffer: Buffer,
+    importId: string
+  ): Promise<{ htmlContent: string; rawText: string; imageCount: number }> {
+    console.log(`[DocumentParser] Parsing DOCX for manual tagging, importId: ${importId}`);
+
+    // Initialize temp directory
+    await tempFileService.initTempDirectory(importId);
+
+    let imageCount = 0;
+
+    // Extract raw text
+    const textResult = await mammoth.extractRawText({ buffer });
+    const rawText = textResult.value;
+
+    // Convert to HTML with images saved to temp files
+    const htmlResult = await mammoth.convertToHtml({
+      buffer,
+      styleMap: [
+        // Map Word styles to HTML headings
+        "p[style-name='Heading 1'] => h1:fresh",
+        "p[style-name='Heading 2'] => h2:fresh",
+        "p[style-name='Heading 3'] => h3:fresh",
+        "p[style-name='Heading 4'] => h4:fresh",
+        "p[style-name='Title'] => h1.title:fresh",
+        "p[style-name='Subtitle'] => h2.subtitle:fresh",
+        "p[style-name='Intense Emphasis'] => strong"
+      ],
+      convertImage: mammoth.images.imgElement(async (image) => {
+        try {
+          // Read image data
+          const imageBuffer = await image.read();
+          const contentType = image.contentType || 'image/png';
+
+          // Save to temp folder
+          const filename = await tempFileService.saveImage(importId, imageBuffer, contentType);
+          imageCount++;
+
+          // Return img tag pointing to our API endpoint
+          return {
+            src: `/api/imports/${importId}/images/${filename}`
+          };
+        } catch (error) {
+          console.error(`[DocumentParser] Error saving image:`, error);
+          // Return placeholder on error
+          return { src: '' };
+        }
+      })
+    });
+
+    let htmlContent = htmlResult.value;
+
+    // Log any conversion messages
+    if (htmlResult.messages && htmlResult.messages.length > 0) {
+      console.log(`[DocumentParser] Mammoth messages:`, htmlResult.messages);
+    }
+
+    // Enhance HTML with headers if none detected
+    if (!htmlContent.includes('<h1') && !htmlContent.includes('<h2')) {
+      htmlContent = this.enhanceHtmlWithHeaders(htmlContent);
+    }
+
+    // Wrap in basic HTML structure for better display
+    htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; max-width: 100%; }
+          h1 { color: #1a365d; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 24px; }
+          h2 { color: #2d3748; margin-top: 20px; }
+          h3 { color: #4a5568; margin-top: 16px; }
+          table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+          th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
+          th { background-color: #f7fafc; }
+          img { max-width: 100%; height: auto; margin: 8px 0; }
+          p { margin: 8px 0; }
+          ul, ol { margin: 8px 0; padding-left: 24px; }
+        </style>
+      </head>
+      <body>
+        ${htmlContent}
+      </body>
+      </html>
+    `;
+
+    // Save HTML to temp file
+    await tempFileService.saveHtmlContent(importId, htmlContent);
+
+    console.log(`[DocumentParser] Manual tagging parse complete: ${rawText.length} chars text, ${imageCount} images`);
+
+    return {
+      htmlContent,
+      rawText,
+      imageCount
+    };
+  }
+
+  /**
+   * Parse PDF document for manual tagging workflow
+   * Converts text to HTML and saves to temp files
+   */
+  async parsePDFForManualTagging(
+    buffer: Buffer,
+    importId: string
+  ): Promise<{ htmlContent: string; rawText: string; imageCount: number }> {
+    console.log(`[DocumentParser] Parsing PDF for manual tagging, importId: ${importId}`);
+
+    // Initialize temp directory
+    await tempFileService.initTempDirectory(importId);
+
+    // Parse PDF
+    const data = await pdfParse(buffer);
+    const rawText = data.text;
+
+    // Convert text to HTML
+    let htmlContent = this.convertTextToHtml(rawText);
+
+    // Wrap in basic HTML structure
+    htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; max-width: 100%; }
+          h1 { color: #1a365d; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 24px; }
+          h2 { color: #2d3748; margin-top: 20px; }
+          h3 { color: #4a5568; margin-top: 16px; }
+          table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+          th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
+          th { background-color: #f7fafc; }
+          p { margin: 8px 0; }
+          ul, ol { margin: 8px 0; padding-left: 24px; }
+        </style>
+      </head>
+      <body>
+        ${htmlContent}
+      </body>
+      </html>
+    `;
+
+    // Save HTML to temp file
+    await tempFileService.saveHtmlContent(importId, htmlContent);
+
+    console.log(`[DocumentParser] PDF manual tagging parse complete: ${rawText.length} chars text`);
+
+    return {
+      htmlContent,
+      rawText,
+      imageCount: 0 // PDF image extraction not implemented yet
     };
   }
 

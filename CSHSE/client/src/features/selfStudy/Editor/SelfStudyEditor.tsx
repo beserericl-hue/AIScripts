@@ -26,6 +26,7 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
+import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection } from './components';
 
 // Use consistent API paths without relying on environment variable
 
@@ -241,7 +242,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [importId, setImportId] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
-  const [importStep, setImportStep] = useState<'upload' | 'processing' | 'section_selection' | 'review' | 'applying'>('upload');
+  const [importStep, setImportStep] = useState<'upload' | 'processing' | 'manual_tagging' | 'section_selection' | 'review' | 'applying'>('upload');
   const [extractedSections, setExtractedSections] = useState<ExtractedSection[]>([]);
   const [isApplying, setIsApplying] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -268,6 +269,20 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [appendixSection, setAppendixSection] = useState<DetectedSection | null>(null);
   const [isConfirmingSelections, setIsConfirmingSelections] = useState(false);
   const [viewingFullSection, setViewingFullSection] = useState<DetectedSection | null>(null);
+
+  // Manual Tagging Workflow State
+  const [documentHtml, setDocumentHtml] = useState<string>('');
+  const [isLoadingDocument, setIsLoadingDocument] = useState(false);
+  const [documentError, setDocumentError] = useState<string | null>(null);
+  const [taggedSections, setTaggedSections] = useState<TaggedSection[]>([]);
+  const [isLoadingTaggedSections, setIsLoadingTaggedSections] = useState(false);
+  const [startOffset, setStartOffset] = useState<number | null>(null);
+  const [endOffset, setEndOffset] = useState<number | null>(null);
+  const [selectionPreview, setSelectionPreview] = useState<string>('');
+  const [isSavingSection, setIsSavingSection] = useState(false);
+  const [sectionError, setSectionError] = useState<string | null>(null);
+  const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null);
+  const [viewingTaggedSection, setViewingTaggedSection] = useState<TaggedSection | null>(null);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -373,25 +388,29 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         setImportStatus(status);
 
         if (status.status === 'awaiting_selection') {
-          // Part 6: New section selection step
-          console.log('[Import Poll] Status is awaiting_selection - fetching detected sections');
+          // Manual Tagging Workflow: Load document for visual tagging
+          console.log('[Import Poll] Status is awaiting_selection - loading document for manual tagging');
           clearInterval(pollInterval);
           try {
-            const sectionsResponse = await api.get(`/api/imports/${importId}/detected-sections`);
-            console.log('[Import Poll] Detected sections received:', {
-              count: sectionsResponse.data.sections?.length || 0,
-              totalSections: sectionsResponse.data.totalSections
+            // Load document HTML content from temp file
+            const contentResponse = await api.get(`/api/imports/${importId}/content`);
+            console.log('[Import Poll] Document content loaded:', {
+              htmlLength: contentResponse.data.htmlContent?.length || 0
             });
-            setDetectedSections(sectionsResponse.data.sections || []);
-            if (sectionsResponse.data.appendix) {
-              // Appendix is handled separately in the new flow
-              setAppendixSection(null);
-            }
-            setImportStep('section_selection');
-            console.log('[Import Poll] Transitioned to section_selection step');
-          } catch (sectionErr) {
-            console.error('[Import Poll] Failed to fetch detected sections:', sectionErr);
-            setUploadError('Failed to load detected sections');
+            setDocumentHtml(contentResponse.data.htmlContent || '');
+
+            // Load any already tagged sections
+            const taggedResponse = await api.get(`/api/imports/${importId}/tagged-sections`);
+            console.log('[Import Poll] Tagged sections loaded:', {
+              count: taggedResponse.data.sections?.length || 0
+            });
+            setTaggedSections(taggedResponse.data.sections || []);
+
+            setImportStep('manual_tagging');
+            console.log('[Import Poll] Transitioned to manual_tagging step');
+          } catch (loadErr: any) {
+            console.error('[Import Poll] Failed to load document for manual tagging:', loadErr);
+            setUploadError(loadErr.response?.data?.error || 'Failed to load document content');
           }
         } else if (status.status === 'completed') {
           console.log('[Import Poll] Status is completed - fetching extracted sections');
@@ -499,6 +518,188 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setDetectedSections([]);
     setAppendixSection(null);
     setViewingFullSection(null);
+    // Reset manual tagging state
+    setDocumentHtml('');
+    setDocumentError(null);
+    setTaggedSections([]);
+    setStartOffset(null);
+    setEndOffset(null);
+    setSelectionPreview('');
+    setSectionError(null);
+    setViewingTaggedSection(null);
+  };
+
+  // Manual Tagging: Load document content from temp file
+  const loadDocumentContent = async () => {
+    if (!importId) return;
+
+    setIsLoadingDocument(true);
+    setDocumentError(null);
+
+    try {
+      const response = await api.get(`/api/imports/${importId}/content`);
+      setDocumentHtml(response.data.htmlContent);
+    } catch (err: any) {
+      setDocumentError(err.response?.data?.error || 'Failed to load document content');
+    } finally {
+      setIsLoadingDocument(false);
+    }
+  };
+
+  // Manual Tagging: Load tagged sections
+  const loadTaggedSections = async () => {
+    if (!importId) return;
+
+    setIsLoadingTaggedSections(true);
+
+    try {
+      const response = await api.get(`/api/imports/${importId}/tagged-sections`);
+      setTaggedSections(response.data.sections || []);
+    } catch (err: any) {
+      console.error('Failed to load tagged sections:', err);
+    } finally {
+      setIsLoadingTaggedSections(false);
+    }
+  };
+
+  // Manual Tagging: Handle position click in document
+  const handlePositionClick = useCallback((offset: number, element: HTMLElement) => {
+    if (startOffset === null) {
+      // Set start position
+      setStartOffset(offset);
+      setEndOffset(null);
+      setSelectionPreview('');
+    } else if (endOffset === null) {
+      // Set end position (ensure it's after start)
+      if (offset > startOffset) {
+        setEndOffset(offset);
+        // Extract preview text from the document
+        const text = documentHtml.replace(/<[^>]*>/g, '').substring(startOffset, offset);
+        setSelectionPreview(text.trim());
+      } else {
+        // If clicked before start, make this the new start
+        setEndOffset(startOffset);
+        setStartOffset(offset);
+        const text = documentHtml.replace(/<[^>]*>/g, '').substring(offset, startOffset);
+        setSelectionPreview(text.trim());
+      }
+    } else {
+      // Both set, start fresh with new start
+      setStartOffset(offset);
+      setEndOffset(null);
+      setSelectionPreview('');
+    }
+  }, [startOffset, endOffset, documentHtml]);
+
+  // Manual Tagging: Mark start position
+  const handleMarkStart = useCallback(() => {
+    // This is triggered by clicking "Mark Start" button
+    // The actual position is set when clicking in the document
+  }, []);
+
+  // Manual Tagging: Mark end position
+  const handleMarkEnd = useCallback(() => {
+    // This is triggered by clicking "Mark End" button
+    // The actual position is set when clicking in the document
+  }, []);
+
+  // Manual Tagging: Clear selection
+  const handleClearSelection = useCallback(() => {
+    setStartOffset(null);
+    setEndOffset(null);
+    setSelectionPreview('');
+    setSectionError(null);
+  }, []);
+
+  // Manual Tagging: Save section
+  const handleSaveSection = async (metadata: SectionMetadata) => {
+    if (!importId || startOffset === null || endOffset === null) return;
+
+    setIsSavingSection(true);
+    setSectionError(null);
+
+    try {
+      const response = await api.post(`/api/imports/${importId}/extract-section`, {
+        startOffset,
+        endOffset,
+        sectionType: metadata.sectionType,
+        standardCode: metadata.standardCode,
+        specCode: metadata.specCode,
+        title: metadata.title
+      });
+
+      // Refresh document content (content should be removed)
+      if (response.data.updatedHtml) {
+        setDocumentHtml(response.data.updatedHtml);
+      } else {
+        await loadDocumentContent();
+      }
+
+      // Refresh tagged sections list
+      await loadTaggedSections();
+
+      // Clear selection
+      handleClearSelection();
+    } catch (err: any) {
+      setSectionError(err.response?.data?.error || 'Failed to save section');
+    } finally {
+      setIsSavingSection(false);
+    }
+  };
+
+  // Manual Tagging: Delete tagged section
+  const handleDeleteTaggedSection = async (sectionId: string) => {
+    if (!importId) return;
+
+    setDeletingSectionId(sectionId);
+
+    try {
+      await api.delete(`/api/imports/${importId}/tagged-sections/${sectionId}`);
+
+      // Refresh tagged sections list
+      await loadTaggedSections();
+
+      // Note: Content is not restored to the document (as per plan)
+    } catch (err: any) {
+      setSectionError(err.response?.data?.error || 'Failed to delete section');
+    } finally {
+      setDeletingSectionId(null);
+    }
+  };
+
+  // Manual Tagging: View tagged section content
+  const handleViewTaggedSection = (section: TaggedSection) => {
+    setViewingTaggedSection(section);
+  };
+
+  // Manual Tagging: Finish tagging and proceed
+  const handleFinishTagging = async () => {
+    if (!importId) return;
+
+    setIsConfirmingSelections(true);
+    setSectionError(null);
+
+    try {
+      const response = await api.post(`/api/imports/${importId}/finish-tagging`, {
+        skipAiProcessing: true // For now, skip AI and go directly to review
+      });
+
+      // Transition to review step or completed
+      if (response.data.status === 'completed') {
+        setImportStatus(prev => prev ? { ...prev, status: 'completed' } : null);
+        setImportStep('review');
+        // Reload extracted sections for review
+        const sectionsResponse = await api.get(`/api/imports/${importId}/sections`);
+        setExtractedSections(sectionsResponse.data.sections || []);
+      } else {
+        // Proceed to AI processing (if enabled)
+        setImportStep('processing');
+      }
+    } catch (err: any) {
+      setSectionError(err.response?.data?.error || 'Failed to finish tagging');
+    } finally {
+      setIsConfirmingSelections(false);
+    }
   };
 
   // Part 6: Toggle section selection
@@ -1317,7 +1518,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
         {/* Import Document Side Panel - Part of layout, not overlay */}
         {showImportModal && (
-          <div className="w-[420px] flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col">
+          <div className={`${importStep === 'manual_tagging' ? 'w-[700px]' : 'w-[420px]'} flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col transition-all duration-300`}>
             {/* Panel Header */}
             <div className={`flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 ${
               importStep === 'review' ? 'bg-teal-50' : 'bg-gray-50'
@@ -1613,7 +1814,142 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                 </div>
               )}
 
-              {/* Part 6: Section Selection Step */}
+              {/* Manual Tagging Step - Full Document View */}
+              {importStep === 'manual_tagging' && (
+                <div className="flex flex-col h-full -m-4">
+                  {/* Header */}
+                  <div className="p-4 bg-teal-50 border-b border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      Manual Section Tagging
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Click in the document to mark section boundaries, then assign metadata.
+                    </p>
+                  </div>
+
+                  {/* Main Content - Split View */}
+                  <div className="flex-1 flex flex-col overflow-hidden">
+                    {/* Document Viewer */}
+                    <div className="flex-1 overflow-hidden border-b border-gray-200">
+                      <DocumentViewer
+                        importId={importId || ''}
+                        htmlContent={documentHtml}
+                        isLoading={isLoadingDocument}
+                        error={documentError}
+                        startOffset={startOffset}
+                        endOffset={endOffset}
+                        onPositionClick={handlePositionClick}
+                        onRefresh={loadDocumentContent}
+                      />
+                    </div>
+
+                    {/* Tagging Controls */}
+                    <div className="h-80 flex-shrink-0 overflow-hidden border-b border-gray-200">
+                      <SectionTagger
+                        startOffset={startOffset}
+                        endOffset={endOffset}
+                        previewText={selectionPreview}
+                        onMarkStart={handleMarkStart}
+                        onMarkEnd={handleMarkEnd}
+                        onClearSelection={handleClearSelection}
+                        onSaveSection={handleSaveSection}
+                        isSaving={isSavingSection}
+                        error={sectionError}
+                      />
+                    </div>
+
+                    {/* Tagged Sections List */}
+                    <div className="h-48 flex-shrink-0 overflow-hidden">
+                      <div className="h-full flex flex-col">
+                        <div className="px-4 py-2 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
+                          <h4 className="font-medium text-gray-700">Tagged Sections</h4>
+                          <span className="text-sm text-gray-500">
+                            {taggedSections.length} section{taggedSections.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <div className="flex-1 overflow-y-auto">
+                          <TaggedSectionsList
+                            sections={taggedSections}
+                            isLoading={isLoadingTaggedSections}
+                            onDelete={handleDeleteTaggedSection}
+                            onView={handleViewTaggedSection}
+                            deletingId={deletingSectionId}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer Actions */}
+                  <div className="p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+                    <button
+                      onClick={handleCancelImport}
+                      disabled={isConfirmingSelections}
+                      className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel Import
+                    </button>
+                    <button
+                      onClick={handleFinishTagging}
+                      disabled={isConfirmingSelections || taggedSections.length === 0}
+                      className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {isConfirmingSelections ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          Finish Tagging ({taggedSections.length} sections)
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* View Tagged Section Modal */}
+                  {viewingTaggedSection && (
+                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                      <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] flex flex-col">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                          <h3 className="font-semibold text-gray-900 truncate">
+                            {viewingTaggedSection.title}
+                          </h3>
+                          <button
+                            onClick={() => setViewingTaggedSection(null)}
+                            className="p-1 hover:bg-gray-100 rounded"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4">
+                          <div className="prose prose-sm max-w-none">
+                            <p className="text-gray-600">
+                              {viewingTaggedSection.previewText || 'No preview available'}
+                            </p>
+                            {viewingTaggedSection.contentLength && (
+                              <p className="text-sm text-gray-400 mt-4">
+                                Total content: {viewingTaggedSection.contentLength.toLocaleString()} characters
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end p-4 border-t border-gray-200 bg-gray-50">
+                          <button
+                            onClick={() => setViewingTaggedSection(null)}
+                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Part 6: Section Selection Step (Legacy - kept for backwards compatibility) */}
               {importStep === 'section_selection' && (
                 <div className="space-y-6">
                   {/* Header */}
