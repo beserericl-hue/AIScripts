@@ -18,6 +18,7 @@ import {
   Grid3X3,
   BookOpen,
   Maximize2,
+  ArrowRight,
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
@@ -110,7 +111,7 @@ interface ImportProgress {
 
 interface ImportStatus {
   id: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'awaiting_selection' | 'completed' | 'failed';
   originalFilename: string;
   mappedCount: number;
   unmappedCount: number;
@@ -118,6 +119,23 @@ interface ImportStatus {
   specName?: string;
   progress?: ImportProgress;
   extractedContent?: { pageCount: number; sectionCount: number };
+}
+
+// Part 6: Detected section for user selection
+interface DetectedSection {
+  id: string;
+  level: 1 | 2 | 3;
+  headerType: 'roman' | 'letter' | 'number' | 'standard' | 'appendix' | 'heading';
+  headerText: string;
+  previewText: string;
+  fullContent: string;
+  htmlContent: string;
+  startPosition: number;
+  endPosition: number;
+  isAppendix: boolean;
+  isSelected: boolean;
+  parentId?: string;
+  children: DetectedSection[];
 }
 
 interface ExtractedSection {
@@ -143,6 +161,70 @@ interface UnmappedAssignment {
   toCurriculumMatrix: boolean;
 }
 
+// Part 6: Component for rendering section selection items with hierarchy
+function SectionSelectionItem({
+  section,
+  onToggle,
+  onViewFull,
+  level = 0
+}: {
+  section: DetectedSection;
+  onToggle: (id: string, selected: boolean) => void;
+  onViewFull: (section: DetectedSection) => void;
+  level?: number;
+}) {
+  const paddingLeft = level * 20;
+
+  return (
+    <>
+      <div
+        className={`flex items-start gap-3 p-3 hover:bg-gray-50 ${
+          section.isAppendix ? 'bg-amber-50' : ''
+        }`}
+        style={{ paddingLeft: `${12 + paddingLeft}px` }}
+      >
+        <input
+          type="checkbox"
+          checked={section.isSelected}
+          onChange={(e) => onToggle(section.id, e.target.checked)}
+          disabled={section.isAppendix}
+          className="mt-1 rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {section.isAppendix && (
+              <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">
+                Appendix
+              </span>
+            )}
+            <span className="font-medium text-gray-900 truncate">
+              {section.headerText}
+            </span>
+          </div>
+          <p className="text-sm text-gray-500 mt-0.5 line-clamp-2">
+            {section.previewText}
+          </p>
+        </div>
+        <button
+          onClick={() => onViewFull(section)}
+          className="text-xs text-teal-600 hover:text-teal-700 font-medium whitespace-nowrap"
+        >
+          View Full
+        </button>
+      </div>
+      {section.children.map((child) => (
+        <SectionSelectionItem
+          key={child.id}
+          section={child}
+          onToggle={onToggle}
+          onViewFull={onViewFull}
+          level={level + 1}
+        />
+      ))}
+    </>
+  );
+}
+
 export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -159,7 +241,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [importId, setImportId] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
-  const [importStep, setImportStep] = useState<'upload' | 'processing' | 'review' | 'applying'>('upload');
+  const [importStep, setImportStep] = useState<'upload' | 'processing' | 'section_selection' | 'review' | 'applying'>('upload');
   const [extractedSections, setExtractedSections] = useState<ExtractedSection[]>([]);
   const [isApplying, setIsApplying] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -180,6 +262,12 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   // State for viewing full section content
   const [expandedSection, setExpandedSection] = useState<ExtractedSection | null>(null);
   const [loadingFullContent, setLoadingFullContent] = useState(false);
+
+  // Part 6: State for section selection before AI processing
+  const [detectedSections, setDetectedSections] = useState<DetectedSection[]>([]);
+  const [appendixSection, setAppendixSection] = useState<DetectedSection | null>(null);
+  const [isConfirmingSelections, setIsConfirmingSelections] = useState(false);
+  const [viewingFullSection, setViewingFullSection] = useState<DetectedSection | null>(null);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -277,7 +365,17 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         const status = response.data as ImportStatus;
         setImportStatus(status);
 
-        if (status.status === 'completed') {
+        if (status.status === 'awaiting_selection') {
+          // Part 6: New section selection step
+          clearInterval(pollInterval);
+          const sectionsResponse = await api.get(`/api/imports/${importId}/detected-sections`);
+          setDetectedSections(sectionsResponse.data.sections || []);
+          if (sectionsResponse.data.appendix) {
+            // Create a DetectedSection from appendix info if it exists
+            setAppendixSection(null); // Appendix is handled separately in the new flow
+          }
+          setImportStep('section_selection');
+        } else if (status.status === 'completed') {
           clearInterval(pollInterval);
           const sectionsResponse = await api.get(`/api/imports/${importId}/sections`);
           setExtractedSections(sectionsResponse.data.sections);
@@ -372,6 +470,93 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setSelectedSectionIds(new Set());
     setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
     setIsBatchMoving(false);
+    // Reset Part 6 section selection state
+    setDetectedSections([]);
+    setAppendixSection(null);
+    setViewingFullSection(null);
+  };
+
+  // Part 6: Toggle section selection
+  const handleToggleSectionSelection = (sectionId: string, isSelected: boolean) => {
+    const updateSelection = (sections: DetectedSection[]): DetectedSection[] => {
+      return sections.map(section => {
+        if (section.id === sectionId) {
+          return { ...section, isSelected };
+        }
+        if (section.children.length > 0) {
+          return { ...section, children: updateSelection(section.children) };
+        }
+        return section;
+      });
+    };
+    setDetectedSections(prev => updateSelection(prev));
+  };
+
+  // Part 6: Select/deselect all sections
+  const handleSelectAllSections = (selectAll: boolean) => {
+    const updateAll = (sections: DetectedSection[]): DetectedSection[] => {
+      return sections.map(section => ({
+        ...section,
+        isSelected: section.isAppendix ? false : selectAll,
+        children: updateAll(section.children)
+      }));
+    };
+    setDetectedSections(prev => updateAll(prev));
+  };
+
+  // Part 6: Count selected sections
+  const countSelectedSections = (sections: DetectedSection[]): number => {
+    let count = 0;
+    for (const section of sections) {
+      if (section.isSelected && !section.isAppendix) count++;
+      count += countSelectedSections(section.children);
+    }
+    return count;
+  };
+
+  // Part 6: Confirm section selections and proceed to AI processing
+  const handleConfirmSectionSelections = async () => {
+    if (!importId) return;
+
+    const selectedCount = countSelectedSections(detectedSections);
+    if (selectedCount === 0) {
+      setUploadError('Please select at least one section to process');
+      return;
+    }
+
+    setIsConfirmingSelections(true);
+    setUploadError(null);
+
+    try {
+      // First, save the section selections
+      const getSelections = (sections: DetectedSection[]): Array<{ id: string; isSelected: boolean }> => {
+        const result: Array<{ id: string; isSelected: boolean }> = [];
+        for (const section of sections) {
+          result.push({ id: section.id, isSelected: section.isSelected });
+          result.push(...getSelections(section.children));
+        }
+        return result;
+      };
+
+      await api.post(`/api/imports/${importId}/select-sections`, {
+        selections: getSelections(detectedSections)
+      });
+
+      // Then confirm and start AI processing
+      await api.post(`/api/imports/${importId}/confirm-selections`);
+
+      // Move to processing step (will poll for completion)
+      setImportStep('processing');
+    } catch (err: any) {
+      setUploadError(err.response?.data?.error || 'Failed to confirm section selections');
+    } finally {
+      setIsConfirmingSelections(false);
+    }
+  };
+
+  // Part 6: View full section content
+  const handleViewDetectedSectionContent = async (section: DetectedSection) => {
+    setViewingFullSection(section);
   };
 
   // Fetch full section content and open modal
@@ -1400,6 +1585,141 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Part 6: Section Selection Step */}
+              {importStep === 'section_selection' && (
+                <div className="space-y-6">
+                  {/* Header */}
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      Select Sections to Process
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      {detectedSections.length > 0 ? (
+                        <>
+                          {countSelectedSections(detectedSections)} of {detectedSections.reduce((acc, s) => acc + 1 + countSelectedSections(s.children), 0)} sections selected
+                        </>
+                      ) : (
+                        'Loading sections...'
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Select All / None */}
+                  <div className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                    <button
+                      onClick={() => handleSelectAllSections(true)}
+                      className="text-sm text-teal-600 hover:text-teal-700 font-medium"
+                    >
+                      Select All
+                    </button>
+                    <button
+                      onClick={() => handleSelectAllSections(false)}
+                      className="text-sm text-gray-500 hover:text-gray-700 font-medium"
+                    >
+                      Select None
+                    </button>
+                  </div>
+
+                  {/* Section List */}
+                  <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                    {detectedSections.map((section) => (
+                      <SectionSelectionItem
+                        key={section.id}
+                        section={section}
+                        onToggle={handleToggleSectionSelection}
+                        onViewFull={handleViewDetectedSectionContent}
+                        level={0}
+                      />
+                    ))}
+                    {detectedSections.length === 0 && (
+                      <div className="p-4 text-center text-gray-500">
+                        No sections detected in the document
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Error message */}
+                  {uploadError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                      {uploadError}
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                    <button
+                      onClick={handleCancelImport}
+                      disabled={isConfirmingSelections}
+                      className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleConfirmSectionSelections}
+                      disabled={isConfirmingSelections || countSelectedSections(detectedSections) === 0}
+                      className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                      {isConfirmingSelections ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Processing...
+                        </>
+                      ) : (
+                        <>
+                          Process {countSelectedSections(detectedSections)} Sections
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Full Section Content Modal */}
+              {viewingFullSection && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] flex flex-col">
+                    <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                      <h3 className="font-semibold text-gray-900 truncate">
+                        {viewingFullSection.headerText}
+                      </h3>
+                      <button
+                        onClick={() => setViewingFullSection(null)}
+                        className="p-1 hover:bg-gray-100 rounded"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4">
+                      <div
+                        className="prose prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: viewingFullSection.htmlContent }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={viewingFullSection.isSelected}
+                          onChange={(e) => {
+                            handleToggleSectionSelection(viewingFullSection.id, e.target.checked);
+                            setViewingFullSection({ ...viewingFullSection, isSelected: e.target.checked });
+                          }}
+                          className="rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                        />
+                        Include this section for processing
+                      </label>
+                      <button
+                        onClick={() => setViewingFullSection(null)}
+                        className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 

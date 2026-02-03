@@ -35,7 +35,7 @@ export interface IUnmappedContent {
 }
 
 export interface IParsingProgress {
-  step: 'extracting_text' | 'extracting_toc' | 'creating_sections' | 'preparing_ai' | 'sending_to_ai';
+  step: 'extracting_text' | 'extracting_toc' | 'creating_sections' | 'preparing_ai' | 'sending_to_ai' | 'section_selection';
   stepDescription: string;
   tocEntriesFound?: number;
   tocTitles?: string[];  // First few TOC entry titles for display
@@ -44,13 +44,42 @@ export interface IParsingProgress {
   currentSectionIndex?: number;  // Which section is being sent to AI
 }
 
+/**
+ * Detected section for user selection before AI processing
+ */
+export interface IDetectedSection {
+  id: string;
+  level: 1 | 2 | 3;
+  headerType: 'roman' | 'letter' | 'number' | 'standard' | 'appendix' | 'heading';
+  headerText: string;
+  previewText: string;
+  fullContent: string;
+  htmlContent: string;
+  startPosition: number;
+  endPosition: number;
+  isAppendix: boolean;
+  isSelected: boolean;
+  parentId?: string;
+  children?: IDetectedSection[];
+}
+
+/**
+ * Appendix information for supporting documentation
+ */
+export interface IAppendixInfo {
+  htmlPath?: string;      // Path to HTML file in temp folder
+  imagesPath?: string;    // Path to images folder
+  htmlContent?: string;   // Raw HTML content
+  extractedAt?: Date;
+}
+
 export interface ISelfStudyImport extends Document {
   submissionId: mongoose.Types.ObjectId;
   originalFilename: string;
   fileType: 'pdf' | 'docx' | 'pptx';
   uploadedAt: Date;
   uploadedBy: mongoose.Types.ObjectId;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'awaiting_selection' | 'completed' | 'failed';
   processingStartedAt?: Date;
   processingCompletedAt?: Date;
   error?: string;
@@ -75,6 +104,9 @@ export interface ISelfStudyImport extends Document {
   };
   mappedSections: IMappedSection[];
   unmappedContent: IUnmappedContent[];
+  // Part 6: Detected sections for user selection before AI processing
+  detectedSections?: IDetectedSection[];
+  appendix?: IAppendixInfo;
 }
 
 const ExtractedSectionSchema = new Schema<IExtractedSection>({
@@ -127,6 +159,35 @@ const UnmappedContentSchema = new Schema<IUnmappedContent>({
   }
 }, { _id: false });
 
+// Schema for detected sections (Part 6: user selection before AI processing)
+const DetectedSectionSchema = new Schema<IDetectedSection>({
+  id: { type: String, required: true },
+  level: { type: Number, enum: [1, 2, 3], required: true },
+  headerType: {
+    type: String,
+    enum: ['roman', 'letter', 'number', 'standard', 'appendix', 'heading'],
+    required: true
+  },
+  headerText: { type: String, required: true },
+  previewText: { type: String, default: '' },
+  fullContent: { type: String, default: '' },
+  htmlContent: { type: String, default: '' },
+  startPosition: { type: Number, default: 0 },
+  endPosition: { type: Number, default: 0 },
+  isAppendix: { type: Boolean, default: false },
+  isSelected: { type: Boolean, default: true },
+  parentId: String,
+  children: { type: [Schema.Types.Mixed], default: [] }  // Recursive reference
+}, { _id: false });
+
+// Schema for appendix info
+const AppendixInfoSchema = new Schema<IAppendixInfo>({
+  htmlPath: String,
+  imagesPath: String,
+  htmlContent: String,
+  extractedAt: Date
+}, { _id: false });
+
 const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   submissionId: {
     type: Schema.Types.ObjectId,
@@ -147,7 +208,7 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   },
   status: {
     type: String,
-    enum: ['pending', 'processing', 'completed', 'failed'],
+    enum: ['pending', 'processing', 'awaiting_selection', 'completed', 'failed'],
     default: 'pending'
   },
   processingStartedAt: Date,
@@ -157,7 +218,7 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   parsingProgress: {
     step: {
       type: String,
-      enum: ['extracting_text', 'extracting_toc', 'creating_sections', 'preparing_ai', 'sending_to_ai']
+      enum: ['extracting_text', 'extracting_toc', 'creating_sections', 'preparing_ai', 'sending_to_ai', 'section_selection']
     },
     stepDescription: String,
     tocEntriesFound: Number,
@@ -184,7 +245,10 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
     sections: [ExtractedSectionSchema]
   },
   mappedSections: [MappedSectionSchema],
-  unmappedContent: [UnmappedContentSchema]
+  unmappedContent: [UnmappedContentSchema],
+  // Part 6: Detected sections for user selection before AI processing
+  detectedSections: [DetectedSectionSchema],
+  appendix: AppendixInfoSchema
 }, {
   timestamps: true
 });

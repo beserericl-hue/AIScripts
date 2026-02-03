@@ -9,7 +9,13 @@ import {
   applyMappings,
   getUnmappedContent,
   handleUnmapped,
-  cancelImport
+  cancelImport,
+  // Part 6: Section selection before AI processing
+  getDetectedSections,
+  updateSectionSelections,
+  confirmSectionSelections,
+  getAppendix,
+  getFullSectionContent
 } from '../controllers/importController';
 import { authenticate } from '../middleware/auth';
 
@@ -102,5 +108,44 @@ router.put('/:importId/unmapped/:sectionId', handleUnmapped);
  * @access  Private (Coordinator)
  */
 router.post('/:importId/cancel', cancelImport);
+
+// ============================================
+// PART 6: Section Selection Before AI Processing
+// ============================================
+
+/**
+ * @route   GET /api/imports/:importId/detected-sections
+ * @desc    Get detected sections for user selection
+ * @access  Private
+ */
+router.get('/:importId/detected-sections', getDetectedSections);
+
+/**
+ * @route   POST /api/imports/:importId/select-sections
+ * @desc    Update section selections (select/deselect)
+ * @access  Private (Coordinator)
+ */
+router.post('/:importId/select-sections', updateSectionSelections);
+
+/**
+ * @route   POST /api/imports/:importId/confirm-selections
+ * @desc    Confirm selections and proceed to AI processing
+ * @access  Private (Coordinator)
+ */
+router.post('/:importId/confirm-selections', confirmSectionSelections);
+
+/**
+ * @route   GET /api/imports/:importId/appendix
+ * @desc    Get appendix content for viewing/copying
+ * @access  Private
+ */
+router.get('/:importId/appendix', getAppendix);
+
+/**
+ * @route   GET /api/imports/:importId/full-section/:sectionId
+ * @desc    Get full content of a detected section
+ * @access  Private
+ */
+router.get('/:importId/full-section/:sectionId', getFullSectionContent);
 
 export default router;

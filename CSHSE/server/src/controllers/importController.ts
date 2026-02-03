@@ -374,6 +374,50 @@ async function processDocumentAsync(
       });
     }
 
+    // Part 6: Detect structural headers for user selection
+    debugLog('Detecting structural headers for user selection...');
+    const { sections: detectedSections, appendixSection, totalSections } =
+      documentParserService.detectStructuralHeaders(parsed.htmlContent, parsed.rawText);
+
+    debugLog('Structural headers detected', {
+      topLevelSections: detectedSections.length,
+      totalSections,
+      hasAppendix: !!appendixSection
+    });
+
+    // Store detected sections for user selection
+    importRecord.detectedSections = detectedSections;
+    if (appendixSection) {
+      importRecord.appendix = {
+        htmlContent: appendixSection.htmlContent,
+        extractedAt: new Date()
+      };
+    }
+
+    // Update progress to section selection step
+    importRecord.parsingProgress = {
+      step: 'section_selection',
+      stepDescription: `${totalSections} sections detected. Please review and select sections to process.`,
+      sectionsCreated: totalSections,
+      sectionTitles: detectedSections.slice(0, 10).map(s => s.headerText?.substring(0, 80) || 'Untitled')
+    };
+    importRecord.status = 'awaiting_selection';
+    importRecord.markModified('detectedSections');
+    importRecord.markModified('appendix');
+    importRecord.markModified('parsingProgress');
+    await importRecord.save();
+
+    debugLog('Import awaiting section selection', {
+      importId: importId.toString(),
+      sectionsForSelection: totalSections,
+      hasAppendix: !!appendixSection
+    });
+
+    // Processing will continue when user confirms section selections
+    // via POST /api/imports/:importId/confirm-selections
+    return;
+
+    // Legacy code below - kept for reference but not executed in new flow
     // Check if n8n Document Matcher webhook is configured
     const webhookSettings = await WebhookSettings.findOne({
       settingType: 'document_matcher',
@@ -1563,5 +1607,346 @@ export const cancelImport = async (req: AuthenticatedRequest, res: Response) => 
   } catch (error) {
     console.error('Cancel import error:', error);
     return res.status(500).json({ error: 'Failed to cancel import' });
+  }
+};
+
+/**
+ * Get detected sections for user selection (Part 6)
+ * Returns hierarchical sections detected from document structure
+ */
+export const getDetectedSections = async (req: Request, res: Response) => {
+  try {
+    const { importId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId)
+      .select('detectedSections appendix status parsingProgress originalFilename');
+
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    // If no detected sections yet, return current status
+    if (!importRecord.detectedSections || importRecord.detectedSections.length === 0) {
+      return res.json({
+        status: importRecord.status,
+        parsingProgress: importRecord.parsingProgress,
+        sections: [],
+        appendix: null,
+        totalSections: 0
+      });
+    }
+
+    return res.json({
+      status: importRecord.status,
+      filename: importRecord.originalFilename,
+      sections: importRecord.detectedSections,
+      appendix: importRecord.appendix || null,
+      totalSections: countSectionsRecursive(importRecord.detectedSections)
+    });
+  } catch (error) {
+    console.error('Get detected sections error:', error);
+    return res.status(500).json({ error: 'Failed to get detected sections' });
+  }
+};
+
+/**
+ * Count sections recursively including children
+ */
+function countSectionsRecursive(sections: any[]): number {
+  let count = 0;
+  for (const section of sections) {
+    count++;
+    if (section.children && section.children.length > 0) {
+      count += countSectionsRecursive(section.children);
+    }
+  }
+  return count;
+}
+
+/**
+ * Update section selections (Part 6)
+ * User can select/deselect sections before sending to n8n
+ */
+export const updateSectionSelections = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+    const { selections } = req.body; // Array of { id: string, isSelected: boolean }
+
+    if (!selections || !Array.isArray(selections)) {
+      return res.status(400).json({ error: 'Selections array is required' });
+    }
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    if (importRecord.status !== 'awaiting_selection') {
+      return res.status(400).json({
+        error: `Cannot update selections. Import status is ${importRecord.status}`
+      });
+    }
+
+    // Update selections in detected sections
+    const selectionMap = new Map(selections.map((s: any) => [s.id, s.isSelected]));
+
+    const updateSectionsRecursive = (sections: any[]) => {
+      for (const section of sections) {
+        if (selectionMap.has(section.id)) {
+          section.isSelected = selectionMap.get(section.id);
+        }
+        if (section.children && section.children.length > 0) {
+          updateSectionsRecursive(section.children);
+        }
+      }
+    };
+
+    if (importRecord.detectedSections) {
+      updateSectionsRecursive(importRecord.detectedSections);
+      importRecord.markModified('detectedSections');
+    }
+
+    await importRecord.save();
+
+    // Count selected sections
+    const countSelected = (sections: any[]): number => {
+      let count = 0;
+      for (const section of sections) {
+        if (section.isSelected && !section.isAppendix) count++;
+        if (section.children) count += countSelected(section.children);
+      }
+      return count;
+    };
+
+    const selectedCount = countSelected(importRecord.detectedSections || []);
+
+    debugLog('Section selections updated', {
+      importId,
+      totalSelections: selections.length,
+      selectedSections: selectedCount
+    });
+
+    return res.json({
+      success: true,
+      selectedCount,
+      message: `${selectedCount} sections selected for processing`
+    });
+  } catch (error) {
+    console.error('Update section selections error:', error);
+    return res.status(500).json({ error: 'Failed to update section selections' });
+  }
+};
+
+/**
+ * Confirm section selections and proceed to n8n processing (Part 6)
+ */
+export const confirmSectionSelections = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    if (importRecord.status !== 'awaiting_selection') {
+      return res.status(400).json({
+        error: `Cannot confirm selections. Import status is ${importRecord.status}`
+      });
+    }
+
+    // Get selected sections (flat list)
+    const getSelectedSections = (sections: any[]): any[] => {
+      const selected: any[] = [];
+      for (const section of sections) {
+        if (section.isSelected && !section.isAppendix) {
+          selected.push(section);
+        }
+        if (section.children && section.children.length > 0) {
+          selected.push(...getSelectedSections(section.children));
+        }
+      }
+      return selected;
+    };
+
+    const selectedSections = getSelectedSections(importRecord.detectedSections || []);
+
+    if (selectedSections.length === 0) {
+      return res.status(400).json({
+        error: 'At least one section must be selected for processing'
+      });
+    }
+
+    debugLog('Confirming section selections for n8n processing', {
+      importId,
+      selectedCount: selectedSections.length
+    });
+
+    // Update status to processing
+    importRecord.status = 'processing';
+    importRecord.parsingProgress = {
+      step: 'preparing_ai',
+      stepDescription: `Preparing ${selectedSections.length} selected sections for AI analysis...`,
+      sectionsCreated: selectedSections.length,
+      sectionTitles: selectedSections.slice(0, 10).map(s => s.headerText?.substring(0, 80) || 'Untitled')
+    };
+    await importRecord.save();
+
+    // Convert DetectedSections to TOCBasedSections for n8n processing
+    const tocSections: TOCBasedSection[] = selectedSections.map(section => ({
+      id: section.id,
+      tocEntry: {
+        title: section.headerText,
+        level: section.level,
+        sectionType: section.isAppendix ? 'appendix' : 'standard',
+        isMatrix: section.headerText?.toLowerCase().includes('matrix') || false,
+        isSupportingEvidence: section.headerText?.toLowerCase().includes('evidence') || false
+      },
+      content: section.fullContent,
+      htmlContent: section.htmlContent,
+      startPosition: section.startPosition,
+      endPosition: section.endPosition
+    }));
+
+    // Check if n8n Document Matcher webhook is configured
+    const webhookSettings = await WebhookSettings.findOne({
+      settingType: 'document_matcher',
+      isActive: true
+    });
+
+    if (webhookSettings) {
+      // Get callback URL from request
+      const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+      const host = req.get('host');
+      const callbackUrl = `${protocol}://${host}/api/webhooks/document-matcher/callback`;
+
+      debugLog('Sending selected sections to n8n Document Matcher', {
+        webhookUrl: webhookSettings.webhookUrl,
+        sectionCount: tocSections.length,
+        specName: importRecord.specName
+      });
+
+      // Create a minimal ParsedDocument for the function
+      const parsedDoc: ParsedDocument = {
+        metadata: { pageCount: 0 },
+        sections: [],
+        tables: [],
+        images: [],
+        rawText: '',
+        htmlContent: tocSections.map(s => s.htmlContent).join('\n')
+      };
+
+      // Use n8n Document Matcher for AI-powered mapping
+      await sendToN8nDocumentMatcher(
+        importRecord,
+        parsedDoc,
+        tocSections,
+        callbackUrl,
+        webhookSettings,
+        importRecord.specName || 'CSHSE Standards'
+      );
+
+      return res.json({
+        success: true,
+        selectedCount: selectedSections.length,
+        message: `Processing ${selectedSections.length} sections with AI`,
+        status: 'processing'
+      });
+    }
+
+    // Fallback: mark as completed without AI processing if no webhook configured
+    debugLog('No n8n webhook configured, marking as completed without AI processing');
+    importRecord.status = 'completed';
+    importRecord.processingCompletedAt = new Date();
+    await importRecord.save();
+
+    return res.json({
+      success: true,
+      selectedCount: selectedSections.length,
+      message: `${selectedSections.length} sections ready for manual mapping (no AI webhook configured)`,
+      status: 'completed'
+    });
+  } catch (error) {
+    console.error('Confirm section selections error:', error);
+    return res.status(500).json({ error: 'Failed to confirm section selections' });
+  }
+};
+
+/**
+ * Get appendix content (Part 6)
+ * Returns the extracted appendix HTML for viewing/copying
+ */
+export const getAppendix = async (req: Request, res: Response) => {
+  try {
+    const { importId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId)
+      .select('appendix');
+
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    if (!importRecord.appendix) {
+      return res.status(404).json({ error: 'No appendix found in this document' });
+    }
+
+    return res.json({
+      appendix: importRecord.appendix
+    });
+  } catch (error) {
+    console.error('Get appendix error:', error);
+    return res.status(500).json({ error: 'Failed to get appendix' });
+  }
+};
+
+/**
+ * Get full section content by ID (Part 6)
+ * For viewing complete section content in modal
+ */
+export const getFullSectionContent = async (req: Request, res: Response) => {
+  try {
+    const { importId, sectionId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId)
+      .select('detectedSections appendix');
+
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    // Search for section in detected sections or appendix
+    const findSection = (sections: any[], id: string): any | null => {
+      for (const section of sections) {
+        if (section.id === id) return section;
+        if (section.children && section.children.length > 0) {
+          const found = findSection(section.children, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    let section = findSection(importRecord.detectedSections || [], sectionId);
+
+    // Check appendix if not found in regular sections
+    if (!section && importRecord.appendix && (importRecord as any).appendix.id === sectionId) {
+      section = importRecord.appendix;
+    }
+
+    if (!section) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+
+    return res.json({
+      id: section.id,
+      headerText: section.headerText,
+      fullContent: section.fullContent,
+      htmlContent: section.htmlContent,
+      isAppendix: section.isAppendix || false
+    });
+  } catch (error) {
+    console.error('Get full section content error:', error);
+    return res.status(500).json({ error: 'Failed to get section content' });
   }
 };

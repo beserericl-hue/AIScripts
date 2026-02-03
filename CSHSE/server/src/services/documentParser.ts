@@ -85,6 +85,26 @@ export interface TOCBasedSection {
   specHint?: string;      // e.g., "Specification b" to help AI
 }
 
+/**
+ * Detected section for user selection before AI processing
+ * Uses structural headers (Roman numerals, Letters, Numbers)
+ */
+export interface DetectedSection {
+  id: string;
+  level: 1 | 2 | 3;  // Hierarchy level
+  headerType: 'roman' | 'letter' | 'number' | 'standard' | 'appendix' | 'heading';
+  headerText: string;  // e.g., "I. GENERAL PROGRAM CHARACTERISTICS"
+  previewText: string;  // First 200 chars of content
+  fullContent: string;  // Complete section content
+  htmlContent: string;  // HTML version for display
+  startPosition: number;
+  endPosition: number;
+  isAppendix: boolean;
+  isSelected: boolean;  // Default true, user can uncheck
+  parentId?: string;    // For hierarchy tracking
+  children: DetectedSection[];  // Nested sub-sections
+}
+
 // Standard detection patterns for CSHSE standards
 const STANDARD_PATTERNS = [
   { pattern: /Standard\s*(\d{1,2})([a-z])?/gi, type: 'explicit' },
@@ -2337,6 +2357,315 @@ export class DocumentParserService {
       }
       return s.tocEntry.sectionType === type;
     });
+  }
+
+  /**
+   * Detect structural headers for user section selection
+   * Finds Roman numerals, Letters, Numbers, and Standard patterns
+   * Returns hierarchical structure with sections for user to select/deselect
+   */
+  detectStructuralHeaders(htmlContent: string, rawText: string): {
+    sections: DetectedSection[];
+    appendixSection?: DetectedSection;
+    totalSections: number;
+  } {
+    const sections: DetectedSection[] = [];
+    let appendixSection: DetectedSection | undefined;
+
+    // Patterns for detecting structural headers
+    const SECTION_PATTERNS = {
+      roman: /^([IVXLCDM]+)\.\s+(.+)/i,           // I. GENERAL PROGRAM...
+      letter: /^([A-Z])\.\s+(.+)/i,               // A. Institutional Requirements
+      number: /^(\d+)\.\s+(.+)/,                   // 1. History, 2. Human Systems
+      standard: /^Standard\s*(\d+)/i,              // Standard 1:
+      appendix: /^Appendix/i,                      // Appendix, Appendix A
+    };
+
+    // First, try to extract from HTML headings (most reliable)
+    const headingRegex = /<h([1-4])[^>]*>(.*?)<\/h\1>/gi;
+    const headings: Array<{
+      level: number;
+      text: string;
+      index: number;
+      fullMatch: string;
+    }> = [];
+
+    let match;
+    while ((match = headingRegex.exec(htmlContent)) !== null) {
+      const headingText = match[2].replace(/<[^>]*>/g, '').trim();
+      if (!headingText || headingText.length < 2) continue;
+      if (headingText.toLowerCase().includes('table of contents')) continue;
+      if (headingText.toLowerCase() === 'contents') continue;
+
+      headings.push({
+        level: parseInt(match[1], 10),
+        text: headingText,
+        index: match.index,
+        fullMatch: match[0]
+      });
+    }
+
+    console.log(`[DocumentParser] detectStructuralHeaders: Found ${headings.length} HTML headings`);
+
+    // If no HTML headings found, fall back to text pattern detection
+    if (headings.length === 0) {
+      return this.detectStructuralHeadersFromText(rawText);
+    }
+
+    // Process HTML headings into DetectedSection structure
+    for (let i = 0; i < headings.length; i++) {
+      const heading = headings[i];
+      const nextHeading = headings[i + 1];
+
+      // Extract content between headings
+      const startPos = heading.index;
+      const endPos = nextHeading ? nextHeading.index : htmlContent.length;
+      const sectionHtml = htmlContent.substring(startPos, endPos);
+      const sectionText = sectionHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+      // Determine header type
+      const headerType = this.determineHeaderType(heading.text, SECTION_PATTERNS);
+
+      // Check if this is an appendix
+      const isAppendix = SECTION_PATTERNS.appendix.test(heading.text);
+
+      // Create preview text (first 200 chars)
+      const previewText = sectionText.substring(0, 200) + (sectionText.length > 200 ? '...' : '');
+
+      const section: DetectedSection = {
+        id: uuidv4(),
+        level: Math.min(heading.level, 3) as 1 | 2 | 3,
+        headerType,
+        headerText: heading.text,
+        previewText,
+        fullContent: sectionText,
+        htmlContent: sectionHtml,
+        startPosition: startPos,
+        endPosition: endPos,
+        isAppendix,
+        isSelected: !isAppendix, // Appendix not selected by default
+        children: []
+      };
+
+      if (isAppendix) {
+        // If appendix, capture everything from here to end
+        const appendixHtml = htmlContent.substring(startPos);
+        const appendixText = appendixHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+        section.fullContent = appendixText;
+        section.htmlContent = appendixHtml;
+        section.endPosition = htmlContent.length;
+        section.previewText = appendixText.substring(0, 200) + (appendixText.length > 200 ? '...' : '');
+        appendixSection = section;
+        // Don't add to regular sections, break here
+        break;
+      }
+
+      sections.push(section);
+    }
+
+    // Build hierarchy based on heading levels
+    const hierarchicalSections = this.buildSectionHierarchy(sections);
+
+    console.log(`[DocumentParser] detectStructuralHeaders: Created ${hierarchicalSections.length} top-level sections` +
+      (appendixSection ? ', 1 appendix section' : ''));
+
+    return {
+      sections: hierarchicalSections,
+      appendixSection,
+      totalSections: this.countAllSections(hierarchicalSections)
+    };
+  }
+
+  /**
+   * Detect structural headers from raw text when HTML headings aren't available
+   */
+  private detectStructuralHeadersFromText(rawText: string): {
+    sections: DetectedSection[];
+    appendixSection?: DetectedSection;
+    totalSections: number;
+  } {
+    const sections: DetectedSection[] = [];
+    let appendixSection: DetectedSection | undefined;
+    const lines = rawText.split('\n');
+
+    const SECTION_PATTERNS = {
+      roman: /^([IVXLCDM]+)\.\s+(.+)/i,
+      letter: /^([A-Z])\.\s+(.+)/i,
+      number: /^(\d+)\.\s+(.+)/,
+      standard: /^Standard\s*(\d+)/i,
+      appendix: /^Appendix/i,
+    };
+
+    // Header patterns to detect
+    const headerPatterns = [
+      { pattern: SECTION_PATTERNS.roman, type: 'roman' as const, level: 1 as const },
+      { pattern: SECTION_PATTERNS.standard, type: 'standard' as const, level: 1 as const },
+      { pattern: SECTION_PATTERNS.letter, type: 'letter' as const, level: 2 as const },
+      { pattern: SECTION_PATTERNS.number, type: 'number' as const, level: 3 as const },
+      { pattern: SECTION_PATTERNS.appendix, type: 'appendix' as const, level: 1 as const },
+      // ALL CAPS headers (likely major sections)
+      { pattern: /^[A-Z][A-Z\s]{10,}$/, type: 'heading' as const, level: 1 as const },
+    ];
+
+    let currentPosition = 0;
+    const detectedHeaders: Array<{
+      lineIndex: number;
+      text: string;
+      type: 'roman' | 'letter' | 'number' | 'standard' | 'appendix' | 'heading';
+      level: 1 | 2 | 3;
+      position: number;
+    }> = [];
+
+    // Find all headers
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line || line.length > 150) continue;
+
+      for (const { pattern, type, level } of headerPatterns) {
+        if (pattern.test(line)) {
+          detectedHeaders.push({
+            lineIndex: i,
+            text: line,
+            type,
+            level,
+            position: currentPosition
+          });
+          break;
+        }
+      }
+      currentPosition += lines[i].length + 1; // +1 for newline
+    }
+
+    console.log(`[DocumentParser] detectStructuralHeadersFromText: Found ${detectedHeaders.length} headers`);
+
+    // Create sections from headers
+    for (let i = 0; i < detectedHeaders.length; i++) {
+      const header = detectedHeaders[i];
+      const nextHeader = detectedHeaders[i + 1];
+
+      // Extract content
+      const startLine = header.lineIndex;
+      const endLine = nextHeader ? nextHeader.lineIndex : lines.length;
+      const content = lines.slice(startLine, endLine).join('\n').trim();
+      const previewText = content.substring(0, 200) + (content.length > 200 ? '...' : '');
+
+      const isAppendix = header.type === 'appendix';
+
+      const section: DetectedSection = {
+        id: uuidv4(),
+        level: header.level,
+        headerType: header.type,
+        headerText: header.text,
+        previewText,
+        fullContent: content,
+        htmlContent: `<div>${content.replace(/\n/g, '<br/>')}</div>`,
+        startPosition: header.position,
+        endPosition: nextHeader ? nextHeader.position : rawText.length,
+        isAppendix,
+        isSelected: !isAppendix,
+        children: []
+      };
+
+      if (isAppendix) {
+        // Capture everything from appendix to end
+        const appendixContent = lines.slice(startLine).join('\n').trim();
+        section.fullContent = appendixContent;
+        section.htmlContent = `<div>${appendixContent.replace(/\n/g, '<br/>')}</div>`;
+        section.endPosition = rawText.length;
+        section.previewText = appendixContent.substring(0, 200) + (appendixContent.length > 200 ? '...' : '');
+        appendixSection = section;
+        break;
+      }
+
+      sections.push(section);
+    }
+
+    const hierarchicalSections = this.buildSectionHierarchy(sections);
+
+    return {
+      sections: hierarchicalSections,
+      appendixSection,
+      totalSections: this.countAllSections(hierarchicalSections)
+    };
+  }
+
+  /**
+   * Determine the header type based on text patterns
+   */
+  private determineHeaderType(
+    text: string,
+    patterns: Record<string, RegExp>
+  ): 'roman' | 'letter' | 'number' | 'standard' | 'appendix' | 'heading' {
+    if (patterns.appendix.test(text)) return 'appendix';
+    if (patterns.roman.test(text)) return 'roman';
+    if (patterns.standard.test(text)) return 'standard';
+    if (patterns.letter.test(text)) return 'letter';
+    if (patterns.number.test(text)) return 'number';
+    return 'heading';
+  }
+
+  /**
+   * Build hierarchical structure from flat sections based on levels
+   */
+  private buildSectionHierarchy(sections: DetectedSection[]): DetectedSection[] {
+    const result: DetectedSection[] = [];
+    const stack: DetectedSection[] = [];
+
+    for (const section of sections) {
+      // Pop sections from stack that are at same or higher level
+      while (stack.length > 0 && stack[stack.length - 1].level >= section.level) {
+        stack.pop();
+      }
+
+      if (stack.length === 0) {
+        // This is a top-level section
+        result.push(section);
+      } else {
+        // This is a child of the last section in stack
+        const parent = stack[stack.length - 1];
+        section.parentId = parent.id;
+        parent.children.push(section);
+      }
+
+      stack.push(section);
+    }
+
+    return result;
+  }
+
+  /**
+   * Count all sections including nested children
+   */
+  private countAllSections(sections: DetectedSection[]): number {
+    let count = 0;
+    for (const section of sections) {
+      count++;
+      if (section.children.length > 0) {
+        count += this.countAllSections(section.children);
+      }
+    }
+    return count;
+  }
+
+  /**
+   * Get all selected sections as a flat array (for processing)
+   */
+  getSelectedSectionsFlat(sections: DetectedSection[]): DetectedSection[] {
+    const selected: DetectedSection[] = [];
+
+    const traverse = (sectionList: DetectedSection[]) => {
+      for (const section of sectionList) {
+        if (section.isSelected && !section.isAppendix) {
+          selected.push(section);
+        }
+        if (section.children.length > 0) {
+          traverse(section.children);
+        }
+      }
+    };
+
+    traverse(sections);
+    return selected;
   }
 }
 
