@@ -5,6 +5,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   FileUp,
   Home,
   Upload,
@@ -275,6 +276,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [isLoadingDocument, setIsLoadingDocument] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [taggedSections, setTaggedSections] = useState<TaggedSection[]>([]);
+  const [showTaggedSections, setShowTaggedSections] = useState(true);
   const [isLoadingTaggedSections, setIsLoadingTaggedSections] = useState(false);
   const [startOffset, setStartOffset] = useState<number | null>(null);
   const [endOffset, setEndOffset] = useState<number | null>(null);
@@ -1518,7 +1520,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
         {/* Import Document Side Panel - Part of layout, not overlay */}
         {showImportModal && (
-          <div className={`${importStep === 'manual_tagging' ? 'w-[700px]' : 'w-[420px]'} h-full flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col transition-all duration-300 overflow-hidden`}>
+          <div className={`${importStep === 'manual_tagging' ? 'w-[85vw] max-w-[1400px]' : 'w-[420px]'} h-full flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col transition-all duration-300 overflow-hidden`}>
             {/* Panel Header */}
             <div className={`flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 ${
               importStep === 'review' ? 'bg-teal-50' : 'bg-gray-50'
@@ -1814,104 +1816,111 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                 </div>
               )}
 
-              {/* Manual Tagging Step - Full Document View */}
+              {/* Manual Tagging Step - Horizontal Split Layout */}
               {importStep === 'manual_tagging' && (
                 <div className="flex flex-col h-full -m-4">
-                  {/* Header */}
-                  <div className="p-4 bg-teal-50 border-b border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                      Manual Section Tagging
-                    </h3>
-                    <p className="text-sm text-gray-500">
-                      Click in the document to mark section boundaries, then assign metadata.
-                    </p>
-                  </div>
-
-                  {/* Main Content - Split View */}
-                  <div className="flex-1 flex flex-col overflow-hidden">
-                    {/* Document Viewer */}
-                    <div className="flex-1 overflow-hidden border-b border-gray-200">
-                      <DocumentViewer
-                        importId={importId || ''}
-                        htmlContent={documentHtml}
-                        isLoading={isLoadingDocument}
-                        error={documentError}
-                        startOffset={startOffset}
-                        endOffset={endOffset}
-                        onPositionClick={handlePositionClick}
-                        onRefresh={loadDocumentContent}
-                      />
-                    </div>
-
-                    {/* Tagging Controls */}
-                    <div className="h-80 flex-shrink-0 overflow-hidden border-b border-gray-200">
-                      <SectionTagger
-                        startOffset={startOffset}
-                        endOffset={endOffset}
-                        previewText={selectionPreview}
-                        onMarkStart={handleMarkStart}
-                        onMarkEnd={handleMarkEnd}
-                        onClearSelection={handleClearSelection}
-                        onSaveSection={handleSaveSection}
-                        isSaving={isSavingSection}
-                        error={sectionError}
-                      />
-                    </div>
-
-                    {/* Tagged Sections List */}
-                    <div className="h-48 flex-shrink-0 overflow-hidden">
-                      <div className="h-full flex flex-col">
-                        <div className="px-4 py-2 bg-gray-100 border-b border-gray-200 flex items-center justify-between">
-                          <h4 className="font-medium text-gray-700">Tagged Sections</h4>
-                          <span className="text-sm text-gray-500">
-                            {taggedSections.length} section{taggedSections.length !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-                        <div className="flex-1 overflow-y-auto">
-                          <TaggedSectionsList
-                            sections={taggedSections}
-                            isLoading={isLoadingTaggedSections}
-                            onDelete={handleDeleteTaggedSection}
-                            onView={handleViewTaggedSection}
-                            deletingId={deletingSectionId}
-                          />
-                        </div>
+                  {/* Main Content - Horizontal Split */}
+                  <div className="flex-1 flex overflow-hidden">
+                    {/* Left: Document Viewer (takes most space) */}
+                    <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                      {/* Document Header */}
+                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex-shrink-0">
+                        <h3 className="text-lg font-semibold text-gray-900">Document Content</h3>
+                        <p className="text-sm text-gray-500">Click to place cursor, then use Mark Start/End buttons</p>
+                      </div>
+                      {/* Document Viewer - Full Height */}
+                      <div className="flex-1 overflow-hidden">
+                        <DocumentViewer
+                          importId={importId || ''}
+                          htmlContent={documentHtml}
+                          isLoading={isLoadingDocument}
+                          error={documentError}
+                          startOffset={startOffset}
+                          endOffset={endOffset}
+                          onPositionClick={handlePositionClick}
+                          onRefresh={loadDocumentContent}
+                        />
                       </div>
                     </div>
-                  </div>
 
-                  {/* Footer Actions */}
-                  <div className="p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-                    <button
-                      onClick={handleCancelImport}
-                      disabled={isConfirmingSelections}
-                      className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Cancel Import
-                    </button>
-                    <button
-                      onClick={handleFinishTagging}
-                      disabled={isConfirmingSelections || taggedSections.length === 0}
-                      className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {isConfirmingSelections ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          Finish Tagging ({taggedSections.length} sections)
-                          <ArrowRight className="w-4 h-4" />
-                        </>
-                      )}
-                    </button>
+                    {/* Right: Controls Panel (fixed width) */}
+                    <div className="w-80 flex-shrink-0 border-l border-gray-200 flex flex-col overflow-hidden bg-gray-50">
+                      {/* Section Tagger */}
+                      <div className="flex-shrink-0 border-b border-gray-200 bg-white">
+                        <SectionTagger
+                          startOffset={startOffset}
+                          endOffset={endOffset}
+                          previewText={selectionPreview}
+                          onMarkStart={handleMarkStart}
+                          onMarkEnd={handleMarkEnd}
+                          onClearSelection={handleClearSelection}
+                          onSaveSection={handleSaveSection}
+                          isSaving={isSavingSection}
+                          error={sectionError}
+                        />
+                      </div>
+
+                      {/* Tagged Sections - Expandable */}
+                      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                        <button
+                          onClick={() => setShowTaggedSections(!showTaggedSections)}
+                          className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between hover:bg-gray-200 transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <ChevronDown className={`w-4 h-4 transition-transform ${showTaggedSections ? '' : '-rotate-90'}`} />
+                            <h4 className="font-medium text-gray-700">Tagged Sections</h4>
+                          </div>
+                          <span className="px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full text-sm font-medium">
+                            {taggedSections.length}
+                          </span>
+                        </button>
+                        {showTaggedSections && (
+                          <div className="flex-1 overflow-y-auto">
+                            <TaggedSectionsList
+                              sections={taggedSections}
+                              isLoading={isLoadingTaggedSections}
+                              onDelete={handleDeleteTaggedSection}
+                              onView={handleViewTaggedSection}
+                              deletingId={deletingSectionId}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer Actions */}
+                      <div className="p-3 bg-gray-50 border-t border-gray-200 flex flex-col gap-2 flex-shrink-0">
+                        <button
+                          onClick={handleFinishTagging}
+                          disabled={isConfirmingSelections || taggedSections.length === 0}
+                          className="w-full px-4 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
+                        >
+                          {isConfirmingSelections ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Processing...
+                            </>
+                          ) : (
+                            <>
+                              Finish Tagging ({taggedSections.length})
+                              <ArrowRight className="w-4 h-4" />
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={handleCancelImport}
+                          disabled={isConfirmingSelections}
+                          className="w-full px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
+                        >
+                          Cancel Import
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* View Tagged Section Modal */}
                   {viewingTaggedSection && (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                      <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[80vh] flex flex-col">
+                      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col">
                         <div className="flex items-center justify-between p-4 border-b border-gray-200">
                           <h3 className="font-semibold text-gray-900 truncate">
                             {viewingTaggedSection.title}
@@ -1923,17 +1932,15 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             <X className="w-5 h-5" />
                           </button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4">
-                          <div className="prose prose-sm max-w-none">
-                            <p className="text-gray-600">
-                              {viewingTaggedSection.previewText || 'No preview available'}
-                            </p>
-                            {viewingTaggedSection.contentLength && (
-                              <p className="text-sm text-gray-400 mt-4">
-                                Total content: {viewingTaggedSection.contentLength.toLocaleString()} characters
-                              </p>
-                            )}
+                        <div className="flex-1 overflow-y-auto p-6">
+                          <div className="prose prose-sm max-w-none whitespace-pre-wrap">
+                            {viewingTaggedSection.previewText || 'No preview available'}
                           </div>
+                          {viewingTaggedSection.contentLength && (
+                            <p className="text-sm text-gray-400 mt-4 pt-4 border-t">
+                              Total content: {viewingTaggedSection.contentLength.toLocaleString()} characters
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center justify-end p-4 border-t border-gray-200 bg-gray-50">
                           <button

@@ -2500,6 +2500,30 @@ export const finishTagging = async (req: AuthenticatedRequest, res: Response) =>
 
     console.log(`[Import] Finishing tagging for ${importId}: ${sections.length} sections`);
 
+    // Clean up the remaining document content from GridFS
+    // Only tagged sections are kept - unmarked content is discarded
+    try {
+      await gridFsService.deleteHtmlContent(importId);
+      debugLog('Deleted remaining document HTML from GridFS (unmarked content discarded)', { importId });
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup GridFS HTML:', cleanupError);
+      // Continue even if cleanup fails
+    }
+
+    // Clean up temp images (they're now referenced in the tagged sections' HTML)
+    try {
+      await tempFileService.cleanupTempFiles(importId);
+      debugLog('Cleaned up temp files', { importId });
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup temp files:', cleanupError);
+    }
+
+    // Clear the metadata flag since HTML is no longer in GridFS
+    if (importRecord.extractedContent?.metadata) {
+      importRecord.extractedContent.metadata.htmlStoredInGridFS = false;
+      importRecord.markModified('extractedContent');
+    }
+
     if (processWithAI) {
       // Update status and send to n8n for AI processing
       importRecord.status = 'processing';
@@ -2527,7 +2551,7 @@ export const finishTagging = async (req: AuthenticatedRequest, res: Response) =>
       sectionsCount: sections.length,
       message: processWithAI
         ? 'Sections sent to AI for processing'
-        : 'Tagging completed without AI processing'
+        : 'Tagging completed - unmarked content discarded'
     });
   } catch (error) {
     console.error('Finish tagging error:', error);

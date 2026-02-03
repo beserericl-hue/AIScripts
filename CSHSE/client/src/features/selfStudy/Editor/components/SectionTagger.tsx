@@ -116,33 +116,30 @@ export function SectionTagger({
      (sectionType === 'standard' && standardCode));
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="p-4 bg-gray-50 border-b border-gray-200">
-        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-          <MapPin className="w-5 h-5 text-teal-600" />
+    <div className="flex flex-col">
+      {/* Header - Compact */}
+      <div className="px-3 py-2 bg-teal-50 border-b border-gray-200">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
+          <MapPin className="w-4 h-4 text-teal-600" />
           Section Tagger
         </h3>
-        <p className="text-sm text-gray-500 mt-1">
-          Mark section boundaries and assign metadata
-        </p>
       </div>
 
-      {/* Controls */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {/* Controls - Compact spacing */}
+      <div className="p-3 space-y-3 overflow-y-auto max-h-[400px]">
         {/* Position Buttons */}
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">
-            Step 1: Mark Boundaries
+        <div className="space-y-1.5">
+          <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide">
+            1. Mark Boundaries
           </label>
-          <div className="flex gap-2">
+          <div className="flex gap-1.5">
             <button
               onClick={onMarkStart}
               disabled={isSaving}
-              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+              className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors ${
                 startOffset !== null
-                  ? 'bg-green-100 text-green-700 border-2 border-green-500'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-2 border-transparent'
+                  ? 'bg-green-100 text-green-700 border border-green-400'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-transparent'
               }`}
             >
               {startOffset !== null ? `Start: ${startOffset}` : 'Mark Start'}
@@ -150,12 +147,12 @@ export function SectionTagger({
             <button
               onClick={onMarkEnd}
               disabled={startOffset === null || isSaving}
-              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+              className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors ${
                 endOffset !== null
-                  ? 'bg-red-100 text-red-700 border-2 border-red-500'
+                  ? 'bg-red-100 text-red-700 border border-red-400'
                   : startOffset !== null
-                  ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-2 border-transparent'
-                  : 'bg-gray-50 text-gray-400 cursor-not-allowed border-2 border-transparent'
+                  ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-transparent'
+                  : 'bg-gray-50 text-gray-400 cursor-not-allowed border border-transparent'
               }`}
             >
               {endOffset !== null ? `End: ${endOffset}` : 'Mark End'}
@@ -165,58 +162,56 @@ export function SectionTagger({
             <button
               onClick={onClearSelection}
               disabled={isSaving}
-              className="w-full px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded transition-colors"
+              className="w-full px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
             >
               Clear Selection
             </button>
           )}
         </div>
 
-        {/* Preview */}
+        {/* Preview - More compact */}
         {previewText && (
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Selection Preview
-            </label>
-            <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-sm text-gray-600 max-h-32 overflow-y-auto">
-              {previewText.substring(0, 500)}
-              {previewText.length > 500 && '...'}
+          <div className="space-y-1">
+            <label className="block text-xs font-medium text-gray-600">Preview</label>
+            <div className="p-2 bg-gray-50 rounded border border-gray-200 text-xs text-gray-600 max-h-20 overflow-y-auto whitespace-pre-wrap">
+              {previewText.substring(0, 300)}
+              {previewText.length > 300 && '...'}
             </div>
           </div>
         )}
 
         {/* Section Type */}
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">
-            Step 2: Section Type
+        <div className="space-y-1.5">
+          <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide">
+            2. Section Type
           </label>
           <select
             value={sectionType}
             onChange={(e) => setSectionType(e.target.value as SectionType)}
             disabled={isSaving}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
           >
             <option value="standard">Standard (1-21)</option>
             <option value="matrix">Curriculum Matrix</option>
-            <option value="appendix">Appendix / Supporting Document</option>
+            <option value="appendix">Appendix / Supporting Doc</option>
             <option value="skip">Skip / Ignore</option>
           </select>
         </div>
 
         {/* Standard-specific fields */}
         {sectionType === 'standard' && (
-          <div className="space-y-3 p-3 bg-teal-50 rounded-lg border border-teal-200">
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Standard Number *
+          <div className="space-y-2 p-2 bg-teal-50 rounded border border-teal-200">
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">
+                Standard *
               </label>
               <select
                 value={standardCode}
                 onChange={(e) => setStandardCode(e.target.value)}
                 disabled={isSaving}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
               >
-                <option value="">Select a standard...</option>
+                <option value="">Select...</option>
                 {Object.entries(STANDARD_NAMES).map(([code, name]) => (
                   <option key={code} value={code}>
                     {code}. {name}
@@ -225,17 +220,17 @@ export function SectionTagger({
               </select>
             </div>
 
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Specification (optional)
+            <div className="space-y-1">
+              <label className="block text-xs font-medium text-gray-700">
+                Spec (optional)
               </label>
               <select
                 value={specCode}
                 onChange={(e) => setSpecCode(e.target.value)}
                 disabled={isSaving || !standardCode}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
               >
-                <option value="">All specifications / General</option>
+                <option value="">All / General</option>
                 {SPEC_OPTIONS.map((spec) => (
                   <option key={spec} value={spec}>
                     {standardCode}.{spec}
@@ -247,38 +242,33 @@ export function SectionTagger({
         )}
 
         {/* Title */}
-        <div className="space-y-2">
-          <label className="block text-sm font-medium text-gray-700">
-            Section Title
+        <div className="space-y-1">
+          <label className="block text-xs font-medium text-gray-600">
+            Title
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             disabled={isSaving}
-            placeholder="Enter a title for this section"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            placeholder="Section title"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
           />
-          <p className="text-xs text-gray-500">
-            Auto-filled from the first line of your selection
-          </p>
         </div>
 
         {/* Error Message */}
         {error && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            <AlertCircle className="w-5 h-5 flex-shrink-0" />
-            <span className="text-sm">{error}</span>
+          <div className="flex items-start gap-2 p-2 bg-red-50 border border-red-200 rounded text-red-700">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <span className="text-xs">{error}</span>
           </div>
         )}
-      </div>
 
-      {/* Action Buttons */}
-      <div className="p-4 border-t border-gray-200 space-y-2">
+        {/* Save Button - Inline with form */}
         <button
           onClick={handleSave}
           disabled={!canSave || isSaving}
-          className={`w-full px-4 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+          className={`w-full px-3 py-2 rounded font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
             canSave && !isSaving
               ? 'bg-teal-600 text-white hover:bg-teal-700'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -286,20 +276,20 @@ export function SectionTagger({
         >
           {isSaving ? (
             <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Saving Section...
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Saving...
             </>
           ) : (
             <>
-              <Save className="w-5 h-5" />
-              {sectionType === 'skip' ? 'Remove Content' : 'Save Section'}
+              <Save className="w-4 h-4" />
+              {sectionType === 'skip' ? 'Skip Content' : 'Save Section'}
             </>
           )}
         </button>
 
         {!hasSelection && (
-          <p className="text-xs text-center text-gray-500">
-            Click in the document to mark the start and end of a section
+          <p className="text-xs text-center text-gray-400">
+            Click in document to mark boundaries
           </p>
         )}
       </div>

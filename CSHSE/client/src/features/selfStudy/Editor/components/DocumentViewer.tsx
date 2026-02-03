@@ -308,21 +308,108 @@ export function DocumentViewer({
         </div>
       </div>
 
-      {/* Content Area */}
+      {/* Content Area - Scrollable document viewer */}
       <div
-        className="flex-1 overflow-auto p-4 cursor-text"
+        className="flex-1 overflow-auto cursor-text"
         onClick={handleContentClick}
         style={{
-          background: 'linear-gradient(to right, #f3f4f6 1px, transparent 1px), linear-gradient(to bottom, #f3f4f6 1px, transparent 1px)',
-          backgroundSize: '20px 20px'
+          background: '#f9fafb'
         }}
       >
+        <style>
+          {`
+            .document-content {
+              font-family: 'Georgia', 'Times New Roman', serif;
+              font-size: 14px;
+              line-height: 1.7;
+              color: #1f2937;
+            }
+            .document-content h1 {
+              font-size: 1.75rem;
+              font-weight: 700;
+              color: #111827;
+              margin: 1.5rem 0 1rem;
+              padding-bottom: 0.5rem;
+              border-bottom: 2px solid #e5e7eb;
+            }
+            .document-content h2 {
+              font-size: 1.5rem;
+              font-weight: 600;
+              color: #1f2937;
+              margin: 1.25rem 0 0.75rem;
+            }
+            .document-content h3 {
+              font-size: 1.25rem;
+              font-weight: 600;
+              color: #374151;
+              margin: 1rem 0 0.5rem;
+            }
+            .document-content h4 {
+              font-size: 1.1rem;
+              font-weight: 600;
+              color: #4b5563;
+              margin: 0.75rem 0 0.5rem;
+            }
+            .document-content p {
+              margin: 0.75rem 0;
+              text-align: justify;
+            }
+            .document-content ul, .document-content ol {
+              margin: 0.75rem 0;
+              padding-left: 1.5rem;
+            }
+            .document-content li {
+              margin: 0.25rem 0;
+            }
+            .document-content table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 1rem 0;
+              font-size: 13px;
+            }
+            .document-content th, .document-content td {
+              border: 1px solid #d1d5db;
+              padding: 0.5rem;
+              text-align: left;
+            }
+            .document-content th {
+              background-color: #f3f4f6;
+              font-weight: 600;
+            }
+            .document-content img {
+              max-width: 100%;
+              height: auto;
+              margin: 1rem 0;
+              border: 1px solid #e5e7eb;
+              border-radius: 4px;
+            }
+            .document-content strong, .document-content b {
+              font-weight: 600;
+            }
+            .document-content em, .document-content i {
+              font-style: italic;
+            }
+            .document-content blockquote {
+              border-left: 4px solid #d1d5db;
+              padding-left: 1rem;
+              margin: 1rem 0;
+              color: #6b7280;
+            }
+            .document-content hr {
+              border: none;
+              border-top: 1px solid #e5e7eb;
+              margin: 1.5rem 0;
+            }
+          `}
+        </style>
         <div
           ref={contentRef}
-          className="max-w-4xl mx-auto bg-white shadow-lg rounded-lg p-8 min-h-full"
+          className="document-content bg-white shadow-sm border border-gray-200 rounded-lg m-4 p-8"
           style={{
             transform: `scale(${zoom / 100})`,
-            transformOrigin: 'top center'
+            transformOrigin: 'top left',
+            minHeight: 'calc(100% - 2rem)',
+            maxWidth: '900px'
           }}
           dangerouslySetInnerHTML={{ __html: htmlContent }}
         />
