@@ -1820,16 +1820,16 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
               {importStep === 'manual_tagging' && (
                 <div className="flex flex-col h-full -m-4">
                   {/* Main Content - Horizontal Split */}
-                  <div className="flex-1 flex overflow-hidden">
+                  <div className="flex-1 flex min-h-0">
                     {/* Left: Document Viewer (takes most space) */}
-                    <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+                    <div className="flex-1 flex flex-col min-h-0 min-w-0">
                       {/* Document Header */}
                       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex-shrink-0">
                         <h3 className="text-lg font-semibold text-gray-900">Document Content</h3>
                         <p className="text-sm text-gray-500">Click to place cursor, then use Mark Start/End buttons</p>
                       </div>
-                      {/* Document Viewer - Full Height */}
-                      <div className="flex-1 overflow-hidden">
+                      {/* Document Viewer - Full Height with scroll */}
+                      <div className="flex-1 min-h-0 h-full">
                         <DocumentViewer
                           importId={importId || ''}
                           htmlContent={documentHtml}

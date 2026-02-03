@@ -274,9 +274,9 @@ export function DocumentViewer({
   }
 
   return (
-    <div ref={containerRef} className="flex-1 flex flex-col overflow-hidden bg-white">
+    <div ref={containerRef} className="h-full flex flex-col bg-white">
       {/* Toolbar */}
-      <div className="viewer-controls flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
+      <div className="viewer-controls flex-shrink-0 flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
         <div className="flex items-center gap-2">
           <span className="text-sm text-gray-600">
             Click in the document to mark section boundaries
@@ -310,7 +310,7 @@ export function DocumentViewer({
 
       {/* Content Area - Scrollable document viewer */}
       <div
-        className="flex-1 overflow-auto cursor-text"
+        className="flex-1 min-h-0 overflow-auto cursor-text"
         onClick={handleContentClick}
         style={{
           background: '#f9fafb'
@@ -417,7 +417,7 @@ export function DocumentViewer({
 
       {/* Position Indicator */}
       {(startOffset !== null || endOffset !== null) && (
-        <div className="px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center gap-4 text-sm">
+        <div className="flex-shrink-0 px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center gap-4 text-sm">
           {startOffset !== null && (
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 bg-green-500 rounded-full"></span>
