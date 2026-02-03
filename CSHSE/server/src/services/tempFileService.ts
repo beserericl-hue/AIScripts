@@ -13,6 +13,9 @@ import { v4 as uuidv4 } from 'uuid';
 
 const TEMP_BASE_DIR = process.env.TEMP_DIR || '/tmp/imports';
 
+// Log the temp directory on startup
+console.log(`[TempFileService] Using temp directory: ${TEMP_BASE_DIR}`);
+
 export interface TempFileInfo {
   importId: string;
   basePath: string;
@@ -48,11 +51,21 @@ export async function initTempDirectory(importId: string): Promise<TempFileInfo>
 export async function saveHtmlContent(importId: string, htmlContent: string): Promise<string> {
   const htmlPath = path.join(TEMP_BASE_DIR, importId, 'content.html');
 
+  console.log(`[TempFileService] Saving HTML content to: ${htmlPath}`);
+
   // Ensure directory exists
   await fs.mkdir(path.dirname(htmlPath), { recursive: true });
 
   await fs.writeFile(htmlPath, htmlContent, 'utf-8');
   console.log(`[TempFileService] Saved HTML content: ${htmlPath} (${htmlContent.length} chars)`);
+
+  // Verify file was written
+  try {
+    const stats = await fs.stat(htmlPath);
+    console.log(`[TempFileService] File verified: ${stats.size} bytes`);
+  } catch (err) {
+    console.error(`[TempFileService] Failed to verify file:`, err);
+  }
 
   return htmlPath;
 }
@@ -85,13 +98,16 @@ export async function saveImage(
  */
 export async function readHtmlContent(importId: string): Promise<string> {
   const htmlPath = path.join(TEMP_BASE_DIR, importId, 'content.html');
+  console.log(`[TempFileService] Reading HTML from: ${htmlPath}`);
 
   try {
     const content = await fs.readFile(htmlPath, 'utf-8');
+    console.log(`[TempFileService] Read ${content.length} chars from ${htmlPath}`);
     return content;
   } catch (error: any) {
+    console.error(`[TempFileService] Error reading HTML:`, error.code, error.message);
     if (error.code === 'ENOENT') {
-      throw new Error(`HTML content not found for import ${importId}`);
+      throw new Error(`HTML content not found for import ${importId}. Path: ${htmlPath}`);
     }
     throw error;
   }

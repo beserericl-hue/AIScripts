@@ -2144,26 +2144,33 @@ export const getFullSectionContent = async (req: Request, res: Response) => {
 export const getDocumentContent = async (req: Request, res: Response) => {
   try {
     const { importId } = req.params;
+    debugLog('getDocumentContent called', { importId });
 
     // Verify import exists
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
+      debugLog('Import not found', { importId });
       return res.status(404).json({ error: 'Import not found' });
     }
 
     // Check if temp file exists
     const exists = await tempFileService.tempDirectoryExists(importId);
+    debugLog('Temp directory check', { importId, exists });
+
     if (!exists) {
+      debugLog('Temp directory does not exist', { importId });
       return res.status(404).json({ error: 'Document content not found. Please re-upload the document.' });
     }
 
     // Read HTML content
     const htmlContent = await tempFileService.readHtmlContent(importId);
+    debugLog('HTML content read', { importId, contentLength: htmlContent?.length || 0 });
 
     // Return HTML content as JSON
     return res.json({ htmlContent });
   } catch (error: any) {
     console.error('Get document content error:', error);
+    debugLog('getDocumentContent error', { error: error.message });
     return res.status(500).json({ error: error.message || 'Failed to get document content' });
   }
 };
