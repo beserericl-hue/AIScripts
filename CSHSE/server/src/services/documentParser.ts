@@ -2383,9 +2383,10 @@ export class DocumentParserService {
     // Patterns for detecting STRUCTURAL headers only
     // These must be single-line section titles, not course content
     const STRUCTURAL_PATTERNS = {
-      // Roman numerals at start: "I. GENERAL PROGRAM CHARACTERISTICS", "II. CURRICULUM: BACCALAUREATE"
-      // Matches ALL CAPS or Title Case (blacklist filters out bad ones)
-      roman: /^([IVXLCDM]+)\.\s+([A-Z].+)/,
+      // Roman numerals at start: "I. GENERAL...", "II. CURRICULUM..."
+      // Single char: only I, V, X (NOT C, D, L, M - those are outline letters, not Roman numerals in docs)
+      // Multi char: II, III, IV, VI, VII, VIII, IX, XI, XII, etc.
+      roman: /^(I|V|X|II|III|IV|VI|VII|VIII|IX|XI|XII|XIII|XIV|XV|[IVXLCDM]{2,})\.\s+([A-Z].+)/,
       // Part with Roman numeral: "Part I: General Standards", "PART II: CURRICULUM"
       partRoman: /^Part\s+([IVXLCDM]+)[:\s]+(.+)/i,
       // Numbered sections: "1. History", "3. Human Services Delivery Systems"
@@ -2653,8 +2654,8 @@ export class DocumentParserService {
       { pattern: /^Matrix\s+for|^Curriculum\s+Matrix/i, type: 'heading' as const, level: 2 as const },
       // Part with Roman numeral: "Part I: General Standards"
       { pattern: /^Part\s+([IVXLCDM]+)[:\s]+(.+)/i, type: 'roman' as const, level: 1 as const },
-      // Roman numerals: "I. GENERAL...", "II. CURRICULUM: BACCALAUREATE"
-      { pattern: /^([IVXLCDM]+)\.\s+([A-Z].+)/, type: 'roman' as const, level: 1 as const },
+      // Roman numerals: "I. GENERAL...", "II. CURRICULUM..." (NOT C, D, L, M single chars)
+      { pattern: /^(I|V|X|II|III|IV|VI|VII|VIII|IX|XI|XII|XIII|XIV|XV|[IVXLCDM]{2,})\.\s+([A-Z].+)/, type: 'roman' as const, level: 1 as const },
       // Standard headers: "Standard 1:", "Standard 12 –"
       { pattern: /^Standard\s+(\d{1,2})\s*[:\-–—]/i, type: 'standard' as const, level: 2 as const },
       // Numbered sections: "1. History", "3. Human Services Delivery Systems"
