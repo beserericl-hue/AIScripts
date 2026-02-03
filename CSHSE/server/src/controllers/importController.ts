@@ -575,14 +575,14 @@ async function processDocumentForManualTagging(
       imageCount: result.imageCount
     });
 
-    // Store minimal metadata in MongoDB (full content is in temp files)
+    // Store HTML content directly in MongoDB (temp files unreliable on Railway's ephemeral storage)
     importRecord.extractedContent = {
-      rawText: result.rawText.substring(0, 5000), // Just a preview
-      pageCount: 0, // Will be updated if needed
+      rawText: result.htmlContent, // Store full HTML here for document viewer
+      pageCount: 0,
       metadata: {
         title: filename
       },
-      sections: [] // Sections will be populated via manual tagging
+      sections: []
     };
 
     // Update progress to awaiting manual tagging
@@ -2138,33 +2138,28 @@ export const getFullSectionContent = async (req: Request, res: Response) => {
 // ============================================
 
 /**
- * Get HTML document content from temp file
- * Used by the document viewer for manual tagging
+ * Get HTML document content for manual tagging
+ * Content is stored in MongoDB (extractedContent.rawText field)
  */
 export const getDocumentContent = async (req: Request, res: Response) => {
   try {
     const { importId } = req.params;
     debugLog('getDocumentContent called', { importId });
 
-    // Verify import exists
+    // Get import record with HTML content
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       debugLog('Import not found', { importId });
       return res.status(404).json({ error: 'Import not found' });
     }
 
-    // Check if temp file exists
-    const exists = await tempFileService.tempDirectoryExists(importId);
-    debugLog('Temp directory check', { importId, exists });
+    // HTML is stored in extractedContent.rawText
+    const htmlContent = importRecord.extractedContent?.rawText || '';
+    debugLog('HTML content retrieved from MongoDB', { importId, contentLength: htmlContent.length });
 
-    if (!exists) {
-      debugLog('Temp directory does not exist', { importId });
+    if (!htmlContent) {
       return res.status(404).json({ error: 'Document content not found. Please re-upload the document.' });
     }
-
-    // Read HTML content
-    const htmlContent = await tempFileService.readHtmlContent(importId);
-    debugLog('HTML content read', { importId, contentLength: htmlContent?.length || 0 });
 
     // Return HTML content as JSON
     return res.json({ htmlContent });
