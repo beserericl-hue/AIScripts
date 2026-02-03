@@ -2,6 +2,7 @@ import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse';
 import { v4 as uuidv4 } from 'uuid';
 import * as tempFileService from './tempFileService';
+import * as gridFsService from './gridFsService';
 
 export interface ParsedMetadata {
   title?: string;
@@ -282,8 +283,12 @@ export class DocumentParserService {
           const imageBuffer = await image.read();
           const contentType = image.contentType || 'image/png';
 
-          // Save to temp folder
-          const filename = await tempFileService.saveImage(importId, imageBuffer, contentType);
+          // Generate unique filename
+          const extension = contentType.split('/')[1] || 'png';
+          const filename = `image_${uuidv4()}.${extension}`;
+
+          // Save to GridFS for persistence (temp files are lost on Railway)
+          await gridFsService.storeImage(importId, imageBuffer, filename, contentType);
           imageCount++;
 
           // Return img tag pointing to our API endpoint

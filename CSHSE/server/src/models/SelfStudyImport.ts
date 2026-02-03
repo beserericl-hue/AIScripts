@@ -35,7 +35,7 @@ export interface IUnmappedContent {
 }
 
 export interface IParsingProgress {
-  step: 'extracting_text' | 'extracting_toc' | 'creating_sections' | 'preparing_ai' | 'sending_to_ai' | 'section_selection';
+  step: 'extracting_text' | 'extracting_toc' | 'creating_sections' | 'preparing_ai' | 'sending_to_ai' | 'section_selection' | 'storing_content';
   stepDescription: string;
   tocEntriesFound?: number;
   tocTitles?: string[];  // First few TOC entry titles for display
@@ -99,6 +99,8 @@ export interface ISelfStudyImport extends Document {
       title?: string;
       author?: string;
       createdDate?: Date;
+      htmlStoredInGridFS?: boolean;  // True if HTML is stored in GridFS (large files)
+      htmlSize?: number;             // Size of HTML content in characters
     };
     sections: IExtractedSection[];
   };
@@ -218,7 +220,7 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   parsingProgress: {
     step: {
       type: String,
-      enum: ['extracting_text', 'extracting_toc', 'creating_sections', 'preparing_ai', 'sending_to_ai', 'section_selection']
+      enum: ['extracting_text', 'extracting_toc', 'creating_sections', 'preparing_ai', 'sending_to_ai', 'section_selection', 'storing_content']
     },
     stepDescription: String,
     tocEntriesFound: Number,
@@ -240,7 +242,9 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
     metadata: {
       title: String,
       author: String,
-      createdDate: Date
+      createdDate: Date,
+      htmlStoredInGridFS: { type: Boolean, default: false },
+      htmlSize: Number
     },
     sections: [ExtractedSectionSchema]
   },

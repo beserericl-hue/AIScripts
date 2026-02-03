@@ -11,6 +11,7 @@ import { documentParserService, TOCBasedSection, ParsedDocument } from '../servi
 import { sectionMapperService } from '../services/sectionMapper';
 import { saveWithRetry, withRetry } from '../utils/dbRetry';
 import * as tempFileService from '../services/tempFileService';
+import * as gridFsService from '../services/gridFsService';
 
 // Always log for visibility in production
 function debugLog(message: string, data?: any) {
@@ -575,12 +576,26 @@ async function processDocumentForManualTagging(
       imageCount: result.imageCount
     });
 
-    // Store HTML content directly in MongoDB (temp files unreliable on Railway's ephemeral storage)
+    // Update progress - storing in GridFS
+    importRecord.parsingProgress = {
+      step: 'storing_content',
+      stepDescription: `Storing document content (${Math.round(result.htmlContent.length / 1024 / 1024)}MB)...`
+    };
+    await importRecord.save();
+
+    // Store HTML content in GridFS (handles files larger than MongoDB's 16MB BSON limit)
+    debugLog('Storing HTML in GridFS', { importId: importId.toString(), size: result.htmlContent.length });
+    await gridFsService.storeHtmlContent(importId.toString(), result.htmlContent);
+    debugLog('HTML stored in GridFS successfully', { importId: importId.toString() });
+
+    // Store minimal metadata in MongoDB (not the full HTML)
     importRecord.extractedContent = {
-      rawText: result.htmlContent, // Store full HTML here for document viewer
+      rawText: '', // HTML is now in GridFS, not here
       pageCount: 0,
       metadata: {
-        title: filename
+        title: filename,
+        htmlStoredInGridFS: true, // Flag to indicate HTML is in GridFS
+        htmlSize: result.htmlContent.length
       },
       sections: []
     };
@@ -1751,13 +1766,31 @@ export const cancelImport = async (req: AuthenticatedRequest, res: Response) => 
       unmappedCount: importRecord.unmappedContent?.length || 0
     });
 
-    // Clean up temp files
+    // Clean up temp files (images)
     try {
       await tempFileService.cleanupTempFiles(importId);
       debugLog('Temp files cleaned up', { importId });
     } catch (cleanupError) {
       console.warn('Failed to cleanup temp files:', cleanupError);
       // Continue with deletion even if temp cleanup fails
+    }
+
+    // Clean up GridFS content (HTML)
+    try {
+      await gridFsService.deleteHtmlContent(importId);
+      debugLog('GridFS HTML content cleaned up', { importId });
+    } catch (gridFsError) {
+      console.warn('Failed to cleanup GridFS HTML:', gridFsError);
+      // Continue with deletion even if GridFS cleanup fails
+    }
+
+    // Clean up GridFS images
+    try {
+      await gridFsService.deleteImportImages(importId);
+      debugLog('GridFS images cleaned up', { importId });
+    } catch (gridFsError) {
+      console.warn('Failed to cleanup GridFS images:', gridFsError);
+      // Continue with deletion even if GridFS cleanup fails
     }
 
     // Delete the entire import record to free up space
@@ -2139,23 +2172,40 @@ export const getFullSectionContent = async (req: Request, res: Response) => {
 
 /**
  * Get HTML document content for manual tagging
- * Content is stored in MongoDB (extractedContent.rawText field)
+ * Content is stored in GridFS for large files
  */
 export const getDocumentContent = async (req: Request, res: Response) => {
   try {
     const { importId } = req.params;
     debugLog('getDocumentContent called', { importId });
 
-    // Get import record with HTML content
+    // Get import record to check if HTML is in GridFS
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       debugLog('Import not found', { importId });
       return res.status(404).json({ error: 'Import not found' });
     }
 
-    // HTML is stored in extractedContent.rawText
-    const htmlContent = importRecord.extractedContent?.rawText || '';
-    debugLog('HTML content retrieved from MongoDB', { importId, contentLength: htmlContent.length });
+    let htmlContent: string;
+
+    // Check if HTML is stored in GridFS (new approach) or inline (legacy)
+    const isGridFS = importRecord.extractedContent?.metadata?.htmlStoredInGridFS === true;
+
+    if (isGridFS) {
+      // Retrieve from GridFS
+      debugLog('Retrieving HTML from GridFS', { importId });
+      try {
+        htmlContent = await gridFsService.getHtmlContent(importId);
+        debugLog('HTML retrieved from GridFS', { importId, contentLength: htmlContent.length });
+      } catch (gridError: any) {
+        debugLog('GridFS retrieval failed', { importId, error: gridError.message });
+        return res.status(404).json({ error: 'Document content not found in storage. Please re-upload the document.' });
+      }
+    } else {
+      // Legacy: HTML is stored in extractedContent.rawText
+      htmlContent = importRecord.extractedContent?.rawText || '';
+      debugLog('HTML retrieved from MongoDB (legacy)', { importId, contentLength: htmlContent.length });
+    }
 
     if (!htmlContent) {
       return res.status(404).json({ error: 'Document content not found. Please re-upload the document.' });
@@ -2171,7 +2221,7 @@ export const getDocumentContent = async (req: Request, res: Response) => {
 };
 
 /**
- * Serve an image from the temp folder
+ * Serve an image from GridFS (or temp folder for legacy)
  */
 export const getDocumentImage = async (req: Request, res: Response) => {
   try {
@@ -2182,24 +2232,36 @@ export const getDocumentImage = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid filename' });
     }
 
-    // Get image path
-    const imagePath = await tempFileService.getImagePath(importId, filename);
+    // Try GridFS first (new approach), fall back to temp files (legacy)
+    try {
+      const { buffer, contentType } = await gridFsService.getImage(importId, filename);
 
-    // Determine content type
-    const ext = path.extname(filename).toLowerCase();
-    const contentTypes: Record<string, string> = {
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp',
-      '.svg': 'image/svg+xml'
-    };
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
 
-    res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
-    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+      return res.send(buffer);
+    } catch (gridFsError: any) {
+      // Fall back to temp file if not in GridFS (legacy imports)
+      debugLog('Image not in GridFS, trying temp file', { importId, filename });
 
-    return res.sendFile(imagePath);
+      const imagePath = await tempFileService.getImagePath(importId, filename);
+
+      // Determine content type from extension
+      const ext = path.extname(filename).toLowerCase();
+      const contentTypes: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.svg': 'image/svg+xml'
+      };
+
+      res.setHeader('Content-Type', contentTypes[ext] || 'application/octet-stream');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+
+      return res.sendFile(imagePath);
+    }
   } catch (error: any) {
     console.error('Get document image error:', error);
     if (error.message?.includes('not found')) {
@@ -2237,8 +2299,16 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
       return res.status(404).json({ error: 'Import not found' });
     }
 
-    // Read current HTML content
-    const htmlContent = await tempFileService.readHtmlContent(importId);
+    // Read current HTML content from GridFS (or legacy temp file)
+    let htmlContent: string;
+    const isGridFS = importRecord.extractedContent?.metadata?.htmlStoredInGridFS === true;
+
+    if (isGridFS) {
+      htmlContent = await gridFsService.getHtmlContent(importId);
+    } else {
+      // Legacy: try temp file
+      htmlContent = await tempFileService.readHtmlContent(importId);
+    }
 
     // Validate offsets are within bounds
     if (startOffset < 0 || endOffset > htmlContent.length) {
@@ -2304,8 +2374,12 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
 
     const updatedHtml = beforeContent + marker + afterContent;
 
-    // Save updated HTML to temp file
-    await tempFileService.updateHtmlContent(importId, updatedHtml);
+    // Save updated HTML back to GridFS (or temp file for legacy)
+    if (isGridFS) {
+      await gridFsService.storeHtmlContent(importId, updatedHtml);
+    } else {
+      await tempFileService.updateHtmlContent(importId, updatedHtml);
+    }
 
     // Save import record
     await importRecord.save();
