@@ -2363,6 +2363,14 @@ export class DocumentParserService {
    * Detect structural headers for user section selection
    * Finds Roman numerals, Letters, Numbers, and Standard patterns
    * Returns hierarchical structure with sections for user to select/deselect
+   *
+   * IMPORTANT: Only detects STRUCTURAL headers, not all HTML headings.
+   * Structural headers are:
+   * - Roman numerals: "I. GENERAL PROGRAM CHARACTERISTICS"
+   * - Letters: "A. Institutional Requirements"
+   * - Standards: "Standard 1:", "Standard 2:"
+   * - Part headers: "Part I:", "Part II:"
+   * - Appendix: "Appendix", "Appendices"
    */
   detectStructuralHeaders(htmlContent: string, rawText: string): {
     sections: DetectedSection[];
@@ -2372,18 +2380,68 @@ export class DocumentParserService {
     const sections: DetectedSection[] = [];
     let appendixSection: DetectedSection | undefined;
 
-    // Patterns for detecting structural headers
-    const SECTION_PATTERNS = {
-      roman: /^([IVXLCDM]+)\.\s+(.+)/i,           // I. GENERAL PROGRAM...
-      letter: /^([A-Z])\.\s+(.+)/i,               // A. Institutional Requirements
-      number: /^(\d+)\.\s+(.+)/,                   // 1. History, 2. Human Systems
-      standard: /^Standard\s*(\d+)/i,              // Standard 1:
-      appendix: /^Appendix/i,                      // Appendix, Appendix A
+    // Patterns for detecting STRUCTURAL headers only
+    const STRUCTURAL_PATTERNS = {
+      // Roman numerals at start: "I. GENERAL...", "II. CURRICULUM..."
+      roman: /^([IVXLCDM]+)\.\s+(.+)/i,
+      // Part with Roman numeral: "Part I: General Standards", "PART II: CURRICULUM"
+      partRoman: /^Part\s+([IVXLCDM]+)[:\s]+(.+)/i,
+      // Letters at start: "A. Institutional Requirements", "B. Primary Objective"
+      letter: /^([A-Z])\.\s+([A-Z].*)/,  // Letter must be followed by capital letter word
+      // Standard headers: "Standard 1:", "Standard 12 –"
+      standard: /^Standard\s+(\d{1,2})\s*[:\-–—]/i,
+      // Matrix headers: "Matrix for Human Services Courses", "Curriculum Matrix"
+      matrix: /^Matrix\s+for|^Curriculum\s+Matrix/i,
+      // Appendix headers: "Appendix", "Appendices", "Appendix A"
+      appendix: /^Appendix|^Appendices/i,
     };
 
-    // First, try to extract from HTML headings (most reliable)
+    // Helper function to check if text matches any structural pattern
+    const isStructuralHeader = (text: string): {
+      isStructural: boolean;
+      type: 'roman' | 'letter' | 'number' | 'standard' | 'appendix' | 'heading';
+      level: 1 | 2 | 3;
+      isMatrix?: boolean;
+    } => {
+      const trimmedText = text.trim();
+
+      // Check appendix first (highest priority)
+      if (STRUCTURAL_PATTERNS.appendix.test(trimmedText)) {
+        return { isStructural: true, type: 'appendix', level: 1 };
+      }
+
+      // Check Matrix sections (e.g., "Matrix for Human Services Courses")
+      if (STRUCTURAL_PATTERNS.matrix.test(trimmedText)) {
+        return { isStructural: true, type: 'heading', level: 2, isMatrix: true };
+      }
+
+      // Check Part Roman (e.g., "Part I: General Standards")
+      if (STRUCTURAL_PATTERNS.partRoman.test(trimmedText)) {
+        return { isStructural: true, type: 'roman', level: 1 };
+      }
+
+      // Check Roman numerals (e.g., "I. GENERAL PROGRAM CHARACTERISTICS")
+      if (STRUCTURAL_PATTERNS.roman.test(trimmedText)) {
+        return { isStructural: true, type: 'roman', level: 1 };
+      }
+
+      // Check Standard headers (e.g., "Standard 1: Program Identity")
+      if (STRUCTURAL_PATTERNS.standard.test(trimmedText)) {
+        return { isStructural: true, type: 'standard', level: 2 };
+      }
+
+      // Check Letter sections (e.g., "A. Institutional Requirements")
+      // Must start with single capital letter followed by period and space
+      if (STRUCTURAL_PATTERNS.letter.test(trimmedText)) {
+        return { isStructural: true, type: 'letter', level: 2 };
+      }
+
+      return { isStructural: false, type: 'heading', level: 1 };
+    };
+
+    // First, try to extract structural headers from HTML headings
     const headingRegex = /<h([1-4])[^>]*>(.*?)<\/h\1>/gi;
-    const headings: Array<{
+    const allHeadings: Array<{
       level: number;
       text: string;
       index: number;
@@ -2397,7 +2455,7 @@ export class DocumentParserService {
       if (headingText.toLowerCase().includes('table of contents')) continue;
       if (headingText.toLowerCase() === 'contents') continue;
 
-      headings.push({
+      allHeadings.push({
         level: parseInt(match[1], 10),
         text: headingText,
         index: match.index,
@@ -2405,37 +2463,69 @@ export class DocumentParserService {
       });
     }
 
-    console.log(`[DocumentParser] detectStructuralHeaders: Found ${headings.length} HTML headings`);
+    console.log(`[DocumentParser] detectStructuralHeaders: Found ${allHeadings.length} total HTML headings`);
 
-    // If no HTML headings found, fall back to text pattern detection
-    if (headings.length === 0) {
+    // Filter to only structural headers
+    const structuralHeadings = allHeadings.filter(h => isStructuralHeader(h.text).isStructural);
+
+    console.log(`[DocumentParser] detectStructuralHeaders: ${structuralHeadings.length} are structural headers`);
+    if (structuralHeadings.length > 0) {
+      console.log(`[DocumentParser] Structural headers found:`, structuralHeadings.slice(0, 10).map(h => h.text.substring(0, 60)));
+    }
+
+    // If no structural headers found in HTML, fall back to text-based detection
+    if (structuralHeadings.length === 0) {
+      console.log(`[DocumentParser] No structural headers in HTML, falling back to text detection`);
       return this.detectStructuralHeadersFromText(rawText);
     }
 
-    // Process HTML headings into DetectedSection structure
-    for (let i = 0; i < headings.length; i++) {
-      const heading = headings[i];
-      const nextHeading = headings[i + 1];
+    // Also check raw text for appendix if not found in HTML headings
+    let appendixTextPosition = -1;
+    if (!structuralHeadings.some(h => STRUCTURAL_PATTERNS.appendix.test(h.text))) {
+      // Look for appendix in raw text
+      const appendixMatch = rawText.match(/\n(Appendix|Appendices)[^\n]*/i);
+      if (appendixMatch && appendixMatch.index) {
+        appendixTextPosition = appendixMatch.index;
+        console.log(`[DocumentParser] Found appendix in raw text at position ${appendixTextPosition}`);
+      }
+    }
 
-      // Extract content between headings
+    // Process structural headings into DetectedSection structure
+    for (let i = 0; i < structuralHeadings.length; i++) {
+      const heading = structuralHeadings[i];
+      const nextHeading = structuralHeadings[i + 1];
+
+      // Get structural info
+      const structInfo = isStructuralHeader(heading.text);
+
+      // Extract content between this heading and the next structural heading
       const startPos = heading.index;
-      const endPos = nextHeading ? nextHeading.index : htmlContent.length;
+      let endPos = nextHeading ? nextHeading.index : htmlContent.length;
+
+      // If appendix found in text and this is the last structural heading before it,
+      // end this section at the appendix
+      if (appendixTextPosition > 0 && !nextHeading) {
+        // Find approximate HTML position for appendix (rough estimate)
+        const textRatio = appendixTextPosition / rawText.length;
+        const estimatedHtmlPos = Math.floor(textRatio * htmlContent.length);
+        if (estimatedHtmlPos > startPos && estimatedHtmlPos < htmlContent.length) {
+          endPos = estimatedHtmlPos;
+        }
+      }
+
       const sectionHtml = htmlContent.substring(startPos, endPos);
       const sectionText = sectionHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
-      // Determine header type
-      const headerType = this.determineHeaderType(heading.text, SECTION_PATTERNS);
-
       // Check if this is an appendix
-      const isAppendix = SECTION_PATTERNS.appendix.test(heading.text);
+      const isAppendix = structInfo.type === 'appendix';
 
       // Create preview text (first 200 chars)
       const previewText = sectionText.substring(0, 200) + (sectionText.length > 200 ? '...' : '');
 
       const section: DetectedSection = {
         id: uuidv4(),
-        level: Math.min(heading.level, 3) as 1 | 2 | 3,
-        headerType,
+        level: structInfo.level,
+        headerType: structInfo.type,
         headerText: heading.text,
         previewText,
         fullContent: sectionText,
@@ -2456,6 +2546,7 @@ export class DocumentParserService {
         section.endPosition = htmlContent.length;
         section.previewText = appendixText.substring(0, 200) + (appendixText.length > 200 ? '...' : '');
         appendixSection = section;
+        console.log(`[DocumentParser] Appendix section created: "${heading.text.substring(0, 50)}"`);
         // Don't add to regular sections, break here
         break;
       }
@@ -2463,7 +2554,33 @@ export class DocumentParserService {
       sections.push(section);
     }
 
-    // Build hierarchy based on heading levels
+    // If appendix was found in text but not as a heading, create appendix section from text
+    if (!appendixSection && appendixTextPosition > 0) {
+      // Find the HTML position roughly corresponding to the text position
+      const textRatio = appendixTextPosition / rawText.length;
+      const estimatedHtmlPos = Math.floor(textRatio * htmlContent.length);
+
+      const appendixHtml = htmlContent.substring(estimatedHtmlPos);
+      const appendixText = appendixHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+      appendixSection = {
+        id: uuidv4(),
+        level: 1,
+        headerType: 'appendix',
+        headerText: 'Appendices',
+        previewText: appendixText.substring(0, 200) + (appendixText.length > 200 ? '...' : ''),
+        fullContent: appendixText,
+        htmlContent: appendixHtml,
+        startPosition: estimatedHtmlPos,
+        endPosition: htmlContent.length,
+        isAppendix: true,
+        isSelected: false,
+        children: []
+      };
+      console.log(`[DocumentParser] Appendix section created from text position`);
+    }
+
+    // Build hierarchy based on section levels
     const hierarchicalSections = this.buildSectionHierarchy(sections);
 
     console.log(`[DocumentParser] detectStructuralHeaders: Created ${hierarchicalSections.length} top-level sections` +
@@ -2478,6 +2595,7 @@ export class DocumentParserService {
 
   /**
    * Detect structural headers from raw text when HTML headings aren't available
+   * Uses strict patterns to only detect actual structural headers
    */
   private detectStructuralHeadersFromText(rawText: string): {
     sections: DetectedSection[];
@@ -2488,23 +2606,20 @@ export class DocumentParserService {
     let appendixSection: DetectedSection | undefined;
     const lines = rawText.split('\n');
 
-    const SECTION_PATTERNS = {
-      roman: /^([IVXLCDM]+)\.\s+(.+)/i,
-      letter: /^([A-Z])\.\s+(.+)/i,
-      number: /^(\d+)\.\s+(.+)/,
-      standard: /^Standard\s*(\d+)/i,
-      appendix: /^Appendix/i,
-    };
-
-    // Header patterns to detect
+    // Strict structural patterns only
     const headerPatterns = [
-      { pattern: SECTION_PATTERNS.roman, type: 'roman' as const, level: 1 as const },
-      { pattern: SECTION_PATTERNS.standard, type: 'standard' as const, level: 1 as const },
-      { pattern: SECTION_PATTERNS.letter, type: 'letter' as const, level: 2 as const },
-      { pattern: SECTION_PATTERNS.number, type: 'number' as const, level: 3 as const },
-      { pattern: SECTION_PATTERNS.appendix, type: 'appendix' as const, level: 1 as const },
-      // ALL CAPS headers (likely major sections)
-      { pattern: /^[A-Z][A-Z\s]{10,}$/, type: 'heading' as const, level: 1 as const },
+      // Appendix (check first - highest priority)
+      { pattern: /^Appendix|^Appendices/i, type: 'appendix' as const, level: 1 as const },
+      // Matrix sections: "Matrix for Human Services Courses"
+      { pattern: /^Matrix\s+for|^Curriculum\s+Matrix/i, type: 'heading' as const, level: 2 as const },
+      // Part with Roman numeral: "Part I: General Standards"
+      { pattern: /^Part\s+([IVXLCDM]+)[:\s]+(.+)/i, type: 'roman' as const, level: 1 as const },
+      // Roman numerals: "I. GENERAL PROGRAM CHARACTERISTICS"
+      { pattern: /^([IVXLCDM]+)\.\s+([A-Z].+)/i, type: 'roman' as const, level: 1 as const },
+      // Standard headers: "Standard 1:", "Standard 12 –"
+      { pattern: /^Standard\s+(\d{1,2})\s*[:\-–—]/i, type: 'standard' as const, level: 2 as const },
+      // Letters: "A. Institutional Requirements" (must be followed by capital letter)
+      { pattern: /^([A-Z])\.\s+([A-Z][a-zA-Z].+)/, type: 'letter' as const, level: 2 as const },
     ];
 
     let currentPosition = 0;
@@ -2516,10 +2631,14 @@ export class DocumentParserService {
       position: number;
     }> = [];
 
-    // Find all headers
+    // Find all structural headers
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (!line || line.length > 150) continue;
+      // Skip empty lines, very long lines (paragraphs), and very short lines
+      if (!line || line.length > 100 || line.length < 5) {
+        currentPosition += lines[i].length + 1;
+        continue;
+      }
 
       for (const { pattern, type, level } of headerPatterns) {
         if (pattern.test(line)) {
@@ -2536,7 +2655,10 @@ export class DocumentParserService {
       currentPosition += lines[i].length + 1; // +1 for newline
     }
 
-    console.log(`[DocumentParser] detectStructuralHeadersFromText: Found ${detectedHeaders.length} headers`);
+    console.log(`[DocumentParser] detectStructuralHeadersFromText: Found ${detectedHeaders.length} structural headers`);
+    if (detectedHeaders.length > 0) {
+      console.log(`[DocumentParser] Headers:`, detectedHeaders.slice(0, 10).map(h => h.text.substring(0, 60)));
+    }
 
     // Create sections from headers
     for (let i = 0; i < detectedHeaders.length; i++) {
@@ -2574,6 +2696,7 @@ export class DocumentParserService {
         section.endPosition = rawText.length;
         section.previewText = appendixContent.substring(0, 200) + (appendixContent.length > 200 ? '...' : '');
         appendixSection = section;
+        console.log(`[DocumentParser] Appendix found in text: "${header.text.substring(0, 50)}"`);
         break;
       }
 
@@ -2589,20 +2712,6 @@ export class DocumentParserService {
     };
   }
 
-  /**
-   * Determine the header type based on text patterns
-   */
-  private determineHeaderType(
-    text: string,
-    patterns: Record<string, RegExp>
-  ): 'roman' | 'letter' | 'number' | 'standard' | 'appendix' | 'heading' {
-    if (patterns.appendix.test(text)) return 'appendix';
-    if (patterns.roman.test(text)) return 'roman';
-    if (patterns.standard.test(text)) return 'standard';
-    if (patterns.letter.test(text)) return 'letter';
-    if (patterns.number.test(text)) return 'number';
-    return 'heading';
-  }
 
   /**
    * Build hierarchical structure from flat sections based on levels
