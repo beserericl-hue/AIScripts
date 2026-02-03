@@ -1518,7 +1518,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
         {/* Import Document Side Panel - Part of layout, not overlay */}
         {showImportModal && (
-          <div className={`${importStep === 'manual_tagging' ? 'w-[700px]' : 'w-[420px]'} flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col transition-all duration-300`}>
+          <div className={`${importStep === 'manual_tagging' ? 'w-[700px]' : 'w-[420px]'} h-full flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col transition-all duration-300 overflow-hidden`}>
             {/* Panel Header */}
             <div className={`flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 ${
               importStep === 'review' ? 'bg-teal-50' : 'bg-gray-50'
