@@ -2487,9 +2487,23 @@ export class DocumentParserService {
       fullMatch: string;
     }> = [];
 
+    // Helper to decode HTML entities and clean up text
+    const cleanHtmlText = (html: string): string => {
+      return html
+        .replace(/<[^>]*>/g, '')           // Remove HTML tags
+        .replace(/&nbsp;/g, ' ')           // Non-breaking space
+        .replace(/&amp;/g, '&')            // Ampersand
+        .replace(/&lt;/g, '<')             // Less than
+        .replace(/&gt;/g, '>')             // Greater than
+        .replace(/&quot;/g, '"')           // Quote
+        .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10))) // Numeric entities
+        .replace(/\s+/g, ' ')              // Normalize whitespace
+        .trim();
+    };
+
     let match;
     while ((match = headingRegex.exec(htmlContent)) !== null) {
-      const headingText = match[2].replace(/<[^>]*>/g, '').trim();
+      const headingText = cleanHtmlText(match[2]);
       if (!headingText || headingText.length < 2) continue;
       if (headingText.toLowerCase().includes('table of contents')) continue;
       if (headingText.toLowerCase() === 'contents') continue;
