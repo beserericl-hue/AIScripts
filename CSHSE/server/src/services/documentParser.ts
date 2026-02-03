@@ -2383,10 +2383,9 @@ export class DocumentParserService {
     // Patterns for detecting STRUCTURAL headers only
     // These must be single-line section titles, not course content
     const STRUCTURAL_PATTERNS = {
-      // Roman numerals at start: "I. GENERAL...", "II. CURRICULUM..."
-      // Single char: only I, V, X (NOT C, D, L, M - those are outline letters, not Roman numerals in docs)
-      // Multi char: II, III, IV, VI, VII, VIII, IX, XI, XII, etc.
-      roman: /^(I|V|X|II|III|IV|VI|VII|VIII|IX|XI|XII|XIII|XIV|XV|[IVXLCDM]{2,})\.\s+([A-Z].+)/,
+      // Roman numerals I-V only: "I. GENERAL...", "II. CURRICULUM...", "III. ..."
+      // Document outlines rarely go past V (5 sections)
+      roman: /^(I|II|III|IV|V)\.\s+(.+)/i,
       // Part with Roman numeral: "Part I: General Standards", "PART II: CURRICULUM"
       partRoman: /^Part\s+([IVXLCDM]+)[:\s]+(.+)/i,
       // Numbered sections: "1. History", "3. Human Services Delivery Systems"
@@ -2504,9 +2503,17 @@ export class DocumentParserService {
     }
 
     console.log(`[DocumentParser] detectStructuralHeaders: Found ${allHeadings.length} total HTML headings`);
+    // Log first 20 headings for debugging
+    console.log(`[DocumentParser] First 20 headings:`, allHeadings.slice(0, 20).map(h => h.text.substring(0, 80)));
 
     // Filter to only structural headers
-    const structuralHeadings = allHeadings.filter(h => isStructuralHeader(h.text).isStructural);
+    const structuralHeadings = allHeadings.filter(h => {
+      const result = isStructuralHeader(h.text);
+      if (result.isStructural) {
+        console.log(`[DocumentParser] MATCHED: "${h.text.substring(0, 60)}" as ${result.type}`);
+      }
+      return result.isStructural;
+    });
 
     console.log(`[DocumentParser] detectStructuralHeaders: ${structuralHeadings.length} are structural headers`);
     if (structuralHeadings.length > 0) {
@@ -2654,8 +2661,8 @@ export class DocumentParserService {
       { pattern: /^Matrix\s+for|^Curriculum\s+Matrix/i, type: 'heading' as const, level: 2 as const },
       // Part with Roman numeral: "Part I: General Standards"
       { pattern: /^Part\s+([IVXLCDM]+)[:\s]+(.+)/i, type: 'roman' as const, level: 1 as const },
-      // Roman numerals: "I. GENERAL...", "II. CURRICULUM..." (NOT C, D, L, M single chars)
-      { pattern: /^(I|V|X|II|III|IV|VI|VII|VIII|IX|XI|XII|XIII|XIV|XV|[IVXLCDM]{2,})\.\s+([A-Z].+)/, type: 'roman' as const, level: 1 as const },
+      // Roman numerals I-V only: "I. GENERAL...", "II. CURRICULUM..."
+      { pattern: /^(I|II|III|IV|V)\.\s+(.+)/i, type: 'roman' as const, level: 1 as const },
       // Standard headers: "Standard 1:", "Standard 12 –"
       { pattern: /^Standard\s+(\d{1,2})\s*[:\-–—]/i, type: 'standard' as const, level: 2 as const },
       // Numbered sections: "1. History", "3. Human Services Delivery Systems"
