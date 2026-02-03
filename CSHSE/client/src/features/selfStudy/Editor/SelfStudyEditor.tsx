@@ -359,38 +359,63 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   useEffect(() => {
     if (!importId || importStep !== 'processing') return;
 
+    console.log('[Import Poll] Starting polling for import:', importId);
+
     const pollInterval = setInterval(async () => {
       try {
         const response = await api.get(`/api/imports/${importId}`);
         const status = response.data as ImportStatus;
+        console.log('[Import Poll] Status received:', status.status, {
+          progress: status.progress,
+          mappedCount: status.mappedCount,
+          unmappedCount: status.unmappedCount
+        });
         setImportStatus(status);
 
         if (status.status === 'awaiting_selection') {
           // Part 6: New section selection step
+          console.log('[Import Poll] Status is awaiting_selection - fetching detected sections');
           clearInterval(pollInterval);
-          const sectionsResponse = await api.get(`/api/imports/${importId}/detected-sections`);
-          setDetectedSections(sectionsResponse.data.sections || []);
-          if (sectionsResponse.data.appendix) {
-            // Create a DetectedSection from appendix info if it exists
-            setAppendixSection(null); // Appendix is handled separately in the new flow
+          try {
+            const sectionsResponse = await api.get(`/api/imports/${importId}/detected-sections`);
+            console.log('[Import Poll] Detected sections received:', {
+              count: sectionsResponse.data.sections?.length || 0,
+              totalSections: sectionsResponse.data.totalSections
+            });
+            setDetectedSections(sectionsResponse.data.sections || []);
+            if (sectionsResponse.data.appendix) {
+              // Appendix is handled separately in the new flow
+              setAppendixSection(null);
+            }
+            setImportStep('section_selection');
+            console.log('[Import Poll] Transitioned to section_selection step');
+          } catch (sectionErr) {
+            console.error('[Import Poll] Failed to fetch detected sections:', sectionErr);
+            setUploadError('Failed to load detected sections');
           }
-          setImportStep('section_selection');
         } else if (status.status === 'completed') {
+          console.log('[Import Poll] Status is completed - fetching extracted sections');
           clearInterval(pollInterval);
           const sectionsResponse = await api.get(`/api/imports/${importId}/sections`);
           setExtractedSections(sectionsResponse.data.sections);
           setImportStep('review');
         } else if (status.status === 'failed') {
+          console.log('[Import Poll] Status is failed:', status.error);
           clearInterval(pollInterval);
           setUploadError(status.error || 'Document processing failed');
           setImportStep('upload');
+        } else {
+          console.log('[Import Poll] Status is still:', status.status);
         }
       } catch (err) {
-        console.error('Failed to poll import status:', err);
+        console.error('[Import Poll] Failed to poll import status:', err);
       }
     }, 2000);
 
-    return () => clearInterval(pollInterval);
+    return () => {
+      console.log('[Import Poll] Stopping polling');
+      clearInterval(pollInterval);
+    };
   }, [importId, importStep]);
 
   // Import handlers
