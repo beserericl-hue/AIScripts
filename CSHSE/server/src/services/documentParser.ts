@@ -2377,6 +2377,10 @@ export class DocumentParserService {
     appendixSection?: DetectedSection;
     totalSections: number;
   } {
+    console.log(`[DocumentParser] detectStructuralHeaders called`);
+    console.log(`[DocumentParser] HTML content length: ${htmlContent?.length || 0}`);
+    console.log(`[DocumentParser] Raw text length: ${rawText?.length || 0}`);
+
     const sections: DetectedSection[] = [];
     let appendixSection: DetectedSection | undefined;
 
@@ -2702,11 +2706,13 @@ export class DocumentParserService {
       position: number;
     }> = [];
 
+    console.log(`[DocumentParser] detectStructuralHeadersFromText: Scanning ${lines.length} lines`);
+
     // Find all structural headers
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
       // Skip empty lines, very long lines (paragraphs), and very short lines
-      if (!line || line.length > 100 || line.length < 5) {
+      if (!line || line.length > 200 || line.length < 3) {
         currentPosition += lines[i].length + 1;
         continue;
       }
