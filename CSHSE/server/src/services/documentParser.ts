@@ -2383,14 +2383,17 @@ export class DocumentParserService {
     // Patterns for detecting STRUCTURAL headers only
     // These must be single-line section titles, not course content
     const STRUCTURAL_PATTERNS = {
-      // Roman numerals at start: "I. GENERAL PROGRAM CHARACTERISTICS"
-      // Must have ALL CAPS text or multi-word title after
-      roman: /^([IVXLCDM]+)\.\s+([A-Z][A-Z\s]+|[A-Z][a-z]+\s+[A-Z])/,
+      // Roman numerals at start: "I. GENERAL PROGRAM CHARACTERISTICS", "II. CURRICULUM: BACCALAUREATE"
+      // Matches ALL CAPS or Title Case (blacklist filters out bad ones)
+      roman: /^([IVXLCDM]+)\.\s+([A-Z].+)/,
       // Part with Roman numeral: "Part I: General Standards", "PART II: CURRICULUM"
       partRoman: /^Part\s+([IVXLCDM]+)[:\s]+(.+)/i,
-      // Letters at start: "A. Institutional Requirements", "B. Primary Objective"
-      // Must have at least 2 words (not "B. Summary" or "C. Reaction")
-      letter: /^([A-Z])\.\s+([A-Z][a-z]+\s+[A-Z][a-z].*)/,
+      // Numbered sections: "1. History", "3. Human Services Delivery Systems"
+      // Single word allowed if not blacklisted (e.g., "1. History" is valid)
+      number: /^(\d{1,2})\.\s+([A-Z][a-z]+.*)/,
+      // Letters at start: "A. Knowledge, Theory, Skills", "B. Primary Objective"
+      // Single word allowed if not blacklisted, commas allowed in title
+      letter: /^([A-Z])\.\s+([A-Z][a-z]+.*)/,
       // Standard headers: "Standard 1:", "Standard 12 –"
       standard: /^Standard\s+(\d{1,2})\s*[:\-–—]/i,
       // Matrix headers: "Matrix for Human Services Courses", "Curriculum Matrix"
@@ -2439,6 +2442,21 @@ export class DocumentParserService {
       // Check Standard headers (e.g., "Standard 1: Program Identity")
       if (STRUCTURAL_PATTERNS.standard.test(trimmedText)) {
         return { isStructural: true, type: 'standard', level: 2 };
+      }
+
+      // Check Numbered sections (e.g., "3. Human Services Delivery Systems")
+      // Must have at least 2 words in title
+      if (STRUCTURAL_PATTERNS.number.test(trimmedText)) {
+        const numberMatch = trimmedText.match(STRUCTURAL_PATTERNS.number);
+        if (numberMatch) {
+          const afterNumber = numberMatch[2].toLowerCase();
+          const firstWord = afterNumber.split(/\s+/)[0];
+          // Check if it's a non-structural term
+          const isNonStructural = NON_STRUCTURAL_TERMS.some(term => firstWord === term);
+          if (!isNonStructural) {
+            return { isStructural: true, type: 'number', level: 2 };
+          }
+        }
       }
 
       // Check Letter sections (e.g., "A. Institutional Requirements")
@@ -2627,7 +2645,7 @@ export class DocumentParserService {
     let appendixSection: DetectedSection | undefined;
     const lines = rawText.split('\n');
 
-    // Strict structural patterns only - must be single-line section titles
+    // Structural patterns - single-line section titles (blacklist filters bad ones)
     const headerPatterns = [
       // Appendix (check first - highest priority)
       { pattern: /^Appendix|^Appendices/i, type: 'appendix' as const, level: 1 as const },
@@ -2635,12 +2653,14 @@ export class DocumentParserService {
       { pattern: /^Matrix\s+for|^Curriculum\s+Matrix/i, type: 'heading' as const, level: 2 as const },
       // Part with Roman numeral: "Part I: General Standards"
       { pattern: /^Part\s+([IVXLCDM]+)[:\s]+(.+)/i, type: 'roman' as const, level: 1 as const },
-      // Roman numerals: "I. GENERAL PROGRAM CHARACTERISTICS" (ALL CAPS or multi-word)
-      { pattern: /^([IVXLCDM]+)\.\s+([A-Z][A-Z\s]+|[A-Z][a-z]+\s+[A-Z])/, type: 'roman' as const, level: 1 as const },
+      // Roman numerals: "I. GENERAL...", "II. CURRICULUM: BACCALAUREATE"
+      { pattern: /^([IVXLCDM]+)\.\s+([A-Z].+)/, type: 'roman' as const, level: 1 as const },
       // Standard headers: "Standard 1:", "Standard 12 –"
       { pattern: /^Standard\s+(\d{1,2})\s*[:\-–—]/i, type: 'standard' as const, level: 2 as const },
-      // Letters: "A. Institutional Requirements" (must have 2+ words, not course assignments)
-      { pattern: /^([A-Z])\.\s+([A-Z][a-z]+\s+[A-Z][a-z].*)/, type: 'letter' as const, level: 2 as const },
+      // Numbered sections: "1. History", "3. Human Services Delivery Systems"
+      { pattern: /^(\d{1,2})\.\s+([A-Z][a-z]+.*)/, type: 'number' as const, level: 2 as const },
+      // Letters: "A. Knowledge, Theory, Skills", "B. Primary Objective"
+      { pattern: /^([A-Z])\.\s+([A-Z][a-z]+.*)/, type: 'letter' as const, level: 2 as const },
     ];
 
     // Terms that are course assignment components, not structural headers
@@ -2671,11 +2691,11 @@ export class DocumentParserService {
 
       for (const { pattern, type, level } of headerPatterns) {
         if (pattern.test(line)) {
-          // For letter patterns, check if it's a non-structural term
-          if (type === 'letter') {
-            const letterMatch = line.match(pattern);
-            if (letterMatch && letterMatch[2]) {
-              const firstWord = letterMatch[2].toLowerCase().split(/\s+/)[0];
+          // For letter and number patterns, check if it's a non-structural term
+          if (type === 'letter' || type === 'number') {
+            const match = line.match(pattern);
+            if (match && match[2]) {
+              const firstWord = match[2].toLowerCase().split(/[\s,]+/)[0];
               if (nonStructuralTerms.includes(firstWord)) {
                 continue; // Skip non-structural terms like "B. Summary"
               }
