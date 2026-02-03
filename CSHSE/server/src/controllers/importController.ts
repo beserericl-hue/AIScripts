@@ -1729,9 +1729,10 @@ export const cancelImport = async (req: AuthenticatedRequest, res: Response) => 
       return res.status(404).json({ error: 'Import not found' });
     }
 
-    // Only allow canceling if still processing or pending
-    if (importRecord.status !== 'processing' && importRecord.status !== 'pending') {
-      debugLog('Import cannot be cancelled - not in processing state', {
+    // Only allow canceling if still processing, pending, or awaiting selection
+    const cancellableStatuses = ['processing', 'pending', 'awaiting_selection'];
+    if (!cancellableStatuses.includes(importRecord.status)) {
+      debugLog('Import cannot be cancelled - not in cancellable state', {
         importId,
         currentStatus: importRecord.status
       });
@@ -1749,6 +1750,15 @@ export const cancelImport = async (req: AuthenticatedRequest, res: Response) => 
       mappedCount: importRecord.mappedSections?.length || 0,
       unmappedCount: importRecord.unmappedContent?.length || 0
     });
+
+    // Clean up temp files
+    try {
+      await tempFileService.cleanupTempFiles(importId);
+      debugLog('Temp files cleaned up', { importId });
+    } catch (cleanupError) {
+      console.warn('Failed to cleanup temp files:', cleanupError);
+      // Continue with deletion even if temp cleanup fails
+    }
 
     // Delete the entire import record to free up space
     // This removes: extracted HTML, sections, mappings, and all metadata
@@ -2150,9 +2160,8 @@ export const getDocumentContent = async (req: Request, res: Response) => {
     // Read HTML content
     const htmlContent = await tempFileService.readHtmlContent(importId);
 
-    // Return HTML content
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(htmlContent);
+    // Return HTML content as JSON
+    return res.json({ htmlContent });
   } catch (error: any) {
     console.error('Get document content error:', error);
     return res.status(500).json({ error: error.message || 'Failed to get document content' });
