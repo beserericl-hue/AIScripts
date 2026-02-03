@@ -1,39 +1,59 @@
-# CSHSE Accreditation Self-Study Application
+# CSHSE Accreditation Self-Study Portal
 
 A comprehensive accreditation self-study application and review management system for the Council for Standards in Human Service Education (CSHSE).
 
+## Table of Contents
+
+- [Overview](#overview)
+- [User Roles](#user-roles)
+- [Key Features](#key-features)
+- [Architecture](#architecture)
+- [Technology Stack](#technology-stack)
+- [N8N Webhook Integration](#n8n-webhook-integration)
+- [Self-Study Import Workflow](#self-study-import-workflow)
+- [User Guide](#user-guide)
+- [API Reference](#api-reference)
+- [Development Setup](#development-setup)
+- [Deployment](#deployment)
+- [Recent Changes](#recent-changes)
+
+---
+
 ## Overview
 
-This application enables educational institutions to prepare and submit accreditation self-studies, and allows accreditation reviewers to evaluate submissions against CSHSE National Standards.
+This portal enables educational institutions to prepare and submit accreditation self-studies for CSHSE National Standards, and allows accreditation reviewers to evaluate submissions. The system supports three degree levels:
 
-### Target Users
+| Program Level | Standards | Field Experience |
+|---------------|-----------|------------------|
+| Associate Degree | 20 Standards | Min. 250 hours |
+| Baccalaureate Degree | 21 Standards | Min. 350 hours |
+| Master's Degree | 18 Standards | Capstone/Field |
 
-| Role | Description |
+---
+
+## User Roles
+
+| Role | Permissions |
 |------|-------------|
-| **Program Coordinators** | Prepare and submit accreditation applications and self-studies |
-| **Readers/Reviewers** | Evaluate submissions against standards |
-| **Lead Readers** | Compile multi-reader assessments and make final recommendations |
-| **Administrators** | Manage users, assign readers, oversee submissions |
-
-### Supported Program Levels
-
-- **Associate Degree** - 20 Standards (Standards 1-10 General, 11-20 Curriculum)
-- **Baccalaureate Degree** - 21 Standards (includes Administrative standard)
-- **Master's Degree** - 18 Standards (focus on leadership/research)
+| **Program Coordinator** | Upload self-studies, edit narratives, manage evidence, submit for review |
+| **Reader/Reviewer** | Evaluate submissions, mark compliance, add comments, submit recommendations |
+| **Lead Reader** | Compile multi-reader assessments, resolve disagreements, make final recommendations |
+| **Administrator** | Manage users, configure webhooks, assign readers, oversee all submissions |
 
 ---
 
 ## Key Features
 
-### Self-Study Import System
-- **Document Parsing**: Import legacy self-studies from PDF, DOCX, and PPTX formats
-- **Auto-Mapping**: AI-assisted section detection with confidence scores
-- **Manual Assignment**: Review and assign unmapped content to standards
+### Self-Study Import & Manual Tagging
+- **Document Upload**: Import legacy self-studies from DOCX or PDF formats
+- **Visual Section Tagging**: Manually mark and tag document sections in a visual interface
+- **GridFS Storage**: Large documents (up to 370MB+) stored using MongoDB GridFS
+- **Image Preservation**: Embedded images extracted and served via API
 
 ### Self-Study Editor
 - **Rich Text Editing**: TipTap-powered editor with formatting toolbar
 - **Auto-Save**: 2-second debounced auto-save with visual indicators
-- **Manual Save + Validation**: Trigger N8N validation on demand
+- **N8N Validation**: AI-powered validation of narrative content against standards
 - **Progress Tracking**: Visual indicators for standard completion status
 
 ### Curriculum Matrix Editor
@@ -44,561 +64,142 @@ This application enables educational institutions to prepare and submit accredit
 ### Evidence Management
 - **File Upload**: Drag-drop support for Word, PDF, PPT, images
 - **URL Evidence**: Link external resources and documents
-- **Linking**: Associate evidence with specific standards/specifications
-
-### N8N Validation Integration
-- **Webhook Integration**: Real-time validation via N8N workflows
-- **AI Analysis**: Pass/fail results with feedback and suggestions
-- **Incremental Revalidation**: Only revalidate failed sections
+- **Standard Linking**: Associate evidence with specific standards/specifications
 
 ### Reader/Reviewer Portal
 - **Split-Screen View**: Standards + narrative on left, documents on right
 - **Compliance Assessment**: Y/N/NA toggles per specification
-- **Comments**: Rich text comments with evidence references
+- **Rich Comments**: Comments with evidence references
 - **Bookmarks & Flags**: Mark items for follow-up
-- **Final Assessment**: Recommendation with strengths/weaknesses
 
 ### Lead Reader Portal
 - **Multi-Reader Comparison**: Side-by-side view of all reader assessments
 - **Disagreement Detection**: Automatic flagging of conflicting assessments
-- **Consensus Determination**: Set final determinations with rationale
-- **Communication Threads**: Discussion threads with readers
+- **Consensus Building**: Set final determinations with rationale
 - **PDF Reports**: Generate compilation reports
 
 ---
 
 ## Architecture
 
-### Technology Stack
-
-**Frontend**
-- React 18 with TypeScript
-- Vite (build tool)
-- React Router v6 (navigation)
-- TipTap (rich text editor)
-- TanStack Query (data fetching)
-- Tailwind CSS (styling)
-- Lucide React (icons)
-
-**Backend**
-- Node.js with Express
-- TypeScript
-- JWT Authentication (bcrypt for passwords)
-- Multer (file uploads)
-- PDFKit (PDF generation)
-
-**Document Parsing**
-- pdf-parse (PDF text extraction)
-- mammoth (DOCX parsing)
-- pptx-parser (PowerPoint parsing)
-
-**Storage**
-- **Local Development**: JSON file-based storage
-- **Production (Docker)**: MongoDB with Mongoose
-
-**Integration**
-- N8N workflow webhooks for AI-powered validation
-
-### Project Structure
-
 ```
-/CSHSE
-├── client/                              # React frontend
-│   ├── src/
-│   │   ├── components/                  # Reusable UI components
-│   │   ├── features/
-│   │   │   ├── admin/
-│   │   │   │   └── WebhookSettings/     # N8N configuration UI
-│   │   │   └── selfStudy/
-│   │   │       ├── Editor/              # TipTap narrative editor
-│   │   │       ├── MatrixEditor/        # Curriculum matrix UI
-│   │   │       ├── EvidenceManager/     # File/URL evidence UI
-│   │   │       └── SubmissionWorkflow/  # Progress & validation UI
-│   │   ├── hooks/
-│   │   │   ├── useAutoSave.ts           # Debounced auto-save hook
-│   │   │   └── useValidationStatus.ts   # Validation tracking hook
-│   │   ├── services/                    # API client
-│   │   ├── store/                       # React Context state
-│   │   ├── styles/                      # Global CSS
-│   │   ├── types/                       # TypeScript interfaces
-│   │   └── utils/                       # Helper functions
-│   └── package.json
-├── server/                              # Express backend
-│   ├── src/
-│   │   ├── config/
-│   │   │   └── database.ts              # MongoDB/JSON connection
-│   │   ├── controllers/
-│   │   │   ├── adminController.ts       # Admin settings
-│   │   │   ├── evidenceController.ts    # Evidence CRUD
-│   │   │   ├── importController.ts      # Document import
-│   │   │   ├── leadReaderController.ts  # Lead reader operations
-│   │   │   ├── matrixController.ts      # Curriculum matrix
-│   │   │   ├── reportController.ts      # PDF generation
-│   │   │   ├── reviewController.ts      # Reader operations
-│   │   │   ├── submissionController.ts  # Submission workflow
-│   │   │   └── webhookController.ts     # N8N integration
-│   │   ├── models/
-│   │   │   ├── CurriculumMatrix.ts      # Course/standard mapping
-│   │   │   ├── LeadReaderCompilation.ts # Multi-reader aggregation
-│   │   │   ├── Review.ts                # Reader assessments
-│   │   │   ├── SelfStudyImport.ts       # Import tracking
-│   │   │   ├── Submission.ts            # Main submission
-│   │   │   ├── SupportingEvidence.ts    # Documents/URLs/images
-│   │   │   ├── User.ts                  # User accounts
-│   │   │   ├── ValidationResult.ts      # N8N results
-│   │   │   └── WebhookSettings.ts       # N8N configuration
-│   │   ├── routes/
-│   │   │   ├── admin.ts                 # /api/admin/*
-│   │   │   ├── evidence.ts              # /api/submissions/:id/evidence/*
-│   │   │   ├── imports.ts               # /api/imports/*
-│   │   │   ├── leadReviews.ts           # /api/lead-reviews/*
-│   │   │   ├── matrix.ts                # /api/submissions/:id/matrix/*
-│   │   │   ├── reports.ts               # /api/reports/*
-│   │   │   ├── reviews.ts               # /api/reviews/*
-│   │   │   ├── submissions.ts           # /api/submissions/*
-│   │   │   └── webhooks.ts              # /api/webhooks/*
-│   │   ├── services/
-│   │   │   ├── documentParser.ts        # PDF/DOCX/PPTX parsing
-│   │   │   ├── pdfGenerator.ts          # Report generation
-│   │   │   ├── sectionMapper.ts         # Auto-mapping logic
-│   │   │   └── validationService.ts     # N8N webhook calls
-│   │   └── index.ts                     # Express app entry
-│   └── package.json
-├── cshse-parts/                         # Reference data (split self-study)
-├── data/                                # Local storage (dev)
-├── docker-compose.yml                   # Production deployment
-└── package.json                         # Root workspace
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           CSHSE Portal Architecture                      │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   ┌──────────────┐         ┌──────────────┐         ┌──────────────┐   │
+│   │   React UI   │ ◄──────►│  Express API │ ◄──────►│   MongoDB    │   │
+│   │   (Vite)     │  REST   │  (Node.js)   │         │  + GridFS    │   │
+│   └──────────────┘         └──────────────┘         └──────────────┘   │
+│          │                        │                        │            │
+│          │                        │                        ▼            │
+│          │                        │                 ┌──────────────┐   │
+│          │                        │                 │   GridFS     │   │
+│          │                        │                 │   Buckets    │   │
+│          │                        │                 │  - htmlContent│   │
+│          │                        │                 │  - images    │   │
+│          │                        │                 └──────────────┘   │
+│          │                        │                                     │
+│          │                        ▼                                     │
+│          │              ┌─────────────────┐                            │
+│          │              │   N8N Webhooks  │                            │
+│          │              │  ┌───────────┐  │                            │
+│          │              │  │ Validator │  │  ◄── AI Analysis           │
+│          │              │  │ Spec Load │  │  ◄── PDF Parsing           │
+│          │              │  │ Doc Match │  │  ◄── Section Mapping       │
+│          │              │  └───────────┘  │                            │
+│          │              └─────────────────┘                            │
+│          │                                                              │
+│          ▼                                                              │
+│   ┌──────────────────────────────────────────────────────────────┐    │
+│   │                         Railway PaaS                          │    │
+│   │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │    │
+│   │  │  Container  │  │   MongoDB   │  │  Environment Vars   │   │    │
+│   │  │  (Docker)   │  │   Atlas     │  │  - MONGODB_URI      │   │    │
+│   │  │             │  │             │  │  - JWT_SECRET       │   │    │
+│   │  │  Port 8080  │  │             │  │  - N8N_WEBHOOK_URL  │   │    │
+│   │  └─────────────┘  └─────────────┘  └─────────────────────┘   │    │
+│   └──────────────────────────────────────────────────────────────┘    │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Storage Architecture
+
+The application uses a hybrid storage approach:
+
+| Data Type | Storage Location | Reason |
+|-----------|------------------|--------|
+| User data, submissions, reviews | MongoDB Documents | Structured data <16MB |
+| Large HTML content (self-studies) | GridFS `htmlContent` bucket | Documents can exceed 16MB BSON limit |
+| Extracted images | GridFS `images` bucket | Persistent storage on ephemeral filesystem |
+| Uploaded evidence files | MongoDB/Local | Configurable via environment |
 
 ---
 
-## Data Models
+## Technology Stack
 
-### User
-```typescript
-interface User {
-  id: string;
-  email: string;
-  passwordHash: string;
-  firstName: string;
-  lastName: string;
-  role: 'program_coordinator' | 'reader' | 'lead_reader' | 'admin';
-  institutionId?: string;
-  assignedSubmissions: string[];
-  isActive: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
+### Frontend Dependencies
 
-### Submission
-```typescript
-interface Submission {
-  id: string;
-  submissionId: string;              // Human-readable "2024-001"
-  institutionName: string;
-  programName: string;
-  programLevel: 'associate' | 'bachelors' | 'masters';
-  coordinatorId: string;
-  type: 'initial' | 'reaccreditation' | 'extension';
-  status: SubmissionStatus;
-  narrativeContent: NarrativeContent[];
-  standardsStatus: Record<string, StandardStatusInfo>;
-  imports: string[];                 // SelfStudyImport references
-  curriculumMatrices: string[];      // CurriculumMatrix references
-  selfStudyProgress: SelfStudyProgress;
-  decision?: Decision;
-  assignedReaders: string[];
-  leadReaderId?: string;
-  submittedAt?: Date;
-  createdAt: Date;
-  updatedAt: Date;
-}
+| Package | Version | Purpose |
+|---------|---------|---------|
+| React | 18.2.0 | UI framework |
+| Vite | 5.1.0 | Build tool |
+| React Router | 6.22.0 | Navigation |
+| TanStack Query | 5.17.19 | Data fetching & caching |
+| TipTap | 2.2.3+ | Rich text editor |
+| Tailwind CSS | 3.4.1 | Styling |
+| Radix UI | Various | Accessible UI primitives |
+| Zustand | 4.5.0 | State management |
+| Lucide React | 0.323.0 | Icons |
+| Zod | 3.22.4 | Validation |
+| React Hook Form | 7.50.1 | Form handling |
 
-interface NarrativeContent {
-  standardCode: string;
-  specCode: string;
-  content: string;                   // Rich text HTML
-  lastModified: Date;
-}
+### Backend Dependencies
 
-interface StandardStatusInfo {
-  status: 'not_started' | 'in_progress' | 'complete' | 'submitted' | 'validated';
-  validationStatus?: 'pending' | 'pass' | 'fail';
-  submittedAt?: Date;
-}
-
-type SubmissionStatus =
-  | 'draft'
-  | 'in_progress'
-  | 'submitted'
-  | 'under_review'
-  | 'readers_assigned'
-  | 'review_complete'
-  | 'approved'
-  | 'denied'
-  | 'conditional';
-```
-
-### Review (Reader Assessment)
-```typescript
-interface Review {
-  id: string;
-  submissionId: string;
-  reviewerId: string;
-  reviewerNumber: number;            // 1, 2, or 3
-  totalReviewers: number;
-  institutionName: string;
-  programName: string;
-  programLevel: string;
-  status: 'assigned' | 'in_progress' | 'complete' | 'submitted';
-  reviewDate?: Date;
-  assessments: StandardAssessment[];
-  finalAssessment?: FinalAssessment;
-  progress: ReaderProgress;
-  bookmarkedItems: string[];         // "11.a", "12.b"
-  flaggedItems: FlaggedItem[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface StandardAssessment {
-  standardCode: string;
-  specifications: SpecificationAssessment[];
-  isComplete: boolean;
-  completedAt?: Date;
-}
-
-interface SpecificationAssessment {
-  specCode: string;
-  compliance: 'compliant' | 'non_compliant' | 'not_applicable' | null;
-  comments: string;
-  internalNotes?: string;
-  evidenceRefs: string[];
-  reviewedAt?: Date;
-}
-
-interface FinalAssessment {
-  recommendation: RecommendationType;
-  overallStrengths: string;
-  overallWeaknesses: string;
-  conditionsForApproval?: string;
-  additionalComments?: string;
-  submittedAt?: Date;
-}
-
-type RecommendationType =
-  | 'accreditation_no_conditions'
-  | 'conditional_accreditation'
-  | 'deny_accreditation'
-  | 'hold_decision';
-```
-
-### Lead Reader Compilation
-```typescript
-interface LeadReaderCompilation {
-  id: string;
-  submissionId: string;
-  leadReaderId: string;
-  institutionName: string;
-  programName: string;
-  programLevel: string;
-  totalReaders: number;
-  completedReviews: number;
-  readerIds: string[];
-  status: 'pending_reviews' | 'ready_for_compilation' | 'in_progress' | 'submitted';
-  compiledAssessments: StandardCompilation[];
-  readerRecommendations: ReaderRecommendation[];
-  finalCompilation?: FinalCompilation;
-  commentThreads: CommentThread[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface StandardCompilation {
-  standardCode: string;
-  specifications: SpecificationCompilation[];
-}
-
-interface SpecificationCompilation {
-  specCode: string;
-  readerVotes: ReaderComplianceVote[];
-  consensus: 'unanimous' | 'majority' | 'split' | 'pending';
-  hasDisagreement: boolean;
-  finalDetermination?: 'compliant' | 'non_compliant' | 'not_applicable';
-  leadReaderRationale?: string;
-}
-
-interface ReaderComplianceVote {
-  readerId: string;
-  readerNumber: number;
-  compliance: 'compliant' | 'non_compliant' | 'not_applicable' | null;
-  comments: string;
-}
-
-interface FinalCompilation {
-  overallStrengths: string;
-  overallWeaknesses: string;
-  recommendation: RecommendationType;
-  conditionsForApproval?: string;
-  additionalComments?: string;
-  submittedAt?: Date;
-}
-```
-
-### Curriculum Matrix
-```typescript
-interface CurriculumMatrix {
-  id: string;
-  submissionId: string;
-  courses: CourseEntry[];
-  standards: StandardMapping[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface CourseEntry {
-  id: string;
-  coursePrefix: string;              // "HUS", "PSY"
-  courseNumber: string;              // "101", "310"
-  courseName: string;
-  credits: number;
-  order: number;
-}
-
-interface StandardMapping {
-  standardCode: string;
-  specCode: string;
-  courseAssessments: CourseAssessment[];
-}
-
-interface CourseAssessment {
-  courseId: string;
-  type: 'I' | 'T' | 'K' | 'S' | null;  // Introduction, Theory, Knowledge, Skills
-  depth: 'L' | 'M' | 'H' | null;        // Low, Medium, High
-}
-```
-
-### Supporting Evidence
-```typescript
-interface SupportingEvidence {
-  id: string;
-  submissionId: string;
-  standardCode?: string;
-  specCode?: string;
-  evidenceType: 'document' | 'url' | 'image';
-  file?: {
-    filename: string;
-    originalName: string;
-    mimeType: string;
-    size: number;
-    storagePath: string;
-  };
-  url?: {
-    href: string;
-    title: string;
-    description: string;
-  };
-  imageMetadata?: {
-    sourceType: 'fax' | 'letter' | 'certificate' | 'other';
-    description: string;
-  };
-  uploadedBy: string;
-  createdAt: Date;
-}
-```
-
-### Validation Result
-```typescript
-interface ValidationResult {
-  id: string;
-  submissionId: string;
-  standardCode: string;
-  specCode: string;
-  validationType: 'auto_save' | 'manual_save' | 'submit';
-  result: {
-    status: 'pass' | 'fail' | 'pending';
-    score: number;
-    feedback: string;
-    suggestions: string[];
-    missingElements: string[];
-  };
-  n8nExecutionId?: string;
-  attemptNumber: number;
-  previousValidationId?: string;
-  createdAt: Date;
-}
-```
-
-### Webhook Settings
-```typescript
-interface WebhookSettings {
-  id: string;
-  settingType: 'n8n_validation';
-  webhookUrl: string;
-  isActive: boolean;
-  authentication: {
-    type: 'api_key' | 'bearer';
-    apiKey: string;
-  };
-  callbackUrl: string;
-  retryConfig: {
-    maxRetries: number;
-    retryDelayMs: number;
-    backoffMultiplier: number;
-  };
-  createdAt: Date;
-  updatedAt: Date;
-}
-```
+| Package | Version | Purpose |
+|---------|---------|---------|
+| Express | 4.18.2 | Web framework |
+| Mongoose | 8.0.3 | MongoDB ODM |
+| JWT/bcrypt | 9.0.2/5.1.1 | Authentication |
+| Mammoth | 1.6.0 | DOCX parsing |
+| pdf-parse | 1.1.1 | PDF extraction |
+| pptx-parser | 1.1.0 | PowerPoint parsing |
+| PDFKit | 0.14.0 | PDF generation |
+| Sharp | 0.33.0 | Image processing |
+| Tesseract.js | 5.0.0 | OCR (optional) |
+| Multer | 1.4.5 | File uploads |
+| Nodemailer | 7.0.12 | Email notifications |
+| Axios | 1.13.3 | HTTP client |
 
 ---
 
-## API Endpoints
+## N8N Webhook Integration
 
-### Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/login` | User login |
-| POST | `/api/auth/logout` | User logout |
-| POST | `/api/auth/refresh` | Refresh JWT token |
-| GET | `/api/auth/me` | Get current user |
+The application integrates with three N8N workflows for AI-powered document processing:
 
-### Submissions
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/submissions` | List submissions (with filters) |
-| GET | `/api/submissions/:id` | Get submission details |
-| GET | `/api/submissions/:id/progress` | Get detailed progress |
-| PATCH | `/api/submissions/:id/narrative` | Save narrative content |
-| POST | `/api/submissions/:id/standards/:code/submit` | Submit standard for validation |
-| POST | `/api/submissions/:id/standards/:code/complete` | Mark standard complete |
-| POST | `/api/submissions/:id/revalidate` | Revalidate failed sections |
-| GET | `/api/submissions/:id/failed` | Get failed validations |
+### 1. Validation Webhook (`n8n_validation`)
 
-### Document Import
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/imports/upload` | Upload PDF/DOCX/PPTX for parsing |
-| GET | `/api/imports/:id` | Get import status and content |
-| POST | `/api/imports/:id/map` | Map extracted section to standard |
-| POST | `/api/imports/:id/apply` | Apply all mappings to submission |
-| GET | `/api/imports/:id/unmapped` | Get unmapped content |
-| PUT | `/api/imports/:id/unmapped/:sectionId` | Assign/discard unmapped |
+Validates narrative content against CSHSE standards using AI analysis.
 
-### Curriculum Matrix
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/submissions/:id/matrix` | Get curriculum matrix |
-| GET | `/api/submissions/:id/matrix/:matrixId` | Get specific matrix |
-| POST | `/api/submissions/:id/matrix/:matrixId/course` | Add course column |
-| DELETE | `/api/submissions/:id/matrix/:matrixId/course/:courseId` | Remove course |
-| PUT | `/api/submissions/:id/matrix/:matrixId/assessment` | Update cell assessment |
-| PUT | `/api/submissions/:id/matrix/:matrixId/reorder` | Reorder courses |
-| POST | `/api/submissions/:id/matrix/:matrixId/import` | Import from CSV |
-| GET | `/api/submissions/:id/matrix/:matrixId/export` | Export to CSV/JSON |
+**Endpoint**: `POST /api/webhooks/n8n/callback`
 
-### Evidence Management
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/submissions/:id/evidence` | List evidence (with filters) |
-| GET | `/api/submissions/:id/evidence/stats` | Get evidence statistics |
-| GET | `/api/submissions/:id/evidence/:evidenceId` | Get evidence details |
-| POST | `/api/submissions/:id/evidence/upload` | Upload document/image |
-| POST | `/api/submissions/:id/evidence/url` | Add URL evidence |
-| PATCH | `/api/submissions/:id/evidence/:evidenceId` | Update metadata |
-| DELETE | `/api/submissions/:id/evidence/:evidenceId` | Delete evidence |
-| GET | `/api/submissions/:id/evidence/:evidenceId/download` | Download file |
-| POST | `/api/submissions/:id/evidence/:evidenceId/link` | Link to standard |
-| POST | `/api/submissions/:id/evidence/:evidenceId/unlink` | Unlink from standard |
-
-### Reviews (Reader Portal)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/reviews` | Get my assigned reviews |
-| GET | `/api/reviews/:reviewId` | Get review details |
-| GET | `/api/reviews/:reviewId/workspace` | Get workspace data (split-view) |
-| GET | `/api/reviews/:reviewId/progress` | Get progress summary |
-| PATCH | `/api/reviews/:reviewId/assessment` | Save assessment |
-| PATCH | `/api/reviews/:reviewId/assessments/bulk` | Bulk save assessments |
-| PATCH | `/api/reviews/:reviewId/final-assessment` | Save final assessment |
-| POST | `/api/reviews/:reviewId/bookmark` | Toggle bookmark |
-| POST | `/api/reviews/:reviewId/flag` | Flag specification |
-| POST | `/api/reviews/:reviewId/standard-complete` | Mark standard complete |
-| POST | `/api/reviews/:reviewId/submit` | Submit completed review |
-| POST | `/api/reviews/submissions/:submissionId/assign` | Assign readers (admin) |
-| GET | `/api/reviews/submissions/:submissionId` | Get all reviews for submission |
-
-### Lead Reviews (Lead Reader Portal)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/lead-reviews` | Get my compilations |
-| GET | `/api/lead-reviews/ready` | Get submissions ready for compilation |
-| POST | `/api/lead-reviews/submissions/:submissionId` | Create/get compilation |
-| GET | `/api/lead-reviews/:compilationId` | Get compilation details |
-| GET | `/api/lead-reviews/:compilationId/comparison` | Get side-by-side comparison |
-| GET | `/api/lead-reviews/:compilationId/disagreements` | Get all disagreements |
-| GET | `/api/lead-reviews/:compilationId/export` | Export compilation (JSON/CSV) |
-| PATCH | `/api/lead-reviews/:compilationId/determination` | Set final determination |
-| PATCH | `/api/lead-reviews/:compilationId/determinations/bulk` | Bulk set determinations |
-| PATCH | `/api/lead-reviews/:compilationId/final` | Save final compilation |
-| POST | `/api/lead-reviews/:compilationId/submit` | Submit compilation |
-| POST | `/api/lead-reviews/:compilationId/threads` | Create comment thread |
-| POST | `/api/lead-reviews/:compilationId/threads/:threadId/messages` | Add message |
-| PATCH | `/api/lead-reviews/:compilationId/threads/:threadId/resolve` | Toggle resolved |
-| POST | `/api/lead-reviews/:compilationId/reminder` | Send reader reminder |
-
-### Reports (PDF Generation)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/reports/reader/:reviewId/pdf` | Generate reader report PDF |
-| GET | `/api/reports/reader/:reviewId/preview` | Get preview data |
-| GET | `/api/reports/submission/:submissionId/all-readers/pdf` | Generate all readers PDF |
-| GET | `/api/reports/compilation/:compilationId/pdf` | Generate compilation PDF |
-| GET | `/api/reports/compilation/:compilationId/preview` | Get preview data |
-
-### Webhooks (N8N Integration)
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/webhooks/n8n/validate` | Trigger N8N validation |
-| POST | `/api/webhooks/n8n/callback` | Receive validation result |
-| GET | `/api/webhooks/validation/latest` | Get latest validation |
-| GET | `/api/webhooks/validation/standard/:submissionId/:standardCode` | Get standard status |
-
-### Admin
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/admin/stats` | Get system statistics |
-| GET | `/api/admin/webhook-settings` | Get webhook settings |
-| PUT | `/api/admin/webhook-settings` | Update webhook settings |
-| POST | `/api/admin/webhook-test` | Test webhook connection |
-
----
-
-## N8N Workflow Integration
-
-The application integrates with N8N workflows to provide AI-powered validation of narrative content against standards.
-
-### Validation Webhook Request
+**Outbound Request**:
 ```json
-POST [N8N_WEBHOOK_URL]
 {
   "submissionId": "sub_123",
   "standardCode": "11",
   "specCode": "a",
   "narrativeText": "The curriculum provides...",
-  "standardText": "The curriculum shall provide theoretical and applied content...",
-  "supportingEvidence": [
-    { "filename": "syllabus.pdf", "type": "document" }
-  ],
+  "standardText": "The curriculum shall provide theoretical...",
+  "supportingEvidence": [{ "filename": "syllabus.pdf", "type": "document" }],
   "validationType": "manual_save",
   "callbackUrl": "https://api/webhooks/n8n/callback"
 }
 ```
 
-### Callback Webhook Response
+**Callback Response**:
 ```json
-POST /api/webhooks/n8n/callback
 {
   "executionId": "exec_456",
   "submissionId": "sub_123",
@@ -607,229 +208,470 @@ POST /api/webhooks/n8n/callback
   "result": {
     "status": "pass",
     "score": 85,
-    "feedback": "The narrative adequately addresses the requirement but could include more specific course references.",
-    "suggestions": [
-      "Add specific course numbers from the curriculum",
-      "Reference the curriculum matrix"
-    ],
+    "feedback": "The narrative adequately addresses the requirement.",
+    "suggestions": ["Add specific course numbers"],
     "missingElements": []
   }
 }
 ```
 
-### Webhook Settings Configuration
+### 2. Spec Loader Webhook (`spec_loader`)
 
-Configure via Admin UI at `/admin/webhook-settings`:
+Loads and parses specification documents (PDFs) into the AI system.
+
+**Endpoint**: `POST /api/webhooks/spec-loader/callback`
+
+**Outbound Request**:
+```json
+{
+  "data": "base64_encoded_pdf_content",
+  "filename": "CSHSE-Standards-2025.pdf",
+  "mimeType": "application/pdf",
+  "specId": "spec_123",
+  "specName": "CSHSE Associate Degree Standards",
+  "specVersion": "July 2025",
+  "callbackUrl": "https://api/webhooks/spec-loader/callback"
+}
+```
+
+**Callback Response**:
+```json
+{
+  "specId": "spec_123",
+  "status": "success",
+  "standardsFound": 20,
+  "specifications": [
+    { "code": "1", "title": "Program Identity", "specs": ["a", "b", "c"] }
+  ]
+}
+```
+
+### 3. Document Matcher Webhook (`document_matcher`)
+
+Maps imported document sections to standards using AI analysis.
+
+**Endpoint**: `POST /api/webhooks/document-matcher/callback`
+
+**Callback Response** (incremental, one section at a time):
+```json
+{
+  "type": "section_result",
+  "jobId": "job_123",
+  "documentId": "import_456",
+  "moreData": true,
+  "sectionIndex": 0,
+  "totalSections": 15,
+  "section": {
+    "heading": "Program Overview",
+    "richTextContent": "<p>Our program is regionally accredited...</p>",
+    "match": {
+      "status": "matched",
+      "standard": { "code": "1", "title": "Program Identity" },
+      "subspecification": { "code": "a", "title": "Regional Accreditation" },
+      "confidence": 92,
+      "rationale": "This section describes regional accreditation status."
+    }
+  }
+}
+```
+
+### Webhook Configuration
+
+Configure webhooks in the Admin Settings (`/admin/webhook-settings`):
 
 | Setting | Description |
 |---------|-------------|
-| **Webhook URL** | N8N webhook endpoint URL |
-| **Callback URL** | URL for N8N to send results back |
-| **Auth Type** | `api_key` (X-API-Key header) or `bearer` (Authorization) |
-| **API Key** | Authentication token |
-| **Max Retries** | Retry attempts on failure (default: 3) |
-| **Retry Delay** | Initial delay in ms (default: 1000) |
-| **Backoff Multiplier** | Exponential backoff factor (default: 2) |
+| Webhook URL | N8N webhook endpoint |
+| Callback URL | Auto-generated from server URL |
+| Auth Type | `api_key` or `bearer` token |
+| API Key | Authentication credential |
+| Max Retries | Retry attempts on failure (default: 3) |
+| Retry Delay | Initial delay in ms (default: 1000) |
+| Backoff Multiplier | Exponential backoff factor (default: 2) |
 
 ---
 
-## UI/UX Design
+## Self-Study Import Workflow
 
-### Color Palette
-```css
-/* Primary - Teal/Dark Green */
---primary-500: #0d9488;      /* Main brand color */
---primary-600: #0f766e;      /* Hover state */
---primary-400: #2dd4bf;      /* Light accent */
+### Manual Section Tagging Process
 
-/* Program Level Badges */
---level-bachelors: #059669;  /* Green */
---level-associate: #d97706;  /* Amber */
---level-masters: #2563eb;    /* Blue */
+The application uses a visual manual tagging workflow for importing self-study documents:
 
-/* Status Colors */
---status-draft: #9ca3af;
---status-in-progress: #f59e0b;
---status-submitted: #3b82f6;
---status-complete: #10b981;
---status-pass: #22c55e;
---status-fail: #ef4444;
-
-/* Compliance Colors */
---compliant: #22c55e;
---non-compliant: #ef4444;
---not-applicable: #9ca3af;
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    SELF-STUDY IMPORT WORKFLOW                    │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  1. UPLOAD DOCUMENT                                              │
+│     ├─ Accept DOCX or PDF                                        │
+│     ├─ Parse with Mammoth/pdf-parse                              │
+│     ├─ Extract images to GridFS                                  │
+│     └─ Store HTML in GridFS (handles 370MB+ documents)           │
+│                                                                  │
+│  2. VISUAL TAGGING INTERFACE                                     │
+│     ┌────────────────────────────┬────────────────────────┐     │
+│     │    Document Viewer (70%)   │  Tagging Panel (30%)   │     │
+│     │                            │                        │     │
+│     │  ┌──────────────────────┐  │  [Mark Start]          │     │
+│     │  │                      │  │  [Mark End]            │     │
+│     │  │  Scrollable HTML     │  │                        │     │
+│     │  │  with images         │  │  Section Type:         │     │
+│     │  │                      │  │  ○ Standard (1-21)     │     │
+│     │  │  Click to place      │  │  ○ Curriculum Matrix   │     │
+│     │  │  cursor markers      │  │  ○ Appendix            │     │
+│     │  │                      │  │  ○ Skip/Ignore         │     │
+│     │  └──────────────────────┘  │                        │     │
+│     │                            │  [Save Section]        │     │
+│     └────────────────────────────┴────────────────────────┘     │
+│                                                                  │
+│  3. SECTION EXTRACTION                                           │
+│     ├─ Extract HTML from marked offsets                          │
+│     ├─ Save to MongoDB with metadata                             │
+│     ├─ Insert visual marker in document                          │
+│     └─ Update GridFS with remaining content                      │
+│                                                                  │
+│  4. FINISH TAGGING                                               │
+│     ├─ Review tagged sections list                               │
+│     ├─ Optionally send to N8N for AI processing                  │
+│     └─ Apply sections to submission narratives                   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Key UI Components
+### Section Types
 
-**Self-Study Editor**
-- Standards navigation sidebar with progress indicators
-- TipTap rich text editor with formatting toolbar
-- Auto-save status indicator (Saving... / Saved / Unsaved changes)
-- Validation panel showing pass/fail with feedback
+| Type | Description | Standard Mapping |
+|------|-------------|------------------|
+| **Standard** | Narrative content for Standards 1-21 | User selects standard number and optional spec (a-h) |
+| **Curriculum Matrix** | Course/standard mapping tables | Parsed into matrix editor |
+| **Appendix** | Supporting documentation | Linked as evidence |
+| **Skip** | Content to ignore (TOC, headers, etc.) | Removed from document |
 
-**Curriculum Matrix**
-- Spreadsheet-like grid interface
-- Course columns with prefix/number/name
-- Assessment cells with Type/Depth popover editor
-- Add/remove course functionality
-- Export to CSV button
+---
 
-**Evidence Manager**
-- Two-panel layout (list + preview)
-- Drag-drop file upload zone
-- URL input with auto-title detection
-- Filter by type and linked status
-- Evidence preview with download
+## User Guide
 
-**Reader Workspace**
-- Split-screen: left (standards/narrative), right (documents)
-- Compliance toggle (Y/N/NA) per specification
-- Rich text comment field
-- Bookmark and flag buttons
-- Progress indicator
+### For Program Coordinators
 
-**Lead Reader Comparison**
-- Side-by-side reader columns
-- Consensus indicator badges
-- Disagreement highlighting
-- Final determination selector
-- Communication threads
+#### Creating a New Submission
+1. Navigate to **Submissions** from the dashboard
+2. Click **New Submission**
+3. Fill in institution and program details
+4. Select program level (Associate/Baccalaureate/Master's)
+
+#### Importing a Self-Study Document
+1. Open your submission
+2. Click **Import Document** in the sidebar
+3. Upload your DOCX or PDF file
+4. Wait for document processing (progress shown)
+5. Use the visual tagging interface:
+   - Scroll to find a section
+   - Click **Mark Start** at the beginning
+   - Scroll to the end of the section
+   - Click **Mark End**
+   - Select the section type (Standard, Matrix, Appendix, Skip)
+   - If Standard: select the standard number (1-21)
+   - Click **Save Section**
+6. Repeat until all content is tagged
+7. Click **Finish Tagging** when complete
+
+#### Editing Narratives
+1. Navigate to a standard in the sidebar
+2. Use the rich text editor to modify content
+3. Content auto-saves every 2 seconds
+4. Click **Save & Validate** to trigger AI validation
+5. Review feedback and suggestions
+6. Mark standards complete when satisfied
+
+#### Managing Evidence
+1. Click **Evidence** in the standard panel
+2. Drag-drop files or click to upload
+3. Add URL evidence with **Add Link**
+4. Link evidence to specific specifications
+
+#### Submitting for Review
+1. Ensure all standards show "Complete" status
+2. Click **Submit Self-Study**
+3. Confirm submission (cannot edit after submission)
+
+### For Readers/Reviewers
+
+#### Reviewing a Submission
+1. Navigate to **My Reviews** from the dashboard
+2. Select an assigned submission
+3. Use the split-screen workspace:
+   - Left: Standards and narrative content
+   - Right: Evidence documents
+4. For each specification:
+   - Select compliance: Compliant / Non-Compliant / N/A
+   - Add comments explaining your assessment
+   - Reference specific evidence if needed
+5. Use **Bookmark** for items to revisit
+6. Use **Flag** for items needing discussion
+
+#### Submitting Your Review
+1. Complete all standard assessments
+2. Fill in the Final Assessment:
+   - Overall strengths
+   - Overall weaknesses
+   - Recommendation
+3. Click **Submit Review**
+
+### For Lead Readers
+
+#### Compiling Reader Assessments
+1. Navigate to **Lead Reviews** from the dashboard
+2. Select a submission with completed reader reviews
+3. View the side-by-side comparison
+4. For disagreements:
+   - Review each reader's comments
+   - Set the final determination
+   - Add rationale for your decision
+5. Complete the final compilation
+6. Generate PDF report if needed
+
+---
+
+## API Reference
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/login` | User login |
+| POST | `/api/auth/logout` | User logout |
+| GET | `/api/auth/me` | Get current user |
+
+### Submissions
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/submissions` | List submissions |
+| GET | `/api/submissions/:id` | Get submission details |
+| PATCH | `/api/submissions/:id/narrative` | Save narrative content |
+| POST | `/api/submissions/:id/standards/:code/submit` | Submit for validation |
+
+### Document Import
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/imports/upload` | Upload document |
+| GET | `/api/imports/:id` | Get import status |
+| GET | `/api/imports/:id/content` | Get HTML content from GridFS |
+| GET | `/api/imports/:id/images/:filename` | Get image from GridFS |
+| POST | `/api/imports/:id/extract-section` | Extract and save section |
+| GET | `/api/imports/:id/tagged-sections` | List tagged sections |
+| DELETE | `/api/imports/:id/tagged-sections/:sectionId` | Delete tagged section |
+| POST | `/api/imports/:id/finish-tagging` | Complete tagging workflow |
+| DELETE | `/api/imports/:id` | Cancel import |
+
+### Curriculum Matrix
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/submissions/:id/matrix` | Get curriculum matrix |
+| POST | `/api/submissions/:id/matrix/:matrixId/course` | Add course |
+| PUT | `/api/submissions/:id/matrix/:matrixId/assessment` | Update assessment |
+
+### Evidence
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/submissions/:id/evidence` | List evidence |
+| POST | `/api/submissions/:id/evidence/upload` | Upload file |
+| POST | `/api/submissions/:id/evidence/url` | Add URL evidence |
+
+### Reviews
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/reviews` | Get assigned reviews |
+| GET | `/api/reviews/:id/workspace` | Get review workspace |
+| PATCH | `/api/reviews/:id/assessment` | Save assessment |
+| POST | `/api/reviews/:id/submit` | Submit review |
+
+### Lead Reviews
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/lead-reviews` | Get compilations |
+| GET | `/api/lead-reviews/:id/comparison` | Get reader comparison |
+| PATCH | `/api/lead-reviews/:id/determination` | Set final determination |
+
+### Webhooks
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/webhooks/n8n/validate` | Trigger validation |
+| POST | `/api/webhooks/n8n/callback` | Receive validation result |
+| POST | `/api/webhooks/spec-loader/callback` | Receive spec load result |
+| POST | `/api/webhooks/document-matcher/callback` | Receive section mapping |
 
 ---
 
 ## Development Setup
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 20+
+- MongoDB 6.0+ (local or Atlas)
 - npm or yarn
 
-### Local Development (JSON Storage)
+### Local Development
+
 ```bash
+# Clone repository
+git clone <repository-url>
+cd CSHSE
+
 # Install dependencies
 cd server && npm install
 cd ../client && npm install
 
+# Configure environment
+cp server/.env.example server/.env
+# Edit .env with your MongoDB URI and JWT secret
+
 # Start development servers
-# Terminal 1: Server
+# Terminal 1: Server (port 5000)
 cd server && npm run dev
-# Server: http://localhost:5000
 
-# Terminal 2: Client
+# Terminal 2: Client (port 3000)
 cd client && npm run dev
-# Client: http://localhost:3000
-```
-
-### Docker Deployment (MongoDB)
-```bash
-# Start all services
-docker-compose up -d
-
-# Services:
-# - MongoDB: localhost:27017
-# - Mongo Express: localhost:8081
-# - Server: localhost:5000
-# - Client: localhost:3000
 ```
 
 ### Environment Variables
 
-**Server (.env)**
+**Server (`server/.env`)**:
 ```bash
 NODE_ENV=development
 PORT=5000
-JWT_SECRET=your-secret-key
-JWT_EXPIRES_IN=7d
 
-# MongoDB (production only)
-MONGODB_URI=mongodb://admin:password@localhost:27017/cshse?authSource=admin
+# MongoDB
+MONGODB_URI=mongodb://localhost:27017/cshse
+
+# Authentication
+JWT_SECRET=your-secure-secret-key
+JWT_EXPIRES_IN=7d
 
 # File uploads
 UPLOAD_DIR=uploads/evidence
-MAX_FILE_SIZE=52428800  # 50MB
+MAX_FILE_SIZE=52428800
 
-# N8N Integration
-N8N_WEBHOOK_URL=https://your-n8n-instance.com/webhook/validate
-N8N_API_KEY=your-n8n-api-key
+# N8N Webhooks (optional)
+N8N_VALIDATION_URL=https://your-n8n/webhook/validate
+N8N_SPEC_LOADER_URL=https://your-n8n/webhook/spec-loader
+N8N_DOCUMENT_MATCHER_URL=https://your-n8n/webhook/doc-matcher
 ```
 
-**Client (.env)**
+**Client (`client/.env`)**:
 ```bash
 VITE_API_URL=http://localhost:5000/api
 ```
 
 ---
 
-## Standards Reference
+## Deployment
 
-The application uses the CSHSE National Standards (Revised July 2025) for three degree levels:
+### Railway Deployment
 
-### Associate Degree - 20 Standards
-**Section I: General Program Characteristics (1-10)**
-1. Institutional Requirements and Primary Program Objective
-2. Philosophical Base of Programs
-3. Community Assessment
-4. Program Evaluation
-5. Policies and Procedures for Admitting, Retaining, and Dismissing Students
-6. Credentials of Human Services Faculty
-7. Personnel Roles, Responsibilities, and Evaluation
-8. Cultural Competence
-9. Program Support
-10. Evaluation of Transfer Credits and Prior Learning
+The application is configured for Railway deployment with the included `Dockerfile` and `railway.json`.
 
-**Section II: Curriculum (11-20)**
-11. History
-12. Human Systems
-13. Human Service Delivery Systems
-14. Discipline Inquiry and Information Literacy
-15. Program Planning and Evaluation
-16. Client Interventions and Strategies
-17. Interpersonal Communication
-18. Client-Related Values and Attitudes
-19. Self-Development
-20. Field Experience (min. 250 hours)
+**Deployment Steps**:
+1. Connect GitHub repository to Railway
+2. Configure environment variables in Railway dashboard
+3. Add MongoDB Atlas addon or configure external MongoDB
+4. Deploy automatically on push to main branch
 
-### Baccalaureate Degree - 21 Standards
-Same general structure with additions:
-- Standard 18: Administrative (leadership/management)
-- Standard 21: Field Experience (min. 350 hours)
-- Additional specifications for advocacy and policy
+**Required Environment Variables**:
+- `MONGODB_URI` - MongoDB connection string
+- `JWT_SECRET` - Secure random string
+- `NODE_ENV=production`
 
-### Master's Degree - 18 Standards
-Focus on administrative, leadership, and research:
-- Standards 11-18 cover curriculum
-- Standard 18: Culminating Experiences (field or capstone)
-- Emphasis on organizational management
+**Railway Configuration** (`railway.json`):
+```json
+{
+  "build": { "builder": "DOCKERFILE" },
+  "deploy": {
+    "numReplicas": 1,
+    "healthcheckPath": "/health",
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
+```
+
+### Docker Build
+
+The multi-stage Dockerfile:
+1. Builds React client with Vite
+2. Compiles TypeScript server with esbuild
+3. Creates minimal production image with Node.js 20 Alpine
+4. Serves client as static files from `/public`
+5. Exposes port 8080
 
 ---
 
-## Curriculum Matrix Guide
+## Recent Changes
 
-### Coverage Types
+### GridFS Storage Implementation (February 2026)
+- **Problem**: Documents producing 370MB+ HTML exceeded MongoDB's 16MB BSON limit
+- **Solution**: Implemented MongoDB GridFS for large file storage
+- **Changes**:
+  - Added `gridFsService.ts` with `htmlContent` and `images` buckets
+  - HTML content stored in GridFS chunks (255KB each)
+  - Images stored in GridFS for persistence on ephemeral filesystems
+  - Updated `getDocumentContent` to stream from GridFS
+  - Updated `extractSection` to read/write from GridFS
+  - Added GridFS cleanup on import cancellation
+
+### Manual Section Tagging Workflow (January 2026)
+- **Problem**: Automated regex-based section detection failed on complex documents
+- **Solution**: Visual manual tagging interface
+- **Changes**:
+  - Added `DocumentViewer` component for scrollable HTML display
+  - Added `SectionTagger` component for marking sections
+  - Added `TaggedSectionsList` component for managing tagged sections
+  - Character offset-based section extraction
+  - Visual markers for extracted sections
+
+### Import Workflow Improvements
+- Replaced automated detection with manual tagging
+- Added progress indicators during document processing
+- Improved error handling and user feedback
+- Added cancel import functionality
+
+---
+
+## Standards Reference
+
+### CSHSE National Standards (Revised July 2025)
+
+**Associate Degree - 20 Standards**
+- Section I (1-10): General Program Characteristics
+- Section II (11-20): Curriculum
+
+**Baccalaureate Degree - 21 Standards**
+- Includes Administrative standard (18)
+- Field Experience minimum 350 hours
+
+**Master's Degree - 18 Standards**
+- Focus on leadership and research
+- Culminating experiences requirement
+
+### Curriculum Matrix Coverage
+
 | Code | Type | Description |
 |------|------|-------------|
-| **I** | Introduction | Basic exposure to concepts |
-| **T** | Theory | Theoretical understanding and frameworks |
-| **K** | Knowledge | Factual knowledge and comprehension |
-| **S** | Skills | Practical application and competencies |
+| I | Introduction | Basic exposure |
+| T | Theory | Theoretical frameworks |
+| K | Knowledge | Factual comprehension |
+| S | Skills | Practical application |
 
-### Coverage Depth
 | Code | Depth | Description |
 |------|-------|-------------|
-| **L** | Low | Minimal coverage (brief mention) |
-| **M** | Medium | Moderate coverage (dedicated content) |
-| **H** | High | Comprehensive coverage (major focus) |
-
-### Example Matrix Entry
-| Course | Standard 11.a | Standard 12.b |
-|--------|--------------|---------------|
-| HUS 101 | I/M | T/L |
-| PSY 210 | K/H | K/M |
-| HUS 310 | S/H | S/H |
+| L | Low | Brief mention |
+| M | Medium | Dedicated content |
+| H | High | Major focus |
 
 ---
 
 ## License
 
 Proprietary - Council for Standards in Human Service Education
+
+---
+
+## Support
+
+For issues or feature requests, please contact the CSHSE development team or submit an issue to the repository.
