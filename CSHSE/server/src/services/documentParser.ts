@@ -2381,6 +2381,14 @@ export class DocumentParserService {
     console.log(`[DocumentParser] HTML content length: ${htmlContent?.length || 0}`);
     console.log(`[DocumentParser] Raw text length: ${rawText?.length || 0}`);
 
+    // SAFEGUARD: If HTML is too large (>5MB), skip HTML parsing and use text-based detection
+    // This prevents regex timeouts on very large documents (e.g., 370MB HTML)
+    const MAX_HTML_SIZE = 5 * 1024 * 1024; // 5MB
+    if (htmlContent && htmlContent.length > MAX_HTML_SIZE) {
+      console.log(`[DocumentParser] HTML too large (${Math.round(htmlContent.length / 1024 / 1024)}MB > 5MB limit), using text-based detection`);
+      return this.detectStructuralHeadersFromText(rawText);
+    }
+
     const sections: DetectedSection[] = [];
     let appendixSection: DetectedSection | undefined;
 
