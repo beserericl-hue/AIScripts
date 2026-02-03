@@ -2446,8 +2446,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
               )}
             </div>
 
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
+            {/* Modal Footer - flex-shrink-0 ensures buttons are always visible */}
+            <div className="flex-shrink-0 flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
               {/* Close/Cancel button - different behavior based on step */}
               {importStep === 'processing' ? (
                 <button
