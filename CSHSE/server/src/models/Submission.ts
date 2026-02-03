@@ -69,7 +69,7 @@ export interface IReaderLock {
   lockedByName?: string;
   lockedByRole?: 'reader' | 'lead_reader';
   lockedAt?: Date;
-  lockReason?: 'reader_review' | 'lead_reader_review' | 'sent_back_for_correction';
+  lockReason?: 'reader_review' | 'lead_reader_review' | 'sent_back_for_correction' | 'submission_complete';
   sentBackAt?: Date;
   sentBackReason?: string;
 }
@@ -168,7 +168,7 @@ const ReaderLockSchema = new Schema<IReaderLock>({
   lockedAt: { type: Date },
   lockReason: {
     type: String,
-    enum: ['reader_review', 'lead_reader_review', 'sent_back_for_correction']
+    enum: ['reader_review', 'lead_reader_review', 'sent_back_for_correction', 'submission_complete']
   },
   sentBackAt: { type: Date },
   sentBackReason: { type: String }

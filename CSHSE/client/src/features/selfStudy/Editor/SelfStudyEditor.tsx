@@ -45,11 +45,16 @@ interface SubmissionData {
   institutionName: string;
   programName: string;
   programLevel: string;
+  status: 'draft' | 'in_progress' | 'submitted' | 'under_review' | 'readers_assigned' | 'review_complete' | 'compliant' | 'non_compliant';
   narrativeContent: NarrativeContent[];
   standardsStatus: Record<string, {
     status: 'not_started' | 'in_progress' | 'complete' | 'submitted' | 'validated';
     validationStatus?: 'pending' | 'pass' | 'fail';
   }>;
+  readerLock?: {
+    isLocked: boolean;
+    lockReason?: string;
+  };
 }
 
 interface StandardDefinition {
@@ -238,12 +243,23 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     },
   });
 
-  // Submit standard mutation
+  // Submit standard mutation (for individual standard validation)
   const submitStandardMutation = useMutation({
     mutationFn: async (standardCode: string) => {
       const response = await api.post(
         `/api/submissions/${submissionId}/standards/${standardCode}/submit`
       );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+    },
+  });
+
+  // Submit entire self-study mutation (locks submission for review)
+  const submitSelfStudyMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.post(`/api/submissions/${submissionId}/submit`);
       return response.data;
     },
     onSuccess: () => {
@@ -712,27 +728,55 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     [saveSupportingEvidenceMutation, selectedStandard, selectedSpec]
   );
 
-  // Handle submit standard for review (triggers validation workflow)
-  const handleSubmitStandard = useCallback(async () => {
-    const confirmMessage = `Submit Standard ${selectedStandard} for Review?\n\nThis will trigger the validation workflow. Make sure you have saved all your changes first.`;
+  // Handle submit entire self-study for review (locks submission)
+  const handleSubmitSelfStudy = useCallback(async () => {
+    const confirmMessage = `Submit Self-Study for Review?\n\nThis will lock the self-study for review by the lead reader. You will not be able to make edits until the review is complete.\n\nMake sure you have saved all your changes first.`;
     if (window.confirm(confirmMessage)) {
-      await submitStandardMutation.mutateAsync(selectedStandard);
+      await submitSelfStudyMutation.mutateAsync();
     }
-  }, [submitStandardMutation, selectedStandard]);
+  }, [submitSelfStudyMutation]);
 
-  // Check if all specifications in the selected standard are validated
-  const isStandardReadyForSubmit = React.useMemo(() => {
+  // Calculate validated specs count for progress display
+  const validationProgress = React.useMemo(() => {
+    if (!standards || !submission?.standardsStatus) {
+      return { validated: 0, total: 0 };
+    }
+
+    let validated = 0;
+    let total = 0;
+
+    for (const standard of standards) {
+      for (const spec of standard.specifications || []) {
+        total++;
+        const status = submission.standardsStatus?.[`${standard.code}.${spec.code}`];
+        if (status?.validationStatus === 'pass') {
+          validated++;
+        }
+      }
+    }
+
+    return { validated, total };
+  }, [standards, submission?.standardsStatus]);
+
+  // Check if entire self-study is ready for submission (all specs validated)
+  const isSelfStudyReadyForSubmit = React.useMemo(() => {
     if (!standards || !submission?.standardsStatus) return false;
 
-    const currentStandard = standards.find(s => s.code === selectedStandard);
-    if (!currentStandard) return false;
+    // Check ALL specs across ALL standards
+    return standards.every(standard =>
+      (standard.specifications || []).every(spec => {
+        const status = submission.standardsStatus?.[`${standard.code}.${spec.code}`];
+        return status?.validationStatus === 'pass';
+      })
+    );
+  }, [standards, submission?.standardsStatus]);
 
-    // Check if all specs have passed validation
-    return (currentStandard.specifications || []).every(spec => {
-      const status = submission?.standardsStatus?.[`${selectedStandard}.${spec.code}`];
-      return status?.validationStatus === 'pass';
-    });
-  }, [standards, submission, selectedStandard]);
+  // Check if submission is already submitted or locked
+  const isSubmissionLocked = React.useMemo(() => {
+    return submission?.status === 'submitted' ||
+           submission?.status === 'under_review' ||
+           submission?.readerLock?.isLocked;
+  }, [submission?.status, submission?.readerLock?.isLocked]);
 
   // Navigate to next/prev spec
   const navigateSpec = useCallback(
@@ -901,23 +945,36 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
               Import Document
             </button>
 
-            {/* Submit for Review Button - triggers workflow */}
+            {/* Validation Progress */}
+            <span className="text-sm text-gray-500">
+              {validationProgress.validated}/{validationProgress.total} Validated
+            </span>
+
+            {/* Submit Self-Study Button */}
             <button
-              onClick={handleSubmitStandard}
-              disabled={submitStandardMutation.isPending || !isStandardReadyForSubmit}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={handleSubmitSelfStudy}
+              disabled={submitSelfStudyMutation.isPending || !isSelfStudyReadyForSubmit || isSubmissionLocked}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                isSubmissionLocked
+                  ? 'bg-green-600 text-white cursor-default'
+                  : 'bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed'
+              }`}
               title={
-                isStandardReadyForSubmit
-                  ? "Submit this standard for review - this action triggers the validation workflow"
-                  : "All specifications must be validated before submitting for review"
+                isSubmissionLocked
+                  ? "Self-study has been submitted for review"
+                  : isSelfStudyReadyForSubmit
+                  ? "Submit self-study for review - this will lock the document"
+                  : `All specifications must be validated before submitting (${validationProgress.validated}/${validationProgress.total} complete)`
               }
             >
-              {submitStandardMutation.isPending ? (
+              {submitSelfStudyMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
+              ) : isSubmissionLocked ? (
+                <Check className="w-4 h-4" />
               ) : (
                 <Send className="w-4 h-4" />
               )}
-              Submit Standard {selectedStandard} for Review
+              {isSubmissionLocked ? 'Submitted' : 'Submit Self-Study for Review'}
             </button>
           </div>
         </div>

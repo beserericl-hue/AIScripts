@@ -4,6 +4,7 @@ import {
   getSubmissionProgress,
   saveNarrative,
   submitStandard,
+  submitSelfStudy,
   revalidateFailed,
   getFailedValidations,
   markStandardComplete,
@@ -59,6 +60,13 @@ router.get('/:submissionId/progress', getSubmissionProgress);
  * @access  Private (Program Coordinator, Admin)
  */
 router.patch('/:submissionId/narrative', saveNarrative);
+
+/**
+ * @route   POST /api/submissions/:submissionId/submit
+ * @desc    Submit the entire self-study for review (locks the submission)
+ * @access  Private (Program Coordinator only - must be owner)
+ */
+router.post('/:submissionId/submit', submitSelfStudy);
 
 /**
  * @route   POST /api/submissions/:submissionId/standards/:standardCode/submit

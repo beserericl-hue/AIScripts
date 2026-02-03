@@ -51,6 +51,16 @@ export interface ReviewCompleteEmailData {
   submissionLink: string;
 }
 
+export interface SelfStudySubmittedEmailData {
+  leadReaderName: string;
+  leadReaderEmail: string;
+  programName: string;
+  institutionName: string;
+  submitterName: string;
+  submissionLink: string;
+  submittedAt: Date;
+}
+
 class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private isConfigured = false;
@@ -316,6 +326,67 @@ View details here: ${data.submissionLink}
     return this.sendEmail({
       to: data.coordinatorEmail,
       subject: `Review Complete: Standard ${data.standardCode} - ${data.programName}`,
+      html,
+      text
+    });
+  }
+
+  async sendSelfStudySubmittedEmail(data: SelfStudySubmittedEmailData): Promise<boolean> {
+    const submittedFormatted = data.submittedAt.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #1a365d; color: white; padding: 20px; text-align: center;">
+          <h1 style="margin: 0;">CSHSE Accreditation System</h1>
+        </div>
+        <div style="padding: 30px; background-color: #f8f9fa;">
+          <h2 style="color: #1a365d;">Self-Study Submitted for Review</h2>
+          <p>Hello ${data.leadReaderName},</p>
+          <p>A complete self-study has been submitted and is ready for your review:</p>
+          <div style="background-color: white; padding: 20px; border-radius: 5px; margin: 20px 0;">
+            <p><strong>Program:</strong> ${data.programName}</p>
+            <p><strong>Institution:</strong> ${data.institutionName}</p>
+            <p><strong>Submitted by:</strong> ${data.submitterName}</p>
+            <p><strong>Submitted on:</strong> ${submittedFormatted}</p>
+          </div>
+          <p>All standards and specifications have been validated. Please review the self-study and assign readers when ready.</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${data.submissionLink}" style="background-color: #0d9488; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Review Self-Study</a>
+          </div>
+        </div>
+        <div style="background-color: #e2e8f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
+          <p>Council for Standards in Human Service Education</p>
+        </div>
+      </div>
+    `;
+
+    const text = `
+Hello ${data.leadReaderName},
+
+A complete self-study has been submitted and is ready for your review:
+
+Program: ${data.programName}
+Institution: ${data.institutionName}
+Submitted by: ${data.submitterName}
+Submitted on: ${submittedFormatted}
+
+All standards and specifications have been validated. Please review the self-study and assign readers when ready.
+
+Review the self-study here: ${data.submissionLink}
+
+- CSHSE Accreditation System
+    `;
+
+    return this.sendEmail({
+      to: data.leadReaderEmail,
+      subject: `Self-Study Submitted for Review - ${data.programName}`,
       html,
       text
     });

@@ -2,6 +2,9 @@ import { Request, Response } from 'express';
 import { Submission, ISubmission } from '../models/Submission';
 import { ValidationResult } from '../models/ValidationResult';
 import { ValidationService } from '../services/validationService';
+import { emailService } from '../services/emailService';
+import { User } from '../models/User';
+import { Spec } from '../models/Spec';
 import mongoose from 'mongoose';
 
 interface AuthenticatedRequest extends Request {
@@ -626,5 +629,116 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
   } catch (error) {
     console.error('Create submission error:', error);
     return res.status(500).json({ error: 'Failed to create submission' });
+  }
+};
+
+/**
+ * Submit the entire self-study for review
+ * - Requires all specs to be validated (pass)
+ * - Locks the self-study (program coordinator becomes read-only)
+ * - Notifies the lead reader
+ */
+export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // Check ownership - only the program coordinator who owns this can submit
+    if (submission.submitterId.toString() !== req.user!.id) {
+      return res.status(403).json({ error: 'Not authorized to submit this self-study' });
+    }
+
+    // Check if already submitted
+    if (submission.status === 'submitted' || submission.status === 'under_review') {
+      return res.status(400).json({ error: 'Self-study has already been submitted' });
+    }
+
+    // Get the active spec to determine all required standards/specs
+    const activeSpec = await Spec.findOne({ isActive: true });
+    if (!activeSpec) {
+      return res.status(400).json({ error: 'No active specification found' });
+    }
+
+    // Verify all specs are validated (pass)
+    const standardsStatus = submission.standardsStatus || new Map();
+    const missingValidations: string[] = [];
+
+    for (const standard of activeSpec.standards) {
+      for (const spec of standard.specifications || []) {
+        const statusKey = `${standard.code}.${spec.code}`;
+        const status = standardsStatus instanceof Map
+          ? standardsStatus.get(statusKey)
+          : standardsStatus[statusKey];
+
+        if (!status || status.validationStatus !== 'pass') {
+          missingValidations.push(`Standard ${standard.code}, Spec ${spec.code}`);
+        }
+      }
+    }
+
+    if (missingValidations.length > 0) {
+      return res.status(400).json({
+        error: 'All specifications must be validated before submitting',
+        missingValidations: missingValidations.slice(0, 10), // Show first 10
+        totalMissing: missingValidations.length
+      });
+    }
+
+    // Update submission status
+    submission.status = 'submitted';
+    submission.submittedAt = new Date();
+
+    // Lock the self-study (program coordinator can only read, not edit)
+    submission.readerLock = {
+      isLocked: true,
+      lockedBy: undefined, // System lock, not a person
+      lockedByName: 'System',
+      lockedByRole: undefined,
+      lockedAt: new Date(),
+      lockReason: 'submission_complete'
+    };
+
+    await submission.save();
+
+    // Notify lead reader if assigned
+    if (submission.leadReader) {
+      try {
+        const leadReader = await User.findById(submission.leadReader);
+        const submitter = await User.findById(submission.submitterId);
+
+        if (leadReader && submitter) {
+          const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+          await emailService.sendSelfStudySubmittedEmail({
+            leadReaderName: leadReader.name,
+            leadReaderEmail: leadReader.email,
+            programName: submission.programName,
+            institutionName: submission.institutionName,
+            submitterName: submitter.name,
+            submissionLink: `${baseUrl}/self-study/${submission._id}`,
+            submittedAt: new Date()
+          });
+        }
+      } catch (emailError) {
+        console.error('Failed to send submission notification email:', emailError);
+        // Don't fail the submission if email fails
+      }
+    }
+
+    return res.json({
+      message: 'Self-study submitted successfully',
+      submission: {
+        _id: submission._id,
+        status: submission.status,
+        submittedAt: submission.submittedAt,
+        readerLock: submission.readerLock
+      }
+    });
+  } catch (error) {
+    console.error('Submit self-study error:', error);
+    return res.status(500).json({ error: 'Failed to submit self-study' });
   }
 };
