@@ -2277,20 +2277,20 @@ export const getDocumentImage = async (req: Request, res: Response) => {
 export const extractSection = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
-    const { startOffset, endOffset, sectionType, standardCode, specCode, title } = req.body;
+    const { htmlContent: providedHtml, sectionType, standardCode, specCode, title } = req.body;
 
     // Validate input
-    if (typeof startOffset !== 'number' || typeof endOffset !== 'number') {
-      return res.status(400).json({ error: 'startOffset and endOffset are required numbers' });
-    }
-    if (startOffset >= endOffset) {
-      return res.status(400).json({ error: 'startOffset must be less than endOffset' });
-    }
     if (!sectionType || !['standard', 'matrix', 'appendix', 'skip'].includes(sectionType)) {
       return res.status(400).json({ error: 'sectionType must be standard, matrix, appendix, or skip' });
     }
     if (!title && sectionType !== 'skip') {
       return res.status(400).json({ error: 'title is required for non-skip sections' });
+    }
+    if (!providedHtml || typeof providedHtml !== 'string') {
+      return res.status(400).json({ error: 'htmlContent is required' });
+    }
+    if (!providedHtml.trim()) {
+      return res.status(400).json({ error: 'htmlContent cannot be empty' });
     }
 
     // Verify import exists
@@ -2299,29 +2299,15 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
       return res.status(404).json({ error: 'Import not found' });
     }
 
-    // Read current HTML content from GridFS (or legacy temp file)
-    let htmlContent: string;
-    const isGridFS = importRecord.extractedContent?.metadata?.htmlStoredInGridFS === true;
-
-    if (isGridFS) {
-      htmlContent = await gridFsService.getHtmlContent(importId);
-    } else {
-      // Legacy: try temp file
-      htmlContent = await tempFileService.readHtmlContent(importId);
-    }
-
-    // Validate offsets are within bounds
-    if (startOffset < 0 || endOffset > htmlContent.length) {
-      return res.status(400).json({ error: 'Offsets are out of bounds' });
-    }
-
-    // Extract the section content
-    const extractedHtml = htmlContent.substring(startOffset, endOffset);
+    // Use the HTML content provided by the frontend (extracted via Range API)
+    const extractedHtml = providedHtml;
     const extractedText = extractedHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
     // Create section object (skip sections are not saved)
+    let sectionId: string | null = null;
+
     if (sectionType !== 'skip') {
-      const sectionId = uuidv4();
+      sectionId = uuidv4();
       const newSection: IDetectedSection = {
         id: sectionId,
         level: 1,
@@ -2331,8 +2317,8 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
         previewText: extractedText.substring(0, 200) + (extractedText.length > 200 ? '...' : ''),
         fullContent: extractedText,
         htmlContent: extractedHtml,
-        startPosition: startOffset,
-        endPosition: endOffset,
+        startPosition: 0, // No longer using offsets
+        endPosition: extractedHtml.length,
         isAppendix: sectionType === 'appendix',
         isSelected: true,
         children: []
@@ -2359,40 +2345,17 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
       importRecord.markModified('detectedSections');
     }
 
-    // Remove the extracted content from HTML
-    const beforeContent = htmlContent.substring(0, startOffset);
-    const afterContent = htmlContent.substring(endOffset);
-
-    // Insert a marker where content was extracted (for visual feedback)
-    const marker = sectionType !== 'skip'
-      ? `<div style="background:#e8f5e9;padding:8px;margin:8px 0;border-left:4px solid #4caf50;color:#2e7d32;">
-          <strong>Section Saved:</strong> ${title} (${sectionType})
-        </div>`
-      : `<div style="background:#fff3e0;padding:8px;margin:8px 0;border-left:4px solid #ff9800;color:#e65100;">
-          <strong>Content Skipped</strong>
-        </div>`;
-
-    const updatedHtml = beforeContent + marker + afterContent;
-
-    // Save updated HTML back to GridFS (or temp file for legacy)
-    if (isGridFS) {
-      await gridFsService.storeHtmlContent(importId, updatedHtml);
-    } else {
-      await tempFileService.updateHtmlContent(importId, updatedHtml);
-    }
-
     // Save import record
     await importRecord.save();
 
-    console.log(`[Import] Section extracted: ${sectionType} - "${title}" (${extractedText.length} chars)`);
+    console.log(`[Import] Section saved: ${sectionType} - "${title}" (${extractedText.length} chars)`);
 
     return res.json({
       success: true,
-      sectionId: sectionType !== 'skip' ? importRecord.detectedSections![importRecord.detectedSections!.length - 1].id : null,
+      sectionId,
       sectionType,
       title,
-      contentLength: extractedText.length,
-      remainingContentLength: updatedHtml.length
+      contentLength: extractedText.length
     });
   } catch (error: any) {
     console.error('Extract section error:', error);

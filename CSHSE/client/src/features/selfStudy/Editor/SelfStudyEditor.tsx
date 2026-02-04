@@ -27,7 +27,7 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
-import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection } from './components';
+import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection, type RangePosition } from './components';
 
 // Use consistent API paths without relying on environment variable
 
@@ -278,10 +278,11 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [taggedSections, setTaggedSections] = useState<TaggedSection[]>([]);
   const [showTaggedSections, setShowTaggedSections] = useState(true);
   const [isLoadingTaggedSections, setIsLoadingTaggedSections] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState<number | null>(null);
-  const [startOffset, setStartOffset] = useState<number | null>(null);
-  const [endOffset, setEndOffset] = useState<number | null>(null);
+  const [cursorPosition, setCursorPosition] = useState<RangePosition | null>(null);
+  const [startPosition, setStartPosition] = useState<RangePosition | null>(null);
+  const [endPosition, setEndPosition] = useState<RangePosition | null>(null);
   const [selectionPreview, setSelectionPreview] = useState<string>('');
+  const documentViewerRef = useRef<HTMLDivElement>(null);
   const [isSavingSection, setIsSavingSection] = useState(false);
   const [sectionError, setSectionError] = useState<string | null>(null);
   const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null);
@@ -525,8 +526,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setDocumentHtml('');
     setDocumentError(null);
     setTaggedSections([]);
-    setStartOffset(null);
-    setEndOffset(null);
+    setCursorPosition(null);
+    setStartPosition(null);
+    setEndPosition(null);
     setSelectionPreview('');
     setSectionError(null);
     setViewingTaggedSection(null);
@@ -567,78 +569,111 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
   // Manual Tagging: Handle position click in document
   // Only updates cursor position - doesn't set markers directly
-  const handlePositionClick = useCallback((offset: number, element: HTMLElement) => {
+  const handlePositionClick = useCallback((position: RangePosition) => {
     // Only update cursor if we haven't locked both markers
     // Once both are set, user must click "Clear Selection" to start over
-    if (startOffset !== null && endOffset !== null) {
+    if (startPosition !== null && endPosition !== null) {
       // Both markers are locked - don't change anything
       return;
     }
-    setCursorPosition(offset);
-  }, [startOffset, endOffset]);
+    setCursorPosition(position);
+  }, [startPosition, endPosition]);
 
   // Manual Tagging: Mark start position - locks cursor position as start
   const handleMarkStart = useCallback(() => {
     if (cursorPosition !== null) {
-      setStartOffset(cursorPosition);
-      // If we're setting a new start, clear the end
-      if (endOffset !== null && cursorPosition >= endOffset) {
-        setEndOffset(null);
-        setSelectionPreview('');
-      }
+      setStartPosition(cursorPosition);
+      setEndPosition(null);
+      setSelectionPreview('');
     }
-  }, [cursorPosition, endOffset]);
+  }, [cursorPosition]);
 
   // Manual Tagging: Mark end position - locks cursor position as end
   const handleMarkEnd = useCallback(() => {
-    if (cursorPosition !== null && startOffset !== null) {
-      if (cursorPosition > startOffset) {
-        setEndOffset(cursorPosition);
-        // Extract preview text from the document
-        const text = documentHtml.replace(/<[^>]*>/g, '').substring(startOffset, cursorPosition);
-        setSelectionPreview(text.trim());
-      } else if (cursorPosition < startOffset) {
-        // Swap: make cursor the new start, old start becomes end
-        setEndOffset(startOffset);
-        setStartOffset(cursorPosition);
-        const text = documentHtml.replace(/<[^>]*>/g, '').substring(cursorPosition, startOffset);
-        setSelectionPreview(text.trim());
-      }
+    if (cursorPosition !== null && startPosition !== null) {
+      setEndPosition(cursorPosition);
+      // Preview will be set when content is extracted
+      setSelectionPreview('Selection marked - ready to save');
     }
-  }, [cursorPosition, startOffset, documentHtml]);
+  }, [cursorPosition, startPosition]);
 
   // Manual Tagging: Clear selection - resets everything
   const handleClearSelection = useCallback(() => {
     setCursorPosition(null);
-    setStartOffset(null);
-    setEndOffset(null);
+    setStartPosition(null);
+    setEndPosition(null);
     setSelectionPreview('');
     setSectionError(null);
   }, []);
 
   // Manual Tagging: Save section
+  // Extracts HTML content using Range API on frontend, sends to backend
   const handleSaveSection = async (metadata: SectionMetadata) => {
-    if (!importId || startOffset === null || endOffset === null) return;
+    if (!importId || startPosition === null || endPosition === null) return;
 
     setIsSavingSection(true);
     setSectionError(null);
 
     try {
+      // Extract HTML content using the DocumentViewer's extraction function
+      const contentDiv = document.querySelector('.document-content');
+      if (!contentDiv) {
+        throw new Error('Document content not found');
+      }
+
+      // Get nodes from paths
+      const getNodeFromPath = (path: number[]): Node | null => {
+        let current: Node = contentDiv;
+        for (const index of path) {
+          if (current.childNodes.length <= index) return null;
+          current = current.childNodes[index];
+        }
+        return current;
+      };
+
+      const startNode = getNodeFromPath(startPosition.path);
+      const endNode = getNodeFromPath(endPosition.path);
+
+      if (!startNode || !endNode) {
+        throw new Error('Could not locate marked positions in document');
+      }
+
+      // Create range and extract content
+      const range = document.createRange();
+
+      if (startNode.nodeType === Node.TEXT_NODE) {
+        range.setStart(startNode, Math.min(startPosition.offset, startNode.textContent?.length || 0));
+      } else {
+        range.setStartBefore(startNode);
+      }
+
+      if (endNode.nodeType === Node.TEXT_NODE) {
+        range.setEnd(endNode, Math.min(endPosition.offset, endNode.textContent?.length || 0));
+      } else {
+        range.setEndAfter(endNode);
+      }
+
+      // Clone the contents
+      const fragment = range.cloneContents();
+      const tempDiv = document.createElement('div');
+      tempDiv.appendChild(fragment);
+      const extractedHtml = tempDiv.innerHTML;
+
+      if (!extractedHtml.trim()) {
+        throw new Error('No content selected');
+      }
+
+      // Send extracted HTML to backend
       const response = await api.post(`/api/imports/${importId}/extract-section`, {
-        startOffset,
-        endOffset,
+        htmlContent: extractedHtml,
         sectionType: metadata.sectionType,
         standardCode: metadata.standardCode,
         specCode: metadata.specCode,
         title: metadata.title
       });
 
-      // Refresh document content (content should be removed)
-      if (response.data.updatedHtml) {
-        setDocumentHtml(response.data.updatedHtml);
-      } else {
-        await loadDocumentContent();
-      }
+      // Refresh document content
+      await loadDocumentContent();
 
       // Refresh tagged sections list
       await loadTaggedSections();
@@ -646,7 +681,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       // Clear selection
       handleClearSelection();
     } catch (err: any) {
-      setSectionError(err.response?.data?.error || 'Failed to save section');
+      setSectionError(err.response?.data?.error || err.message || 'Failed to save section');
     } finally {
       setIsSavingSection(false);
     }
@@ -1839,8 +1874,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           isLoading={isLoadingDocument}
                           error={documentError}
                           cursorPosition={cursorPosition}
-                          startOffset={startOffset}
-                          endOffset={endOffset}
+                          startPosition={startPosition}
+                          endPosition={endPosition}
                           onPositionClick={handlePositionClick}
                           onRefresh={loadDocumentContent}
                         />
@@ -1853,8 +1888,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                       <div className="flex-shrink-0 border-b border-gray-200 bg-white">
                         <SectionTagger
                           cursorPosition={cursorPosition}
-                          startOffset={startOffset}
-                          endOffset={endOffset}
+                          startPosition={startPosition}
+                          endPosition={endPosition}
                           previewText={selectionPreview}
                           onMarkStart={handleMarkStart}
                           onMarkEnd={handleMarkEnd}

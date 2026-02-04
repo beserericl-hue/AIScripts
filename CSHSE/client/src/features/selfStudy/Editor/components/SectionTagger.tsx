@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Trash2, Save, Loader2, AlertCircle } from 'lucide-react';
+import { MapPin, Save, Loader2, AlertCircle, MousePointer, Flag, FlagOff } from 'lucide-react';
+import type { RangePosition } from './DocumentViewer';
 
 // Standard names for dropdown
 const STANDARD_NAMES: Record<string, string> = {
@@ -39,9 +40,9 @@ export interface SectionMetadata {
 }
 
 interface SectionTaggerProps {
-  cursorPosition: number | null;
-  startOffset: number | null;
-  endOffset: number | null;
+  cursorPosition: RangePosition | null;
+  startPosition: RangePosition | null;
+  endPosition: RangePosition | null;
   previewText: string;
   onMarkStart: () => void;
   onMarkEnd: () => void;
@@ -55,17 +56,17 @@ interface SectionTaggerProps {
  * SectionTagger - Controls for marking and saving document sections
  *
  * Flow:
- * 1. User clicks in document → cursor position shown
- * 2. User clicks "Mark Start" → locks cursor as start marker
+ * 1. User clicks in document → cursor position shown (blue marker)
+ * 2. User clicks "Mark Start" → locks cursor as start marker (green)
  * 3. User clicks elsewhere in document → new cursor position
- * 4. User clicks "Mark End" → locks cursor as end marker
+ * 4. User clicks "Mark End" → locks cursor as end marker (red)
  * 5. User fills in section type, standard, title
  * 6. User clicks "Save Section" → saves and clears
  */
 export function SectionTagger({
   cursorPosition,
-  startOffset,
-  endOffset,
+  startPosition,
+  endPosition,
   previewText,
   onMarkStart,
   onMarkEnd,
@@ -104,14 +105,17 @@ export function SectionTagger({
 
     await onSaveSection(metadata);
 
-    // Reset form (offset clearing is handled by parent)
+    // Reset form (position clearing is handled by parent)
     setSectionType('standard');
     setStandardCode('');
     setSpecCode('');
     setTitle('');
   };
 
-  const hasSelection = startOffset !== null && endOffset !== null;
+  const hasSelection = startPosition !== null && endPosition !== null;
+  const hasCursor = cursorPosition !== null;
+  const hasStart = startPosition !== null;
+
   const canSave = hasSelection &&
     (sectionType === 'skip' ||
      sectionType === 'appendix' ||
@@ -130,17 +134,14 @@ export function SectionTagger({
 
       {/* Controls - Compact spacing */}
       <div className="p-3 space-y-3 overflow-y-auto max-h-[400px]">
-        {/* Current Cursor Position */}
-        <div className="p-2 bg-blue-50 border border-blue-200 rounded">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-blue-700">Current Position:</span>
-            <span className="text-sm font-mono text-blue-800">
-              {cursorPosition !== null ? cursorPosition : '—'}
+        {/* Cursor Status */}
+        <div className={`p-2 rounded border ${hasCursor ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+          <div className="flex items-center gap-2">
+            <MousePointer className={`w-4 h-4 ${hasCursor ? 'text-blue-600' : 'text-gray-400'}`} />
+            <span className={`text-sm font-medium ${hasCursor ? 'text-blue-700' : 'text-gray-500'}`}>
+              {hasCursor ? 'Position selected' : 'Click in document to set position'}
             </span>
           </div>
-          {cursorPosition === null && startOffset === null && (
-            <p className="text-xs text-blue-600 mt-1">Click in document to set cursor</p>
-          )}
         </div>
 
         {/* Position Buttons */}
@@ -151,29 +152,31 @@ export function SectionTagger({
           <div className="flex gap-1.5">
             <button
               onClick={onMarkStart}
-              disabled={isSaving || cursorPosition === null || (startOffset !== null && endOffset !== null)}
-              className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors ${
-                startOffset !== null
+              disabled={isSaving || !hasCursor || hasSelection}
+              className={`flex-1 px-2 py-2 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
+                hasStart
                   ? 'bg-green-100 text-green-700 border-2 border-green-500'
-                  : cursorPosition !== null
+                  : hasCursor
                   ? 'bg-green-500 text-white hover:bg-green-600 border border-transparent'
                   : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent'
               }`}
             >
-              {startOffset !== null ? `Start: ${startOffset}` : 'Mark Start'}
+              <Flag className="w-4 h-4" />
+              {hasStart ? '✓ Start Set' : 'Mark Start'}
             </button>
             <button
               onClick={onMarkEnd}
-              disabled={isSaving || startOffset === null || cursorPosition === null || (startOffset !== null && endOffset !== null)}
-              className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors ${
-                endOffset !== null
+              disabled={isSaving || !hasStart || !hasCursor || hasSelection}
+              className={`flex-1 px-2 py-2 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
+                endPosition !== null
                   ? 'bg-red-100 text-red-700 border-2 border-red-500'
-                  : startOffset !== null && cursorPosition !== null
+                  : hasStart && hasCursor
                   ? 'bg-red-500 text-white hover:bg-red-600 border border-transparent'
                   : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent'
               }`}
             >
-              {endOffset !== null ? `End: ${endOffset}` : 'Mark End'}
+              <FlagOff className="w-4 h-4" />
+              {endPosition !== null ? '✓ End Set' : 'Mark End'}
             </button>
           </div>
           <button
@@ -284,7 +287,7 @@ export function SectionTagger({
         <button
           onClick={handleSave}
           disabled={!canSave || isSaving}
-          className={`w-full px-3 py-2 rounded font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
+          className={`w-full px-3 py-2.5 rounded font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
             canSave && !isSaving
               ? 'bg-teal-600 text-white hover:bg-teal-700'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -303,7 +306,7 @@ export function SectionTagger({
           )}
         </button>
 
-        {!hasSelection && (
+        {!hasSelection && !hasCursor && (
           <p className="text-xs text-center text-gray-400">
             Click in document to mark boundaries
           </p>

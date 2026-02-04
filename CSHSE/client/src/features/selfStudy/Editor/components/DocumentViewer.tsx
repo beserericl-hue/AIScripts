@@ -1,27 +1,30 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 
+// Serializable range position - stores path to node + offset
+export interface RangePosition {
+  path: number[]; // Path from content root to the container node
+  offset: number; // Offset within that node
+  rect?: { top: number; left: number }; // Visual position for markers
+}
+
 interface DocumentViewerProps {
   importId: string;
   htmlContent: string;
   isLoading: boolean;
   error: string | null;
-  cursorPosition: number | null;
-  startOffset: number | null;
-  endOffset: number | null;
-  onPositionClick: (offset: number, element: HTMLElement) => void;
+  cursorPosition: RangePosition | null;
+  startPosition: RangePosition | null;
+  endPosition: RangePosition | null;
+  onPositionClick: (position: RangePosition) => void;
   onRefresh: () => void;
 }
 
 /**
  * DocumentViewer - Displays HTML document content for manual section tagging
  *
- * Features:
- * - Scrollable HTML content viewer
- * - Click to capture position for section marking
- * - Visual markers for cursor, start, and end positions
- * - Zoom controls
- * - Highlights the current selection range
+ * Uses Range API for accurate positioning in complex HTML content.
+ * Markers are rendered as overlays, not inserted into the DOM.
  */
 export function DocumentViewer({
   importId,
@@ -29,247 +32,220 @@ export function DocumentViewer({
   isLoading,
   error,
   cursorPosition,
-  startOffset,
-  endOffset,
+  startPosition,
+  endPosition,
   onPositionClick,
   onRefresh
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(100);
-  const cursorMarkerRef = useRef<HTMLSpanElement | null>(null);
-  const startMarkerRef = useRef<HTMLSpanElement | null>(null);
-  const endMarkerRef = useRef<HTMLSpanElement | null>(null);
+  const [markerPositions, setMarkerPositions] = useState<{
+    cursor?: { top: number; left: number };
+    start?: { top: number; left: number };
+    end?: { top: number; left: number };
+  }>({});
 
-  // Calculate text offset from clicked position
-  const getTextOffset = useCallback((node: Node, offset: number): number => {
-    if (!contentRef.current) return 0;
+  // Get the path from content root to a node (for serialization)
+  const getNodePath = useCallback((node: Node): number[] => {
+    const path: number[] = [];
+    let current: Node | null = node;
 
-    const walker = document.createTreeWalker(
-      contentRef.current,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    let totalOffset = 0;
-    let currentNode = walker.nextNode();
-
-    while (currentNode) {
-      if (currentNode === node) {
-        return totalOffset + offset;
-      }
-      totalOffset += currentNode.textContent?.length || 0;
-      currentNode = walker.nextNode();
+    while (current && current !== contentRef.current && current.parentNode) {
+      const parent = current.parentNode;
+      const children = Array.from(parent.childNodes);
+      const index = children.indexOf(current as ChildNode);
+      path.unshift(index);
+      current = parent;
     }
 
-    return totalOffset;
+    return path;
   }, []);
+
+  // Find a node given a path from content root
+  const getNodeFromPath = useCallback((path: number[]): Node | null => {
+    if (!contentRef.current) return null;
+
+    let current: Node = contentRef.current;
+
+    for (const index of path) {
+      if (current.childNodes.length <= index) {
+        return null;
+      }
+      current = current.childNodes[index];
+    }
+
+    return current;
+  }, []);
+
+  // Get visual position of a range position
+  const getVisualPosition = useCallback((position: RangePosition): { top: number; left: number } | null => {
+    if (!contentRef.current || !scrollContainerRef.current) return null;
+
+    try {
+      const node = getNodeFromPath(position.path);
+      if (!node) return null;
+
+      const range = document.createRange();
+
+      // Handle text nodes vs element nodes
+      if (node.nodeType === Node.TEXT_NODE) {
+        const textLength = node.textContent?.length || 0;
+        range.setStart(node, Math.min(position.offset, textLength));
+        range.setEnd(node, Math.min(position.offset, textLength));
+      } else {
+        // For element nodes, use the start of the element
+        range.selectNodeContents(node);
+        range.collapse(true);
+      }
+
+      const rect = range.getBoundingClientRect();
+      const containerRect = contentRef.current.getBoundingClientRect();
+      const scrollRect = scrollContainerRef.current.getBoundingClientRect();
+
+      // Calculate position relative to the scroll container
+      return {
+        top: rect.top - scrollRect.top + scrollContainerRef.current.scrollTop,
+        left: rect.left - scrollRect.left + scrollContainerRef.current.scrollLeft
+      };
+    } catch (err) {
+      console.warn('Failed to get visual position:', err);
+      return null;
+    }
+  }, [getNodeFromPath]);
+
+  // Update marker positions when positions change or on scroll
+  const updateMarkerPositions = useCallback(() => {
+    const newPositions: typeof markerPositions = {};
+
+    if (cursorPosition && !(startPosition && endPosition)) {
+      const pos = getVisualPosition(cursorPosition);
+      if (pos) newPositions.cursor = pos;
+    }
+
+    if (startPosition) {
+      const pos = getVisualPosition(startPosition);
+      if (pos) newPositions.start = pos;
+    }
+
+    if (endPosition) {
+      const pos = getVisualPosition(endPosition);
+      if (pos) newPositions.end = pos;
+    }
+
+    setMarkerPositions(newPositions);
+  }, [cursorPosition, startPosition, endPosition, getVisualPosition]);
+
+  // Update markers on position changes
+  useEffect(() => {
+    updateMarkerPositions();
+  }, [updateMarkerPositions]);
+
+  // Update markers on scroll
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    const handleScroll = () => {
+      updateMarkerPositions();
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
+  }, [updateMarkerPositions]);
 
   // Handle click to capture position
   const handleContentClick = useCallback((e: React.MouseEvent) => {
-    // Don't capture clicks on markers or controls
     const target = e.target as HTMLElement;
-    if (target.closest('.section-marker') || target.closest('.viewer-controls')) {
+
+    // Don't capture clicks on overlays
+    if (target.closest('.marker-overlay')) {
       return;
     }
 
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-      // No selection, use click position
-      // Try to get caret position from click
-      if (document.caretRangeFromPoint) {
-        const range = document.caretRangeFromPoint(e.clientX, e.clientY);
-        if (range) {
-          const offset = getTextOffset(range.startContainer, range.startOffset);
-          onPositionClick(offset, target);
-        }
-      }
-      return;
+    // Use caretRangeFromPoint for accurate click position
+    let range: Range | null = null;
+
+    if (document.caretRangeFromPoint) {
+      range = document.caretRangeFromPoint(e.clientX, e.clientY);
     }
 
-    const range = selection.getRangeAt(0);
-    const offset = getTextOffset(range.startContainer, range.startOffset);
-    onPositionClick(offset, range.startContainer.parentElement || target);
-  }, [getTextOffset, onPositionClick]);
-
-  // Helper to find node at offset
-  const findNodeAtOffset = useCallback((targetOffset: number): { node: Text; offset: number } | null => {
-    if (!contentRef.current) return null;
-
-    const walker = document.createTreeWalker(
-      contentRef.current,
-      NodeFilter.SHOW_TEXT,
-      null
-    );
-
-    let currentOffset = 0;
-    let currentNode = walker.nextNode() as Text | null;
-
-    while (currentNode) {
-      const nodeLength = currentNode.textContent?.length || 0;
-      if (currentOffset + nodeLength >= targetOffset) {
-        return { node: currentNode, offset: targetOffset - currentOffset };
+    if (!range) {
+      // Fallback: try to get selection
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        range = selection.getRangeAt(0);
       }
-      currentOffset += nodeLength;
-      currentNode = walker.nextNode() as Text | null;
     }
 
-    return null;
-  }, []);
+    if (range && contentRef.current) {
+      // Make sure the range is within our content
+      if (!contentRef.current.contains(range.startContainer)) {
+        return;
+      }
 
-  // Insert visual markers for cursor, start, and end positions
+      const path = getNodePath(range.startContainer);
+      const rect = range.getBoundingClientRect();
+      const scrollRect = scrollContainerRef.current?.getBoundingClientRect();
+
+      const position: RangePosition = {
+        path,
+        offset: range.startOffset,
+        rect: scrollRect ? {
+          top: rect.top - scrollRect.top + (scrollContainerRef.current?.scrollTop || 0),
+          left: rect.left - scrollRect.left + (scrollContainerRef.current?.scrollLeft || 0)
+        } : undefined
+      };
+
+      onPositionClick(position);
+    }
+  }, [getNodePath, onPositionClick]);
+
+  // Extract HTML content between two positions
+  const extractHtmlBetweenPositions = useCallback((start: RangePosition, end: RangePosition): string => {
+    if (!contentRef.current) return '';
+
+    try {
+      const startNode = getNodeFromPath(start.path);
+      const endNode = getNodeFromPath(end.path);
+
+      if (!startNode || !endNode) return '';
+
+      const range = document.createRange();
+
+      // Set start position
+      if (startNode.nodeType === Node.TEXT_NODE) {
+        range.setStart(startNode, Math.min(start.offset, startNode.textContent?.length || 0));
+      } else {
+        range.setStartBefore(startNode);
+      }
+
+      // Set end position
+      if (endNode.nodeType === Node.TEXT_NODE) {
+        range.setEnd(endNode, Math.min(end.offset, endNode.textContent?.length || 0));
+      } else {
+        range.setEndAfter(endNode);
+      }
+
+      // Clone the contents
+      const fragment = range.cloneContents();
+      const div = document.createElement('div');
+      div.appendChild(fragment);
+
+      return div.innerHTML;
+    } catch (err) {
+      console.error('Failed to extract content:', err);
+      return '';
+    }
+  }, [getNodeFromPath]);
+
+  // Expose extraction function via ref (for parent component)
   useEffect(() => {
-    if (!contentRef.current) return;
-
-    // Remove existing markers
-    if (cursorMarkerRef.current) {
-      cursorMarkerRef.current.remove();
-      cursorMarkerRef.current = null;
+    if (contentRef.current) {
+      (contentRef.current as any).extractHtmlBetweenPositions = extractHtmlBetweenPositions;
     }
-    if (startMarkerRef.current) {
-      startMarkerRef.current.remove();
-      startMarkerRef.current = null;
-    }
-    if (endMarkerRef.current) {
-      endMarkerRef.current.remove();
-      endMarkerRef.current = null;
-    }
-
-    // Insert cursor marker (blue vertical line) - only if no end marker yet
-    if (cursorPosition !== null && !(startOffset !== null && endOffset !== null)) {
-      const result = findNodeAtOffset(cursorPosition);
-      if (result) {
-        const marker = document.createElement('span');
-        marker.className = 'section-marker section-cursor-marker';
-        marker.innerHTML = '|';
-        marker.style.cssText = `
-          display: inline;
-          color: #3b82f6;
-          font-weight: bold;
-          font-size: 18px;
-          line-height: 1;
-          animation: blink 1s infinite;
-          vertical-align: middle;
-        `;
-        marker.title = 'Current cursor position - click Mark Start or Mark End';
-
-        try {
-          const range = document.createRange();
-          range.setStart(result.node, Math.min(result.offset, result.node.length));
-          range.collapse(true);
-          range.insertNode(marker);
-          cursorMarkerRef.current = marker;
-        } catch (err) {
-          console.warn('Failed to insert cursor marker:', err);
-        }
-      }
-    }
-
-    // Insert start marker (green circle with arrow)
-    if (startOffset !== null) {
-      const result = findNodeAtOffset(startOffset);
-      if (result) {
-        const marker = document.createElement('span');
-        marker.className = 'section-marker section-start-marker';
-        marker.innerHTML = '▶';
-        marker.style.cssText = `
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 24px;
-          height: 24px;
-          background-color: #10b981;
-          color: white;
-          border-radius: 50%;
-          font-size: 12px;
-          margin: 0 4px;
-          vertical-align: middle;
-          cursor: default;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        `;
-        marker.title = 'Section Start';
-
-        try {
-          const range = document.createRange();
-          range.setStart(result.node, Math.min(result.offset, result.node.length));
-          range.collapse(true);
-          range.insertNode(marker);
-          startMarkerRef.current = marker;
-        } catch (err) {
-          console.warn('Failed to insert start marker:', err);
-        }
-      }
-    }
-
-    // Insert end marker (red circle with square)
-    if (endOffset !== null && startOffset !== null) {
-      const result = findNodeAtOffset(endOffset);
-      if (result) {
-        const marker = document.createElement('span');
-        marker.className = 'section-marker section-end-marker';
-        marker.innerHTML = '■';
-        marker.style.cssText = `
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 24px;
-          height: 24px;
-          background-color: #ef4444;
-          color: white;
-          border-radius: 50%;
-          font-size: 12px;
-          margin: 0 4px;
-          vertical-align: middle;
-          cursor: default;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        `;
-        marker.title = 'Section End';
-
-        try {
-          const range = document.createRange();
-          range.setStart(result.node, Math.min(result.offset, result.node.length));
-          range.collapse(true);
-          range.insertNode(marker);
-          endMarkerRef.current = marker;
-        } catch (err) {
-          console.warn('Failed to insert end marker:', err);
-        }
-      }
-    }
-
-    // Cleanup on unmount or content change
-    return () => {
-      if (cursorMarkerRef.current) {
-        cursorMarkerRef.current.remove();
-        cursorMarkerRef.current = null;
-      }
-      if (startMarkerRef.current) {
-        startMarkerRef.current.remove();
-        startMarkerRef.current = null;
-      }
-      if (endMarkerRef.current) {
-        endMarkerRef.current.remove();
-        endMarkerRef.current = null;
-      }
-    };
-  }, [cursorPosition, startOffset, endOffset, htmlContent, findNodeAtOffset]);
-
-  // Highlight selection range
-  useEffect(() => {
-    if (!contentRef.current) return;
-
-    // Remove existing highlight
-    const existingHighlight = contentRef.current.querySelector('.selection-highlight');
-    if (existingHighlight) {
-      existingHighlight.remove();
-    }
-
-    // Add highlight if both start and end are set
-    if (startOffset !== null && endOffset !== null && startOffset < endOffset) {
-      // We'll use CSS background instead of inserting elements
-      // This is handled by the markers above
-    }
-  }, [startOffset, endOffset]);
+  }, [extractHtmlBetweenPositions]);
 
   const handleZoomIn = () => setZoom(z => Math.min(z + 10, 200));
   const handleZoomOut = () => setZoom(z => Math.max(z - 10, 50));
@@ -353,12 +329,67 @@ export function DocumentViewer({
 
       {/* Content Area - Scrollable document viewer */}
       <div
-        className="flex-1 min-h-0 overflow-auto cursor-text"
+        ref={scrollContainerRef}
+        className="flex-1 min-h-0 overflow-auto cursor-text relative"
         onClick={handleContentClick}
         style={{
           background: '#f9fafb'
         }}
       >
+        {/* Marker Overlays - Rendered on top of content */}
+        {markerPositions.cursor && (
+          <div
+            className="marker-overlay absolute pointer-events-none z-10"
+            style={{
+              top: markerPositions.cursor.top,
+              left: markerPositions.cursor.left - 2,
+              width: 4,
+              height: 24,
+              backgroundColor: '#3b82f6',
+              animation: 'blink 1s infinite'
+            }}
+            title="Cursor position"
+          />
+        )}
+        {markerPositions.start && (
+          <div
+            className="marker-overlay absolute z-10 flex items-center justify-center pointer-events-none"
+            style={{
+              top: markerPositions.start.top - 12,
+              left: markerPositions.start.left - 12,
+              width: 24,
+              height: 24,
+              backgroundColor: '#10b981',
+              borderRadius: '50%',
+              color: 'white',
+              fontSize: 12,
+              boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+            }}
+            title="Section Start"
+          >
+            ▶
+          </div>
+        )}
+        {markerPositions.end && (
+          <div
+            className="marker-overlay absolute z-10 flex items-center justify-center pointer-events-none"
+            style={{
+              top: markerPositions.end.top - 12,
+              left: markerPositions.end.left - 12,
+              width: 24,
+              height: 24,
+              backgroundColor: '#ef4444',
+              borderRadius: '50%',
+              color: 'white',
+              fontSize: 12,
+              boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+            }}
+            title="Section End"
+          >
+            ■
+          </div>
+        )}
+
         <style>
           {`
             .document-content {
@@ -463,29 +494,23 @@ export function DocumentViewer({
       </div>
 
       {/* Position Indicator */}
-      {(cursorPosition !== null || startOffset !== null || endOffset !== null) && (
+      {(startPosition || endPosition) && (
         <div className="flex-shrink-0 px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center gap-4 text-sm">
-          {cursorPosition !== null && !(startOffset !== null && endOffset !== null) && (
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
-              Cursor: {cursorPosition}
-            </span>
-          )}
-          {startOffset !== null && (
+          {startPosition && (
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-              Start: {startOffset}
+              Start marked
             </span>
           )}
-          {endOffset !== null && (
+          {endPosition && (
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 bg-red-500 rounded-full"></span>
-              End: {endOffset}
+              End marked
             </span>
           )}
-          {startOffset !== null && endOffset !== null && (
-            <span className="text-gray-500">
-              Selection: {endOffset - startOffset} characters
+          {startPosition && endPosition && (
+            <span className="text-green-600 font-medium">
+              ✓ Selection complete - ready to save
             </span>
           )}
         </div>
