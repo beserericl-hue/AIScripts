@@ -8,6 +8,14 @@ export interface SelectionData {
   previewText: string;
 }
 
+// Tagged section info for visual marking
+export interface TaggedSectionInfo {
+  id: string;
+  title: string;
+  previewText: string;
+  contentLength: number;
+}
+
 interface DocumentViewerProps {
   importId: string;
   htmlContent: string;
@@ -16,6 +24,7 @@ interface DocumentViewerProps {
   onSelectionCapture: (selection: SelectionData | null) => void;
   onRefresh: () => void;
   hasSelection: boolean;
+  taggedSections?: TaggedSectionInfo[];
 }
 
 /**
@@ -31,7 +40,8 @@ export function DocumentViewer({
   error,
   onSelectionCapture,
   onRefresh,
-  hasSelection
+  hasSelection,
+  taggedSections = []
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -39,61 +49,129 @@ export function DocumentViewer({
   const [zoom, setZoom] = useState(100);
   const [currentSelection, setCurrentSelection] = useState<SelectionData | null>(null);
   const [selectionActive, setSelectionActive] = useState(false);
-  const [extractedCount, setExtractedCount] = useState(0);
-  const [showExtracted, setShowExtracted] = useState(false);
+  const [showExtractedList, setShowExtractedList] = useState(false);
+  const [markedRanges, setMarkedRanges] = useState<Range[]>([]);
 
-  // Count extracted section markers when content changes
+  // Number of tagged sections (from parent component)
+  const extractedCount = taggedSections.length;
+
+  // Mark extracted content in the document visually
   useEffect(() => {
-    if (contentRef.current) {
-      const markers = contentRef.current.querySelectorAll('.extracted-section-marker');
-      setExtractedCount(markers.length);
+    if (!contentRef.current || taggedSections.length === 0) {
+      setMarkedRanges([]);
+      return;
     }
-  }, [htmlContent]);
 
-  // Jump to the first non-extracted content (skip past all markers at the top)
+    // Clear previous marks
+    const existingMarks = contentRef.current.querySelectorAll('.extracted-content-overlay');
+    existingMarks.forEach(mark => mark.remove());
+
+    // For each tagged section, try to find and mark matching text
+    const ranges: Range[] = [];
+
+    taggedSections.forEach(section => {
+      if (!section.previewText || !contentRef.current) return;
+
+      // Get first 50 chars of preview text for matching (more reliable than full text)
+      const searchText = section.previewText.substring(0, 50).trim();
+      if (searchText.length < 10) return;
+
+      // Use TreeWalker to find text nodes containing this text
+      const walker = document.createTreeWalker(
+        contentRef.current,
+        NodeFilter.SHOW_TEXT,
+        null
+      );
+
+      let node: Text | null;
+      while ((node = walker.nextNode() as Text | null)) {
+        const text = node.textContent || '';
+        const index = text.indexOf(searchText);
+
+        if (index !== -1) {
+          try {
+            // Found a match - create a range for highlighting
+            const range = document.createRange();
+            range.setStart(node, index);
+
+            // Try to extend the range to cover more of the extracted content
+            // Find the approximate end based on content length
+            const endOffset = Math.min(index + Math.min(section.contentLength, 500), text.length);
+            range.setEnd(node, endOffset);
+
+            ranges.push(range);
+
+            // Add visual overlay to the parent element
+            const parentElement = node.parentElement;
+            if (parentElement && !parentElement.classList.contains('extracted-content-marked')) {
+              parentElement.classList.add('extracted-content-marked');
+              parentElement.setAttribute('data-extracted-section', section.id);
+              parentElement.setAttribute('title', `Already extracted: ${section.title}`);
+            }
+          } catch (e) {
+            // Range creation failed, skip this match
+          }
+          break; // Only mark first occurrence
+        }
+      }
+    });
+
+    setMarkedRanges(ranges);
+  }, [htmlContent, taggedSections]);
+
+  // Jump to the first non-extracted content (skip past marked content)
   const handleJumpToNext = useCallback(() => {
     if (!contentRef.current || !scrollContainerRef.current) return;
 
-    // Find all extracted markers
-    const markers = contentRef.current.querySelectorAll('.extracted-section-marker');
-    if (markers.length === 0) {
-      // No markers, scroll to top
+    // Find all marked (extracted) elements
+    const markedElements = contentRef.current.querySelectorAll('.extracted-content-marked');
+
+    if (markedElements.length === 0) {
+      // No marked content, scroll to top
       scrollContainerRef.current.scrollTop = 0;
       return;
     }
 
-    // Find the last marker
-    const lastMarker = markers[markers.length - 1];
+    // Find the last marked element
+    const lastMarked = markedElements[markedElements.length - 1];
 
-    // Find the next sibling element after the last marker
-    let nextElement = lastMarker.nextElementSibling;
+    // Find the next sibling element that is NOT marked
+    let nextElement: Element | null = lastMarked.nextElementSibling;
 
-    // If no sibling, look for any content after all markers
+    // Walk through siblings until we find one that's not marked
+    while (nextElement && nextElement.classList.contains('extracted-content-marked')) {
+      nextElement = nextElement.nextElementSibling;
+    }
+
+    // If no unmarked sibling, look through all elements
     if (!nextElement) {
-      // Get all direct children of the content div
-      const allElements = Array.from(contentRef.current.children);
-      const lastMarkerIndex = allElements.indexOf(lastMarker as Element);
+      const allElements = Array.from(contentRef.current.querySelectorAll('p, h1, h2, h3, h4, h5, h6, table, ul, ol, div'));
+      let foundLastMarked = false;
 
-      for (let i = lastMarkerIndex + 1; i < allElements.length; i++) {
-        if (!allElements[i].classList.contains('extracted-section-marker')) {
-          nextElement = allElements[i];
+      for (const el of allElements) {
+        if (el === lastMarked) {
+          foundLastMarked = true;
+          continue;
+        }
+        if (foundLastMarked && !el.classList.contains('extracted-content-marked')) {
+          nextElement = el;
           break;
         }
       }
     }
 
     if (nextElement) {
-      // Scroll to the element
+      // Scroll to the element with some offset from top
       nextElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
-      // If no next element found, scroll to bottom of last marker
-      lastMarker.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      // If everything is marked, scroll to end of last marked
+      lastMarked.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, []);
 
-  // Toggle visibility of extracted content
-  const handleToggleExtracted = useCallback(() => {
-    setShowExtracted(prev => !prev);
+  // Toggle extracted sections list dropdown
+  const handleToggleExtractedList = useCallback(() => {
+    setShowExtractedList(prev => !prev);
   }, []);
 
   // Check for text selection when mouse is released
@@ -248,15 +326,15 @@ export function DocumentViewer({
                 Jump to Next
               </button>
               <button
-                onClick={handleToggleExtracted}
+                onClick={handleToggleExtractedList}
                 className={`flex items-center gap-1 px-2 py-1 text-sm rounded ${
-                  showExtracted
+                  showExtractedList
                     ? 'bg-gray-200 text-gray-700'
                     : 'bg-gray-100 text-gray-500'
                 }`}
-                title={showExtracted ? 'Collapse extracted sections' : 'Expand extracted sections'}
+                title={showExtractedList ? 'Hide extracted sections list' : 'Show extracted sections list'}
               >
-                <ChevronDown className={`w-4 h-4 transition-transform ${showExtracted ? '' : '-rotate-90'}`} />
+                <ChevronDown className={`w-4 h-4 transition-transform ${showExtractedList ? '' : '-rotate-90'}`} />
                 {extractedCount} extracted
               </button>
               <div className="w-px h-5 bg-gray-300" />
@@ -421,71 +499,39 @@ export function DocumentViewer({
               background-color: #bfdbfe;
             }
 
-            /* Extracted section markers - collapsed by default */
-            .document-content .extracted-section-marker {
-              background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
-              border: 1px solid #86efac;
-              border-left: 4px solid #22c55e;
-              border-radius: 6px;
-              margin: 0.75rem 0;
-              overflow: hidden;
-              transition: all 0.2s ease;
+            /* Frontend-marked extracted content - grayed out with strikethrough effect */
+            .document-content .extracted-content-marked {
+              position: relative;
+              background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+              opacity: 0.6;
+              border-left: 4px solid #9ca3af;
+              padding-left: 8px;
+              margin-left: -12px;
+              cursor: not-allowed;
+              user-select: none;
             }
-            .document-content .extracted-marker-header {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              padding: 10px 14px;
-              font-family: system-ui, -apple-system, sans-serif;
-              font-size: 13px;
-              color: #166534;
-              cursor: default;
-            }
-            .document-content .extracted-marker-icon {
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              width: 20px;
-              height: 20px;
+            .document-content .extracted-content-marked::before {
+              content: '✓ Extracted';
+              position: absolute;
+              top: 0;
+              right: 0;
               background: #22c55e;
               color: white;
-              border-radius: 50%;
-              font-size: 12px;
-              font-weight: bold;
-              flex-shrink: 0;
-            }
-            .document-content .extracted-marker-label {
+              font-size: 10px;
+              font-family: system-ui, -apple-system, sans-serif;
+              padding: 2px 6px;
+              border-radius: 0 0 0 4px;
               font-weight: 600;
-              flex: 1;
-              white-space: nowrap;
-              overflow: hidden;
-              text-overflow: ellipsis;
             }
-            .document-content .extracted-marker-size {
-              font-size: 11px;
-              color: #16a34a;
-              background: rgba(34, 197, 94, 0.15);
-              padding: 2px 8px;
-              border-radius: 10px;
-              white-space: nowrap;
-            }
-
-            /* Collapsed state (default) - hide markers */
-            .document-content.hide-extracted .extracted-section-marker {
-              display: none;
-            }
-
-            /* Expanded state - show markers */
-            .document-content.show-extracted .extracted-section-marker {
-              display: block;
+            .document-content .extracted-content-marked * {
+              text-decoration: line-through;
+              text-decoration-color: #9ca3af;
             }
           `}
         </style>
         <div
           ref={contentRef}
-          className={`document-content bg-white shadow-sm border border-gray-200 rounded-lg m-4 p-8 ${
-            showExtracted ? 'show-extracted' : 'hide-extracted'
-          }`}
+          className="document-content bg-white shadow-sm border border-gray-200 rounded-lg m-4 p-8"
           style={{
             transform: `scale(${zoom / 100})`,
             transformOrigin: 'top left',

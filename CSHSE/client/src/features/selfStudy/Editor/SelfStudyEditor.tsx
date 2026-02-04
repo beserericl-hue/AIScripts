@@ -27,7 +27,7 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
-import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection, type SelectionData } from './components';
+import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection, type SelectionData, type TaggedSectionInfo } from './components';
 
 // Use consistent API paths without relying on environment variable
 
@@ -1805,6 +1805,12 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           onSelectionCapture={handleSelectionCapture}
                           onRefresh={loadDocumentContent}
                           hasSelection={currentSelection !== null}
+                          taggedSections={taggedSections.map(s => ({
+                            id: s.id,
+                            title: s.title,
+                            previewText: s.previewText || '',
+                            contentLength: s.contentLength || 0
+                          }))}
                         />
                       </div>
                     </div>
