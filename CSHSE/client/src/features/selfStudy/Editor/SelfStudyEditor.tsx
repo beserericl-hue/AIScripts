@@ -1487,7 +1487,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
         {/* Import Document Side Panel - Part of layout, not overlay */}
         {showImportModal && (
-          <div className={`${importStep === 'manual_tagging' ? 'w-[85vw] max-w-[1400px]' : 'w-[420px]'} h-full flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col transition-all duration-300 overflow-hidden`}>
+          <div className={`${importStep === 'manual_tagging' ? 'w-[85vw] max-w-[1400px]' : 'w-[420px]'} h-full max-h-full flex-shrink-0 border-l border-gray-200 bg-white shadow-lg flex flex-col transition-all duration-300 overflow-hidden`}>
             {/* Panel Header */}
             <div className={`flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0 ${
               importStep === 'review' ? 'bg-teal-50' : 'bg-gray-50'
@@ -1508,7 +1508,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
             </div>
 
             {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 min-h-0 overflow-y-auto p-4">
               {/* Upload Step */}
               {importStep === 'upload' && (
                 <div className="space-y-6">
