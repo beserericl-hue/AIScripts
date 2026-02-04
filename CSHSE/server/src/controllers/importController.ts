@@ -2486,6 +2486,47 @@ export const getTaggedSections = async (req: Request, res: Response) => {
 };
 
 /**
+ * Get full content of a single tagged section
+ */
+export const getTaggedSectionContent = async (req: Request, res: Response) => {
+  try {
+    const { importId, sectionId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId)
+      .select('detectedSections');
+
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    if (!importRecord.detectedSections || importRecord.detectedSections.length === 0) {
+      return res.status(404).json({ error: 'No sections found' });
+    }
+
+    const section = importRecord.detectedSections.find((s: any) => s.id === sectionId);
+
+    if (!section) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+
+    return res.json({
+      id: section.id,
+      title: section.headerText,
+      sectionType: section.isMatrix ? 'matrix' :
+                   section.isAppendix ? 'appendix' :
+                   section.standardCode ? 'standard' : 'standard',
+      fullContent: section.fullContent || section.previewText || 'No content available',
+      contentLength: section.fullContent?.length || 0,
+      standardCode: section.standardCode,
+      specCode: section.specCode
+    });
+  } catch (error) {
+    console.error('Get tagged section content error:', error);
+    return res.status(500).json({ error: 'Failed to get section content' });
+  }
+};
+
+/**
  * Delete a tagged section
  */
 export const deleteTaggedSection = async (req: AuthenticatedRequest, res: Response) => {

@@ -284,6 +284,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [sectionError, setSectionError] = useState<string | null>(null);
   const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null);
   const [viewingTaggedSection, setViewingTaggedSection] = useState<TaggedSection | null>(null);
+  const [viewingFullContent, setViewingFullContent] = useState<string | null>(null);
+  const [isLoadingFullContent, setIsLoadingFullContent] = useState(false);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -636,9 +638,21 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     }
   };
 
-  // Manual Tagging: View tagged section content
-  const handleViewTaggedSection = (section: TaggedSection) => {
+  // Manual Tagging: View tagged section content (fetch full content from API)
+  const handleViewTaggedSection = async (section: TaggedSection) => {
     setViewingTaggedSection(section);
+    setViewingFullContent(null);
+    setIsLoadingFullContent(true);
+
+    try {
+      const response = await api.get(`/api/imports/${importId}/tagged-sections/${section.id}`);
+      setViewingFullContent(response.data.fullContent || 'No content available');
+    } catch (err: any) {
+      console.error('Failed to load full section content:', err);
+      setViewingFullContent(section.previewText || 'Failed to load content');
+    } finally {
+      setIsLoadingFullContent(false);
+    }
   };
 
   // Manual Tagging: Finish tagging and proceed
@@ -1894,17 +1908,27 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             {viewingTaggedSection.title}
                           </h3>
                           <button
-                            onClick={() => setViewingTaggedSection(null)}
+                            onClick={() => {
+                              setViewingTaggedSection(null);
+                              setViewingFullContent(null);
+                            }}
                             className="p-1 hover:bg-gray-100 rounded"
                           >
                             <X className="w-5 h-5" />
                           </button>
                         </div>
                         <div className="flex-1 overflow-y-auto p-6">
-                          <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                            {viewingTaggedSection.previewText || 'No preview available'}
-                          </div>
-                          {viewingTaggedSection.contentLength && (
+                          {isLoadingFullContent ? (
+                            <div className="flex items-center justify-center py-8">
+                              <Loader2 className="w-6 h-6 animate-spin text-teal-600 mr-2" />
+                              <span className="text-gray-500">Loading full content...</span>
+                            </div>
+                          ) : (
+                            <div className="prose prose-sm max-w-none whitespace-pre-wrap">
+                              {viewingFullContent || viewingTaggedSection.previewText || 'No content available'}
+                            </div>
+                          )}
+                          {viewingTaggedSection.contentLength && !isLoadingFullContent && (
                             <p className="text-sm text-gray-400 mt-4 pt-4 border-t">
                               Total content: {viewingTaggedSection.contentLength.toLocaleString()} characters
                             </p>
@@ -1912,7 +1936,10 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                         </div>
                         <div className="flex items-center justify-end p-4 border-t border-gray-200 bg-gray-50">
                           <button
-                            onClick={() => setViewingTaggedSection(null)}
+                            onClick={() => {
+                              setViewingTaggedSection(null);
+                              setViewingFullContent(null);
+                            }}
                             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                           >
                             Close

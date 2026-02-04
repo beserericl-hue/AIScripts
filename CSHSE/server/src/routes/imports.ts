@@ -21,6 +21,7 @@ import {
   getDocumentImage,
   extractSection,
   getTaggedSections,
+  getTaggedSectionContent,
   deleteTaggedSection,
   finishTagging
 } from '../controllers/importController';
@@ -186,6 +187,13 @@ router.post('/:importId/extract-section', extractSection);
  * @access  Private
  */
 router.get('/:importId/tagged-sections', getTaggedSections);
+
+/**
+ * @route   GET /api/imports/:importId/tagged-sections/:sectionId
+ * @desc    Get full content of a specific tagged section
+ * @access  Private
+ */
+router.get('/:importId/tagged-sections/:sectionId', getTaggedSectionContent);
 
 /**
  * @route   DELETE /api/imports/:importId/tagged-sections/:sectionId
