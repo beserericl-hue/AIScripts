@@ -56,7 +56,7 @@ export function DocumentViewer({
   const extractedCount = taggedSections.length;
 
   // Mark extracted content in the document visually
-  // This marks ALL elements that were part of the extraction, not just the first one
+  // Only marks the specific element(s) containing the extracted text, not consecutive elements
   useEffect(() => {
     if (!contentRef.current) {
       return;
@@ -74,74 +74,83 @@ export function DocumentViewer({
       return;
     }
 
-    // Get all block-level elements in document order
-    const allElements = Array.from(contentRef.current.querySelectorAll(
-      'p, h1, h2, h3, h4, h5, h6, table, ul, ol, li, div, blockquote, pre, tr, td, th'
+    // Get leaf-level elements (smallest containers) - prefer these over parent containers
+    // Order matters: more specific elements first
+    const leafElements = Array.from(contentRef.current.querySelectorAll(
+      'td, th, li, p, h1, h2, h3, h4, h5, h6, blockquote, pre'
     ));
 
     taggedSections.forEach(section => {
       if (!section.previewText || !contentRef.current) return;
 
-      // Use more of the preview text for reliable matching (first 100 chars)
-      const searchText = section.previewText.substring(0, 100).trim();
+      // Get search text from the preview (first 50 chars for initial match)
+      const searchText = section.previewText.substring(0, 50).trim();
       if (searchText.length < 10) return;
 
-      // Find the starting element by matching the preview text
-      let startElementIndex = -1;
+      // Find the SMALLEST element that contains the beginning of the extracted text
+      // This prevents marking entire tables when only one cell was selected
+      let matchedElement: Element | null = null;
+      let smallestMatchSize = Infinity;
 
-      for (let i = 0; i < allElements.length; i++) {
-        const el = allElements[i];
+      for (const el of leafElements) {
         const elText = el.textContent || '';
 
         // Check if this element contains the start of our extracted content
-        if (elText.includes(searchText.substring(0, 30))) {
-          startElementIndex = i;
-          break;
-        }
-      }
-
-      if (startElementIndex === -1) {
-        // Couldn't find the starting element - try a more lenient search
-        const firstWords = searchText.split(/\s+/).slice(0, 5).join(' ');
-        for (let i = 0; i < allElements.length; i++) {
-          const el = allElements[i];
-          const elText = el.textContent || '';
-          if (elText.includes(firstWords)) {
-            startElementIndex = i;
-            break;
+        if (elText.includes(searchText.substring(0, 25))) {
+          // Prefer smaller elements (more specific matches)
+          const elSize = elText.length;
+          if (elSize < smallestMatchSize) {
+            smallestMatchSize = elSize;
+            matchedElement = el;
           }
         }
       }
 
-      if (startElementIndex === -1) return; // Still couldn't find it
-
-      // Now mark elements starting from startElementIndex until we've covered contentLength
-      let charsCovered = 0;
-      const targetLength = section.contentLength || 1000;
-
-      for (let i = startElementIndex; i < allElements.length && charsCovered < targetLength; i++) {
-        const el = allElements[i];
-
-        // Skip if this element is nested inside an already-marked element
-        if (el.closest('.extracted-content-marked') && !el.classList.contains('extracted-content-marked')) {
-          continue;
+      // Fallback: try with first few words if no match found
+      if (!matchedElement) {
+        const firstWords = searchText.split(/\s+/).slice(0, 4).join(' ');
+        if (firstWords.length >= 10) {
+          for (const el of leafElements) {
+            const elText = el.textContent || '';
+            if (elText.includes(firstWords)) {
+              const elSize = elText.length;
+              if (elSize < smallestMatchSize) {
+                smallestMatchSize = elSize;
+                matchedElement = el;
+              }
+            }
+          }
         }
+      }
 
-        // Mark this element
-        el.classList.add('extracted-content-marked');
-        el.setAttribute('data-extracted-section', section.id);
-        el.setAttribute('title', `Already extracted: ${section.title}`);
+      if (!matchedElement) return; // Couldn't find matching element
 
-        // Count characters
-        const elLength = el.textContent?.length || 0;
-        charsCovered += elLength;
+      // Mark only this specific element
+      matchedElement.classList.add('extracted-content-marked');
+      matchedElement.setAttribute('data-extracted-section', section.id);
+      matchedElement.setAttribute('title', `Already extracted: ${section.title}`);
 
-        // If this is a container element (like table, ul, ol), we've likely marked it all
-        if (['TABLE', 'UL', 'OL'].includes(el.tagName)) {
-          // Mark children too for visual consistency
-          el.querySelectorAll('tr, td, th, li').forEach(child => {
-            child.classList.add('extracted-content-marked');
-          });
+      // If the extracted content is significantly larger than this element,
+      // look for adjacent siblings that might also be part of the extraction
+      const matchedLength = matchedElement.textContent?.length || 0;
+      const targetLength = section.contentLength || 0;
+
+      // Only expand to siblings if extracted content is much larger than matched element
+      // and we're not in a table cell (td/th)
+      if (targetLength > matchedLength * 1.5 && !['TD', 'TH'].includes(matchedElement.tagName)) {
+        let charsCovered = matchedLength;
+        let nextSibling = matchedElement.nextElementSibling;
+
+        while (nextSibling && charsCovered < targetLength) {
+          // Only mark sibling if it's a similar element type (p, li, etc.)
+          const validSiblings = ['P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE'];
+          if (validSiblings.includes(nextSibling.tagName)) {
+            nextSibling.classList.add('extracted-content-marked');
+            nextSibling.setAttribute('data-extracted-section', section.id);
+            nextSibling.setAttribute('title', `Already extracted: ${section.title}`);
+            charsCovered += nextSibling.textContent?.length || 0;
+          }
+          nextSibling = nextSibling.nextElementSibling;
         }
       }
     });
