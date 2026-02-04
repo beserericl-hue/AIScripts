@@ -2379,12 +2379,12 @@ export const getTaggedSections = async (req: Request, res: Response) => {
 
     const sections = (importRecord.detectedSections || []).map((s: any) => ({
       id: s.id,
-      headerText: s.headerText,
-      headerType: s.headerType,
+      title: s.headerText, // Map headerText to title for frontend
+      sectionType: s.isMatrix ? 'matrix' :
+                   s.isAppendix ? 'appendix' :
+                   s.standardCode ? 'standard' : 'standard',
       previewText: s.previewText,
       contentLength: s.fullContent?.length || 0,
-      isAppendix: s.isAppendix || false,
-      isMatrix: s.isMatrix || false,
       standardCode: s.standardCode,
       specCode: s.specCode
     }));
