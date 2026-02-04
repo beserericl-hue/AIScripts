@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Save, Loader2, AlertCircle, MousePointer, Flag, FlagOff } from 'lucide-react';
-import type { RangePosition } from './DocumentViewer';
+import { MapPin, Save, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import type { SelectionData } from './DocumentViewer';
 
 // Standard names for dropdown
 const STANDARD_NAMES: Record<string, string> = {
@@ -40,12 +40,7 @@ export interface SectionMetadata {
 }
 
 interface SectionTaggerProps {
-  cursorPosition: RangePosition | null;
-  startPosition: RangePosition | null;
-  endPosition: RangePosition | null;
-  previewText: string;
-  onMarkStart: () => void;
-  onMarkEnd: () => void;
+  selection: SelectionData | null;
   onClearSelection: () => void;
   onSaveSection: (metadata: SectionMetadata) => Promise<void>;
   isSaving: boolean;
@@ -53,23 +48,17 @@ interface SectionTaggerProps {
 }
 
 /**
- * SectionTagger - Controls for marking and saving document sections
+ * SectionTagger - Controls for tagging and saving document sections
  *
- * Flow:
- * 1. User clicks in document → cursor position shown (blue marker)
- * 2. User clicks "Mark Start" → locks cursor as start marker (green)
- * 3. User clicks elsewhere in document → new cursor position
- * 4. User clicks "Mark End" → locks cursor as end marker (red)
- * 5. User fills in section type, standard, title
- * 6. User clicks "Save Section" → saves and clears
+ * Simplified flow:
+ * 1. User selects text in the document viewer (drag to select)
+ * 2. User clicks "Capture Selection" in the document viewer
+ * 3. Selection appears here with preview
+ * 4. User fills in section type, standard, title
+ * 5. User clicks "Save Section" to save
  */
 export function SectionTagger({
-  cursorPosition,
-  startPosition,
-  endPosition,
-  previewText,
-  onMarkStart,
-  onMarkEnd,
+  selection,
   onClearSelection,
   onSaveSection,
   isSaving,
@@ -80,15 +69,22 @@ export function SectionTagger({
   const [specCode, setSpecCode] = useState('');
   const [title, setTitle] = useState('');
 
-  // Auto-fill title from preview text
+  // Auto-fill title from selection preview
   useEffect(() => {
-    if (previewText && !title) {
+    if (selection && !title) {
       // Extract first line as title
-      const firstLine = previewText.split('\n')[0].trim();
+      const firstLine = selection.text.split('\n')[0].trim();
       // Limit to 100 characters
       setTitle(firstLine.substring(0, 100));
     }
-  }, [previewText]);
+  }, [selection]);
+
+  // Reset title when selection is cleared
+  useEffect(() => {
+    if (!selection) {
+      setTitle('');
+    }
+  }, [selection]);
 
   // Clear form after successful save
   const handleSave = async () => {
@@ -105,16 +101,14 @@ export function SectionTagger({
 
     await onSaveSection(metadata);
 
-    // Reset form (position clearing is handled by parent)
+    // Reset form
     setSectionType('standard');
     setStandardCode('');
     setSpecCode('');
     setTitle('');
   };
 
-  const hasSelection = startPosition !== null && endPosition !== null;
-  const hasCursor = cursorPosition !== null;
-  const hasStart = startPosition !== null;
+  const hasSelection = selection !== null;
 
   const canSave = hasSelection &&
     (sectionType === 'skip' ||
@@ -124,7 +118,7 @@ export function SectionTagger({
 
   return (
     <div className="flex flex-col">
-      {/* Header - Compact */}
+      {/* Header */}
       <div className="px-3 py-2 bg-teal-50 border-b border-gray-200">
         <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
           <MapPin className="w-4 h-4 text-teal-600" />
@@ -132,83 +126,53 @@ export function SectionTagger({
         </h3>
       </div>
 
-      {/* Controls - Compact spacing */}
-      <div className="p-3 space-y-3 overflow-y-auto max-h-[400px]">
-        {/* Cursor Status */}
-        <div className={`p-2 rounded border ${hasCursor ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+      {/* Controls */}
+      <div className="p-3 space-y-3 overflow-y-auto max-h-[500px]">
+        {/* Selection Status */}
+        <div className={`p-2 rounded border ${hasSelection ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
           <div className="flex items-center gap-2">
-            <MousePointer className={`w-4 h-4 ${hasCursor ? 'text-blue-600' : 'text-gray-400'}`} />
-            <span className={`text-sm font-medium ${hasCursor ? 'text-blue-700' : 'text-gray-500'}`}>
-              {hasCursor ? 'Position selected' : 'Click in document to set position'}
-            </span>
+            {hasSelection ? (
+              <>
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-green-700">
+                  Selection captured ({selection.text.length.toLocaleString()} chars)
+                </span>
+              </>
+            ) : (
+              <span className="text-sm text-gray-500">
+                Select text in the document, then click "Capture Selection"
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Position Buttons */}
-        <div className="space-y-1.5">
-          <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide">
-            1. Mark Boundaries
-          </label>
-          <div className="flex gap-1.5">
-            <button
-              onClick={onMarkStart}
-              disabled={isSaving || !hasCursor || hasSelection}
-              className={`flex-1 px-2 py-2 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
-                hasStart
-                  ? 'bg-green-100 text-green-700 border-2 border-green-500'
-                  : hasCursor
-                  ? 'bg-green-500 text-white hover:bg-green-600 border border-transparent'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent'
-              }`}
-            >
-              <Flag className="w-4 h-4" />
-              {hasStart ? '✓ Start Set' : 'Mark Start'}
-            </button>
-            <button
-              onClick={onMarkEnd}
-              disabled={isSaving || !hasStart || !hasCursor || hasSelection}
-              className={`flex-1 px-2 py-2 rounded text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
-                endPosition !== null
-                  ? 'bg-red-100 text-red-700 border-2 border-red-500'
-                  : hasStart && hasCursor
-                  ? 'bg-red-500 text-white hover:bg-red-600 border border-transparent'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent'
-              }`}
-            >
-              <FlagOff className="w-4 h-4" />
-              {endPosition !== null ? '✓ End Set' : 'Mark End'}
-            </button>
-          </div>
-          <button
-            onClick={onClearSelection}
-            disabled={isSaving}
-            className="w-full px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors border border-gray-200"
-          >
-            Clear Selection
-          </button>
-        </div>
-
-        {/* Preview - More compact */}
-        {previewText && (
+        {/* Preview */}
+        {hasSelection && (
           <div className="space-y-1">
             <label className="block text-xs font-medium text-gray-600">Preview</label>
-            <div className="p-2 bg-gray-50 rounded border border-gray-200 text-xs text-gray-600 max-h-20 overflow-y-auto whitespace-pre-wrap">
-              {previewText.substring(0, 300)}
-              {previewText.length > 300 && '...'}
+            <div className="p-2 bg-gray-50 rounded border border-gray-200 text-xs text-gray-600 max-h-24 overflow-y-auto whitespace-pre-wrap">
+              {selection.previewText}
             </div>
+            <button
+              onClick={onClearSelection}
+              disabled={isSaving}
+              className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+            >
+              Clear selection
+            </button>
           </div>
         )}
 
         {/* Section Type */}
         <div className="space-y-1.5">
           <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide">
-            2. Section Type
+            Section Type
           </label>
           <select
             value={sectionType}
             onChange={(e) => setSectionType(e.target.value as SectionType)}
-            disabled={isSaving}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+            disabled={isSaving || !hasSelection}
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500 disabled:bg-gray-100"
           >
             <option value="standard">Standard (1-21)</option>
             <option value="matrix">Curriculum Matrix</option>
@@ -227,8 +191,8 @@ export function SectionTagger({
               <select
                 value={standardCode}
                 onChange={(e) => setStandardCode(e.target.value)}
-                disabled={isSaving}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                disabled={isSaving || !hasSelection}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500 disabled:bg-gray-100"
               >
                 <option value="">Select...</option>
                 {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -246,8 +210,8 @@ export function SectionTagger({
               <select
                 value={specCode}
                 onChange={(e) => setSpecCode(e.target.value)}
-                disabled={isSaving || !standardCode}
-                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                disabled={isSaving || !standardCode || !hasSelection}
+                className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500 disabled:bg-gray-100"
               >
                 <option value="">All / General</option>
                 {SPEC_OPTIONS.map((spec) => (
@@ -269,9 +233,9 @@ export function SectionTagger({
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            disabled={isSaving}
+            disabled={isSaving || !hasSelection}
             placeholder="Section title"
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500 disabled:bg-gray-100"
           />
         </div>
 
@@ -283,7 +247,7 @@ export function SectionTagger({
           </div>
         )}
 
-        {/* Save Button - Inline with form */}
+        {/* Save Button */}
         <button
           onClick={handleSave}
           disabled={!canSave || isSaving}
@@ -306,9 +270,9 @@ export function SectionTagger({
           )}
         </button>
 
-        {!hasSelection && !hasCursor && (
-          <p className="text-xs text-center text-gray-400">
-            Click in document to mark boundaries
+        {!hasSelection && (
+          <p className="text-xs text-center text-gray-400 mt-2">
+            Select text in the document to begin
           </p>
         )}
       </div>

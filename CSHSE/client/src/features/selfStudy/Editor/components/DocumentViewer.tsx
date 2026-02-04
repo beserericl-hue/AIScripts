@@ -1,11 +1,11 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
+import { Loader2, ZoomIn, ZoomOut, RotateCcw, MousePointer2, CheckCircle } from 'lucide-react';
 
-// Serializable range position - stores path to node + offset
-export interface RangePosition {
-  path: number[]; // Path from content root to the container node
-  offset: number; // Offset within that node
-  rect?: { top: number; left: number }; // Visual position for markers
+// Simple selection data - stores the selected HTML directly
+export interface SelectionData {
+  html: string;
+  text: string;
+  previewText: string;
 }
 
 interface DocumentViewerProps {
@@ -13,243 +13,114 @@ interface DocumentViewerProps {
   htmlContent: string;
   isLoading: boolean;
   error: string | null;
-  cursorPosition: RangePosition | null;
-  startPosition: RangePosition | null;
-  endPosition: RangePosition | null;
-  onPositionClick: (position: RangePosition) => void;
+  onSelectionCapture: (selection: SelectionData | null) => void;
   onRefresh: () => void;
+  hasSelection: boolean;
 }
 
 /**
  * DocumentViewer - Displays HTML document content for manual section tagging
  *
- * Uses Range API for accurate positioning in complex HTML content.
- * Markers are rendered as overlays, not inserted into the DOM.
+ * Uses native browser text selection for reliability with large documents.
+ * User selects text by dragging, then clicks "Capture Selection" to save it.
  */
 export function DocumentViewer({
   importId,
   htmlContent,
   isLoading,
   error,
-  cursorPosition,
-  startPosition,
-  endPosition,
-  onPositionClick,
-  onRefresh
+  onSelectionCapture,
+  onRefresh,
+  hasSelection
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(100);
-  const [markerPositions, setMarkerPositions] = useState<{
-    cursor?: { top: number; left: number };
-    start?: { top: number; left: number };
-    end?: { top: number; left: number };
-  }>({});
+  const [currentSelection, setCurrentSelection] = useState<SelectionData | null>(null);
+  const [selectionActive, setSelectionActive] = useState(false);
 
-  // Get the path from content root to a node (for serialization)
-  const getNodePath = useCallback((node: Node): number[] => {
-    const path: number[] = [];
-    let current: Node | null = node;
-
-    while (current && current !== contentRef.current && current.parentNode) {
-      const parent = current.parentNode;
-      const children = Array.from(parent.childNodes);
-      const index = children.indexOf(current as ChildNode);
-      path.unshift(index);
-      current = parent;
-    }
-
-    return path;
-  }, []);
-
-  // Find a node given a path from content root
-  const getNodeFromPath = useCallback((path: number[]): Node | null => {
-    if (!contentRef.current) return null;
-
-    let current: Node = contentRef.current;
-
-    for (const index of path) {
-      if (current.childNodes.length <= index) {
-        return null;
-      }
-      current = current.childNodes[index];
-    }
-
-    return current;
-  }, []);
-
-  // Get visual position of a range position
-  const getVisualPosition = useCallback((position: RangePosition): { top: number; left: number } | null => {
-    if (!contentRef.current || !scrollContainerRef.current) return null;
-
-    try {
-      const node = getNodeFromPath(position.path);
-      if (!node) return null;
-
-      const range = document.createRange();
-
-      // Handle text nodes vs element nodes
-      if (node.nodeType === Node.TEXT_NODE) {
-        const textLength = node.textContent?.length || 0;
-        range.setStart(node, Math.min(position.offset, textLength));
-        range.setEnd(node, Math.min(position.offset, textLength));
-      } else {
-        // For element nodes, use the start of the element
-        range.selectNodeContents(node);
-        range.collapse(true);
-      }
-
-      const rect = range.getBoundingClientRect();
-      const containerRect = contentRef.current.getBoundingClientRect();
-      const scrollRect = scrollContainerRef.current.getBoundingClientRect();
-
-      // Calculate position relative to the scroll container
-      return {
-        top: rect.top - scrollRect.top + scrollContainerRef.current.scrollTop,
-        left: rect.left - scrollRect.left + scrollContainerRef.current.scrollLeft
-      };
-    } catch (err) {
-      console.warn('Failed to get visual position:', err);
-      return null;
-    }
-  }, [getNodeFromPath]);
-
-  // Update marker positions when positions change or on scroll
-  const updateMarkerPositions = useCallback(() => {
-    const newPositions: typeof markerPositions = {};
-
-    if (cursorPosition && !(startPosition && endPosition)) {
-      const pos = getVisualPosition(cursorPosition);
-      if (pos) newPositions.cursor = pos;
-    }
-
-    if (startPosition) {
-      const pos = getVisualPosition(startPosition);
-      if (pos) newPositions.start = pos;
-    }
-
-    if (endPosition) {
-      const pos = getVisualPosition(endPosition);
-      if (pos) newPositions.end = pos;
-    }
-
-    setMarkerPositions(newPositions);
-  }, [cursorPosition, startPosition, endPosition, getVisualPosition]);
-
-  // Update markers on position changes
-  useEffect(() => {
-    updateMarkerPositions();
-  }, [updateMarkerPositions]);
-
-  // Update markers on scroll
-  useEffect(() => {
-    const scrollContainer = scrollContainerRef.current;
-    if (!scrollContainer) return;
-
-    const handleScroll = () => {
-      updateMarkerPositions();
-    };
-
-    scrollContainer.addEventListener('scroll', handleScroll);
-    return () => scrollContainer.removeEventListener('scroll', handleScroll);
-  }, [updateMarkerPositions]);
-
-  // Handle click to capture position
-  const handleContentClick = useCallback((e: React.MouseEvent) => {
-    const target = e.target as HTMLElement;
-
-    // Don't capture clicks on overlays
-    if (target.closest('.marker-overlay')) {
-      return;
-    }
-
-    // Use caretRangeFromPoint for accurate click position
-    let range: Range | null = null;
-
-    if (document.caretRangeFromPoint) {
-      range = document.caretRangeFromPoint(e.clientX, e.clientY);
-    }
-
-    if (!range) {
-      // Fallback: try to get selection
+  // Check for text selection when mouse is released
+  const handleMouseUp = useCallback(() => {
+    // Small delay to let browser finalize selection
+    setTimeout(() => {
       const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0) {
-        range = selection.getRangeAt(0);
-      }
-    }
-
-    if (range && contentRef.current) {
-      // Make sure the range is within our content
-      if (!contentRef.current.contains(range.startContainer)) {
+      if (!selection || selection.isCollapsed || !contentRef.current) {
+        setCurrentSelection(null);
+        setSelectionActive(false);
         return;
       }
 
-      const path = getNodePath(range.startContainer);
-      const rect = range.getBoundingClientRect();
-      const scrollRect = scrollContainerRef.current?.getBoundingClientRect();
-
-      const position: RangePosition = {
-        path,
-        offset: range.startOffset,
-        rect: scrollRect ? {
-          top: rect.top - scrollRect.top + (scrollContainerRef.current?.scrollTop || 0),
-          left: rect.left - scrollRect.left + (scrollContainerRef.current?.scrollLeft || 0)
-        } : undefined
-      };
-
-      onPositionClick(position);
-    }
-  }, [getNodePath, onPositionClick]);
-
-  // Extract HTML content between two positions
-  const extractHtmlBetweenPositions = useCallback((start: RangePosition, end: RangePosition): string => {
-    if (!contentRef.current) return '';
-
-    try {
-      const startNode = getNodeFromPath(start.path);
-      const endNode = getNodeFromPath(end.path);
-
-      if (!startNode || !endNode) return '';
-
-      const range = document.createRange();
-
-      // Set start position
-      if (startNode.nodeType === Node.TEXT_NODE) {
-        range.setStart(startNode, Math.min(start.offset, startNode.textContent?.length || 0));
-      } else {
-        range.setStartBefore(startNode);
+      // Check if selection is within our content
+      const range = selection.getRangeAt(0);
+      if (!contentRef.current.contains(range.commonAncestorContainer)) {
+        return;
       }
 
-      // Set end position
-      if (endNode.nodeType === Node.TEXT_NODE) {
-        range.setEnd(endNode, Math.min(end.offset, endNode.textContent?.length || 0));
-      } else {
-        range.setEndAfter(endNode);
+      try {
+        // Clone the selection contents
+        const fragment = range.cloneContents();
+        const tempDiv = document.createElement('div');
+        tempDiv.appendChild(fragment);
+        const selectedHtml = tempDiv.innerHTML;
+        const selectedText = tempDiv.textContent || '';
+
+        if (selectedText.trim().length > 0) {
+          setCurrentSelection({
+            html: selectedHtml,
+            text: selectedText,
+            previewText: selectedText.substring(0, 200) + (selectedText.length > 200 ? '...' : '')
+          });
+          setSelectionActive(true);
+        } else {
+          setCurrentSelection(null);
+          setSelectionActive(false);
+        }
+      } catch (err) {
+        console.warn('Failed to capture selection:', err);
+        setCurrentSelection(null);
+        setSelectionActive(false);
       }
+    }, 10);
+  }, []);
 
-      // Clone the contents
-      const fragment = range.cloneContents();
-      const div = document.createElement('div');
-      div.appendChild(fragment);
-
-      return div.innerHTML;
-    } catch (err) {
-      console.error('Failed to extract content:', err);
-      return '';
+  // Capture the current selection
+  const handleCaptureSelection = useCallback(() => {
+    if (currentSelection) {
+      onSelectionCapture(currentSelection);
+      // Clear the browser selection
+      window.getSelection()?.removeAllRanges();
+      setCurrentSelection(null);
+      setSelectionActive(false);
     }
-  }, [getNodeFromPath]);
+  }, [currentSelection, onSelectionCapture]);
 
-  // Expose extraction function via ref (for parent component)
+  // Clear selection
+  const handleClearSelection = useCallback(() => {
+    window.getSelection()?.removeAllRanges();
+    setCurrentSelection(null);
+    setSelectionActive(false);
+    onSelectionCapture(null);
+  }, [onSelectionCapture]);
+
+  // Add global mouseup listener
   useEffect(() => {
-    if (contentRef.current) {
-      (contentRef.current as any).extractHtmlBetweenPositions = extractHtmlBetweenPositions;
-    }
-  }, [extractHtmlBetweenPositions]);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => document.removeEventListener('mouseup', handleMouseUp);
+  }, [handleMouseUp]);
 
   const handleZoomIn = () => setZoom(z => Math.min(z + 10, 200));
   const handleZoomOut = () => setZoom(z => Math.max(z - 10, 50));
   const handleZoomReset = () => setZoom(100);
+
+  // Format file size for display
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const documentSize = htmlContent.length;
+  const isLargeDocument = documentSize > 10 * 1024 * 1024; // > 10MB
 
   if (isLoading) {
     return (
@@ -296,10 +167,16 @@ export function DocumentViewer({
     <div ref={containerRef} className="h-full flex flex-col bg-white">
       {/* Toolbar */}
       <div className="viewer-controls flex-shrink-0 flex items-center justify-between px-4 py-2 bg-gray-100 border-b border-gray-200">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <span className="text-sm text-gray-600">
-            Click in the document to mark section boundaries
+            <MousePointer2 className="w-4 h-4 inline mr-1" />
+            Select text by dragging, then click "Capture Selection"
           </span>
+          {isLargeDocument && (
+            <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded">
+              Large doc: {formatSize(documentSize)}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -327,69 +204,51 @@ export function DocumentViewer({
         </div>
       </div>
 
+      {/* Selection Action Bar - Shows when text is selected */}
+      {(selectionActive || hasSelection) && (
+        <div className="flex-shrink-0 px-4 py-2 bg-blue-50 border-b border-blue-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {selectionActive && currentSelection && (
+              <>
+                <CheckCircle className="w-4 h-4 text-blue-600" />
+                <span className="text-sm text-blue-700">
+                  Selected: {currentSelection.text.length.toLocaleString()} characters
+                </span>
+              </>
+            )}
+            {hasSelection && !selectionActive && (
+              <>
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                <span className="text-sm text-green-700">
+                  Selection captured - fill in details and save
+                </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {selectionActive && currentSelection && (
+              <button
+                onClick={handleCaptureSelection}
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 font-medium"
+              >
+                Capture Selection
+              </button>
+            )}
+            <button
+              onClick={handleClearSelection}
+              className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded hover:bg-gray-300"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Content Area - Scrollable document viewer */}
       <div
-        ref={scrollContainerRef}
-        className="flex-1 min-h-0 overflow-auto cursor-text relative"
-        onClick={handleContentClick}
-        style={{
-          background: '#f9fafb'
-        }}
+        className="flex-1 min-h-0 overflow-auto"
+        style={{ background: '#f9fafb' }}
       >
-        {/* Marker Overlays - Rendered on top of content */}
-        {markerPositions.cursor && (
-          <div
-            className="marker-overlay absolute pointer-events-none z-10"
-            style={{
-              top: markerPositions.cursor.top,
-              left: markerPositions.cursor.left - 2,
-              width: 4,
-              height: 24,
-              backgroundColor: '#3b82f6',
-              animation: 'blink 1s infinite'
-            }}
-            title="Cursor position"
-          />
-        )}
-        {markerPositions.start && (
-          <div
-            className="marker-overlay absolute z-10 flex items-center justify-center pointer-events-none"
-            style={{
-              top: markerPositions.start.top - 12,
-              left: markerPositions.start.left - 12,
-              width: 24,
-              height: 24,
-              backgroundColor: '#10b981',
-              borderRadius: '50%',
-              color: 'white',
-              fontSize: 12,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
-            }}
-            title="Section Start"
-          >
-            ▶
-          </div>
-        )}
-        {markerPositions.end && (
-          <div
-            className="marker-overlay absolute z-10 flex items-center justify-center pointer-events-none"
-            style={{
-              top: markerPositions.end.top - 12,
-              left: markerPositions.end.left - 12,
-              width: 24,
-              height: 24,
-              backgroundColor: '#ef4444',
-              borderRadius: '50%',
-              color: 'white',
-              fontSize: 12,
-              boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
-            }}
-            title="Section End"
-          >
-            ■
-          </div>
-        )}
-
         <style>
           {`
             .document-content {
@@ -474,9 +333,8 @@ export function DocumentViewer({
               border-top: 1px solid #e5e7eb;
               margin: 1.5rem 0;
             }
-            @keyframes blink {
-              0%, 50% { opacity: 1; }
-              51%, 100% { opacity: 0; }
+            .document-content ::selection {
+              background-color: #bfdbfe;
             }
           `}
         </style>
@@ -493,26 +351,12 @@ export function DocumentViewer({
         />
       </div>
 
-      {/* Position Indicator */}
-      {(startPosition || endPosition) && (
-        <div className="flex-shrink-0 px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center gap-4 text-sm">
-          {startPosition && (
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 bg-green-500 rounded-full"></span>
-              Start marked
-            </span>
-          )}
-          {endPosition && (
-            <span className="flex items-center gap-1">
-              <span className="w-3 h-3 bg-red-500 rounded-full"></span>
-              End marked
-            </span>
-          )}
-          {startPosition && endPosition && (
-            <span className="text-green-600 font-medium">
-              ✓ Selection complete - ready to save
-            </span>
-          )}
+      {/* Instructions Footer */}
+      {!selectionActive && !hasSelection && (
+        <div className="flex-shrink-0 px-4 py-2 bg-gray-50 border-t border-gray-200 text-center">
+          <p className="text-sm text-gray-500">
+            Click and drag to select the text you want to tag as a section
+          </p>
         </div>
       )}
     </div>

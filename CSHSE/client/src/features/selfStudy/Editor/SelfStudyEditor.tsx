@@ -27,7 +27,7 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
-import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection, type RangePosition } from './components';
+import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection, type SelectionData } from './components';
 
 // Use consistent API paths without relying on environment variable
 
@@ -278,10 +278,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [taggedSections, setTaggedSections] = useState<TaggedSection[]>([]);
   const [showTaggedSections, setShowTaggedSections] = useState(true);
   const [isLoadingTaggedSections, setIsLoadingTaggedSections] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState<RangePosition | null>(null);
-  const [startPosition, setStartPosition] = useState<RangePosition | null>(null);
-  const [endPosition, setEndPosition] = useState<RangePosition | null>(null);
-  const [selectionPreview, setSelectionPreview] = useState<string>('');
+  const [currentSelection, setCurrentSelection] = useState<SelectionData | null>(null);
   const documentViewerRef = useRef<HTMLDivElement>(null);
   const [isSavingSection, setIsSavingSection] = useState(false);
   const [sectionError, setSectionError] = useState<string | null>(null);
@@ -526,10 +523,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setDocumentHtml('');
     setDocumentError(null);
     setTaggedSections([]);
-    setCursorPosition(null);
-    setStartPosition(null);
-    setEndPosition(null);
-    setSelectionPreview('');
+    setCurrentSelection(null);
     setSectionError(null);
     setViewingTaggedSection(null);
   };
@@ -567,104 +561,39 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     }
   };
 
-  // Manual Tagging: Handle position click in document
-  // Only updates cursor position - doesn't set markers directly
-  const handlePositionClick = useCallback((position: RangePosition) => {
-    // Only update cursor if we haven't locked both markers
-    // Once both are set, user must click "Clear Selection" to start over
-    if (startPosition !== null && endPosition !== null) {
-      // Both markers are locked - don't change anything
-      return;
-    }
-    setCursorPosition(position);
-  }, [startPosition, endPosition]);
-
-  // Manual Tagging: Mark start position - locks cursor position as start
-  const handleMarkStart = useCallback(() => {
-    if (cursorPosition !== null) {
-      setStartPosition(cursorPosition);
-      setEndPosition(null);
-      setSelectionPreview('');
-    }
-  }, [cursorPosition]);
-
-  // Manual Tagging: Mark end position - locks cursor position as end
-  const handleMarkEnd = useCallback(() => {
-    if (cursorPosition !== null && startPosition !== null) {
-      setEndPosition(cursorPosition);
-      // Preview will be set when content is extracted
-      setSelectionPreview('Selection marked - ready to save');
-    }
-  }, [cursorPosition, startPosition]);
-
-  // Manual Tagging: Clear selection - resets everything
-  const handleClearSelection = useCallback(() => {
-    setCursorPosition(null);
-    setStartPosition(null);
-    setEndPosition(null);
-    setSelectionPreview('');
+  // Manual Tagging: Handle selection capture from DocumentViewer
+  // User selects text by dragging, clicks "Capture Selection" button
+  const handleSelectionCapture = useCallback((selection: SelectionData | null) => {
+    setCurrentSelection(selection);
     setSectionError(null);
   }, []);
 
+  // Manual Tagging: Clear selection - resets everything
+  const handleClearSelection = useCallback(() => {
+    setCurrentSelection(null);
+    setSectionError(null);
+    // Also clear browser selection
+    window.getSelection()?.removeAllRanges();
+  }, []);
+
   // Manual Tagging: Save section
-  // Extracts HTML content using Range API on frontend, sends to backend
+  // Uses HTML content already captured in SelectionData
   const handleSaveSection = async (metadata: SectionMetadata) => {
-    if (!importId || startPosition === null || endPosition === null) return;
+    if (!importId || !currentSelection) return;
 
     setIsSavingSection(true);
     setSectionError(null);
 
     try {
-      // Extract HTML content using the DocumentViewer's extraction function
-      const contentDiv = document.querySelector('.document-content');
-      if (!contentDiv) {
-        throw new Error('Document content not found');
-      }
-
-      // Get nodes from paths
-      const getNodeFromPath = (path: number[]): Node | null => {
-        let current: Node = contentDiv;
-        for (const index of path) {
-          if (current.childNodes.length <= index) return null;
-          current = current.childNodes[index];
-        }
-        return current;
-      };
-
-      const startNode = getNodeFromPath(startPosition.path);
-      const endNode = getNodeFromPath(endPosition.path);
-
-      if (!startNode || !endNode) {
-        throw new Error('Could not locate marked positions in document');
-      }
-
-      // Create range and extract content
-      const range = document.createRange();
-
-      if (startNode.nodeType === Node.TEXT_NODE) {
-        range.setStart(startNode, Math.min(startPosition.offset, startNode.textContent?.length || 0));
-      } else {
-        range.setStartBefore(startNode);
-      }
-
-      if (endNode.nodeType === Node.TEXT_NODE) {
-        range.setEnd(endNode, Math.min(endPosition.offset, endNode.textContent?.length || 0));
-      } else {
-        range.setEndAfter(endNode);
-      }
-
-      // Clone the contents
-      const fragment = range.cloneContents();
-      const tempDiv = document.createElement('div');
-      tempDiv.appendChild(fragment);
-      const extractedHtml = tempDiv.innerHTML;
+      // Selection already contains the HTML - send directly to backend
+      const extractedHtml = currentSelection.html;
 
       if (!extractedHtml.trim()) {
         throw new Error('No content selected');
       }
 
       // Send extracted HTML to backend
-      const response = await api.post(`/api/imports/${importId}/extract-section`, {
+      await api.post(`/api/imports/${importId}/extract-section`, {
         htmlContent: extractedHtml,
         sectionType: metadata.sectionType,
         standardCode: metadata.standardCode,
@@ -1432,7 +1361,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       </header>
 
       {/* Main Content - flex container that includes import panel */}
-      <div className="flex flex-1 min-h-[600px]">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Main Editor/Content Area - shrinks when import panel is open */}
         <div className="flex-1 flex min-w-0">
           {/* Standards Editor View */}
@@ -1864,7 +1793,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                       {/* Document Header */}
                       <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex-shrink-0">
                         <h3 className="text-lg font-semibold text-gray-900">Document Content</h3>
-                        <p className="text-sm text-gray-500">Click to place cursor, then use Mark Start/End buttons</p>
+                        <p className="text-sm text-gray-500">Select text by dragging, then click "Capture Selection"</p>
                       </div>
                       {/* Document Viewer - Full Height with scroll */}
                       <div className="flex-1 min-h-0 h-full">
@@ -1873,11 +1802,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           htmlContent={documentHtml}
                           isLoading={isLoadingDocument}
                           error={documentError}
-                          cursorPosition={cursorPosition}
-                          startPosition={startPosition}
-                          endPosition={endPosition}
-                          onPositionClick={handlePositionClick}
+                          onSelectionCapture={handleSelectionCapture}
                           onRefresh={loadDocumentContent}
+                          hasSelection={currentSelection !== null}
                         />
                       </div>
                     </div>
@@ -1887,12 +1814,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                       {/* Section Tagger */}
                       <div className="flex-shrink-0 border-b border-gray-200 bg-white">
                         <SectionTagger
-                          cursorPosition={cursorPosition}
-                          startPosition={startPosition}
-                          endPosition={endPosition}
-                          previewText={selectionPreview}
-                          onMarkStart={handleMarkStart}
-                          onMarkEnd={handleMarkEnd}
+                          selection={currentSelection}
                           onClearSelection={handleClearSelection}
                           onSaveSection={handleSaveSection}
                           isSaving={isSavingSection}
