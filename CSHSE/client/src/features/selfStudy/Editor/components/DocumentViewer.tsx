@@ -6,6 +6,7 @@ interface DocumentViewerProps {
   htmlContent: string;
   isLoading: boolean;
   error: string | null;
+  cursorPosition: number | null;
   startOffset: number | null;
   endOffset: number | null;
   onPositionClick: (offset: number, element: HTMLElement) => void;
@@ -18,7 +19,7 @@ interface DocumentViewerProps {
  * Features:
  * - Scrollable HTML content viewer
  * - Click to capture position for section marking
- * - Visual markers for start/end positions
+ * - Visual markers for cursor, start, and end positions
  * - Zoom controls
  * - Highlights the current selection range
  */
@@ -27,6 +28,7 @@ export function DocumentViewer({
   htmlContent,
   isLoading,
   error,
+  cursorPosition,
   startOffset,
   endOffset,
   onPositionClick,
@@ -35,6 +37,7 @@ export function DocumentViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState(100);
+  const cursorMarkerRef = useRef<HTMLSpanElement | null>(null);
   const startMarkerRef = useRef<HTMLSpanElement | null>(null);
   const endMarkerRef = useRef<HTMLSpanElement | null>(null);
 
@@ -89,11 +92,40 @@ export function DocumentViewer({
     onPositionClick(offset, range.startContainer.parentElement || target);
   }, [getTextOffset, onPositionClick]);
 
-  // Insert visual markers for start/end positions
+  // Helper to find node at offset
+  const findNodeAtOffset = useCallback((targetOffset: number): { node: Text; offset: number } | null => {
+    if (!contentRef.current) return null;
+
+    const walker = document.createTreeWalker(
+      contentRef.current,
+      NodeFilter.SHOW_TEXT,
+      null
+    );
+
+    let currentOffset = 0;
+    let currentNode = walker.nextNode() as Text | null;
+
+    while (currentNode) {
+      const nodeLength = currentNode.textContent?.length || 0;
+      if (currentOffset + nodeLength >= targetOffset) {
+        return { node: currentNode, offset: targetOffset - currentOffset };
+      }
+      currentOffset += nodeLength;
+      currentNode = walker.nextNode() as Text | null;
+    }
+
+    return null;
+  }, []);
+
+  // Insert visual markers for cursor, start, and end positions
   useEffect(() => {
     if (!contentRef.current) return;
 
     // Remove existing markers
+    if (cursorMarkerRef.current) {
+      cursorMarkerRef.current.remove();
+      cursorMarkerRef.current = null;
+    }
     if (startMarkerRef.current) {
       startMarkerRef.current.remove();
       startMarkerRef.current = null;
@@ -103,51 +135,57 @@ export function DocumentViewer({
       endMarkerRef.current = null;
     }
 
-    // Helper to find node at offset
-    const findNodeAtOffset = (targetOffset: number): { node: Text; offset: number } | null => {
-      if (!contentRef.current) return null;
+    // Insert cursor marker (blue vertical line) - only if no end marker yet
+    if (cursorPosition !== null && !(startOffset !== null && endOffset !== null)) {
+      const result = findNodeAtOffset(cursorPosition);
+      if (result) {
+        const marker = document.createElement('span');
+        marker.className = 'section-marker section-cursor-marker';
+        marker.innerHTML = '|';
+        marker.style.cssText = `
+          display: inline;
+          color: #3b82f6;
+          font-weight: bold;
+          font-size: 18px;
+          line-height: 1;
+          animation: blink 1s infinite;
+          vertical-align: middle;
+        `;
+        marker.title = 'Current cursor position - click Mark Start or Mark End';
 
-      const walker = document.createTreeWalker(
-        contentRef.current,
-        NodeFilter.SHOW_TEXT,
-        null
-      );
-
-      let currentOffset = 0;
-      let currentNode = walker.nextNode() as Text | null;
-
-      while (currentNode) {
-        const nodeLength = currentNode.textContent?.length || 0;
-        if (currentOffset + nodeLength >= targetOffset) {
-          return { node: currentNode, offset: targetOffset - currentOffset };
+        try {
+          const range = document.createRange();
+          range.setStart(result.node, Math.min(result.offset, result.node.length));
+          range.collapse(true);
+          range.insertNode(marker);
+          cursorMarkerRef.current = marker;
+        } catch (err) {
+          console.warn('Failed to insert cursor marker:', err);
         }
-        currentOffset += nodeLength;
-        currentNode = walker.nextNode() as Text | null;
       }
+    }
 
-      return null;
-    };
-
-    // Insert start marker
+    // Insert start marker (green circle with arrow)
     if (startOffset !== null) {
       const result = findNodeAtOffset(startOffset);
       if (result) {
         const marker = document.createElement('span');
         marker.className = 'section-marker section-start-marker';
-        marker.innerHTML = '<span class="marker-icon">&#9654;</span>';
+        marker.innerHTML = '▶';
         marker.style.cssText = `
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 20px;
-          height: 20px;
+          width: 24px;
+          height: 24px;
           background-color: #10b981;
           color: white;
           border-radius: 50%;
-          font-size: 10px;
-          margin: 0 2px;
+          font-size: 12px;
+          margin: 0 4px;
           vertical-align: middle;
           cursor: default;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         `;
         marker.title = 'Section Start';
 
@@ -163,26 +201,27 @@ export function DocumentViewer({
       }
     }
 
-    // Insert end marker
+    // Insert end marker (red circle with square)
     if (endOffset !== null && startOffset !== null) {
       const result = findNodeAtOffset(endOffset);
       if (result) {
         const marker = document.createElement('span');
         marker.className = 'section-marker section-end-marker';
-        marker.innerHTML = '<span class="marker-icon">&#9632;</span>';
+        marker.innerHTML = '■';
         marker.style.cssText = `
           display: inline-flex;
           align-items: center;
           justify-content: center;
-          width: 20px;
-          height: 20px;
+          width: 24px;
+          height: 24px;
           background-color: #ef4444;
           color: white;
           border-radius: 50%;
-          font-size: 10px;
-          margin: 0 2px;
+          font-size: 12px;
+          margin: 0 4px;
           vertical-align: middle;
           cursor: default;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         `;
         marker.title = 'Section End';
 
@@ -200,6 +239,10 @@ export function DocumentViewer({
 
     // Cleanup on unmount or content change
     return () => {
+      if (cursorMarkerRef.current) {
+        cursorMarkerRef.current.remove();
+        cursorMarkerRef.current = null;
+      }
       if (startMarkerRef.current) {
         startMarkerRef.current.remove();
         startMarkerRef.current = null;
@@ -209,7 +252,7 @@ export function DocumentViewer({
         endMarkerRef.current = null;
       }
     };
-  }, [startOffset, endOffset, htmlContent]);
+  }, [cursorPosition, startOffset, endOffset, htmlContent, findNodeAtOffset]);
 
   // Highlight selection range
   useEffect(() => {
@@ -400,6 +443,10 @@ export function DocumentViewer({
               border-top: 1px solid #e5e7eb;
               margin: 1.5rem 0;
             }
+            @keyframes blink {
+              0%, 50% { opacity: 1; }
+              51%, 100% { opacity: 0; }
+            }
           `}
         </style>
         <div
@@ -416,8 +463,14 @@ export function DocumentViewer({
       </div>
 
       {/* Position Indicator */}
-      {(startOffset !== null || endOffset !== null) && (
+      {(cursorPosition !== null || startOffset !== null || endOffset !== null) && (
         <div className="flex-shrink-0 px-4 py-2 bg-gray-50 border-t border-gray-200 flex items-center gap-4 text-sm">
+          {cursorPosition !== null && !(startOffset !== null && endOffset !== null) && (
+            <span className="flex items-center gap-1">
+              <span className="w-3 h-3 bg-blue-500 rounded-full"></span>
+              Cursor: {cursorPosition}
+            </span>
+          )}
           {startOffset !== null && (
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 bg-green-500 rounded-full"></span>

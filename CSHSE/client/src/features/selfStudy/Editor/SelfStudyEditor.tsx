@@ -278,6 +278,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [taggedSections, setTaggedSections] = useState<TaggedSection[]>([]);
   const [showTaggedSections, setShowTaggedSections] = useState(true);
   const [isLoadingTaggedSections, setIsLoadingTaggedSections] = useState(false);
+  const [cursorPosition, setCursorPosition] = useState<number | null>(null);
   const [startOffset, setStartOffset] = useState<number | null>(null);
   const [endOffset, setEndOffset] = useState<number | null>(null);
   const [selectionPreview, setSelectionPreview] = useState<string>('');
@@ -565,48 +566,50 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   };
 
   // Manual Tagging: Handle position click in document
+  // Only updates cursor position - doesn't set markers directly
   const handlePositionClick = useCallback((offset: number, element: HTMLElement) => {
-    if (startOffset === null) {
-      // Set start position
-      setStartOffset(offset);
-      setEndOffset(null);
-      setSelectionPreview('');
-    } else if (endOffset === null) {
-      // Set end position (ensure it's after start)
-      if (offset > startOffset) {
-        setEndOffset(offset);
+    // Only update cursor if we haven't locked both markers
+    // Once both are set, user must click "Clear Selection" to start over
+    if (startOffset !== null && endOffset !== null) {
+      // Both markers are locked - don't change anything
+      return;
+    }
+    setCursorPosition(offset);
+  }, [startOffset, endOffset]);
+
+  // Manual Tagging: Mark start position - locks cursor position as start
+  const handleMarkStart = useCallback(() => {
+    if (cursorPosition !== null) {
+      setStartOffset(cursorPosition);
+      // If we're setting a new start, clear the end
+      if (endOffset !== null && cursorPosition >= endOffset) {
+        setEndOffset(null);
+        setSelectionPreview('');
+      }
+    }
+  }, [cursorPosition, endOffset]);
+
+  // Manual Tagging: Mark end position - locks cursor position as end
+  const handleMarkEnd = useCallback(() => {
+    if (cursorPosition !== null && startOffset !== null) {
+      if (cursorPosition > startOffset) {
+        setEndOffset(cursorPosition);
         // Extract preview text from the document
-        const text = documentHtml.replace(/<[^>]*>/g, '').substring(startOffset, offset);
+        const text = documentHtml.replace(/<[^>]*>/g, '').substring(startOffset, cursorPosition);
         setSelectionPreview(text.trim());
-      } else {
-        // If clicked before start, make this the new start
+      } else if (cursorPosition < startOffset) {
+        // Swap: make cursor the new start, old start becomes end
         setEndOffset(startOffset);
-        setStartOffset(offset);
-        const text = documentHtml.replace(/<[^>]*>/g, '').substring(offset, startOffset);
+        setStartOffset(cursorPosition);
+        const text = documentHtml.replace(/<[^>]*>/g, '').substring(cursorPosition, startOffset);
         setSelectionPreview(text.trim());
       }
-    } else {
-      // Both set, start fresh with new start
-      setStartOffset(offset);
-      setEndOffset(null);
-      setSelectionPreview('');
     }
-  }, [startOffset, endOffset, documentHtml]);
+  }, [cursorPosition, startOffset, documentHtml]);
 
-  // Manual Tagging: Mark start position
-  const handleMarkStart = useCallback(() => {
-    // This is triggered by clicking "Mark Start" button
-    // The actual position is set when clicking in the document
-  }, []);
-
-  // Manual Tagging: Mark end position
-  const handleMarkEnd = useCallback(() => {
-    // This is triggered by clicking "Mark End" button
-    // The actual position is set when clicking in the document
-  }, []);
-
-  // Manual Tagging: Clear selection
+  // Manual Tagging: Clear selection - resets everything
   const handleClearSelection = useCallback(() => {
+    setCursorPosition(null);
     setStartOffset(null);
     setEndOffset(null);
     setSelectionPreview('');
@@ -1835,6 +1838,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           htmlContent={documentHtml}
                           isLoading={isLoadingDocument}
                           error={documentError}
+                          cursorPosition={cursorPosition}
                           startOffset={startOffset}
                           endOffset={endOffset}
                           onPositionClick={handlePositionClick}
@@ -1848,6 +1852,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                       {/* Section Tagger */}
                       <div className="flex-shrink-0 border-b border-gray-200 bg-white">
                         <SectionTagger
+                          cursorPosition={cursorPosition}
                           startOffset={startOffset}
                           endOffset={endOffset}
                           previewText={selectionPreview}

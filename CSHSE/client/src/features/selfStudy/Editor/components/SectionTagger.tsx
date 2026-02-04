@@ -39,6 +39,7 @@ export interface SectionMetadata {
 }
 
 interface SectionTaggerProps {
+  cursorPosition: number | null;
   startOffset: number | null;
   endOffset: number | null;
   previewText: string;
@@ -53,14 +54,16 @@ interface SectionTaggerProps {
 /**
  * SectionTagger - Controls for marking and saving document sections
  *
- * Features:
- * - Mark Start / Mark End buttons
- * - Section type selection (Standard, Matrix, Appendix, Skip)
- * - Standard number and specification selection (for Standard type)
- * - Title input (auto-filled from first line of selection)
- * - Save and Clear buttons
+ * Flow:
+ * 1. User clicks in document → cursor position shown
+ * 2. User clicks "Mark Start" → locks cursor as start marker
+ * 3. User clicks elsewhere in document → new cursor position
+ * 4. User clicks "Mark End" → locks cursor as end marker
+ * 5. User fills in section type, standard, title
+ * 6. User clicks "Save Section" → saves and clears
  */
 export function SectionTagger({
+  cursorPosition,
   startOffset,
   endOffset,
   previewText,
@@ -127,6 +130,19 @@ export function SectionTagger({
 
       {/* Controls - Compact spacing */}
       <div className="p-3 space-y-3 overflow-y-auto max-h-[400px]">
+        {/* Current Cursor Position */}
+        <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-blue-700">Current Position:</span>
+            <span className="text-sm font-mono text-blue-800">
+              {cursorPosition !== null ? cursorPosition : '—'}
+            </span>
+          </div>
+          {cursorPosition === null && startOffset === null && (
+            <p className="text-xs text-blue-600 mt-1">Click in document to set cursor</p>
+          )}
+        </div>
+
         {/* Position Buttons */}
         <div className="space-y-1.5">
           <label className="block text-xs font-medium text-gray-600 uppercase tracking-wide">
@@ -135,38 +151,38 @@ export function SectionTagger({
           <div className="flex gap-1.5">
             <button
               onClick={onMarkStart}
-              disabled={isSaving}
+              disabled={isSaving || cursorPosition === null || (startOffset !== null && endOffset !== null)}
               className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors ${
                 startOffset !== null
-                  ? 'bg-green-100 text-green-700 border border-green-400'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-transparent'
+                  ? 'bg-green-100 text-green-700 border-2 border-green-500'
+                  : cursorPosition !== null
+                  ? 'bg-green-500 text-white hover:bg-green-600 border border-transparent'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent'
               }`}
             >
               {startOffset !== null ? `Start: ${startOffset}` : 'Mark Start'}
             </button>
             <button
               onClick={onMarkEnd}
-              disabled={startOffset === null || isSaving}
+              disabled={isSaving || startOffset === null || cursorPosition === null || (startOffset !== null && endOffset !== null)}
               className={`flex-1 px-2 py-1.5 rounded text-sm font-medium transition-colors ${
                 endOffset !== null
-                  ? 'bg-red-100 text-red-700 border border-red-400'
-                  : startOffset !== null
-                  ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-transparent'
-                  : 'bg-gray-50 text-gray-400 cursor-not-allowed border border-transparent'
+                  ? 'bg-red-100 text-red-700 border-2 border-red-500'
+                  : startOffset !== null && cursorPosition !== null
+                  ? 'bg-red-500 text-white hover:bg-red-600 border border-transparent'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-transparent'
               }`}
             >
               {endOffset !== null ? `End: ${endOffset}` : 'Mark End'}
             </button>
           </div>
-          {startOffset !== null && (
-            <button
-              onClick={onClearSelection}
-              disabled={isSaving}
-              className="w-full px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
-            >
-              Clear Selection
-            </button>
-          )}
+          <button
+            onClick={onClearSelection}
+            disabled={isSaving}
+            className="w-full px-2 py-1 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors border border-gray-200"
+          >
+            Clear Selection
+          </button>
         </div>
 
         {/* Preview - More compact */}
