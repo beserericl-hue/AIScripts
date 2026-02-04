@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Save, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { MapPin, Save, Loader2, AlertCircle, CheckCircle, Zap } from 'lucide-react';
 import type { SelectionData } from './DocumentViewer';
 
 // Standard names for dropdown
@@ -37,6 +37,7 @@ export interface SectionMetadata {
   standardCode?: string;
   specCode?: string;
   title: string;
+  applyDirectly?: boolean; // If true, apply directly to standard instead of sending to N8N
 }
 
 interface SectionTaggerProps {
@@ -68,6 +69,7 @@ export function SectionTagger({
   const [standardCode, setStandardCode] = useState('');
   const [specCode, setSpecCode] = useState('');
   const [title, setTitle] = useState('');
+  const [applyDirectly, setApplyDirectly] = useState(false);
 
   // Auto-fill title from selection preview
   useEffect(() => {
@@ -95,7 +97,8 @@ export function SectionTagger({
       title: title.trim() || 'Untitled Section',
       ...(sectionType === 'standard' && standardCode && {
         standardCode,
-        specCode: specCode || undefined
+        specCode: specCode || undefined,
+        applyDirectly: applyDirectly && specCode ? true : undefined // Only apply directly if spec is selected
       })
     };
 
@@ -106,6 +109,7 @@ export function SectionTagger({
     setStandardCode('');
     setSpecCode('');
     setTitle('');
+    setApplyDirectly(false);
   };
 
   const hasSelection = selection !== null;
@@ -221,6 +225,31 @@ export function SectionTagger({
                 ))}
               </select>
             </div>
+
+            {/* Apply Directly option - only shows when spec is selected */}
+            {specCode && (
+              <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded">
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={applyDirectly}
+                    onChange={(e) => setApplyDirectly(e.target.checked)}
+                    disabled={isSaving}
+                    className="mt-0.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-1 text-sm font-medium text-blue-800">
+                      <Zap className="w-3.5 h-3.5" />
+                      Apply Directly
+                    </div>
+                    <p className="text-xs text-blue-600 mt-0.5">
+                      Save directly to Standard {standardCode}.{specCode} in the editor.
+                      Skips AI processing - use when content is already correctly labeled.
+                    </p>
+                  </div>
+                </label>
+              </div>
+            )}
           </div>
         )}
 
@@ -260,12 +289,21 @@ export function SectionTagger({
           {isSaving ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              Saving...
+              {applyDirectly && specCode ? 'Applying...' : 'Saving...'}
             </>
           ) : (
             <>
-              <Save className="w-4 h-4" />
-              {sectionType === 'skip' ? 'Skip Content' : 'Save Section'}
+              {applyDirectly && specCode ? (
+                <>
+                  <Zap className="w-4 h-4" />
+                  Apply to {standardCode}.{specCode}
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  {sectionType === 'skip' ? 'Skip Content' : 'Save Section'}
+                </>
+              )}
             </>
           )}
         </button>

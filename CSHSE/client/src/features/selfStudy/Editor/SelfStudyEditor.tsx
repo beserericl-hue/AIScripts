@@ -580,6 +580,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
   // Manual Tagging: Save section
   // Uses HTML content already captured in SelectionData
+  // If applyDirectly is true, saves directly to the submission's narrative (skips N8N)
   const handleSaveSection = async (metadata: SectionMetadata) => {
     if (!importId || !currentSelection) return;
 
@@ -589,12 +590,48 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     try {
       // Selection already contains the HTML - send directly to backend
       const extractedHtml = currentSelection.html;
+      const extractedText = currentSelection.text;
 
       if (!extractedHtml.trim()) {
         throw new Error('No content selected');
       }
 
-      // Send extracted HTML to backend
+      // If applyDirectly is true and we have standard/spec, save directly to submission
+      if (metadata.applyDirectly && metadata.standardCode && metadata.specCode) {
+        // Save directly to the submission's narrative using the existing mutation
+        await saveMutation.mutateAsync({
+          standardCode: metadata.standardCode,
+          specCode: metadata.specCode,
+          content: extractedText, // Use plain text for narrative content
+        });
+
+        // Also save to tagged sections for tracking (marked as applied)
+        await api.post(`/api/imports/${importId}/extract-section`, {
+          htmlContent: extractedHtml,
+          sectionType: 'standard',
+          standardCode: metadata.standardCode,
+          specCode: metadata.specCode,
+          title: metadata.title,
+          appliedDirectly: true // Flag to indicate it was already applied
+        });
+
+        // Refresh document content
+        await loadDocumentContent();
+
+        // Refresh tagged sections list
+        await loadTaggedSections();
+
+        // Clear selection
+        handleClearSelection();
+
+        // Show success feedback - briefly navigate to the standard to show it was applied
+        // (This refreshes the narrative content in the editor)
+        queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+
+        return;
+      }
+
+      // Normal flow: Send extracted HTML to backend for N8N processing later
       await api.post(`/api/imports/${importId}/extract-section`, {
         htmlContent: extractedHtml,
         sectionType: metadata.sectionType,

@@ -2277,7 +2277,7 @@ export const getDocumentImage = async (req: Request, res: Response) => {
 export const extractSection = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
-    const { htmlContent: providedHtml, sectionType, standardCode, specCode, title } = req.body;
+    const { htmlContent: providedHtml, sectionType, standardCode, specCode, title, appliedDirectly } = req.body;
 
     // Validate input
     if (!sectionType || !['standard', 'matrix', 'appendix', 'skip'].includes(sectionType)) {
@@ -2329,6 +2329,10 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
         (newSection as any).standardCode = standardCode;
         if (specCode) {
           (newSection as any).specCode = specCode;
+        }
+        // Mark if already applied directly to submission (skips N8N processing)
+        if (appliedDirectly) {
+          (newSection as any).appliedDirectly = true;
         }
       }
       if (sectionType === 'matrix') {
@@ -2470,7 +2474,8 @@ export const getTaggedSections = async (req: Request, res: Response) => {
       previewText: s.previewText,
       contentLength: s.fullContent?.length || 0,
       standardCode: s.standardCode,
-      specCode: s.specCode
+      specCode: s.specCode,
+      appliedDirectly: s.appliedDirectly || false // Whether already applied to submission
     }));
 
     return res.json({

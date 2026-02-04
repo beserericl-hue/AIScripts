@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trash2, FileText, Grid3X3, BookOpen, Eye, Loader2 } from 'lucide-react';
+import { Trash2, FileText, Grid3X3, BookOpen, Eye, Loader2, Zap, CheckCircle2 } from 'lucide-react';
 
 // Standard names for display
 const STANDARD_NAMES: Record<string, string> = {
@@ -35,6 +35,7 @@ export interface TaggedSection {
   previewText?: string;
   contentLength?: number;
   createdAt?: string;
+  appliedDirectly?: boolean; // If true, already applied to submission (skips N8N)
 }
 
 interface TaggedSectionsListProps {
@@ -180,6 +181,12 @@ export function TaggedSectionsList({
                 <span className="font-medium text-gray-900 truncate">
                   {getSectionLabel(section)}
                 </span>
+                {section.appliedDirectly && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-green-100 text-green-700 text-xs font-medium rounded" title="Applied directly to standard - skips N8N processing">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Applied
+                  </span>
+                )}
               </div>
               {section.title && section.title !== getSectionLabel(section) && (
                 <p className="text-sm text-gray-600 truncate mt-0.5">
