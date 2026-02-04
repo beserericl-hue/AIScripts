@@ -56,67 +56,95 @@ export function DocumentViewer({
   const extractedCount = taggedSections.length;
 
   // Mark extracted content in the document visually
+  // This marks ALL elements that were part of the extraction, not just the first one
   useEffect(() => {
-    if (!contentRef.current || taggedSections.length === 0) {
-      setMarkedRanges([]);
+    if (!contentRef.current) {
       return;
     }
 
-    // Clear previous marks
-    const existingMarks = contentRef.current.querySelectorAll('.extracted-content-overlay');
-    existingMarks.forEach(mark => mark.remove());
+    // Clear ALL previous marks first
+    const existingMarks = contentRef.current.querySelectorAll('.extracted-content-marked');
+    existingMarks.forEach(mark => {
+      mark.classList.remove('extracted-content-marked');
+      mark.removeAttribute('data-extracted-section');
+      mark.removeAttribute('title');
+    });
 
-    // For each tagged section, try to find and mark matching text
-    const ranges: Range[] = [];
+    if (taggedSections.length === 0) {
+      return;
+    }
+
+    // Get all block-level elements in document order
+    const allElements = Array.from(contentRef.current.querySelectorAll(
+      'p, h1, h2, h3, h4, h5, h6, table, ul, ol, li, div, blockquote, pre, tr, td, th'
+    ));
 
     taggedSections.forEach(section => {
       if (!section.previewText || !contentRef.current) return;
 
-      // Get first 50 chars of preview text for matching (more reliable than full text)
-      const searchText = section.previewText.substring(0, 50).trim();
+      // Use more of the preview text for reliable matching (first 100 chars)
+      const searchText = section.previewText.substring(0, 100).trim();
       if (searchText.length < 10) return;
 
-      // Use TreeWalker to find text nodes containing this text
-      const walker = document.createTreeWalker(
-        contentRef.current,
-        NodeFilter.SHOW_TEXT,
-        null
-      );
+      // Find the starting element by matching the preview text
+      let startElementIndex = -1;
 
-      let node: Text | null;
-      while ((node = walker.nextNode() as Text | null)) {
-        const text = node.textContent || '';
-        const index = text.indexOf(searchText);
+      for (let i = 0; i < allElements.length; i++) {
+        const el = allElements[i];
+        const elText = el.textContent || '';
 
-        if (index !== -1) {
-          try {
-            // Found a match - create a range for highlighting
-            const range = document.createRange();
-            range.setStart(node, index);
+        // Check if this element contains the start of our extracted content
+        if (elText.includes(searchText.substring(0, 30))) {
+          startElementIndex = i;
+          break;
+        }
+      }
 
-            // Try to extend the range to cover more of the extracted content
-            // Find the approximate end based on content length
-            const endOffset = Math.min(index + Math.min(section.contentLength, 500), text.length);
-            range.setEnd(node, endOffset);
-
-            ranges.push(range);
-
-            // Add visual overlay to the parent element
-            const parentElement = node.parentElement;
-            if (parentElement && !parentElement.classList.contains('extracted-content-marked')) {
-              parentElement.classList.add('extracted-content-marked');
-              parentElement.setAttribute('data-extracted-section', section.id);
-              parentElement.setAttribute('title', `Already extracted: ${section.title}`);
-            }
-          } catch (e) {
-            // Range creation failed, skip this match
+      if (startElementIndex === -1) {
+        // Couldn't find the starting element - try a more lenient search
+        const firstWords = searchText.split(/\s+/).slice(0, 5).join(' ');
+        for (let i = 0; i < allElements.length; i++) {
+          const el = allElements[i];
+          const elText = el.textContent || '';
+          if (elText.includes(firstWords)) {
+            startElementIndex = i;
+            break;
           }
-          break; // Only mark first occurrence
+        }
+      }
+
+      if (startElementIndex === -1) return; // Still couldn't find it
+
+      // Now mark elements starting from startElementIndex until we've covered contentLength
+      let charsCovered = 0;
+      const targetLength = section.contentLength || 1000;
+
+      for (let i = startElementIndex; i < allElements.length && charsCovered < targetLength; i++) {
+        const el = allElements[i];
+
+        // Skip if this element is nested inside an already-marked element
+        if (el.closest('.extracted-content-marked') && !el.classList.contains('extracted-content-marked')) {
+          continue;
+        }
+
+        // Mark this element
+        el.classList.add('extracted-content-marked');
+        el.setAttribute('data-extracted-section', section.id);
+        el.setAttribute('title', `Already extracted: ${section.title}`);
+
+        // Count characters
+        const elLength = el.textContent?.length || 0;
+        charsCovered += elLength;
+
+        // If this is a container element (like table, ul, ol), we've likely marked it all
+        if (['TABLE', 'UL', 'OL'].includes(el.tagName)) {
+          // Mark children too for visual consistency
+          el.querySelectorAll('tr, td, th, li').forEach(child => {
+            child.classList.add('extracted-content-marked');
+          });
         }
       }
     });
-
-    setMarkedRanges(ranges);
   }, [htmlContent, taggedSections]);
 
   // Jump to the first non-extracted content (skip past marked content)
