@@ -144,11 +144,29 @@ export function DocumentViewer({
 
       console.log(`[Marking] Start element found at index ${startIndex}, text: "${leafElements[startIndex].textContent?.substring(0, 50)}..."`);
 
-      // Find END element using endPreviewText (more reliable than character counting)
-      let endIndex = startIndex;
+      // STEP 1: First estimate end position using character counting
+      const targetLength = section.contentLength || 1000;
+      let estimatedEndIndex = startIndex;
+      let charsCovered = 0;
+
+      for (let i = startIndex; i < leafElements.length; i++) {
+        const elLength = leafElements[i].textContent?.length || 0;
+        charsCovered += elLength;
+        estimatedEndIndex = i;
+
+        // Stop when we've covered the target length
+        if (charsCovered >= targetLength) {
+          break;
+        }
+      }
+
+      console.log(`[Marking] Estimated end at index ${estimatedEndIndex} (${charsCovered} chars covered, target: ${targetLength})`);
+
+      // STEP 2: Search for endPreviewText NEAR the estimated position (not from start)
+      // This prevents finding early matches of repeated text like "Response: Not applicable"
+      let endIndex = estimatedEndIndex;
 
       if (section.endPreviewText && section.endPreviewText.length >= 10) {
-        // Search for end preview text starting from the start element
         const cleanEndSearch = normalizeText(section.endPreviewText);
 
         // Try multiple search variants for end text
@@ -160,12 +178,18 @@ export function DocumentViewer({
           cleanEndSearch.split(/\s+/).slice(-3).join(' ')
         ].filter(v => v.length >= 5);
 
-        console.log('[Marking] Searching for end using variants:', endVariants.map(v => v.substring(0, 30)));
+        console.log('[Marking] Searching for end near estimated position using variants:', endVariants.map(v => v.substring(0, 30)));
+
+        // Search within a range around the estimated end (80% to 130% of estimated position)
+        const searchRangeStart = Math.max(startIndex, Math.floor(startIndex + (estimatedEndIndex - startIndex) * 0.7));
+        const searchRangeEnd = Math.min(leafElements.length - 1, Math.ceil(startIndex + (estimatedEndIndex - startIndex) * 1.5));
+
+        console.log(`[Marking] Search range: ${searchRangeStart} to ${searchRangeEnd}`);
 
         let foundEnd = false;
         for (const variant of endVariants) {
-          // Search forward from start index
-          for (let i = startIndex; i < leafElements.length; i++) {
+          // Search forward within the expected range
+          for (let i = searchRangeStart; i <= searchRangeEnd; i++) {
             const elText = normalizeText(leafElements[i].textContent || '');
             if (elText.includes(variant)) {
               endIndex = i;
@@ -178,26 +202,13 @@ export function DocumentViewer({
         }
 
         if (!foundEnd) {
-          console.log('[Marking] Could not find end using endPreviewText, falling back to character count');
+          console.log('[Marking] Could not find end using endPreviewText in range, using estimated position');
+          // Add a small buffer to the estimated position
+          endIndex = Math.min(leafElements.length - 1, estimatedEndIndex + 5);
         }
-      }
-
-      // Fallback: if endPreviewText didn't help, use character counting with generous buffer
-      if (endIndex === startIndex) {
-        const targetLength = section.contentLength || 1000;
-        let charsCovered = 0;
-
-        for (let i = startIndex; i < leafElements.length; i++) {
-          const elLength = leafElements[i].textContent?.length || 0;
-          charsCovered += elLength;
-          endIndex = i;
-
-          // Stop when we've covered 120% of target length (generous buffer)
-          if (charsCovered >= targetLength * 1.2) {
-            break;
-          }
-        }
-        console.log(`[Marking] Fallback: chars covered: ${charsCovered}, target: ${targetLength}`);
+      } else {
+        // No endPreviewText, add buffer to estimated position
+        endIndex = Math.min(leafElements.length - 1, estimatedEndIndex + 5);
       }
 
       console.log(`[Marking] End index: ${endIndex}, will mark ${endIndex - startIndex + 1} elements`);
