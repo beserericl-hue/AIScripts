@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { Loader2, ZoomIn, ZoomOut, RotateCcw, MousePointer2, CheckCircle, ChevronDown, SkipForward } from 'lucide-react';
+import { Loader2, ZoomIn, ZoomOut, RotateCcw, MousePointer2, CheckCircle, SkipForward } from 'lucide-react';
 
 // Selection data - stores the selected HTML and the Range for later replacement
 export interface SelectionData {
@@ -449,18 +449,9 @@ export function DocumentViewer({
                 <SkipForward className="w-4 h-4" />
                 Jump to Next
               </button>
-              <button
-                onClick={handleToggleExtractedList}
-                className={`flex items-center gap-1 px-2 py-1 text-sm rounded ${
-                  showExtractedList
-                    ? 'bg-gray-200 text-gray-700'
-                    : 'bg-gray-100 text-gray-500'
-                }`}
-                title={showExtractedList ? 'Hide extracted sections list' : 'Show extracted sections list'}
-              >
-                <ChevronDown className={`w-4 h-4 transition-transform ${showExtractedList ? '' : '-rotate-90'}`} />
+              <span className="text-sm text-gray-600">
                 {extractedCount} extracted
-              </button>
+              </span>
               <div className="w-px h-5 bg-gray-300" />
             </>
           )}
