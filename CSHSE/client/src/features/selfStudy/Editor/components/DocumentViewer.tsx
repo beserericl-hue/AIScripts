@@ -144,25 +144,63 @@ export function DocumentViewer({
 
       console.log(`[Marking] Start element found at index ${startIndex}, text: "${leafElements[startIndex].textContent?.substring(0, 50)}..."`);
 
-      // Calculate end index based on contentLength
-      // Mark elements until we've covered the contentLength
-      const targetLength = section.contentLength || 1000;
+      // Find END element using endPreviewText (more reliable than character counting)
       let endIndex = startIndex;
-      let charsCovered = 0;
 
-      for (let i = startIndex; i < leafElements.length; i++) {
-        const elLength = leafElements[i].textContent?.length || 0;
-        charsCovered += elLength;
-        endIndex = i;
+      if (section.endPreviewText && section.endPreviewText.length >= 10) {
+        // Search for end preview text starting from the start element
+        const cleanEndSearch = normalizeText(section.endPreviewText);
 
-        // Stop when we've covered the target length (with 10% buffer)
-        if (charsCovered >= targetLength * 0.9) {
-          break;
+        // Try multiple search variants for end text
+        const endVariants = [
+          cleanEndSearch.substring(Math.max(0, cleanEndSearch.length - 60)),
+          cleanEndSearch.substring(Math.max(0, cleanEndSearch.length - 40)),
+          cleanEndSearch.split(/\s+/).slice(-8).join(' '),
+          cleanEndSearch.split(/\s+/).slice(-5).join(' '),
+          cleanEndSearch.split(/\s+/).slice(-3).join(' ')
+        ].filter(v => v.length >= 5);
+
+        console.log('[Marking] Searching for end using variants:', endVariants.map(v => v.substring(0, 30)));
+
+        let foundEnd = false;
+        for (const variant of endVariants) {
+          // Search forward from start index
+          for (let i = startIndex; i < leafElements.length; i++) {
+            const elText = normalizeText(leafElements[i].textContent || '');
+            if (elText.includes(variant)) {
+              endIndex = i;
+              foundEnd = true;
+              console.log(`[Marking] Found end match for "${variant.substring(0, 30)}..." at index ${i}`);
+              break;
+            }
+          }
+          if (foundEnd) break;
+        }
+
+        if (!foundEnd) {
+          console.log('[Marking] Could not find end using endPreviewText, falling back to character count');
         }
       }
 
-      console.log(`[Marking] End index: ${endIndex}, chars covered: ${charsCovered}, target: ${targetLength}`);
-      console.log(`[Marking] Will mark ${endIndex - startIndex + 1} elements`);
+      // Fallback: if endPreviewText didn't help, use character counting with generous buffer
+      if (endIndex === startIndex) {
+        const targetLength = section.contentLength || 1000;
+        let charsCovered = 0;
+
+        for (let i = startIndex; i < leafElements.length; i++) {
+          const elLength = leafElements[i].textContent?.length || 0;
+          charsCovered += elLength;
+          endIndex = i;
+
+          // Stop when we've covered 120% of target length (generous buffer)
+          if (charsCovered >= targetLength * 1.2) {
+            break;
+          }
+        }
+        console.log(`[Marking] Fallback: chars covered: ${charsCovered}, target: ${targetLength}`);
+      }
+
+      console.log(`[Marking] End index: ${endIndex}, will mark ${endIndex - startIndex + 1} elements`);
 
       // Mark all elements from start to end (inclusive)
       let markedCount = 0;

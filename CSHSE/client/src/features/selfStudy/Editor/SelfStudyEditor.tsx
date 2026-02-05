@@ -1969,6 +1969,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             id: s.id,
                             title: s.title,
                             previewText: s.previewText || '',
+                            endPreviewText: s.endPreviewText || '',
                             contentLength: s.contentLength || 0
                           }))}
                         />

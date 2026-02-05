@@ -33,6 +33,7 @@ export interface TaggedSection {
   specCode?: string;
   title: string;
   previewText?: string;
+  endPreviewText?: string; // Last 100 chars - helps frontend find where extraction ends
   contentLength?: number;
   createdAt?: string;
   appliedDirectly?: boolean; // If true, already applied to submission (skips N8N)
