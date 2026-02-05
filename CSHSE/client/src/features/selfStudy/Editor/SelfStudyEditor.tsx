@@ -547,6 +547,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   };
 
   // Check for existing in-progress import when user clicks Import Document
+  // Auto-resumes if found - no dialog needed
   const handleImportButtonClick = async () => {
     setIsCheckingExistingImport(true);
     setUploadError(null);
@@ -555,9 +556,13 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       const response = await api.get(`/api/imports/check/${submissionId}`);
 
       if (response.data.hasExistingImport) {
-        // Found an existing import - show resume dialog
-        setExistingImportInfo(response.data.import);
-        setShowResumeDialog(true);
+        // Found an existing import - auto-resume directly (no dialog)
+        const existingImport = response.data.import;
+        setExistingImportInfo(existingImport);
+        setImportId(existingImport.id);
+        setShowImportModal(true);
+        setImportStep('manual_tagging');
+        // Document content and tagged sections will be loaded by useEffect
       } else {
         // No existing import - show fresh upload modal
         setShowImportModal(true);
@@ -573,44 +578,37 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     }
   };
 
-  // Resume an existing in-progress import
-  const handleResumeImport = async () => {
-    if (!existingImportInfo) return;
-
-    setShowResumeDialog(false);
-    setImportId(existingImportInfo.id);
-    setShowImportModal(true);
-    setImportStep('manual_tagging');
-
-    // Load the document content and tagged sections
-    // These will be loaded by the useEffect that watches importId
+  // Save progress and exit - closes the import panel
+  // Progress is already auto-saved with each tagged section
+  const handleSaveProgressAndExit = () => {
+    setShowImportModal(false);
+    // Don't reset importId or other state - preserve for next time
+    // Just close the modal
   };
 
-  // Discard existing import and start fresh
-  const handleDiscardImport = async () => {
-    if (!existingImportInfo) return;
+  // Start over - discard existing import and show upload screen
+  const handleStartOver = async () => {
+    const idToDiscard = importId || existingImportInfo?.id;
+    if (!idToDiscard) return;
 
     setIsDiscardingImport(true);
 
     try {
-      await api.delete(`/api/imports/${existingImportInfo.id}/discard`);
+      await api.delete(`/api/imports/${idToDiscard}/discard`);
 
-      // Clear the existing import info and show upload modal
+      // Reset all import state and show upload screen
+      setImportId(null);
       setExistingImportInfo(null);
-      setShowResumeDialog(false);
-      setShowImportModal(true);
       setImportStep('upload');
+      setDocumentHtml('');
+      setTaggedSections([]);
+      setCurrentSelection(null);
+      setSectionError(null);
     } catch (err: any) {
       setUploadError(err.response?.data?.error || 'Failed to discard import');
     } finally {
       setIsDiscardingImport(false);
     }
-  };
-
-  // Close resume dialog without action
-  const handleCloseResumeDialog = () => {
-    setShowResumeDialog(false);
-    setExistingImportInfo(null);
   };
 
   // Manual Tagging: Load document content from temp file
@@ -1636,14 +1634,33 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                 <h2 className="text-lg font-semibold text-gray-900">
                   {importStep === 'review' ? 'Import Review' : 'Import Document'}
                 </h2>
+                {/* Show resuming indicator if we have existing import info */}
+                {importStep === 'manual_tagging' && existingImportInfo && (
+                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                    Resuming
+                  </span>
+                )}
               </div>
-              <button
-                onClick={resetImportModal}
-                className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-                title="Close"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Save Progress & Exit - shown during manual tagging */}
+                {importStep === 'manual_tagging' && (
+                  <button
+                    onClick={handleSaveProgressAndExit}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                    title="Save your progress and exit - you can resume later"
+                  >
+                    <Check className="w-4 h-4" />
+                    Save & Exit
+                  </button>
+                )}
+                <button
+                  onClick={importStep === 'manual_tagging' ? handleSaveProgressAndExit : resetImportModal}
+                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                  title={importStep === 'manual_tagging' ? "Save progress and close" : "Close"}
+                >
+                  <X className="w-5 h-5 text-gray-500" />
+                </button>
+              </div>
             </div>
 
             {/* Modal Content */}
@@ -2020,6 +2037,17 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                         >
                           Cancel Import
                         </button>
+
+                        {/* Start Over link */}
+                        <div className="text-center pt-1">
+                          <button
+                            onClick={handleStartOver}
+                            disabled={isDiscardingImport || isConfirmingSelections}
+                            className="text-xs text-gray-400 hover:text-red-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isDiscardingImport ? 'Discarding...' : 'Start Over (discard all progress)'}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2723,81 +2751,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         </div>
       )}
 
-      {/* Resume Import Dialog */}
-      {showResumeDialog && existingImportInfo && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-amber-100 rounded-full">
-                  <AlertCircle className="w-6 h-6 text-amber-600" />
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Resume Previous Import?
-                </h3>
-              </div>
-
-              <p className="text-gray-600 mb-4">
-                You have an in-progress import that was started earlier. Would you like to continue where you left off?
-              </p>
-
-              <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                <div className="text-sm space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">File:</span>
-                    <span className="font-medium text-gray-900 truncate ml-2" title={existingImportInfo.originalFilename}>
-                      {existingImportInfo.originalFilename}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Started:</span>
-                    <span className="text-gray-700">
-                      {new Date(existingImportInfo.uploadedAt).toLocaleDateString()} at{' '}
-                      {new Date(existingImportInfo.uploadedAt).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Progress:</span>
-                    <span className="text-gray-700">
-                      {existingImportInfo.taggedSectionsCount} section{existingImportInfo.taggedSectionsCount !== 1 ? 's' : ''} tagged
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleResumeImport}
-                  className="flex-1 px-4 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 font-medium flex items-center justify-center gap-2"
-                >
-                  <PlayCircle className="w-4 h-4" />
-                  Continue Import
-                </button>
-                <button
-                  onClick={handleDiscardImport}
-                  disabled={isDiscardingImport}
-                  className="flex-1 px-4 py-2.5 bg-red-50 text-red-600 border border-red-200 rounded-lg hover:bg-red-100 font-medium flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isDiscardingImport ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Trash2 className="w-4 h-4" />
-                  )}
-                  Start Fresh
-                </button>
-              </div>
-
-              <button
-                onClick={handleCloseResumeDialog}
-                className="w-full mt-3 px-4 py-2 text-gray-500 hover:text-gray-700 text-sm"
-              >
-                Cancel
-              </button>
-            </div>
           </div>
-        </div>
-      )}
-    </div>
   );
 }
 
