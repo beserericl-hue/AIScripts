@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { Loader2, ZoomIn, ZoomOut, RotateCcw, MousePointer2, CheckCircle, SkipForward } from 'lucide-react';
 
-// Selection data - stores the selected HTML and the Range for later replacement
+// Selection data - stores the selected HTML and the Range for later replacement (v2)
 export interface SelectionData {
   html: string;
   text: string;
