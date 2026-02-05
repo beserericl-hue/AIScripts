@@ -298,6 +298,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null);
   const [viewingTaggedSection, setViewingTaggedSection] = useState<TaggedSection | null>(null);
   const [viewingFullContent, setViewingFullContent] = useState<string | null>(null);
+  const [viewingHtmlContent, setViewingHtmlContent] = useState<string | null>(null); // HTML content for formatting
   const [isLoadingFullContent, setIsLoadingFullContent] = useState(false);
 
   // Fetch submission data
@@ -760,11 +761,14 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const handleViewTaggedSection = async (section: TaggedSection) => {
     setViewingTaggedSection(section);
     setViewingFullContent(null);
+    setViewingHtmlContent(null);
     setIsLoadingFullContent(true);
 
     try {
       const response = await api.get(`/api/imports/${importId}/tagged-sections/${section.id}`);
       setViewingFullContent(response.data.fullContent || 'No content available');
+      // Store HTML content separately for formatted display
+      setViewingHtmlContent(response.data.htmlContent || null);
     } catch (err: any) {
       console.error('Failed to load full section content:', err);
       setViewingFullContent(section.previewText || 'Failed to load content');
@@ -2064,6 +2068,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             onClick={() => {
                               setViewingTaggedSection(null);
                               setViewingFullContent(null);
+                              setViewingHtmlContent(null);
                             }}
                             className="p-1 hover:bg-gray-100 rounded"
                           >
@@ -2076,7 +2081,44 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                               <Loader2 className="w-6 h-6 animate-spin text-teal-600 mr-2" />
                               <span className="text-gray-500">Loading full content...</span>
                             </div>
+                          ) : viewingHtmlContent ? (
+                            // Render HTML content to preserve formatting (tables, lists, etc.)
+                            <>
+                              <style>{`
+                                .tagged-section-content table {
+                                  border-collapse: collapse;
+                                  width: 100%;
+                                  margin: 1rem 0;
+                                }
+                                .tagged-section-content th,
+                                .tagged-section-content td {
+                                  border: 1px solid #d1d5db;
+                                  padding: 0.5rem 0.75rem;
+                                  text-align: left;
+                                }
+                                .tagged-section-content th {
+                                  background: #f3f4f6;
+                                  font-weight: 600;
+                                }
+                                .tagged-section-content tr:nth-child(even) {
+                                  background: #f9fafb;
+                                }
+                                .tagged-section-content p {
+                                  margin: 0.5rem 0;
+                                }
+                                .tagged-section-content ul,
+                                .tagged-section-content ol {
+                                  margin: 0.5rem 0;
+                                  padding-left: 1.5rem;
+                                }
+                              `}</style>
+                              <div
+                                className="tagged-section-content prose prose-sm max-w-none"
+                                dangerouslySetInnerHTML={{ __html: viewingHtmlContent }}
+                              />
+                            </>
                           ) : (
+                            // Fallback to plain text
                             <div className="prose prose-sm max-w-none whitespace-pre-wrap">
                               {viewingFullContent || viewingTaggedSection.previewText || 'No content available'}
                             </div>
@@ -2092,6 +2134,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             onClick={() => {
                               setViewingTaggedSection(null);
                               setViewingFullContent(null);
+                              setViewingHtmlContent(null);
                             }}
                             className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
                           >

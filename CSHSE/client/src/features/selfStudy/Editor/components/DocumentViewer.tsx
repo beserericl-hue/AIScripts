@@ -13,6 +13,7 @@ export interface TaggedSectionInfo {
   id: string;
   title: string;
   previewText: string;
+  endPreviewText?: string; // Last 100 chars to find where extraction ends
   contentLength: number;
 }
 
@@ -56,7 +57,7 @@ export function DocumentViewer({
   const extractedCount = taggedSections.length;
 
   // Mark extracted content in the document visually
-  // Only marks the specific element(s) containing the extracted text, not consecutive elements
+  // Uses both start text (previewText) and end text (endPreviewText) to find the full range
   useEffect(() => {
     if (!contentRef.current) {
       return;
@@ -74,83 +75,97 @@ export function DocumentViewer({
       return;
     }
 
-    // Get leaf-level elements (smallest containers) - prefer these over parent containers
-    // Order matters: more specific elements first
+    // Get ALL leaf-level elements in document order for range marking
     const leafElements = Array.from(contentRef.current.querySelectorAll(
       'td, th, li, p, h1, h2, h3, h4, h5, h6, blockquote, pre'
     ));
 
+    // Helper: find element containing text (returns smallest matching element and its index)
+    const findElementContaining = (searchText: string, startFromIndex = 0): { element: Element | null; index: number } => {
+      if (!searchText || searchText.length < 5) return { element: null, index: -1 };
+
+      // Try with first 25 chars, then first few words
+      const searchVariants = [
+        searchText.substring(0, 25),
+        searchText.split(/\s+/).slice(0, 4).join(' ')
+      ];
+
+      for (const variant of searchVariants) {
+        if (variant.length < 5) continue;
+
+        for (let i = startFromIndex; i < leafElements.length; i++) {
+          const el = leafElements[i];
+          const elText = el.textContent || '';
+          if (elText.includes(variant)) {
+            return { element: el, index: i };
+          }
+        }
+      }
+
+      return { element: null, index: -1 };
+    };
+
+    // Helper: mark an element
+    const markElement = (el: Element, sectionId: string, sectionTitle: string) => {
+      el.classList.add('extracted-content-marked');
+      el.setAttribute('data-extracted-section', sectionId);
+      el.setAttribute('title', `Already extracted: ${sectionTitle}`);
+    };
+
     taggedSections.forEach(section => {
       if (!section.previewText || !contentRef.current) return;
 
-      // Get search text from the preview (first 50 chars for initial match)
-      const searchText = section.previewText.substring(0, 50).trim();
-      if (searchText.length < 10) return;
+      // Find START element (using previewText - first 200 chars)
+      const startText = section.previewText.substring(0, 50).trim();
+      const { element: startElement, index: startIndex } = findElementContaining(startText);
 
-      // Find the SMALLEST element that contains the beginning of the extracted text
-      // This prevents marking entire tables when only one cell was selected
-      let matchedElement: Element | null = null;
-      let smallestMatchSize = Infinity;
+      if (!startElement || startIndex < 0) return; // Couldn't find start
 
-      for (const el of leafElements) {
-        const elText = el.textContent || '';
+      // Find END element (using endPreviewText - last 100 chars)
+      let endElement: Element | null = startElement;
+      let endIndex = startIndex;
 
-        // Check if this element contains the start of our extracted content
-        if (elText.includes(searchText.substring(0, 25))) {
-          // Prefer smaller elements (more specific matches)
-          const elSize = elText.length;
-          if (elSize < smallestMatchSize) {
-            smallestMatchSize = elSize;
-            matchedElement = el;
-          }
+      if (section.endPreviewText && section.endPreviewText.length >= 10) {
+        // Search for end starting from the start element
+        const endText = section.endPreviewText.substring(section.endPreviewText.length - 50).trim();
+        const endResult = findElementContaining(endText, startIndex);
+        if (endResult.element && endResult.index >= startIndex) {
+          endElement = endResult.element;
+          endIndex = endResult.index;
         }
+      } else {
+        // No endPreviewText - estimate based on content length
+        const targetLength = section.contentLength || 0;
+        let charsCovered = startElement.textContent?.length || 0;
+
+        for (let i = startIndex + 1; i < leafElements.length && charsCovered < targetLength; i++) {
+          charsCovered += leafElements[i].textContent?.length || 0;
+          endIndex = i;
+        }
+        endElement = leafElements[endIndex] || startElement;
       }
 
-      // Fallback: try with first few words if no match found
-      if (!matchedElement) {
-        const firstWords = searchText.split(/\s+/).slice(0, 4).join(' ');
-        if (firstWords.length >= 10) {
-          for (const el of leafElements) {
-            const elText = el.textContent || '';
-            if (elText.includes(firstWords)) {
-              const elSize = elText.length;
-              if (elSize < smallestMatchSize) {
-                smallestMatchSize = elSize;
-                matchedElement = el;
-              }
+      // Mark all elements from start to end (inclusive)
+      for (let i = startIndex; i <= endIndex && i < leafElements.length; i++) {
+        markElement(leafElements[i], section.id, section.title);
+      }
+
+      // If start and end are the same but content is larger, expand forward
+      if (startIndex === endIndex && section.contentLength > (startElement.textContent?.length || 0) * 1.2) {
+        // Check if we're in a table - if so, mark parent rows
+        const parentTable = startElement.closest('table');
+        if (parentTable) {
+          // Get all cells in the table after the start element
+          const tableCells = Array.from(parentTable.querySelectorAll('td, th'));
+          const startCellIndex = tableCells.indexOf(startElement as HTMLTableCellElement);
+
+          if (startCellIndex >= 0) {
+            let charsCovered = startElement.textContent?.length || 0;
+            for (let i = startCellIndex + 1; i < tableCells.length && charsCovered < section.contentLength; i++) {
+              markElement(tableCells[i], section.id, section.title);
+              charsCovered += tableCells[i].textContent?.length || 0;
             }
           }
-        }
-      }
-
-      if (!matchedElement) return; // Couldn't find matching element
-
-      // Mark only this specific element
-      matchedElement.classList.add('extracted-content-marked');
-      matchedElement.setAttribute('data-extracted-section', section.id);
-      matchedElement.setAttribute('title', `Already extracted: ${section.title}`);
-
-      // If the extracted content is significantly larger than this element,
-      // look for adjacent siblings that might also be part of the extraction
-      const matchedLength = matchedElement.textContent?.length || 0;
-      const targetLength = section.contentLength || 0;
-
-      // Only expand to siblings if extracted content is much larger than matched element
-      // and we're not in a table cell (td/th)
-      if (targetLength > matchedLength * 1.5 && !['TD', 'TH'].includes(matchedElement.tagName)) {
-        let charsCovered = matchedLength;
-        let nextSibling = matchedElement.nextElementSibling;
-
-        while (nextSibling && charsCovered < targetLength) {
-          // Only mark sibling if it's a similar element type (p, li, etc.)
-          const validSiblings = ['P', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE'];
-          if (validSiblings.includes(nextSibling.tagName)) {
-            nextSibling.classList.add('extracted-content-marked');
-            nextSibling.setAttribute('data-extracted-section', section.id);
-            nextSibling.setAttribute('title', `Already extracted: ${section.title}`);
-            charsCovered += nextSibling.textContent?.length || 0;
-          }
-          nextSibling = nextSibling.nextElementSibling;
         }
       }
     });

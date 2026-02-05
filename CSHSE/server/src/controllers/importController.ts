@@ -2541,18 +2541,28 @@ export const getTaggedSections = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Import not found' });
     }
 
-    const sections = (importRecord.detectedSections || []).map((s: any) => ({
-      id: s.id,
-      title: s.headerText, // Map headerText to title for frontend
-      sectionType: s.isMatrix ? 'matrix' :
-                   s.isAppendix ? 'appendix' :
-                   s.standardCode ? 'standard' : 'standard',
-      previewText: s.previewText,
-      contentLength: s.fullContent?.length || 0,
-      standardCode: s.standardCode,
-      specCode: s.specCode,
-      appliedDirectly: s.appliedDirectly || false // Whether already applied to submission
-    }));
+    const sections = (importRecord.detectedSections || []).map((s: any) => {
+      // Get the full content for calculating end preview
+      const fullText = s.fullContent || '';
+      // End preview is last 100 chars (helps frontend find where extraction ends)
+      const endPreviewText = fullText.length > 100
+        ? fullText.substring(fullText.length - 100)
+        : fullText;
+
+      return {
+        id: s.id,
+        title: s.headerText, // Map headerText to title for frontend
+        sectionType: s.isMatrix ? 'matrix' :
+                     s.isAppendix ? 'appendix' :
+                     s.standardCode ? 'standard' : 'standard',
+        previewText: s.previewText,
+        endPreviewText, // Last 100 chars to help find where extraction ends in document
+        contentLength: s.fullContent?.length || 0,
+        standardCode: s.standardCode,
+        specCode: s.specCode,
+        appliedDirectly: s.appliedDirectly || false // Whether already applied to submission
+      };
+    });
 
     return res.json({
       sections,
@@ -2596,6 +2606,8 @@ export const getTaggedSectionContent = async (req: Request, res: Response) => {
       sectionType: section.isMatrix ? 'matrix' :
                    section.isAppendix ? 'appendix' :
                    section.standardCode ? 'standard' : 'standard',
+      // Return HTML content to preserve formatting (tables, lists, etc.)
+      htmlContent: section.htmlContent || null,
       fullContent: section.fullContent || section.previewText || 'No content available',
       contentLength: section.fullContent?.length || 0,
       standardCode: section.standardCode,
