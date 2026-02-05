@@ -89,8 +89,7 @@ export function DocumentViewer({
   };
 
   // Replace captured selection with placeholder after successful save
-  // This is the key change - instead of trying to mark content later,
-  // we replace it immediately with a placeholder when saved
+  // Uses range.deleteContents() to remove exactly what was visually selected
   useEffect(() => {
     if (!lastSavedSection || !lastCapturedRangeRef.current || !contentRef.current) {
       return;
@@ -101,87 +100,9 @@ export function DocumentViewer({
     try {
       const placeholder = createPlaceholder(lastSavedSection);
 
-      // Check if selection is within a table - need special handling
-      const startRow = findAncestor(range.startContainer, 'TR');
-      let endRow = findAncestor(range.endContainer, 'TR');
-      const startTable = findAncestor(range.startContainer, 'TABLE');
-      const endTable = findAncestor(range.endContainer, 'TABLE');
-
-      // If both start and end are in the same table, remove the actual row elements
-      if (startRow && endRow && startTable && endTable && startTable === endTable) {
-        const table = startTable as HTMLTableElement;
-        const rows = Array.from(table.rows);
-        const startIdx = rows.indexOf(startRow as HTMLTableRowElement);
-        let endIdx = rows.indexOf(endRow as HTMLTableRowElement);
-
-        // IMPORTANT: Check if selection actually includes content from endRow
-        // Browser selections often extend to the START of the next element
-        // If endOffset is 0 and we're in a different row than start, the user didn't select that row
-        if (endRow !== startRow && endIdx > startIdx) {
-          // Check if the end position is at the very beginning of the row
-          const endContainer = range.endContainer;
-          const endOffset = range.endOffset;
-
-          // If offset is 0 and container is at the start of the row, don't include this row
-          let isAtRowStart = false;
-
-          if (endOffset === 0) {
-            isAtRowStart = true;
-          } else if (endContainer.nodeType === Node.TEXT_NODE && endOffset <= 1) {
-            // Check if this text node is at the very beginning of the row
-            const textContent = endContainer.textContent || '';
-            const selectedInEndRow = textContent.substring(0, endOffset).trim();
-            if (selectedInEndRow.length === 0) {
-              isAtRowStart = true;
-            }
-          }
-
-          if (isAtRowStart) {
-            // Don't include the end row - adjust to previous row
-            endIdx = endIdx - 1;
-            endRow = rows[endIdx] || startRow;
-            console.log(`[DocumentViewer] Adjusted end row: selection was at boundary, excluding row ${endIdx + 1}`);
-          }
-        }
-
-        if (startIdx >= 0 && endIdx >= 0) {
-          const minIdx = Math.min(startIdx, endIdx);
-          const maxIdx = Math.max(startIdx, endIdx);
-
-          // Check if we're removing all data rows (keep header if exists)
-          const tbody = table.querySelector('tbody');
-          const thead = table.querySelector('thead');
-          const dataRowCount = tbody ? tbody.rows.length : (thead ? table.rows.length - thead.rows.length : table.rows.length);
-          const removingAllDataRows = (maxIdx - minIdx + 1) >= dataRowCount;
-
-          if (removingAllDataRows) {
-            // Remove entire table and replace with placeholder
-            table.parentNode?.insertBefore(placeholder, table);
-            table.remove();
-            console.log(`[DocumentViewer] Removed entire table (all rows extracted)`);
-          } else {
-            // Remove only the selected rows
-            // Insert placeholder BEFORE the table (not inside it) to preserve column widths
-            // Inserting a colspan row inside the table disrupts column width calculations
-            table.parentNode?.insertBefore(placeholder, table);
-
-            // Remove the selected rows (in reverse order to maintain indices)
-            for (let i = maxIdx; i >= minIdx; i--) {
-              rows[i].remove();
-            }
-
-            console.log(`[DocumentViewer] Removed ${maxIdx - minIdx + 1} table rows (${minIdx}-${maxIdx}), placeholder before table`);
-          }
-        } else {
-          // Fallback: couldn't find row indices, use standard deletion
-          range.deleteContents();
-          range.insertNode(placeholder);
-        }
-      } else {
-        // Not in a table or spans multiple tables - use standard deletion
-        range.deleteContents();
-        range.insertNode(placeholder);
-      }
+      // Delete exactly what was selected (the visual highlight is the source of truth)
+      range.deleteContents();
+      range.insertNode(placeholder);
 
       // Update extracted count
       setExtractedCount(prev => prev + 1);
@@ -241,81 +162,9 @@ export function DocumentViewer({
     return null;
   };
 
-  // Helper: Extract HTML preserving table structure
+  // Helper: Extract HTML - uses range.cloneContents() to get exactly what's visually selected
   const extractSelectionHtml = (range: Range): string => {
-    // Check if selection is within a table
-    const startTable = findAncestor(range.startContainer, 'TABLE');
-    const endTable = findAncestor(range.endContainer, 'TABLE');
-
-    // If both start and end are in the same table, we need special handling
-    if (startTable && endTable && startTable === endTable) {
-      const table = startTable as HTMLTableElement;
-
-      // Find which rows are selected
-      const startRow = findAncestor(range.startContainer, 'TR');
-      const endRow = findAncestor(range.endContainer, 'TR');
-
-      if (startRow && endRow) {
-        // Clone the entire table structure with selected rows
-        const rows = Array.from(table.rows);
-        const startIdx = rows.indexOf(startRow as HTMLTableRowElement);
-        const endIdx = rows.indexOf(endRow as HTMLTableRowElement);
-
-        if (startIdx >= 0 && endIdx >= 0) {
-          // Create a new table with selected rows
-          const newTable = document.createElement('table');
-          // Copy table attributes
-          for (const attr of Array.from(table.attributes)) {
-            newTable.setAttribute(attr.name, attr.value);
-          }
-
-          // Always include thead if it exists - provides context for partial table extractions
-          const thead = table.querySelector('thead');
-          if (thead) {
-            newTable.appendChild(thead.cloneNode(true));
-          }
-
-          // Also check for header row in tbody (first row with th cells)
-          // Some tables don't use thead but have th cells in the first row
-          const tbody = table.querySelector('tbody');
-          const firstRow = tbody ? tbody.rows[0] : table.rows[0];
-          const hasHeaderCells = firstRow && firstRow.querySelectorAll('th').length > 0;
-          const selectionStartsAfterHeader = Math.min(startIdx, endIdx) > 0;
-
-          // Clone tbody with selected rows
-          const newTbody = document.createElement('tbody');
-
-          // If table has a header row (not in thead) and selection doesn't include it, add it
-          if (!thead && hasHeaderCells && selectionStartsAfterHeader) {
-            newTbody.appendChild(firstRow.cloneNode(true));
-            console.log('[Selection] Added header row for context');
-          }
-
-          for (let i = Math.min(startIdx, endIdx); i <= Math.max(startIdx, endIdx); i++) {
-            newTbody.appendChild(rows[i].cloneNode(true));
-          }
-          newTable.appendChild(newTbody);
-
-          console.log(`[Selection] Extracted ${Math.abs(endIdx - startIdx) + 1} rows from table (with headers for context)`);
-          return newTable.outerHTML;
-        }
-      }
-    }
-
-    // If selection spans multiple tables or non-table content,
-    // try to preserve structure by getting outerHTML of common ancestor
-    const commonAncestor = range.commonAncestorContainer;
-
-    // If common ancestor is an element that contains the full selection, use it
-    if (commonAncestor.nodeType === Node.ELEMENT_NODE) {
-      const element = commonAncestor as Element;
-      // For table cells, rows, or the table itself - clone the relevant structure
-      if (['TABLE', 'TBODY', 'THEAD', 'TR'].includes(element.tagName)) {
-        return element.outerHTML;
-      }
-    }
-
-    // Default: use range.cloneContents() and try to fix orphaned table content
+    // Use cloneContents() - this gives exactly what's visually highlighted
     const fragment = range.cloneContents();
     const tempDiv = document.createElement('div');
     tempDiv.appendChild(fragment);
