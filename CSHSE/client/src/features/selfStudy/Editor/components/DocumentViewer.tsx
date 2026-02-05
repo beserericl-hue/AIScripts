@@ -89,7 +89,6 @@ export function DocumentViewer({
   };
 
   // Replace captured selection with placeholder after successful save
-  // Uses range.deleteContents() to remove exactly what was visually selected
   useEffect(() => {
     if (!lastSavedSection || !lastCapturedRangeRef.current || !contentRef.current) {
       return;
@@ -100,9 +99,45 @@ export function DocumentViewer({
     try {
       const placeholder = createPlaceholder(lastSavedSection);
 
-      // Delete exactly what was selected (the visual highlight is the source of truth)
-      range.deleteContents();
-      range.insertNode(placeholder);
+      // Check if selection is within a table - need to handle row cleanup
+      const startTable = findAncestor(range.startContainer, 'TABLE');
+      const startRow = findAncestor(range.startContainer, 'TR');
+
+      if (startTable && startRow) {
+        // Table selection: insert placeholder before table, then delete content and clean up empty rows
+        const table = startTable as HTMLTableElement;
+
+        // Insert placeholder before the table
+        table.parentNode?.insertBefore(placeholder, table);
+
+        // Delete the selected content
+        range.deleteContents();
+
+        // Clean up any rows that are now empty (only whitespace/empty cells)
+        const rows = Array.from(table.rows);
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const row = rows[i];
+          const textContent = row.textContent?.trim() || '';
+          // Also check if row only contains placeholder elements we just inserted
+          const hasOnlyPlaceholders = row.querySelectorAll('.extracted-section-placeholder').length > 0
+            && textContent.length === 0;
+
+          if (textContent.length === 0 || hasOnlyPlaceholders) {
+            row.remove();
+            console.log(`[DocumentViewer] Removed empty table row ${i}`);
+          }
+        }
+
+        // If table is now empty, remove it too
+        if (table.rows.length === 0) {
+          table.remove();
+          console.log(`[DocumentViewer] Removed empty table`);
+        }
+      } else {
+        // Non-table content: simple delete and insert
+        range.deleteContents();
+        range.insertNode(placeholder);
+      }
 
       // Update extracted count
       setExtractedCount(prev => prev + 1);
