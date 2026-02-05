@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Trash2, FileText, Grid3X3, BookOpen, Eye, Loader2, Zap, CheckCircle2, Send } from 'lucide-react';
 
-// Standard names for display
+// Standard names for display - CSHSE Standards 1-21
 const STANDARD_NAMES: Record<string, string> = {
   '1': 'Program Identity',
   '2': 'Program Objectives',
