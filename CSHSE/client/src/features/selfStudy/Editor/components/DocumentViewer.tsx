@@ -57,8 +57,7 @@ export function DocumentViewer({
   const extractedCount = taggedSections.length;
 
   // Mark extracted content in the document visually
-  // Uses START (previewText) and END (endPreviewText) to find exact boundaries
-  // Only marks what was actually extracted - nothing more, nothing less
+  // Uses contentLength to determine how many elements to mark from the start
   useEffect(() => {
     if (!contentRef.current) {
       return;
@@ -81,38 +80,39 @@ export function DocumentViewer({
       'p, h1, h2, h3, h4, h5, h6, li, td, th, blockquote, pre'
     ));
 
+    console.log('[Marking] Total leaf elements:', leafElements.length);
+
+    // Helper: normalize text for comparison
+    const normalizeText = (text: string): string => {
+      return text.replace(/\s+/g, ' ').trim().toLowerCase();
+    };
+
     // Helper: find element index containing specific text
-    const findElementIndex = (searchText: string, startFrom = 0, searchBackward = false): number => {
+    const findElementIndex = (searchText: string, startFrom = 0): number => {
       if (!searchText || searchText.length < 5) return -1;
 
-      const cleanSearch = searchText.replace(/\s+/g, ' ').trim();
+      const cleanSearch = normalizeText(searchText);
+
+      // Try multiple search variants - use more text for better matching
       const variants = [
+        cleanSearch.substring(0, Math.min(60, cleanSearch.length)),
         cleanSearch.substring(0, Math.min(40, cleanSearch.length)),
-        cleanSearch.split(/\s+/).slice(0, 6).join(' '),
-        cleanSearch.split(/\s+/).slice(0, 4).join(' ')
-      ];
+        cleanSearch.split(/\s+/).slice(0, 8).join(' '),
+        cleanSearch.split(/\s+/).slice(0, 5).join(' '),
+        cleanSearch.split(/\s+/).slice(0, 3).join(' ')
+      ].filter(v => v.length >= 5);
 
       for (const variant of variants) {
-        if (variant.length < 5) continue;
-
-        if (searchBackward) {
-          // Search from end backwards
-          for (let i = leafElements.length - 1; i >= startFrom; i--) {
-            const elText = (leafElements[i].textContent || '').replace(/\s+/g, ' ');
-            if (elText.includes(variant)) {
-              return i;
-            }
-          }
-        } else {
-          // Search forward
-          for (let i = startFrom; i < leafElements.length; i++) {
-            const elText = (leafElements[i].textContent || '').replace(/\s+/g, ' ');
-            if (elText.includes(variant)) {
-              return i;
-            }
+        for (let i = startFrom; i < leafElements.length; i++) {
+          const elText = normalizeText(leafElements[i].textContent || '');
+          if (elText.includes(variant)) {
+            console.log(`[Marking] Found match for "${variant.substring(0, 30)}..." at index ${i}`);
+            return i;
           }
         }
       }
+
+      console.log(`[Marking] No match found for "${cleanSearch.substring(0, 50)}..."`);
       return -1;
     };
 
@@ -126,41 +126,55 @@ export function DocumentViewer({
     taggedSections.forEach(section => {
       if (!section.previewText || !contentRef.current) return;
 
-      // Find START element using previewText (first ~200 chars)
-      const startIndex = findElementIndex(section.previewText, 0, false);
-      if (startIndex < 0) return; // Couldn't find start
+      console.log('[Marking] Processing section:', {
+        id: section.id,
+        title: section.title,
+        contentLength: section.contentLength,
+        previewText: section.previewText.substring(0, 50) + '...',
+        endPreviewText: section.endPreviewText ? section.endPreviewText.substring(0, 50) + '...' : 'none'
+      });
 
-      // Find END element using endPreviewText (last ~100 chars)
-      let endIndex = startIndex; // Default to same element if no end found
+      // Find START element using previewText
+      const startIndex = findElementIndex(section.previewText, 0);
 
-      if (section.endPreviewText && section.endPreviewText.length >= 10) {
-        // Search for end text starting from the start element
-        const foundEnd = findElementIndex(section.endPreviewText, startIndex, false);
-        if (foundEnd >= startIndex) {
-          endIndex = foundEnd;
+      if (startIndex < 0) {
+        console.log('[Marking] Could not find start element!');
+        return;
+      }
+
+      console.log(`[Marking] Start element found at index ${startIndex}, text: "${leafElements[startIndex].textContent?.substring(0, 50)}..."`);
+
+      // Calculate end index based on contentLength
+      // Mark elements until we've covered the contentLength
+      const targetLength = section.contentLength || 1000;
+      let endIndex = startIndex;
+      let charsCovered = 0;
+
+      for (let i = startIndex; i < leafElements.length; i++) {
+        const elLength = leafElements[i].textContent?.length || 0;
+        charsCovered += elLength;
+        endIndex = i;
+
+        // Stop when we've covered the target length (with 10% buffer)
+        if (charsCovered >= targetLength * 0.9) {
+          break;
         }
       }
 
-      // If start and end are the same but content is larger, estimate end by character count
-      if (startIndex === endIndex && section.contentLength > 0) {
-        const startElLength = leafElements[startIndex].textContent?.length || 0;
-        if (section.contentLength > startElLength * 1.2) {
-          // Need to find more elements - use character counting as fallback
-          let charsCovered = startElLength;
-          for (let i = startIndex + 1; i < leafElements.length && charsCovered < section.contentLength; i++) {
-            charsCovered += leafElements[i].textContent?.length || 0;
-            endIndex = i;
-          }
-        }
-      }
+      console.log(`[Marking] End index: ${endIndex}, chars covered: ${charsCovered}, target: ${targetLength}`);
+      console.log(`[Marking] Will mark ${endIndex - startIndex + 1} elements`);
 
       // Mark all elements from start to end (inclusive)
+      let markedCount = 0;
       for (let i = startIndex; i <= endIndex && i < leafElements.length; i++) {
         const el = leafElements[i];
         if (!el.classList.contains('extracted-content-marked')) {
           markElement(el, section.id, section.title);
+          markedCount++;
         }
       }
+
+      console.log(`[Marking] Marked ${markedCount} elements for section "${section.title}"`);
     });
   }, [htmlContent, taggedSections]);
 
