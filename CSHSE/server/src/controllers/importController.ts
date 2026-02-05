@@ -1075,6 +1075,82 @@ function formatTableAsText(table: { headers: string[]; rows: string[][] }): stri
 }
 
 /**
+ * Check for existing in-progress import for a submission
+ * Returns the import if found, allowing user to resume or discard
+ */
+export const checkExistingImport = async (req: Request, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+
+    // Find any in-progress imports for this submission
+    // Status 'uploading', 'processing', or 'awaiting_selection' means work in progress
+    const existingImport = await SelfStudyImport.findOne({
+      submissionId,
+      status: { $in: ['uploading', 'processing', 'awaiting_selection', 'mapping'] }
+    }).sort({ uploadedAt: -1 }); // Get most recent
+
+    if (!existingImport) {
+      return res.json({
+        hasExistingImport: false
+      });
+    }
+
+    // Get count of tagged sections
+    const taggedSectionsCount = existingImport.detectedSections?.length || 0;
+
+    return res.json({
+      hasExistingImport: true,
+      import: {
+        id: existingImport._id,
+        status: existingImport.status,
+        originalFilename: existingImport.originalFilename,
+        uploadedAt: existingImport.uploadedAt,
+        taggedSectionsCount,
+        // Include progress info if available
+        parsingProgress: existingImport.parsingProgress
+      }
+    });
+  } catch (error: any) {
+    console.error('Check existing import error:', error);
+    return res.status(500).json({ error: 'Failed to check for existing import' });
+  }
+};
+
+/**
+ * Discard an in-progress import (allows user to start fresh)
+ */
+export const discardImport = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    // Clean up GridFS content if it exists
+    try {
+      await gridFsService.deleteHtmlContent(importId);
+    } catch (e) {
+      // Ignore cleanup errors
+    }
+
+    // Delete the import record
+    await SelfStudyImport.findByIdAndDelete(importId);
+
+    console.log(`[Import] Discarded import ${importId}`);
+
+    return res.json({
+      success: true,
+      message: 'Import discarded successfully'
+    });
+  } catch (error: any) {
+    console.error('Discard import error:', error);
+    return res.status(500).json({ error: 'Failed to discard import' });
+  }
+};
+
+/**
  * Get import status and content with detailed progress
  */
 export const getImport = async (req: Request, res: Response) => {

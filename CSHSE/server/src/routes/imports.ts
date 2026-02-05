@@ -23,7 +23,10 @@ import {
   getTaggedSections,
   getTaggedSectionContent,
   deleteTaggedSection,
-  finishTagging
+  finishTagging,
+  // Session persistence
+  checkExistingImport,
+  discardImport
 } from '../controllers/importController';
 import { authenticate } from '../middleware/auth';
 
@@ -60,6 +63,20 @@ const upload = multer({
  * @access  Private (Coordinator)
  */
 router.post('/upload', upload.single('file'), uploadDocument);
+
+/**
+ * @route   GET /api/imports/check/:submissionId
+ * @desc    Check for existing in-progress import for a submission
+ * @access  Private
+ */
+router.get('/check/:submissionId', checkExistingImport);
+
+/**
+ * @route   DELETE /api/imports/:importId/discard
+ * @desc    Discard an in-progress import (start fresh)
+ * @access  Private (Coordinator)
+ */
+router.delete('/:importId/discard', discardImport);
 
 /**
  * @route   GET /api/imports/:importId
