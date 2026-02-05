@@ -1,19 +1,19 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { Loader2, ZoomIn, ZoomOut, RotateCcw, MousePointer2, CheckCircle, ChevronDown, SkipForward } from 'lucide-react';
 
-// Simple selection data - stores the selected HTML directly
+// Selection data - stores the selected HTML and the Range for later replacement
 export interface SelectionData {
   html: string;
   text: string;
   previewText: string;
+  range?: Range; // Store the Range so we can replace it after save
 }
 
-// Tagged section info for visual marking
-export interface TaggedSectionInfo {
+// Info for a successfully saved section (used to create placeholder)
+export interface SavedSectionInfo {
   id: string;
   title: string;
-  previewText: string;
-  endPreviewText?: string; // Last 100 chars to find where extraction ends
+  sectionType: string;
   contentLength: number;
 }
 
@@ -25,7 +25,9 @@ interface DocumentViewerProps {
   onSelectionCapture: (selection: SelectionData | null) => void;
   onRefresh: () => void;
   hasSelection: boolean;
-  taggedSections?: TaggedSectionInfo[];
+  // Called by parent after successful save - replaces selection with placeholder
+  lastSavedSection?: SavedSectionInfo | null;
+  onPlaceholderInserted?: () => void; // Called after placeholder is inserted
 }
 
 /**
@@ -42,7 +44,8 @@ export function DocumentViewer({
   onSelectionCapture,
   onRefresh,
   hasSelection,
-  taggedSections = []
+  lastSavedSection,
+  onPlaceholderInserted
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -50,236 +53,98 @@ export function DocumentViewer({
   const [zoom, setZoom] = useState(100);
   const [currentSelection, setCurrentSelection] = useState<SelectionData | null>(null);
   const [selectionActive, setSelectionActive] = useState(false);
-  const [showExtractedList, setShowExtractedList] = useState(false);
-  const [markedRanges, setMarkedRanges] = useState<Range[]>([]);
+  const [extractedCount, setExtractedCount] = useState(0);
+  // Store the last captured range so we can replace it after save
+  const lastCapturedRangeRef = useRef<Range | null>(null);
 
-  // Number of tagged sections (from parent component)
-  const extractedCount = taggedSections.length;
-
-  // Mark extracted content in the document visually
-  // Uses contentLength to determine how many elements to mark from the start
+  // Replace captured selection with placeholder after successful save
+  // This is the key change - instead of trying to mark content later,
+  // we replace it immediately with a placeholder when saved
   useEffect(() => {
-    if (!contentRef.current) {
+    if (!lastSavedSection || !lastCapturedRangeRef.current || !contentRef.current) {
       return;
     }
 
-    // Clear ALL previous marks first
-    const existingMarks = contentRef.current.querySelectorAll('.extracted-content-marked');
-    existingMarks.forEach(mark => {
-      mark.classList.remove('extracted-content-marked');
-      mark.removeAttribute('data-extracted-section');
-      mark.removeAttribute('title');
-    });
+    const range = lastCapturedRangeRef.current;
 
-    if (taggedSections.length === 0) {
-      return;
+    try {
+      // Create placeholder element
+      const placeholder = document.createElement('div');
+      placeholder.className = 'extracted-section-placeholder';
+      placeholder.setAttribute('data-section-id', lastSavedSection.id);
+      placeholder.setAttribute('data-section-type', lastSavedSection.sectionType);
+
+      // Style based on section type
+      const typeColors: Record<string, string> = {
+        'standard': 'bg-teal-100 border-teal-400 text-teal-800',
+        'matrix': 'bg-purple-100 border-purple-400 text-purple-800',
+        'appendix': 'bg-amber-100 border-amber-400 text-amber-800',
+        'skip': 'bg-gray-100 border-gray-400 text-gray-600'
+      };
+      const colorClass = typeColors[lastSavedSection.sectionType] || typeColors['standard'];
+
+      placeholder.innerHTML = `
+        <div class="flex items-center gap-2 px-3 py-2 ${colorClass} border-l-4 rounded-r my-2">
+          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+          <span class="font-medium text-sm truncate">
+            ✓ Extracted: ${lastSavedSection.title}
+          </span>
+          <span class="text-xs opacity-75">
+            (${lastSavedSection.contentLength.toLocaleString()} chars)
+          </span>
+        </div>
+      `;
+
+      // Delete the selected content and insert placeholder
+      range.deleteContents();
+      range.insertNode(placeholder);
+
+      // Update extracted count
+      setExtractedCount(prev => prev + 1);
+
+      // Clear the stored range
+      lastCapturedRangeRef.current = null;
+
+      // Notify parent that placeholder was inserted
+      onPlaceholderInserted?.();
+
+      console.log(`[DocumentViewer] Replaced selection with placeholder: "${lastSavedSection.title}"`);
+    } catch (err) {
+      console.error('[DocumentViewer] Failed to insert placeholder:', err);
     }
+  }, [lastSavedSection, onPlaceholderInserted]);
 
-    // Get leaf-level content elements (smallest text containers)
-    const leafElements = Array.from(contentRef.current.querySelectorAll(
-      'p, h1, h2, h3, h4, h5, h6, li, td, th, blockquote, pre'
-    ));
-
-    console.log('[Marking] Total leaf elements:', leafElements.length);
-
-    // Helper: normalize text for comparison
-    const normalizeText = (text: string): string => {
-      return text.replace(/\s+/g, ' ').trim().toLowerCase();
-    };
-
-    // Helper: find element index containing specific text
-    const findElementIndex = (searchText: string, startFrom = 0): number => {
-      if (!searchText || searchText.length < 5) return -1;
-
-      const cleanSearch = normalizeText(searchText);
-
-      // Try multiple search variants - use more text for better matching
-      const variants = [
-        cleanSearch.substring(0, Math.min(60, cleanSearch.length)),
-        cleanSearch.substring(0, Math.min(40, cleanSearch.length)),
-        cleanSearch.split(/\s+/).slice(0, 8).join(' '),
-        cleanSearch.split(/\s+/).slice(0, 5).join(' '),
-        cleanSearch.split(/\s+/).slice(0, 3).join(' ')
-      ].filter(v => v.length >= 5);
-
-      for (const variant of variants) {
-        for (let i = startFrom; i < leafElements.length; i++) {
-          const elText = normalizeText(leafElements[i].textContent || '');
-          if (elText.includes(variant)) {
-            console.log(`[Marking] Found match for "${variant.substring(0, 30)}..." at index ${i}`);
-            return i;
-          }
-        }
-      }
-
-      console.log(`[Marking] No match found for "${cleanSearch.substring(0, 50)}..."`);
-      return -1;
-    };
-
-    // Helper: mark an element
-    const markElement = (el: Element, sectionId: string, sectionTitle: string) => {
-      el.classList.add('extracted-content-marked');
-      el.setAttribute('data-extracted-section', sectionId);
-      el.setAttribute('title', `Already extracted: ${sectionTitle}`);
-    };
-
-    taggedSections.forEach(section => {
-      if (!section.previewText || !contentRef.current) return;
-
-      console.log('[Marking] Processing section:', {
-        id: section.id,
-        title: section.title,
-        contentLength: section.contentLength,
-        previewText: section.previewText.substring(0, 50) + '...',
-        endPreviewText: section.endPreviewText ? section.endPreviewText.substring(0, 50) + '...' : 'none'
-      });
-
-      // Find START element using previewText
-      const startIndex = findElementIndex(section.previewText, 0);
-
-      if (startIndex < 0) {
-        console.log('[Marking] Could not find start element!');
-        return;
-      }
-
-      console.log(`[Marking] Start element found at index ${startIndex}, text: "${leafElements[startIndex].textContent?.substring(0, 50)}..."`);
-
-      // STEP 1: First estimate end position using character counting
-      const targetLength = section.contentLength || 1000;
-      let estimatedEndIndex = startIndex;
-      let charsCovered = 0;
-
-      for (let i = startIndex; i < leafElements.length; i++) {
-        const elLength = leafElements[i].textContent?.length || 0;
-        charsCovered += elLength;
-        estimatedEndIndex = i;
-
-        // Stop when we've covered the target length
-        if (charsCovered >= targetLength) {
-          break;
-        }
-      }
-
-      console.log(`[Marking] Estimated end at index ${estimatedEndIndex} (${charsCovered} chars covered, target: ${targetLength})`);
-
-      // STEP 2: Search for endPreviewText NEAR the estimated position (not from start)
-      // This prevents finding early matches of repeated text like "Response: Not applicable"
-      let endIndex = estimatedEndIndex;
-
-      if (section.endPreviewText && section.endPreviewText.length >= 10) {
-        const cleanEndSearch = normalizeText(section.endPreviewText);
-
-        // Try multiple search variants for end text (more specific first)
-        const endVariants = [
-          cleanEndSearch.substring(Math.max(0, cleanEndSearch.length - 60)),
-          cleanEndSearch.substring(Math.max(0, cleanEndSearch.length - 40)),
-          cleanEndSearch.split(/\s+/).slice(-8).join(' '),
-          cleanEndSearch.split(/\s+/).slice(-5).join(' ')
-        ].filter(v => v.length >= 8);
-
-        console.log('[Marking] Searching for end using variants:', endVariants.map(v => v.substring(0, 30)));
-
-        // Search BACKWARDS from a generous upper bound to find the LAST match
-        // This prevents finding early duplicates of repeated text like "Response: Not applicable"
-        const searchUpperBound = Math.min(leafElements.length - 1, Math.ceil(startIndex + (estimatedEndIndex - startIndex) * 2.0));
-        const searchLowerBound = Math.max(startIndex, Math.floor(startIndex + (estimatedEndIndex - startIndex) * 0.5));
-
-        console.log(`[Marking] Search range (backwards): ${searchUpperBound} down to ${searchLowerBound}`);
-
-        let foundEnd = false;
-        for (const variant of endVariants) {
-          // Search BACKWARDS from upper bound to find the LAST occurrence
-          for (let i = searchUpperBound; i >= searchLowerBound; i--) {
-            const elText = normalizeText(leafElements[i].textContent || '');
-            if (elText.includes(variant)) {
-              endIndex = i;
-              foundEnd = true;
-              console.log(`[Marking] Found LAST match for "${variant.substring(0, 30)}..." at index ${i}`);
-              break;
-            }
-          }
-          if (foundEnd) break;
-        }
-
-        if (!foundEnd) {
-          console.log('[Marking] Could not find end using endPreviewText in range, using generous estimate');
-          // Use a generous buffer beyond the estimated position
-          endIndex = Math.min(leafElements.length - 1, Math.ceil(estimatedEndIndex * 1.3));
-        }
-      } else {
-        // No endPreviewText, use generous estimate
-        endIndex = Math.min(leafElements.length - 1, Math.ceil(estimatedEndIndex * 1.3));
-      }
-
-      console.log(`[Marking] End index: ${endIndex}, will mark ${endIndex - startIndex + 1} elements`);
-
-      // Mark all elements from start to end (inclusive)
-      let markedCount = 0;
-      for (let i = startIndex; i <= endIndex && i < leafElements.length; i++) {
-        const el = leafElements[i];
-        if (!el.classList.contains('extracted-content-marked')) {
-          markElement(el, section.id, section.title);
-          markedCount++;
-        }
-      }
-
-      console.log(`[Marking] Marked ${markedCount} elements for section "${section.title}"`);
-    });
-  }, [htmlContent, taggedSections]);
-
-  // Jump to the first non-extracted content (skip past marked content)
+  // Jump to the first content after placeholders (skip past extracted sections)
   const handleJumpToNext = useCallback(() => {
     if (!contentRef.current || !scrollContainerRef.current) return;
 
-    // Find all marked (extracted) elements
-    const markedElements = contentRef.current.querySelectorAll('.extracted-content-marked');
+    // Find all placeholder elements
+    const placeholders = contentRef.current.querySelectorAll('.extracted-section-placeholder');
 
-    if (markedElements.length === 0) {
-      // No marked content, scroll to top
+    if (placeholders.length === 0) {
+      // No placeholders, scroll to top
       scrollContainerRef.current.scrollTop = 0;
       return;
     }
 
-    // Find the last marked element
-    const lastMarked = markedElements[markedElements.length - 1];
+    // Find the last placeholder
+    const lastPlaceholder = placeholders[placeholders.length - 1];
 
-    // Find the next sibling element that is NOT marked
-    let nextElement: Element | null = lastMarked.nextElementSibling;
+    // Find the next sibling element that is NOT a placeholder
+    let nextElement: Element | null = lastPlaceholder.nextElementSibling;
 
-    // Walk through siblings until we find one that's not marked
-    while (nextElement && nextElement.classList.contains('extracted-content-marked')) {
+    while (nextElement && nextElement.classList.contains('extracted-section-placeholder')) {
       nextElement = nextElement.nextElementSibling;
     }
 
-    // If no unmarked sibling, look through all elements
-    if (!nextElement) {
-      const allElements = Array.from(contentRef.current.querySelectorAll('p, h1, h2, h3, h4, h5, h6, table, ul, ol, div'));
-      let foundLastMarked = false;
-
-      for (const el of allElements) {
-        if (el === lastMarked) {
-          foundLastMarked = true;
-          continue;
-        }
-        if (foundLastMarked && !el.classList.contains('extracted-content-marked')) {
-          nextElement = el;
-          break;
-        }
-      }
-    }
-
     if (nextElement) {
-      // Scroll to the element with some offset from top
       nextElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } else {
-      // If everything is marked, scroll to end of last marked
-      lastMarked.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      // If everything after is extracted, scroll to end
+      lastPlaceholder.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
-  }, []);
-
-  // Toggle extracted sections list dropdown
-  const handleToggleExtractedList = useCallback(() => {
-    setShowExtractedList(prev => !prev);
   }, []);
 
   // Helper: Find the closest ancestor of a specific type
@@ -468,11 +333,19 @@ export function DocumentViewer({
     }, 10);
   }, []);
 
-  // Capture the current selection
+  // Capture the current selection and store the Range for later replacement
   const handleCaptureSelection = useCallback(() => {
     if (currentSelection) {
+      // Store the current browser selection Range BEFORE clearing
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0) {
+        // Clone the range so it persists after selection is cleared
+        lastCapturedRangeRef.current = selection.getRangeAt(0).cloneRange();
+        console.log('[DocumentViewer] Stored Range for later replacement');
+      }
+
       onSelectionCapture(currentSelection);
-      // Clear the browser selection
+      // Clear the browser selection (but Range is stored in ref)
       window.getSelection()?.removeAllRanges();
       setCurrentSelection(null);
       setSelectionActive(false);
@@ -484,6 +357,7 @@ export function DocumentViewer({
     window.getSelection()?.removeAllRanges();
     setCurrentSelection(null);
     setSelectionActive(false);
+    lastCapturedRangeRef.current = null; // Clear stored range
     onSelectionCapture(null);
   }, [onSelectionCapture]);
 
@@ -749,33 +623,18 @@ export function DocumentViewer({
               background-color: #bfdbfe;
             }
 
-            /* Frontend-marked extracted content - grayed out with strikethrough effect */
-            .document-content .extracted-content-marked {
-              position: relative;
-              background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
-              opacity: 0.6;
-              border-left: 4px solid #9ca3af;
-              padding-left: 8px;
-              margin-left: -12px;
-              cursor: not-allowed;
-              user-select: none;
-            }
-            .document-content .extracted-content-marked::before {
-              content: '✓ Extracted';
-              position: absolute;
-              top: 0;
-              right: 0;
-              background: #22c55e;
-              color: white;
-              font-size: 10px;
+            /* Placeholder for extracted sections - replaces the original content */
+            .document-content .extracted-section-placeholder {
               font-family: system-ui, -apple-system, sans-serif;
-              padding: 2px 6px;
-              border-radius: 0 0 0 4px;
-              font-weight: 600;
+              margin: 0.5rem 0;
             }
-            .document-content .extracted-content-marked * {
-              text-decoration: line-through;
-              text-decoration-color: #9ca3af;
+            .document-content .extracted-section-placeholder > div {
+              display: flex;
+              align-items: center;
+              gap: 0.5rem;
+              padding: 0.5rem 0.75rem;
+              border-radius: 0 0.25rem 0.25rem 0;
+              font-size: 0.875rem;
             }
           `}
         </style>

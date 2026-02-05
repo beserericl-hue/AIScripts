@@ -28,7 +28,7 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
-import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection, type SelectionData, type TaggedSectionInfo } from './components';
+import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
 
 // Use consistent API paths without relying on environment variable
 
@@ -300,6 +300,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [viewingFullContent, setViewingFullContent] = useState<string | null>(null);
   const [viewingHtmlContent, setViewingHtmlContent] = useState<string | null>(null); // HTML content for formatting
   const [isLoadingFullContent, setIsLoadingFullContent] = useState(false);
+  // Track last saved section to trigger placeholder insertion in DocumentViewer
+  const [lastSavedSection, setLastSavedSection] = useState<SavedSectionInfo | null>(null);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -688,7 +690,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         });
 
         // Also save to tagged sections for tracking (marked as applied)
-        await api.post(`/api/imports/${importId}/extract-section`, {
+        const response = await api.post(`/api/imports/${importId}/extract-section`, {
           htmlContent: extractedHtml,
           sectionType: 'standard',
           standardCode: metadata.standardCode,
@@ -697,24 +699,28 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
           appliedDirectly: true // Flag to indicate it was already applied
         });
 
-        // Refresh document content
-        await loadDocumentContent();
+        // Set lastSavedSection to trigger placeholder insertion
+        setLastSavedSection({
+          id: response.data.sectionId || Date.now().toString(),
+          title: `${metadata.standardCode}.${metadata.specCode} - ${metadata.title}`,
+          sectionType: 'standard',
+          contentLength: extractedText.length
+        });
 
-        // Refresh tagged sections list
+        // Refresh tagged sections list (for sidebar)
         await loadTaggedSections();
 
-        // Clear selection
-        handleClearSelection();
+        // Clear selection state
+        setCurrentSelection(null);
 
-        // Show success feedback - briefly navigate to the standard to show it was applied
-        // (This refreshes the narrative content in the editor)
+        // Refresh submission data to show the applied content
         queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
 
         return;
       }
 
       // Normal flow: Send extracted HTML to backend for N8N processing later
-      await api.post(`/api/imports/${importId}/extract-section`, {
+      const response = await api.post(`/api/imports/${importId}/extract-section`, {
         htmlContent: extractedHtml,
         sectionType: metadata.sectionType,
         standardCode: metadata.standardCode,
@@ -722,14 +728,20 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         title: metadata.title
       });
 
-      // Refresh document content
-      await loadDocumentContent();
+      // Set lastSavedSection to trigger placeholder insertion in DocumentViewer
+      // This will replace the selected content with a placeholder WITHOUT reloading from server
+      setLastSavedSection({
+        id: response.data.sectionId || Date.now().toString(),
+        title: metadata.title,
+        sectionType: metadata.sectionType,
+        contentLength: extractedText.length
+      });
 
-      // Refresh tagged sections list
+      // Refresh tagged sections list (for sidebar)
       await loadTaggedSections();
 
-      // Clear selection
-      handleClearSelection();
+      // Clear the selection state (but the Range was already used by DocumentViewer)
+      setCurrentSelection(null);
     } catch (err: any) {
       setSectionError(err.response?.data?.error || err.message || 'Failed to save section');
     } finally {
@@ -1965,13 +1977,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           onSelectionCapture={handleSelectionCapture}
                           onRefresh={loadDocumentContent}
                           hasSelection={currentSelection !== null}
-                          taggedSections={taggedSections.map(s => ({
-                            id: s.id,
-                            title: s.title,
-                            previewText: s.previewText || '',
-                            endPreviewText: s.endPreviewText || '',
-                            contentLength: s.contentLength || 0
-                          }))}
+                          lastSavedSection={lastSavedSection}
+                          onPlaceholderInserted={() => setLastSavedSection(null)}
                         />
                       </div>
                     </div>
