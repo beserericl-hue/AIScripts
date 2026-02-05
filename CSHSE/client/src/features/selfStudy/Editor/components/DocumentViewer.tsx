@@ -57,6 +57,37 @@ export function DocumentViewer({
   // Store the last captured range so we can replace it after save
   const lastCapturedRangeRef = useRef<Range | null>(null);
 
+  // Helper to create placeholder element
+  const createPlaceholder = (section: SavedSectionInfo): HTMLDivElement => {
+    const placeholder = document.createElement('div');
+    placeholder.className = 'extracted-section-placeholder';
+    placeholder.setAttribute('data-section-id', section.id);
+    placeholder.setAttribute('data-section-type', section.sectionType);
+
+    const typeColors: Record<string, string> = {
+      'standard': 'bg-teal-100 border-teal-400 text-teal-800',
+      'matrix': 'bg-purple-100 border-purple-400 text-purple-800',
+      'appendix': 'bg-amber-100 border-amber-400 text-amber-800',
+      'skip': 'bg-gray-100 border-gray-400 text-gray-600'
+    };
+    const colorClass = typeColors[section.sectionType] || typeColors['standard'];
+
+    placeholder.innerHTML = `
+      <div class="flex items-center gap-2 px-3 py-2 ${colorClass} border-l-4 rounded-r my-2">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span class="font-medium text-sm truncate">
+          ✓ Extracted: ${section.title}
+        </span>
+        <span class="text-xs opacity-75">
+          (${section.contentLength.toLocaleString()} chars)
+        </span>
+      </div>
+    `;
+    return placeholder;
+  };
+
   // Replace captured selection with placeholder after successful save
   // This is the key change - instead of trying to mark content later,
   // we replace it immediately with a placeholder when saved
@@ -68,38 +99,72 @@ export function DocumentViewer({
     const range = lastCapturedRangeRef.current;
 
     try {
-      // Create placeholder element
-      const placeholder = document.createElement('div');
-      placeholder.className = 'extracted-section-placeholder';
-      placeholder.setAttribute('data-section-id', lastSavedSection.id);
-      placeholder.setAttribute('data-section-type', lastSavedSection.sectionType);
+      const placeholder = createPlaceholder(lastSavedSection);
 
-      // Style based on section type
-      const typeColors: Record<string, string> = {
-        'standard': 'bg-teal-100 border-teal-400 text-teal-800',
-        'matrix': 'bg-purple-100 border-purple-400 text-purple-800',
-        'appendix': 'bg-amber-100 border-amber-400 text-amber-800',
-        'skip': 'bg-gray-100 border-gray-400 text-gray-600'
-      };
-      const colorClass = typeColors[lastSavedSection.sectionType] || typeColors['standard'];
+      // Check if selection is within a table - need special handling
+      const startRow = findAncestor(range.startContainer, 'TR');
+      const endRow = findAncestor(range.endContainer, 'TR');
+      const startTable = findAncestor(range.startContainer, 'TABLE');
+      const endTable = findAncestor(range.endContainer, 'TABLE');
 
-      placeholder.innerHTML = `
-        <div class="flex items-center gap-2 px-3 py-2 ${colorClass} border-l-4 rounded-r my-2">
-          <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-          </svg>
-          <span class="font-medium text-sm truncate">
-            ✓ Extracted: ${lastSavedSection.title}
-          </span>
-          <span class="text-xs opacity-75">
-            (${lastSavedSection.contentLength.toLocaleString()} chars)
-          </span>
-        </div>
-      `;
+      // If both start and end are in the same table, remove the actual row elements
+      if (startRow && endRow && startTable && endTable && startTable === endTable) {
+        const table = startTable as HTMLTableElement;
+        const rows = Array.from(table.rows);
+        const startIdx = rows.indexOf(startRow as HTMLTableRowElement);
+        const endIdx = rows.indexOf(endRow as HTMLTableRowElement);
 
-      // Delete the selected content and insert placeholder
-      range.deleteContents();
-      range.insertNode(placeholder);
+        if (startIdx >= 0 && endIdx >= 0) {
+          const minIdx = Math.min(startIdx, endIdx);
+          const maxIdx = Math.max(startIdx, endIdx);
+
+          // Check if we're removing all data rows (keep header if exists)
+          const tbody = table.querySelector('tbody');
+          const thead = table.querySelector('thead');
+          const dataRowCount = tbody ? tbody.rows.length : (thead ? table.rows.length - thead.rows.length : table.rows.length);
+          const removingAllDataRows = (maxIdx - minIdx + 1) >= dataRowCount;
+
+          if (removingAllDataRows) {
+            // Remove entire table and replace with placeholder
+            table.parentNode?.insertBefore(placeholder, table);
+            table.remove();
+            console.log(`[DocumentViewer] Removed entire table (all rows extracted)`);
+          } else {
+            // Remove only the selected rows
+            // Insert placeholder before the first row being removed
+            const firstRowToRemove = rows[minIdx];
+            const rowParent = firstRowToRemove.parentNode;
+
+            // Create a placeholder row that spans the full table width
+            const placeholderRow = document.createElement('tr');
+            placeholderRow.className = 'extracted-row-placeholder';
+            const placeholderCell = document.createElement('td');
+            // Count columns in the table
+            const colCount = rows[0]?.cells.length || 1;
+            placeholderCell.colSpan = colCount;
+            placeholderCell.appendChild(placeholder);
+            placeholderRow.appendChild(placeholderCell);
+
+            // Insert placeholder row before removing the selected rows
+            rowParent?.insertBefore(placeholderRow, firstRowToRemove);
+
+            // Remove the selected rows (in reverse order to maintain indices)
+            for (let i = maxIdx; i >= minIdx; i--) {
+              rows[i].remove();
+            }
+
+            console.log(`[DocumentViewer] Removed ${maxIdx - minIdx + 1} table rows (${minIdx}-${maxIdx})`);
+          }
+        } else {
+          // Fallback: couldn't find row indices, use standard deletion
+          range.deleteContents();
+          range.insertNode(placeholder);
+        }
+      } else {
+        // Not in a table or spans multiple tables - use standard deletion
+        range.deleteContents();
+        range.insertNode(placeholder);
+      }
 
       // Update extracted count
       setExtractedCount(prev => prev + 1);
