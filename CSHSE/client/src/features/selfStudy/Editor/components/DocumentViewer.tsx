@@ -57,7 +57,7 @@ export function DocumentViewer({
   const extractedCount = taggedSections.length;
 
   // Mark extracted content in the document visually
-  // Uses both start text (previewText) and end text (endPreviewText) to find the full range
+  // Uses character-count based marking: find start, then mark elements until contentLength is covered
   useEffect(() => {
     if (!contentRef.current) {
       return;
@@ -75,37 +75,26 @@ export function DocumentViewer({
       return;
     }
 
-    // Get ALL leaf-level elements in document order for range marking
-    const leafElements = Array.from(contentRef.current.querySelectorAll(
-      'td, th, li, p, h1, h2, h3, h4, h5, h6, blockquote, pre'
+    // Get ALL content elements in document order - comprehensive list
+    // Include table rows (tr) to mark entire rows when cells are extracted
+    const allElements = Array.from(contentRef.current.querySelectorAll(
+      'p, h1, h2, h3, h4, h5, h6, li, td, th, tr, blockquote, pre, div:not(:has(p, h1, h2, h3, h4, h5, h6, li, td, th, tr, blockquote, pre))'
     ));
 
-    // Helper: find element containing text (returns smallest matching element and its index)
-    const findElementContaining = (searchText: string, startFromIndex = 0): { element: Element | null; index: number } => {
-      if (!searchText || searchText.length < 5) return { element: null, index: -1 };
+    // Filter to only elements that directly contain text (not just wrapper divs)
+    const contentElements = allElements.filter(el => {
+      // Skip elements that are just containers with no direct text
+      const directText = Array.from(el.childNodes)
+        .filter(node => node.nodeType === Node.TEXT_NODE)
+        .map(node => node.textContent?.trim() || '')
+        .join('');
 
-      // Try with first 25 chars, then first few words
-      const searchVariants = [
-        searchText.substring(0, 25),
-        searchText.split(/\s+/).slice(0, 4).join(' ')
-      ];
+      // Include if has direct text OR is a specific content element type
+      const isContentElement = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'TD', 'TH', 'BLOCKQUOTE', 'PRE'].includes(el.tagName);
+      return isContentElement || directText.length > 0;
+    });
 
-      for (const variant of searchVariants) {
-        if (variant.length < 5) continue;
-
-        for (let i = startFromIndex; i < leafElements.length; i++) {
-          const el = leafElements[i];
-          const elText = el.textContent || '';
-          if (elText.includes(variant)) {
-            return { element: el, index: i };
-          }
-        }
-      }
-
-      return { element: null, index: -1 };
-    };
-
-    // Helper: mark an element
+    // Helper: mark an element and optionally its parent row
     const markElement = (el: Element, sectionId: string, sectionTitle: string) => {
       el.classList.add('extracted-content-marked');
       el.setAttribute('data-extracted-section', sectionId);
@@ -115,57 +104,84 @@ export function DocumentViewer({
     taggedSections.forEach(section => {
       if (!section.previewText || !contentRef.current) return;
 
-      // Find START element (using previewText - first 200 chars)
-      const startText = section.previewText.substring(0, 50).trim();
-      const { element: startElement, index: startIndex } = findElementContaining(startText);
+      // Get search text (first 30-50 chars, cleaned)
+      const searchText = section.previewText.substring(0, 40).trim().replace(/\s+/g, ' ');
+      if (searchText.length < 10) return;
 
-      if (!startElement || startIndex < 0) return; // Couldn't find start
+      // Find the START element - try multiple search strategies
+      let startIndex = -1;
+      const searchVariants = [
+        searchText.substring(0, 30),
+        searchText.split(/\s+/).slice(0, 5).join(' '),
+        searchText.split(/\s+/).slice(0, 3).join(' ')
+      ];
 
-      // Find END element (using endPreviewText - last 100 chars)
-      let endElement: Element | null = startElement;
-      let endIndex = startIndex;
-
-      if (section.endPreviewText && section.endPreviewText.length >= 10) {
-        // Search for end starting from the start element
-        const endText = section.endPreviewText.substring(section.endPreviewText.length - 50).trim();
-        const endResult = findElementContaining(endText, startIndex);
-        if (endResult.element && endResult.index >= startIndex) {
-          endElement = endResult.element;
-          endIndex = endResult.index;
-        }
-      } else {
-        // No endPreviewText - estimate based on content length
-        const targetLength = section.contentLength || 0;
-        let charsCovered = startElement.textContent?.length || 0;
-
-        for (let i = startIndex + 1; i < leafElements.length && charsCovered < targetLength; i++) {
-          charsCovered += leafElements[i].textContent?.length || 0;
-          endIndex = i;
-        }
-        endElement = leafElements[endIndex] || startElement;
-      }
-
-      // Mark all elements from start to end (inclusive)
-      for (let i = startIndex; i <= endIndex && i < leafElements.length; i++) {
-        markElement(leafElements[i], section.id, section.title);
-      }
-
-      // If start and end are the same but content is larger, expand forward
-      if (startIndex === endIndex && section.contentLength > (startElement.textContent?.length || 0) * 1.2) {
-        // Check if we're in a table - if so, mark parent rows
-        const parentTable = startElement.closest('table');
-        if (parentTable) {
-          // Get all cells in the table after the start element
-          const tableCells = Array.from(parentTable.querySelectorAll('td, th'));
-          const startCellIndex = tableCells.indexOf(startElement as HTMLTableCellElement);
-
-          if (startCellIndex >= 0) {
-            let charsCovered = startElement.textContent?.length || 0;
-            for (let i = startCellIndex + 1; i < tableCells.length && charsCovered < section.contentLength; i++) {
-              markElement(tableCells[i], section.id, section.title);
-              charsCovered += tableCells[i].textContent?.length || 0;
-            }
+      for (const variant of searchVariants) {
+        if (variant.length < 8) continue;
+        for (let i = 0; i < contentElements.length; i++) {
+          const elText = (contentElements[i].textContent || '').replace(/\s+/g, ' ');
+          if (elText.includes(variant)) {
+            startIndex = i;
+            break;
           }
+        }
+        if (startIndex >= 0) break;
+      }
+
+      if (startIndex < 0) return; // Couldn't find start
+
+      // Mark elements starting from startIndex until we cover contentLength characters
+      const targetLength = section.contentLength || 1000;
+      let charsCovered = 0;
+      let elementsMarked = 0;
+
+      for (let i = startIndex; i < contentElements.length && charsCovered < targetLength; i++) {
+        const el = contentElements[i];
+        const elLength = el.textContent?.length || 0;
+
+        // Skip if already marked by another section
+        if (el.classList.contains('extracted-content-marked')) {
+          charsCovered += elLength;
+          continue;
+        }
+
+        markElement(el, section.id, section.title);
+        charsCovered += elLength;
+        elementsMarked++;
+
+        // Also mark parent TR if this is a TD/TH (for visual consistency)
+        if (['TD', 'TH'].includes(el.tagName)) {
+          const parentRow = el.closest('tr');
+          if (parentRow && !parentRow.classList.contains('extracted-content-marked')) {
+            // Don't mark the row itself, just ensure all cells in marked area are marked
+          }
+        }
+      }
+
+      // If we marked very few elements but content is large, try marking more aggressively
+      // This handles cases where the document structure doesn't match our element query
+      if (elementsMarked < 3 && targetLength > 500) {
+        // Find the closest parent that contains all the content
+        const startEl = contentElements[startIndex];
+        let parent = startEl.parentElement;
+
+        // Walk up to find a container that might hold more content
+        while (parent && parent !== contentRef.current) {
+          const parentLength = parent.textContent?.length || 0;
+          if (parentLength >= targetLength * 0.8) {
+            // This parent contains most of the content
+            // Mark all markable children
+            const childElements = parent.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th, blockquote, pre');
+            let childCharsCovered = 0;
+            childElements.forEach(child => {
+              if (childCharsCovered < targetLength && !child.classList.contains('extracted-content-marked')) {
+                markElement(child, section.id, section.title);
+                childCharsCovered += child.textContent?.length || 0;
+              }
+            });
+            break;
+          }
+          parent = parent.parentElement;
         }
       }
     });
