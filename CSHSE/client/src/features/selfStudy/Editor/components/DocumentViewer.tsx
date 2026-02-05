@@ -103,7 +103,7 @@ export function DocumentViewer({
 
       // Check if selection is within a table - need special handling
       const startRow = findAncestor(range.startContainer, 'TR');
-      const endRow = findAncestor(range.endContainer, 'TR');
+      let endRow = findAncestor(range.endContainer, 'TR');
       const startTable = findAncestor(range.startContainer, 'TABLE');
       const endTable = findAncestor(range.endContainer, 'TABLE');
 
@@ -112,7 +112,37 @@ export function DocumentViewer({
         const table = startTable as HTMLTableElement;
         const rows = Array.from(table.rows);
         const startIdx = rows.indexOf(startRow as HTMLTableRowElement);
-        const endIdx = rows.indexOf(endRow as HTMLTableRowElement);
+        let endIdx = rows.indexOf(endRow as HTMLTableRowElement);
+
+        // IMPORTANT: Check if selection actually includes content from endRow
+        // Browser selections often extend to the START of the next element
+        // If endOffset is 0 and we're in a different row than start, the user didn't select that row
+        if (endRow !== startRow && endIdx > startIdx) {
+          // Check if the end position is at the very beginning of the row
+          const endContainer = range.endContainer;
+          const endOffset = range.endOffset;
+
+          // If offset is 0 and container is at the start of the row, don't include this row
+          let isAtRowStart = false;
+
+          if (endOffset === 0) {
+            isAtRowStart = true;
+          } else if (endContainer.nodeType === Node.TEXT_NODE && endOffset <= 1) {
+            // Check if this text node is at the very beginning of the row
+            const textContent = endContainer.textContent || '';
+            const selectedInEndRow = textContent.substring(0, endOffset).trim();
+            if (selectedInEndRow.length === 0) {
+              isAtRowStart = true;
+            }
+          }
+
+          if (isAtRowStart) {
+            // Don't include the end row - adjust to previous row
+            endIdx = endIdx - 1;
+            endRow = rows[endIdx] || startRow;
+            console.log(`[DocumentViewer] Adjusted end row: selection was at boundary, excluding row ${endIdx + 1}`);
+          }
+        }
 
         if (startIdx >= 0 && endIdx >= 0) {
           const minIdx = Math.min(startIdx, endIdx);
