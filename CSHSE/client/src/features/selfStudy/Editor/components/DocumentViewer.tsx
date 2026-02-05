@@ -169,32 +169,32 @@ export function DocumentViewer({
       if (section.endPreviewText && section.endPreviewText.length >= 10) {
         const cleanEndSearch = normalizeText(section.endPreviewText);
 
-        // Try multiple search variants for end text
+        // Try multiple search variants for end text (more specific first)
         const endVariants = [
           cleanEndSearch.substring(Math.max(0, cleanEndSearch.length - 60)),
           cleanEndSearch.substring(Math.max(0, cleanEndSearch.length - 40)),
           cleanEndSearch.split(/\s+/).slice(-8).join(' '),
-          cleanEndSearch.split(/\s+/).slice(-5).join(' '),
-          cleanEndSearch.split(/\s+/).slice(-3).join(' ')
-        ].filter(v => v.length >= 5);
+          cleanEndSearch.split(/\s+/).slice(-5).join(' ')
+        ].filter(v => v.length >= 8);
 
-        console.log('[Marking] Searching for end near estimated position using variants:', endVariants.map(v => v.substring(0, 30)));
+        console.log('[Marking] Searching for end using variants:', endVariants.map(v => v.substring(0, 30)));
 
-        // Search within a range around the estimated end (80% to 130% of estimated position)
-        const searchRangeStart = Math.max(startIndex, Math.floor(startIndex + (estimatedEndIndex - startIndex) * 0.7));
-        const searchRangeEnd = Math.min(leafElements.length - 1, Math.ceil(startIndex + (estimatedEndIndex - startIndex) * 1.5));
+        // Search BACKWARDS from a generous upper bound to find the LAST match
+        // This prevents finding early duplicates of repeated text like "Response: Not applicable"
+        const searchUpperBound = Math.min(leafElements.length - 1, Math.ceil(startIndex + (estimatedEndIndex - startIndex) * 2.0));
+        const searchLowerBound = Math.max(startIndex, Math.floor(startIndex + (estimatedEndIndex - startIndex) * 0.5));
 
-        console.log(`[Marking] Search range: ${searchRangeStart} to ${searchRangeEnd}`);
+        console.log(`[Marking] Search range (backwards): ${searchUpperBound} down to ${searchLowerBound}`);
 
         let foundEnd = false;
         for (const variant of endVariants) {
-          // Search forward within the expected range
-          for (let i = searchRangeStart; i <= searchRangeEnd; i++) {
+          // Search BACKWARDS from upper bound to find the LAST occurrence
+          for (let i = searchUpperBound; i >= searchLowerBound; i--) {
             const elText = normalizeText(leafElements[i].textContent || '');
             if (elText.includes(variant)) {
               endIndex = i;
               foundEnd = true;
-              console.log(`[Marking] Found end match for "${variant.substring(0, 30)}..." at index ${i}`);
+              console.log(`[Marking] Found LAST match for "${variant.substring(0, 30)}..." at index ${i}`);
               break;
             }
           }
@@ -202,13 +202,13 @@ export function DocumentViewer({
         }
 
         if (!foundEnd) {
-          console.log('[Marking] Could not find end using endPreviewText in range, using estimated position');
-          // Add a small buffer to the estimated position
-          endIndex = Math.min(leafElements.length - 1, estimatedEndIndex + 5);
+          console.log('[Marking] Could not find end using endPreviewText in range, using generous estimate');
+          // Use a generous buffer beyond the estimated position
+          endIndex = Math.min(leafElements.length - 1, Math.ceil(estimatedEndIndex * 1.3));
         }
       } else {
-        // No endPreviewText, add buffer to estimated position
-        endIndex = Math.min(leafElements.length - 1, estimatedEndIndex + 5);
+        // No endPreviewText, use generous estimate
+        endIndex = Math.min(leafElements.length - 1, Math.ceil(estimatedEndIndex * 1.3));
       }
 
       console.log(`[Marking] End index: ${endIndex}, will mark ${endIndex - startIndex + 1} elements`);
