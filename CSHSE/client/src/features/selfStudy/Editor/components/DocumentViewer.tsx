@@ -131,29 +131,16 @@ export function DocumentViewer({
             console.log(`[DocumentViewer] Removed entire table (all rows extracted)`);
           } else {
             // Remove only the selected rows
-            // Insert placeholder before the first row being removed
-            const firstRowToRemove = rows[minIdx];
-            const rowParent = firstRowToRemove.parentNode;
-
-            // Create a placeholder row that spans the full table width
-            const placeholderRow = document.createElement('tr');
-            placeholderRow.className = 'extracted-row-placeholder';
-            const placeholderCell = document.createElement('td');
-            // Count columns in the table
-            const colCount = rows[0]?.cells.length || 1;
-            placeholderCell.colSpan = colCount;
-            placeholderCell.appendChild(placeholder);
-            placeholderRow.appendChild(placeholderCell);
-
-            // Insert placeholder row before removing the selected rows
-            rowParent?.insertBefore(placeholderRow, firstRowToRemove);
+            // Insert placeholder BEFORE the table (not inside it) to preserve column widths
+            // Inserting a colspan row inside the table disrupts column width calculations
+            table.parentNode?.insertBefore(placeholder, table);
 
             // Remove the selected rows (in reverse order to maintain indices)
             for (let i = maxIdx; i >= minIdx; i--) {
               rows[i].remove();
             }
 
-            console.log(`[DocumentViewer] Removed ${maxIdx - minIdx + 1} table rows (${minIdx}-${maxIdx})`);
+            console.log(`[DocumentViewer] Removed ${maxIdx - minIdx + 1} table rows (${minIdx}-${maxIdx}), placeholder before table`);
           }
         } else {
           // Fallback: couldn't find row indices, use standard deletion
