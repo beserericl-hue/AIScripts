@@ -322,20 +322,34 @@ export function DocumentViewer({
             newTable.setAttribute(attr.name, attr.value);
           }
 
-          // Clone thead if it exists and is within selection or if selection includes first rows
+          // Always include thead if it exists - provides context for partial table extractions
           const thead = table.querySelector('thead');
-          if (thead && startIdx === 0) {
+          if (thead) {
             newTable.appendChild(thead.cloneNode(true));
           }
 
+          // Also check for header row in tbody (first row with th cells)
+          // Some tables don't use thead but have th cells in the first row
+          const tbody = table.querySelector('tbody');
+          const firstRow = tbody ? tbody.rows[0] : table.rows[0];
+          const hasHeaderCells = firstRow && firstRow.querySelectorAll('th').length > 0;
+          const selectionStartsAfterHeader = Math.min(startIdx, endIdx) > 0;
+
           // Clone tbody with selected rows
           const newTbody = document.createElement('tbody');
+
+          // If table has a header row (not in thead) and selection doesn't include it, add it
+          if (!thead && hasHeaderCells && selectionStartsAfterHeader) {
+            newTbody.appendChild(firstRow.cloneNode(true));
+            console.log('[Selection] Added header row for context');
+          }
+
           for (let i = Math.min(startIdx, endIdx); i <= Math.max(startIdx, endIdx); i++) {
             newTbody.appendChild(rows[i].cloneNode(true));
           }
           newTable.appendChild(newTbody);
 
-          console.log(`[Selection] Extracted ${Math.abs(endIdx - startIdx) + 1} rows from table`);
+          console.log(`[Selection] Extracted ${Math.abs(endIdx - startIdx) + 1} rows from table (with headers for context)`);
           return newTable.outerHTML;
         }
       }
