@@ -282,6 +282,133 @@ export function DocumentViewer({
     setShowExtractedList(prev => !prev);
   }, []);
 
+  // Helper: Find the closest ancestor of a specific type
+  const findAncestor = (node: Node | null, tagName: string): Element | null => {
+    let current: Node | null = node;
+    while (current && current !== contentRef.current) {
+      if (current.nodeType === Node.ELEMENT_NODE && (current as Element).tagName === tagName) {
+        return current as Element;
+      }
+      current = current.parentNode;
+    }
+    return null;
+  };
+
+  // Helper: Extract HTML preserving table structure
+  const extractSelectionHtml = (range: Range): string => {
+    // Check if selection is within a table
+    const startTable = findAncestor(range.startContainer, 'TABLE');
+    const endTable = findAncestor(range.endContainer, 'TABLE');
+
+    // If both start and end are in the same table, we need special handling
+    if (startTable && endTable && startTable === endTable) {
+      const table = startTable as HTMLTableElement;
+
+      // Find which rows are selected
+      const startRow = findAncestor(range.startContainer, 'TR');
+      const endRow = findAncestor(range.endContainer, 'TR');
+
+      if (startRow && endRow) {
+        // Clone the entire table structure with selected rows
+        const rows = Array.from(table.rows);
+        const startIdx = rows.indexOf(startRow as HTMLTableRowElement);
+        const endIdx = rows.indexOf(endRow as HTMLTableRowElement);
+
+        if (startIdx >= 0 && endIdx >= 0) {
+          // Create a new table with selected rows
+          const newTable = document.createElement('table');
+          // Copy table attributes
+          for (const attr of Array.from(table.attributes)) {
+            newTable.setAttribute(attr.name, attr.value);
+          }
+
+          // Clone thead if it exists and is within selection or if selection includes first rows
+          const thead = table.querySelector('thead');
+          if (thead && startIdx === 0) {
+            newTable.appendChild(thead.cloneNode(true));
+          }
+
+          // Clone tbody with selected rows
+          const newTbody = document.createElement('tbody');
+          for (let i = Math.min(startIdx, endIdx); i <= Math.max(startIdx, endIdx); i++) {
+            newTbody.appendChild(rows[i].cloneNode(true));
+          }
+          newTable.appendChild(newTbody);
+
+          console.log(`[Selection] Extracted ${Math.abs(endIdx - startIdx) + 1} rows from table`);
+          return newTable.outerHTML;
+        }
+      }
+    }
+
+    // If selection spans multiple tables or non-table content,
+    // try to preserve structure by getting outerHTML of common ancestor
+    const commonAncestor = range.commonAncestorContainer;
+
+    // If common ancestor is an element that contains the full selection, use it
+    if (commonAncestor.nodeType === Node.ELEMENT_NODE) {
+      const element = commonAncestor as Element;
+      // For table cells, rows, or the table itself - clone the relevant structure
+      if (['TABLE', 'TBODY', 'THEAD', 'TR'].includes(element.tagName)) {
+        return element.outerHTML;
+      }
+    }
+
+    // Default: use range.cloneContents() and try to fix orphaned table content
+    const fragment = range.cloneContents();
+    const tempDiv = document.createElement('div');
+    tempDiv.appendChild(fragment);
+
+    // Check if we have orphaned table cells (td/th without table wrapper)
+    const orphanedCells = tempDiv.querySelectorAll('td, th');
+    const hasOrphanedCells = orphanedCells.length > 0 && !tempDiv.querySelector('table');
+
+    if (hasOrphanedCells) {
+      // Wrap orphaned cells in a proper table structure
+      const wrapperTable = document.createElement('table');
+      wrapperTable.style.cssText = 'border-collapse: collapse; width: 100%;';
+      const tbody = document.createElement('tbody');
+
+      // Group cells into rows (assume consecutive cells belong to same row if no tr)
+      let currentRow = document.createElement('tr');
+      const childNodes = Array.from(tempDiv.childNodes);
+
+      for (const node of childNodes) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+          const el = node as Element;
+          if (el.tagName === 'TD' || el.tagName === 'TH') {
+            currentRow.appendChild(el.cloneNode(true));
+          } else if (el.tagName === 'TR') {
+            if (currentRow.children.length > 0) {
+              tbody.appendChild(currentRow);
+              currentRow = document.createElement('tr');
+            }
+            tbody.appendChild(el.cloneNode(true));
+          } else {
+            // Non-table element - add current row if it has cells, then add element
+            if (currentRow.children.length > 0) {
+              tbody.appendChild(currentRow);
+              currentRow = document.createElement('tr');
+            }
+            // Keep non-table content outside the table
+          }
+        }
+      }
+
+      if (currentRow.children.length > 0) {
+        tbody.appendChild(currentRow);
+      }
+
+      if (tbody.children.length > 0) {
+        wrapperTable.appendChild(tbody);
+        console.log(`[Selection] Wrapped ${orphanedCells.length} orphaned cells in table structure`);
+        return wrapperTable.outerHTML;
+      }
+    }
+
+    return tempDiv.innerHTML;
+  };
+
   // Check for text selection when mouse is released
   const handleMouseUp = useCallback(() => {
     // Small delay to let browser finalize selection
@@ -300,11 +427,12 @@ export function DocumentViewer({
       }
 
       try {
-        // Clone the selection contents
-        const fragment = range.cloneContents();
+        // Extract HTML with proper table structure preservation
+        const selectedHtml = extractSelectionHtml(range);
+
+        // Get plain text
         const tempDiv = document.createElement('div');
-        tempDiv.appendChild(fragment);
-        const selectedHtml = tempDiv.innerHTML;
+        tempDiv.innerHTML = selectedHtml;
         const selectedText = tempDiv.textContent || '';
 
         if (selectedText.trim().length > 0) {
