@@ -2348,6 +2348,41 @@ export const getDocumentImage = async (req: Request, res: Response) => {
 };
 
 /**
+ * Sync updated document HTML (with placeholders) to GridFS
+ * Called after the frontend inserts placeholders for extracted content
+ */
+export const syncDocumentHtml = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+    const { html } = req.body;
+
+    if (!html || typeof html !== 'string') {
+      return res.status(400).json({ error: 'html is required' });
+    }
+
+    // Verify import exists
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    // Store the updated HTML to GridFS
+    await gridFsService.storeHtmlContent(importId, html);
+
+    console.log(`[Import] Synced document HTML with placeholders (${html.length.toLocaleString()} chars)`);
+
+    return res.json({
+      success: true,
+      message: 'Document HTML synced successfully',
+      htmlLength: html.length
+    });
+  } catch (error: any) {
+    console.error('Sync document HTML error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to sync document HTML' });
+  }
+};
+
+/**
  * Extract a section from the document and save to MongoDB
  */
 export const extractSection = async (req: AuthenticatedRequest, res: Response) => {
@@ -2428,89 +2463,9 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
     // Save import record
     await importRecord.save();
 
-    // Mark extracted content in the stored HTML document
-    // This helps users see what's been extracted and navigate to remaining content
-    try {
-      const currentHtml = await gridFsService.getHtmlContent(importId);
-
-      if (currentHtml && providedHtml) {
-        // Create a marker to replace the extracted content
-        const markerLabel = sectionType === 'skip' ? 'Skipped Content' :
-                          sectionType === 'matrix' ? 'Curriculum Matrix' :
-                          sectionType === 'appendix' ? 'Appendix' :
-                          standardCode ? `Standard ${standardCode}${specCode ? `.${specCode}` : ''}` : 'Section';
-
-        const extractedMarker = `<div class="extracted-section-marker" data-section-id="${sectionId || 'skipped'}" data-section-type="${sectionType}">
-          <div class="extracted-marker-header">
-            <span class="extracted-marker-icon">✓</span>
-            <span class="extracted-marker-label">${markerLabel}: ${title || 'Untitled'}</span>
-            <span class="extracted-marker-size">${extractedText.length.toLocaleString()} chars</span>
-          </div>
-        </div>`;
-
-        // Try to find and replace the extracted HTML
-        // Use exact match first, then try normalized match
-        let modifiedHtml = currentHtml;
-
-        if (currentHtml.includes(providedHtml)) {
-          // Exact match found
-          modifiedHtml = currentHtml.replace(providedHtml, extractedMarker);
-          console.log(`[Import] Marked extracted content (exact match) for section: ${title}`);
-        } else {
-          // Try matching with normalized whitespace
-          const normalizeHtml = (html: string) => html.replace(/\s+/g, ' ').trim();
-          const normalizedProvided = normalizeHtml(providedHtml);
-
-          // Search for content by looking for key text fragments
-          const textContent = providedHtml.replace(/<[^>]*>/g, '').trim();
-          const firstChunk = textContent.substring(0, Math.min(100, textContent.length));
-          const lastChunk = textContent.substring(Math.max(0, textContent.length - 100));
-
-          if (firstChunk && lastChunk && currentHtml.includes(firstChunk) && currentHtml.includes(lastChunk)) {
-            // Find positions of first and last chunks to identify the region
-            const startIdx = currentHtml.indexOf(firstChunk);
-            const lastIdx = currentHtml.lastIndexOf(lastChunk);
-
-            if (startIdx !== -1 && lastIdx !== -1 && lastIdx > startIdx) {
-              // Find the enclosing HTML tags around this region
-              // Look backward from startIdx for an opening tag
-              let regionStart = startIdx;
-              for (let i = startIdx - 1; i >= Math.max(0, startIdx - 500); i--) {
-                if (currentHtml[i] === '<') {
-                  regionStart = i;
-                  break;
-                }
-              }
-
-              // Look forward from lastIdx for a closing tag
-              let regionEnd = lastIdx + lastChunk.length;
-              for (let i = regionEnd; i < Math.min(currentHtml.length, regionEnd + 500); i++) {
-                if (currentHtml[i] === '>') {
-                  regionEnd = i + 1;
-                  break;
-                }
-              }
-
-              // Extract and replace the region
-              const regionContent = currentHtml.substring(regionStart, regionEnd);
-              modifiedHtml = currentHtml.substring(0, regionStart) + extractedMarker + currentHtml.substring(regionEnd);
-              console.log(`[Import] Marked extracted content (fuzzy match) for section: ${title}`);
-            }
-          }
-        }
-
-        // Only update if we successfully marked content
-        if (modifiedHtml !== currentHtml) {
-          await gridFsService.storeHtmlContent(importId, modifiedHtml);
-          console.log(`[Import] Updated document with extraction marker`);
-        } else {
-          console.log(`[Import] Could not find exact content to mark - document unchanged`);
-        }
-      }
-    } catch (markError: any) {
-      // Don't fail the extraction if marking fails - just log it
-      console.error('[Import] Failed to mark extracted content:', markError.message);
-    }
+    // Note: The frontend will sync the updated HTML (with placeholders) via PUT /sync-html
+    // This happens after the placeholder is inserted in the DOM, ensuring the stored HTML
+    // always reflects what the user sees in the document viewer.
 
     console.log(`[Import] Section saved: ${sectionType} - "${title}" (${extractedText.length} chars)`);
 

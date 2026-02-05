@@ -20,6 +20,7 @@ import {
   getDocumentContent,
   getDocumentImage,
   extractSection,
+  syncDocumentHtml,
   getTaggedSections,
   getTaggedSectionContent,
   deleteTaggedSection,
@@ -197,6 +198,13 @@ router.get('/:importId/images/:filename', getDocumentImage);
  * @access  Private (Coordinator)
  */
 router.post('/:importId/extract-section', extractSection);
+
+/**
+ * @route   PUT /api/imports/:importId/sync-html
+ * @desc    Sync updated document HTML (with placeholders) to GridFS
+ * @access  Private (Coordinator)
+ */
+router.put('/:importId/sync-html', syncDocumentHtml);
 
 /**
  * @route   GET /api/imports/:importId/tagged-sections

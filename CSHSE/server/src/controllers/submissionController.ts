@@ -201,7 +201,8 @@ export const saveNarrative = async (req: AuthenticatedRequest, res: Response) =>
     if (!submission.standardsStatus) {
       submission.standardsStatus = new Map();
     }
-    const statusKey = specCode ? `${standardCode}.${specCode}` : standardCode;
+    // Use underscore separator for Mongoose Map keys (dots are not allowed in Map keys)
+    const statusKey = specCode ? `${standardCode}_${specCode}` : standardCode;
     const currentStatus = submission.standardsStatus.get(statusKey);
     if (!currentStatus || currentStatus.status === 'not_started') {
       submission.standardsStatus.set(statusKey, {

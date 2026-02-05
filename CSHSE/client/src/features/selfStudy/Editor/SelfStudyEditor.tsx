@@ -296,6 +296,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [isSavingSection, setIsSavingSection] = useState(false);
   const [sectionError, setSectionError] = useState<string | null>(null);
   const [deletingSectionId, setDeletingSectionId] = useState<string | null>(null);
+  const [applyingSectionId, setApplyingSectionId] = useState<string | null>(null);
   const [viewingTaggedSection, setViewingTaggedSection] = useState<TaggedSection | null>(null);
   const [viewingFullContent, setViewingFullContent] = useState<string | null>(null);
   const [viewingHtmlContent, setViewingHtmlContent] = useState<string | null>(null); // HTML content for formatting
@@ -662,6 +663,24 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     window.getSelection()?.removeAllRanges();
   }, []);
 
+  // Manual Tagging: Sync updated HTML after placeholder insertion
+  // This ensures extraction markers persist when the user resumes the import
+  const handlePlaceholderInserted = useCallback(async (updatedHtml: string) => {
+    // Clear the lastSavedSection state so the placeholder isn't inserted again
+    setLastSavedSection(null);
+
+    // Sync the updated HTML (with placeholder) to the backend
+    if (importId && updatedHtml) {
+      try {
+        await api.put(`/api/imports/${importId}/sync-html`, { html: updatedHtml });
+        console.log('[SelfStudyEditor] Synced document HTML with placeholders');
+      } catch (err) {
+        console.error('[SelfStudyEditor] Failed to sync document HTML:', err);
+        // Don't show error to user - this is background sync, extraction still succeeded
+      }
+    }
+  }, [importId]);
+
   // Manual Tagging: Save section
   // Uses HTML content already captured in SelectionData
   // If applyDirectly is true, saves directly to the submission's narrative (skips N8N)
@@ -766,6 +785,56 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       setSectionError(err.response?.data?.error || 'Failed to delete section');
     } finally {
       setDeletingSectionId(null);
+    }
+  };
+
+  // Manual Tagging: Apply tagged section to a specific standard/spec
+  const handleApplyTaggedSection = async (section: TaggedSection, targetStandardCode: string, targetSpecCode: string) => {
+    if (!importId) return;
+
+    setApplyingSectionId(section.id);
+    setSectionError(null);
+
+    try {
+      // First, fetch the full content of the section
+      const contentResponse = await api.get(`/api/imports/${importId}/tagged-sections/${section.id}`);
+      const fullContent = contentResponse.data.fullContent || '';
+
+      if (!fullContent.trim()) {
+        throw new Error('Section has no content to apply');
+      }
+
+      // Save the content to the submission's narrative
+      await saveMutation.mutateAsync({
+        standardCode: targetStandardCode,
+        specCode: targetSpecCode,
+        content: fullContent,
+      });
+
+      // Update the tagged section to mark it as applied
+      // We do this by re-extracting with the appliedDirectly flag
+      await api.post(`/api/imports/${importId}/extract-section`, {
+        htmlContent: contentResponse.data.htmlContent || fullContent,
+        sectionType: 'standard',
+        standardCode: targetStandardCode,
+        specCode: targetSpecCode,
+        title: section.title,
+        appliedDirectly: true
+      });
+
+      // Delete the old tagged section (since we just created a new one with applied flag)
+      await api.delete(`/api/imports/${importId}/tagged-sections/${section.id}`);
+
+      // Refresh tagged sections list
+      await loadTaggedSections();
+
+      // Refresh submission data to show the applied content
+      queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+
+    } catch (err: any) {
+      setSectionError(err.response?.data?.error || err.message || 'Failed to apply section');
+    } finally {
+      setApplyingSectionId(null);
     }
   };
 
@@ -1222,10 +1291,10 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         specCode: spec.code,
         specTitle: spec.title,
         status:
-          submission?.standardsStatus?.[`${standard.code}.${spec.code}`]?.status ||
+          submission?.standardsStatus?.[`${standard.code}_${spec.code}`]?.status ||
           'not_started',
         validationStatus:
-          submission?.standardsStatus?.[`${standard.code}.${spec.code}`]?.validationStatus,
+          submission?.standardsStatus?.[`${standard.code}_${spec.code}`]?.validationStatus,
       })),
     }));
   }, [standards, submission]);
@@ -1276,7 +1345,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     for (const standard of standards) {
       for (const spec of standard.specifications || []) {
         total++;
-        const status = submission.standardsStatus?.[`${standard.code}.${spec.code}`];
+        const status = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
         if (status?.validationStatus === 'pass') {
           validated++;
         }
@@ -1293,7 +1362,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     // Check ALL specs across ALL standards
     return standards.every(standard =>
       (standard.specifications || []).every(spec => {
-        const status = submission.standardsStatus?.[`${standard.code}.${spec.code}`];
+        const status = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
         return status?.validationStatus === 'pass';
       })
     );
@@ -1978,7 +2047,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           onRefresh={loadDocumentContent}
                           hasSelection={currentSelection !== null}
                           lastSavedSection={lastSavedSection}
-                          onPlaceholderInserted={() => setLastSavedSection(null)}
+                          onPlaceholderInserted={handlePlaceholderInserted}
                         />
                       </div>
                     </div>
@@ -2017,7 +2086,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                               isLoading={isLoadingTaggedSections}
                               onDelete={handleDeleteTaggedSection}
                               onView={handleViewTaggedSection}
+                              onApply={handleApplyTaggedSection}
                               deletingId={deletingSectionId}
+                              applyingId={applyingSectionId}
                             />
                           </div>
                         )}

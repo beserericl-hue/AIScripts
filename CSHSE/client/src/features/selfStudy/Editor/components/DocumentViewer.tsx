@@ -27,7 +27,7 @@ interface DocumentViewerProps {
   hasSelection: boolean;
   // Called by parent after successful save - replaces selection with placeholder
   lastSavedSection?: SavedSectionInfo | null;
-  onPlaceholderInserted?: () => void; // Called after placeholder is inserted
+  onPlaceholderInserted?: (updatedHtml: string) => void; // Called after placeholder is inserted, with updated HTML
 }
 
 /**
@@ -145,8 +145,9 @@ export function DocumentViewer({
       // Clear the stored range
       lastCapturedRangeRef.current = null;
 
-      // Notify parent that placeholder was inserted
-      onPlaceholderInserted?.();
+      // Get the updated HTML with placeholder and notify parent
+      const updatedHtml = contentRef.current.innerHTML;
+      onPlaceholderInserted?.(updatedHtml);
 
       console.log(`[DocumentViewer] Replaced selection with placeholder: "${lastSavedSection.title}"`);
     } catch (err) {

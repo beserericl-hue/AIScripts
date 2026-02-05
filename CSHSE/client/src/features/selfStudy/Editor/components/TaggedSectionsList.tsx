@@ -1,5 +1,5 @@
-import React from 'react';
-import { Trash2, FileText, Grid3X3, BookOpen, Eye, Loader2, Zap, CheckCircle2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Trash2, FileText, Grid3X3, BookOpen, Eye, Loader2, Zap, CheckCircle2, Send } from 'lucide-react';
 
 // Standard names for display
 const STANDARD_NAMES: Record<string, string> = {
@@ -44,7 +44,9 @@ interface TaggedSectionsListProps {
   isLoading: boolean;
   onDelete: (sectionId: string) => void;
   onView: (section: TaggedSection) => void;
+  onApply: (section: TaggedSection, targetStandardCode: string, targetSpecCode: string) => Promise<void>;
   deletingId: string | null;
+  applyingId: string | null;
 }
 
 /**
@@ -57,13 +59,43 @@ interface TaggedSectionsListProps {
  * - Delete button with confirmation
  * - Progress indicator
  */
+// Specification options (varies by standard, but commonly a-f)
+const SPEC_OPTIONS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
 export function TaggedSectionsList({
   sections,
   isLoading,
   onDelete,
   onView,
-  deletingId
+  onApply,
+  deletingId,
+  applyingId
 }: TaggedSectionsListProps) {
+  // State for inline apply form
+  const [applyFormOpen, setApplyFormOpen] = useState<string | null>(null);
+  const [selectedStandard, setSelectedStandard] = useState('');
+  const [selectedSpec, setSelectedSpec] = useState('');
+
+  const handleApplyClick = (sectionId: string) => {
+    if (applyFormOpen === sectionId) {
+      setApplyFormOpen(null);
+      setSelectedStandard('');
+      setSelectedSpec('');
+    } else {
+      setApplyFormOpen(sectionId);
+      setSelectedStandard('');
+      setSelectedSpec('');
+    }
+  };
+
+  const handleApplySubmit = async (section: TaggedSection) => {
+    if (!selectedStandard || !selectedSpec) return;
+    await onApply(section, selectedStandard, selectedSpec);
+    setApplyFormOpen(null);
+    setSelectedStandard('');
+    setSelectedSpec('');
+  };
+
   // Group sections by type
   const standardSections = sections.filter(s => s.sectionType === 'standard' || s.sectionType === 'narrative');
   const matrixSections = sections.filter(s => s.sectionType === 'matrix');
@@ -208,6 +240,25 @@ export function TaggedSectionsList({
 
             {/* Actions */}
             <div className="flex items-center gap-1">
+              {/* Apply button - only show if not already applied */}
+              {!section.appliedDirectly && (
+                <button
+                  onClick={() => handleApplyClick(section.id)}
+                  disabled={applyingId === section.id}
+                  className={`p-1.5 rounded transition-colors ${
+                    applyFormOpen === section.id
+                      ? 'text-blue-600 bg-blue-50'
+                      : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'
+                  } disabled:opacity-50`}
+                  title="Apply to standard"
+                >
+                  {applyingId === section.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </button>
+              )}
               <button
                 onClick={() => onView(section)}
                 className="p-1.5 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded transition-colors"
@@ -229,6 +280,71 @@ export function TaggedSectionsList({
               </button>
             </div>
           </div>
+
+          {/* Inline Apply Form */}
+          {applyFormOpen === section.id && (
+            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-medium text-blue-800">Apply to Standard</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedStandard}
+                  onChange={(e) => {
+                    setSelectedStandard(e.target.value);
+                    setSelectedSpec('');
+                  }}
+                  className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">Standard...</option>
+                  {Object.entries(STANDARD_NAMES).map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {code}. {name}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={selectedSpec}
+                  onChange={(e) => setSelectedSpec(e.target.value)}
+                  disabled={!selectedStandard}
+                  className="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                >
+                  <option value="">Spec...</option>
+                  {SPEC_OPTIONS.map((spec) => (
+                    <option key={spec} value={spec}>
+                      {selectedStandard}.{spec}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => handleApplySubmit(section)}
+                  disabled={!selectedStandard || !selectedSpec || applyingId === section.id}
+                  className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {applyingId === section.id ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Zap className="w-3 h-3" />
+                  )}
+                  Apply
+                </button>
+                <button
+                  onClick={() => {
+                    setApplyFormOpen(null);
+                    setSelectedStandard('');
+                    setSelectedSpec('');
+                  }}
+                  className="px-2 py-1.5 text-gray-600 text-sm hover:bg-gray-200 rounded"
+                >
+                  Cancel
+                </button>
+              </div>
+              <p className="text-xs text-blue-600 mt-2">
+                This will save the content directly to the selected standard/spec in the editor.
+              </p>
+            </div>
+          )}
         </div>
       ))}
     </div>
