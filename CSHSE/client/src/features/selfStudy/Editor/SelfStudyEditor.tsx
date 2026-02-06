@@ -663,23 +663,18 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     window.getSelection()?.removeAllRanges();
   }, []);
 
-  // Manual Tagging: Sync updated HTML after placeholder insertion
-  // This ensures extraction markers persist when the user resumes the import
-  const handlePlaceholderInserted = useCallback(async (updatedHtml: string) => {
+  // Manual Tagging: Handle placeholder insertion
+  // NOTE: We do NOT sync the full HTML back to the server anymore.
+  // With large documents (370MB+), syncing causes browser memory exhaustion and crashes.
+  // Instead, placeholders are visual-only during the session. The tagged sections are
+  // already saved to MongoDB, so extraction state is preserved across sessions.
+  const handlePlaceholderInserted = useCallback(async (_updatedHtml: string) => {
     // Clear the lastSavedSection state so the placeholder isn't inserted again
     setLastSavedSection(null);
 
-    // Sync the updated HTML (with placeholder) to the backend
-    if (importId && updatedHtml) {
-      try {
-        await api.put(`/api/imports/${importId}/sync-html`, { html: updatedHtml });
-        console.log('[SelfStudyEditor] Synced document HTML with placeholders');
-      } catch (err) {
-        console.error('[SelfStudyEditor] Failed to sync document HTML:', err);
-        // Don't show error to user - this is background sync, extraction still succeeded
-      }
-    }
-  }, [importId]);
+    // HTML sync disabled for large documents - see comment above
+    console.log('[SelfStudyEditor] Placeholder inserted (HTML sync disabled for performance)');
+  }, []);
 
   // Manual Tagging: Save section
   // Uses HTML content already captured in SelectionData
