@@ -2482,53 +2482,42 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
     // Save import record
     await importRecord.save();
 
-    // Update GridFS HTML server-side to remove the extracted content
-    // This avoids the browser having to send 370MB+ back over HTTP
-    try {
-      const storedHtml = await gridFsService.getHtmlContent(importId);
-
-      // Find and replace the extracted content with a placeholder
-      // We search for the exact HTML or use text matching as fallback
-      let updatedHtml = storedHtml;
-      let contentRemoved = false;
-
-      // First try: exact HTML match (most reliable)
-      if (storedHtml.includes(providedHtml)) {
-        // Create placeholder HTML
-        const placeholderHtml = createPlaceholderHtml(sectionId || 'skip', sectionType, title, extractedText.length);
-        updatedHtml = storedHtml.replace(providedHtml, placeholderHtml);
-        contentRemoved = true;
-        console.log(`[Import] Content removed from HTML using exact match`);
-      } else {
-        // Fallback: try to find by text content (handles minor HTML differences)
-        // Use a unique portion of the text to locate the content
-        const textToFind = extractedText.substring(0, Math.min(200, extractedText.length));
-        if (textToFind.length > 20) {
-          // Escape regex special characters
-          const escapedText = textToFind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          // Look for text within tags
-          const textPattern = new RegExp(`([^>]*${escapedText.substring(0, 50)}[^<]*)`, 'i');
-          const match = storedHtml.match(textPattern);
-          if (match) {
-            console.log(`[Import] Found content by text match at position ${match.index}`);
-            // For text match, we can't safely remove HTML structure, so just log
-            // The exact match should work in most cases since we load from the same source
-          }
-        }
-        console.log(`[Import] Exact HTML match not found, content may already be removed or differs`);
-      }
-
-      // Only update GridFS if we actually removed content
-      if (contentRemoved && updatedHtml !== storedHtml) {
-        await gridFsService.storeHtmlContent(importId, updatedHtml);
-        console.log(`[Import] Updated GridFS HTML, removed ${storedHtml.length - updatedHtml.length} chars`);
-      }
-    } catch (gridFsError: any) {
-      // Log but don't fail the extraction - section is already saved
-      console.error(`[Import] Failed to update GridFS HTML:`, gridFsError.message);
-    }
-
     console.log(`[Import] Section saved: ${sectionType} - "${title}" (${extractedText.length} chars)`);
+
+    // Update GridFS HTML in the BACKGROUND (non-blocking)
+    // This avoids the browser having to wait for 370MB+ file operations
+    // We don't await this - it runs after the response is sent
+    const backgroundHtmlUpdate = async () => {
+      try {
+        console.log(`[Import] Starting background HTML update for section: ${sectionId}`);
+        const storedHtml = await gridFsService.getHtmlContent(importId);
+
+        // Find and replace the extracted content with a placeholder
+        let updatedHtml = storedHtml;
+        let contentRemoved = false;
+
+        // First try: exact HTML match (most reliable)
+        if (storedHtml.includes(providedHtml)) {
+          const placeholderHtml = createPlaceholderHtml(sectionId || 'skip', sectionType, title, extractedText.length);
+          updatedHtml = storedHtml.replace(providedHtml, placeholderHtml);
+          contentRemoved = true;
+          console.log(`[Import] Background: Content removed from HTML using exact match`);
+        } else {
+          console.log(`[Import] Background: Exact HTML match not found, content may already be removed`);
+        }
+
+        // Only update GridFS if we actually removed content
+        if (contentRemoved && updatedHtml !== storedHtml) {
+          await gridFsService.storeHtmlContent(importId, updatedHtml);
+          console.log(`[Import] Background: Updated GridFS HTML, removed ${storedHtml.length - updatedHtml.length} chars`);
+        }
+      } catch (gridFsError: any) {
+        console.error(`[Import] Background: Failed to update GridFS HTML:`, gridFsError.message);
+      }
+    };
+
+    // Fire and forget - don't await, runs after response is sent
+    backgroundHtmlUpdate().catch(err => console.error('[Import] Background HTML update error:', err));
 
     return res.json({
       success: true,
