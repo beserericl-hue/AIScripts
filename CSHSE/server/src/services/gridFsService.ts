@@ -332,6 +332,121 @@ export async function listImportImages(importId: string): Promise<string[]> {
   return files.map(f => f.filename.replace(`${importId}/`, ''));
 }
 
+/**
+ * Clean up orphaned GridFS files
+ * Finds and deletes GridFS files whose associated import no longer exists
+ * @param dryRun - If true, only report what would be deleted without actually deleting
+ * @returns Stats about cleaned up files
+ */
+export async function cleanupOrphanedFiles(dryRun = false): Promise<{
+  orphanedHtmlFiles: number;
+  orphanedImageFiles: number;
+  totalBytesFreed: number;
+  orphanedImportIds: string[];
+}> {
+  // Import SelfStudyImport here to avoid circular dependencies
+  const { SelfStudyImport } = await import('../models/SelfStudyImport');
+
+  const htmlBucket = getBucket();
+  const imgBucket = getImageBucket();
+
+  // Get all HTML files
+  const htmlFiles = await htmlBucket.find({}).toArray();
+
+  // Get all image files
+  const imageFiles = await imgBucket.find({}).toArray();
+
+  // Extract unique import IDs from filenames
+  const importIdsFromHtml = new Set<string>();
+  const importIdsFromImages = new Set<string>();
+
+  for (const file of htmlFiles) {
+    // Filename format: {importId}.html
+    const match = file.filename.match(/^([a-f0-9]{24})\.html$/);
+    if (match) {
+      importIdsFromHtml.add(match[1]);
+    }
+  }
+
+  for (const file of imageFiles) {
+    // Filename format: {importId}/{imageName}
+    const match = file.filename.match(/^([a-f0-9]{24})\//);
+    if (match) {
+      importIdsFromImages.add(match[1]);
+    }
+  }
+
+  // Combine all unique import IDs
+  const allImportIds = new Set([...importIdsFromHtml, ...importIdsFromImages]);
+
+  // Check which imports actually exist
+  const existingImports = await SelfStudyImport.find({
+    _id: { $in: Array.from(allImportIds) }
+  }).select('_id');
+
+  const existingImportIds = new Set(existingImports.map(i => i._id.toString()));
+
+  // Find orphaned import IDs
+  const orphanedImportIds = Array.from(allImportIds).filter(id => !existingImportIds.has(id));
+
+  console.log(`[GridFSService] Found ${orphanedImportIds.length} orphaned import IDs out of ${allImportIds.size} total`);
+
+  let orphanedHtmlFiles = 0;
+  let orphanedImageFiles = 0;
+  let totalBytesFreed = 0;
+
+  if (!dryRun) {
+    // Delete orphaned HTML files
+    for (const file of htmlFiles) {
+      const match = file.filename.match(/^([a-f0-9]{24})\.html$/);
+      if (match && orphanedImportIds.includes(match[1])) {
+        await htmlBucket.delete(file._id);
+        orphanedHtmlFiles++;
+        totalBytesFreed += file.length || 0;
+        console.log(`[GridFSService] Deleted orphaned HTML: ${file.filename} (${(file.length / 1024 / 1024).toFixed(2)} MB)`);
+      }
+    }
+
+    // Delete orphaned image files
+    for (const file of imageFiles) {
+      const match = file.filename.match(/^([a-f0-9]{24})\//);
+      if (match && orphanedImportIds.includes(match[1])) {
+        await imgBucket.delete(file._id);
+        orphanedImageFiles++;
+        totalBytesFreed += file.length || 0;
+      }
+    }
+
+    console.log(`[GridFSService] Cleanup complete: ${orphanedHtmlFiles} HTML files, ${orphanedImageFiles} images, ${(totalBytesFreed / 1024 / 1024).toFixed(2)} MB freed`);
+  } else {
+    // Dry run - just count
+    for (const file of htmlFiles) {
+      const match = file.filename.match(/^([a-f0-9]{24})\.html$/);
+      if (match && orphanedImportIds.includes(match[1])) {
+        orphanedHtmlFiles++;
+        totalBytesFreed += file.length || 0;
+      }
+    }
+
+    for (const file of imageFiles) {
+      const match = file.filename.match(/^([a-f0-9]{24})\//);
+      if (match && orphanedImportIds.includes(match[1])) {
+        orphanedImageFiles++;
+        totalBytesFreed += file.length || 0;
+      }
+    }
+
+    console.log(`[GridFSService] Dry run: Would delete ${orphanedHtmlFiles} HTML files, ${orphanedImageFiles} images, ${(totalBytesFreed / 1024 / 1024).toFixed(2)} MB`);
+  }
+
+  return {
+    orphanedHtmlFiles,
+    orphanedImageFiles,
+    totalBytesFreed,
+    orphanedImportIds
+  };
+}
+
 export default {
   storeHtmlContent,
   getHtmlContent,
@@ -345,5 +460,7 @@ export default {
   getImage,
   imageExists,
   deleteImportImages,
-  listImportImages
+  listImportImages,
+  // Cleanup
+  cleanupOrphanedFiles
 };

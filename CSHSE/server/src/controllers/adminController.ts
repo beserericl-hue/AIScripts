@@ -4,6 +4,7 @@ import { Submission } from '../models/Submission';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { ValidationResult } from '../models/ValidationResult';
+import * as gridFsService from '../services/gridFsService';
 import axios from 'axios';
 
 interface AuthenticatedRequest extends Request {
@@ -331,11 +332,32 @@ export const deleteInstitutionData = async (req: AuthenticatedRequest, res: Resp
       submissions: 0,
       imports: 0,
       matrices: 0,
-      validations: 0
+      validations: 0,
+      gridFsFiles: 0
     };
 
-    // 1. Delete all imports for these submissions
+    // 1. Delete all imports for these submissions (including GridFS data)
     if (submissionIds.length > 0) {
+      // First, find all imports to get their IDs for GridFS cleanup
+      const imports = await SelfStudyImport.find({
+        submissionId: { $in: submissionIds }
+      }).select('_id');
+
+      // Delete GridFS content for each import
+      for (const imp of imports) {
+        const importId = imp._id.toString();
+        try {
+          await gridFsService.deleteHtmlContent(importId);
+          await gridFsService.deleteImportImages(importId);
+          deleteResults.gridFsFiles++;
+        } catch (gridFsError) {
+          console.error(`[AdminController] Error deleting GridFS data for import ${importId}:`, gridFsError);
+          // Continue with other deletions even if one fails
+        }
+      }
+      console.log(`[AdminController] Deleted GridFS data for ${deleteResults.gridFsFiles} imports`);
+
+      // Now delete the import documents
       const importsResult = await SelfStudyImport.deleteMany({
         submissionId: { $in: submissionIds }
       });
@@ -372,5 +394,67 @@ export const deleteInstitutionData = async (req: AuthenticatedRequest, res: Resp
   } catch (error) {
     console.error('Delete institution data error:', error);
     return res.status(500).json({ error: 'Failed to delete institution data' });
+  }
+};
+
+/**
+ * Clean up orphaned GridFS files
+ * SUPERUSER ONLY - Finds and deletes GridFS files whose associated import no longer exists
+ */
+export const cleanupOrphanedGridFsFiles = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Only superusers can perform this action
+    if (!req.user?.isSuperuser) {
+      return res.status(403).json({ error: 'Superuser access required' });
+    }
+
+    const dryRun = req.query.dryRun === 'true';
+
+    console.log(`[AdminController] Starting GridFS cleanup (dryRun: ${dryRun})`);
+
+    const result = await gridFsService.cleanupOrphanedFiles(dryRun);
+
+    const message = dryRun
+      ? `Dry run complete: Would delete ${result.orphanedHtmlFiles} HTML files and ${result.orphanedImageFiles} images (${(result.totalBytesFreed / 1024 / 1024).toFixed(2)} MB)`
+      : `Cleanup complete: Deleted ${result.orphanedHtmlFiles} HTML files and ${result.orphanedImageFiles} images (${(result.totalBytesFreed / 1024 / 1024).toFixed(2)} MB freed)`;
+
+    console.log(`[AdminController] ${message}`);
+
+    return res.json({
+      success: true,
+      dryRun,
+      message,
+      ...result,
+      totalMBFreed: parseFloat((result.totalBytesFreed / 1024 / 1024).toFixed(2))
+    });
+  } catch (error) {
+    console.error('GridFS cleanup error:', error);
+    return res.status(500).json({ error: 'Failed to cleanup orphaned files' });
+  }
+};
+
+/**
+ * Get GridFS storage statistics
+ * SUPERUSER ONLY
+ */
+export const getGridFsStats = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // Only superusers can access
+    if (!req.user?.isSuperuser) {
+      return res.status(403).json({ error: 'Superuser access required' });
+    }
+
+    const stats = await gridFsService.getStorageStats();
+
+    return res.json({
+      htmlContent: {
+        fileCount: stats.fileCount,
+        totalSizeBytes: stats.totalSize,
+        totalSizeMB: parseFloat((stats.totalSize / 1024 / 1024).toFixed(2))
+      }
+    });
+  } catch (error) {
+    console.error('Get GridFS stats error:', error);
+    return res.status(500).json({ error: 'Failed to get storage stats' });
   }
 };

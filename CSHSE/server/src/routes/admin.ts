@@ -4,7 +4,9 @@ import {
   updateWebhookSettings,
   testWebhookConnection,
   getSystemStats,
-  deleteInstitutionData
+  deleteInstitutionData,
+  cleanupOrphanedGridFsFiles,
+  getGridFsStats
 } from '../controllers/adminController';
 import { authenticate, requireAdmin, requireSuperuser } from '../middleware/auth';
 
@@ -55,5 +57,19 @@ router.post('/webhook-test', requireAdmin, testWebhookConnection);
  * @access  Private (Superuser only)
  */
 router.delete('/institution-data/:institutionId', requireSuperuser, deleteInstitutionData);
+
+/**
+ * @route   GET /api/admin/gridfs/stats
+ * @desc    Get GridFS storage statistics
+ * @access  Private (Superuser only)
+ */
+router.get('/gridfs/stats', requireSuperuser, getGridFsStats);
+
+/**
+ * @route   POST /api/admin/gridfs/cleanup
+ * @desc    Clean up orphaned GridFS files (use ?dryRun=true to preview)
+ * @access  Private (Superuser only)
+ */
+router.post('/gridfs/cleanup', requireSuperuser, cleanupOrphanedGridFsFiles);
 
 export default router;
