@@ -2484,40 +2484,13 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
 
     console.log(`[Import] Section saved: ${sectionType} - "${title}" (${extractedText.length} chars)`);
 
-    // Update GridFS HTML in the BACKGROUND (non-blocking)
-    // This avoids the browser having to wait for 370MB+ file operations
-    // We don't await this - it runs after the response is sent
-    const backgroundHtmlUpdate = async () => {
-      try {
-        console.log(`[Import] Starting background HTML update for section: ${sectionId}`);
-        const storedHtml = await gridFsService.getHtmlContent(importId);
-
-        // Find and replace the extracted content with a placeholder
-        let updatedHtml = storedHtml;
-        let contentRemoved = false;
-
-        // First try: exact HTML match (most reliable)
-        if (storedHtml.includes(providedHtml)) {
-          const placeholderHtml = createPlaceholderHtml(sectionId || 'skip', sectionType, title, extractedText.length);
-          updatedHtml = storedHtml.replace(providedHtml, placeholderHtml);
-          contentRemoved = true;
-          console.log(`[Import] Background: Content removed from HTML using exact match`);
-        } else {
-          console.log(`[Import] Background: Exact HTML match not found, content may already be removed`);
-        }
-
-        // Only update GridFS if we actually removed content
-        if (contentRemoved && updatedHtml !== storedHtml) {
-          await gridFsService.storeHtmlContent(importId, updatedHtml);
-          console.log(`[Import] Background: Updated GridFS HTML, removed ${storedHtml.length - updatedHtml.length} chars`);
-        }
-      } catch (gridFsError: any) {
-        console.error(`[Import] Background: Failed to update GridFS HTML:`, gridFsError.message);
-      }
-    };
-
-    // Fire and forget - don't await, runs after response is sent
-    backgroundHtmlUpdate().catch(err => console.error('[Import] Background HTML update error:', err));
+    // NOTE: We intentionally DO NOT update the GridFS HTML to remove extracted content.
+    // Reasons:
+    // 1. For large documents (300MB+), this operation consumes too much memory and crashes the server
+    // 2. The client already shows placeholders in the DOM via DocumentViewer
+    // 3. Tagged sections are tracked in MongoDB and shown in the Tagged Sections list
+    // 4. When user reloads, content is visible but clearly tracked as "extracted" in the list
+    // This is a deliberate trade-off: slight visual inconsistency on reload vs server stability
 
     return res.json({
       success: true,
