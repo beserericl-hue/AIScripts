@@ -44,7 +44,8 @@ interface TaggedSectionsListProps {
   isLoading: boolean;
   onDelete: (sectionId: string) => void;
   onView: (section: TaggedSection) => void;
-  onApply: (section: TaggedSection, targetStandardCode: string, targetSpecCode: string) => Promise<void>;
+  onApply: (section: TaggedSection, targetStandardCode: string, targetSpecCode: string, toSupportingEvidence?: boolean) => Promise<void>;
+  onApplyToMatrix?: (section: TaggedSection) => Promise<void>;
   deletingId: string | null;
   applyingId: string | null;
 }
@@ -68,6 +69,7 @@ export function TaggedSectionsList({
   onDelete,
   onView,
   onApply,
+  onApplyToMatrix,
   deletingId,
   applyingId
 }: TaggedSectionsListProps) {
@@ -75,25 +77,29 @@ export function TaggedSectionsList({
   const [applyFormOpen, setApplyFormOpen] = useState<string | null>(null);
   const [selectedStandard, setSelectedStandard] = useState('');
   const [selectedSpec, setSelectedSpec] = useState('');
+  const [toSupportingEvidence, setToSupportingEvidence] = useState(false);
 
   const handleApplyClick = (sectionId: string) => {
     if (applyFormOpen === sectionId) {
       setApplyFormOpen(null);
       setSelectedStandard('');
       setSelectedSpec('');
+      setToSupportingEvidence(false);
     } else {
       setApplyFormOpen(sectionId);
       setSelectedStandard('');
       setSelectedSpec('');
+      setToSupportingEvidence(false);
     }
   };
 
   const handleApplySubmit = async (section: TaggedSection) => {
     if (!selectedStandard || !selectedSpec) return;
-    await onApply(section, selectedStandard, selectedSpec);
+    await onApply(section, selectedStandard, selectedSpec, toSupportingEvidence);
     setApplyFormOpen(null);
     setSelectedStandard('');
     setSelectedSpec('');
+    setToSupportingEvidence(false);
   };
 
   // Group sections by type
@@ -240,8 +246,22 @@ export function TaggedSectionsList({
 
             {/* Actions */}
             <div className="flex items-center gap-1">
-              {/* Apply button - only show if not already applied */}
-              {!section.appliedDirectly && (
+              {/* Apply button - different behavior for matrix vs standard/appendix */}
+              {!section.appliedDirectly && section.sectionType === 'matrix' && onApplyToMatrix && (
+                <button
+                  onClick={() => onApplyToMatrix(section)}
+                  disabled={applyingId === section.id}
+                  className="p-1.5 rounded transition-colors text-gray-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-50"
+                  title="Import to Curriculum Matrix"
+                >
+                  {applyingId === section.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Grid3X3 className="w-4 h-4" />
+                  )}
+                </button>
+              )}
+              {!section.appliedDirectly && section.sectionType !== 'matrix' && (
                 <button
                   onClick={() => handleApplyClick(section.id)}
                   disabled={applyingId === section.id}
@@ -340,8 +360,22 @@ export function TaggedSectionsList({
                   Cancel
                 </button>
               </div>
-              <p className="text-xs text-blue-600 mt-2">
-                This will save the content directly to the selected standard/spec in the editor.
+              {/* Supporting Evidence checkbox */}
+              <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={toSupportingEvidence}
+                  onChange={(e) => setToSupportingEvidence(e.target.checked)}
+                  className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                />
+                <span className="text-xs text-blue-700 font-medium">
+                  Save to Supporting Evidence Text
+                </span>
+              </label>
+              <p className="text-xs text-blue-600 mt-1">
+                {toSupportingEvidence
+                  ? 'Content will be saved to the Supporting Evidence section for this spec.'
+                  : 'Content will be saved to the narrative editor for this spec.'}
               </p>
             </div>
           )}

@@ -2306,8 +2306,38 @@ export const getDocumentContent = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Document content not found. Please re-upload the document.' });
     }
 
+    // Re-insert placeholders for previously tagged sections (so resume shows progress)
+    const taggedSections = importRecord.detectedSections || [];
+    if (taggedSections.length > 0) {
+      debugLog('Re-inserting placeholders for tagged sections', { count: taggedSections.length });
+      let replacedCount = 0;
+
+      for (const section of taggedSections) {
+        const sectionHtml = (section as any).htmlContent;
+        if (!sectionHtml || typeof sectionHtml !== 'string' || sectionHtml.length < 10) continue;
+
+        // Determine section type for placeholder styling
+        const sectionType = (section as any).isMatrix ? 'matrix' :
+                           (section as any).isAppendix ? 'appendix' :
+                           (section as any).standardCode ? 'standard' : 'standard';
+        const title = (section as any).headerText || 'Extracted Section';
+        const contentLength = (section as any).fullContent?.length || sectionHtml.length;
+
+        const placeholder = createPlaceholderHtml(section.id, sectionType, title, contentLength);
+
+        // Try exact match replacement (most reliable for substantial content)
+        const idx = htmlContent.indexOf(sectionHtml);
+        if (idx !== -1) {
+          htmlContent = htmlContent.substring(0, idx) + placeholder + htmlContent.substring(idx + sectionHtml.length);
+          replacedCount++;
+        }
+      }
+
+      debugLog('Placeholders re-inserted', { replacedCount, total: taggedSections.length });
+    }
+
     // Return HTML content as JSON
-    return res.json({ htmlContent });
+    return res.json({ htmlContent, taggedSectionsCount: taggedSections.length });
   } catch (error: any) {
     console.error('Get document content error:', error);
     debugLog('getDocumentContent error', { error: error.message });

@@ -421,3 +421,49 @@ export const exportMatrix = async (req: AuthenticatedRequest, res: Response) => 
     return res.status(500).json({ error: 'Failed to export matrix' });
   }
 };
+
+/**
+ * Add raw imported content to matrix for reference
+ */
+export const addRawContent = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { matrixId } = req.params;
+    const { content, sourceImportId } = req.body;
+
+    if (!content || typeof content !== 'string') {
+      return res.status(400).json({ error: 'content is required' });
+    }
+
+    const matrix = await CurriculumMatrix.findById(matrixId);
+    if (!matrix) {
+      return res.status(404).json({ error: 'Matrix not found' });
+    }
+
+    // Initialize rawContent array if needed
+    if (!matrix.rawContent) {
+      matrix.rawContent = [];
+    }
+
+    const rawEntry = {
+      id: new mongoose.Types.ObjectId().toString(),
+      content,
+      sourceImportId: sourceImportId || undefined,
+      addedAt: new Date(),
+      addedBy: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined,
+      processed: false
+    };
+
+    matrix.rawContent.push(rawEntry as any);
+    matrix.markModified('rawContent');
+    await matrix.save();
+
+    return res.json({
+      success: true,
+      message: 'Raw content added to matrix',
+      rawContentId: rawEntry.id
+    });
+  } catch (error) {
+    console.error('Add raw content error:', error);
+    return res.status(500).json({ error: 'Failed to add raw content' });
+  }
+};

@@ -38,11 +38,19 @@ interface StandardMapping {
   courseAssessments: CourseAssessment[];
 }
 
+interface RawMatrixContent {
+  id: string;
+  content: string;
+  addedAt: string;
+  processed: boolean;
+}
+
 interface CurriculumMatrix {
   _id: string;
   submissionId: string;
   courses: Course[];
   standards: StandardMapping[];
+  rawContent?: RawMatrixContent[];
 }
 
 interface StandardDefinition {
@@ -70,6 +78,7 @@ export function CurriculumMatrixEditor({
     new Set(['11', '12', '13']) // Start with curriculum standards expanded
   );
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showImportedReference, setShowImportedReference] = useState(false);
 
   // Fetch matrix data
   const { data: matrix, isLoading: loadingMatrix } = useQuery<CurriculumMatrix>({
@@ -300,12 +309,57 @@ export function CurriculumMatrixEditor({
             Export CSV
           </button>
 
-          <button className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-            <Upload className="w-4 h-4" />
-            Import
-          </button>
+          {matrix?.rawContent && matrix.rawContent.length > 0 && (
+            <button
+              onClick={() => setShowImportedReference(!showImportedReference)}
+              className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors ${
+                showImportedReference
+                  ? 'border-purple-300 bg-purple-50 text-purple-700'
+                  : 'border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <Upload className="w-4 h-4" />
+              Imported Reference ({matrix.rawContent.filter(r => !r.processed).length})
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Imported Reference Panel - Shows raw content from document import */}
+      {showImportedReference && matrix?.rawContent && matrix.rawContent.length > 0 && (
+        <div className="border border-purple-200 rounded-lg bg-purple-50 mb-4">
+          <div className="px-4 py-2 bg-purple-100 border-b border-purple-200 flex items-center justify-between">
+            <span className="text-sm font-medium text-purple-800">
+              Imported Document Reference
+            </span>
+            <button
+              onClick={() => setShowImportedReference(false)}
+              className="text-purple-500 hover:text-purple-700 text-sm"
+            >
+              Hide
+            </button>
+          </div>
+          <div className="p-4 max-h-[400px] overflow-auto">
+            {matrix.rawContent.filter(r => !r.processed).map((raw) => (
+              <div
+                key={raw.id}
+                className="bg-white rounded border border-purple-200 p-4 mb-3 last:mb-0"
+              >
+                <div
+                  className="prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: raw.content }}
+                />
+              </div>
+            ))}
+          </div>
+          <div className="px-4 py-2 bg-purple-50 border-t border-purple-200">
+            <p className="text-xs text-purple-600">
+              Use this as a reference while filling in the matrix cells above.
+              You can add courses and set assessment types (I/T/K/S) and depth (L/M/H) for each cell.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Matrix Grid */}
       <div className="overflow-auto max-h-[calc(100vh-300px)]">

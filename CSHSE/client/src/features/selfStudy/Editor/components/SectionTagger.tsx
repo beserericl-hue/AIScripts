@@ -38,6 +38,7 @@ export interface SectionMetadata {
   specCode?: string;
   title: string;
   applyDirectly?: boolean; // If true, apply directly to standard instead of sending to N8N
+  toSupportingEvidence?: boolean; // If true, save to supporting evidence text (for appendix type)
 }
 
 interface SectionTaggerProps {
@@ -70,6 +71,7 @@ export function SectionTagger({
   const [specCode, setSpecCode] = useState('');
   const [title, setTitle] = useState('');
   const [applyDirectly, setApplyDirectly] = useState(false);
+  const [toSupportingEvidence, setToSupportingEvidence] = useState(false);
 
   // Auto-fill title from selection preview
   useEffect(() => {
@@ -99,6 +101,13 @@ export function SectionTagger({
         standardCode,
         specCode: specCode || undefined,
         applyDirectly: applyDirectly && specCode ? true : undefined // Only apply directly if spec is selected
+      }),
+      // For appendix with "Apply to Supporting Evidence", include standard/spec and flag
+      ...(sectionType === 'appendix' && toSupportingEvidence && standardCode && specCode && {
+        standardCode,
+        specCode,
+        toSupportingEvidence: true,
+        applyDirectly: true // Apply directly since we have a target
       })
     };
 
@@ -110,13 +119,14 @@ export function SectionTagger({
     setSpecCode('');
     setTitle('');
     setApplyDirectly(false);
+    setToSupportingEvidence(false);
   };
 
   const hasSelection = selection !== null;
 
   const canSave = hasSelection &&
     (sectionType === 'skip' ||
-     sectionType === 'appendix' ||
+     (sectionType === 'appendix' && (!toSupportingEvidence || (standardCode && specCode))) ||
      sectionType === 'matrix' ||
      (sectionType === 'standard' && standardCode));
 
@@ -253,6 +263,77 @@ export function SectionTagger({
           </div>
         )}
 
+        {/* Appendix-specific fields - option to apply to supporting evidence */}
+        {sectionType === 'appendix' && (
+          <div className="space-y-2 p-2 bg-amber-50 rounded border border-amber-200">
+            <label className="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={toSupportingEvidence}
+                onChange={(e) => {
+                  setToSupportingEvidence(e.target.checked);
+                  if (!e.target.checked) {
+                    setStandardCode('');
+                    setSpecCode('');
+                  }
+                }}
+                disabled={isSaving || !hasSelection}
+                className="mt-0.5 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+              />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-amber-800">
+                  Apply to Supporting Evidence
+                </div>
+                <p className="text-xs text-amber-600 mt-0.5">
+                  Save directly to a standard's Supporting Evidence Text section.
+                </p>
+              </div>
+            </label>
+
+            {/* Standard/Spec selectors when applying to supporting evidence */}
+            {toSupportingEvidence && (
+              <div className="space-y-2 mt-2">
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-gray-700">
+                    Standard *
+                  </label>
+                  <select
+                    value={standardCode}
+                    onChange={(e) => setStandardCode(e.target.value)}
+                    disabled={isSaving || !hasSelection}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500 disabled:bg-gray-100"
+                  >
+                    <option value="">Select...</option>
+                    {Object.entries(STANDARD_NAMES).map(([code, name]) => (
+                      <option key={code} value={code}>
+                        {code}. {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-gray-700">
+                    Spec *
+                  </label>
+                  <select
+                    value={specCode}
+                    onChange={(e) => setSpecCode(e.target.value)}
+                    disabled={isSaving || !standardCode || !hasSelection}
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-amber-500 focus:border-amber-500 disabled:bg-gray-100"
+                  >
+                    <option value="">Select...</option>
+                    {SPEC_OPTIONS.map((spec) => (
+                      <option key={spec} value={spec}>
+                        {standardCode}.{spec}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Title */}
         <div className="space-y-1">
           <label className="block text-xs font-medium text-gray-600">
@@ -289,11 +370,16 @@ export function SectionTagger({
           {isSaving ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              {applyDirectly && specCode ? 'Applying...' : 'Saving...'}
+              {(applyDirectly && specCode) || (toSupportingEvidence && specCode) ? 'Applying...' : 'Saving...'}
             </>
           ) : (
             <>
-              {applyDirectly && specCode ? (
+              {toSupportingEvidence && standardCode && specCode ? (
+                <>
+                  <Zap className="w-4 h-4" />
+                  Apply to {standardCode}.{specCode} Supporting Evidence
+                </>
+              ) : applyDirectly && specCode ? (
                 <>
                   <Zap className="w-4 h-4" />
                   Apply to {standardCode}.{specCode}

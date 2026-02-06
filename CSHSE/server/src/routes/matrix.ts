@@ -6,7 +6,8 @@ import {
   updateAssessment,
   reorderCourses,
   importMatrix,
-  exportMatrix
+  exportMatrix,
+  addRawContent
 } from '../controllers/matrixController';
 import { authenticate } from '../middleware/auth';
 
@@ -75,5 +76,12 @@ router.post('/submissions/:submissionId/matrix/:matrixId/import', importMatrix);
  * @query   format - 'json' or 'csv'
  */
 router.get('/submissions/:submissionId/matrix/:matrixId/export', exportMatrix);
+
+/**
+ * @route   POST /api/submissions/:submissionId/matrix/:matrixId/raw-content
+ * @desc    Add raw imported content to matrix for reference
+ * @access  Private (Program Coordinator, Admin)
+ */
+router.post('/submissions/:submissionId/matrix/:matrixId/raw-content', addRawContent);
 
 export default router;

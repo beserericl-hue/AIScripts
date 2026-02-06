@@ -696,17 +696,26 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
       // If applyDirectly is true and we have standard/spec, save directly to submission
       if (metadata.applyDirectly && metadata.standardCode && metadata.specCode) {
-        // Save directly to the submission's narrative using the existing mutation
-        await saveMutation.mutateAsync({
-          standardCode: metadata.standardCode,
-          specCode: metadata.specCode,
-          content: extractedText, // Use plain text for narrative content
-        });
+        if (metadata.toSupportingEvidence) {
+          // Save to supporting evidence text
+          await saveSupportingEvidenceMutation.mutateAsync({
+            standardCode: metadata.standardCode,
+            specCode: metadata.specCode,
+            supportingEvidenceText: extractedHtml,
+          });
+        } else {
+          // Save to narrative content
+          await saveMutation.mutateAsync({
+            standardCode: metadata.standardCode,
+            specCode: metadata.specCode,
+            content: extractedHtml,
+          });
+        }
 
         // Also save to tagged sections for tracking (marked as applied)
         const response = await api.post(`/api/imports/${importId}/extract-section`, {
           htmlContent: extractedHtml,
-          sectionType: 'standard',
+          sectionType: metadata.toSupportingEvidence ? 'appendix' : 'standard',
           standardCode: metadata.standardCode,
           specCode: metadata.specCode,
           title: metadata.title,
@@ -784,7 +793,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   };
 
   // Manual Tagging: Apply tagged section to a specific standard/spec
-  const handleApplyTaggedSection = async (section: TaggedSection, targetStandardCode: string, targetSpecCode: string) => {
+  const handleApplyTaggedSection = async (section: TaggedSection, targetStandardCode: string, targetSpecCode: string, toSupportingEvidence = false) => {
     if (!importId) return;
 
     setApplyingSectionId(section.id);
@@ -793,18 +802,32 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     try {
       // First, fetch the full content of the section
       const contentResponse = await api.get(`/api/imports/${importId}/tagged-sections/${section.id}`);
+      // Use HTML content for rich text editor (preserves formatting: tables, lists, bold, etc.)
+      const htmlContent = contentResponse.data.htmlContent || '';
       const fullContent = contentResponse.data.fullContent || '';
 
-      if (!fullContent.trim()) {
+      if (!fullContent.trim() && !htmlContent.trim()) {
         throw new Error('Section has no content to apply');
       }
 
-      // Save the content to the submission's narrative
-      await saveMutation.mutateAsync({
-        standardCode: targetStandardCode,
-        specCode: targetSpecCode,
-        content: fullContent,
-      });
+      // Use HTML content if available (better for the rich text editor), fall back to plain text
+      const contentToApply = htmlContent || fullContent;
+
+      if (toSupportingEvidence) {
+        // Save to supporting evidence text instead of narrative
+        await saveSupportingEvidenceMutation.mutateAsync({
+          standardCode: targetStandardCode,
+          specCode: targetSpecCode,
+          supportingEvidenceText: contentToApply,
+        });
+      } else {
+        // Save the content to the submission's narrative
+        await saveMutation.mutateAsync({
+          standardCode: targetStandardCode,
+          specCode: targetSpecCode,
+          content: contentToApply,
+        });
+      }
 
       // Update the tagged section to mark it as applied
       // We do this by re-extracting with the appliedDirectly flag
@@ -828,6 +851,60 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
     } catch (err: any) {
       setSectionError(err.response?.data?.error || err.message || 'Failed to apply section');
+    } finally {
+      setApplyingSectionId(null);
+    }
+  };
+
+  // Manual Tagging: Apply tagged section to curriculum matrix
+  const handleApplyToMatrix = async (section: TaggedSection) => {
+    if (!importId) return;
+
+    setApplyingSectionId(section.id);
+    setSectionError(null);
+
+    try {
+      // Fetch the full content of the section
+      const contentResponse = await api.get(`/api/imports/${importId}/tagged-sections/${section.id}`);
+      const htmlContent = contentResponse.data.htmlContent || '';
+
+      if (!htmlContent.trim()) {
+        throw new Error('Section has no content to import');
+      }
+
+      // Get the matrix for this submission
+      const matrixResponse = await api.get(`/api/submissions/${submissionId}/matrix`);
+      const matrixId = matrixResponse.data._id;
+
+      if (!matrixId) {
+        throw new Error('No curriculum matrix found for this submission');
+      }
+
+      // Save raw content to the matrix for reference
+      await api.post(`/api/submissions/${submissionId}/matrix/${matrixId}/raw-content`, {
+        content: htmlContent,
+        sourceImportId: importId
+      });
+
+      // Mark as applied in tagged sections
+      await api.post(`/api/imports/${importId}/extract-section`, {
+        htmlContent,
+        sectionType: 'matrix',
+        title: section.title,
+        appliedDirectly: true
+      });
+
+      // Delete the old tagged section
+      await api.delete(`/api/imports/${importId}/tagged-sections/${section.id}`);
+
+      // Refresh tagged sections list
+      await loadTaggedSections();
+
+      // Refresh matrix data
+      queryClient.invalidateQueries({ queryKey: ['matrix', submissionId] });
+
+    } catch (err: any) {
+      setSectionError(err.response?.data?.error || err.message || 'Failed to import to matrix');
     } finally {
       setApplyingSectionId(null);
     }
@@ -2082,6 +2159,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                               onDelete={handleDeleteTaggedSection}
                               onView={handleViewTaggedSection}
                               onApply={handleApplyTaggedSection}
+                              onApplyToMatrix={handleApplyToMatrix}
                               deletingId={deletingSectionId}
                               applyingId={applyingSectionId}
                             />
