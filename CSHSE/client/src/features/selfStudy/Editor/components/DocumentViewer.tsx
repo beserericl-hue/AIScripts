@@ -7,6 +7,9 @@ export interface SelectionData {
   text: string;
   previewText: string;
   range?: Range; // Store the Range so we can replace it after save
+  // Text offsets relative to the ORIGINAL document text (for placeholder persistence on resume)
+  textStartOffset?: number;
+  textLength?: number;
 }
 
 // Info for a successfully saved section (used to create placeholder)
@@ -15,6 +18,19 @@ export interface SavedSectionInfo {
   title: string;
   sectionType: string;
   contentLength: number;
+}
+
+// Minimal tagged section data needed for placeholder re-insertion on resume
+export interface TaggedSectionPlaceholder {
+  id: string;
+  sectionType: string;
+  title: string;
+  previewText?: string;
+  endPreviewText?: string;
+  contentLength?: number;
+  // Stored text offsets from original extraction (most reliable method)
+  textStartOffset?: number | null;
+  textLength?: number | null;
 }
 
 interface DocumentViewerProps {
@@ -28,6 +44,8 @@ interface DocumentViewerProps {
   // Called by parent after successful save - replaces selection with placeholder
   lastSavedSection?: SavedSectionInfo | null;
   onPlaceholderInserted?: (updatedHtml: string) => void; // Called after placeholder is inserted, with updated HTML
+  // Tagged sections for re-inserting placeholders on resume
+  taggedSections?: TaggedSectionPlaceholder[];
 }
 
 /**
@@ -45,7 +63,8 @@ export function DocumentViewer({
   onRefresh,
   hasSelection,
   lastSavedSection,
-  onPlaceholderInserted
+  onPlaceholderInserted,
+  taggedSections
 }: DocumentViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -154,6 +173,166 @@ export function DocumentViewer({
       console.error('[DocumentViewer] Failed to insert placeholder:', err);
     }
   }, [lastSavedSection, onPlaceholderInserted]);
+
+  // Re-insert placeholders for previously tagged sections on resume
+  // Uses client-side DOM text matching since server-side HTML matching is unreliable
+  useEffect(() => {
+    if (!contentRef.current || !taggedSections || taggedSections.length === 0 || !htmlContent) return;
+
+    // Small delay to ensure the DOM has rendered the HTML content
+    const timer = setTimeout(() => {
+      if (!contentRef.current) return;
+
+      const root = contentRef.current;
+      const fullText = root.textContent || '';
+      if (fullText.length === 0) return;
+
+      // Helper: find the text node and offset at a given character position in the full text
+      const findTextNodeAtOffset = (targetOffset: number): { node: Text; offset: number } | null => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let currentOffset = 0;
+        let node;
+
+        while (node = walker.nextNode()) {
+          const textNode = node as Text;
+          const nodeLength = textNode.textContent?.length || 0;
+
+          if (currentOffset + nodeLength > targetOffset) {
+            return { node: textNode, offset: targetOffset - currentOffset };
+          }
+          currentOffset += nodeLength;
+        }
+        return null;
+      };
+
+      // Collect all matches first, then process from end to start to avoid offset shifts
+      const matches: Array<{
+        startIdx: number;
+        endIdx: number;
+        section: TaggedSectionPlaceholder;
+        method: 'offset' | 'text-search';
+      }> = [];
+
+      for (const section of taggedSections) {
+        let startIdx = -1;
+        let endIdx = -1;
+        let method: 'offset' | 'text-search' = 'text-search';
+
+        // Method 1 (preferred): Use stored text offsets from original extraction
+        // These are the exact positions captured during the original cursor selection
+        if (section.textStartOffset != null && section.textStartOffset >= 0 &&
+            section.textLength != null && section.textLength > 0) {
+          startIdx = section.textStartOffset;
+          endIdx = section.textStartOffset + section.textLength;
+          method = 'offset';
+          console.log(`[DocumentViewer] Using stored offset for "${section.title}": ${startIdx}-${endIdx}`);
+        }
+
+        // Method 2 (fallback): Text search using previewText/endPreviewText
+        if (startIdx === -1 || startIdx >= fullText.length) {
+          if (!section.previewText || section.previewText.length < 20) continue;
+
+          const searchStart = section.previewText.replace(/\.{3}$/, '').trim();
+          if (searchStart.length < 15) continue;
+
+          startIdx = fullText.indexOf(searchStart);
+          if (startIdx === -1) {
+            console.log(`[DocumentViewer] Could not find preview text for section "${section.title}"`);
+            continue;
+          }
+
+          // Find end using endPreviewText or contentLength
+          if (section.endPreviewText && section.endPreviewText.length >= 10) {
+            const cleanEnd = section.endPreviewText.trim();
+            const expectedEnd = startIdx + (section.contentLength || searchStart.length);
+            const searchFrom = Math.max(0, expectedEnd - cleanEnd.length - 200);
+            const foundEnd = fullText.indexOf(cleanEnd, searchFrom);
+
+            if (foundEnd !== -1 && foundEnd > startIdx) {
+              endIdx = foundEnd + cleanEnd.length;
+            } else {
+              endIdx = startIdx + (section.contentLength || searchStart.length);
+            }
+          } else {
+            endIdx = startIdx + (section.contentLength || searchStart.length);
+          }
+          method = 'text-search';
+        }
+
+        // Clamp to document length
+        endIdx = Math.min(endIdx, fullText.length);
+
+        matches.push({ startIdx, endIdx, section, method });
+      }
+
+      if (matches.length === 0) {
+        console.log('[DocumentViewer] No tagged sections could be matched in document text');
+        return;
+      }
+
+      // Sort by startIdx descending so we process from end to start (avoids offset shifts)
+      matches.sort((a, b) => b.startIdx - a.startIdx);
+
+      let insertedCount = 0;
+
+      for (const { startIdx, endIdx, section, method } of matches) {
+        try {
+          const startInfo = findTextNodeAtOffset(startIdx);
+          const endInfo = findTextNodeAtOffset(endIdx);
+
+          if (!startInfo || !endInfo) {
+            console.log(`[DocumentViewer] Could not find text nodes for section "${section.title}"`);
+            continue;
+          }
+
+          const range = document.createRange();
+          range.setStart(startInfo.node, startInfo.offset);
+          range.setEnd(endInfo.node, endInfo.offset);
+
+          // Create placeholder element
+          const placeholder = createPlaceholder({
+            id: section.id,
+            title: section.title,
+            sectionType: section.sectionType,
+            contentLength: section.contentLength || 0
+          });
+
+          // Check if inside a table
+          const startTable = findAncestor(range.startContainer, 'TABLE');
+
+          if (startTable) {
+            // Table content: insert placeholder before table, delete range content
+            startTable.parentNode?.insertBefore(placeholder, startTable);
+            range.deleteContents();
+
+            // Clean up empty rows
+            const table = startTable as HTMLTableElement;
+            const rows = Array.from(table.rows);
+            for (let i = rows.length - 1; i >= 0; i--) {
+              if ((rows[i].textContent?.trim() || '').length === 0) {
+                rows[i].remove();
+              }
+            }
+            if (table.rows.length === 0) table.remove();
+          } else {
+            range.deleteContents();
+            range.insertNode(placeholder);
+          }
+
+          insertedCount++;
+        } catch (err) {
+          console.error(`[DocumentViewer] Failed to insert placeholder for "${section.title}":`, err);
+        }
+      }
+
+      if (insertedCount > 0) {
+        setExtractedCount(insertedCount);
+        console.log(`[DocumentViewer] Re-inserted ${insertedCount} placeholder(s) from ${taggedSections.length} tagged sections`);
+      }
+    }, 100); // Small delay for DOM to render
+
+    return () => clearTimeout(timer);
+  }, [htmlContent, taggedSections]); // Only re-run when HTML or tagged sections change
 
   // Jump to the first content after placeholders (skip past extracted sections)
   const handleJumpToNext = useCallback(() => {
@@ -300,24 +479,53 @@ export function DocumentViewer({
     }, 10);
   }, []);
 
+  // Helper: Calculate text offset of a Range's start position relative to root element
+  const calculateTextOffset = useCallback((range: Range): number => {
+    if (!contentRef.current) return -1;
+    const walker = document.createTreeWalker(contentRef.current, NodeFilter.SHOW_TEXT);
+    let offset = 0;
+    let node;
+    while (node = walker.nextNode()) {
+      if (node === range.startContainer) {
+        return offset + range.startOffset;
+      }
+      offset += (node as Text).textContent?.length || 0;
+    }
+    return -1;
+  }, []);
+
   // Capture the current selection and store the Range for later replacement
   const handleCaptureSelection = useCallback(() => {
     if (currentSelection) {
       // Store the current browser selection Range BEFORE clearing
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
+        const range = selection.getRangeAt(0);
         // Clone the range so it persists after selection is cleared
-        lastCapturedRangeRef.current = selection.getRangeAt(0).cloneRange();
-        console.log('[DocumentViewer] Stored Range for later replacement');
+        lastCapturedRangeRef.current = range.cloneRange();
+
+        // Calculate text offset relative to the document root for persistence
+        // This allows us to re-create the exact placeholder position on resume
+        const textStartOffset = calculateTextOffset(range);
+        const textLength = currentSelection.text.length;
+        console.log(`[DocumentViewer] Stored Range for replacement (textOffset=${textStartOffset}, textLength=${textLength})`);
+
+        // Enrich the selection data with offset info
+        onSelectionCapture({
+          ...currentSelection,
+          textStartOffset: textStartOffset >= 0 ? textStartOffset : undefined,
+          textLength: textLength > 0 ? textLength : undefined
+        });
+      } else {
+        onSelectionCapture(currentSelection);
       }
 
-      onSelectionCapture(currentSelection);
       // Clear the browser selection (but Range is stored in ref)
       window.getSelection()?.removeAllRanges();
       setCurrentSelection(null);
       setSelectionActive(false);
     }
-  }, [currentSelection, onSelectionCapture]);
+  }, [currentSelection, onSelectionCapture, calculateTextOffset]);
 
   // Clear selection
   const handleClearSelection = useCallback(() => {

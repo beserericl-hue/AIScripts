@@ -37,6 +37,9 @@ export interface TaggedSection {
   contentLength?: number;
   createdAt?: string;
   appliedDirectly?: boolean; // If true, already applied to submission (skips N8N)
+  // Text position offsets from original extraction (for placeholder re-insertion on resume)
+  textStartOffset?: number | null;
+  textLength?: number | null;
 }
 
 interface TaggedSectionsListProps {
@@ -86,10 +89,13 @@ export function TaggedSectionsList({
       setSelectedSpec('');
       setToSupportingEvidence(false);
     } else {
+      // Default to Supporting Evidence for appendix/supporting_evidence sections
+      const section = sections.find(s => s.id === sectionId);
+      const isAppendixType = section?.sectionType === 'appendix' || section?.sectionType === 'supporting_evidence';
       setApplyFormOpen(sectionId);
       setSelectedStandard('');
       setSelectedSpec('');
-      setToSupportingEvidence(false);
+      setToSupportingEvidence(isAppendixType); // Default to checked for appendix sections
     }
   };
 
@@ -306,8 +312,35 @@ export function TaggedSectionsList({
             <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-center gap-2 mb-2">
                 <Zap className="w-4 h-4 text-blue-600" />
-                <span className="text-sm font-medium text-blue-800">Apply to Standard</span>
+                <span className="text-sm font-medium text-blue-800">
+                  Apply to Standard {toSupportingEvidence ? '(Supporting Evidence)' : '(Narrative)'}
+                </span>
               </div>
+
+              {/* Destination toggle - Narrative vs Supporting Evidence */}
+              <div className="flex items-center gap-1 mb-3 p-1 bg-white rounded-lg border border-gray-200">
+                <button
+                  onClick={() => setToSupportingEvidence(false)}
+                  className={`flex-1 px-2 py-1.5 text-xs font-medium rounded transition-colors ${
+                    !toSupportingEvidence
+                      ? 'bg-blue-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Narrative Editor
+                </button>
+                <button
+                  onClick={() => setToSupportingEvidence(true)}
+                  className={`flex-1 px-2 py-1.5 text-xs font-medium rounded transition-colors ${
+                    toSupportingEvidence
+                      ? 'bg-amber-600 text-white'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Supporting Evidence
+                </button>
+              </div>
+
               <div className="flex items-center gap-2">
                 <select
                   value={selectedStandard}
@@ -340,7 +373,11 @@ export function TaggedSectionsList({
                 <button
                   onClick={() => handleApplySubmit(section)}
                   disabled={!selectedStandard || !selectedSpec || applyingId === section.id}
-                  className="px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                  className={`px-3 py-1.5 text-white text-sm font-medium rounded disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1 ${
+                    toSupportingEvidence
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
                 >
                   {applyingId === section.id ? (
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -354,28 +391,17 @@ export function TaggedSectionsList({
                     setApplyFormOpen(null);
                     setSelectedStandard('');
                     setSelectedSpec('');
+                    setToSupportingEvidence(false);
                   }}
                   className="px-2 py-1.5 text-gray-600 text-sm hover:bg-gray-200 rounded"
                 >
                   Cancel
                 </button>
               </div>
-              {/* Supporting Evidence checkbox */}
-              <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={toSupportingEvidence}
-                  onChange={(e) => setToSupportingEvidence(e.target.checked)}
-                  className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
-                />
-                <span className="text-xs text-blue-700 font-medium">
-                  Save to Supporting Evidence Text
-                </span>
-              </label>
-              <p className="text-xs text-blue-600 mt-1">
+              <p className={`text-xs mt-2 ${toSupportingEvidence ? 'text-amber-700' : 'text-blue-600'}`}>
                 {toSupportingEvidence
-                  ? 'Content will be saved to the Supporting Evidence section for this spec.'
-                  : 'Content will be saved to the narrative editor for this spec.'}
+                  ? 'Content will be saved to the Supporting Evidence section for this standard/spec.'
+                  : 'Content will be saved to the narrative editor for this standard/spec.'}
               </p>
             </div>
           )}

@@ -2306,38 +2306,12 @@ export const getDocumentContent = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Document content not found. Please re-upload the document.' });
     }
 
-    // Re-insert placeholders for previously tagged sections (so resume shows progress)
-    const taggedSections = importRecord.detectedSections || [];
-    if (taggedSections.length > 0) {
-      debugLog('Re-inserting placeholders for tagged sections', { count: taggedSections.length });
-      let replacedCount = 0;
+    // Placeholder re-insertion is now done client-side in DocumentViewer using DOM text matching
+    // Server-side HTML matching was unreliable because browser Range API normalizes HTML differently
+    const taggedSectionsCount = (importRecord.detectedSections || []).length;
 
-      for (const section of taggedSections) {
-        const sectionHtml = (section as any).htmlContent;
-        if (!sectionHtml || typeof sectionHtml !== 'string' || sectionHtml.length < 10) continue;
-
-        // Determine section type for placeholder styling
-        const sectionType = (section as any).isMatrix ? 'matrix' :
-                           (section as any).isAppendix ? 'appendix' :
-                           (section as any).standardCode ? 'standard' : 'standard';
-        const title = (section as any).headerText || 'Extracted Section';
-        const contentLength = (section as any).fullContent?.length || sectionHtml.length;
-
-        const placeholder = createPlaceholderHtml(section.id, sectionType, title, contentLength);
-
-        // Try exact match replacement (most reliable for substantial content)
-        const idx = htmlContent.indexOf(sectionHtml);
-        if (idx !== -1) {
-          htmlContent = htmlContent.substring(0, idx) + placeholder + htmlContent.substring(idx + sectionHtml.length);
-          replacedCount++;
-        }
-      }
-
-      debugLog('Placeholders re-inserted', { replacedCount, total: taggedSections.length });
-    }
-
-    // Return HTML content as JSON
-    return res.json({ htmlContent, taggedSectionsCount: taggedSections.length });
+    // Return HTML content as JSON (placeholders will be inserted client-side)
+    return res.json({ htmlContent, taggedSectionsCount });
   } catch (error: any) {
     console.error('Get document content error:', error);
     debugLog('getDocumentContent error', { error: error.message });
@@ -2437,7 +2411,7 @@ export const syncDocumentHtml = async (req: AuthenticatedRequest, res: Response)
 export const extractSection = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
-    const { htmlContent: providedHtml, sectionType, standardCode, specCode, title, appliedDirectly } = req.body;
+    const { htmlContent: providedHtml, sectionType, standardCode, specCode, title, appliedDirectly, textStartOffset, textLength } = req.body;
 
     // Validate input
     if (!sectionType || !['standard', 'matrix', 'appendix', 'skip'].includes(sectionType)) {
@@ -2497,6 +2471,14 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
       }
       if (sectionType === 'matrix') {
         (newSection as any).isMatrix = true;
+      }
+
+      // Store text position offsets for reliable placeholder re-insertion on resume
+      if (typeof textStartOffset === 'number' && textStartOffset >= 0) {
+        (newSection as any).textStartOffset = textStartOffset;
+      }
+      if (typeof textLength === 'number' && textLength > 0) {
+        (newSection as any).textLength = textLength;
       }
 
       // Initialize detectedSections array if needed
@@ -2568,7 +2550,10 @@ export const getTaggedSections = async (req: Request, res: Response) => {
         contentLength: s.fullContent?.length || 0,
         standardCode: s.standardCode,
         specCode: s.specCode,
-        appliedDirectly: s.appliedDirectly || false // Whether already applied to submission
+        appliedDirectly: s.appliedDirectly || false, // Whether already applied to submission
+        // Text position offsets for reliable placeholder re-insertion on resume
+        textStartOffset: s.textStartOffset ?? null,
+        textLength: s.textLength ?? null
       };
     });
 

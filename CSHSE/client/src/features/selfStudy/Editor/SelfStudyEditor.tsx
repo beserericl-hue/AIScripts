@@ -303,6 +303,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [isLoadingFullContent, setIsLoadingFullContent] = useState(false);
   // Track last saved section to trigger placeholder insertion in DocumentViewer
   const [lastSavedSection, setLastSavedSection] = useState<SavedSectionInfo | null>(null);
+  // Version counter to force NarrativeEditor remount when content is externally applied
+  const [editorRefreshKey, setEditorRefreshKey] = useState(0);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -456,6 +458,16 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       clearInterval(pollInterval);
     };
   }, [importId, importStep]);
+
+  // Auto-load document content and tagged sections when resuming a manual_tagging session
+  // This handles the case where the user resumes an import (importStep set directly to manual_tagging)
+  useEffect(() => {
+    if (importStep === 'manual_tagging' && importId && !documentHtml && !isLoadingDocument) {
+      console.log('[SelfStudyEditor] Auto-loading document content for resumed import');
+      loadDocumentContent();
+      loadTaggedSections();
+    }
+  }, [importStep, importId, documentHtml, isLoadingDocument]);
 
   // Import handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -719,7 +731,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
           standardCode: metadata.standardCode,
           specCode: metadata.specCode,
           title: metadata.title,
-          appliedDirectly: true // Flag to indicate it was already applied
+          appliedDirectly: true, // Flag to indicate it was already applied
+          textStartOffset: currentSelection.textStartOffset,
+          textLength: currentSelection.textLength
         });
 
         // Set lastSavedSection to trigger placeholder insertion
@@ -736,8 +750,11 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         // Clear selection state
         setCurrentSelection(null);
 
-        // Refresh submission data to show the applied content
-        queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+        // Refresh submission data and WAIT for it to complete
+        await queryClient.refetchQueries({ queryKey: ['submission', submissionId] });
+
+        // Force NarrativeEditor to remount with fresh content
+        setEditorRefreshKey(prev => prev + 1);
 
         return;
       }
@@ -748,7 +765,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         sectionType: metadata.sectionType,
         standardCode: metadata.standardCode,
         specCode: metadata.specCode,
-        title: metadata.title
+        title: metadata.title,
+        textStartOffset: currentSelection.textStartOffset,
+        textLength: currentSelection.textLength
       });
 
       // Set lastSavedSection to trigger placeholder insertion in DocumentViewer
@@ -846,10 +865,16 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       // Refresh tagged sections list
       await loadTaggedSections();
 
-      // Refresh submission data to show the applied content
-      queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+      // Refresh submission data and WAIT for it to complete (ensures editor gets fresh content)
+      await queryClient.refetchQueries({ queryKey: ['submission', submissionId] });
+
+      // Force NarrativeEditor to remount with fresh content if user is on the same spec
+      setEditorRefreshKey(prev => prev + 1);
+
+      console.log(`[SelfStudyEditor] Applied section "${section.title}" to ${targetStandardCode}.${targetSpecCode}${toSupportingEvidence ? ' (supporting evidence)' : ''}`);
 
     } catch (err: any) {
+      console.error('[SelfStudyEditor] Failed to apply section:', err);
       setSectionError(err.response?.data?.error || err.message || 'Failed to apply section');
     } finally {
       setApplyingSectionId(null);
@@ -1736,6 +1761,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
               <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-auto p-4">
                 {selectedSpec ? (
                   <NarrativeEditor
+                    key={`${selectedStandard}-${selectedSpec}-${editorRefreshKey}`}
                     submissionId={submissionId}
                     standardCode={selectedStandard}
                     specCode={selectedSpec}
@@ -2120,6 +2146,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           hasSelection={currentSelection !== null}
                           lastSavedSection={lastSavedSection}
                           onPlaceholderInserted={handlePlaceholderInserted}
+                          taggedSections={taggedSections}
                         />
                       </div>
                     </div>
