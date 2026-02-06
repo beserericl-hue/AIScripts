@@ -28,7 +28,7 @@ interface Course {
 
 interface CourseAssessment {
   courseId: string;
-  type: CoverageType;
+  type: CoverageType | CoverageType[];  // Support array of types
   depth: CoverageDepth;
 }
 
@@ -136,7 +136,7 @@ export function CurriculumMatrixEditor({
       standardCode: string;
       specCode: string;
       courseId: string;
-      type: CoverageType;
+      type: CoverageType | CoverageType[] | null;
       depth: CoverageDepth;
     }) => {
       await api.put(
@@ -156,14 +156,16 @@ export function CurriculumMatrixEditor({
       standardCode: string,
       specCode: string,
       courseId: string,
-      type: CoverageType,
+      type: CoverageType | CoverageType[],
       depth: CoverageDepth
     ) => {
+      // Normalize type to array for API
+      const typeArray = Array.isArray(type) ? type.filter((t): t is CoverageType => t !== null) : (type ? [type] : []);
       updateAssessmentMutation.mutate({
         standardCode,
         specCode,
         courseId,
-        type,
+        type: typeArray.length > 0 ? typeArray : null as any,
         depth,
       });
     },
@@ -172,7 +174,7 @@ export function CurriculumMatrixEditor({
 
   // Get assessment for a cell
   const getAssessment = useCallback(
-    (standardCode: string, specCode: string, courseId: string) => {
+    (standardCode: string, specCode: string, courseId: string): { type: CoverageType | CoverageType[] | null; depth: CoverageDepth | null } => {
       if (!matrix) return { type: null, depth: null };
       const mapping = matrix.standards.find(
         (s) => s.standardCode === standardCode && s.specCode === specCode
@@ -433,24 +435,25 @@ export function CurriculumMatrixEditor({
         </table>
       </div>
 
-      {/* Legend */}
+      {/* Legend with colors */}
       <div className="p-4 border-t border-gray-200 bg-gray-50">
         <div className="flex flex-wrap gap-6 text-sm">
-          <div>
-            <span className="font-medium text-gray-700 mr-2">Type:</span>
-            <span className="text-gray-600">
-              I = Introduction, T = Theory, K = Knowledge, S = Skills
+          <div className="flex items-center gap-3">
+            <span className="font-medium text-gray-700">Type:</span>
+            <span className="flex items-center gap-2">
+              <span className="font-bold text-blue-600">I</span><span className="text-gray-500">=Introduction</span>
+              <span className="font-bold text-purple-600">T</span><span className="text-gray-500">=Theory</span>
+              <span className="font-bold text-green-600">K</span><span className="text-gray-500">=Knowledge</span>
+              <span className="font-bold text-orange-600">S</span><span className="text-gray-500">=Skills</span>
             </span>
           </div>
-          <div>
-            <span className="font-medium text-gray-700 mr-2">Depth:</span>
-            <span className="text-gray-600">L = Low, M = Medium, H = High</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-gray-700">Coverage:</span>
-            <span className="inline-block w-4 h-4 bg-teal-100 rounded" /> High
-            <span className="inline-block w-4 h-4 bg-teal-50 rounded" /> Medium
-            <span className="inline-block w-4 h-4 bg-gray-100 rounded" /> Low
+          <div className="flex items-center gap-3">
+            <span className="font-medium text-gray-700">Depth:</span>
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-4 h-4 bg-teal-100 border-b-2 border-b-teal-500 rounded-sm" /><span className="text-gray-500">H=High</span>
+              <span className="inline-block w-4 h-4 bg-teal-50 border-b border-b-teal-400 rounded-sm" /><span className="text-gray-500">M=Medium</span>
+              <span className="inline-block w-4 h-4 bg-gray-100 border-b border-b-teal-300 rounded-sm" /><span className="text-gray-500">L=Low</span>
+            </span>
           </div>
         </div>
       </div>

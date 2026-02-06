@@ -28,7 +28,7 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
-import { DocumentViewer, SectionTagger, TaggedSectionsList, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
+import { DocumentViewer, SectionTagger, TaggedSectionsList, SubExtractionViewerModal, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
 
 // Use consistent API paths without relying on environment variable
 
@@ -2130,93 +2130,25 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                     </div>
                   </div>
 
-                  {/* View Tagged Section Modal */}
+                  {/* View Tagged Section Modal - with sub-extraction capability */}
                   {viewingTaggedSection && (
-                    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                      <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[85vh] flex flex-col">
-                        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                          <h3 className="font-semibold text-gray-900 truncate">
-                            {viewingTaggedSection.title}
-                          </h3>
-                          <button
-                            onClick={() => {
-                              setViewingTaggedSection(null);
-                              setViewingFullContent(null);
-                              setViewingHtmlContent(null);
-                            }}
-                            className="p-1 hover:bg-gray-100 rounded"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-6">
-                          {isLoadingFullContent ? (
-                            <div className="flex items-center justify-center py-8">
-                              <Loader2 className="w-6 h-6 animate-spin text-teal-600 mr-2" />
-                              <span className="text-gray-500">Loading full content...</span>
-                            </div>
-                          ) : viewingHtmlContent ? (
-                            // Render HTML content to preserve formatting (tables, lists, etc.)
-                            <>
-                              <style>{`
-                                .tagged-section-content table {
-                                  border-collapse: collapse;
-                                  width: 100%;
-                                  margin: 1rem 0;
-                                }
-                                .tagged-section-content th,
-                                .tagged-section-content td {
-                                  border: 1px solid #d1d5db;
-                                  padding: 0.5rem 0.75rem;
-                                  text-align: left;
-                                }
-                                .tagged-section-content th {
-                                  background: #f3f4f6;
-                                  font-weight: 600;
-                                }
-                                .tagged-section-content tr:nth-child(even) {
-                                  background: #f9fafb;
-                                }
-                                .tagged-section-content p {
-                                  margin: 0.5rem 0;
-                                }
-                                .tagged-section-content ul,
-                                .tagged-section-content ol {
-                                  margin: 0.5rem 0;
-                                  padding-left: 1.5rem;
-                                }
-                              `}</style>
-                              <div
-                                className="tagged-section-content prose prose-sm max-w-none"
-                                dangerouslySetInnerHTML={{ __html: viewingHtmlContent }}
-                              />
-                            </>
-                          ) : (
-                            // Fallback to plain text
-                            <div className="prose prose-sm max-w-none whitespace-pre-wrap">
-                              {viewingFullContent || viewingTaggedSection.previewText || 'No content available'}
-                            </div>
-                          )}
-                          {viewingTaggedSection.contentLength && !isLoadingFullContent && (
-                            <p className="text-sm text-gray-400 mt-4 pt-4 border-t">
-                              Total content: {viewingTaggedSection.contentLength.toLocaleString()} characters
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-end p-4 border-t border-gray-200 bg-gray-50">
-                          <button
-                            onClick={() => {
-                              setViewingTaggedSection(null);
-                              setViewingFullContent(null);
-                              setViewingHtmlContent(null);
-                            }}
-                            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-                          >
-                            Close
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                    <SubExtractionViewerModal
+                      section={viewingTaggedSection}
+                      importId={importId!}
+                      submissionId={submissionId}
+                      htmlContent={viewingHtmlContent}
+                      textContent={viewingFullContent}
+                      isLoading={isLoadingFullContent}
+                      onClose={() => {
+                        setViewingTaggedSection(null);
+                        setViewingFullContent(null);
+                        setViewingHtmlContent(null);
+                      }}
+                      onExtractionApplied={() => {
+                        // Refresh submission data after extraction
+                        queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+                      }}
+                    />
                   )}
                 </div>
               )}
