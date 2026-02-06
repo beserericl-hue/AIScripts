@@ -19,6 +19,25 @@ function debugLog(message: string, data?: any) {
 }
 
 /**
+ * Create HTML placeholder for extracted content
+ * This replaces the extracted content in the stored HTML so it doesn't appear when reloaded
+ */
+function createPlaceholderHtml(sectionId: string, sectionType: string, title: string, contentLength: number): string {
+  const typeColors: Record<string, { bg: string; border: string; text: string }> = {
+    'standard': { bg: '#ccfbf1', border: '#2dd4bf', text: '#115e59' },
+    'matrix': { bg: '#f3e8ff', border: '#a855f7', text: '#6b21a8' },
+    'appendix': { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
+    'skip': { bg: '#f3f4f6', border: '#9ca3af', text: '#4b5563' }
+  };
+  const colors = typeColors[sectionType] || typeColors['standard'];
+
+  return `<div class="extracted-section-placeholder" data-section-id="${sectionId}" data-section-type="${sectionType}" style="background-color: ${colors.bg}; border-left: 4px solid ${colors.border}; color: ${colors.text}; padding: 8px 12px; margin: 8px 0; border-radius: 0 4px 4px 0; font-family: system-ui, -apple-system, sans-serif;">
+    <span style="font-weight: 500; font-size: 14px;">✓ Extracted: ${title.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+    <span style="font-size: 12px; opacity: 0.75; margin-left: 8px;">(${contentLength.toLocaleString()} chars)</span>
+  </div>`;
+}
+
+/**
  * Clean HTML content before sending to n8n
  * Removes:
  * - Base64 encoded images (data:image/...)
@@ -2463,9 +2482,51 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
     // Save import record
     await importRecord.save();
 
-    // Note: The frontend will sync the updated HTML (with placeholders) via PUT /sync-html
-    // This happens after the placeholder is inserted in the DOM, ensuring the stored HTML
-    // always reflects what the user sees in the document viewer.
+    // Update GridFS HTML server-side to remove the extracted content
+    // This avoids the browser having to send 370MB+ back over HTTP
+    try {
+      const storedHtml = await gridFsService.getHtmlContent(importId);
+
+      // Find and replace the extracted content with a placeholder
+      // We search for the exact HTML or use text matching as fallback
+      let updatedHtml = storedHtml;
+      let contentRemoved = false;
+
+      // First try: exact HTML match (most reliable)
+      if (storedHtml.includes(providedHtml)) {
+        // Create placeholder HTML
+        const placeholderHtml = createPlaceholderHtml(sectionId || 'skip', sectionType, title, extractedText.length);
+        updatedHtml = storedHtml.replace(providedHtml, placeholderHtml);
+        contentRemoved = true;
+        console.log(`[Import] Content removed from HTML using exact match`);
+      } else {
+        // Fallback: try to find by text content (handles minor HTML differences)
+        // Use a unique portion of the text to locate the content
+        const textToFind = extractedText.substring(0, Math.min(200, extractedText.length));
+        if (textToFind.length > 20) {
+          // Escape regex special characters
+          const escapedText = textToFind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          // Look for text within tags
+          const textPattern = new RegExp(`([^>]*${escapedText.substring(0, 50)}[^<]*)`, 'i');
+          const match = storedHtml.match(textPattern);
+          if (match) {
+            console.log(`[Import] Found content by text match at position ${match.index}`);
+            // For text match, we can't safely remove HTML structure, so just log
+            // The exact match should work in most cases since we load from the same source
+          }
+        }
+        console.log(`[Import] Exact HTML match not found, content may already be removed or differs`);
+      }
+
+      // Only update GridFS if we actually removed content
+      if (contentRemoved && updatedHtml !== storedHtml) {
+        await gridFsService.storeHtmlContent(importId, updatedHtml);
+        console.log(`[Import] Updated GridFS HTML, removed ${storedHtml.length - updatedHtml.length} chars`);
+      }
+    } catch (gridFsError: any) {
+      // Log but don't fail the extraction - section is already saved
+      console.error(`[Import] Failed to update GridFS HTML:`, gridFsError.message);
+    }
 
     console.log(`[Import] Section saved: ${sectionType} - "${title}" (${extractedText.length} chars)`);
 
