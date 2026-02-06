@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { GridFSBucket, ObjectId, GridFSBucketReadStream } from 'mongodb';
 import { Readable } from 'stream';
+import { SelfStudyImport } from '../models/SelfStudyImport';
 
 /**
  * GridFS Service for storing large files (HTML content) that exceed MongoDB's 16MB BSON limit
@@ -344,9 +345,6 @@ export async function cleanupOrphanedFiles(dryRun = false): Promise<{
   totalBytesFreed: number;
   orphanedImportIds: string[];
 }> {
-  // Import SelfStudyImport here to avoid circular dependencies
-  const { SelfStudyImport } = await import('../models/SelfStudyImport');
-
   const htmlBucket = getBucket();
   const imgBucket = getImageBucket();
 
