@@ -185,7 +185,7 @@ export function DocumentViewer({
             }
             maxCols = Math.max(maxCols, cols);
           }
-          const selectedRows = rows.filter(row => range.intersectsNode(row));
+          const selectedRows = rows.filter(row => rangeStrictlyOverlaps(range, row));
           return { table, maxCols, selectedRows };
         });
 
@@ -429,7 +429,7 @@ export function DocumentViewer({
                 for (const cell of Array.from(row.cells)) cols += cell.colSpan || 1;
                 maxCols = Math.max(maxCols, cols);
               }
-              return { table, maxCols, selectedRows: rows.filter(row => range.intersectsNode(row)) };
+              return { table, maxCols, selectedRows: rows.filter(row => rangeStrictlyOverlaps(range, row)) };
             });
 
             const nonTableToRemove: ChildNode[] = [];
@@ -515,6 +515,20 @@ export function DocumentViewer({
       lastPlaceholder.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, []);
+
+  // Helper: Check if a range strictly overlaps a node's content (not just touches boundary).
+  // range.intersectsNode() returns true even when the range end is at offset 0 of a text
+  // node inside the element (boundary touch), which causes adjacent table rows to be
+  // wrongly matched. This uses compareBoundaryPoints for a strict overlap check.
+  const rangeStrictlyOverlaps = (range: Range, node: Node): boolean => {
+    const nodeRange = document.createRange();
+    nodeRange.selectNodeContents(node);
+    // Range end must be strictly AFTER node start
+    const endAfterStart = range.compareBoundaryPoints(Range.END_TO_START, nodeRange) > 0;
+    // Range start must be strictly BEFORE node end
+    const startBeforeEnd = range.compareBoundaryPoints(Range.START_TO_END, nodeRange) < 0;
+    return endAfterStart && startBeforeEnd;
+  };
 
   // Helper: Find the closest ancestor of a specific type
   const findAncestor = (node: Node | null, tagName: string): Element | null => {
