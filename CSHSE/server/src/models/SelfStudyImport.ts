@@ -61,6 +61,14 @@ export interface IDetectedSection {
   isSelected: boolean;
   parentId?: string;
   children?: IDetectedSection[];
+  // Manual tagging metadata
+  standardCode?: string;
+  specCode?: string;
+  appliedDirectly?: boolean;
+  isMatrix?: boolean;
+  // Text position offsets for placeholder re-insertion on resume
+  textStartOffset?: number;
+  textLength?: number;
 }
 
 /**
@@ -179,7 +187,15 @@ const DetectedSectionSchema = new Schema<IDetectedSection>({
   isAppendix: { type: Boolean, default: false },
   isSelected: { type: Boolean, default: true },
   parentId: String,
-  children: { type: [Schema.Types.Mixed], default: [] }  // Recursive reference
+  children: { type: [Schema.Types.Mixed], default: [] },  // Recursive reference
+  // Manual tagging metadata
+  standardCode: String,
+  specCode: String,
+  appliedDirectly: { type: Boolean, default: false },
+  isMatrix: { type: Boolean, default: false },
+  // Text position offsets for placeholder re-insertion on resume
+  textStartOffset: Number,
+  textLength: Number
 }, { _id: false });
 
 // Schema for appendix info

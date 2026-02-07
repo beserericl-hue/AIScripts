@@ -2451,35 +2451,18 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
         previewText: extractedText.substring(0, 200) + (extractedText.length > 200 ? '...' : ''),
         fullContent: extractedText,
         htmlContent: extractedHtml,
-        startPosition: 0, // No longer using offsets
+        startPosition: 0,
         endPosition: extractedHtml.length,
         isAppendix: sectionType === 'appendix',
         isSelected: true,
-        children: []
+        children: [],
+        standardCode: sectionType === 'standard' ? standardCode : undefined,
+        specCode: sectionType === 'standard' ? specCode : undefined,
+        appliedDirectly: sectionType === 'standard' && appliedDirectly ? true : false,
+        isMatrix: sectionType === 'matrix',
+        textStartOffset: typeof textStartOffset === 'number' && textStartOffset >= 0 ? textStartOffset : undefined,
+        textLength: typeof textLength === 'number' && textLength > 0 ? textLength : undefined
       };
-
-      // Add metadata for standard/matrix
-      if (sectionType === 'standard' && standardCode) {
-        (newSection as any).standardCode = standardCode;
-        if (specCode) {
-          (newSection as any).specCode = specCode;
-        }
-        // Mark if already applied directly to submission (skips N8N processing)
-        if (appliedDirectly) {
-          (newSection as any).appliedDirectly = true;
-        }
-      }
-      if (sectionType === 'matrix') {
-        (newSection as any).isMatrix = true;
-      }
-
-      // Store text position offsets for reliable placeholder re-insertion on resume
-      if (typeof textStartOffset === 'number' && textStartOffset >= 0) {
-        (newSection as any).textStartOffset = textStartOffset;
-      }
-      if (typeof textLength === 'number' && textLength > 0) {
-        (newSection as any).textLength = textLength;
-      }
 
       // Initialize detectedSections array if needed
       if (!importRecord.detectedSections) {

@@ -179,13 +179,19 @@ export function DocumentViewer({
   useEffect(() => {
     if (!contentRef.current || !taggedSections || taggedSections.length === 0 || !htmlContent) return;
 
-    // Small delay to ensure the DOM has rendered the HTML content
+    // Delay to ensure the DOM has fully rendered the HTML content
+    // Large documents (300MB+) need more time for browser layout
+    const delay = htmlContent.length > 10_000_000 ? 1000 : 200;
     const timer = setTimeout(() => {
       if (!contentRef.current) return;
 
       const root = contentRef.current;
       const fullText = root.textContent || '';
-      if (fullText.length === 0) return;
+      if (fullText.length === 0) {
+        console.log('[DocumentViewer] DOM text content is empty, skipping placeholder re-insertion');
+        return;
+      }
+      console.log(`[DocumentViewer] Re-inserting placeholders for ${taggedSections.length} tagged sections (docText: ${fullText.length} chars)`);
 
       // Helper: find the text node and offset at a given character position in the full text
       const findTextNodeAtOffset = (targetOffset: number): { node: Text; offset: number } | null => {
@@ -329,7 +335,7 @@ export function DocumentViewer({
         setExtractedCount(insertedCount);
         console.log(`[DocumentViewer] Re-inserted ${insertedCount} placeholder(s) from ${taggedSections.length} tagged sections`);
       }
-    }, 100); // Small delay for DOM to render
+    }, delay);
 
     return () => clearTimeout(timer);
   }, [htmlContent, taggedSections]); // Only re-run when HTML or tagged sections change

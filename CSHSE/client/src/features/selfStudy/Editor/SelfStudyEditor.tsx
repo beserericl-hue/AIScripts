@@ -680,13 +680,29 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   // With large documents (370MB+), syncing causes browser memory exhaustion and crashes.
   // Instead, placeholders are visual-only during the session. The tagged sections are
   // already saved to MongoDB, so extraction state is preserved across sessions.
-  const handlePlaceholderInserted = useCallback(async (_updatedHtml: string) => {
+  const handlePlaceholderInserted = useCallback(async (updatedHtml: string) => {
     // Clear the lastSavedSection state so the placeholder isn't inserted again
     setLastSavedSection(null);
 
-    // HTML sync disabled for large documents - see comment above
-    console.log('[SelfStudyEditor] Placeholder inserted (HTML sync disabled for performance)');
-  }, []);
+    // Update local state so resume uses the version with placeholders
+    setDocumentHtml(updatedHtml);
+
+    // Sync the updated HTML (with placeholders) back to GridFS once small enough.
+    // Server body limit is 50MB, so sync when under 40MB (room for JSON overhead).
+    // For larger documents, offset-based placeholder re-insertion handles resume.
+    // As sections are extracted, the document shrinks and eventually crosses the threshold.
+    const MAX_SYNC_SIZE = 40 * 1024 * 1024; // 40MB
+    if (importId && updatedHtml.length <= MAX_SYNC_SIZE) {
+      try {
+        await api.put(`/api/imports/${importId}/sync-html`, { html: updatedHtml });
+        console.log(`[SelfStudyEditor] Synced HTML to GridFS (${(updatedHtml.length / 1024 / 1024).toFixed(1)}MB)`);
+      } catch (err) {
+        console.error('[SelfStudyEditor] Failed to sync HTML to GridFS:', err);
+      }
+    } else {
+      console.log(`[SelfStudyEditor] Skipping GridFS sync (${(updatedHtml.length / 1024 / 1024).toFixed(1)}MB > 40MB threshold, using offset-based resume)`);
+    }
+  }, [importId]);
 
   // Manual Tagging: Save section
   // Uses HTML content already captured in SelectionData
