@@ -269,6 +269,7 @@ export function DocumentViewer({
 
   // Re-insert placeholders for previously tagged sections on resume
   // Uses client-side DOM text matching since server-side HTML matching is unreliable
+  // Only runs on fresh HTML — skips if placeholders already exist in the DOM
   useEffect(() => {
     if (!contentRef.current || !taggedSections || taggedSections.length === 0 || !htmlContent) return;
 
@@ -279,6 +280,16 @@ export function DocumentViewer({
       if (!contentRef.current) return;
 
       const root = contentRef.current;
+
+      // Skip if placeholders already exist in the DOM — the initial insertion
+      // already handled this. Re-running would use text offsets against modified
+      // HTML and remove wrong table rows.
+      const existingPlaceholders = root.querySelectorAll('.extracted-section-placeholder');
+      if (existingPlaceholders.length > 0) {
+        console.log(`[DocumentViewer] Skipping re-insertion: ${existingPlaceholders.length} placeholder(s) already in DOM`);
+        return;
+      }
+
       const fullText = root.textContent || '';
       if (fullText.length === 0) {
         console.log('[DocumentViewer] DOM text content is empty, skipping placeholder re-insertion');
