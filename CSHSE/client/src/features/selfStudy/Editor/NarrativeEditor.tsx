@@ -769,7 +769,7 @@ export function NarrativeEditor({
       <div className="editor-content flex-1 border border-gray-200 rounded-b-lg overflow-auto max-w-full">
         <EditorContent
           editor={editor}
-          className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:table-fixed [&_table]:max-w-full [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_th]:overflow-hidden [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_td]:overflow-hidden [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[300px] [&_.ProseMirror]:overflow-x-auto"
+          className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:max-w-full [&_.ProseMirror_table]:!table-auto [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[300px] [&_.ProseMirror]:overflow-x-auto"
         />
       </div>
 
@@ -817,7 +817,7 @@ export function NarrativeEditor({
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <EditorContent
                     editor={supportingEvidenceEditor}
-                    className="prose prose-sm max-w-none p-4 min-h-[150px] max-h-[400px] overflow-y-auto focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:table-fixed [&_table]:max-w-full [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_th]:overflow-hidden [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_td]:overflow-hidden [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[150px] [&_.ProseMirror]:overflow-x-auto"
+                    className="prose prose-sm max-w-none p-4 min-h-[150px] max-h-[400px] overflow-y-auto focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:max-w-full [&_.ProseMirror_table]:!table-auto [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[150px] [&_.ProseMirror]:overflow-x-auto"
                   />
                 </div>
               ) : (
