@@ -107,44 +107,8 @@ export function DocumentViewer({
     return placeholder;
   };
 
-  // Helper: create a placeholder as a table row (for in-table extraction)
-  const createTableRowPlaceholder = (section: SavedSectionInfo, colSpan: number): HTMLTableRowElement => {
-    const tr = document.createElement('tr');
-    tr.className = 'extracted-section-placeholder';
-    tr.setAttribute('data-section-id', section.id);
-    tr.setAttribute('data-section-type', section.sectionType);
-
-    const typeColors: Record<string, string> = {
-      'standard': 'bg-teal-100 border-teal-400 text-teal-800',
-      'matrix': 'bg-purple-100 border-purple-400 text-purple-800',
-      'appendix': 'bg-amber-100 border-amber-400 text-amber-800',
-      'skip': 'bg-gray-100 border-gray-400 text-gray-600'
-    };
-    const colorClass = typeColors[section.sectionType] || typeColors['standard'];
-
-    const td = document.createElement('td');
-    td.colSpan = colSpan;
-    td.innerHTML = `
-      <div class="flex items-center gap-2 px-3 py-2 ${colorClass} border-l-4 rounded-r my-1">
-        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-        </svg>
-        <span class="font-medium text-sm truncate">
-          ✓ Extracted: ${section.title}
-        </span>
-        <span class="text-xs opacity-75">
-          (${section.contentLength.toLocaleString()} chars)
-        </span>
-      </div>
-    `;
-    tr.appendChild(td);
-    return tr;
-  };
-
   // Replace captured selection with placeholder after successful save.
-  // IMPORTANT: range.deleteContents() splits DOM nodes at range boundaries, which
-  // corrupts table structure. For table content, we remove specific <tr> elements
-  // directly and insert a placeholder row, preserving the rest of the table.
+  // Replace captured selection with placeholder after successful save
   useEffect(() => {
     if (!lastSavedSection || !lastCapturedRangeRef.current || !contentRef.current) {
       return;
@@ -153,100 +117,43 @@ export function DocumentViewer({
     const range = lastCapturedRangeRef.current;
 
     try {
-      const root = contentRef.current;
+      const placeholder = createPlaceholder(lastSavedSection);
 
-      // Check if selection starts or ends within a table
-      const startTable = findAncestor(range.startContainer, 'TABLE') as HTMLTableElement | null;
-      const endTable = findAncestor(range.endContainer, 'TABLE') as HTMLTableElement | null;
+      // Check if selection is within a table - need to handle row cleanup
+      const startTable = findAncestor(range.startContainer, 'TABLE');
+      const startRow = findAncestor(range.startContainer, 'TR');
 
-      if (startTable || endTable) {
-        // Table-aware deletion: remove selected <tr> elements directly,
-        // insert placeholder row, preserve remaining table structure.
+      if (startTable && startRow) {
+        // Table selection: insert placeholder before table, then delete content and clean up empty rows
+        const table = startTable as HTMLTableElement;
 
-        // === PHASE 1: Collect everything BEFORE any DOM modifications ===
-        // (DOM mutations invalidate Range objects, so all checks must happen first)
+        // Insert placeholder before the table
+        table.parentNode?.insertBefore(placeholder, table);
 
-        // Collect affected tables
-        const affectedTables: HTMLTableElement[] = [];
-        root.querySelectorAll('table').forEach(table => {
-          if (range.intersectsNode(table)) {
-            affectedTables.push(table as HTMLTableElement);
-          }
-        });
+        // Delete the selected content
+        range.deleteContents();
 
-        // Collect selected rows per table, and compute column counts
-        const tableInfo = affectedTables.map(table => {
-          const rows = Array.from(table.rows);
-          let maxCols = 0;
-          for (const row of rows) {
-            let cols = 0;
-            for (const cell of Array.from(row.cells)) {
-              cols += cell.colSpan || 1;
-            }
-            maxCols = Math.max(maxCols, cols);
-          }
-          const selectedRows = rows.filter(row => rangeStrictlyOverlaps(range, row));
-          return { table, maxCols, selectedRows };
-        });
+        // Clean up any rows that are now empty (only whitespace/empty cells)
+        const rows = Array.from(table.rows);
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const row = rows[i];
+          const textContent = row.textContent?.trim() || '';
+          const hasOnlyPlaceholders = row.querySelectorAll('.extracted-section-placeholder').length > 0
+            && textContent.length === 0;
 
-        // Collect non-table elements fully within the range
-        const nonTableToRemove: Node[] = [];
-        const children = Array.from(root.childNodes);
-        for (const child of children) {
-          if (child instanceof HTMLTableElement) continue; // Tables handled separately
-          if (!range.intersectsNode(child)) continue;
-          const nodeRange = document.createRange();
-          nodeRange.selectNode(child);
-          const startsBeforeOrAt = range.compareBoundaryPoints(Range.START_TO_START, nodeRange) <= 0;
-          const endsAfterOrAt = range.compareBoundaryPoints(Range.END_TO_END, nodeRange) >= 0;
-          if (startsBeforeOrAt && endsAfterOrAt) {
-            nonTableToRemove.push(child);
-          }
-        }
-
-        // === PHASE 2: Apply DOM modifications ===
-
-        // Determine where to insert the main (div) placeholder for non-table content
-        // Insert it before the first affected element
-        const firstAffectedElement = nonTableToRemove.length > 0
-          ? nonTableToRemove[0]
-          : affectedTables[0];
-        if (nonTableToRemove.length > 0 || startTable === null) {
-          const divPlaceholder = createPlaceholder(lastSavedSection);
-          firstAffectedElement.parentNode?.insertBefore(divPlaceholder, firstAffectedElement);
-        }
-
-        // Remove non-table elements
-        for (const node of nonTableToRemove) {
-          node.parentNode?.removeChild(node);
-        }
-
-        // Handle table rows
-        for (const { table, maxCols, selectedRows } of tableInfo) {
-          if (selectedRows.length === 0) continue;
-
-          // Insert placeholder row where the first selected row was
-          // (only if selection starts INSIDE the table — otherwise we already have the div placeholder)
-          if (startTable !== null || nonTableToRemove.length === 0) {
-            const placeholderRow = createTableRowPlaceholder(lastSavedSection, maxCols || 2);
-            selectedRows[0].parentNode?.insertBefore(placeholderRow, selectedRows[0]);
-          }
-
-          // Remove selected rows
-          for (const row of selectedRows) {
+          if (textContent.length === 0 || hasOnlyPlaceholders) {
             row.remove();
+            console.log(`[DocumentViewer] Removed empty table row ${i}`);
           }
-          console.log(`[DocumentViewer] Removed ${selectedRows.length} table row(s), table has ${table.rows.length} remaining`);
+        }
 
-          // If table is now empty, remove it
-          if (table.rows.length === 0) {
-            table.remove();
-            console.log(`[DocumentViewer] Removed empty table`);
-          }
+        // If table is now empty, remove it too
+        if (table.rows.length === 0) {
+          table.remove();
+          console.log(`[DocumentViewer] Removed empty table`);
         }
       } else {
-        // No tables involved: simple delete and insert
-        const placeholder = createPlaceholder(lastSavedSection);
+        // Non-table content: simple delete and insert
         range.deleteContents();
         range.insertNode(placeholder);
       }
@@ -258,7 +165,7 @@ export function DocumentViewer({
       lastCapturedRangeRef.current = null;
 
       // Get the updated HTML with placeholder and notify parent
-      const updatedHtml = root.innerHTML;
+      const updatedHtml = contentRef.current.innerHTML;
       onPlaceholderInserted?.(updatedHtml);
 
       console.log(`[DocumentViewer] Replaced selection with placeholder: "${lastSavedSection.title}"`);
@@ -412,59 +319,19 @@ export function DocumentViewer({
           const endTable = findAncestor(range.endContainer, 'TABLE') as HTMLTableElement | null;
 
           if (startTable || endTable) {
-            // Table-aware: remove specific <tr> elements instead of range.deleteContents()
-            // which corrupts table structure by splitting DOM nodes at range boundaries.
+            // Table content: insert placeholder before table, delete range content
+            startTable.parentNode?.insertBefore(placeholder, startTable);
+            range.deleteContents();
 
-            // Phase 1: collect everything while range is valid
-            const affectedTables: HTMLTableElement[] = [];
-            root.querySelectorAll('table').forEach(t => {
-              if (range.intersectsNode(t)) affectedTables.push(t as HTMLTableElement);
-            });
-
-            const tableInfo = affectedTables.map(table => {
-              const rows = Array.from(table.rows);
-              let maxCols = 0;
-              for (const row of rows) {
-                let cols = 0;
-                for (const cell of Array.from(row.cells)) cols += cell.colSpan || 1;
-                maxCols = Math.max(maxCols, cols);
-              }
-              return { table, maxCols, selectedRows: rows.filter(row => rangeStrictlyOverlaps(range, row)) };
-            });
-
-            const nonTableToRemove: ChildNode[] = [];
-            for (const child of Array.from(root.childNodes)) {
-              if (child instanceof HTMLTableElement) continue;
-              if (!range.intersectsNode(child)) continue;
-              const nr = document.createRange();
-              nr.selectNode(child);
-              if (range.compareBoundaryPoints(Range.START_TO_START, nr) <= 0 &&
-                  range.compareBoundaryPoints(Range.END_TO_END, nr) >= 0) {
-                nonTableToRemove.push(child);
+            // Clean up empty rows
+            const table = startTable as HTMLTableElement;
+            const rows = Array.from(table.rows);
+            for (let i = rows.length - 1; i >= 0; i--) {
+              if ((rows[i].textContent?.trim() || '').length === 0) {
+                rows[i].remove();
               }
             }
-
-            // Phase 2: apply DOM modifications
-            const firstAffected = nonTableToRemove.length > 0 ? nonTableToRemove[0] : affectedTables[0];
-            if (nonTableToRemove.length > 0 || startTable === null) {
-              firstAffected.parentNode?.insertBefore(placeholder, firstAffected);
-            }
-            for (const node of nonTableToRemove) node.parentNode?.removeChild(node);
-
-            for (const { table, maxCols, selectedRows } of tableInfo) {
-              if (selectedRows.length === 0) continue;
-              if (startTable !== null && nonTableToRemove.length === 0) {
-                const placeholderRow = createTableRowPlaceholder({
-                  id: section.id,
-                  title: section.title,
-                  sectionType: section.sectionType,
-                  contentLength: section.contentLength || 0
-                }, maxCols || 2);
-                selectedRows[0].parentNode?.insertBefore(placeholderRow, selectedRows[0]);
-              }
-              for (const row of selectedRows) row.remove();
-              if (table.rows.length === 0) table.remove();
-            }
+            if (table.rows.length === 0) table.remove();
           } else {
             range.deleteContents();
             range.insertNode(placeholder);
@@ -515,20 +382,6 @@ export function DocumentViewer({
       lastPlaceholder.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, []);
-
-  // Helper: Check if a range strictly overlaps a node's content (not just touches boundary).
-  // range.intersectsNode() returns true even when the range end is at offset 0 of a text
-  // node inside the element (boundary touch), which causes adjacent table rows to be
-  // wrongly matched. This uses compareBoundaryPoints for a strict overlap check.
-  const rangeStrictlyOverlaps = (range: Range, node: Node): boolean => {
-    const nodeRange = document.createRange();
-    nodeRange.selectNodeContents(node);
-    // Range end must be strictly AFTER node start
-    const endAfterStart = range.compareBoundaryPoints(Range.END_TO_START, nodeRange) > 0;
-    // Range start must be strictly BEFORE node end
-    const startBeforeEnd = range.compareBoundaryPoints(Range.START_TO_END, nodeRange) < 0;
-    return endAfterStart && startBeforeEnd;
-  };
 
   // Helper: Find the closest ancestor of a specific type
   const findAncestor = (node: Node | null, tagName: string): Element | null => {
