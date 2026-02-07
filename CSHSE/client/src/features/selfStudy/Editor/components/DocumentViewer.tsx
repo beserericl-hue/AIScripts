@@ -163,7 +163,10 @@ export function DocumentViewer({
         // Table-aware deletion: remove selected <tr> elements directly,
         // insert placeholder row, preserve remaining table structure.
 
-        // Collect all tables that intersect the selection
+        // === PHASE 1: Collect everything BEFORE any DOM modifications ===
+        // (DOM mutations invalidate Range objects, so all checks must happen first)
+
+        // Collect affected tables
         const affectedTables: HTMLTableElement[] = [];
         root.querySelectorAll('table').forEach(table => {
           if (range.intersectsNode(table)) {
@@ -171,32 +174,9 @@ export function DocumentViewer({
           }
         });
 
-        // For non-table content before/after the table portions, we need to handle
-        // those separately. Create a range for just the non-table parts.
-        // First: handle content BEFORE the first affected table
-        if (startTable === null && affectedTables.length > 0) {
-          // Selection starts before a table - delete non-table content up to the table
-          const preRange = document.createRange();
-          preRange.setStart(range.startContainer, range.startOffset);
-          preRange.setEndBefore(affectedTables[0]);
-          const prePlaceholder = createPlaceholder(lastSavedSection);
-          preRange.deleteContents();
-          preRange.insertNode(prePlaceholder);
-        }
-
-        // Handle content AFTER the last affected table
-        if (endTable === null && affectedTables.length > 0) {
-          const lastTable = affectedTables[affectedTables.length - 1];
-          const postRange = document.createRange();
-          postRange.setStartAfter(lastTable);
-          postRange.setEnd(range.endContainer, range.endOffset);
-          postRange.deleteContents();
-        }
-
-        // Now handle table rows: remove selected rows and insert placeholder row
-        for (const table of affectedTables) {
+        // Collect selected rows per table, and compute column counts
+        const tableInfo = affectedTables.map(table => {
           const rows = Array.from(table.rows);
-          // Determine column count for colspan
           let maxCols = 0;
           for (const row of rows) {
             let cols = 0;
@@ -205,34 +185,61 @@ export function DocumentViewer({
             }
             maxCols = Math.max(maxCols, cols);
           }
+          const selectedRows = rows.filter(row => range.intersectsNode(row));
+          return { table, maxCols, selectedRows };
+        });
 
-          // Find rows that intersect the selection
-          const selectedRows: HTMLTableRowElement[] = [];
-          for (const row of rows) {
-            if (range.intersectsNode(row)) {
-              selectedRows.push(row);
-            }
+        // Collect non-table elements fully within the range
+        const nonTableToRemove: Node[] = [];
+        const children = Array.from(root.childNodes);
+        for (const child of children) {
+          if (child instanceof HTMLTableElement) continue; // Tables handled separately
+          if (!range.intersectsNode(child)) continue;
+          const nodeRange = document.createRange();
+          nodeRange.selectNode(child);
+          const startsBeforeOrAt = range.compareBoundaryPoints(Range.START_TO_START, nodeRange) <= 0;
+          const endsAfterOrAt = range.compareBoundaryPoints(Range.END_TO_END, nodeRange) >= 0;
+          if (startsBeforeOrAt && endsAfterOrAt) {
+            nonTableToRemove.push(child);
+          }
+        }
+
+        // === PHASE 2: Apply DOM modifications ===
+
+        // Determine where to insert the main (div) placeholder for non-table content
+        // Insert it before the first affected element
+        const firstAffectedElement = nonTableToRemove.length > 0
+          ? nonTableToRemove[0]
+          : affectedTables[0];
+        if (nonTableToRemove.length > 0 || startTable === null) {
+          const divPlaceholder = createPlaceholder(lastSavedSection);
+          firstAffectedElement.parentNode?.insertBefore(divPlaceholder, firstAffectedElement);
+        }
+
+        // Remove non-table elements
+        for (const node of nonTableToRemove) {
+          node.parentNode?.removeChild(node);
+        }
+
+        // Handle table rows
+        for (const { table, maxCols, selectedRows } of tableInfo) {
+          if (selectedRows.length === 0) continue;
+
+          // Insert placeholder row where the first selected row was
+          // (only if selection starts INSIDE the table — otherwise we already have the div placeholder)
+          if (startTable !== null || nonTableToRemove.length === 0) {
+            const placeholderRow = createTableRowPlaceholder(lastSavedSection, maxCols || 2);
+            selectedRows[0].parentNode?.insertBefore(placeholderRow, selectedRows[0]);
           }
 
-          if (selectedRows.length > 0) {
-            // Insert placeholder row where the first selected row was
-            // (only if we didn't already insert a non-table placeholder above)
-            if (startTable !== null || affectedTables.indexOf(table) > 0) {
-              const placeholderRow = createTableRowPlaceholder(lastSavedSection, maxCols || 2);
-              selectedRows[0].parentNode?.insertBefore(placeholderRow, selectedRows[0]);
-            }
-
-            // Remove selected rows
-            for (const row of selectedRows) {
-              row.remove();
-            }
-            console.log(`[DocumentViewer] Removed ${selectedRows.length} table row(s), table has ${table.rows.length} remaining`);
+          // Remove selected rows
+          for (const row of selectedRows) {
+            row.remove();
           }
+          console.log(`[DocumentViewer] Removed ${selectedRows.length} table row(s), table has ${table.rows.length} remaining`);
 
           // If table is now empty, remove it
           if (table.rows.length === 0) {
-            const placeholder = createPlaceholder(lastSavedSection);
-            table.parentNode?.insertBefore(placeholder, table);
             table.remove();
             console.log(`[DocumentViewer] Removed empty table`);
           }
