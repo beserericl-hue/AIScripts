@@ -107,7 +107,44 @@ export function DocumentViewer({
     return placeholder;
   };
 
-  // Replace captured selection with placeholder after successful save
+  // Helper: create a placeholder as a table row (for in-table extraction)
+  const createTableRowPlaceholder = (section: SavedSectionInfo, colSpan: number): HTMLTableRowElement => {
+    const tr = document.createElement('tr');
+    tr.className = 'extracted-section-placeholder';
+    tr.setAttribute('data-section-id', section.id);
+    tr.setAttribute('data-section-type', section.sectionType);
+
+    const typeColors: Record<string, string> = {
+      'standard': 'bg-teal-100 border-teal-400 text-teal-800',
+      'matrix': 'bg-purple-100 border-purple-400 text-purple-800',
+      'appendix': 'bg-amber-100 border-amber-400 text-amber-800',
+      'skip': 'bg-gray-100 border-gray-400 text-gray-600'
+    };
+    const colorClass = typeColors[section.sectionType] || typeColors['standard'];
+
+    const td = document.createElement('td');
+    td.colSpan = colSpan;
+    td.innerHTML = `
+      <div class="flex items-center gap-2 px-3 py-2 ${colorClass} border-l-4 rounded-r my-1">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        <span class="font-medium text-sm truncate">
+          ✓ Extracted: ${section.title}
+        </span>
+        <span class="text-xs opacity-75">
+          (${section.contentLength.toLocaleString()} chars)
+        </span>
+      </div>
+    `;
+    tr.appendChild(td);
+    return tr;
+  };
+
+  // Replace captured selection with placeholder after successful save.
+  // IMPORTANT: range.deleteContents() splits DOM nodes at range boundaries, which
+  // corrupts table structure. For table content, we remove specific <tr> elements
+  // directly and insert a placeholder row, preserving the rest of the table.
   useEffect(() => {
     if (!lastSavedSection || !lastCapturedRangeRef.current || !contentRef.current) {
       return;
@@ -116,44 +153,93 @@ export function DocumentViewer({
     const range = lastCapturedRangeRef.current;
 
     try {
-      const placeholder = createPlaceholder(lastSavedSection);
+      const root = contentRef.current;
 
-      // Check if selection is within a table - need to handle row cleanup
-      const startTable = findAncestor(range.startContainer, 'TABLE');
-      const startRow = findAncestor(range.startContainer, 'TR');
+      // Check if selection starts or ends within a table
+      const startTable = findAncestor(range.startContainer, 'TABLE') as HTMLTableElement | null;
+      const endTable = findAncestor(range.endContainer, 'TABLE') as HTMLTableElement | null;
 
-      if (startTable && startRow) {
-        // Table selection: insert placeholder before table, then delete content and clean up empty rows
-        const table = startTable as HTMLTableElement;
+      if (startTable || endTable) {
+        // Table-aware deletion: remove selected <tr> elements directly,
+        // insert placeholder row, preserve remaining table structure.
 
-        // Insert placeholder before the table
-        table.parentNode?.insertBefore(placeholder, table);
+        // Collect all tables that intersect the selection
+        const affectedTables: HTMLTableElement[] = [];
+        root.querySelectorAll('table').forEach(table => {
+          if (range.intersectsNode(table)) {
+            affectedTables.push(table as HTMLTableElement);
+          }
+        });
 
-        // Delete the selected content
-        range.deleteContents();
+        // For non-table content before/after the table portions, we need to handle
+        // those separately. Create a range for just the non-table parts.
+        // First: handle content BEFORE the first affected table
+        if (startTable === null && affectedTables.length > 0) {
+          // Selection starts before a table - delete non-table content up to the table
+          const preRange = document.createRange();
+          preRange.setStart(range.startContainer, range.startOffset);
+          preRange.setEndBefore(affectedTables[0]);
+          const prePlaceholder = createPlaceholder(lastSavedSection);
+          preRange.deleteContents();
+          preRange.insertNode(prePlaceholder);
+        }
 
-        // Clean up any rows that are now empty (only whitespace/empty cells)
-        const rows = Array.from(table.rows);
-        for (let i = rows.length - 1; i >= 0; i--) {
-          const row = rows[i];
-          const textContent = row.textContent?.trim() || '';
-          // Also check if row only contains placeholder elements we just inserted
-          const hasOnlyPlaceholders = row.querySelectorAll('.extracted-section-placeholder').length > 0
-            && textContent.length === 0;
+        // Handle content AFTER the last affected table
+        if (endTable === null && affectedTables.length > 0) {
+          const lastTable = affectedTables[affectedTables.length - 1];
+          const postRange = document.createRange();
+          postRange.setStartAfter(lastTable);
+          postRange.setEnd(range.endContainer, range.endOffset);
+          postRange.deleteContents();
+        }
 
-          if (textContent.length === 0 || hasOnlyPlaceholders) {
-            row.remove();
-            console.log(`[DocumentViewer] Removed empty table row ${i}`);
+        // Now handle table rows: remove selected rows and insert placeholder row
+        for (const table of affectedTables) {
+          const rows = Array.from(table.rows);
+          // Determine column count for colspan
+          let maxCols = 0;
+          for (const row of rows) {
+            let cols = 0;
+            for (const cell of Array.from(row.cells)) {
+              cols += cell.colSpan || 1;
+            }
+            maxCols = Math.max(maxCols, cols);
+          }
+
+          // Find rows that intersect the selection
+          const selectedRows: HTMLTableRowElement[] = [];
+          for (const row of rows) {
+            if (range.intersectsNode(row)) {
+              selectedRows.push(row);
+            }
+          }
+
+          if (selectedRows.length > 0) {
+            // Insert placeholder row where the first selected row was
+            // (only if we didn't already insert a non-table placeholder above)
+            if (startTable !== null || affectedTables.indexOf(table) > 0) {
+              const placeholderRow = createTableRowPlaceholder(lastSavedSection, maxCols || 2);
+              selectedRows[0].parentNode?.insertBefore(placeholderRow, selectedRows[0]);
+            }
+
+            // Remove selected rows
+            for (const row of selectedRows) {
+              row.remove();
+            }
+            console.log(`[DocumentViewer] Removed ${selectedRows.length} table row(s), table has ${table.rows.length} remaining`);
+          }
+
+          // If table is now empty, remove it
+          if (table.rows.length === 0) {
+            const placeholder = createPlaceholder(lastSavedSection);
+            table.parentNode?.insertBefore(placeholder, table);
+            table.remove();
+            console.log(`[DocumentViewer] Removed empty table`);
           }
         }
-
-        // If table is now empty, remove it too
-        if (table.rows.length === 0) {
-          table.remove();
-          console.log(`[DocumentViewer] Removed empty table`);
-        }
       } else {
-        // Non-table content: simple delete and insert
+        // No tables involved: simple delete and insert
+        const placeholder = createPlaceholder(lastSavedSection);
         range.deleteContents();
         range.insertNode(placeholder);
       }
@@ -165,7 +251,7 @@ export function DocumentViewer({
       lastCapturedRangeRef.current = null;
 
       // Get the updated HTML with placeholder and notify parent
-      const updatedHtml = contentRef.current.innerHTML;
+      const updatedHtml = root.innerHTML;
       onPlaceholderInserted?.(updatedHtml);
 
       console.log(`[DocumentViewer] Replaced selection with placeholder: "${lastSavedSection.title}"`);
