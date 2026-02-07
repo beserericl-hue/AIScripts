@@ -396,23 +396,64 @@ export function DocumentViewer({
             contentLength: section.contentLength || 0
           });
 
-          // Check if inside a table
-          const startTable = findAncestor(range.startContainer, 'TABLE');
+          // Check if selection involves any tables
+          const startTable = findAncestor(range.startContainer, 'TABLE') as HTMLTableElement | null;
+          const endTable = findAncestor(range.endContainer, 'TABLE') as HTMLTableElement | null;
 
-          if (startTable) {
-            // Table content: insert placeholder before table, delete range content
-            startTable.parentNode?.insertBefore(placeholder, startTable);
-            range.deleteContents();
+          if (startTable || endTable) {
+            // Table-aware: remove specific <tr> elements instead of range.deleteContents()
+            // which corrupts table structure by splitting DOM nodes at range boundaries.
 
-            // Clean up empty rows
-            const table = startTable as HTMLTableElement;
-            const rows = Array.from(table.rows);
-            for (let i = rows.length - 1; i >= 0; i--) {
-              if ((rows[i].textContent?.trim() || '').length === 0) {
-                rows[i].remove();
+            // Phase 1: collect everything while range is valid
+            const affectedTables: HTMLTableElement[] = [];
+            root.querySelectorAll('table').forEach(t => {
+              if (range.intersectsNode(t)) affectedTables.push(t as HTMLTableElement);
+            });
+
+            const tableInfo = affectedTables.map(table => {
+              const rows = Array.from(table.rows);
+              let maxCols = 0;
+              for (const row of rows) {
+                let cols = 0;
+                for (const cell of Array.from(row.cells)) cols += cell.colSpan || 1;
+                maxCols = Math.max(maxCols, cols);
+              }
+              return { table, maxCols, selectedRows: rows.filter(row => range.intersectsNode(row)) };
+            });
+
+            const nonTableToRemove: ChildNode[] = [];
+            for (const child of Array.from(root.childNodes)) {
+              if (child instanceof HTMLTableElement) continue;
+              if (!range.intersectsNode(child)) continue;
+              const nr = document.createRange();
+              nr.selectNode(child);
+              if (range.compareBoundaryPoints(Range.START_TO_START, nr) <= 0 &&
+                  range.compareBoundaryPoints(Range.END_TO_END, nr) >= 0) {
+                nonTableToRemove.push(child);
               }
             }
-            if (table.rows.length === 0) table.remove();
+
+            // Phase 2: apply DOM modifications
+            const firstAffected = nonTableToRemove.length > 0 ? nonTableToRemove[0] : affectedTables[0];
+            if (nonTableToRemove.length > 0 || startTable === null) {
+              firstAffected.parentNode?.insertBefore(placeholder, firstAffected);
+            }
+            for (const node of nonTableToRemove) node.parentNode?.removeChild(node);
+
+            for (const { table, maxCols, selectedRows } of tableInfo) {
+              if (selectedRows.length === 0) continue;
+              if (startTable !== null && nonTableToRemove.length === 0) {
+                const placeholderRow = createTableRowPlaceholder({
+                  id: section.id,
+                  title: section.title,
+                  sectionType: section.sectionType,
+                  contentLength: section.contentLength || 0
+                }, maxCols || 2);
+                selectedRows[0].parentNode?.insertBefore(placeholderRow, selectedRows[0]);
+              }
+              for (const row of selectedRows) row.remove();
+              if (table.rows.length === 0) table.remove();
+            }
           } else {
             range.deleteContents();
             range.insertNode(placeholder);
