@@ -815,6 +815,119 @@ export function NarrativeEditor({
               </p>
               {supportingEvidenceEditor ? (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  {/* Compact Toolbar */}
+                  {!readOnly && (
+                    <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200">
+                      {/* Basic formatting */}
+                      <ToolbarButton
+                        onClick={() => supportingEvidenceEditor.chain().focus().toggleBold().run()}
+                        isActive={supportingEvidenceEditor.isActive('bold')}
+                        title="Bold (Ctrl+B)"
+                      >
+                        <Bold className="w-3.5 h-3.5" />
+                      </ToolbarButton>
+                      <ToolbarButton
+                        onClick={() => supportingEvidenceEditor.chain().focus().toggleItalic().run()}
+                        isActive={supportingEvidenceEditor.isActive('italic')}
+                        title="Italic (Ctrl+I)"
+                      >
+                        <Italic className="w-3.5 h-3.5" />
+                      </ToolbarButton>
+                      <ToolbarButton
+                        onClick={() => supportingEvidenceEditor.chain().focus().toggleUnderline().run()}
+                        isActive={supportingEvidenceEditor.isActive('underline')}
+                        title="Underline (Ctrl+U)"
+                      >
+                        <UnderlineIcon className="w-3.5 h-3.5" />
+                      </ToolbarButton>
+                      <ToolbarButton
+                        onClick={() => supportingEvidenceEditor.chain().focus().toggleStrike().run()}
+                        isActive={supportingEvidenceEditor.isActive('strike')}
+                        title="Strikethrough"
+                      >
+                        <Strikethrough className="w-3.5 h-3.5" />
+                      </ToolbarButton>
+
+                      <div className="w-px h-5 bg-gray-300 mx-0.5" />
+
+                      {/* Lists */}
+                      <ToolbarButton
+                        onClick={() => supportingEvidenceEditor.chain().focus().toggleBulletList().run()}
+                        isActive={supportingEvidenceEditor.isActive('bulletList')}
+                        title="Bullet List"
+                      >
+                        <List className="w-3.5 h-3.5" />
+                      </ToolbarButton>
+                      <ToolbarButton
+                        onClick={() => supportingEvidenceEditor.chain().focus().toggleOrderedList().run()}
+                        isActive={supportingEvidenceEditor.isActive('orderedList')}
+                        title="Numbered List"
+                      >
+                        <ListOrdered className="w-3.5 h-3.5" />
+                      </ToolbarButton>
+
+                      <div className="w-px h-5 bg-gray-300 mx-0.5" />
+
+                      {/* Undo/Redo */}
+                      <ToolbarButton
+                        onClick={() => supportingEvidenceEditor.chain().focus().undo().run()}
+                        disabled={!supportingEvidenceEditor.can().undo()}
+                        title="Undo (Ctrl+Z)"
+                      >
+                        <Undo className="w-3.5 h-3.5" />
+                      </ToolbarButton>
+                      <ToolbarButton
+                        onClick={() => supportingEvidenceEditor.chain().focus().redo().run()}
+                        disabled={!supportingEvidenceEditor.can().redo()}
+                        title="Redo (Ctrl+Y)"
+                      >
+                        <Redo className="w-3.5 h-3.5" />
+                      </ToolbarButton>
+
+                      {/* Table controls - only when cursor is inside a table */}
+                      {supportingEvidenceEditor.isActive('table') && (
+                        <>
+                          <div className="w-px h-5 bg-gray-300 mx-0.5" />
+                          <span className="text-xs text-gray-500 mx-1">Table:</span>
+                          <button
+                            onClick={() => supportingEvidenceEditor.chain().focus().addColumnBefore().run()}
+                            className="px-1.5 py-0.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+                            title="Add column before"
+                          >
+                            + Col
+                          </button>
+                          <button
+                            onClick={() => supportingEvidenceEditor.chain().focus().addRowAfter().run()}
+                            className="px-1.5 py-0.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+                            title="Add row after"
+                          >
+                            + Row
+                          </button>
+                          <button
+                            onClick={() => supportingEvidenceEditor.chain().focus().deleteColumn().run()}
+                            className="px-1.5 py-0.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 text-red-600"
+                            title="Delete column"
+                          >
+                            - Col
+                          </button>
+                          <button
+                            onClick={() => supportingEvidenceEditor.chain().focus().deleteRow().run()}
+                            className="px-1.5 py-0.5 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 text-red-600"
+                            title="Delete row"
+                          >
+                            - Row
+                          </button>
+                          <button
+                            onClick={() => supportingEvidenceEditor.chain().focus().deleteTable().run()}
+                            className="px-1.5 py-0.5 text-xs bg-red-50 border border-red-300 rounded hover:bg-red-100 text-red-600"
+                            title="Delete table"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                   <EditorContent
                     editor={supportingEvidenceEditor}
                     className="prose prose-sm max-w-none p-4 min-h-[150px] max-h-[400px] overflow-y-auto focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:max-w-full [&_.ProseMirror_table]:!table-auto [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[150px] [&_.ProseMirror]:overflow-x-auto"
