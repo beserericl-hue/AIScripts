@@ -445,6 +445,140 @@ export async function cleanupOrphanedFiles(dryRun = false): Promise<{
   };
 }
 
+/**
+ * Insert an HTML comment marker into the stored HTML at a specific text offset,
+ * replacing the extracted text range. This allows large documents to have
+ * placeholder positions embedded without transferring the full HTML over REST.
+ *
+ * @param importId - The import ID
+ * @param marker - The HTML comment string to insert
+ * @param textStartOffset - Character offset in the plain text
+ * @param textLength - Length of text to replace
+ * @returns true if successful
+ */
+export async function insertHtmlMarker(
+  importId: string,
+  marker: string,
+  textStartOffset: number,
+  textLength: number
+): Promise<boolean> {
+  // Read the current HTML
+  console.log(`[GridFSService] insertHtmlMarker: reading HTML for import ${importId}...`);
+  const readStart = Date.now();
+  const html = await getHtmlContent(importId);
+  console.log(`[GridFSService] insertHtmlMarker: read ${html.length} chars in ${Date.now() - readStart}ms. ` +
+    `Looking for textOffset=${textStartOffset}, textLength=${textLength}`);
+
+  // Walk the HTML to find the byte position corresponding to the text offset.
+  // We need to map from "text character offset" to "HTML string position"
+  // by counting only non-tag text characters.
+  // HTML entities like &amp; count as 1 text character (browser renders them as single chars).
+  let textPos = 0;
+  let htmlStartPos = -1;
+  let htmlEndPos = -1;
+  let inTag = false;
+
+  for (let i = 0; i < html.length; i++) {
+    const ch = html[i];
+
+    if (ch === '<') {
+      // Check for HTML comment - skip entirely
+      if (html.substring(i, i + 4) === '<!--') {
+        const commentEnd = html.indexOf('-->', i + 4);
+        if (commentEnd !== -1) {
+          i = commentEnd + 2; // skip to end of -->
+          continue;
+        }
+      }
+      inTag = true;
+      continue;
+    }
+    if (ch === '>' && inTag) {
+      inTag = false;
+      continue;
+    }
+    if (inTag) continue;
+
+    // We're in text content
+    if (textPos === textStartOffset) {
+      htmlStartPos = i;
+    }
+
+    // Handle HTML entities (e.g., &amp; &lt; &#123;) — browser renders as 1 char
+    if (ch === '&') {
+      const semiIdx = html.indexOf(';', i + 1);
+      if (semiIdx !== -1 && semiIdx - i <= 10) {
+        // This is an entity — counts as 1 text character
+        textPos++;
+        if (textPos === textStartOffset + textLength) {
+          htmlEndPos = semiIdx + 1;
+          break;
+        }
+        i = semiIdx; // skip to end of entity
+        continue;
+      }
+    }
+
+    textPos++;
+    if (textPos === textStartOffset + textLength) {
+      htmlEndPos = i + 1;
+      break;
+    }
+  }
+
+  console.log(`[GridFSService] insertHtmlMarker: scanned ${textPos} text chars, htmlStartPos=${htmlStartPos}, htmlEndPos=${htmlEndPos}`);
+
+  if (htmlStartPos === -1) {
+    console.log(`[GridFSService] Could not find text offset ${textStartOffset} in HTML (total text chars: ${textPos})`);
+    return false;
+  }
+
+  // If we didn't find the exact end, use what we have
+  if (htmlEndPos === -1) {
+    htmlEndPos = html.length;
+    console.log(`[GridFSService] End offset extends beyond document, clamping to end`);
+  }
+
+  // We need to expand the range to include complete HTML tags.
+  // Walk backwards from htmlStartPos to find the start of any containing element,
+  // and forward from htmlEndPos to close any opened tags.
+  // For simplicity, we'll find the positions and include any partial tags.
+
+  // Expand start backwards to not split a tag
+  let expandedStart = htmlStartPos;
+  // Check if we're inside a tag - find the previous '>'
+  let checkPos = htmlStartPos - 1;
+  while (checkPos >= 0 && html[checkPos] !== '>' && html[checkPos] !== '<') {
+    checkPos--;
+  }
+  if (checkPos >= 0 && html[checkPos] === '<') {
+    // We were inside a tag, expand to include it
+    expandedStart = checkPos;
+  }
+
+  // Expand end forward to not split a tag
+  let expandedEnd = htmlEndPos;
+  checkPos = htmlEndPos;
+  while (checkPos < html.length && html[checkPos] !== '<' && html[checkPos] !== '>') {
+    checkPos++;
+  }
+  if (checkPos < html.length && html[checkPos] === '>') {
+    // We were inside a tag, expand to include the closing >
+    expandedEnd = checkPos + 1;
+  }
+
+  // Build new HTML: before + marker + after
+  const newHtml = html.substring(0, expandedStart) + marker + html.substring(expandedEnd);
+
+  console.log(`[GridFSService] Inserting marker at text offset ${textStartOffset} (HTML pos ${expandedStart}-${expandedEnd}), ` +
+    `removed ${expandedEnd - expandedStart} chars of HTML, marker: ${marker.length} chars`);
+
+  // Store back to GridFS
+  await storeHtmlContent(importId, newHtml);
+
+  return true;
+}
+
 export default {
   storeHtmlContent,
   getHtmlContent,
@@ -453,6 +587,7 @@ export default {
   getHtmlContentMetadata,
   deleteHtmlContent,
   getStorageStats,
+  insertHtmlMarker,
   // Image functions
   storeImage,
   getImage,

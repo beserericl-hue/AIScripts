@@ -596,8 +596,13 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   };
 
   // Save progress and exit - closes the import panel
-  // Progress is already auto-saved with each tagged section
+  // All progress is already persisted:
+  //   - Tagged sections → saved to MongoDB during each extraction
+  //   - HTML comment markers → inserted into GridFS during each extraction
+  //   - Document HTML → in GridFS with markers embedded
   const handleSaveProgressAndExit = () => {
+    console.log(`[SelfStudyEditor] Save & Exit — All data already persisted. ` +
+      `Tagged sections: ${taggedSections.length}, importId: ${importId}`);
     setShowImportModal(false);
     // Don't reset importId or other state - preserve for next time
     // Just close the modal
@@ -677,33 +682,18 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   }, []);
 
   // Manual Tagging: Handle placeholder insertion
-  // NOTE: We do NOT sync the full HTML back to the server anymore.
-  // With large documents (370MB+), syncing causes browser memory exhaustion and crashes.
-  // Instead, placeholders are visual-only during the session. The tagged sections are
-  // already saved to MongoDB, so extraction state is preserved across sessions.
+  // After placeholder is visually inserted in the DOM, update local state.
+  // The actual GridFS marker insertion is handled by handleSaveSection after the
+  // extract-section API call, using the server-side insert-marker endpoint.
   const handlePlaceholderInserted = useCallback(async (updatedHtml: string) => {
+    console.log(`[SelfStudyEditor] handlePlaceholderInserted — updating local HTML state (${(updatedHtml.length / 1024 / 1024).toFixed(1)}MB)`);
+
     // Clear the lastSavedSection state so the placeholder isn't inserted again
     setLastSavedSection(null);
 
-    // Update local state so resume uses the version with placeholders
+    // Update local state so the current session shows placeholders
     setDocumentHtml(updatedHtml);
-
-    // Sync the updated HTML (with placeholders) back to GridFS once small enough.
-    // Server body limit is 50MB, so sync when under 40MB (room for JSON overhead).
-    // For larger documents, offset-based placeholder re-insertion handles resume.
-    // As sections are extracted, the document shrinks and eventually crosses the threshold.
-    const MAX_SYNC_SIZE = 40 * 1024 * 1024; // 40MB
-    if (importId && updatedHtml.length <= MAX_SYNC_SIZE) {
-      try {
-        await api.put(`/api/imports/${importId}/sync-html`, { html: updatedHtml });
-        console.log(`[SelfStudyEditor] Synced HTML to GridFS (${(updatedHtml.length / 1024 / 1024).toFixed(1)}MB)`);
-      } catch (err) {
-        console.error('[SelfStudyEditor] Failed to sync HTML to GridFS:', err);
-      }
-    } else {
-      console.log(`[SelfStudyEditor] Skipping GridFS sync (${(updatedHtml.length / 1024 / 1024).toFixed(1)}MB > 40MB threshold, using offset-based resume)`);
-    }
-  }, [importId]);
+  }, []);
 
   // Manual Tagging: Save section
   // Uses HTML content already captured in SelectionData
@@ -713,6 +703,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
     setIsSavingSection(true);
     setSectionError(null);
+
+    console.log(`[SelfStudyEditor] handleSaveSection START — type=${metadata.sectionType}, title="${metadata.title}", ` +
+      `applyDirectly=${metadata.applyDirectly}, textOffset=${currentSelection.textStartOffset}, textLength=${currentSelection.textLength}`);
 
     try {
       // Selection already contains the HTML - send directly to backend
@@ -753,30 +746,59 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
           textLength: currentSelection.textLength
         });
 
-        // Set lastSavedSection to trigger placeholder insertion
+        const sectionId = response.data.sectionId || Date.now().toString();
+        const sectionTitle = `${metadata.standardCode}.${metadata.specCode} - ${metadata.title}`;
+        console.log(`[SelfStudyEditor] Direct apply: section saved to MongoDB, id=${sectionId}`);
+
+        // Insert HTML comment marker into GridFS document (server-side, no size limit)
+        if (currentSelection.textStartOffset != null && currentSelection.textLength != null) {
+          try {
+            console.log(`[SelfStudyEditor] Calling insert-marker API: offset=${currentSelection.textStartOffset}, length=${currentSelection.textLength}`);
+            const markerResponse = await api.post(`/api/imports/${importId}/insert-marker`, {
+              sectionId,
+              title: sectionTitle,
+              sectionType: 'standard',
+              contentLength: extractedText.length,
+              textStartOffset: currentSelection.textStartOffset,
+              textLength: currentSelection.textLength
+            });
+            console.log(`[SelfStudyEditor] insert-marker response:`, markerResponse.data);
+          } catch (err: any) {
+            console.error('[SelfStudyEditor] Failed to insert marker in GridFS:', err?.response?.data || err.message);
+          }
+        } else {
+          console.warn(`[SelfStudyEditor] No textStartOffset/textLength — cannot insert marker. offset=${currentSelection.textStartOffset}, length=${currentSelection.textLength}`);
+        }
+
+        // Set lastSavedSection to trigger visual placeholder insertion in DocumentViewer
+        console.log(`[SelfStudyEditor] Setting lastSavedSection to trigger DOM placeholder`);
         setLastSavedSection({
-          id: response.data.sectionId || Date.now().toString(),
-          title: `${metadata.standardCode}.${metadata.specCode} - ${metadata.title}`,
+          id: sectionId,
+          title: sectionTitle,
           sectionType: 'standard',
           contentLength: extractedText.length
         });
 
         // Refresh tagged sections list (for sidebar)
+        console.log(`[SelfStudyEditor] Refreshing tagged sections list...`);
         await loadTaggedSections();
 
         // Clear selection state
         setCurrentSelection(null);
 
         // Refresh submission data and WAIT for it to complete
+        console.log(`[SelfStudyEditor] Refreshing submission data...`);
         await queryClient.refetchQueries({ queryKey: ['submission', submissionId] });
 
         // Force NarrativeEditor to remount with fresh content
         setEditorRefreshKey(prev => prev + 1);
 
+        console.log(`[SelfStudyEditor] handleSaveSection COMPLETE (direct apply) for "${sectionTitle}"`);
         return;
       }
 
       // Normal flow: Send extracted HTML to backend for N8N processing later
+      console.log(`[SelfStudyEditor] Normal flow: saving section to MongoDB via extract-section API`);
       const response = await api.post(`/api/imports/${importId}/extract-section`, {
         htmlContent: extractedHtml,
         sectionType: metadata.sectionType,
@@ -787,23 +809,54 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         textLength: currentSelection.textLength
       });
 
-      // Set lastSavedSection to trigger placeholder insertion in DocumentViewer
-      // This will replace the selected content with a placeholder WITHOUT reloading from server
+      const sectionId = response.data.sectionId || Date.now().toString();
+      console.log(`[SelfStudyEditor] Section saved to MongoDB, id=${sectionId}`);
+
+      // Insert HTML comment marker into GridFS document (server-side, no size limit)
+      // This embeds the marker directly in the stored HTML so on resume
+      // the document already has markers — no client-side offset traversal needed.
+      if (currentSelection.textStartOffset != null && currentSelection.textLength != null) {
+        try {
+          console.log(`[SelfStudyEditor] Calling insert-marker API: offset=${currentSelection.textStartOffset}, length=${currentSelection.textLength}`);
+          const markerResponse = await api.post(`/api/imports/${importId}/insert-marker`, {
+            sectionId,
+            title: metadata.title,
+            sectionType: metadata.sectionType,
+            contentLength: extractedText.length,
+            textStartOffset: currentSelection.textStartOffset,
+            textLength: currentSelection.textLength
+          });
+          console.log(`[SelfStudyEditor] insert-marker response:`, markerResponse.data);
+        } catch (err: any) {
+          console.error('[SelfStudyEditor] Failed to insert marker in GridFS:', err?.response?.data || err.message);
+        }
+      } else {
+        console.warn(`[SelfStudyEditor] No textStartOffset/textLength — cannot insert marker. offset=${currentSelection.textStartOffset}, length=${currentSelection.textLength}`);
+      }
+
+      // Set lastSavedSection to trigger visual placeholder insertion in DocumentViewer
+      console.log(`[SelfStudyEditor] Setting lastSavedSection to trigger DOM placeholder`);
       setLastSavedSection({
-        id: response.data.sectionId || Date.now().toString(),
+        id: sectionId,
         title: metadata.title,
         sectionType: metadata.sectionType,
         contentLength: extractedText.length
       });
 
       // Refresh tagged sections list (for sidebar)
+      console.log(`[SelfStudyEditor] Refreshing tagged sections list...`);
       await loadTaggedSections();
 
       // Clear the selection state (but the Range was already used by DocumentViewer)
       setCurrentSelection(null);
+
+      console.log(`[SelfStudyEditor] handleSaveSection COMPLETE for "${metadata.title}"`);
+
     } catch (err: any) {
+      console.error(`[SelfStudyEditor] handleSaveSection ERROR:`, err?.response?.data || err.message);
       setSectionError(err.response?.data?.error || err.message || 'Failed to save section');
     } finally {
+      console.log(`[SelfStudyEditor] handleSaveSection FINALLY — isSavingSection set to false`);
       setIsSavingSection(false);
     }
   };

@@ -44,7 +44,7 @@ interface DocumentViewerProps {
   // Called by parent after successful save - replaces selection with placeholder
   lastSavedSection?: SavedSectionInfo | null;
   onPlaceholderInserted?: (updatedHtml: string) => void; // Called after placeholder is inserted, with updated HTML
-  // Tagged sections for re-inserting placeholders on resume
+  // Tagged sections (kept for reference, markers are now embedded in HTML for resume)
   taggedSections?: TaggedSectionPlaceholder[];
 }
 
@@ -174,183 +174,82 @@ export function DocumentViewer({
     }
   }, [lastSavedSection, onPlaceholderInserted]);
 
-  // Re-insert placeholders for previously tagged sections on resume
-  // Uses client-side DOM text matching since server-side HTML matching is unreliable
-  // Only runs on fresh HTML — skips if placeholders already exist in the DOM
+  // Convert HTML comment markers to visible placeholder divs on resume.
+  // The server-side insert-marker endpoint embeds comments like:
+  //   <!-- EXTRACTED:sectionId:sectionType:title:contentLength -->
+  // This approach is reliable for any document size — no DOM offset traversal needed.
   useEffect(() => {
-    if (!contentRef.current || !taggedSections || taggedSections.length === 0 || !htmlContent) return;
+    if (!contentRef.current || !htmlContent) return;
 
     // Delay to ensure the DOM has fully rendered the HTML content
-    // Large documents (300MB+) need more time for browser layout
     const delay = htmlContent.length > 10_000_000 ? 1000 : 200;
     const timer = setTimeout(() => {
       if (!contentRef.current) return;
 
       const root = contentRef.current;
 
-      // Skip if placeholders already exist in the DOM — the initial insertion
-      // already handled this. Re-running would use text offsets against modified
-      // HTML and remove wrong table rows.
+      // Skip if placeholders already exist in the DOM (current session, not resume)
       const existingPlaceholders = root.querySelectorAll('.extracted-section-placeholder');
       if (existingPlaceholders.length > 0) {
-        console.log(`[DocumentViewer] Skipping re-insertion: ${existingPlaceholders.length} placeholder(s) already in DOM`);
+        console.log(`[DocumentViewer] Skipping marker conversion: ${existingPlaceholders.length} placeholder(s) already in DOM`);
         return;
       }
 
-      const fullText = root.textContent || '';
-      if (fullText.length === 0) {
-        console.log('[DocumentViewer] DOM text content is empty, skipping placeholder re-insertion');
-        return;
-      }
-      console.log(`[DocumentViewer] Re-inserting placeholders for ${taggedSections.length} tagged sections (docText: ${fullText.length} chars)`);
+      // Find all HTML comment markers in the rendered DOM
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
+      const markerComments: Array<{ node: Comment; id: string; type: string; title: string; length: number }> = [];
 
-      // Helper: find the text node and offset at a given character position in the full text
-      const findTextNodeAtOffset = (targetOffset: number): { node: Text; offset: number } | null => {
-        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-        let currentOffset = 0;
-        let node;
-
-        while (node = walker.nextNode()) {
-          const textNode = node as Text;
-          const nodeLength = textNode.textContent?.length || 0;
-
-          if (currentOffset + nodeLength > targetOffset) {
-            return { node: textNode, offset: targetOffset - currentOffset };
-          }
-          currentOffset += nodeLength;
+      let commentNode;
+      while (commentNode = walker.nextNode()) {
+        const text = (commentNode as Comment).textContent?.trim() || '';
+        // Match: EXTRACTED:sectionId:sectionType:title:contentLength
+        const match = text.match(/^EXTRACTED:([^:]+):([^:]+):(.+):(\d+)$/);
+        if (match) {
+          markerComments.push({
+            node: commentNode as Comment,
+            id: match[1],
+            type: match[2],
+            title: match[3],
+            length: parseInt(match[4], 10)
+          });
         }
-        return null;
-      };
-
-      // Collect all matches first, then process from end to start to avoid offset shifts
-      const matches: Array<{
-        startIdx: number;
-        endIdx: number;
-        section: TaggedSectionPlaceholder;
-        method: 'offset' | 'text-search';
-      }> = [];
-
-      for (const section of taggedSections) {
-        let startIdx = -1;
-        let endIdx = -1;
-        let method: 'offset' | 'text-search' = 'text-search';
-
-        // Method 1 (preferred): Use stored text offsets from original extraction
-        // These are the exact positions captured during the original cursor selection
-        if (section.textStartOffset != null && section.textStartOffset >= 0 &&
-            section.textLength != null && section.textLength > 0) {
-          startIdx = section.textStartOffset;
-          endIdx = section.textStartOffset + section.textLength;
-          method = 'offset';
-          console.log(`[DocumentViewer] Using stored offset for "${section.title}": ${startIdx}-${endIdx}`);
-        }
-
-        // Method 2 (fallback): Text search using previewText/endPreviewText
-        if (startIdx === -1 || startIdx >= fullText.length) {
-          if (!section.previewText || section.previewText.length < 20) continue;
-
-          const searchStart = section.previewText.replace(/\.{3}$/, '').trim();
-          if (searchStart.length < 15) continue;
-
-          startIdx = fullText.indexOf(searchStart);
-          if (startIdx === -1) {
-            console.log(`[DocumentViewer] Could not find preview text for section "${section.title}"`);
-            continue;
-          }
-
-          // Find end using endPreviewText or contentLength
-          if (section.endPreviewText && section.endPreviewText.length >= 10) {
-            const cleanEnd = section.endPreviewText.trim();
-            const expectedEnd = startIdx + (section.contentLength || searchStart.length);
-            const searchFrom = Math.max(0, expectedEnd - cleanEnd.length - 200);
-            const foundEnd = fullText.indexOf(cleanEnd, searchFrom);
-
-            if (foundEnd !== -1 && foundEnd > startIdx) {
-              endIdx = foundEnd + cleanEnd.length;
-            } else {
-              endIdx = startIdx + (section.contentLength || searchStart.length);
-            }
-          } else {
-            endIdx = startIdx + (section.contentLength || searchStart.length);
-          }
-          method = 'text-search';
-        }
-
-        // Clamp to document length
-        endIdx = Math.min(endIdx, fullText.length);
-
-        matches.push({ startIdx, endIdx, section, method });
       }
 
-      if (matches.length === 0) {
-        console.log('[DocumentViewer] No tagged sections could be matched in document text');
+      if (markerComments.length === 0) {
+        console.log('[DocumentViewer] No EXTRACTED markers found in HTML');
         return;
       }
 
-      // Sort by startIdx descending so we process from end to start (avoids offset shifts)
-      matches.sort((a, b) => b.startIdx - a.startIdx);
+      console.log(`[DocumentViewer] Found ${markerComments.length} EXTRACTED marker(s), converting to placeholders`);
 
       let insertedCount = 0;
 
-      for (const { startIdx, endIdx, section, method } of matches) {
+      // Process markers — they're already in document order (top to bottom)
+      for (const marker of markerComments) {
         try {
-          const startInfo = findTextNodeAtOffset(startIdx);
-          const endInfo = findTextNodeAtOffset(endIdx);
-
-          if (!startInfo || !endInfo) {
-            console.log(`[DocumentViewer] Could not find text nodes for section "${section.title}"`);
-            continue;
-          }
-
-          const range = document.createRange();
-          range.setStart(startInfo.node, startInfo.offset);
-          range.setEnd(endInfo.node, endInfo.offset);
-
-          // Create placeholder element
           const placeholder = createPlaceholder({
-            id: section.id,
-            title: section.title,
-            sectionType: section.sectionType,
-            contentLength: section.contentLength || 0
+            id: marker.id,
+            title: marker.title,
+            sectionType: marker.type,
+            contentLength: marker.length
           });
 
-          // Check if selection involves any tables
-          const startTable = findAncestor(range.startContainer, 'TABLE') as HTMLTableElement | null;
-          const endTable = findAncestor(range.endContainer, 'TABLE') as HTMLTableElement | null;
-
-          if (startTable || endTable) {
-            // Table content: insert placeholder before table, delete range content
-            startTable.parentNode?.insertBefore(placeholder, startTable);
-            range.deleteContents();
-
-            // Clean up empty rows
-            const table = startTable as HTMLTableElement;
-            const rows = Array.from(table.rows);
-            for (let i = rows.length - 1; i >= 0; i--) {
-              if ((rows[i].textContent?.trim() || '').length === 0) {
-                rows[i].remove();
-              }
-            }
-            if (table.rows.length === 0) table.remove();
-          } else {
-            range.deleteContents();
-            range.insertNode(placeholder);
-          }
-
+          // Replace the comment node with the visible placeholder
+          marker.node.parentNode?.replaceChild(placeholder, marker.node);
           insertedCount++;
         } catch (err) {
-          console.error(`[DocumentViewer] Failed to insert placeholder for "${section.title}":`, err);
+          console.error(`[DocumentViewer] Failed to convert marker for "${marker.title}":`, err);
         }
       }
 
       if (insertedCount > 0) {
         setExtractedCount(insertedCount);
-        console.log(`[DocumentViewer] Re-inserted ${insertedCount} placeholder(s) from ${taggedSections.length} tagged sections`);
+        console.log(`[DocumentViewer] Converted ${insertedCount} marker(s) to visible placeholders`);
       }
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [htmlContent, taggedSections]); // Only re-run when HTML or tagged sections change
+  }, [htmlContent]); // Only depends on htmlContent — markers are embedded in the HTML itself
 
   // Jump to the first content after placeholders (skip past extracted sections)
   const handleJumpToNext = useCallback(() => {
@@ -497,10 +396,24 @@ export function DocumentViewer({
     }, 10);
   }, []);
 
-  // Helper: Calculate text offset of a Range's start position relative to root element
+  // Helper: Calculate text offset of a Range's start position relative to root element.
+  // Skips text inside .extracted-section-placeholder elements so offsets match
+  // the server-side HTML where extracted sections are replaced with zero-length comment markers.
   const calculateTextOffset = useCallback((range: Range): number => {
     if (!contentRef.current) return -1;
-    const walker = document.createTreeWalker(contentRef.current, NodeFilter.SHOW_TEXT);
+    const walker = document.createTreeWalker(contentRef.current, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => {
+        // Skip text nodes inside placeholder elements
+        let parent: Node | null = node.parentNode;
+        while (parent && parent !== contentRef.current) {
+          if ((parent as HTMLElement).classList?.contains('extracted-section-placeholder')) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          parent = parent.parentNode;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
     let offset = 0;
     let node;
     while (node = walker.nextNode()) {

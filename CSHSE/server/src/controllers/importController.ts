@@ -2501,6 +2501,47 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
 };
 
 /**
+ * Insert an HTML comment marker into the GridFS document at the extracted section's position.
+ * This replaces the extracted text with a comment marker so on resume the document
+ * already has markers embedded — no client-side text offset traversal needed.
+ */
+export const insertPlaceholderMarker = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+    const { sectionId, title, sectionType, contentLength, textStartOffset, textLength } = req.body;
+
+    console.log(`[Import] insert-marker request: sectionId=${sectionId}, title="${title}", type=${sectionType}, offset=${textStartOffset}, length=${textLength}`);
+
+    if (!sectionId || typeof textStartOffset !== 'number' || typeof textLength !== 'number') {
+      console.log(`[Import] insert-marker REJECTED: missing required fields`);
+      return res.status(400).json({ error: 'sectionId, textStartOffset, and textLength are required' });
+    }
+
+    // Build the HTML comment marker
+    // Encode title to avoid breaking the comment syntax
+    const safeTitle = (title || 'Untitled').replace(/-->/g, '—>').replace(/--/g, '—');
+    const marker = `<!-- EXTRACTED:${sectionId}:${sectionType || 'standard'}:${safeTitle}:${contentLength || 0} -->`;
+
+    console.log(`[Import] Calling insertHtmlMarker for "${title}" — marker: ${marker}`);
+    const startTime = Date.now();
+    const success = await gridFsService.insertHtmlMarker(importId, marker, textStartOffset, textLength);
+    const elapsed = Date.now() - startTime;
+
+    if (!success) {
+      console.log(`[Import] insert-marker FAILED: could not find text at offset ${textStartOffset} (took ${elapsed}ms)`);
+      return res.status(422).json({ error: 'Could not find text at specified offset in document' });
+    }
+
+    console.log(`[Import] insert-marker SUCCESS for "${title}" at offset ${textStartOffset} (${textLength} chars removed, took ${elapsed}ms)`);
+
+    return res.json({ success: true, marker });
+  } catch (error: any) {
+    console.error('Insert placeholder marker error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to insert marker' });
+  }
+};
+
+/**
  * Get list of manually tagged sections
  */
 export const getTaggedSections = async (req: Request, res: Response) => {

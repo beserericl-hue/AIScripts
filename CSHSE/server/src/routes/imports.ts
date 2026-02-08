@@ -21,6 +21,7 @@ import {
   getDocumentImage,
   extractSection,
   syncDocumentHtml,
+  insertPlaceholderMarker,
   getTaggedSections,
   getTaggedSectionContent,
   deleteTaggedSection,
@@ -205,6 +206,13 @@ router.post('/:importId/extract-section', extractSection);
  * @access  Private (Coordinator)
  */
 router.put('/:importId/sync-html', syncDocumentHtml);
+
+/**
+ * @route   POST /api/imports/:importId/insert-marker
+ * @desc    Insert an HTML comment marker into the GridFS document at the extracted section's position
+ * @access  Private (Coordinator)
+ */
+router.post('/:importId/insert-marker', insertPlaceholderMarker);
 
 /**
  * @route   GET /api/imports/:importId/tagged-sections
