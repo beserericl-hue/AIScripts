@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MapPin, Save, Loader2, AlertCircle, CheckCircle, Zap } from 'lucide-react';
+import { MapPin, Save, Loader2, AlertCircle, CheckCircle, Zap, ChevronDown } from 'lucide-react';
 import type { SelectionData } from './DocumentViewer';
 
 // Standard names for dropdown
@@ -47,6 +47,8 @@ interface SectionTaggerProps {
   onSaveSection: (metadata: SectionMetadata) => Promise<void>;
   isSaving: boolean;
   error: string | null;
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }
 
 /**
@@ -64,7 +66,9 @@ export function SectionTagger({
   onClearSelection,
   onSaveSection,
   isSaving,
-  error
+  error,
+  collapsed = false,
+  onToggleCollapsed
 }: SectionTaggerProps) {
   const [sectionType, setSectionType] = useState<SectionType>('standard');
   const [standardCode, setStandardCode] = useState('');
@@ -132,16 +136,20 @@ export function SectionTagger({
 
   return (
     <div className="flex flex-col">
-      {/* Header */}
-      <div className="px-3 py-2 bg-teal-50 border-b border-gray-200">
+      {/* Header - Collapsible */}
+      <button
+        onClick={onToggleCollapsed}
+        className="px-3 py-2 bg-teal-50 border-b border-gray-200 flex items-center justify-between hover:bg-teal-100 transition-colors w-full"
+      >
         <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
           <MapPin className="w-4 h-4 text-teal-600" />
           Section Tagger
         </h3>
-      </div>
+        <ChevronDown className={`w-4 h-4 text-teal-600 transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+      </button>
 
-      {/* Controls */}
-      <div className="p-3 space-y-3 overflow-y-auto max-h-[500px]">
+      {/* Controls - Collapsible */}
+      {!collapsed && <div className="p-3 space-y-3 overflow-y-auto">
         {/* Selection Status */}
         <div className={`p-2 rounded border ${hasSelection ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
           <div className="flex items-center gap-2">
@@ -399,7 +407,7 @@ export function SectionTagger({
             Select text in the document to begin
           </p>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

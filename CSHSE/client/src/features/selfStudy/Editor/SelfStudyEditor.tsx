@@ -289,7 +289,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [isLoadingDocument, setIsLoadingDocument] = useState(false);
   const [documentError, setDocumentError] = useState<string | null>(null);
   const [taggedSections, setTaggedSections] = useState<TaggedSection[]>([]);
-  const [showTaggedSections, setShowTaggedSections] = useState(true);
+  const [showTaggedSections, setShowTaggedSections] = useState(false);
+  const [sectionTaggerCollapsed, setSectionTaggerCollapsed] = useState(false);
   const [isLoadingTaggedSections, setIsLoadingTaggedSections] = useState(false);
   const [currentSelection, setCurrentSelection] = useState<SelectionData | null>(null);
   const documentViewerRef = useRef<HTMLDivElement>(null);
@@ -2169,7 +2170,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
                     {/* Right: Controls Panel (fixed width) */}
                     <div className="w-80 flex-shrink-0 border-l border-gray-200 flex flex-col overflow-hidden bg-gray-50">
-                      {/* Section Tagger */}
+                      {/* Section Tagger - Collapsible, open by default */}
                       <div className="flex-shrink-0 border-b border-gray-200 bg-white">
                         <SectionTagger
                           selection={currentSelection}
@@ -2177,14 +2178,17 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           onSaveSection={handleSaveSection}
                           isSaving={isSavingSection}
                           error={sectionError}
+                          collapsed={sectionTaggerCollapsed}
+                          onToggleCollapsed={() => setSectionTaggerCollapsed(!sectionTaggerCollapsed)}
                         />
                       </div>
 
-                      {/* Tagged Sections - Expandable */}
-                      <div className="flex-1 flex flex-col overflow-hidden bg-white">
+                      {/* Bottom Section: Tagged Sections + Footer Actions */}
+                      <div className="flex-1 flex flex-col overflow-hidden">
+                        {/* Tagged Sections Header - Always visible */}
                         <button
                           onClick={() => setShowTaggedSections(!showTaggedSections)}
-                          className="px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between hover:bg-gray-200 transition-colors"
+                          className="flex-shrink-0 px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between hover:bg-gray-200 transition-colors"
                         >
                           <div className="flex items-center gap-2">
                             <ChevronDown className={`w-4 h-4 transition-transform ${showTaggedSections ? '' : '-rotate-90'}`} />
@@ -2194,8 +2198,10 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             {taggedSections.length}
                           </span>
                         </button>
+
+                        {/* Tagged Sections List - Scrollable when open */}
                         {showTaggedSections && (
-                          <div className="flex-1 overflow-y-auto">
+                          <div className="flex-1 overflow-y-auto bg-white">
                             <TaggedSectionsList
                               sections={taggedSections}
                               isLoading={isLoadingTaggedSections}
@@ -2208,44 +2214,44 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                             />
                           </div>
                         )}
-                      </div>
 
-                      {/* Footer Actions */}
-                      <div className="p-3 bg-gray-50 border-t border-gray-200 flex flex-col gap-2 flex-shrink-0">
-                        <button
-                          onClick={handleFinishTagging}
-                          disabled={isConfirmingSelections || taggedSections.length === 0}
-                          className="w-full px-4 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
-                        >
-                          {isConfirmingSelections ? (
-                            <>
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                              Processing...
-                            </>
-                          ) : (
-                            <>
-                              Finish Tagging ({taggedSections.length})
-                              <ArrowRight className="w-4 h-4" />
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={handleCancelImport}
-                          disabled={isConfirmingSelections}
-                          className="w-full px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
-                        >
-                          Cancel Import
-                        </button>
-
-                        {/* Start Over link */}
-                        <div className="text-center pt-1">
+                        {/* Footer Actions - Always at bottom */}
+                        <div className="flex-shrink-0 p-3 bg-gray-50 border-t border-gray-200 flex flex-col gap-2 mt-auto">
                           <button
-                            onClick={handleStartOver}
-                            disabled={isDiscardingImport || isConfirmingSelections}
-                            className="text-xs text-gray-400 hover:text-red-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                            onClick={handleFinishTagging}
+                            disabled={isConfirmingSelections || taggedSections.length === 0}
+                            className="w-full px-4 py-2.5 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
                           >
-                            {isDiscardingImport ? 'Discarding...' : 'Start Over (discard all progress)'}
+                            {isConfirmingSelections ? (
+                              <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Processing...
+                              </>
+                            ) : (
+                              <>
+                                Finish Tagging ({taggedSections.length})
+                                <ArrowRight className="w-4 h-4" />
+                              </>
+                            )}
                           </button>
+                          <button
+                            onClick={handleCancelImport}
+                            disabled={isConfirmingSelections}
+                            className="w-full px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm"
+                          >
+                            Cancel Import
+                          </button>
+
+                          {/* Start Over link */}
+                          <div className="text-center pt-1">
+                            <button
+                              onClick={handleStartOver}
+                              disabled={isDiscardingImport || isConfirmingSelections}
+                              className="text-xs text-gray-400 hover:text-red-600 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {isDiscardingImport ? 'Discarding...' : 'Start Over (discard all progress)'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
