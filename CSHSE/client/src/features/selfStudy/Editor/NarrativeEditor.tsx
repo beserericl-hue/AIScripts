@@ -88,7 +88,7 @@ export function NarrativeEditor({
   readOnly = false,
 }: NarrativeEditorProps) {
   const [content, setContent] = useState(initialContent);
-  const [supportingEvidenceCollapsed, setSupportingEvidenceCollapsed] = useState(false);
+  const [supportingEvidenceCollapsed, setSupportingEvidenceCollapsed] = useState(true);
 
   // Auto-save hook with 2s debounce
   const {
