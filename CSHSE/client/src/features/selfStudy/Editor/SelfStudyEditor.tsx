@@ -291,6 +291,18 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [taggedSections, setTaggedSections] = useState<TaggedSection[]>([]);
   const [showTaggedSections, setShowTaggedSections] = useState(false);
   const [sectionTaggerCollapsed, setSectionTaggerCollapsed] = useState(false);
+
+  // Mutually exclusive accordion toggles
+  const toggleSectionTagger = () => {
+    const willOpen = sectionTaggerCollapsed;
+    setSectionTaggerCollapsed(!sectionTaggerCollapsed);
+    if (willOpen) setShowTaggedSections(false); // close tagged when tagger opens
+  };
+  const toggleTaggedSections = () => {
+    const willOpen = !showTaggedSections;
+    setShowTaggedSections(willOpen);
+    if (willOpen) setSectionTaggerCollapsed(true); // close tagger when tagged opens
+  };
   const [isLoadingTaggedSections, setIsLoadingTaggedSections] = useState(false);
   const [currentSelection, setCurrentSelection] = useState<SelectionData | null>(null);
   const documentViewerRef = useRef<HTMLDivElement>(null);
@@ -2232,7 +2244,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           isSaving={isSavingSection}
                           error={sectionError}
                           collapsed={sectionTaggerCollapsed}
-                          onToggleCollapsed={() => setSectionTaggerCollapsed(!sectionTaggerCollapsed)}
+                          onToggleCollapsed={toggleSectionTagger}
                         />
                       </div>
 
@@ -2240,7 +2252,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                       <div className="flex-1 flex flex-col overflow-hidden">
                         {/* Tagged Sections Header - Always visible */}
                         <button
-                          onClick={() => setShowTaggedSections(!showTaggedSections)}
+                          onClick={toggleTaggedSections}
                           className="flex-shrink-0 px-4 py-3 bg-gray-100 border-b border-gray-200 flex items-center justify-between hover:bg-gray-200 transition-colors"
                         >
                           <div className="flex items-center gap-2">
