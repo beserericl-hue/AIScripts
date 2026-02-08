@@ -539,42 +539,123 @@ export async function insertHtmlMarker(
     console.log(`[GridFSService] End offset extends beyond document, clamping to end`);
   }
 
-  // We need to expand the range to include complete HTML tags.
-  // Walk backwards from htmlStartPos to find the start of any containing element,
-  // and forward from htmlEndPos to close any opened tags.
-  // For simplicity, we'll find the positions and include any partial tags.
+  // Check if the range is inside a table — if so, we must remove entire <tr> rows
+  // to avoid corrupting the table structure (same principle as client-side logic).
+  const isInsideTable = (pos: number): boolean => {
+    // Search backwards for <table or </table to determine if we're inside a table
+    let depth = 0;
+    // Quick search: find the nearest <table> or </table> before this position
+    const before = html.substring(Math.max(0, pos - 50000), pos);
+    const lastTableOpen = before.lastIndexOf('<table');
+    const lastTableClose = before.lastIndexOf('</table');
+    if (lastTableOpen === -1) return false;
+    // If the last table open is after the last table close, we're inside a table
+    return lastTableOpen > lastTableClose;
+  };
 
-  // Expand start backwards to not split a tag
-  let expandedStart = htmlStartPos;
-  // Check if we're inside a tag - find the previous '>'
-  let checkPos = htmlStartPos - 1;
-  while (checkPos >= 0 && html[checkPos] !== '>' && html[checkPos] !== '<') {
-    checkPos--;
-  }
-  if (checkPos >= 0 && html[checkPos] === '<') {
-    // We were inside a tag, expand to include it
-    expandedStart = checkPos;
+  const startInTable = isInsideTable(htmlStartPos);
+  const endInTable = isInsideTable(htmlEndPos);
+
+  let expandedStart: number;
+  let expandedEnd: number;
+  let markerPlacement: 'replace' | 'before-table' = 'replace';
+
+  if (startInTable || endInTable) {
+    // TABLE-AWARE: expand to full <tr>...</tr> row boundaries
+    console.log(`[GridFSService] Text range is inside a table — expanding to row boundaries`);
+
+    // Find the <tr that contains htmlStartPos (search backwards)
+    const trStartSearch = html.lastIndexOf('<tr', htmlStartPos);
+    if (trStartSearch !== -1) {
+      expandedStart = trStartSearch;
+    } else {
+      expandedStart = htmlStartPos;
+    }
+
+    // Find the </tr> that contains/follows htmlEndPos (search forward)
+    const trEndSearch = html.indexOf('</tr>', htmlEndPos);
+    if (trEndSearch !== -1) {
+      expandedEnd = trEndSearch + 5; // length of "</tr>"
+    } else {
+      // Try </tr with whitespace
+      const trEndAlt = html.indexOf('</tr', htmlEndPos);
+      if (trEndAlt !== -1) {
+        const closeBracket = html.indexOf('>', trEndAlt);
+        expandedEnd = closeBracket !== -1 ? closeBracket + 1 : htmlEndPos;
+      } else {
+        expandedEnd = htmlEndPos;
+      }
+    }
+
+    // Also check: does the range span ALL rows in the table?
+    // If so, we should find the <table> and </table> tags and replace the whole thing
+    const tableStartSearch = html.lastIndexOf('<table', expandedStart);
+    const tableEndSearch = html.indexOf('</table>', expandedEnd);
+    if (tableStartSearch !== -1 && tableEndSearch !== -1) {
+      // Check if there are any <tr> rows remaining between expandedEnd and </table>
+      const remainingContent = html.substring(expandedEnd, tableEndSearch);
+      const hasRemainingRows = /<tr[\s>]/i.test(remainingContent);
+      const beforeContent = html.substring(tableStartSearch, expandedStart);
+      const hasPrecedingRows = /<tr[\s>]/i.test(beforeContent.substring(beforeContent.indexOf('>') + 1));
+
+      if (!hasRemainingRows && !hasPrecedingRows) {
+        // No remaining rows — remove the entire table
+        expandedStart = tableStartSearch;
+        expandedEnd = tableEndSearch + 8; // length of "</table>"
+        console.log(`[GridFSService] All table rows extracted — removing entire table`);
+      }
+    }
+
+    // Place the marker BEFORE the table (not inside it) to avoid breaking structure
+    // Find the <table> tag that contains this row
+    const tableTag = html.lastIndexOf('<table', expandedStart);
+    if (tableTag !== -1 && tableTag < expandedStart) {
+      markerPlacement = 'before-table';
+    }
+
+    console.log(`[GridFSService] Table-aware expansion: rows at HTML pos ${expandedStart}-${expandedEnd} ` +
+      `(original text range was ${htmlStartPos}-${htmlEndPos})`);
+  } else {
+    // NON-TABLE: simple tag boundary expansion
+    expandedStart = htmlStartPos;
+    let checkPos = htmlStartPos - 1;
+    while (checkPos >= 0 && html[checkPos] !== '>' && html[checkPos] !== '<') {
+      checkPos--;
+    }
+    if (checkPos >= 0 && html[checkPos] === '<') {
+      expandedStart = checkPos;
+    }
+
+    expandedEnd = htmlEndPos;
+    checkPos = htmlEndPos;
+    while (checkPos < html.length && html[checkPos] !== '<' && html[checkPos] !== '>') {
+      checkPos++;
+    }
+    if (checkPos < html.length && html[checkPos] === '>') {
+      expandedEnd = checkPos + 1;
+    }
   }
 
-  // Expand end forward to not split a tag
-  let expandedEnd = htmlEndPos;
-  checkPos = htmlEndPos;
-  while (checkPos < html.length && html[checkPos] !== '<' && html[checkPos] !== '>') {
-    checkPos++;
-  }
-  if (checkPos < html.length && html[checkPos] === '>') {
-    // We were inside a tag, expand to include the closing >
-    expandedEnd = checkPos + 1;
+  // Build new HTML
+  let newHtml: string;
+  if (markerPlacement === 'before-table') {
+    // Place marker before the table, remove the rows from inside the table
+    const tableTag = html.lastIndexOf('<table', expandedStart);
+    newHtml = html.substring(0, tableTag) + marker + html.substring(tableTag, expandedStart) + html.substring(expandedEnd);
+  } else {
+    // Simple replacement
+    newHtml = html.substring(0, expandedStart) + marker + html.substring(expandedEnd);
   }
 
-  // Build new HTML: before + marker + after
-  const newHtml = html.substring(0, expandedStart) + marker + html.substring(expandedEnd);
-
+  const removedChars = expandedEnd - expandedStart;
+  const snippet = html.substring(expandedStart, Math.min(expandedStart + 100, expandedEnd));
   console.log(`[GridFSService] Inserting marker at text offset ${textStartOffset} (HTML pos ${expandedStart}-${expandedEnd}), ` +
-    `removed ${expandedEnd - expandedStart} chars of HTML, marker: ${marker.length} chars`);
+    `removed ${removedChars} chars, placement=${markerPlacement}, snippet: "${snippet.replace(/\n/g, '\\n').substring(0, 80)}..."`);
 
   // Store back to GridFS
+  const writeStart = Date.now();
   await storeHtmlContent(importId, newHtml);
+  console.log(`[GridFSService] Stored updated HTML (${newHtml.length} chars) in ${Date.now() - writeStart}ms`);
 
   return true;
 }

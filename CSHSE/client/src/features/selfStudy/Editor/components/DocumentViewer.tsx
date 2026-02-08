@@ -119,38 +119,54 @@ export function DocumentViewer({
     try {
       const placeholder = createPlaceholder(lastSavedSection);
 
-      // Check if selection is within a table - need to handle row cleanup
+      // Check if selection is within a table - need table-aware row removal
       const startTable = findAncestor(range.startContainer, 'TABLE');
-      const startRow = findAncestor(range.startContainer, 'TR');
+      const endTable = findAncestor(range.endContainer, 'TABLE');
 
-      if (startTable && startRow) {
-        // Table selection: insert placeholder before table, then delete content and clean up empty rows
+      if (startTable) {
+        // Table selection: NEVER use range.deleteContents() — it splits DOM nodes
+        // at range boundaries, corrupting table structure (orphaned cells, broken rows).
+        // Instead, remove specific <tr> elements that overlap the selection.
         const table = startTable as HTMLTableElement;
+        const allRows = Array.from(table.rows);
+
+        // Collect rows that overlap the selection BEFORE any DOM mutations
+        // (DOM changes invalidate Range objects)
+        const rowsToRemove: HTMLTableRowElement[] = [];
+        for (const row of allRows) {
+          // Use compareBoundaryPoints for strict overlap (intersectsNode returns true for boundary touches)
+          const rowRange = document.createRange();
+          rowRange.selectNodeContents(row);
+          const startsBeforeRowEnd = range.compareBoundaryPoints(Range.START_TO_END, rowRange) > 0;
+          const endsAfterRowStart = range.compareBoundaryPoints(Range.END_TO_START, rowRange) < 0;
+          if (startsBeforeRowEnd && endsAfterRowStart) {
+            rowsToRemove.push(row);
+          }
+        }
+
+        console.log(`[DocumentViewer] Table placeholder: ${allRows.length} total rows, ${rowsToRemove.length} rows overlap selection`);
+
+        // If the selection also extends beyond the table (endTable !== startTable),
+        // handle the non-table portion after the table
+        if (endTable && endTable !== startTable) {
+          console.warn(`[DocumentViewer] Selection spans multiple tables or table+non-table — removing overlapping rows from start table only`);
+        }
 
         // Insert placeholder before the table
         table.parentNode?.insertBefore(placeholder, table);
 
-        // Delete the selected content
-        range.deleteContents();
-
-        // Clean up any rows that are now empty (only whitespace/empty cells)
-        const rows = Array.from(table.rows);
-        for (let i = rows.length - 1; i >= 0; i--) {
-          const row = rows[i];
-          const textContent = row.textContent?.trim() || '';
-          const hasOnlyPlaceholders = row.querySelectorAll('.extracted-section-placeholder').length > 0
-            && textContent.length === 0;
-
-          if (textContent.length === 0 || hasOnlyPlaceholders) {
-            row.remove();
-            console.log(`[DocumentViewer] Removed empty table row ${i}`);
-          }
+        // Remove overlapping rows directly (no deleteContents!)
+        for (const row of rowsToRemove) {
+          console.log(`[DocumentViewer] Removing table row: "${row.textContent?.substring(0, 80).trim()}..."`);
+          row.remove();
         }
 
         // If table is now empty, remove it too
         if (table.rows.length === 0) {
           table.remove();
-          console.log(`[DocumentViewer] Removed empty table`);
+          console.log(`[DocumentViewer] Removed empty table (all rows extracted)`);
+        } else {
+          console.log(`[DocumentViewer] Table still has ${table.rows.length} rows remaining`);
         }
       } else {
         // Non-table content: simple delete and insert
@@ -216,7 +232,26 @@ export function DocumentViewer({
       }
 
       if (markerComments.length === 0) {
-        console.log('[DocumentViewer] No EXTRACTED markers found in HTML');
+        // Fallback for old sessions: if there are tagged sections but no markers,
+        // the extractions happened before the marker system was deployed.
+        // Show a count banner at the top so the user knows sections were extracted.
+        if (taggedSections && taggedSections.length > 0) {
+          console.log(`[DocumentViewer] No EXTRACTED markers found, but ${taggedSections.length} tagged section(s) exist (pre-marker extraction). ` +
+            `Showing info banner. Future extractions will embed markers.`);
+          const banner = document.createElement('div');
+          banner.className = 'extracted-section-placeholder';
+          banner.innerHTML = `
+            <div class="flex items-center gap-2 px-3 py-2 bg-amber-100 border-l-4 border-amber-400 text-amber-800 rounded-r my-2">
+              <span class="font-medium text-sm">
+                ${taggedSections.length} section(s) previously extracted — markers will be embedded on new extractions
+              </span>
+            </div>
+          `;
+          root.insertBefore(banner, root.firstChild);
+          setExtractedCount(taggedSections.length);
+        } else {
+          console.log('[DocumentViewer] No EXTRACTED markers found in HTML (no tagged sections either)');
+        }
         return;
       }
 
@@ -249,7 +284,7 @@ export function DocumentViewer({
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [htmlContent]); // Only depends on htmlContent — markers are embedded in the HTML itself
+  }, [htmlContent, taggedSections]); // Markers are in HTML; taggedSections used for fallback banner
 
   // Jump to the first content after placeholders (skip past extracted sections)
   const handleJumpToNext = useCallback(() => {
