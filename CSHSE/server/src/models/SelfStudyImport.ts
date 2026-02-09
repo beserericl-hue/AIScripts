@@ -69,6 +69,9 @@ export interface IDetectedSection {
   // Text position offsets for placeholder re-insertion on resume
   textStartOffset?: number;
   textLength?: number;
+  // Exact HTML removed by insertHtmlMarker (may differ from htmlContent due to
+  // table boundary expansion). Used by restoreMarker for accurate restoration.
+  removedHtml?: string;
 }
 
 /**

@@ -2524,15 +2524,30 @@ export const insertPlaceholderMarker = async (req: AuthenticatedRequest, res: Re
 
     console.log(`[Import] Calling insertHtmlMarker for "${title}" — marker: ${marker}`);
     const startTime = Date.now();
-    const success = await gridFsService.insertHtmlMarker(importId, marker, textStartOffset, textLength);
+    const result = await gridFsService.insertHtmlMarker(importId, marker, textStartOffset, textLength);
     const elapsed = Date.now() - startTime;
 
-    if (!success) {
+    if (!result.success) {
       console.log(`[Import] insert-marker FAILED: could not find text at offset ${textStartOffset} (took ${elapsed}ms)`);
       return res.status(422).json({ error: 'Could not find text at specified offset in document' });
     }
 
-    console.log(`[Import] insert-marker SUCCESS for "${title}" at offset ${textStartOffset} (${textLength} chars removed, took ${elapsed}ms)`);
+    // Store the exact removed HTML on the section record for accurate restoration.
+    // This may differ from htmlContent (client's selection) due to table boundary expansion.
+    if (result.removedHtml && sectionId) {
+      const importRecord = await SelfStudyImport.findById(importId);
+      if (importRecord?.detectedSections) {
+        const section = importRecord.detectedSections.find((s: any) => s.id === sectionId);
+        if (section) {
+          (section as any).removedHtml = result.removedHtml;
+          importRecord.markModified('detectedSections');
+          await importRecord.save();
+          console.log(`[Import] Stored removedHtml (${result.removedHtml.length} chars) on section ${sectionId}`);
+        }
+      }
+    }
+
+    console.log(`[Import] insert-marker SUCCESS for "${title}" at offset ${textStartOffset} (${result.removedHtml?.length || 0} chars removed, took ${elapsed}ms)`);
 
     return res.json({ success: true, marker });
   } catch (error: any) {
@@ -2662,19 +2677,31 @@ export const deleteTaggedSection = async (req: AuthenticatedRequest, res: Respon
 
     const section = importRecord.detectedSections[sectionIndex] as any;
 
-    // Restore: replace the HTML comment marker in GridFS with the original content
+    // Restore: replace the HTML comment marker in GridFS with the original content.
+    // Use removedHtml (exact HTML removed by insertHtmlMarker) when available,
+    // falling back to htmlContent (client's selection) for backward compatibility.
+    const restoreContent = section.removedHtml || section.htmlContent;
     let restored = false;
-    if (section.htmlContent) {
+    if (restoreContent) {
       try {
-        restored = await gridFsService.restoreMarker(importId, sectionId, section.htmlContent);
+        restored = await gridFsService.restoreMarker(importId, sectionId, restoreContent);
         if (restored) {
-          console.log(`[Import] Restored content for section "${section.headerText}" (${section.htmlContent.length} chars)`);
+          const source = section.removedHtml ? 'removedHtml' : 'htmlContent';
+          console.log(`[Import] Restored content for section "${section.headerText}" (${restoreContent.length} chars via ${source})`);
         } else {
+          // No marker found — section was tagged before marker system, or marker was already restored.
+          // Safe to proceed with deletion (original content is still in the document).
           console.log(`[Import] No marker found in document for section "${section.headerText}" — content not restored`);
         }
       } catch (err: any) {
+        // restoreMarker failed (e.g., OOM on large doc). Do NOT delete the section —
+        // we'd lose the htmlContent needed for future restore attempts.
+        // The marker stays in GridFS; the client will show a warning placeholder.
         console.error(`[Import] Failed to restore marker for section ${sectionId}:`, err.message);
-        // Continue with deletion even if restore fails
+        return res.status(500).json({
+          error: 'Content restoration failed — section not deleted to preserve original content. Try again or contact support.',
+          contentRestored: false
+        });
       }
     }
 
@@ -2694,6 +2721,103 @@ export const deleteTaggedSection = async (req: AuthenticatedRequest, res: Respon
   } catch (error) {
     console.error('Delete tagged section error:', error);
     return res.status(500).json({ error: 'Failed to delete section' });
+  }
+};
+
+/**
+ * Repair document: re-upload the original document file to replace corrupted GridFS HTML.
+ * Keeps existing tagged sections intact in MongoDB. Re-inserts markers for each tagged section.
+ */
+export const repairDocument = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    console.log(`[Import] Repair document: re-processing ${file.originalname} for import ${importId}`);
+
+    // Convert document to HTML (same as initial upload)
+    const extension = file.originalname.toLowerCase().split('.').pop();
+    let result: { htmlContent: string; rawText: string; imageCount: number };
+
+    if (extension === 'docx') {
+      result = await documentParserService.parseDOCXForManualTagging(file.buffer, importId.toString());
+    } else if (extension === 'pdf') {
+      result = await documentParserService.parsePDFForManualTagging(file.buffer, importId.toString());
+    } else {
+      return res.status(400).json({ error: `Unsupported file type: ${extension}` });
+    }
+
+    console.log(`[Import] Repair: converted to HTML (${result.htmlContent.length} chars)`);
+
+    // Replace the GridFS HTML with the fresh conversion
+    await gridFsService.storeHtmlContent(importId.toString(), result.htmlContent);
+    console.log(`[Import] Repair: replaced GridFS HTML`);
+
+    // Re-insert markers for existing tagged sections
+    const sections = importRecord.detectedSections || [];
+    let markersInserted = 0;
+    let markersFailed = 0;
+
+    for (const section of sections) {
+      const s = section as any;
+      if (typeof s.textStartOffset !== 'number' || typeof s.textLength !== 'number') {
+        console.log(`[Import] Repair: skipping section "${s.headerText}" — no text offsets`);
+        markersFailed++;
+        continue;
+      }
+
+      const safeTitle = (s.headerText || 'Untitled').replace(/-->/g, '—>').replace(/--/g, '—');
+      const sectionType = s.isMatrix ? 'matrix' : (s.isAppendix ? 'appendix' : 'standard');
+      const marker = `<!-- EXTRACTED:${s.id}:${sectionType}:${safeTitle}:${s.fullContent?.length || 0} -->`;
+
+      try {
+        const markerResult = await gridFsService.insertHtmlMarker(
+          importId.toString(), marker, s.textStartOffset, s.textLength
+        );
+        if (markerResult.success) {
+          // Update removedHtml on the section
+          if (markerResult.removedHtml) {
+            s.removedHtml = markerResult.removedHtml;
+          }
+          markersInserted++;
+          console.log(`[Import] Repair: inserted marker for "${s.headerText}"`);
+        } else {
+          markersFailed++;
+          console.warn(`[Import] Repair: failed to insert marker for "${s.headerText}" — offset not found`);
+        }
+      } catch (err: any) {
+        markersFailed++;
+        console.error(`[Import] Repair: error inserting marker for "${s.headerText}":`, err.message);
+      }
+    }
+
+    // Save updated section records (with removedHtml)
+    if (markersInserted > 0) {
+      importRecord.markModified('detectedSections');
+      await importRecord.save();
+    }
+
+    console.log(`[Import] Repair complete: ${markersInserted} markers inserted, ${markersFailed} failed`);
+
+    return res.json({
+      success: true,
+      htmlSize: result.htmlContent.length,
+      markersInserted,
+      markersFailed,
+      totalSections: sections.length
+    });
+  } catch (error: any) {
+    console.error('Repair document error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to repair document' });
   }
 };
 

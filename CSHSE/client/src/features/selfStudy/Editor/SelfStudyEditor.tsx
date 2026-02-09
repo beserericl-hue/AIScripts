@@ -315,6 +315,10 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [viewingFullContent, setViewingFullContent] = useState<string | null>(null);
   const [viewingHtmlContent, setViewingHtmlContent] = useState<string | null>(null); // HTML content for formatting
   const [isLoadingFullContent, setIsLoadingFullContent] = useState(false);
+  // Repair document state
+  const repairFileInputRef = useRef<HTMLInputElement>(null);
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [repairMessage, setRepairMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   // Track last saved section to trigger placeholder insertion in DocumentViewer
   const [lastSavedSection, setLastSavedSection] = useState<SavedSectionInfo | null>(null);
   // Version counter to force NarrativeEditor remount when content is externally applied
@@ -667,6 +671,43 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       setDocumentError(err.response?.data?.error || 'Failed to load document content');
     } finally {
       setIsLoadingDocument(false);
+    }
+  };
+
+  // Repair document: re-upload original file, re-insert markers, keep tags
+  const handleRepairDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !importId) return;
+
+    // Reset file input so re-selecting the same file triggers onChange
+    e.target.value = '';
+
+    setIsRepairing(true);
+    setRepairMessage(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await api.post(`/api/imports/${importId}/repair`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const { markersInserted, totalSections } = response.data;
+      setRepairMessage({
+        type: 'success',
+        text: `Document repaired. ${markersInserted}/${totalSections} section markers restored.`,
+      });
+
+      // Reload document content to reflect repaired HTML
+      await loadDocumentContent();
+    } catch (err: any) {
+      setRepairMessage({
+        type: 'error',
+        text: err.response?.data?.error || 'Failed to repair document',
+      });
+    } finally {
+      setIsRepairing(false);
     }
   };
 
@@ -2366,6 +2407,42 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           >
                             Cancel Import
                           </button>
+
+                          {/* Repair Document */}
+                          <input
+                            ref={repairFileInputRef}
+                            type="file"
+                            accept=".pdf,.doc,.docx,.ppt,.pptx"
+                            onChange={handleRepairDocument}
+                            className="hidden"
+                          />
+                          <button
+                            onClick={() => repairFileInputRef.current?.click()}
+                            disabled={isRepairing || isConfirmingSelections}
+                            className="w-full px-4 py-2 text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 text-sm flex items-center justify-center gap-2"
+                            title="Re-upload the original document to fix display issues while keeping all tagged sections"
+                          >
+                            {isRepairing ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Repairing...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                Repair Document
+                              </>
+                            )}
+                          </button>
+                          {repairMessage && (
+                            <div className={`text-xs px-3 py-2 rounded-lg ${
+                              repairMessage.type === 'success'
+                                ? 'bg-green-50 text-green-700 border border-green-200'
+                                : 'bg-red-50 text-red-700 border border-red-200'
+                            }`}>
+                              {repairMessage.text}
+                            </div>
+                          )}
 
                           {/* Start Over link */}
                           <div className="text-center pt-1">

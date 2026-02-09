@@ -255,36 +255,55 @@ export function DocumentViewer({
         return;
       }
 
-      // Build set of active tagged section IDs to filter orphan markers
+      // Build set of active tagged section IDs
       const activeSectionIds = new Set(
         (taggedSections || []).map(s => s.id)
       );
 
-      // Filter out markers for deleted sections (orphan markers)
-      const activeMarkers = markerComments.filter(m => {
-        if (activeSectionIds.has(m.id)) return true;
-        console.log(`[DocumentViewer] Skipping orphan marker for deleted section "${m.title}" (${m.id})`);
-        // Remove the orphan marker comment from DOM so it doesn't show
-        m.node.parentNode?.removeChild(m.node);
-        return false;
-      });
-
-      console.log(`[DocumentViewer] Found ${markerComments.length} EXTRACTED marker(s), ${activeMarkers.length} active, converting to placeholders`);
+      console.log(`[DocumentViewer] Found ${markerComments.length} EXTRACTED marker(s), converting to placeholders`);
 
       let insertedCount = 0;
 
-      // Process markers — they're already in document order (top to bottom)
-      for (const marker of activeMarkers) {
+      // Process ALL markers — they're already in document order (top to bottom).
+      // Markers for deleted sections (restoreMarker failed) get a warning placeholder
+      // so the user knows content is missing. If restoreMarker succeeded, the marker
+      // wouldn't be in the HTML at all.
+      for (const marker of markerComments) {
         try {
-          const placeholder = createPlaceholder({
-            id: marker.id,
-            title: marker.title,
-            sectionType: marker.type,
-            contentLength: marker.length
-          });
+          const isActive = activeSectionIds.has(marker.id);
 
-          // Replace the comment node with the visible placeholder
-          marker.node.parentNode?.replaceChild(placeholder, marker.node);
+          if (isActive) {
+            // Normal placeholder for active tagged sections
+            const placeholder = createPlaceholder({
+              id: marker.id,
+              title: marker.title,
+              sectionType: marker.type,
+              contentLength: marker.length
+            });
+            marker.node.parentNode?.replaceChild(placeholder, marker.node);
+          } else {
+            // Marker for a deleted section — restoreMarker must have failed.
+            // Show a warning placeholder so user knows content is missing here.
+            console.warn(`[DocumentViewer] Marker for deleted section "${marker.title}" (${marker.id}) — content restoration may have failed`);
+            const warningPlaceholder = document.createElement('div');
+            warningPlaceholder.className = 'extracted-section-placeholder';
+            warningPlaceholder.setAttribute('data-section-id', marker.id);
+            warningPlaceholder.innerHTML = `
+              <div class="flex items-center gap-2 px-3 py-2 bg-red-100 border-red-400 text-red-800 border-l-4 rounded-r my-2">
+                <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                </svg>
+                <span class="font-medium text-sm truncate">
+                  Content not restored: ${marker.title}
+                </span>
+                <span class="text-xs opacity-75">
+                  (${marker.length.toLocaleString()} chars — reload page to retry)
+                </span>
+              </div>
+            `;
+            marker.node.parentNode?.replaceChild(warningPlaceholder, marker.node);
+          }
+
           insertedCount++;
         } catch (err) {
           console.error(`[DocumentViewer] Failed to convert marker for "${marker.title}":`, err);

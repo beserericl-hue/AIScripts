@@ -461,7 +461,7 @@ export async function insertHtmlMarker(
   marker: string,
   textStartOffset: number,
   textLength: number
-): Promise<boolean> {
+): Promise<{ success: boolean; removedHtml?: string }> {
   // Read the current HTML
   console.log(`[GridFSService] insertHtmlMarker: reading HTML for import ${importId}...`);
   const readStart = Date.now();
@@ -530,7 +530,7 @@ export async function insertHtmlMarker(
 
   if (htmlStartPos === -1) {
     console.log(`[GridFSService] Could not find text offset ${textStartOffset} in HTML (total text chars: ${textPos})`);
-    return false;
+    return { success: false };
   }
 
   // If we didn't find the exact end, use what we have
@@ -539,17 +539,13 @@ export async function insertHtmlMarker(
     console.log(`[GridFSService] End offset extends beyond document, clamping to end`);
   }
 
-  // Check if the range is inside a table — if so, we must remove entire <tr> rows
-  // to avoid corrupting the table structure (same principle as client-side logic).
+  // Check if the range is inside a table — if so, expand to full <table>...</table>
+  // boundaries to ensure clean round-tripping with restoreMarker.
   const isInsideTable = (pos: number): boolean => {
-    // Search backwards for <table or </table to determine if we're inside a table
-    let depth = 0;
-    // Quick search: find the nearest <table> or </table> before this position
     const before = html.substring(Math.max(0, pos - 50000), pos);
     const lastTableOpen = before.lastIndexOf('<table');
     const lastTableClose = before.lastIndexOf('</table');
     if (lastTableOpen === -1) return false;
-    // If the last table open is after the last table close, we're inside a table
     return lastTableOpen > lastTableClose;
   };
 
@@ -558,63 +554,29 @@ export async function insertHtmlMarker(
 
   let expandedStart: number;
   let expandedEnd: number;
-  let markerPlacement: 'replace' | 'before-table' = 'replace';
 
   if (startInTable || endInTable) {
-    // TABLE-AWARE: expand to full <tr>...</tr> row boundaries
-    console.log(`[GridFSService] Text range is inside a table — expanding to row boundaries`);
+    // TABLE-AWARE: expand to full <table>...</table> boundaries.
+    // We replace the ENTIRE table with the marker — this ensures symmetric
+    // round-tripping: restoreMarker can do a simple 1:1 replacement.
+    // Previous approach (removing rows, placing marker before table) created
+    // an asymmetry that corrupted HTML on restore.
+    console.log(`[GridFSService] Text range is inside a table — expanding to full table boundaries`);
 
-    // Find the <tr that contains htmlStartPos (search backwards)
-    const trStartSearch = html.lastIndexOf('<tr', htmlStartPos);
-    if (trStartSearch !== -1) {
-      expandedStart = trStartSearch;
+    const tableStart = html.lastIndexOf('<table', htmlStartPos);
+    const tableEndTag = html.indexOf('</table>', htmlEndPos);
+
+    if (tableStart !== -1 && tableEndTag !== -1) {
+      expandedStart = tableStart;
+      expandedEnd = tableEndTag + 8; // "</table>".length
+      console.log(`[GridFSService] Full table expansion: ${expandedStart}-${expandedEnd} ` +
+        `(original text range was ${htmlStartPos}-${htmlEndPos})`);
     } else {
+      // Fallback: couldn't find table boundaries, use text range
       expandedStart = htmlStartPos;
+      expandedEnd = htmlEndPos;
+      console.warn(`[GridFSService] Could not find table boundaries, using text range`);
     }
-
-    // Find the </tr> that contains/follows htmlEndPos (search forward)
-    const trEndSearch = html.indexOf('</tr>', htmlEndPos);
-    if (trEndSearch !== -1) {
-      expandedEnd = trEndSearch + 5; // length of "</tr>"
-    } else {
-      // Try </tr with whitespace
-      const trEndAlt = html.indexOf('</tr', htmlEndPos);
-      if (trEndAlt !== -1) {
-        const closeBracket = html.indexOf('>', trEndAlt);
-        expandedEnd = closeBracket !== -1 ? closeBracket + 1 : htmlEndPos;
-      } else {
-        expandedEnd = htmlEndPos;
-      }
-    }
-
-    // Also check: does the range span ALL rows in the table?
-    // If so, we should find the <table> and </table> tags and replace the whole thing
-    const tableStartSearch = html.lastIndexOf('<table', expandedStart);
-    const tableEndSearch = html.indexOf('</table>', expandedEnd);
-    if (tableStartSearch !== -1 && tableEndSearch !== -1) {
-      // Check if there are any <tr> rows remaining between expandedEnd and </table>
-      const remainingContent = html.substring(expandedEnd, tableEndSearch);
-      const hasRemainingRows = /<tr[\s>]/i.test(remainingContent);
-      const beforeContent = html.substring(tableStartSearch, expandedStart);
-      const hasPrecedingRows = /<tr[\s>]/i.test(beforeContent.substring(beforeContent.indexOf('>') + 1));
-
-      if (!hasRemainingRows && !hasPrecedingRows) {
-        // No remaining rows — remove the entire table
-        expandedStart = tableStartSearch;
-        expandedEnd = tableEndSearch + 8; // length of "</table>"
-        console.log(`[GridFSService] All table rows extracted — removing entire table`);
-      }
-    }
-
-    // Place the marker BEFORE the table (not inside it) to avoid breaking structure
-    // Find the <table> tag that contains this row
-    const tableTag = html.lastIndexOf('<table', expandedStart);
-    if (tableTag !== -1 && tableTag < expandedStart) {
-      markerPlacement = 'before-table';
-    }
-
-    console.log(`[GridFSService] Table-aware expansion: rows at HTML pos ${expandedStart}-${expandedEnd} ` +
-      `(original text range was ${htmlStartPos}-${htmlEndPos})`);
   } else {
     // NON-TABLE: simple tag boundary expansion
     expandedStart = htmlStartPos;
@@ -636,28 +598,23 @@ export async function insertHtmlMarker(
     }
   }
 
-  // Build new HTML
-  let newHtml: string;
-  if (markerPlacement === 'before-table') {
-    // Place marker before the table, remove the rows from inside the table
-    const tableTag = html.lastIndexOf('<table', expandedStart);
-    newHtml = html.substring(0, tableTag) + marker + html.substring(tableTag, expandedStart) + html.substring(expandedEnd);
-  } else {
-    // Simple replacement
-    newHtml = html.substring(0, expandedStart) + marker + html.substring(expandedEnd);
-  }
+  // Capture the exact HTML being removed (for accurate restoration)
+  const removedHtml = html.substring(expandedStart, expandedEnd);
+
+  // Build new HTML — simple replacement in all cases
+  const newHtml = html.substring(0, expandedStart) + marker + html.substring(expandedEnd);
 
   const removedChars = expandedEnd - expandedStart;
-  const snippet = html.substring(expandedStart, Math.min(expandedStart + 100, expandedEnd));
+  const snippet = removedHtml.substring(0, 100);
   console.log(`[GridFSService] Inserting marker at text offset ${textStartOffset} (HTML pos ${expandedStart}-${expandedEnd}), ` +
-    `removed ${removedChars} chars, placement=${markerPlacement}, snippet: "${snippet.replace(/\n/g, '\\n').substring(0, 80)}..."`);
+    `removed ${removedChars} chars, snippet: "${snippet.replace(/\n/g, '\\n').substring(0, 80)}..."`);
 
   // Store back to GridFS
   const writeStart = Date.now();
   await storeHtmlContent(importId, newHtml);
   console.log(`[GridFSService] Stored updated HTML (${newHtml.length} chars) in ${Date.now() - writeStart}ms`);
 
-  return true;
+  return { success: true, removedHtml };
 }
 
 /**
@@ -745,30 +702,28 @@ export async function restoreMarker(
   }
 
   // === Pass 2: Stream copy with replacement ===
-  // Delete the original file first, then stream-write the new one with the same filename.
+  // Write new file FIRST, then delete old file. This prevents data loss:
+  // if we deleted first, the read cursor might lose access to chunks.
+  // GridFS allows multiple files with the same filename (keyed by _id).
   const fileId = file._id;
   const restoredBuffer = Buffer.from(htmlContent, 'utf-8');
-  const newSize = file.length - (markerByteEnd - markerByteStart) + restoredBuffer.length;
+  const expectedSize = file.length - (markerByteEnd - markerByteStart) + restoredBuffer.length;
 
-  // We need to read from the old file WHILE writing to the new one.
-  // Open the read stream before deleting (GridFS keeps chunks until stream closes).
   const readStream = bucket.openDownloadStream(fileId);
 
-  // Delete old file entry (chunks stay readable via open stream)
-  await bucket.delete(fileId);
-
-  await new Promise<void>((resolve, reject) => {
+  const newFileId = await new Promise<any>((resolve, reject) => {
     const uploadStream = bucket.openUploadStream(`${importId}.html`, {
       metadata: {
         importId,
         contentType: 'text/html',
         uploadedAt: new Date(),
-        size: newSize
+        size: expectedSize
       }
     });
 
     let byteOffset = 0;
     let restoredWritten = false;
+    let totalWritten = 0;
 
     readStream.on('data', (chunk: Buffer) => {
       const chunkStart = byteOffset;
@@ -777,22 +732,25 @@ export async function restoreMarker(
       if (chunkEnd <= markerByteStart || chunkStart >= markerByteEnd) {
         // Chunk entirely before or after marker — pass through
         uploadStream.write(chunk);
+        totalWritten += chunk.length;
       } else {
         // Chunk overlaps the marker region
         if (chunkStart < markerByteStart) {
-          // Write the part before the marker
-          uploadStream.write(chunk.subarray(0, markerByteStart - chunkStart));
+          const before = chunk.subarray(0, markerByteStart - chunkStart);
+          uploadStream.write(before);
+          totalWritten += before.length;
         }
 
         if (!restoredWritten) {
-          // Write the restored content (once)
           uploadStream.write(restoredBuffer);
+          totalWritten += restoredBuffer.length;
           restoredWritten = true;
         }
 
         if (chunkEnd > markerByteEnd) {
-          // Write the part after the marker
-          uploadStream.write(chunk.subarray(markerByteEnd - chunkStart));
+          const after = chunk.subarray(markerByteEnd - chunkStart);
+          uploadStream.write(after);
+          totalWritten += after.length;
         }
       }
 
@@ -805,11 +763,23 @@ export async function restoreMarker(
       uploadStream.end();
     });
 
-    uploadStream.on('finish', resolve);
+    uploadStream.on('finish', () => {
+      // Validate: check that we wrote the expected amount of data
+      if (Math.abs(totalWritten - expectedSize) > 1) {
+        console.error(`[GridFSService] restoreMarker: size mismatch! expected=${expectedSize}, written=${totalWritten}`);
+        // Don't delete old file — keep it as fallback
+        reject(new Error(`Restoration size mismatch: expected ${expectedSize} bytes, wrote ${totalWritten}`));
+        return;
+      }
+      resolve(uploadStream.id);
+    });
     uploadStream.on('error', reject);
   });
 
-  console.log(`[GridFSService] restoreMarker: restored ${htmlContent.length} chars for section ${sectionId} (${newSize} total bytes)`);
+  // New file written successfully — now safe to delete the old one
+  await bucket.delete(fileId);
+
+  console.log(`[GridFSService] restoreMarker: restored ${htmlContent.length} chars for section ${sectionId} (${expectedSize} total bytes, newFileId=${newFileId})`);
   return true;
 }
 

@@ -25,6 +25,7 @@ import {
   getTaggedSections,
   getTaggedSectionContent,
   deleteTaggedSection,
+  repairDocument,
   finishTagging,
   // Session persistence
   checkExistingImport,
@@ -234,6 +235,13 @@ router.get('/:importId/tagged-sections/:sectionId', getTaggedSectionContent);
  * @access  Private (Coordinator)
  */
 router.delete('/:importId/tagged-sections/:sectionId', deleteTaggedSection);
+
+/**
+ * @route   POST /api/imports/:importId/repair
+ * @desc    Re-upload document to repair corrupted GridFS HTML (keeps existing tags)
+ * @access  Private (Coordinator)
+ */
+router.post('/:importId/repair', upload.single('file'), repairDocument);
 
 /**
  * @route   POST /api/imports/:importId/finish-tagging
