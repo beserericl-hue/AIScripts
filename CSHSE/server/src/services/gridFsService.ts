@@ -522,22 +522,55 @@ export function findSectionTextOffset(
   const anchorLen = Math.min(150, normalizedSection.length);
   const anchor = normalizedSection.substring(0, anchorLen);
 
-  const normalizedIdx = normalizedDoc.indexOf(anchor);
-  if (normalizedIdx === -1) {
+  // End anchor for verification (last 50 chars)
+  const endAnchorLen = Math.min(50, normalizedSection.length);
+  const endAnchor = normalizedSection.substring(normalizedSection.length - endAnchorLen);
+  const hasDistinctEndAnchor = normalizedSection.length > 200;
+
+  // Find ALL occurrences of the start anchor (avoids false positives in TOC/headers)
+  const candidates: Array<{ normalizedIdx: number; endMatched: boolean }> = [];
+  let searchFrom = 0;
+  while (true) {
+    const idx = normalizedDoc.indexOf(anchor, searchFrom);
+    if (idx === -1) break;
+
+    // Check end anchor match for this candidate
+    let endMatched = false;
+    if (hasDistinctEndAnchor) {
+      const expectedEndIdx = idx + normalizedSection.length - endAnchorLen;
+      const endFound = normalizedDoc.indexOf(endAnchor, Math.max(0, expectedEndIdx - 100));
+      endMatched = endFound !== -1 && Math.abs(endFound - expectedEndIdx) <= 100;
+    } else {
+      endMatched = true; // Short section, can't verify end separately
+    }
+
+    candidates.push({ normalizedIdx: idx, endMatched });
+    searchFrom = idx + 1;
+  }
+
+  if (candidates.length === 0) {
     console.log(`[GridFSService] findSectionTextOffset: anchor not found in document. Anchor: "${anchor.substring(0, 60)}..."`);
     return null;
   }
 
-  // Verify with end anchor (last 50 chars) to confirm full section match
-  if (normalizedSection.length > 200) {
-    const endAnchor = normalizedSection.substring(normalizedSection.length - 50);
-    const expectedEndIdx = normalizedIdx + normalizedSection.length - 50;
-    const endFound = normalizedDoc.indexOf(endAnchor, expectedEndIdx - 100);
-    if (endFound === -1 || Math.abs(endFound - expectedEndIdx) > 100) {
-      console.log(`[GridFSService] findSectionTextOffset: end anchor mismatch, possible false positive`);
-      // Continue anyway — start anchor was found
+  // Pick the best candidate:
+  // 1. Prefer candidates where end anchor also matches (full section present)
+  // 2. Among those, prefer the LAST one (body content comes after TOC/headers)
+  // 3. If no end-anchor match, use the last occurrence as best guess
+  let bestCandidate: typeof candidates[0];
+  const endMatchedCandidates = candidates.filter(c => c.endMatched);
+  if (endMatchedCandidates.length > 0) {
+    bestCandidate = endMatchedCandidates[endMatchedCandidates.length - 1];
+    if (candidates.length > 1) {
+      console.log(`[GridFSService] findSectionTextOffset: ${candidates.length} start-anchor match(es), ` +
+        `${endMatchedCandidates.length} with end-anchor — using last verified at normalized pos ${bestCandidate.normalizedIdx}`);
     }
+  } else {
+    bestCandidate = candidates[candidates.length - 1];
+    console.log(`[GridFSService] findSectionTextOffset: ${candidates.length} start-anchor match(es) but no end-anchor match — using last at ${bestCandidate.normalizedIdx}`);
   }
+
+  const normalizedIdx = bestCandidate.normalizedIdx;
 
   // Map normalizedDoc position back to raw docText position
   let normPos = 0;
@@ -559,16 +592,13 @@ export function findSectionTextOffset(
   if (rawStartOffset === -1) return null;
 
   // Determine text length: find where the section text ends in the raw docText
-  // Search for the normalized section's last few words starting from rawStartOffset
   const normalizedFromStart = docText.substring(rawStartOffset).replace(/\s+/g, ' ');
-  const sectionEndInNormalized = normalizedFromStart.indexOf(
-    normalizedSection.substring(normalizedSection.length - Math.min(50, normalizedSection.length))
-  );
+  const sectionEndInNormalized = normalizedFromStart.indexOf(endAnchor);
 
   let rawTextLength: number;
   if (sectionEndInNormalized !== -1) {
     // Map the normalized end position back to raw text length
-    const normalizedEndPos = sectionEndInNormalized + Math.min(50, normalizedSection.length);
+    const normalizedEndPos = sectionEndInNormalized + endAnchorLen;
     let np = 0;
     let ls = false;
     let rawEnd = 0;
@@ -580,13 +610,13 @@ export function findSectionTextOffset(
       if (np === normalizedEndPos) { rawEnd = i; break; }
       np++;
     }
-    rawTextLength = rawEnd || normalizedSection.length;
+    rawTextLength = rawEnd > 0 ? rawEnd : normalizedSection.length;
   } else {
     // Fallback: use the section's normalized text length
     rawTextLength = normalizedSection.length;
   }
 
-  console.log(`[GridFSService] findSectionTextOffset: found at textOffset=${rawStartOffset}, textLength=${rawTextLength}`);
+  console.log(`[GridFSService] findSectionTextOffset: found at textOffset=${rawStartOffset}, textLength=${rawTextLength} (${candidates.length} candidate(s))`);
   return { textOffset: rawStartOffset, textLength: rawTextLength };
 }
 

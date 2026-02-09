@@ -2838,6 +2838,20 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
     // Step 3: Sort by expandedStart ASCENDING for single-pass array-join build
     replacements.sort((a, b) => a.expandedStart - b.expandedStart);
 
+    // Step 3b: Remove overlapping replacements (keep the first one in each overlap)
+    const validReplacements = [];
+    let prevEnd = 0;
+    for (const r of replacements) {
+      if (r.expandedStart >= prevEnd) {
+        validReplacements.push(r);
+        prevEnd = r.expandedEnd;
+      } else {
+        markersFailed++;
+        console.warn(`[Import] Repair: skipping overlapping replacement for "${(r.section as any).headerText}" ` +
+          `(range ${r.expandedStart}-${r.expandedEnd} overlaps previous end ${prevEnd})`);
+      }
+    }
+
     // Step 4: Build the final HTML in one allocation using array-join.
     // This avoids creating N intermediate copies of the 370MB string.
     // V8 substrings are lightweight views into the parent string, so the
@@ -2849,7 +2863,7 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
     const parts: string[] = [];
     let lastEnd = 0;
 
-    for (const { section: s, marker, expandedStart, expandedEnd, removedHtml } of replacements) {
+    for (const { section: s, marker, expandedStart, expandedEnd, removedHtml } of validReplacements) {
       parts.push(html.substring(lastEnd, expandedStart));
       parts.push(marker);
       lastEnd = expandedEnd;
