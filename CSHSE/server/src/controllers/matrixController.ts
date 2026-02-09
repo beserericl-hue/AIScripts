@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CurriculumMatrix, ICurriculumMatrix } from '../models/CurriculumMatrix';
 import { Submission } from '../models/Submission';
+import { parseMatrixHtml } from '../services/matrixHtmlParser';
 import mongoose from 'mongoose';
 
 interface AuthenticatedRequest extends Request {
@@ -497,7 +498,6 @@ export const parseMatrixContent = async (req: AuthenticatedRequest, res: Respons
       return res.status(400).json({ error: 'Either htmlContent or rawContentId is required' });
     }
 
-    const { parseMatrixHtml } = await import('../services/matrixHtmlParser');
     const result = parseMatrixHtml(html);
 
     return res.json(result);
