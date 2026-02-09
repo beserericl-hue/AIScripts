@@ -2790,20 +2790,15 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
 
     console.log(`[Import] Repair: converted to HTML (${result.htmlContent.length} chars)`);
 
-    // Replace the GridFS HTML with the fresh conversion
-    await gridFsService.storeHtmlContent(importId.toString(), result.htmlContent);
-    console.log(`[Import] Repair: replaced GridFS HTML`);
-
     // Re-insert markers for existing tagged sections using CONTENT MATCHING.
-    // We can't use stored textStartOffset values because they were relative to
-    // the document state at the time of tagging (with previous sections already extracted).
-    // The fresh document has ALL content present, so offsets don't match.
-    // Instead, search for each section's text content in the fresh document.
+    // Single-pass approach: find all positions in memory, apply all replacements at once,
+    // then write to GridFS once. This avoids N round-trips to GridFS for N sections,
+    // which caused OOM on 370MB documents.
     const sections = importRecord.detectedSections || [];
     let markersInserted = 0;
     let markersFailed = 0;
 
-    // Step 1: Find each section's position in the fresh document via content matching
+    // Step 1: Find each section's text position in the fresh HTML via content matching
     console.log(`[Import] Repair: finding ${sections.length} section positions via content matching...`);
     const sectionPositions: Array<{ section: any; textOffset: number; textLength: number; marker: string }> = [];
 
@@ -2826,31 +2821,49 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
       }
     }
 
-    // Step 2: Sort sections by textOffset DESCENDING (process end-to-start).
-    // This ensures each marker insertion doesn't affect earlier sections' offsets.
-    sectionPositions.sort((a, b) => b.textOffset - a.textOffset);
+    // Step 2: Find HTML byte ranges for all positions (pure, no I/O)
+    const replacements: Array<{ section: any; marker: string; expandedStart: number; expandedEnd: number; removedHtml: string }> = [];
 
-    // Step 3: Insert markers from end to start
-    for (const { section: s, textOffset, textLength, marker } of sectionPositions) {
-      try {
-        const markerResult = await gridFsService.insertHtmlMarker(
-          importId.toString(), marker, textOffset, textLength
-        );
-        if (markerResult.success) {
-          if (markerResult.removedHtml) {
-            s.removedHtml = markerResult.removedHtml;
-          }
-          markersInserted++;
-          console.log(`[Import] Repair: inserted marker for "${s.headerText}"`);
-        } else {
-          markersFailed++;
-          console.warn(`[Import] Repair: insertHtmlMarker failed for "${s.headerText}" at offset=${textOffset}`);
-        }
-      } catch (err: any) {
+    for (const { section, textOffset, textLength, marker } of sectionPositions) {
+      const range = gridFsService.findHtmlRange(result.htmlContent, textOffset, textLength);
+      if (range) {
+        replacements.push({ section, marker, ...range });
+        console.log(`[Import] Repair: HTML range for "${(section as any).headerText}": ${range.expandedStart}-${range.expandedEnd} (${range.expandedEnd - range.expandedStart} chars)`);
+      } else {
         markersFailed++;
-        console.error(`[Import] Repair: error inserting marker for "${s.headerText}":`, err.message);
+        console.warn(`[Import] Repair: could not map text offset to HTML for "${(section as any).headerText}"`);
       }
     }
+
+    // Step 3: Sort by expandedStart ASCENDING for single-pass array-join build
+    replacements.sort((a, b) => a.expandedStart - b.expandedStart);
+
+    // Step 4: Build the final HTML in one allocation using array-join.
+    // This avoids creating N intermediate copies of the 370MB string.
+    // V8 substrings are lightweight views into the parent string, so the
+    // parts array doesn't double memory until the final join().
+    const html = result.htmlContent;
+    // Free the parser result reference
+    (result as any).htmlContent = '';
+
+    const parts: string[] = [];
+    let lastEnd = 0;
+
+    for (const { section: s, marker, expandedStart, expandedEnd, removedHtml } of replacements) {
+      parts.push(html.substring(lastEnd, expandedStart));
+      parts.push(marker);
+      lastEnd = expandedEnd;
+      s.removedHtml = removedHtml;
+      markersInserted++;
+      console.log(`[Import] Repair: inserted marker for "${s.headerText}"`);
+    }
+    parts.push(html.substring(lastEnd));
+
+    const finalHtml = parts.join('');
+
+    // Step 5: Single write to GridFS
+    await gridFsService.storeHtmlContent(importId.toString(), finalHtml);
+    console.log(`[Import] Repair: stored final HTML (${finalHtml.length} chars) to GridFS`);
 
     // Save updated section records (with removedHtml)
     if (markersInserted > 0) {
@@ -2862,7 +2875,7 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
 
     return res.json({
       success: true,
-      htmlSize: result.htmlContent.length,
+      htmlSize: finalHtml.length,
       markersInserted,
       markersFailed,
       totalSections: sections.length

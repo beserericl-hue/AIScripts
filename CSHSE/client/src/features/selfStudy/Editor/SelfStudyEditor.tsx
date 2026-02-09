@@ -1027,9 +1027,20 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       // Get the matrix for this submission
       const matrixResponse = await api.get(`/api/submissions/${submissionId}/matrix`);
       const matrixId = matrixResponse.data._id;
+      const existingRaw = matrixResponse.data.rawContent || [];
 
       if (!matrixId) {
         throw new Error('No curriculum matrix found for this submission');
+      }
+
+      // Check for duplicate: same section already imported
+      const isDuplicate = existingRaw.some((r: any) =>
+        r.sourceImportId === importId && r.standardCode === standardCode &&
+        r.title === (section.title || `Matrix - Standard ${standardCode}`)
+      );
+
+      if (isDuplicate) {
+        throw new Error(`This section has already been imported to Standard ${standardCode}`);
       }
 
       // Store the HTML content directly in the matrix (rich text approach)

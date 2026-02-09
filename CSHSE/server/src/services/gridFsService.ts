@@ -763,6 +763,118 @@ export async function insertHtmlMarker(
 }
 
 /**
+ * Pure function: find the HTML byte range for a text offset, including table expansion.
+ * No GridFS I/O — operates on the in-memory HTML string.
+ * Used by repairDocument to find all marker positions in a single pass.
+ */
+export function findHtmlRange(
+  html: string,
+  textStartOffset: number,
+  textLength: number
+): { expandedStart: number; expandedEnd: number; removedHtml: string } | null {
+  let textPos = 0;
+  let htmlStartPos = -1;
+  let htmlEndPos = -1;
+  let inTag = false;
+
+  for (let i = 0; i < html.length; i++) {
+    const ch = html[i];
+
+    if (ch === '<') {
+      if (html.substring(i, i + 4) === '<!--') {
+        const commentEnd = html.indexOf('-->', i + 4);
+        if (commentEnd !== -1) {
+          i = commentEnd + 2;
+          continue;
+        }
+      }
+      inTag = true;
+      continue;
+    }
+    if (ch === '>' && inTag) {
+      inTag = false;
+      continue;
+    }
+    if (inTag) continue;
+
+    if (textPos === textStartOffset) {
+      htmlStartPos = i;
+    }
+
+    if (ch === '&') {
+      const semiIdx = html.indexOf(';', i + 1);
+      if (semiIdx !== -1 && semiIdx - i <= 10) {
+        textPos++;
+        if (textPos === textStartOffset + textLength) {
+          htmlEndPos = semiIdx + 1;
+          break;
+        }
+        i = semiIdx;
+        continue;
+      }
+    }
+
+    textPos++;
+    if (textPos === textStartOffset + textLength) {
+      htmlEndPos = i + 1;
+      break;
+    }
+  }
+
+  if (htmlStartPos === -1) return null;
+  if (htmlEndPos === -1) htmlEndPos = html.length;
+
+  // Table expansion
+  const isInsideTable = (pos: number): boolean => {
+    const before = html.substring(Math.max(0, pos - 50000), pos);
+    const lastTableOpen = before.lastIndexOf('<table');
+    const lastTableClose = before.lastIndexOf('</table');
+    if (lastTableOpen === -1) return false;
+    return lastTableOpen > lastTableClose;
+  };
+
+  let expandedStart: number;
+  let expandedEnd: number;
+
+  if (isInsideTable(htmlStartPos) || isInsideTable(htmlEndPos)) {
+    const tableStart = html.lastIndexOf('<table', htmlStartPos);
+    const tableEndTag = html.indexOf('</table>', htmlEndPos);
+
+    if (tableStart !== -1 && tableEndTag !== -1) {
+      expandedStart = tableStart;
+      expandedEnd = tableEndTag + 8;
+    } else {
+      expandedStart = htmlStartPos;
+      expandedEnd = htmlEndPos;
+    }
+  } else {
+    expandedStart = htmlStartPos;
+    let checkPos = htmlStartPos - 1;
+    while (checkPos >= 0 && html[checkPos] !== '>' && html[checkPos] !== '<') {
+      checkPos--;
+    }
+    if (checkPos >= 0 && html[checkPos] === '<') {
+      expandedStart = checkPos;
+    }
+
+    expandedEnd = htmlEndPos;
+    checkPos = htmlEndPos;
+    while (checkPos < html.length && html[checkPos] !== '<' && html[checkPos] !== '>') {
+      checkPos++;
+    }
+    if (checkPos < html.length && html[checkPos] === '>') {
+      expandedEnd = checkPos + 1;
+    }
+  }
+
+  return {
+    expandedStart,
+    expandedEnd,
+    removedHtml: html.substring(expandedStart, expandedEnd)
+  };
+}
+
+/**
  * Restore a tagged section by replacing its HTML comment marker with original content.
  * Uses a two-pass streaming approach to handle large documents (300MB+) without OOM:
  *   Pass 1: Stream through to find marker byte position (low memory)
