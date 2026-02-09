@@ -478,7 +478,7 @@ export const addRawContent = async (req: AuthenticatedRequest, res: Response) =>
 export const parseMatrixContent = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { matrixId } = req.params;
-    const { rawContentId, htmlContent } = req.body;
+    const { rawContentId, htmlContent, defaultStandardCode } = req.body;
 
     let html: string;
 
@@ -498,7 +498,9 @@ export const parseMatrixContent = async (req: AuthenticatedRequest, res: Respons
       return res.status(400).json({ error: 'Either htmlContent or rawContentId is required' });
     }
 
-    const result = parseMatrixHtml(html);
+    const result = parseMatrixHtml(html, {
+      defaultStandardCode: defaultStandardCode || undefined,
+    });
 
     return res.json(result);
   } catch (error) {

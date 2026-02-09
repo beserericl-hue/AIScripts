@@ -1048,7 +1048,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
       // Parse the HTML table to extract structured data
       const parseResponse = await api.post(`/api/submissions/${submissionId}/matrix/${matrixId}/parse`, {
-        htmlContent
+        htmlContent,
+        defaultStandardCode: standardCode
       });
 
       const parsedData: ParsedMatrixResult = parseResponse.data;

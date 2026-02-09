@@ -377,13 +377,44 @@ function countLabelColumns(grid: string[][], headerRow: number): number {
   return 1; // Default: 1 label column
 }
 
+/**
+ * Determine label columns from data analysis only (no header row required).
+ * Scans all rows for assessment data patterns and returns the first column
+ * index that has significant assessment values.
+ */
+function countLabelColumnsFromData(grid: string[][]): number {
+  const maxCols = grid[0]?.length || 0;
+  const colScores: number[] = new Array(maxCols).fill(0);
+
+  for (let r = 0; r < grid.length; r++) {
+    const row = grid[r];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      if (looksLikeAssessmentData(row[c])) {
+        colScores[c]++;
+      }
+    }
+  }
+
+  const threshold = Math.max(2, grid.length * 0.15);
+  for (let c = 0; c < colScores.length; c++) {
+    if (colScores[c] >= threshold) {
+      return c;
+    }
+  }
+
+  return 1; // Default: 1 label column
+}
+
 // Spec letter codes in order
 const SPEC_LETTERS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
 
 /**
  * Main entry point: parse a matrix HTML string into structured data.
+ * Options:
+ *   defaultStandardCode — fallback standard code if none detected in text
  */
-export function parseMatrixHtml(html: string): ParsedMatrixResult {
+export function parseMatrixHtml(html: string, options?: { defaultStandardCode?: string }): ParsedMatrixResult {
   const $ = cheerio.load(html);
   const warnings: string[] = [];
   const courses: ParsedCourse[] = [];
@@ -420,41 +451,78 @@ export function parseMatrixHtml(html: string): ParsedMatrixResult {
   }
 
   // Find header row with course names
-  const headerRowIdx = findHeaderRowIndex(grid);
-  if (headerRowIdx === -1) {
-    warnings.push('Could not identify a course header row in the table');
-    return { courses, assessments, warnings, stats: { totalCourses: 0, totalAssessments: 0, unparsedCells: 0 } };
-  }
-
-  const labelCols = countLabelColumns(grid, headerRowIdx);
-  console.log(`[matrixHtmlParser] Header row: ${headerRowIdx}, label columns: ${labelCols}`);
-
-  // Extract courses from header row
+  let headerRowIdx = findHeaderRowIndex(grid);
+  let labelCols: number;
   const courseColumns: (ParsedCourse | null)[] = [];
-  const headerRow = grid[headerRowIdx];
-  for (let c = labelCols; c < headerRow.length; c++) {
-    const parsed = parseCourseHeader(headerRow[c]);
-    if (parsed) {
-      // Deduplicate by courseName (handles description-only headers where prefix/number are empty)
-      const existing = courses.find(
-        co => co.courseName === parsed.courseName
-      );
-      if (!existing) {
-        courses.push(parsed);
+
+  if (headerRowIdx === -1) {
+    // Headerless mode: no course header row found.
+    // Determine column structure from assessment data patterns and create positional courses.
+    labelCols = countLabelColumnsFromData(grid);
+    const totalDataCols = (grid[0]?.length || 0) - labelCols;
+
+    // Check which columns actually have assessment data (skip always-empty columns)
+    const colHasData: boolean[] = new Array(totalDataCols).fill(false);
+    for (let r = 0; r < grid.length; r++) {
+      for (let dc = 0; dc < totalDataCols; dc++) {
+        const colIdx = dc + labelCols;
+        if (colIdx < grid[r].length && looksLikeAssessmentData(grid[r][colIdx])) {
+          colHasData[dc] = true;
+        }
       }
-      courseColumns.push(parsed);
-    } else {
-      courseColumns.push(null);
-      if (headerRow[c].trim()) {
-        warnings.push(`Could not parse course header at column ${c}: "${headerRow[c].substring(0, 60)}"`);
+    }
+
+    warnings.push('No course header row found — using positional course columns. You can rename courses before importing.');
+    console.log(`[matrixHtmlParser] Headerless mode: ${labelCols} label col(s), ${totalDataCols} data col(s)`);
+
+    let courseNum = 1;
+    for (let dc = 0; dc < totalDataCols; dc++) {
+      if (colHasData[dc]) {
+        const course: ParsedCourse = {
+          coursePrefix: '',
+          courseNumber: String(courseNum),
+          courseName: `Course ${courseNum}`,
+        };
+        courses.push(course);
+        courseColumns.push(course);
+        courseNum++;
+      } else {
+        courseColumns.push(null);
+      }
+    }
+
+    // In headerless mode, process all rows (headerRowIdx + 1 = 0)
+    headerRowIdx = -1;
+  } else {
+    labelCols = countLabelColumns(grid, headerRowIdx);
+    console.log(`[matrixHtmlParser] Header row: ${headerRowIdx}, label columns: ${labelCols}`);
+
+    // Extract courses from header row
+    const headerRow = grid[headerRowIdx];
+    for (let c = labelCols; c < headerRow.length; c++) {
+      const parsed = parseCourseHeader(headerRow[c]);
+      if (parsed) {
+        // Deduplicate by courseName (handles description-only headers where prefix/number are empty)
+        const existing = courses.find(
+          co => co.courseName === parsed.courseName
+        );
+        if (!existing) {
+          courses.push(parsed);
+        }
+        courseColumns.push(parsed);
+      } else {
+        courseColumns.push(null);
+        if (headerRow[c].trim()) {
+          warnings.push(`Could not parse course header at column ${c}: "${headerRow[c].substring(0, 60)}"`);
+        }
       }
     }
   }
 
-  console.log(`[matrixHtmlParser] Extracted ${courses.length} courses from header row`);
+  console.log(`[matrixHtmlParser] Extracted ${courses.length} courses`);
 
-  // Iterate data rows (after header) to extract assessments
-  let currentStandard: string | null = null;
+  // Iterate data rows (after header, or all rows in headerless mode)
+  let currentStandard: string | null = options?.defaultStandardCode || null;
   let specIndex = 0; // Resets when standard changes
 
   for (let r = headerRowIdx + 1; r < grid.length; r++) {
