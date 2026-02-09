@@ -660,6 +660,38 @@ export async function insertHtmlMarker(
   return true;
 }
 
+/**
+ * Restore a tagged section by replacing its HTML comment marker with original content.
+ * Finds <!-- EXTRACTED:sectionId:... --> in the GridFS HTML and replaces with htmlContent.
+ */
+export async function restoreMarker(
+  importId: string,
+  sectionId: string,
+  htmlContent: string
+): Promise<boolean> {
+  const html = await getHtmlContent(importId);
+  if (!html) return false;
+
+  // Find the marker: <!-- EXTRACTED:sectionId:... -->
+  const markerRegex = new RegExp(`<!-- EXTRACTED:${sectionId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:[^>]*-->`, 'g');
+  const match = markerRegex.exec(html);
+
+  if (!match) {
+    console.log(`[GridFSService] restoreMarker: marker not found for section ${sectionId}`);
+    return false;
+  }
+
+  console.log(`[GridFSService] restoreMarker: found marker at position ${match.index}, length ${match[0].length}`);
+
+  // Replace the marker with the original HTML content
+  const newHtml = html.substring(0, match.index) + htmlContent + html.substring(match.index + match[0].length);
+
+  await storeHtmlContent(importId, newHtml);
+  console.log(`[GridFSService] restoreMarker: restored ${htmlContent.length} chars for section ${sectionId}`);
+
+  return true;
+}
+
 export default {
   storeHtmlContent,
   getHtmlContent,
@@ -669,6 +701,7 @@ export default {
   deleteHtmlContent,
   getStorageStats,
   insertHtmlMarker,
+  restoreMarker,
   // Image functions
   storeImage,
   getImage,

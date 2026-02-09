@@ -2660,6 +2660,24 @@ export const deleteTaggedSection = async (req: AuthenticatedRequest, res: Respon
       return res.status(404).json({ error: 'Section not found' });
     }
 
+    const section = importRecord.detectedSections[sectionIndex] as any;
+
+    // Restore: replace the HTML comment marker in GridFS with the original content
+    let restored = false;
+    if (section.htmlContent) {
+      try {
+        restored = await gridFsService.restoreMarker(importId, sectionId, section.htmlContent);
+        if (restored) {
+          console.log(`[Import] Restored content for section "${section.headerText}" (${section.htmlContent.length} chars)`);
+        } else {
+          console.log(`[Import] No marker found in document for section "${section.headerText}" — content not restored`);
+        }
+      } catch (err: any) {
+        console.error(`[Import] Failed to restore marker for section ${sectionId}:`, err.message);
+        // Continue with deletion even if restore fails
+      }
+    }
+
     // Remove the section
     const removedSection = importRecord.detectedSections.splice(sectionIndex, 1)[0];
     importRecord.markModified('detectedSections');
@@ -2670,7 +2688,8 @@ export const deleteTaggedSection = async (req: AuthenticatedRequest, res: Respon
     return res.json({
       success: true,
       deletedSectionId: sectionId,
-      remainingSections: importRecord.detectedSections.length
+      remainingSections: importRecord.detectedSections.length,
+      contentRestored: restored
     });
   } catch (error) {
     console.error('Delete tagged section error:', error);

@@ -888,12 +888,15 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     setDeletingSectionId(sectionId);
 
     try {
-      await api.delete(`/api/imports/${importId}/tagged-sections/${sectionId}`);
+      const response = await api.delete(`/api/imports/${importId}/tagged-sections/${sectionId}`);
 
       // Refresh tagged sections list
       await loadTaggedSections();
 
-      // Note: Content is not restored to the document (as per plan)
+      // If content was restored in the document, reload to show restored text
+      if (response.data.contentRestored) {
+        await loadDocumentContent();
+      }
     } catch (err: any) {
       setSectionError(err.response?.data?.error || 'Failed to delete section');
     } finally {
