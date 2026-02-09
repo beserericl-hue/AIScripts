@@ -677,7 +677,10 @@ export async function restoreMarker(
   const match = markerRegex.exec(html);
 
   if (!match) {
-    console.log(`[GridFSService] restoreMarker: marker not found for section ${sectionId}`);
+    // Count how many EXTRACTED markers exist total (for diagnostic)
+    const allMarkers = html.match(/<!-- EXTRACTED:[^>]*-->/g);
+    console.log(`[GridFSService] restoreMarker: marker not found for section ${sectionId}. ` +
+      `Document has ${html.length} chars, ${allMarkers ? allMarkers.length : 0} total EXTRACTED markers.`);
     return false;
   }
 

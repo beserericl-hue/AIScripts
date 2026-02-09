@@ -893,10 +893,11 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       // Refresh tagged sections list
       await loadTaggedSections();
 
-      // If content was restored in the document, reload to show restored text
-      if (response.data.contentRestored) {
-        await loadDocumentContent();
-      }
+      // Always reload document from GridFS after section deletion.
+      // If the marker existed, restoreMarker replaced it with original content.
+      // If no marker existed (e.g., tagged before marker system, or insert-marker failed),
+      // the original content is still in GridFS and reloading removes the DOM placeholder.
+      await loadDocumentContent();
     } catch (err: any) {
       setSectionError(err.response?.data?.error || 'Failed to delete section');
     } finally {
