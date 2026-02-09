@@ -2825,7 +2825,7 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
     const replacements: Array<{ section: any; marker: string; expandedStart: number; expandedEnd: number; removedHtml: string }> = [];
 
     for (const { section, textOffset, textLength, marker } of sectionPositions) {
-      const range = gridFsService.findHtmlRange(result.htmlContent, textOffset, textLength);
+      const range = gridFsService.findHtmlRange(result.htmlContent, textOffset, textLength, { skipTableExpansion: true });
       if (range) {
         replacements.push({ section, marker, ...range });
         console.log(`[Import] Repair: HTML range for "${(section as any).headerText}": ${range.expandedStart}-${range.expandedEnd} (${range.expandedEnd - range.expandedStart} chars)`);

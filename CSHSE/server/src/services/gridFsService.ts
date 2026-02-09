@@ -793,14 +793,19 @@ export async function insertHtmlMarker(
 }
 
 /**
- * Pure function: find the HTML byte range for a text offset, including table expansion.
+ * Pure function: find the HTML byte range for a text offset.
  * No GridFS I/O — operates on the in-memory HTML string.
  * Used by repairDocument to find all marker positions in a single pass.
+ *
+ * @param options.skipTableExpansion - When true, uses precise text boundaries
+ *   instead of expanding to full table. Use for repair (multiple sections in
+ *   same table need separate ranges). Default false for insertHtmlMarker compat.
  */
 export function findHtmlRange(
   html: string,
   textStartOffset: number,
-  textLength: number
+  textLength: number,
+  options?: { skipTableExpansion?: boolean }
 ): { expandedStart: number; expandedEnd: number; removedHtml: string } | null {
   let textPos = 0;
   let htmlStartPos = -1;
@@ -866,7 +871,7 @@ export function findHtmlRange(
   let expandedStart: number;
   let expandedEnd: number;
 
-  if (isInsideTable(htmlStartPos) || isInsideTable(htmlEndPos)) {
+  if (!options?.skipTableExpansion && (isInsideTable(htmlStartPos) || isInsideTable(htmlEndPos))) {
     const tableStart = html.lastIndexOf('<table', htmlStartPos);
     const tableEndTag = html.indexOf('</table>', htmlEndPos);
 
