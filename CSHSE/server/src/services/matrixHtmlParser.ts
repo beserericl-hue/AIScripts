@@ -141,6 +141,7 @@ function extractDepth(text: string): string | null {
 /**
  * Parse a course header cell into prefix + number.
  * Handles: "PSY 101", "PSY101", "PSY\n101", "Psychology 101", etc.
+ * Also handles description-only headers with no prefix/number.
  */
 export function parseCourseHeader(text: string): ParsedCourse | null {
   if (!text) return null;
@@ -157,9 +158,9 @@ export function parseCourseHeader(text: string): ParsedCourse | null {
     };
   }
 
-  // Fallback: if it looks like a course name but no clear prefix/number
-  // Only accept if it's reasonably short (course headers, not paragraph text)
-  if (clean.length <= 40) {
+  // Fallback: accept description-only course names (no prefix/number)
+  // Accept up to 120 chars to cover longer course descriptions
+  if (clean.length <= 120) {
     return {
       coursePrefix: '',
       courseNumber: '',
@@ -253,41 +254,126 @@ function buildVirtualGrid($: cheerio.CheerioAPI, table: cheerio.Cheerio<any>): s
 }
 
 /**
+ * Check if a cell's text looks like assessment data (I/T/K/S + L/M/H codes)
+ * rather than a header/label.
+ */
+function looksLikeAssessmentData(text: string): boolean {
+  if (!text || !text.trim()) return false;
+  const clean = text.replace(/[,\s\n/]+/g, '').toUpperCase();
+  if (!clean) return false;
+  // All characters should be valid type or depth codes
+  return clean.length <= 8 && [...clean].every(ch => VALID_TYPES.has(ch) || VALID_DEPTHS.has(ch));
+}
+
+/**
  * Detect which row is the course header row.
- * Usually the first row with many cells that look like course codes.
+ * Strategy 1: Look for PREFIX NUMBER patterns (e.g., "PSY 101").
+ * Strategy 2 (fallback): Find a row where columns have non-empty text that
+ *   ISN'T assessment data, using data rows below to confirm the pattern.
  */
 function findHeaderRowIndex(grid: string[][], startFromRow = 0): number {
+  // Strategy 1: Look for rows with PREFIX NUMBER course headers
   for (let r = startFromRow; r < Math.min(grid.length, 10); r++) {
     const row = grid[r];
-    if (row.length < 3) continue; // Need at least label col + 2 course cols
+    if (row.length < 3) continue;
 
-    // Count how many cells (after first 1-2) look like course headers
     let courseCount = 0;
     for (let c = 1; c < row.length; c++) {
       const parsed = parseCourseHeader(row[c]);
       if (parsed && parsed.coursePrefix) courseCount++;
     }
 
-    // If majority of cells parse as courses, this is the header row
     if (courseCount >= 2 && courseCount >= (row.length - 2) * 0.3) {
       return r;
     }
   }
+
+  // Strategy 2: Fallback for description-only headers
+  // Find the first row where most cells after the label column(s) are
+  // non-empty text that does NOT look like assessment data, and where
+  // subsequent rows DO have assessment-like data in those same columns.
+  for (let r = startFromRow; r < Math.min(grid.length, 10); r++) {
+    const row = grid[r];
+    if (row.length < 3) continue;
+
+    // Try different label column counts (1 or 2)
+    for (const labelCols of [1, 2]) {
+      let headerCells = 0;
+      let nonEmptyCells = 0;
+
+      for (let c = labelCols; c < row.length; c++) {
+        const text = row[c]?.trim();
+        if (!text) continue;
+        nonEmptyCells++;
+        // Header cell: has text, is NOT just assessment codes, is reasonable length
+        if (!looksLikeAssessmentData(text) && text.length <= 120) {
+          headerCells++;
+        }
+      }
+
+      // Need at least 2 header-like cells in the potential header row
+      if (headerCells < 2 || nonEmptyCells < 2) continue;
+
+      // Verify: check that some rows below have assessment data in those columns
+      let dataRowsFound = 0;
+      for (let dr = r + 1; dr < Math.min(r + 10, grid.length); dr++) {
+        const dataRow = grid[dr];
+        let assessmentCells = 0;
+        for (let c = labelCols; c < dataRow.length; c++) {
+          if (looksLikeAssessmentData(dataRow[c])) assessmentCells++;
+        }
+        if (assessmentCells >= 2) dataRowsFound++;
+      }
+
+      if (dataRowsFound >= 2) {
+        console.log(`[matrixHtmlParser] Fallback header detection: row ${r} with ${labelCols} label col(s)`);
+        return r;
+      }
+    }
+  }
+
   return -1;
 }
 
 /**
  * Determine the number of label columns (columns before course data).
- * These contain standard/spec text descriptions.
+ * Strategy 1: Find first column with PREFIX NUMBER course header.
+ * Strategy 2: Use data rows to find where assessment data starts.
  */
 function countLabelColumns(grid: string[][], headerRow: number): number {
   const row = grid[headerRow];
+
+  // Strategy 1: Find first column with PREFIX NUMBER
   for (let c = 0; c < row.length; c++) {
     const parsed = parseCourseHeader(row[c]);
     if (parsed && (parsed.coursePrefix || parsed.courseNumber)) {
       return c;
     }
   }
+
+  // Strategy 2: Analyze data rows to find where assessment data columns begin.
+  // Scan rows below header and count how many have assessment-like values per column.
+  const colScores: number[] = new Array(row.length).fill(0);
+  const dataRowsChecked = Math.min(15, grid.length - headerRow - 1);
+
+  for (let r = headerRow + 1; r <= headerRow + dataRowsChecked; r++) {
+    const dataRow = grid[r];
+    if (!dataRow) continue;
+    for (let c = 0; c < dataRow.length; c++) {
+      if (looksLikeAssessmentData(dataRow[c])) {
+        colScores[c] = (colScores[c] || 0) + 1;
+      }
+    }
+  }
+
+  // The first column with a significant number of assessment values is the start of course columns
+  const threshold = Math.max(2, dataRowsChecked * 0.15);
+  for (let c = 0; c < colScores.length; c++) {
+    if (colScores[c] >= threshold) {
+      return c;
+    }
+  }
+
   return 1; // Default: 1 label column
 }
 
@@ -349,9 +435,9 @@ export function parseMatrixHtml(html: string): ParsedMatrixResult {
   for (let c = labelCols; c < headerRow.length; c++) {
     const parsed = parseCourseHeader(headerRow[c]);
     if (parsed) {
-      // Deduplicate
+      // Deduplicate by courseName (handles description-only headers where prefix/number are empty)
       const existing = courses.find(
-        co => co.coursePrefix === parsed.coursePrefix && co.courseNumber === parsed.courseNumber && co.courseName === parsed.courseName
+        co => co.courseName === parsed.courseName
       );
       if (!existing) {
         courses.push(parsed);
@@ -360,7 +446,7 @@ export function parseMatrixHtml(html: string): ParsedMatrixResult {
     } else {
       courseColumns.push(null);
       if (headerRow[c].trim()) {
-        warnings.push(`Could not parse course header at column ${c}: "${headerRow[c].substring(0, 40)}"`);
+        warnings.push(`Could not parse course header at column ${c}: "${headerRow[c].substring(0, 60)}"`);
       }
     }
   }
@@ -383,7 +469,7 @@ export function parseMatrixHtml(html: string): ParsedMatrixResult {
     if (detectedStd) {
       // Check if it's a "Specifications for Standard X" header row or context row
       const isSpecHeader = /specifications?\s+(for\s+)?standard/i.test(labelText);
-      const isContextRow = /^(context|standard\s+\d{1,2}\s*:)/i.test(labelText);
+      const isContextRow = /^(context\s*:|standard\s+\d{1,2}\s*[:.]|\d+\.\s+[A-Z]|demonstrate\s+how)/i.test(labelText);
 
       if (currentStandard !== detectedStd) {
         currentStandard = detectedStd;
@@ -421,9 +507,19 @@ export function parseMatrixHtml(html: string): ParsedMatrixResult {
       continue;
     }
 
-    // This is a specification data row
-    const specCode = SPEC_LETTERS[specIndex] || String.fromCharCode(97 + specIndex);
-    specIndex++;
+    // This is a specification data row.
+    // Try to extract the spec letter from the label (e.g., "a. Theories of..." → 'a')
+    const specLetterMatch = labelText.match(/^\s*([a-z])\.\s/i);
+    let specCode: string;
+    if (specLetterMatch) {
+      specCode = specLetterMatch[1].toLowerCase();
+      // Update specIndex to stay in sync in case later rows lack labels
+      const letterIdx = specCode.charCodeAt(0) - 97;
+      if (letterIdx >= specIndex) specIndex = letterIdx + 1;
+    } else {
+      specCode = SPEC_LETTERS[specIndex] || String.fromCharCode(97 + specIndex);
+      specIndex++;
+    }
 
     // Parse each course cell
     for (let c = 0; c < courseColumns.length; c++) {
