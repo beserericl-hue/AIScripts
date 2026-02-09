@@ -2762,29 +2762,49 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
     await gridFsService.storeHtmlContent(importId.toString(), result.htmlContent);
     console.log(`[Import] Repair: replaced GridFS HTML`);
 
-    // Re-insert markers for existing tagged sections
+    // Re-insert markers for existing tagged sections using CONTENT MATCHING.
+    // We can't use stored textStartOffset values because they were relative to
+    // the document state at the time of tagging (with previous sections already extracted).
+    // The fresh document has ALL content present, so offsets don't match.
+    // Instead, search for each section's text content in the fresh document.
     const sections = importRecord.detectedSections || [];
     let markersInserted = 0;
     let markersFailed = 0;
 
+    // Step 1: Find each section's position in the fresh document via content matching
+    console.log(`[Import] Repair: finding ${sections.length} section positions via content matching...`);
+    const sectionPositions: Array<{ section: any; textOffset: number; textLength: number; marker: string }> = [];
+
     for (const section of sections) {
       const s = section as any;
-      if (typeof s.textStartOffset !== 'number' || typeof s.textLength !== 'number') {
-        console.log(`[Import] Repair: skipping section "${s.headerText}" — no text offsets`);
-        markersFailed++;
-        continue;
-      }
-
       const safeTitle = (s.headerText || 'Untitled').replace(/-->/g, '—>').replace(/--/g, '—');
       const sectionType = s.isMatrix ? 'matrix' : (s.isAppendix ? 'appendix' : 'standard');
       const marker = `<!-- EXTRACTED:${s.id}:${sectionType}:${safeTitle}:${s.fullContent?.length || 0} -->`;
 
+      const match = gridFsService.findSectionTextOffset(
+        result.htmlContent, s.htmlContent, s.fullContent
+      );
+
+      if (match) {
+        sectionPositions.push({ section: s, textOffset: match.textOffset, textLength: match.textLength, marker });
+        console.log(`[Import] Repair: found "${s.headerText}" at textOffset=${match.textOffset}, textLength=${match.textLength}`);
+      } else {
+        markersFailed++;
+        console.warn(`[Import] Repair: could not find "${s.headerText}" in fresh document`);
+      }
+    }
+
+    // Step 2: Sort sections by textOffset DESCENDING (process end-to-start).
+    // This ensures each marker insertion doesn't affect earlier sections' offsets.
+    sectionPositions.sort((a, b) => b.textOffset - a.textOffset);
+
+    // Step 3: Insert markers from end to start
+    for (const { section: s, textOffset, textLength, marker } of sectionPositions) {
       try {
         const markerResult = await gridFsService.insertHtmlMarker(
-          importId.toString(), marker, s.textStartOffset, s.textLength
+          importId.toString(), marker, textOffset, textLength
         );
         if (markerResult.success) {
-          // Update removedHtml on the section
           if (markerResult.removedHtml) {
             s.removedHtml = markerResult.removedHtml;
           }
@@ -2792,7 +2812,7 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
           console.log(`[Import] Repair: inserted marker for "${s.headerText}"`);
         } else {
           markersFailed++;
-          console.warn(`[Import] Repair: failed to insert marker for "${s.headerText}" — offset not found`);
+          console.warn(`[Import] Repair: insertHtmlMarker failed for "${s.headerText}" at offset=${textOffset}`);
         }
       } catch (err: any) {
         markersFailed++;

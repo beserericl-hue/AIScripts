@@ -446,6 +446,151 @@ export async function cleanupOrphanedFiles(dryRun = false): Promise<{
 }
 
 /**
+ * Extract plain text from HTML using the same walker logic as insertHtmlMarker.
+ * Skips tags, comments, and counts HTML entities as single characters.
+ * The returned text's character indices are compatible with insertHtmlMarker's textStartOffset.
+ */
+export function extractTextFromHtml(html: string): string {
+  let text = '';
+  let inTag = false;
+
+  for (let i = 0; i < html.length; i++) {
+    const ch = html[i];
+
+    if (ch === '<') {
+      if (html.substring(i, i + 4) === '<!--') {
+        const commentEnd = html.indexOf('-->', i + 4);
+        if (commentEnd !== -1) { i = commentEnd + 2; continue; }
+      }
+      inTag = true;
+      continue;
+    }
+    if (ch === '>' && inTag) { inTag = false; continue; }
+    if (inTag) continue;
+
+    if (ch === '&') {
+      const semiIdx = html.indexOf(';', i + 1);
+      if (semiIdx !== -1 && semiIdx - i <= 10) {
+        const entity = html.substring(i, semiIdx + 1).toLowerCase();
+        // Decode common entities for better matching
+        const decoded: Record<string, string> = {
+          '&amp;': '&', '&lt;': '<', '&gt;': '>', '&nbsp;': ' ',
+          '&quot;': '"', '&apos;': "'", '&#39;': "'",
+        };
+        text += decoded[entity] || ' ';
+        i = semiIdx;
+        continue;
+      }
+    }
+
+    text += ch;
+  }
+
+  return text;
+}
+
+/**
+ * Find a section's text content position in an HTML document by content matching.
+ * Searches for the section's text in the document, returning the text offset
+ * compatible with insertHtmlMarker.
+ *
+ * @param html - The full HTML document
+ * @param sectionHtml - The section's HTML content (from range.cloneContents)
+ * @param sectionFullContent - The section's plain text (fallback)
+ * @returns textOffset and textLength, or null if not found
+ */
+export function findSectionTextOffset(
+  html: string,
+  sectionHtml: string | undefined,
+  sectionFullContent: string | undefined
+): { textOffset: number; textLength: number } | null {
+  const docText = extractTextFromHtml(html);
+
+  // Extract text from section HTML (preferred — uses same walker as document)
+  let sectionText = sectionHtml ? extractTextFromHtml(sectionHtml) : '';
+  // Fallback to fullContent if HTML extraction yields nothing useful
+  if (!sectionText || sectionText.trim().length < 20) {
+    sectionText = sectionFullContent || '';
+  }
+  if (!sectionText || sectionText.trim().length < 20) return null;
+
+  // Normalize whitespace for matching
+  const normalizedDoc = docText.replace(/\s+/g, ' ');
+  const normalizedSection = sectionText.replace(/\s+/g, ' ').trim();
+
+  // Use first 150 chars as search anchor
+  const anchorLen = Math.min(150, normalizedSection.length);
+  const anchor = normalizedSection.substring(0, anchorLen);
+
+  const normalizedIdx = normalizedDoc.indexOf(anchor);
+  if (normalizedIdx === -1) {
+    console.log(`[GridFSService] findSectionTextOffset: anchor not found in document. Anchor: "${anchor.substring(0, 60)}..."`);
+    return null;
+  }
+
+  // Verify with end anchor (last 50 chars) to confirm full section match
+  if (normalizedSection.length > 200) {
+    const endAnchor = normalizedSection.substring(normalizedSection.length - 50);
+    const expectedEndIdx = normalizedIdx + normalizedSection.length - 50;
+    const endFound = normalizedDoc.indexOf(endAnchor, expectedEndIdx - 100);
+    if (endFound === -1 || Math.abs(endFound - expectedEndIdx) > 100) {
+      console.log(`[GridFSService] findSectionTextOffset: end anchor mismatch, possible false positive`);
+      // Continue anyway — start anchor was found
+    }
+  }
+
+  // Map normalizedDoc position back to raw docText position
+  let normPos = 0;
+  let lastWasSpace = false;
+  let rawStartOffset = -1;
+
+  for (let i = 0; i < docText.length; i++) {
+    const isSpace = /\s/.test(docText[i]);
+    if (isSpace && lastWasSpace) continue;
+    lastWasSpace = isSpace;
+
+    if (normPos === normalizedIdx) {
+      rawStartOffset = i;
+      break;
+    }
+    normPos++;
+  }
+
+  if (rawStartOffset === -1) return null;
+
+  // Determine text length: find where the section text ends in the raw docText
+  // Search for the normalized section's last few words starting from rawStartOffset
+  const normalizedFromStart = docText.substring(rawStartOffset).replace(/\s+/g, ' ');
+  const sectionEndInNormalized = normalizedFromStart.indexOf(
+    normalizedSection.substring(normalizedSection.length - Math.min(50, normalizedSection.length))
+  );
+
+  let rawTextLength: number;
+  if (sectionEndInNormalized !== -1) {
+    // Map the normalized end position back to raw text length
+    const normalizedEndPos = sectionEndInNormalized + Math.min(50, normalizedSection.length);
+    let np = 0;
+    let ls = false;
+    let rawEnd = 0;
+    const subText = docText.substring(rawStartOffset);
+    for (let i = 0; i < subText.length; i++) {
+      const isSp = /\s/.test(subText[i]);
+      if (isSp && ls) continue;
+      ls = isSp;
+      if (np === normalizedEndPos) { rawEnd = i; break; }
+      np++;
+    }
+    rawTextLength = rawEnd || normalizedSection.length;
+  } else {
+    // Fallback: use the section's normalized text length
+    rawTextLength = normalizedSection.length;
+  }
+
+  console.log(`[GridFSService] findSectionTextOffset: found at textOffset=${rawStartOffset}, textLength=${rawTextLength}`);
+  return { textOffset: rawStartOffset, textLength: rawTextLength };
+}
+
+/**
  * Insert an HTML comment marker into the stored HTML at a specific text offset,
  * replacing the extracted text range. This allows large documents to have
  * placeholder positions embedded without transferring the full HTML over REST.
