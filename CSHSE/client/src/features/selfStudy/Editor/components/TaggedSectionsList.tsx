@@ -48,7 +48,7 @@ interface TaggedSectionsListProps {
   onDelete: (sectionId: string) => void;
   onView: (section: TaggedSection) => void;
   onApply: (section: TaggedSection, targetStandardCode: string, targetSpecCode: string, toSupportingEvidence?: boolean) => Promise<void>;
-  onApplyToMatrix?: (section: TaggedSection) => Promise<void>;
+  onApplyToMatrix?: (section: TaggedSection, standardCode: string) => Promise<void>;
   deletingId: string | null;
   applyingId: string | null;
 }
@@ -76,11 +76,15 @@ export function TaggedSectionsList({
   deletingId,
   applyingId
 }: TaggedSectionsListProps) {
-  // State for inline apply form
+  // State for inline apply form (standard/appendix sections)
   const [applyFormOpen, setApplyFormOpen] = useState<string | null>(null);
   const [selectedStandard, setSelectedStandard] = useState('');
   const [selectedSpec, setSelectedSpec] = useState('');
   const [toSupportingEvidence, setToSupportingEvidence] = useState(false);
+
+  // State for matrix apply form
+  const [matrixApplyFormOpen, setMatrixApplyFormOpen] = useState<string | null>(null);
+  const [matrixStandard, setMatrixStandard] = useState('');
 
   const handleApplyClick = (sectionId: string) => {
     if (applyFormOpen === sectionId) {
@@ -93,10 +97,29 @@ export function TaggedSectionsList({
       const section = sections.find(s => s.id === sectionId);
       const isAppendixType = section?.sectionType === 'appendix' || section?.sectionType === 'supporting_evidence';
       setApplyFormOpen(sectionId);
+      setMatrixApplyFormOpen(null); // Close matrix form if open
       setSelectedStandard('');
       setSelectedSpec('');
-      setToSupportingEvidence(isAppendixType); // Default to checked for appendix sections
+      setToSupportingEvidence(isAppendixType);
     }
+  };
+
+  const handleMatrixApplyClick = (sectionId: string) => {
+    if (matrixApplyFormOpen === sectionId) {
+      setMatrixApplyFormOpen(null);
+      setMatrixStandard('');
+    } else {
+      setMatrixApplyFormOpen(sectionId);
+      setApplyFormOpen(null); // Close standard form if open
+      setMatrixStandard('');
+    }
+  };
+
+  const handleMatrixApplySubmit = async (section: TaggedSection) => {
+    if (!matrixStandard || !onApplyToMatrix) return;
+    await onApplyToMatrix(section, matrixStandard);
+    setMatrixApplyFormOpen(null);
+    setMatrixStandard('');
   };
 
   const handleApplySubmit = async (section: TaggedSection) => {
@@ -252,12 +275,16 @@ export function TaggedSectionsList({
 
             {/* Actions */}
             <div className="flex items-center gap-1">
-              {/* Apply button - different behavior for matrix vs standard/appendix */}
+              {/* Apply button - matrix sections get inline form with standard selector */}
               {!section.appliedDirectly && section.sectionType === 'matrix' && onApplyToMatrix && (
                 <button
-                  onClick={() => onApplyToMatrix(section)}
+                  onClick={() => handleMatrixApplyClick(section.id)}
                   disabled={applyingId === section.id}
-                  className="p-1.5 rounded transition-colors text-gray-400 hover:text-purple-600 hover:bg-purple-50 disabled:opacity-50"
+                  className={`p-1.5 rounded transition-colors ${
+                    matrixApplyFormOpen === section.id
+                      ? 'text-purple-600 bg-purple-50'
+                      : 'text-gray-400 hover:text-purple-600 hover:bg-purple-50'
+                  } disabled:opacity-50`}
                   title="Import to Curriculum Matrix"
                 >
                   {applyingId === section.id ? (
@@ -402,6 +429,59 @@ export function TaggedSectionsList({
                 {toSupportingEvidence
                   ? 'Content will be saved to the Supporting Evidence section for this standard/spec.'
                   : 'Content will be saved to the narrative editor for this standard/spec.'}
+              </p>
+            </div>
+          )}
+
+          {/* Matrix Inline Apply Form */}
+          {matrixApplyFormOpen === section.id && (
+            <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Grid3X3 className="w-4 h-4 text-purple-600" />
+                <span className="text-sm font-medium text-purple-800">
+                  Import to Curriculum Matrix
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={matrixStandard}
+                  onChange={(e) => setMatrixStandard(e.target.value)}
+                  className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
+                >
+                  <option value="">Select Standard...</option>
+                  {Object.entries(STANDARD_NAMES)
+                    .filter(([code]) => parseInt(code) >= 11)
+                    .map(([code, name]) => (
+                      <option key={code} value={code}>
+                        {code}. {name}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  onClick={() => handleMatrixApplySubmit(section)}
+                  disabled={!matrixStandard || applyingId === section.id}
+                  className="px-3 py-1.5 text-white text-sm font-medium rounded bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                >
+                  {applyingId === section.id ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Grid3X3 className="w-3 h-3" />
+                  )}
+                  Parse & Import
+                </button>
+                <button
+                  onClick={() => {
+                    setMatrixApplyFormOpen(null);
+                    setMatrixStandard('');
+                  }}
+                  className="px-2 py-1.5 text-gray-600 text-sm hover:bg-gray-200 rounded"
+                >
+                  Cancel
+                </button>
+              </div>
+              <p className="text-xs mt-2 text-purple-600">
+                Matrix HTML will be parsed to extract courses and cell values, then imported to the grid.
               </p>
             </div>
           )}

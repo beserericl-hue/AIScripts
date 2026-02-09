@@ -9,11 +9,13 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
-  Save,
   AlertCircle,
+  FileSearch,
+  Copy,
 } from 'lucide-react';
 import { AssessmentCell, CoverageType, CoverageDepth } from './AssessmentCell';
 import { AddCourseModal } from './AddCourseModal';
+import { MatrixImportPreviewModal, type ParsedMatrixResult, type ParsedCourse, type ParsedAssessment } from './MatrixImportPreviewModal';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -35,6 +37,7 @@ interface CourseAssessment {
 interface StandardMapping {
   standardCode: string;
   specCode: string;
+  rowIndex: number;
   courseAssessments: CourseAssessment[];
 }
 
@@ -79,6 +82,11 @@ export function CurriculumMatrixEditor({
   );
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showImportedReference, setShowImportedReference] = useState(false);
+  const [parseImportPreview, setParseImportPreview] = useState<{
+    parsedData: ParsedMatrixResult;
+    rawContentId?: string;
+  } | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
 
   // Fetch matrix data
   const { data: matrix, isLoading: loadingMatrix } = useQuery<CurriculumMatrix>({
@@ -106,6 +114,22 @@ export function CurriculumMatrixEditor({
     if (!standards) return [];
     return standards.filter((s) => parseInt(s.code) >= 11);
   }, [standards]);
+
+  // Group standards by standardCode+specCode to support duplicate rows
+  const groupedStandards = useMemo(() => {
+    if (!matrix) return new Map<string, StandardMapping[]>();
+    const groups = new Map<string, StandardMapping[]>();
+    for (const s of matrix.standards) {
+      const key = `${s.standardCode}|${s.specCode}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(s);
+    }
+    // Sort each group by rowIndex
+    for (const [, rows] of groups) {
+      rows.sort((a, b) => (a.rowIndex || 0) - (b.rowIndex || 0));
+    }
+    return groups;
+  }, [matrix]);
 
   // Add course mutation
   const addCourseMutation = useMutation({
@@ -141,16 +165,18 @@ export function CurriculumMatrixEditor({
       courseId,
       type,
       depth,
+      rowIndex,
     }: {
       standardCode: string;
       specCode: string;
       courseId: string;
       type: CoverageType | CoverageType[] | null;
       depth: CoverageDepth;
+      rowIndex: number;
     }) => {
       await api.put(
         `${API_BASE}/submissions/${submissionId}/matrix/${matrix?._id}/assessment`,
-        { standardCode, specCode, courseId, type, depth }
+        { standardCode, specCode, courseId, type, depth, rowIndex }
       );
     },
     onSuccess: () => {
@@ -159,14 +185,41 @@ export function CurriculumMatrixEditor({
     },
   });
 
-  // Handle assessment change
+  // Duplicate row mutation
+  const duplicateRowMutation = useMutation({
+    mutationFn: async ({ standardCode, specCode }: { standardCode: string; specCode: string }) => {
+      await api.post(
+        `${API_BASE}/submissions/${submissionId}/matrix/${matrix?._id}/duplicate-row`,
+        { standardCode, specCode }
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['matrix', submissionId] });
+    },
+  });
+
+  // Remove row mutation
+  const removeRowMutation = useMutation({
+    mutationFn: async ({ standardCode, specCode, rowIndex }: { standardCode: string; specCode: string; rowIndex: number }) => {
+      await api.delete(
+        `${API_BASE}/submissions/${submissionId}/matrix/${matrix?._id}/remove-row`,
+        { data: { standardCode, specCode, rowIndex } }
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['matrix', submissionId] });
+    },
+  });
+
+  // Handle assessment change (with rowIndex support)
   const handleAssessmentChange = useCallback(
     (
       standardCode: string,
       specCode: string,
       courseId: string,
       type: CoverageType | CoverageType[],
-      depth: CoverageDepth
+      depth: CoverageDepth,
+      rowIndex: number = 0
     ) => {
       // Normalize type to array for API
       const typeArray = Array.isArray(type) ? type.filter((t): t is CoverageType => t !== null) : (type ? [type] : []);
@@ -176,17 +229,18 @@ export function CurriculumMatrixEditor({
         courseId,
         type: typeArray.length > 0 ? typeArray : null as any,
         depth,
+        rowIndex,
       });
     },
     [updateAssessmentMutation]
   );
 
-  // Get assessment for a cell
+  // Get assessment for a cell (with rowIndex support)
   const getAssessment = useCallback(
-    (standardCode: string, specCode: string, courseId: string): { type: CoverageType | CoverageType[] | null; depth: CoverageDepth | null } => {
+    (standardCode: string, specCode: string, courseId: string, rowIndex: number = 0): { type: CoverageType | CoverageType[] | null; depth: CoverageDepth | null } => {
       if (!matrix) return { type: null, depth: null };
       const mapping = matrix.standards.find(
-        (s) => s.standardCode === standardCode && s.specCode === specCode
+        (s) => s.standardCode === standardCode && s.specCode === specCode && (s.rowIndex || 0) === rowIndex
       );
       if (!mapping) return { type: null, depth: null };
       const assessment = mapping.courseAssessments.find(
@@ -222,6 +276,56 @@ export function CurriculumMatrixEditor({
     ) {
       await deleteCourseMutation.mutateAsync(courseId);
     }
+  };
+
+  // Handle Parse & Import from raw content
+  const handleParseRawContent = async () => {
+    if (!matrix?.rawContent) return;
+    const unprocessed = matrix.rawContent.find(r => !r.processed);
+    if (!unprocessed) return;
+
+    setIsParsing(true);
+    try {
+      const response = await api.post(
+        `${API_BASE}/submissions/${submissionId}/matrix/${matrix._id}/parse`,
+        { rawContentId: unprocessed.id }
+      );
+      setParseImportPreview({
+        parsedData: response.data,
+        rawContentId: unprocessed.id,
+      });
+    } catch (err) {
+      console.error('Failed to parse matrix content:', err);
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  // Handle confirmed import from preview modal
+  const handleImportConfirm = async (courses: ParsedCourse[], assessments: ParsedAssessment[]) => {
+    if (!matrix) return;
+
+    await api.post(
+      `${API_BASE}/submissions/${submissionId}/matrix/${matrix._id}/import`,
+      {
+        courses: courses.map(c => ({
+          coursePrefix: c.coursePrefix,
+          courseNumber: c.courseNumber,
+          courseName: c.courseName,
+          credits: 3
+        })),
+        assessments: assessments.map(a => ({
+          standardCode: a.standardCode,
+          specCode: a.specCode,
+          coursePrefix: a.coursePrefix,
+          courseNumber: a.courseNumber,
+          type: a.type,
+          depth: a.depth
+        }))
+      }
+    );
+
+    queryClient.invalidateQueries({ queryKey: ['matrix', submissionId] });
   };
 
   // Export to CSV
@@ -266,6 +370,18 @@ export function CurriculumMatrixEditor({
     URL.revokeObjectURL(url);
   };
 
+  // Handle duplicate row
+  const handleDuplicateRow = (standardCode: string, specCode: string) => {
+    duplicateRowMutation.mutate({ standardCode, specCode });
+  };
+
+  // Handle remove duplicate row
+  const handleRemoveRow = (standardCode: string, specCode: string, rowIndex: number) => {
+    if (window.confirm('Remove this duplicate row? Assessment data in this row will be lost.')) {
+      removeRowMutation.mutate({ standardCode, specCode, rowIndex });
+    }
+  };
+
   if (loadingMatrix) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -275,6 +391,7 @@ export function CurriculumMatrixEditor({
   }
 
   const courses = matrix?.courses || [];
+  const unprocessedRawContent = matrix?.rawContent?.filter(r => !r.processed) || [];
 
   return (
     <div className="curriculum-matrix-editor bg-white rounded-lg shadow-sm border border-gray-200">
@@ -309,6 +426,21 @@ export function CurriculumMatrixEditor({
             Export CSV
           </button>
 
+          {unprocessedRawContent.length > 0 && (
+            <button
+              onClick={handleParseRawContent}
+              disabled={isParsing}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+            >
+              {isParsing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <FileSearch className="w-4 h-4" />
+              )}
+              Parse & Import
+            </button>
+          )}
+
           {matrix?.rawContent && matrix.rawContent.length > 0 && (
             <button
               onClick={() => setShowImportedReference(!showImportedReference)}
@@ -319,7 +451,7 @@ export function CurriculumMatrixEditor({
               }`}
             >
               <Upload className="w-4 h-4" />
-              Imported Reference ({matrix.rawContent.filter(r => !r.processed).length})
+              Imported Reference ({unprocessedRawContent.length})
             </button>
           )}
         </div>
@@ -432,57 +564,106 @@ export function CurriculumMatrixEditor({
                   </td>
                 </tr>
 
-                {/* Specification Rows */}
+                {/* Specification Rows (with duplicate row support) */}
                 {expandedStandards.has(standard.code) &&
-                  standard.specifications.map((spec) => (
-                    <tr key={`${standard.code}-${spec.code}`} className="hover:bg-gray-50">
-                      <td className="sticky left-0 z-10 bg-white p-3 border-b border-r border-gray-200">
-                        <div className="flex items-start gap-2">
-                          <span className="font-medium text-gray-700">
-                            {standard.code}.{spec.code}
-                          </span>
-                          <span className="text-sm text-gray-600 truncate" title={spec.title}>
-                            {spec.title}
-                          </span>
-                        </div>
-                      </td>
-                      {courses.map((course) => {
-                        const { type, depth } = getAssessment(
-                          standard.code,
-                          spec.code,
-                          course.id
-                        );
-                        return (
-                          <td
-                            key={course.id}
-                            className="p-0 border-b border-gray-200"
+                  standard.specifications.map((spec) => {
+                    const key = `${standard.code}|${spec.code}`;
+                    const duplicateRows = groupedStandards.get(key) || [];
+                    // Always render at least the base row (rowIndex 0)
+                    const rowIndicesToRender = duplicateRows.length > 0
+                      ? duplicateRows.map(r => r.rowIndex || 0)
+                      : [0];
+
+                    return (
+                      <React.Fragment key={`${standard.code}-${spec.code}`}>
+                        {rowIndicesToRender.map((rowIdx, renderIdx) => (
+                          <tr
+                            key={`${standard.code}-${spec.code}-${rowIdx}`}
+                            className={`hover:bg-gray-50 ${rowIdx > 0 ? 'bg-gray-50/50' : ''}`}
                           >
-                            <AssessmentCell
-                              courseId={course.id}
-                              standardCode={standard.code}
-                              specCode={spec.code}
-                              type={type}
-                              depth={depth}
-                              onChange={(newType, newDepth) =>
-                                handleAssessmentChange(
-                                  standard.code,
-                                  spec.code,
-                                  course.id,
-                                  newType,
-                                  newDepth
-                                )
-                              }
-                            />
-                          </td>
-                        );
-                      })}
-                      {courses.length === 0 && (
-                        <td className="p-4 text-center text-gray-400 border-b border-gray-200">
-                          —
-                        </td>
-                      )}
-                    </tr>
-                  ))}
+                            <td className="sticky left-0 z-10 bg-white p-3 border-b border-r border-gray-200">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 flex items-start gap-2">
+                                  <span className="font-medium text-gray-700">
+                                    {standard.code}.{spec.code}
+                                    {rowIdx > 0 && (
+                                      <span className="ml-1 text-xs text-purple-600 font-normal">
+                                        ({rowIdx + 1})
+                                      </span>
+                                    )}
+                                  </span>
+                                  {renderIdx === 0 && (
+                                    <span className="text-sm text-gray-600 truncate" title={spec.title}>
+                                      {spec.title}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  {/* Duplicate row button - show on base row only */}
+                                  {renderIdx === 0 && (
+                                    <button
+                                      onClick={() => handleDuplicateRow(standard.code, spec.code)}
+                                      className="p-1 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors"
+                                      title="Add duplicate row for this spec"
+                                    >
+                                      <Copy className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                  {/* Delete button for duplicate rows only */}
+                                  {rowIdx > 0 && (
+                                    <button
+                                      onClick={() => handleRemoveRow(standard.code, spec.code, rowIdx)}
+                                      className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                                      title="Remove this duplicate row"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            {courses.map((course) => {
+                              const { type, depth } = getAssessment(
+                                standard.code,
+                                spec.code,
+                                course.id,
+                                rowIdx
+                              );
+                              return (
+                                <td
+                                  key={course.id}
+                                  className="p-0 border-b border-gray-200"
+                                >
+                                  <AssessmentCell
+                                    courseId={course.id}
+                                    standardCode={standard.code}
+                                    specCode={spec.code}
+                                    type={type}
+                                    depth={depth}
+                                    onChange={(newType, newDepth) =>
+                                      handleAssessmentChange(
+                                        standard.code,
+                                        spec.code,
+                                        course.id,
+                                        newType,
+                                        newDepth,
+                                        rowIdx
+                                      )
+                                    }
+                                  />
+                                </td>
+                              );
+                            })}
+                            {courses.length === 0 && (
+                              <td className="p-4 text-center text-gray-400 border-b border-gray-200">
+                                —
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
               </React.Fragment>
             ))}
           </tbody>
@@ -521,6 +702,16 @@ export function CurriculumMatrixEditor({
         }}
         existingPrefixes={courses.map((c) => c.coursePrefix)}
       />
+
+      {/* Parse & Import Preview Modal */}
+      {parseImportPreview && (
+        <MatrixImportPreviewModal
+          isOpen={true}
+          onClose={() => setParseImportPreview(null)}
+          parsedData={parseImportPreview.parsedData}
+          onImport={(courses, assessments) => handleImportConfirm(courses, assessments)}
+        />
+      )}
     </div>
   );
 }

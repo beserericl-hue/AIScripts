@@ -23,6 +23,7 @@ export interface IStandardMapping {
   standardCode: string;
   specCode: string;
   specText: string;
+  rowIndex: number; // 0 = base row, 1+ = duplicates for same standard/spec
   courseAssessments: ICourseAssessment[];
 }
 
@@ -76,6 +77,7 @@ const StandardMappingSchema = new Schema<IStandardMapping>({
   standardCode: { type: String, required: true },
   specCode: { type: String, required: true },
   specText: { type: String, required: true },
+  rowIndex: { type: Number, default: 0 },
   courseAssessments: [CourseAssessmentSchema]
 }, { _id: false });
 

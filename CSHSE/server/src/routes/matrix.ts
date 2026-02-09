@@ -7,7 +7,10 @@ import {
   reorderCourses,
   importMatrix,
   exportMatrix,
-  addRawContent
+  addRawContent,
+  parseMatrixContent,
+  duplicateStandardRow,
+  removeStandardRow
 } from '../controllers/matrixController';
 import { authenticate } from '../middleware/auth';
 
@@ -83,5 +86,26 @@ router.get('/submissions/:submissionId/matrix/:matrixId/export', exportMatrix);
  * @access  Private (Program Coordinator, Admin)
  */
 router.post('/submissions/:submissionId/matrix/:matrixId/raw-content', addRawContent);
+
+/**
+ * @route   POST /api/submissions/:submissionId/matrix/:matrixId/parse
+ * @desc    Parse raw matrix HTML into structured courses + assessments (preview only)
+ * @access  Private
+ */
+router.post('/submissions/:submissionId/matrix/:matrixId/parse', parseMatrixContent);
+
+/**
+ * @route   POST /api/submissions/:submissionId/matrix/:matrixId/duplicate-row
+ * @desc    Create a duplicate standard/spec row for additional assessments
+ * @access  Private (Program Coordinator, Admin)
+ */
+router.post('/submissions/:submissionId/matrix/:matrixId/duplicate-row', duplicateStandardRow);
+
+/**
+ * @route   DELETE /api/submissions/:submissionId/matrix/:matrixId/remove-row
+ * @desc    Remove a duplicate standard/spec row (rowIndex > 0 only)
+ * @access  Private (Program Coordinator, Admin)
+ */
+router.delete('/submissions/:submissionId/matrix/:matrixId/remove-row', removeStandardRow);
 
 export default router;

@@ -147,7 +147,8 @@ export const removeCourse = async (req: AuthenticatedRequest, res: Response) => 
 export const updateAssessment = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { matrixId } = req.params;
-    const { standardCode, specCode, courseId, type, depth } = req.body;
+    const { standardCode, specCode, courseId, type, depth, rowIndex: rawRowIndex } = req.body;
+    const rowIndex = typeof rawRowIndex === 'number' ? rawRowIndex : 0;
 
     // Validation
     if (!standardCode || !specCode || !courseId) {
@@ -177,16 +178,17 @@ export const updateAssessment = async (req: AuthenticatedRequest, res: Response)
       return res.status(404).json({ error: 'Course not found in matrix' });
     }
 
-    // Find or create standard mapping
+    // Find or create standard mapping (matching rowIndex for duplicate row support)
     let standardMapping = matrix.standards.find(
-      s => s.standardCode === standardCode && s.specCode === specCode
+      s => s.standardCode === standardCode && s.specCode === specCode && (s.rowIndex || 0) === rowIndex
     );
 
     if (!standardMapping) {
       standardMapping = {
         standardCode,
         specCode,
-        specText: '', // Will be populated from spec template if needed
+        specText: '',
+        rowIndex,
         courseAssessments: []
       };
       matrix.standards.push(standardMapping);
@@ -319,16 +321,17 @@ export const importMatrix = async (req: AuthenticatedRequest, res: Response) => 
         );
         if (!course) continue;
 
-        // Find or create standard mapping
+        // Find or create standard mapping (rowIndex 0 for imports)
         let standardMapping = matrix.standards.find(
-          s => s.standardCode === standardCode && s.specCode === specCode
+          s => s.standardCode === standardCode && s.specCode === specCode && (s.rowIndex || 0) === 0
         );
 
         if (!standardMapping) {
           standardMapping = {
             standardCode,
             specCode,
-            specText: '', // Will be populated from spec template if needed
+            specText: '',
+            rowIndex: 0,
             courseAssessments: []
           };
           matrix.standards.push(standardMapping);
@@ -465,5 +468,131 @@ export const addRawContent = async (req: AuthenticatedRequest, res: Response) =>
   } catch (error) {
     console.error('Add raw content error:', error);
     return res.status(500).json({ error: 'Failed to add raw content' });
+  }
+};
+
+/**
+ * Parse raw matrix HTML content into structured courses + assessments (preview only, no save)
+ */
+export const parseMatrixContent = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { matrixId } = req.params;
+    const { rawContentId, htmlContent } = req.body;
+
+    let html: string;
+
+    if (htmlContent) {
+      html = htmlContent;
+    } else if (rawContentId) {
+      const matrix = await CurriculumMatrix.findById(matrixId);
+      if (!matrix) {
+        return res.status(404).json({ error: 'Matrix not found' });
+      }
+      const rawEntry = matrix.rawContent?.find(r => r.id === rawContentId);
+      if (!rawEntry) {
+        return res.status(404).json({ error: 'Raw content entry not found' });
+      }
+      html = rawEntry.content;
+    } else {
+      return res.status(400).json({ error: 'Either htmlContent or rawContentId is required' });
+    }
+
+    const { parseMatrixHtml } = await import('../services/matrixHtmlParser');
+    const result = parseMatrixHtml(html);
+
+    return res.json(result);
+  } catch (error) {
+    console.error('Parse matrix content error:', error);
+    return res.status(500).json({ error: 'Failed to parse matrix content' });
+  }
+};
+
+/**
+ * Duplicate a standard/spec row (create a new rowIndex for additional assessments)
+ */
+export const duplicateStandardRow = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { matrixId } = req.params;
+    const { standardCode, specCode } = req.body;
+
+    if (!standardCode || !specCode) {
+      return res.status(400).json({ error: 'standardCode and specCode are required' });
+    }
+
+    const matrix = await CurriculumMatrix.findById(matrixId);
+    if (!matrix) {
+      return res.status(404).json({ error: 'Matrix not found' });
+    }
+
+    // Find max existing rowIndex for this standard/spec
+    const existingRows = matrix.standards.filter(
+      s => s.standardCode === standardCode && s.specCode === specCode
+    );
+    const maxRowIndex = existingRows.reduce((max, s) => Math.max(max, s.rowIndex || 0), 0);
+    const newRowIndex = maxRowIndex + 1;
+
+    const newMapping = {
+      standardCode,
+      specCode,
+      specText: '',
+      rowIndex: newRowIndex,
+      courseAssessments: []
+    };
+
+    matrix.standards.push(newMapping);
+    matrix.markModified('standards');
+    await matrix.save();
+
+    return res.json({
+      message: `Duplicate row created (rowIndex ${newRowIndex})`,
+      standardMapping: newMapping,
+      matrix
+    });
+  } catch (error) {
+    console.error('Duplicate standard row error:', error);
+    return res.status(500).json({ error: 'Failed to duplicate standard row' });
+  }
+};
+
+/**
+ * Remove a duplicate standard/spec row (only rowIndex > 0)
+ */
+export const removeStandardRow = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { matrixId } = req.params;
+    const { standardCode, specCode, rowIndex } = req.body;
+
+    if (!standardCode || !specCode || rowIndex === undefined) {
+      return res.status(400).json({ error: 'standardCode, specCode, and rowIndex are required' });
+    }
+
+    if (rowIndex === 0) {
+      return res.status(400).json({ error: 'Cannot delete the base row (rowIndex 0)' });
+    }
+
+    const matrix = await CurriculumMatrix.findById(matrixId);
+    if (!matrix) {
+      return res.status(404).json({ error: 'Matrix not found' });
+    }
+
+    const idx = matrix.standards.findIndex(
+      s => s.standardCode === standardCode && s.specCode === specCode && (s.rowIndex || 0) === rowIndex
+    );
+
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Standard mapping row not found' });
+    }
+
+    matrix.standards.splice(idx, 1);
+    matrix.markModified('standards');
+    await matrix.save();
+
+    return res.json({
+      message: `Removed duplicate row (rowIndex ${rowIndex})`,
+      matrix
+    });
+  } catch (error) {
+    console.error('Remove standard row error:', error);
+    return res.status(500).json({ error: 'Failed to remove standard row' });
   }
 };
