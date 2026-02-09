@@ -479,12 +479,12 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   // Auto-load document content and tagged sections when resuming a manual_tagging session
   // This handles the case where the user resumes an import (importStep set directly to manual_tagging)
   useEffect(() => {
-    if (importStep === 'manual_tagging' && importId && !documentHtml && !isLoadingDocument) {
+    if (importStep === 'manual_tagging' && importId && !documentHtml && !isLoadingDocument && !documentError) {
       console.log('[SelfStudyEditor] Auto-loading document content for resumed import');
       loadDocumentContent();
       loadTaggedSections();
     }
-  }, [importStep, importId, documentHtml, isLoadingDocument]);
+  }, [importStep, importId, documentHtml, isLoadingDocument, documentError]);
 
   // Import handlers
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
