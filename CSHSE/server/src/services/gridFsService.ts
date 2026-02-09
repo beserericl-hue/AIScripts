@@ -662,36 +662,154 @@ export async function insertHtmlMarker(
 
 /**
  * Restore a tagged section by replacing its HTML comment marker with original content.
- * Finds <!-- EXTRACTED:sectionId:... --> in the GridFS HTML and replaces with htmlContent.
+ * Uses a two-pass streaming approach to handle large documents (300MB+) without OOM:
+ *   Pass 1: Stream through to find marker byte position (low memory)
+ *   Pass 2: Stream copy to new file, substituting marker with restored content
  */
 export async function restoreMarker(
   importId: string,
   sectionId: string,
   htmlContent: string
 ): Promise<boolean> {
-  const html = await getHtmlContent(importId);
-  if (!html) return false;
-
-  // Find the marker: <!-- EXTRACTED:sectionId:... -->
-  const markerRegex = new RegExp(`<!-- EXTRACTED:${sectionId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:[^>]*-->`, 'g');
-  const match = markerRegex.exec(html);
-
-  if (!match) {
-    // Count how many EXTRACTED markers exist total (for diagnostic)
-    const allMarkers = html.match(/<!-- EXTRACTED:[^>]*-->/g);
-    console.log(`[GridFSService] restoreMarker: marker not found for section ${sectionId}. ` +
-      `Document has ${html.length} chars, ${allMarkers ? allMarkers.length : 0} total EXTRACTED markers.`);
+  const bucket = getBucket();
+  const files = await bucket.find({ filename: `${importId}.html` }).toArray();
+  if (files.length === 0) {
+    console.log(`[GridFSService] restoreMarker: no HTML file for import ${importId}`);
     return false;
   }
 
-  console.log(`[GridFSService] restoreMarker: found marker at position ${match.index}, length ${match[0].length}`);
+  const file = files[0];
+  const markerPrefixStr = `<!-- EXTRACTED:${sectionId}:`;
+  const markerPrefix = Buffer.from(markerPrefixStr, 'utf-8');
+  const markerSuffix = Buffer.from('-->', 'utf-8');
 
-  // Replace the marker with the original HTML content
-  const newHtml = html.substring(0, match.index) + htmlContent + html.substring(match.index + match[0].length);
+  console.log(`[GridFSService] restoreMarker: scanning ${file.length} bytes for section ${sectionId}`);
 
-  await storeHtmlContent(importId, newHtml);
-  console.log(`[GridFSService] restoreMarker: restored ${htmlContent.length} chars for section ${sectionId}`);
+  // === Pass 1: Find marker byte position ===
+  let markerByteStart = -1;
+  let markerByteEnd = -1;
 
+  await new Promise<void>((resolve, reject) => {
+    const stream = bucket.openDownloadStream(file._id);
+    let byteOffset = 0;
+    let carryOver = Buffer.alloc(0); // carry-over for markers spanning chunk boundaries
+
+    stream.on('data', (chunk: Buffer) => {
+      if (markerByteStart !== -1 && markerByteEnd !== -1) return; // already found
+
+      // Combine carry-over with current chunk for boundary searching
+      const searchBuf = Buffer.concat([carryOver, chunk]);
+
+      // Search for marker prefix
+      if (markerByteStart === -1) {
+        const prefixIdx = searchBuf.indexOf(markerPrefix);
+        if (prefixIdx !== -1) {
+          markerByteStart = byteOffset - carryOver.length + prefixIdx;
+
+          // Now find the closing --> after the prefix
+          const suffixIdx = searchBuf.indexOf(markerSuffix, prefixIdx + markerPrefix.length);
+          if (suffixIdx !== -1) {
+            markerByteEnd = byteOffset - carryOver.length + suffixIdx + markerSuffix.length;
+            console.log(`[GridFSService] restoreMarker: found marker at bytes ${markerByteStart}-${markerByteEnd}`);
+          }
+        }
+      } else if (markerByteEnd === -1) {
+        // We found the prefix in a previous chunk but not the suffix yet
+        const suffixIdx = searchBuf.indexOf(markerSuffix);
+        if (suffixIdx !== -1) {
+          markerByteEnd = byteOffset - carryOver.length + suffixIdx + markerSuffix.length;
+          console.log(`[GridFSService] restoreMarker: found marker end at byte ${markerByteEnd}`);
+        }
+      }
+
+      byteOffset += chunk.length;
+
+      // Keep last 512 bytes as carry-over for boundary spanning
+      if (markerByteStart === -1) {
+        const overlapSize = Math.min(512, searchBuf.length);
+        carryOver = searchBuf.subarray(searchBuf.length - overlapSize);
+      } else if (markerByteEnd === -1) {
+        carryOver = searchBuf; // keep accumulating until we find the end
+      } else {
+        carryOver = Buffer.alloc(0);
+      }
+    });
+
+    stream.on('error', reject);
+    stream.on('end', resolve);
+  });
+
+  if (markerByteStart === -1 || markerByteEnd === -1) {
+    console.log(`[GridFSService] restoreMarker: marker not found for section ${sectionId} in ${file.length} bytes`);
+    return false;
+  }
+
+  // === Pass 2: Stream copy with replacement ===
+  // Delete the original file first, then stream-write the new one with the same filename.
+  const fileId = file._id;
+  const restoredBuffer = Buffer.from(htmlContent, 'utf-8');
+  const newSize = file.length - (markerByteEnd - markerByteStart) + restoredBuffer.length;
+
+  // We need to read from the old file WHILE writing to the new one.
+  // Open the read stream before deleting (GridFS keeps chunks until stream closes).
+  const readStream = bucket.openDownloadStream(fileId);
+
+  // Delete old file entry (chunks stay readable via open stream)
+  await bucket.delete(fileId);
+
+  await new Promise<void>((resolve, reject) => {
+    const uploadStream = bucket.openUploadStream(`${importId}.html`, {
+      metadata: {
+        importId,
+        contentType: 'text/html',
+        uploadedAt: new Date(),
+        size: newSize
+      }
+    });
+
+    let byteOffset = 0;
+    let restoredWritten = false;
+
+    readStream.on('data', (chunk: Buffer) => {
+      const chunkStart = byteOffset;
+      const chunkEnd = byteOffset + chunk.length;
+
+      if (chunkEnd <= markerByteStart || chunkStart >= markerByteEnd) {
+        // Chunk entirely before or after marker — pass through
+        uploadStream.write(chunk);
+      } else {
+        // Chunk overlaps the marker region
+        if (chunkStart < markerByteStart) {
+          // Write the part before the marker
+          uploadStream.write(chunk.subarray(0, markerByteStart - chunkStart));
+        }
+
+        if (!restoredWritten) {
+          // Write the restored content (once)
+          uploadStream.write(restoredBuffer);
+          restoredWritten = true;
+        }
+
+        if (chunkEnd > markerByteEnd) {
+          // Write the part after the marker
+          uploadStream.write(chunk.subarray(markerByteEnd - chunkStart));
+        }
+      }
+
+      byteOffset += chunk.length;
+    });
+
+    readStream.on('error', reject);
+
+    readStream.on('end', () => {
+      uploadStream.end();
+    });
+
+    uploadStream.on('finish', resolve);
+    uploadStream.on('error', reject);
+  });
+
+  console.log(`[GridFSService] restoreMarker: restored ${htmlContent.length} chars for section ${sectionId} (${newSize} total bytes)`);
   return true;
 }
 

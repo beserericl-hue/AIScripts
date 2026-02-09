@@ -255,12 +255,26 @@ export function DocumentViewer({
         return;
       }
 
-      console.log(`[DocumentViewer] Found ${markerComments.length} EXTRACTED marker(s), converting to placeholders`);
+      // Build set of active tagged section IDs to filter orphan markers
+      const activeSectionIds = new Set(
+        (taggedSections || []).map(s => s.id)
+      );
+
+      // Filter out markers for deleted sections (orphan markers)
+      const activeMarkers = markerComments.filter(m => {
+        if (activeSectionIds.has(m.id)) return true;
+        console.log(`[DocumentViewer] Skipping orphan marker for deleted section "${m.title}" (${m.id})`);
+        // Remove the orphan marker comment from DOM so it doesn't show
+        m.node.parentNode?.removeChild(m.node);
+        return false;
+      });
+
+      console.log(`[DocumentViewer] Found ${markerComments.length} EXTRACTED marker(s), ${activeMarkers.length} active, converting to placeholders`);
 
       let insertedCount = 0;
 
       // Process markers — they're already in document order (top to bottom)
-      for (const marker of markerComments) {
+      for (const marker of activeMarkers) {
         try {
           const placeholder = createPlaceholder({
             id: marker.id,
