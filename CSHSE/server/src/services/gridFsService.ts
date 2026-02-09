@@ -883,22 +883,49 @@ export function findHtmlRange(
       expandedEnd = htmlEndPos;
     }
   } else {
-    expandedStart = htmlStartPos;
-    let checkPos = htmlStartPos - 1;
-    while (checkPos >= 0 && html[checkPos] !== '>' && html[checkPos] !== '<') {
-      checkPos--;
-    }
-    if (checkPos >= 0 && html[checkPos] === '<') {
-      expandedStart = checkPos;
-    }
+    // Check if content is inside a table — if so, expand to row boundaries
+    const startInTable = isInsideTable(htmlStartPos);
+    const endInTable = isInsideTable(htmlEndPos);
 
-    expandedEnd = htmlEndPos;
-    checkPos = htmlEndPos;
-    while (checkPos < html.length && html[checkPos] !== '<' && html[checkPos] !== '>') {
-      checkPos++;
-    }
-    if (checkPos < html.length && html[checkPos] === '>') {
-      expandedEnd = checkPos + 1;
+    if (startInTable || endInTable) {
+      // Row-level expansion: expand to <tr>...</tr> boundaries
+      // This keeps the <table> intact while allowing multiple sections per table
+      const lowerHtml = html.toLowerCase();
+
+      if (startInTable) {
+        // Find the <tr that contains htmlStartPos
+        const trStart = lowerHtml.lastIndexOf('<tr', htmlStartPos);
+        expandedStart = trStart !== -1 ? trStart : htmlStartPos;
+      } else {
+        expandedStart = htmlStartPos;
+      }
+
+      if (endInTable) {
+        // Find the </tr> that closes after htmlEndPos
+        const trEndTag = lowerHtml.indexOf('</tr>', htmlEndPos);
+        expandedEnd = trEndTag !== -1 ? trEndTag + 5 : htmlEndPos;
+      } else {
+        expandedEnd = htmlEndPos;
+      }
+    } else {
+      // Not in a table — simple tag boundary expansion
+      expandedStart = htmlStartPos;
+      let checkPos = htmlStartPos - 1;
+      while (checkPos >= 0 && html[checkPos] !== '>' && html[checkPos] !== '<') {
+        checkPos--;
+      }
+      if (checkPos >= 0 && html[checkPos] === '<') {
+        expandedStart = checkPos;
+      }
+
+      expandedEnd = htmlEndPos;
+      checkPos = htmlEndPos;
+      while (checkPos < html.length && html[checkPos] !== '<' && html[checkPos] !== '>') {
+        checkPos++;
+      }
+      if (checkPos < html.length && html[checkPos] === '>') {
+        expandedEnd = checkPos + 1;
+      }
     }
   }
 
