@@ -28,7 +28,6 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
-import { MatrixImportPreviewModal, type ParsedMatrixResult, type ParsedCourse, type ParsedAssessment } from '../MatrixEditor/MatrixImportPreviewModal';
 import { DocumentViewer, SectionTagger, TaggedSectionsList, SubExtractionViewerModal, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
 
 // Use consistent API paths without relying on environment variable
@@ -323,13 +322,6 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
   const [lastSavedSection, setLastSavedSection] = useState<SavedSectionInfo | null>(null);
   // Version counter to force NarrativeEditor remount when content is externally applied
   const [editorRefreshKey, setEditorRefreshKey] = useState(0);
-  // Matrix import preview modal state
-  const [matrixImportPreview, setMatrixImportPreview] = useState<{
-    parsedData: ParsedMatrixResult;
-    matrixId: string;
-    sectionId: string;
-    standardCode: string;
-  } | null>(null);
 
   // Fetch submission data
   const { data: submission, isLoading: loadingSubmission, isError: submissionError, error: submissionErrorDetails } = useQuery<SubmissionData>({
@@ -1016,7 +1008,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
     }
   };
 
-  // Manual Tagging: Apply tagged section to curriculum matrix (with parse + preview)
+  // Manual Tagging: Apply tagged section to curriculum matrix (store as rich content)
   const handleApplyToMatrix = async (section: TaggedSection, standardCode: string) => {
     if (!importId) return;
 
@@ -1040,82 +1032,27 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
         throw new Error('No curriculum matrix found for this submission');
       }
 
-      // Save raw content to the matrix for reference
+      // Store the HTML content directly in the matrix (rich text approach)
       await api.post(`/api/submissions/${submissionId}/matrix/${matrixId}/raw-content`, {
         content: htmlContent,
+        title: section.title || `Matrix - Standard ${standardCode}`,
+        standardCode,
         sourceImportId: importId
       });
 
-      // Parse the HTML table to extract structured data
-      const parseResponse = await api.post(`/api/submissions/${submissionId}/matrix/${matrixId}/parse`, {
-        htmlContent,
-        defaultStandardCode: standardCode
-      });
-
-      const parsedData: ParsedMatrixResult = parseResponse.data;
-
-      if (parsedData.stats.totalCourses === 0 && parsedData.stats.totalAssessments === 0) {
-        throw new Error('Could not parse any matrix data from the HTML content. Check the table structure.');
-      }
-
-      // Show the preview modal — import happens when user confirms
-      setMatrixImportPreview({
-        parsedData,
-        matrixId,
-        sectionId: section.id,
-        standardCode,
-      });
-
-    } catch (err: any) {
-      setSectionError(err.response?.data?.error || err.message || 'Failed to parse matrix content');
-    } finally {
-      setApplyingSectionId(null);
-    }
-  };
-
-  // Callback when user confirms matrix import from the preview modal
-  const handleMatrixImportConfirm = async (courses: ParsedCourse[], assessments: ParsedAssessment[]) => {
-    if (!matrixImportPreview || !importId) return;
-
-    const { matrixId, sectionId } = matrixImportPreview;
-
-    try {
-      // Import the parsed data using the existing bulk import endpoint
-      await api.post(`/api/submissions/${submissionId}/matrix/${matrixId}/import`, {
-        courses: courses.map(c => ({
-          coursePrefix: c.coursePrefix,
-          courseNumber: c.courseNumber,
-          courseName: c.courseName,
-          credits: 3
-        })),
-        assessments: assessments.map(a => ({
-          standardCode: a.standardCode,
-          specCode: a.specCode,
-          coursePrefix: a.coursePrefix,
-          courseNumber: a.courseNumber,
-          type: a.type,
-          depth: a.depth
-        }))
-      });
-
-      // Mark as applied in tagged sections
-      await api.post(`/api/imports/${importId}/extract-section`, {
-        htmlContent: '<p>Matrix data imported</p>',
-        sectionType: 'matrix',
-        title: `Matrix import (${courses.length} courses, ${assessments.length} assessments)`,
+      // Mark the tagged section as applied
+      await api.patch(`/api/imports/${importId}/tagged-sections/${section.id}`, {
         appliedDirectly: true
       });
 
-      // Delete the old tagged section
-      await api.delete(`/api/imports/${importId}/tagged-sections/${sectionId}`);
-
-      // Refresh
+      // Refresh tagged sections and matrix data
       await loadTaggedSections();
       queryClient.invalidateQueries({ queryKey: ['matrix', submissionId] });
 
     } catch (err: any) {
-      setSectionError(err.response?.data?.error || err.message || 'Failed to import matrix data');
-      throw err; // Re-throw so the modal shows the error
+      setSectionError(err.response?.data?.error || err.message || 'Failed to import matrix content');
+    } finally {
+      setApplyingSectionId(null);
     }
   };
 
@@ -2481,16 +2418,6 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                     />
                   )}
 
-                  {/* Matrix Import Preview Modal */}
-                  {matrixImportPreview && (
-                    <MatrixImportPreviewModal
-                      isOpen={true}
-                      onClose={() => setMatrixImportPreview(null)}
-                      parsedData={matrixImportPreview.parsedData}
-                      onImport={(courses, assessments) => handleMatrixImportConfirm(courses, assessments)}
-                      standardCode={matrixImportPreview.standardCode}
-                    />
-                  )}
                 </div>
               )}
 

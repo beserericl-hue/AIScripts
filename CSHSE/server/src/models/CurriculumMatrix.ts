@@ -30,6 +30,8 @@ export interface IStandardMapping {
 export interface IRawMatrixContent {
   id: string;
   content: string;
+  title?: string;
+  standardCode?: string;
   sourceImportId?: string;
   addedAt: Date;
   addedBy: mongoose.Types.ObjectId;
@@ -84,6 +86,8 @@ const StandardMappingSchema = new Schema<IStandardMapping>({
 const RawMatrixContentSchema = new Schema<IRawMatrixContent>({
   id: { type: String, required: true },
   content: { type: String, required: true },
+  title: String,
+  standardCode: String,
   sourceImportId: String,
   addedAt: { type: Date, default: Date.now },
   addedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },

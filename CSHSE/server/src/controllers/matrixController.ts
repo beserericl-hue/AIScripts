@@ -432,7 +432,7 @@ export const exportMatrix = async (req: AuthenticatedRequest, res: Response) => 
 export const addRawContent = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { matrixId } = req.params;
-    const { content, sourceImportId } = req.body;
+    const { content, sourceImportId, title, standardCode } = req.body;
 
     if (!content || typeof content !== 'string') {
       return res.status(400).json({ error: 'content is required' });
@@ -451,6 +451,8 @@ export const addRawContent = async (req: AuthenticatedRequest, res: Response) =>
     const rawEntry = {
       id: new mongoose.Types.ObjectId().toString(),
       content,
+      title: title || undefined,
+      standardCode: standardCode || undefined,
       sourceImportId: sourceImportId || undefined,
       addedAt: new Date(),
       addedBy: req.user?.id ? new mongoose.Types.ObjectId(req.user.id) : undefined,
@@ -596,5 +598,37 @@ export const removeStandardRow = async (req: AuthenticatedRequest, res: Response
   } catch (error) {
     console.error('Remove standard row error:', error);
     return res.status(500).json({ error: 'Failed to remove standard row' });
+  }
+};
+
+/**
+ * Delete a raw content entry from the matrix
+ */
+export const deleteRawContent = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { matrixId, rawContentId } = req.params;
+
+    const matrix = await CurriculumMatrix.findById(matrixId);
+    if (!matrix) {
+      return res.status(404).json({ error: 'Matrix not found' });
+    }
+
+    if (!matrix.rawContent) {
+      return res.status(404).json({ error: 'No raw content found' });
+    }
+
+    const idx = matrix.rawContent.findIndex(r => r.id === rawContentId);
+    if (idx === -1) {
+      return res.status(404).json({ error: 'Raw content entry not found' });
+    }
+
+    matrix.rawContent.splice(idx, 1);
+    matrix.markModified('rawContent');
+    await matrix.save();
+
+    return res.json({ message: 'Raw content removed successfully' });
+  } catch (error) {
+    console.error('Delete raw content error:', error);
+    return res.status(500).json({ error: 'Failed to delete raw content' });
   }
 };

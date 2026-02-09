@@ -468,7 +468,7 @@ export function TaggedSectionsList({
                   ) : (
                     <Grid3X3 className="w-3 h-3" />
                   )}
-                  Parse & Import
+                  Import to Matrix
                 </button>
                 <button
                   onClick={() => {
@@ -481,7 +481,7 @@ export function TaggedSectionsList({
                 </button>
               </div>
               <p className="text-xs mt-2 text-purple-600">
-                Matrix HTML will be parsed to extract courses and cell values, then imported to the grid.
+                Content will be stored as rich text in the Curriculum Matrix.
               </p>
             </div>
           )}

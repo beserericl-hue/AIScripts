@@ -10,7 +10,8 @@ import {
   addRawContent,
   parseMatrixContent,
   duplicateStandardRow,
-  removeStandardRow
+  removeStandardRow,
+  deleteRawContent
 } from '../controllers/matrixController';
 import { authenticate } from '../middleware/auth';
 
@@ -86,6 +87,13 @@ router.get('/submissions/:submissionId/matrix/:matrixId/export', exportMatrix);
  * @access  Private (Program Coordinator, Admin)
  */
 router.post('/submissions/:submissionId/matrix/:matrixId/raw-content', addRawContent);
+
+/**
+ * @route   DELETE /api/submissions/:submissionId/matrix/:matrixId/raw-content/:rawContentId
+ * @desc    Delete a raw content entry from the matrix
+ * @access  Private (Program Coordinator, Admin)
+ */
+router.delete('/submissions/:submissionId/matrix/:matrixId/raw-content/:rawContentId', deleteRawContent);
 
 /**
  * @route   POST /api/submissions/:submissionId/matrix/:matrixId/parse
