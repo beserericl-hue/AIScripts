@@ -24,6 +24,7 @@ import {
   insertPlaceholderMarker,
   getTaggedSections,
   getTaggedSectionContent,
+  updateTaggedSection,
   deleteTaggedSection,
   repairDocument,
   finishTagging,
@@ -228,6 +229,13 @@ router.get('/:importId/tagged-sections', getTaggedSections);
  * @access  Private
  */
 router.get('/:importId/tagged-sections/:sectionId', getTaggedSectionContent);
+
+/**
+ * @route   PATCH /api/imports/:importId/tagged-sections/:sectionId
+ * @desc    Update a tagged section (e.g., mark as applied)
+ * @access  Private (Coordinator)
+ */
+router.patch('/:importId/tagged-sections/:sectionId', updateTaggedSection);
 
 /**
  * @route   DELETE /api/imports/:importId/tagged-sections/:sectionId

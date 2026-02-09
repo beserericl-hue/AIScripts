@@ -20,6 +20,7 @@ export interface ParsedCourse {
 export interface ParsedAssessment {
   standardCode: string;
   specCode: string;
+  specText: string;  // Full spec description from the row label
   coursePrefix: string;
   courseNumber: string;
   type: string[];   // e.g. ['I', 'T', 'K']

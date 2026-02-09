@@ -2652,6 +2652,38 @@ export const getTaggedSectionContent = async (req: Request, res: Response) => {
 };
 
 /**
+ * Update a tagged section (e.g., mark as applied)
+ */
+export const updateTaggedSection = async (req: Request, res: Response) => {
+  try {
+    const { importId, sectionId } = req.params;
+    const { appliedDirectly } = req.body;
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    const section = (importRecord.detectedSections || []).find((s: any) => s.id === sectionId);
+    if (!section) {
+      return res.status(404).json({ error: 'Section not found' });
+    }
+
+    if (appliedDirectly !== undefined) {
+      (section as any).appliedDirectly = appliedDirectly;
+    }
+
+    importRecord.markModified('detectedSections');
+    await importRecord.save();
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Update tagged section error:', error);
+    return res.status(500).json({ error: 'Failed to update tagged section' });
+  }
+};
+
+/**
  * Delete a tagged section
  */
 export const deleteTaggedSection = async (req: AuthenticatedRequest, res: Response) => {

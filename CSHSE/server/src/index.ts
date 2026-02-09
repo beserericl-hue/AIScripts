@@ -134,8 +134,15 @@ app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
 
 // Serve static files from React app build
+// Hashed assets (JS/CSS) get long cache, index.html always revalidates
 const publicPath = path.join(__dirname, '..', 'public');
-app.use(express.static(publicPath));
+app.use(express.static(publicPath, {
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }
+}));
 
 // SPA catch-all: serve index.html for any non-API routes
 // This enables client-side routing in React
@@ -144,7 +151,8 @@ app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({ error: 'API endpoint not found' });
   }
-  // Serve React app for all other routes
+  // Serve React app for all other routes - never cache index.html
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(publicPath, 'index.html'));
 });
 
