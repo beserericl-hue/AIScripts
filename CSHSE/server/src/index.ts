@@ -9,6 +9,7 @@ import {
   setupProcessErrorHandlers
 } from './middleware/errorHandler';
 import { initializeSuperuser } from './services/superuserInit';
+import { runMigrations } from './services/migrations';
 
 // Import routes
 import importsRouter from './routes/imports';
@@ -177,6 +178,9 @@ const startServer = async () => {
 
     // Initialize superuser account if configured via environment variables
     await initializeSuperuser();
+
+    // Run data migrations (idempotent)
+    await runMigrations();
   } catch (error) {
     dbError = error instanceof Error ? error.message : 'Unknown database error';
     console.error('Database connection failed:', dbError);
