@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 
@@ -34,10 +34,13 @@ interface TriggerValidationParams {
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const POLL_INTERVAL_MS = 3000;
+const POLL_TIMEOUT_MS = 60000;
 
 /**
  * Hook for managing validation status of self-study sections
- * Polls for results after triggering validation, then refreshes submission data
+ * After triggering validation, polls until the callback result arrives,
+ * then refreshes the submission data so the validated counter updates.
  */
 export function useValidationStatus({
   submissionId,
@@ -47,9 +50,9 @@ export function useValidationStatus({
   const queryClient = useQueryClient();
   const [isValidating, setIsValidating] = useState(false);
   const [waitingForResult, setWaitingForResult] = useState(false);
-  const previousStatusRef = useRef<string | null>(null);
+  const [pendingValidationId, setPendingValidationId] = useState<string | null>(null);
 
-  // Fetch latest validation result — polls every 3s while waiting for callback
+  // Fetch latest validation result
   const { data: validationResult, isLoading } = useQuery<ValidationResponse | null>({
     queryKey: ['validation', submissionId, standardCode, specCode],
     queryFn: async () => {
@@ -71,24 +74,45 @@ export function useValidationStatus({
       }
     },
     enabled: !!submissionId && !!standardCode,
-    refetchInterval: waitingForResult ? 3000 : false,
   });
 
-  // When result changes from pending to pass/fail, stop polling and refresh submission
+  // Explicit polling via setInterval when waiting for callback result
   useEffect(() => {
-    const currentStatus = validationResult?.result?.status;
-    if (
-      waitingForResult &&
-      currentStatus &&
-      currentStatus !== 'pending' &&
-      previousStatusRef.current === 'pending'
-    ) {
+    if (!waitingForResult) return;
+
+    const intervalId = setInterval(() => {
+      queryClient.refetchQueries({
+        queryKey: ['validation', submissionId, standardCode, specCode],
+      });
+    }, POLL_INTERVAL_MS);
+
+    // Safety timeout — stop polling after 60s
+    const timeoutId = setTimeout(() => {
       setWaitingForResult(false);
+      setPendingValidationId(null);
+    }, POLL_TIMEOUT_MS);
+
+    return () => {
+      clearInterval(intervalId);
+      clearTimeout(timeoutId);
+    };
+  }, [waitingForResult, queryClient, submissionId, standardCode, specCode]);
+
+  // Detect when the callback result arrives by matching the validation ID
+  useEffect(() => {
+    if (!waitingForResult || !pendingValidationId) return;
+
+    const currentStatus = validationResult?.result?.status;
+    const currentId = validationResult?._id;
+
+    // Only stop polling when the SPECIFIC validation we triggered is no longer pending
+    if (currentId === pendingValidationId && currentStatus && currentStatus !== 'pending') {
+      setWaitingForResult(false);
+      setPendingValidationId(null);
       // Refresh submission data so the validated counter updates
       queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
     }
-    previousStatusRef.current = currentStatus ?? null;
-  }, [validationResult?.result?.status, waitingForResult, queryClient, submissionId]);
+  }, [validationResult, waitingForResult, pendingValidationId, queryClient, submissionId]);
 
   // Trigger validation mutation
   const validateMutation = useMutation({
@@ -107,8 +131,9 @@ export function useValidationStatus({
     onSettled: () => {
       setIsValidating(false);
     },
-    onSuccess: () => {
-      // Start polling for the callback result
+    onSuccess: (data) => {
+      // Track the specific validation ID so we can match it when polling
+      setPendingValidationId(data.validationId);
       setWaitingForResult(true);
       // Invalidate to immediately pick up the new "pending" record
       queryClient.invalidateQueries({
