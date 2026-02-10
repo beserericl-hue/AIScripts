@@ -41,10 +41,14 @@ async function verifyEvidenceAccess(
     throw new NotFoundError('Submission');
   }
 
-  // Get institution
-  const institution = await Institution.findOne({
+  // Get institution — try currentSubmissionId first, fall back to submission.institutionId
+  let institution = await Institution.findOne({
     currentSubmissionId: submissionId
   }).lean();
+
+  if (!institution && (submission as any).institutionId) {
+    institution = await Institution.findById((submission as any).institutionId).lean();
+  }
 
   // Admin has full access
   if (userRole === 'admin') {

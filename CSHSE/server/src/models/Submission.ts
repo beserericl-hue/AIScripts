@@ -76,6 +76,7 @@ export interface IReaderLock {
 
 export interface ISubmission extends Document {
   submissionId: string;
+  institutionId?: mongoose.Types.ObjectId;
   institutionName: string;
   programName: string;
   programLevel: 'associate' | 'bachelors' | 'masters';
@@ -179,6 +180,10 @@ const SubmissionSchema = new Schema<ISubmission>({
     type: String,
     required: true,
     unique: true
+  },
+  institutionId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Institution'
   },
   institutionName: { type: String, required: true },
   programName: { type: String, required: true },
