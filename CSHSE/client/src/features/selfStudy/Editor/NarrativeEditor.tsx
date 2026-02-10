@@ -89,6 +89,7 @@ export function NarrativeEditor({
 }: NarrativeEditorProps) {
   const [content, setContent] = useState(initialContent);
   const [supportingEvidenceCollapsed, setSupportingEvidenceCollapsed] = useState(true);
+  const [contentChangedSinceValidation, setContentChangedSinceValidation] = useState(false);
 
   // Auto-save hook with 2s debounce
   const {
@@ -200,6 +201,7 @@ export function NarrativeEditor({
       setContent(html);
       onContentChange?.(html);
       triggerAutoSave(html);
+      setContentChangedSinceValidation(true);
     },
     // Handle paste from Word/external sources
     editorProps: {
@@ -264,6 +266,7 @@ export function NarrativeEditor({
     onUpdate: ({ editor }) => {
       const html = editor.getHTML();
       triggerSupportingEvidenceAutoSave(html);
+      setContentChangedSinceValidation(true);
     },
   });
 
@@ -329,6 +332,7 @@ export function NarrativeEditor({
       validationType: 'manual_save',
       evidenceText: currentEvidenceText,
     });
+    setContentChangedSinceValidation(false);
   }, [editor, supportingEvidenceEditor, saveNow, triggerValidation]);
 
   // Update editor content if initial content changes externally
@@ -655,15 +659,17 @@ export function NarrativeEditor({
               </button>
               <button
                 onClick={handleSaveAndValidate}
-                disabled={isSaving || isValidating}
+                disabled={isSaving || isValidating || (validationStatus === 'pass' && !contentChangedSinceValidation)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white text-sm rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {isValidating ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
+                ) : validationStatus === 'pass' && !contentChangedSinceValidation ? (
+                  <CheckCircle className="w-4 h-4 text-green-200" />
                 ) : (
                   <CheckCircle className="w-4 h-4" />
                 )}
-                Validate
+                {validationStatus === 'pass' && !contentChangedSinceValidation ? 'Validated' : 'Validate'}
               </button>
             </div>
           )}

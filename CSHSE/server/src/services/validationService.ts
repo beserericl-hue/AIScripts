@@ -473,13 +473,14 @@ export class ValidationService {
     if (!submission) return;
 
     const standardsStatus = submission.standardsStatus;
-    const currentStatus = standardsStatus?.get(standardCode) || {
+    const statusKey = `${standardCode}_${specCode}`;
+    const currentStatus = standardsStatus?.get(statusKey) || {
       status: 'in_progress',
       completionPercentage: 0,
       lastModified: new Date()
     };
 
-    standardsStatus.set(standardCode, {
+    standardsStatus.set(statusKey, {
       ...currentStatus,
       validationStatus: status,
       validatedAt: new Date(),
