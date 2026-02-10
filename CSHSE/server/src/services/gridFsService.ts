@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import { GridFSBucket, ObjectId, GridFSBucketReadStream } from 'mongodb';
 import { Readable } from 'stream';
+import { createReadStream } from 'fs';
+import { stat } from 'fs/promises';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 
 /**
@@ -64,6 +66,53 @@ export async function storeHtmlContent(importId: string, htmlContent: string): P
         console.log(`[GridFSService] Stored HTML for import ${importId}, fileId: ${uploadStream.id}, size: ${htmlContent.length} chars`);
         resolve(uploadStream.id.toString());
       });
+  });
+}
+
+/**
+ * Store HTML content in GridFS by streaming from a file on disk.
+ * Avoids holding the entire HTML string in memory during upload — critical
+ * for 300MB+ documents where peak memory during repair is already high.
+ */
+export async function storeHtmlContentFromFile(importId: string, filePath: string): Promise<string> {
+  const bucket = getBucket();
+
+  // Check if file already exists for this import and delete it
+  const existingFiles = await bucket.find({ filename: `${importId}.html` }).toArray();
+  for (const file of existingFiles) {
+    await bucket.delete(file._id);
+    console.log(`[GridFSService] Deleted existing file for import: ${importId}`);
+  }
+
+  const fileStat = await stat(filePath);
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = bucket.openUploadStream(`${importId}.html`, {
+      metadata: {
+        importId,
+        contentType: 'text/html',
+        uploadedAt: new Date(),
+        size: fileStat.size
+      }
+    });
+
+    const readStream = createReadStream(filePath);
+
+    readStream.pipe(uploadStream)
+      .on('error', (error) => {
+        console.error(`[GridFSService] Error uploading HTML from file for import ${importId}:`, error);
+        reject(error);
+      })
+      .on('finish', () => {
+        console.log(`[GridFSService] Stored HTML from file for import ${importId}, fileId: ${uploadStream.id}, size: ${fileStat.size} bytes`);
+        resolve(uploadStream.id.toString());
+      });
+
+    readStream.on('error', (error) => {
+      console.error(`[GridFSService] Error reading file ${filePath}:`, error);
+      uploadStream.destroy();
+      reject(error);
+    });
   });
 }
 
@@ -1227,6 +1276,7 @@ export async function restoreMarker(
 
 export default {
   storeHtmlContent,
+  storeHtmlContentFromFile,
   getHtmlContent,
   getHtmlContentStream,
   htmlContentExists,

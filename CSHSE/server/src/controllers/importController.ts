@@ -12,10 +12,22 @@ import { sectionMapperService } from '../services/sectionMapper';
 import { saveWithRetry, withRetry } from '../utils/dbRetry';
 import * as tempFileService from '../services/tempFileService';
 import * as gridFsService from '../services/gridFsService';
+import fs from 'fs/promises';
+import { createReadStream } from 'fs';
 
 // Always log for visibility in production
 function debugLog(message: string, data?: any) {
   console.log(`[Import] ${message}`, data ? JSON.stringify(data) : '');
+}
+
+/**
+ * Force a flat copy of a string, breaking V8 SlicedString references.
+ * V8's substring() creates a SlicedString that retains a reference to the
+ * full parent string. For 370MB documents, this prevents GC of old copies.
+ */
+function flattenString(s: string): string {
+  if (!s || s.length === 0) return s;
+  return Buffer.from(s, 'utf-8').toString('utf-8');
 }
 
 /**
@@ -2916,10 +2928,10 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
             section: s, marker, tier: 2,
             expandedStart: range.expandedStart,
             expandedEnd: range.expandedEnd,
-            removedHtml: range.removedHtml,
-            sectionHtml: result.htmlContent.substring(range.sectionStart, range.sectionEnd),
-            splitBefore: range.splitBefore || '',
-            splitAfter: range.splitAfter || ''
+            removedHtml: flattenString(range.removedHtml),
+            sectionHtml: flattenString(result.htmlContent.substring(range.sectionStart, range.sectionEnd)),
+            splitBefore: range.splitBefore ? flattenString(range.splitBefore) : '',
+            splitAfter: range.splitAfter ? flattenString(range.splitAfter) : ''
           });
           const removedSnippet = range.removedHtml.substring(0, 120).replace(/\n/g, '\\n');
           console.log(`[Import] Repair T2: "${s.headerText}" range ${range.expandedStart}-${range.expandedEnd} (${range.expandedEnd - range.expandedStart} chars)` +
@@ -2985,13 +2997,16 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
     }
     parts.push(html!.substring(lastEnd));
 
-    let finalHtml = parts.join('');
+    // Join parts and immediately flatten to break all SlicedString references
+    // to the original 370MB html string. Without this, the joined string retains
+    // internal references that prevent GC of the original.
+    let finalHtml = Buffer.from(parts.join(''), 'utf-8').toString('utf-8');
 
     // Free original HTML and parts array before T3 to reduce peak memory
-    // (parts holds SlicedString references to html, keeping the full 370MB alive)
     html = null;
     parts.length = 0;
     replacements.length = 0;
+    validReplacements.length = 0;
 
     // Tier 3: Sequential table-splitting on already-modified HTML
     // Uses table-splitting (not full table expansion) so multiple sections
@@ -3012,7 +3027,9 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
       }
 
       // Store section-specific HTML before modifying finalHtml (positions become invalid after)
-      const sectionSpecificHtml = finalHtml.substring(range.sectionStart, range.sectionEnd);
+      // flattenString breaks SlicedString references — without this, each substring retains
+      // a reference to the full 370MB finalHtml, preventing GC of old copies.
+      const sectionSpecificHtml = flattenString(finalHtml.substring(range.sectionStart, range.sectionEnd));
 
       // Build replacement with table-split fragments (same as Tier 2)
       let replacement = '';
@@ -3021,10 +3038,14 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
       if (range.splitAfter) replacement += '\n' + range.splitAfter;
 
       finalHtml = finalHtml.substring(0, range.expandedStart) + replacement + finalHtml.substring(range.expandedEnd);
-      s.removedHtml = sectionSpecificHtml || range.removedHtml;
+      // Break V8 ConsString reference chain: the concatenation above creates a ConsString
+      // whose SlicedString children keep the OLD 370MB finalHtml alive. Without flattening,
+      // each T3 iteration accumulates another 370MB copy that can't be GC'd.
+      finalHtml = Buffer.from(finalHtml, 'utf-8').toString('utf-8');
+      s.removedHtml = sectionSpecificHtml || flattenString(range.removedHtml);
       markersInserted++;
       tier3Count++;
-      const t3Snippet = range.removedHtml.substring(0, 120).replace(/\n/g, '\\n');
+      const t3Snippet = flattenString(range.removedHtml.substring(0, 120)).replace(/\n/g, '\\n');
       console.log(`[Import] Repair T3: "${s.headerText}" at ${range.expandedStart}-${range.expandedEnd} (${range.expandedEnd - range.expandedStart} chars)` +
         (range.splitBefore ? ` splitBefore=${range.splitBefore.length}ch` : '') +
         (range.splitAfter ? ` splitAfter=${range.splitAfter.length}ch` : '') +
@@ -3054,13 +3075,24 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
     const memUsage = process.memoryUsage();
     console.log(`[Import] Repair: memory before GridFS store — RSS=${Math.round(memUsage.rss / 1024 / 1024)}MB, heap=${Math.round(memUsage.heapUsed / 1024 / 1024)}MB/${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`);
 
-    // Write to GridFS
+    // Write to temp file first, then free the string, then stream to GridFS.
+    // This avoids holding ~370MB in memory during the GridFS upload.
     const htmlSize = finalHtml.length;
-    await gridFsService.storeHtmlContent(importId.toString(), finalHtml);
-    console.log(`[Import] Repair: stored final HTML (${htmlSize} chars) to GridFS`);
+    const tempPaths = tempFileService.getTempPaths(importId.toString());
+    const repairedHtmlPath = tempPaths.htmlPath; // /tmp/imports/{id}/content.html
+    await fs.mkdir(path.dirname(repairedHtmlPath), { recursive: true });
+    await fs.writeFile(repairedHtmlPath, finalHtml, 'utf-8');
+    console.log(`[Import] Repair: wrote ${htmlSize} chars to temp file`);
 
-    // Free finalHtml after GridFS store
+    // Free the in-memory string BEFORE streaming to GridFS
     finalHtml = '';
+
+    const memAfterFree = process.memoryUsage();
+    console.log(`[Import] Repair: memory after free — RSS=${Math.round(memAfterFree.rss / 1024 / 1024)}MB, heap=${Math.round(memAfterFree.heapUsed / 1024 / 1024)}MB/${Math.round(memAfterFree.heapTotal / 1024 / 1024)}MB`);
+
+    // Stream from temp file to GridFS (no large string in memory)
+    await gridFsService.storeHtmlContentFromFile(importId.toString(), repairedHtmlPath);
+    console.log(`[Import] Repair: stored final HTML (${htmlSize} chars) to GridFS via file stream`);
 
     // Save updated section records (with removedHtml persisted via schema fix)
     if (markersInserted > 0) {
