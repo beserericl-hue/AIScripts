@@ -241,10 +241,12 @@ export class ValidationService {
 
       console.log('[ValidationService] Webhook call result:', webhookResult);
 
-      if (webhookResult.success && webhookResult.executionId) {
-        validationResult.n8nExecutionId = webhookResult.executionId;
+      if (webhookResult.success) {
+        if (webhookResult.executionId) {
+          validationResult.n8nExecutionId = webhookResult.executionId;
+        }
         await validationResult.save();
-        console.log('[ValidationService] Saved execution ID:', webhookResult.executionId);
+        console.log('[ValidationService] Webhook accepted, executionId:', webhookResult.executionId || 'none (async callback)');
       } else {
         console.log('[ValidationService] Webhook call failed:', webhookResult.error);
         validationResult.result = {
