@@ -72,6 +72,10 @@ export interface IDetectedSection {
   // Exact HTML removed by insertHtmlMarker (may differ from htmlContent due to
   // table boundary expansion). Used by restoreMarker for accurate restoration.
   removedHtml?: string;
+  // HTML context around the marker insertion point (for fuzzy repair matching)
+  htmlContextBefore?: string;
+  htmlContextAfter?: string;
+  wasTableExpanded?: boolean;
 }
 
 /**
@@ -198,7 +202,14 @@ const DetectedSectionSchema = new Schema<IDetectedSection>({
   isMatrix: { type: Boolean, default: false },
   // Text position offsets for placeholder re-insertion on resume
   textStartOffset: Number,
-  textLength: Number
+  textLength: Number,
+  // Exact HTML removed by insertHtmlMarker (includes table expansion).
+  // Used by repair for direct matching — most reliable repair data.
+  removedHtml: String,
+  // HTML context around the marker insertion point (for fuzzy repair matching)
+  htmlContextBefore: String,
+  htmlContextAfter: String,
+  wasTableExpanded: Boolean
 }, { _id: false });
 
 // Schema for appendix info

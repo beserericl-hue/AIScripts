@@ -26,6 +26,7 @@ import {
   getTaggedSectionContent,
   updateTaggedSection,
   deleteTaggedSection,
+  debugImport,
   repairDocument,
   finishTagging,
   // Session persistence
@@ -243,6 +244,13 @@ router.patch('/:importId/tagged-sections/:sectionId', updateTaggedSection);
  * @access  Private (Coordinator)
  */
 router.delete('/:importId/tagged-sections/:sectionId', deleteTaggedSection);
+
+/**
+ * @route   GET /api/imports/:importId/debug
+ * @desc    Get section metadata for diagnostic inspection (no GridFS load)
+ * @access  Private
+ */
+router.get('/:importId/debug', debugImport);
 
 /**
  * @route   POST /api/imports/:importId/repair

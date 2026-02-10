@@ -636,7 +636,7 @@ export async function insertHtmlMarker(
   marker: string,
   textStartOffset: number,
   textLength: number
-): Promise<{ success: boolean; removedHtml?: string }> {
+): Promise<{ success: boolean; removedHtml?: string; htmlContextBefore?: string; htmlContextAfter?: string; wasTableExpanded?: boolean }> {
   // Read the current HTML
   console.log(`[GridFSService] insertHtmlMarker: reading HTML for import ${importId}...`);
   const readStart = Date.now();
@@ -775,6 +775,11 @@ export async function insertHtmlMarker(
 
   // Capture the exact HTML being removed (for accurate restoration)
   const removedHtml = html.substring(expandedStart, expandedEnd);
+  const wasTableExpanded = startInTable || endInTable;
+
+  // Capture HTML context around the insertion point (for fuzzy repair matching)
+  const htmlContextBefore = html.substring(Math.max(0, expandedStart - 300), expandedStart);
+  const htmlContextAfter = html.substring(expandedEnd, Math.min(html.length, expandedEnd + 300));
 
   // Build new HTML — simple replacement in all cases
   const newHtml = html.substring(0, expandedStart) + marker + html.substring(expandedEnd);
@@ -782,14 +787,14 @@ export async function insertHtmlMarker(
   const removedChars = expandedEnd - expandedStart;
   const snippet = removedHtml.substring(0, 100);
   console.log(`[GridFSService] Inserting marker at text offset ${textStartOffset} (HTML pos ${expandedStart}-${expandedEnd}), ` +
-    `removed ${removedChars} chars, snippet: "${snippet.replace(/\n/g, '\\n').substring(0, 80)}..."`);
+    `removed ${removedChars} chars, tableExpanded=${wasTableExpanded}, snippet: "${snippet.replace(/\n/g, '\\n').substring(0, 80)}..."`);
 
   // Store back to GridFS
   const writeStart = Date.now();
   await storeHtmlContent(importId, newHtml);
   console.log(`[GridFSService] Stored updated HTML (${newHtml.length} chars) in ${Date.now() - writeStart}ms`);
 
-  return { success: true, removedHtml };
+  return { success: true, removedHtml, htmlContextBefore, htmlContextAfter, wasTableExpanded };
 }
 
 /**
@@ -806,7 +811,7 @@ export function findHtmlRange(
   textStartOffset: number,
   textLength: number,
   options?: { skipTableExpansion?: boolean }
-): { expandedStart: number; expandedEnd: number; removedHtml: string } | null {
+): { expandedStart: number; expandedEnd: number; removedHtml: string; splitBefore?: string; splitAfter?: string } | null {
   let textPos = 0;
   let htmlStartPos = -1;
   let htmlEndPos = -1;
@@ -870,6 +875,8 @@ export function findHtmlRange(
 
   let expandedStart: number;
   let expandedEnd: number;
+  let splitBeforeHtml = '';
+  let splitAfterHtml = '';
 
   if (!options?.skipTableExpansion && (isInsideTable(htmlStartPos) || isInsideTable(htmlEndPos))) {
     const tableStart = html.lastIndexOf('<table', htmlStartPos);
@@ -888,23 +895,77 @@ export function findHtmlRange(
     const endInTable = isInsideTable(htmlEndPos);
 
     if (startInTable || endInTable) {
-      // Row-level expansion: expand to <tr>...</tr> boundaries
-      // This keeps the <table> intact while allowing multiple sections per table
+      // Table-splitting: find the full table, extract rows before/after the section,
+      // and place the marker BETWEEN two complete table fragments.
+      // This keeps markers outside tables (like initial insertion) while handling
+      // multiple sections per table.
       const lowerHtml = html.toLowerCase();
 
-      if (startInTable) {
-        // Find the <tr that contains htmlStartPos
-        const trStart = lowerHtml.lastIndexOf('<tr', htmlStartPos);
-        expandedStart = trStart !== -1 ? trStart : htmlStartPos;
-      } else {
-        expandedStart = htmlStartPos;
-      }
+      // Find the full table boundaries
+      const tableStart = lowerHtml.lastIndexOf('<table', htmlStartPos);
+      const tableEndSearch = lowerHtml.indexOf('</table>', htmlEndPos);
+      const tableEnd = tableEndSearch !== -1 ? tableEndSearch + 8 : -1;
 
-      if (endInTable) {
-        // Find the </tr> that closes after htmlEndPos
-        const trEndTag = lowerHtml.indexOf('</tr>', htmlEndPos);
-        expandedEnd = trEndTag !== -1 ? trEndTag + 5 : htmlEndPos;
+      if (tableStart !== -1 && tableEnd !== -1) {
+        // Find the <tr> row boundaries for the section content
+        // Use validated <tr matching (not <track, <transition, etc.)
+        let trStart = htmlStartPos;
+        while (trStart >= tableStart) {
+          trStart = lowerHtml.lastIndexOf('<tr', trStart);
+          if (trStart === -1 || trStart < tableStart) { trStart = -1; break; }
+          const nextChar = lowerHtml[trStart + 3];
+          if (nextChar === '>' || nextChar === ' ' || nextChar === '\n' || nextChar === '\t' || nextChar === '\r') {
+            break; // Valid <tr> tag
+          }
+          trStart--;
+        }
+
+        let trEnd = htmlEndPos;
+        const trEndTag = lowerHtml.indexOf('</tr>', trEnd);
+        trEnd = trEndTag !== -1 ? trEndTag + 5 : htmlEndPos;
+
+        if (trStart === -1) trStart = htmlStartPos;
+
+        // Extract the table's opening tag and structural header (<colgroup>, <col>, <thead>)
+        const tableOpenEnd = html.indexOf('>', tableStart) + 1;
+        const tableOpenTag = html.substring(tableStart, tableOpenEnd);
+
+        // Find structural elements (colgroup, col, thead, tbody) between <table> and first <tr>
+        // These need to be duplicated into both split fragments
+        let firstTrPos = tableStart + 6;
+        while (firstTrPos < tableEnd) {
+          firstTrPos = lowerHtml.indexOf('<tr', firstTrPos);
+          if (firstTrPos === -1 || firstTrPos >= tableEnd) { firstTrPos = tableOpenEnd; break; }
+          const nc = lowerHtml[firstTrPos + 3];
+          if (nc === '>' || nc === ' ' || nc === '\n' || nc === '\t' || nc === '\r') break;
+          firstTrPos++;
+        }
+        const structuralHtml = firstTrPos > tableOpenEnd
+          ? html.substring(tableOpenEnd, firstTrPos)
+          : '';
+
+        // rowsBefore: content between structural header and first removed row
+        const rowsBefore = html.substring(firstTrPos, trStart);
+        // rowsAfter: content between last removed row and </table>
+        const rowsAfter = html.substring(trEnd, tableEnd - 8); // before </table>
+
+        const hasRowsBefore = rowsBefore.trim().length > 0;
+        const hasRowsAfter = rowsAfter.trim().length > 0;
+
+        // Replace the entire table with: [beforeTable] + marker + [afterTable]
+        expandedStart = tableStart;
+        expandedEnd = tableEnd;
+
+        // Each fragment gets the table open tag + structural header + its rows
+        splitBeforeHtml = hasRowsBefore
+          ? tableOpenTag + structuralHtml + rowsBefore + '</table>'
+          : '';
+        splitAfterHtml = hasRowsAfter
+          ? tableOpenTag + structuralHtml + rowsAfter + '</table>'
+          : '';
       } else {
+        // Couldn't find table boundaries, fall back to text boundaries
+        expandedStart = htmlStartPos;
         expandedEnd = htmlEndPos;
       }
     } else {
@@ -932,7 +993,9 @@ export function findHtmlRange(
   return {
     expandedStart,
     expandedEnd,
-    removedHtml: html.substring(expandedStart, expandedEnd)
+    removedHtml: html.substring(expandedStart, expandedEnd),
+    splitBefore: splitBeforeHtml,
+    splitAfter: splitAfterHtml
   };
 }
 

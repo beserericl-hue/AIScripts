@@ -2532,17 +2532,22 @@ export const insertPlaceholderMarker = async (req: AuthenticatedRequest, res: Re
       return res.status(422).json({ error: 'Could not find text at specified offset in document' });
     }
 
-    // Store the exact removed HTML on the section record for accurate restoration.
-    // This may differ from htmlContent (client's selection) due to table boundary expansion.
+    // Store the exact removed HTML and context on the section record for accurate repair.
+    // removedHtml may differ from htmlContent (client's selection) due to table boundary expansion.
     if (result.removedHtml && sectionId) {
       const importRecord = await SelfStudyImport.findById(importId);
       if (importRecord?.detectedSections) {
         const section = importRecord.detectedSections.find((s: any) => s.id === sectionId);
         if (section) {
           (section as any).removedHtml = result.removedHtml;
+          (section as any).htmlContextBefore = result.htmlContextBefore || '';
+          (section as any).htmlContextAfter = result.htmlContextAfter || '';
+          (section as any).wasTableExpanded = result.wasTableExpanded || false;
           importRecord.markModified('detectedSections');
           await importRecord.save();
-          console.log(`[Import] Stored removedHtml (${result.removedHtml.length} chars) on section ${sectionId}`);
+          console.log(`[Import] Stored removedHtml (${result.removedHtml.length} chars), ` +
+            `contextBefore=${result.htmlContextBefore?.length || 0}, contextAfter=${result.htmlContextAfter?.length || 0}, ` +
+            `tableExpanded=${result.wasTableExpanded} on section ${sectionId}`);
         }
       }
     }
@@ -2757,6 +2762,51 @@ export const deleteTaggedSection = async (req: AuthenticatedRequest, res: Respon
 };
 
 /**
+ * Debug endpoint: return section metadata from MongoDB for diagnostic inspection.
+ * Lightweight read — no GridFS load, no HTML processing.
+ * Usage: curl -H "Authorization: Bearer $TOKEN" /api/imports/:importId/debug
+ */
+export const debugImport = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { importId } = req.params;
+
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      return res.status(404).json({ error: 'Import not found' });
+    }
+
+    const sections = (importRecord.detectedSections || []).map((section: any) => ({
+      sectionId: section.id,
+      headerText: section.headerText,
+      sectionType: section.isMatrix ? 'matrix' : (section.isAppendix ? 'appendix' : 'standard'),
+      standardCode: section.standardCode || null,
+      specCode: section.specCode || null,
+      textStartOffset: section.textStartOffset ?? null,
+      textLength: section.textLength ?? null,
+      hasRemovedHtml: !!(section.removedHtml && section.removedHtml.length > 0),
+      removedHtmlLength: section.removedHtml?.length || 0,
+      removedHtmlPreview: section.removedHtml ? section.removedHtml.substring(0, 200) : null,
+      htmlContentLength: section.htmlContent?.length || 0,
+      htmlContentPreview: section.htmlContent ? section.htmlContent.substring(0, 200) : null,
+      fullContentLength: section.fullContent?.length || 0,
+      hasContextBefore: !!(section.htmlContextBefore && section.htmlContextBefore.length > 0),
+      hasContextAfter: !!(section.htmlContextAfter && section.htmlContextAfter.length > 0),
+      wasTableExpanded: section.wasTableExpanded ?? null
+    }));
+
+    return res.json({
+      importId,
+      status: importRecord.status,
+      sectionCount: sections.length,
+      sections
+    });
+  } catch (error: any) {
+    console.error('Debug import error:', error);
+    return res.status(500).json({ error: error.message || 'Failed to get debug info' });
+  }
+};
+
+/**
  * Repair document: re-upload the original document file to replace corrupted GridFS HTML.
  * Keeps existing tagged sections intact in MongoDB. Re-inserts markers for each tagged section.
  */
@@ -2790,17 +2840,30 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
 
     console.log(`[Import] Repair: converted to HTML (${result.htmlContent.length} chars)`);
 
-    // Re-insert markers for existing tagged sections using CONTENT MATCHING.
-    // Single-pass approach: find all positions in memory, apply all replacements at once,
-    // then write to GridFS once. This avoids N round-trips to GridFS for N sections,
-    // which caused OOM on 370MB documents.
+    // Re-insert markers using tiered matching strategy:
+    // Tier 1: Direct removedHtml match (exact byte match, most reliable)
+    // Tier 2: Text-offset matching with table-splitting (for sections without removedHtml)
+    // Tier 3: Sequential full-table expansion (last resort)
     const sections = importRecord.detectedSections || [];
     let markersInserted = 0;
     let markersFailed = 0;
+    let tier1Count = 0;
+    let tier2Count = 0;
+    let tier3Count = 0;
 
-    // Step 1: Find each section's text position in the fresh HTML via content matching
-    console.log(`[Import] Repair: finding ${sections.length} section positions via content matching...`);
-    const sectionPositions: Array<{ section: any; textOffset: number; textLength: number; marker: string }> = [];
+    interface Replacement {
+      section: any;
+      marker: string;
+      expandedStart: number;
+      expandedEnd: number;
+      removedHtml: string;
+      splitBefore: string;
+      splitAfter: string;
+      tier: number;
+    }
+
+    const replacements: Replacement[] = [];
+    const tier3Queue: Array<{ section: any; marker: string }> = [];
 
     for (const section of sections) {
       const s = section as any;
@@ -2808,91 +2871,154 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
       const sectionType = s.isMatrix ? 'matrix' : (s.isAppendix ? 'appendix' : 'standard');
       const marker = `<!-- EXTRACTED:${s.id}:${sectionType}:${safeTitle}:${s.fullContent?.length || 0} -->`;
 
+      // Tier 1: Direct removedHtml match
+      if (s.removedHtml && typeof s.removedHtml === 'string' && s.removedHtml.length > 0) {
+        const directIdx = result.htmlContent.indexOf(s.removedHtml);
+        if (directIdx !== -1) {
+          replacements.push({
+            section: s, marker,
+            expandedStart: directIdx,
+            expandedEnd: directIdx + s.removedHtml.length,
+            removedHtml: s.removedHtml,
+            splitBefore: '', splitAfter: '',
+            tier: 1
+          });
+          console.log(`[Import] Repair T1: direct match "${s.headerText}" at ${directIdx}-${directIdx + s.removedHtml.length}`);
+          continue;
+        }
+        console.log(`[Import] Repair T1: removedHtml not found for "${s.headerText}", trying T2`);
+      }
+
+      // Tier 2: Text-offset matching with table-splitting
       const match = gridFsService.findSectionTextOffset(
         result.htmlContent, s.htmlContent, s.fullContent
       );
 
       if (match) {
-        sectionPositions.push({ section: s, textOffset: match.textOffset, textLength: match.textLength, marker });
-        console.log(`[Import] Repair: found "${s.headerText}" at textOffset=${match.textOffset}, textLength=${match.textLength}`);
-      } else {
-        markersFailed++;
-        console.warn(`[Import] Repair: could not find "${s.headerText}" in fresh document`);
+        const range = gridFsService.findHtmlRange(
+          result.htmlContent, match.textOffset, match.textLength, { skipTableExpansion: true }
+        );
+        if (range) {
+          replacements.push({
+            section: s, marker, tier: 2,
+            expandedStart: range.expandedStart,
+            expandedEnd: range.expandedEnd,
+            removedHtml: range.removedHtml,
+            splitBefore: range.splitBefore || '',
+            splitAfter: range.splitAfter || ''
+          });
+          console.log(`[Import] Repair T2: "${s.headerText}" range ${range.expandedStart}-${range.expandedEnd}` +
+            (range.splitBefore ? ' (table-split)' : ''));
+          continue;
+        }
       }
+
+      // Queue for Tier 3
+      tier3Queue.push({ section: s, marker });
+      console.log(`[Import] Repair: "${s.headerText}" queued for T3 sequential`);
     }
 
-    // Step 2: Find HTML byte ranges for all positions (pure, no I/O)
-    const replacements: Array<{ section: any; marker: string; expandedStart: number; expandedEnd: number; removedHtml: string }> = [];
-
-    for (const { section, textOffset, textLength, marker } of sectionPositions) {
-      const range = gridFsService.findHtmlRange(result.htmlContent, textOffset, textLength, { skipTableExpansion: true });
-      if (range) {
-        replacements.push({ section, marker, ...range });
-        console.log(`[Import] Repair: HTML range for "${(section as any).headerText}": ${range.expandedStart}-${range.expandedEnd} (${range.expandedEnd - range.expandedStart} chars)`);
-      } else {
-        markersFailed++;
-        console.warn(`[Import] Repair: could not map text offset to HTML for "${(section as any).headerText}"`);
-      }
-    }
-
-    // Step 3: Sort by expandedStart ASCENDING for single-pass array-join build
+    // Sort replacements by expandedStart for single-pass build
     replacements.sort((a, b) => a.expandedStart - b.expandedStart);
 
-    // Step 3b: Remove overlapping replacements (keep the first one in each overlap)
-    const validReplacements = [];
+    // Remove overlapping replacements
+    const validReplacements: Replacement[] = [];
     let prevEnd = 0;
     for (const r of replacements) {
       if (r.expandedStart >= prevEnd) {
         validReplacements.push(r);
         prevEnd = r.expandedEnd;
       } else {
-        markersFailed++;
-        console.warn(`[Import] Repair: skipping overlapping replacement for "${(r.section as any).headerText}" ` +
-          `(range ${r.expandedStart}-${r.expandedEnd} overlaps previous end ${prevEnd})`);
+        // Overlapping — queue for T3 sequential instead of dropping
+        tier3Queue.push({ section: r.section, marker: r.marker });
+        console.warn(`[Import] Repair: overlap for "${r.section.headerText}" ` +
+          `(${r.expandedStart}-${r.expandedEnd} vs prevEnd ${prevEnd}), moving to T3`);
       }
     }
 
-    // Step 4: Build the final HTML in one allocation using array-join.
-    // This avoids creating N intermediate copies of the 370MB string.
-    // V8 substrings are lightweight views into the parent string, so the
-    // parts array doesn't double memory until the final join().
+    // Build the final HTML using array-join (single allocation)
     const html = result.htmlContent;
-    // Free the parser result reference
-    (result as any).htmlContent = '';
+    (result as any).htmlContent = ''; // Free reference
 
     const parts: string[] = [];
     let lastEnd = 0;
 
-    for (const { section: s, marker, expandedStart, expandedEnd, removedHtml } of validReplacements) {
-      parts.push(html.substring(lastEnd, expandedStart));
-      parts.push(marker);
-      lastEnd = expandedEnd;
-      s.removedHtml = removedHtml;
+    for (const r of validReplacements) {
+      parts.push(html.substring(lastEnd, r.expandedStart));
+
+      if (r.splitBefore || r.splitAfter) {
+        // Table-split: [beforeTable] + marker + [afterTable]
+        if (r.splitBefore) parts.push(r.splitBefore + '\n');
+        parts.push(r.marker);
+        if (r.splitAfter) parts.push('\n' + r.splitAfter);
+        tier2Count++;
+      } else {
+        // Direct replacement (Tier 1 or non-table Tier 2)
+        parts.push(r.marker);
+        if (r.tier === 1) tier1Count++;
+        else tier2Count++;
+      }
+
+      lastEnd = r.expandedEnd;
+      r.section.removedHtml = r.removedHtml;
       markersInserted++;
-      console.log(`[Import] Repair: inserted marker for "${s.headerText}"`);
     }
     parts.push(html.substring(lastEnd));
 
-    const finalHtml = parts.join('');
+    let finalHtml = parts.join('');
 
-    // Step 5: Single write to GridFS
+    // Tier 3: Sequential full-table expansion on already-modified HTML
+    for (const { section: s, marker } of tier3Queue) {
+      const match = gridFsService.findSectionTextOffset(finalHtml, s.htmlContent, s.fullContent);
+      if (!match) {
+        markersFailed++;
+        console.warn(`[Import] Repair T3: could not find "${s.headerText}" in modified HTML`);
+        continue;
+      }
+
+      // Use full table expansion (like initial insertion)
+      const range = gridFsService.findHtmlRange(finalHtml, match.textOffset, match.textLength);
+      if (!range) {
+        markersFailed++;
+        console.warn(`[Import] Repair T3: could not map HTML range for "${s.headerText}"`);
+        continue;
+      }
+
+      finalHtml = finalHtml.substring(0, range.expandedStart) + marker + finalHtml.substring(range.expandedEnd);
+      s.removedHtml = range.removedHtml;
+      markersInserted++;
+      tier3Count++;
+      console.log(`[Import] Repair T3: "${s.headerText}" at ${range.expandedStart}-${range.expandedEnd}`);
+    }
+
+    // Diagnostic: verify table balance
+    const tableOpenCount = (finalHtml.match(/<table[\s>]/gi) || []).length;
+    const tableCloseCount = (finalHtml.match(/<\/table>/gi) || []).length;
+    if (tableOpenCount !== tableCloseCount) {
+      console.warn(`[Import] Repair WARNING: unbalanced tables! <table>=${tableOpenCount} </table>=${tableCloseCount}`);
+    }
+
+    // Write to GridFS
     await gridFsService.storeHtmlContent(importId.toString(), finalHtml);
     console.log(`[Import] Repair: stored final HTML (${finalHtml.length} chars) to GridFS`);
 
-    // Save updated section records (with removedHtml)
+    // Save updated section records (with removedHtml persisted via schema fix)
     if (markersInserted > 0) {
       importRecord.markModified('detectedSections');
       await importRecord.save();
     }
 
-    console.log(`[Import] Repair complete: ${markersInserted} markers inserted, ${markersFailed} failed`);
+    console.log(`[Import] Repair complete: ${markersInserted}/${sections.length} markers inserted ` +
+      `(T1=${tier1Count}, T2=${tier2Count}, T3=${tier3Count}, failed=${markersFailed})`);
 
     return res.json({
       success: true,
       htmlSize: finalHtml.length,
       markersInserted,
       markersFailed,
-      totalSections: sections.length
+      totalSections: sections.length,
+      tiers: { direct: tier1Count, tableSplit: tier2Count, sequential: tier3Count },
+      tableBalance: { open: tableOpenCount, close: tableCloseCount }
     });
   } catch (error: any) {
     console.error('Repair document error:', error);
