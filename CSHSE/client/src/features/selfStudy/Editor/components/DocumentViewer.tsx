@@ -40,6 +40,8 @@ interface DocumentViewerProps {
   error: string | null;
   onSelectionCapture: (selection: SelectionData | null) => void;
   onRefresh: () => void;
+  onRepairDocument?: () => void;
+  isRepairing?: boolean;
   hasSelection: boolean;
   // Called by parent after successful save - replaces selection with placeholder
   lastSavedSection?: SavedSectionInfo | null;
@@ -61,6 +63,8 @@ export function DocumentViewer({
   error,
   onSelectionCapture,
   onRefresh,
+  onRepairDocument,
+  isRepairing,
   hasSelection,
   lastSavedSection,
   onPlaceholderInserted,
@@ -567,6 +571,7 @@ export function DocumentViewer({
   }
 
   if (error) {
+    const isContentMissing = error.toLowerCase().includes('not found');
     return (
       <div className="flex-1 flex items-center justify-center bg-red-50">
         <div className="text-center max-w-md">
@@ -577,12 +582,33 @@ export function DocumentViewer({
           </div>
           <h3 className="font-semibold text-red-700 mb-1">Error Loading Document</h3>
           <p className="text-sm text-red-600 mb-4">{error}</p>
-          <button
-            onClick={onRefresh}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-          >
-            Try Again
-          </button>
+          <div className="flex flex-col gap-2 items-center">
+            {isContentMissing && onRepairDocument && (
+              <button
+                onClick={onRepairDocument}
+                disabled={isRepairing}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isRepairing ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Repairing...
+                  </>
+                ) : (
+                  'Repair Document'
+                )}
+              </button>
+            )}
+            <button
+              onClick={onRefresh}
+              className={`px-4 py-2 rounded-lg ${isContentMissing ? 'text-gray-600 bg-white border border-gray-300 hover:bg-gray-50 text-sm' : 'bg-red-600 text-white hover:bg-red-700'}`}
+            >
+              Try Again
+            </button>
+          </div>
         </div>
       </div>
     );

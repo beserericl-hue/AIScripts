@@ -2276,6 +2276,8 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                           error={documentError}
                           onSelectionCapture={handleSelectionCapture}
                           onRefresh={loadDocumentContent}
+                          onRepairDocument={() => repairFileInputRef.current?.click()}
+                          isRepairing={isRepairing}
                           hasSelection={currentSelection !== null}
                           lastSavedSection={lastSavedSection}
                           onPlaceholderInserted={handlePlaceholderInserted}
