@@ -890,83 +890,141 @@ export function findHtmlRange(
       expandedEnd = htmlEndPos;
     }
   } else {
-    // Check if content is inside a table — if so, expand to row boundaries
+    // skipTableExpansion path (used by repair) — table-splitting
     const startInTable = isInsideTable(htmlStartPos);
     const endInTable = isInsideTable(htmlEndPos);
 
     if (startInTable || endInTable) {
-      // Table-splitting: find the full table, extract rows before/after the section,
-      // and place the marker BETWEEN two complete table fragments.
-      // This keeps markers outside tables (like initial insertion) while handling
-      // multiple sections per table.
       const lowerHtml = html.toLowerCase();
 
-      // Find the full table boundaries
-      const tableStart = lowerHtml.lastIndexOf('<table', htmlStartPos);
-      const tableEndSearch = lowerHtml.indexOf('</table>', htmlEndPos);
-      const tableEnd = tableEndSearch !== -1 ? tableEndSearch + 8 : -1;
-
-      if (tableStart !== -1 && tableEnd !== -1) {
-        // Find the <tr> row boundaries for the section content
-        // Use validated <tr matching (not <track, <transition, etc.)
-        let trStart = htmlStartPos;
-        while (trStart >= tableStart) {
-          trStart = lowerHtml.lastIndexOf('<tr', trStart);
-          if (trStart === -1 || trStart < tableStart) { trStart = -1; break; }
-          const nextChar = lowerHtml[trStart + 3];
-          if (nextChar === '>' || nextChar === ' ' || nextChar === '\n' || nextChar === '\t' || nextChar === '\r') {
-            break; // Valid <tr> tag
+      // Helper: find the MATCHING </table> for a <table at the given position (handles nesting)
+      const findMatchingClose = (tableOpenPos: number): number => {
+        let depth = 0;
+        let pos = tableOpenPos + 6; // past '<table'
+        while (pos < lowerHtml.length) {
+          const nextOpen = lowerHtml.indexOf('<table', pos);
+          const nextClose = lowerHtml.indexOf('</table>', pos);
+          if (nextClose === -1) return -1;
+          if (nextOpen !== -1 && nextOpen < nextClose) {
+            const nc = lowerHtml[nextOpen + 6];
+            if (nc === '>' || nc === ' ' || nc === '\n' || nc === '\t' || nc === '\r') {
+              depth++;
+            }
+            pos = nextOpen + 6;
+          } else {
+            if (depth === 0) return nextClose + 8; // position after </table>
+            depth--;
+            pos = nextClose + 8;
           }
-          trStart--;
         }
+        return -1;
+      };
 
-        let trEnd = htmlEndPos;
-        const trEndTag = lowerHtml.indexOf('</tr>', trEnd);
-        trEnd = trEndTag !== -1 ? trEndTag + 5 : htmlEndPos;
+      // Helper: split a table at a row boundary, keeping rows on one side
+      const splitTableAt = (
+        tableOpen: number, tableClose: number, splitPos: number, keepSide: 'before' | 'after'
+      ): string => {
+        const tableOpenEnd = html.indexOf('>', tableOpen) + 1;
+        const tableOpenTag = html.substring(tableOpen, tableOpenEnd);
 
-        if (trStart === -1) trStart = htmlStartPos;
-
-        // Extract the table's opening tag and structural header (<colgroup>, <col>, <thead>)
-        const tableOpenEnd = html.indexOf('>', tableStart) + 1;
-        const tableOpenTag = html.substring(tableStart, tableOpenEnd);
-
-        // Find structural elements (colgroup, col, thead, tbody) between <table> and first <tr>
-        // These need to be duplicated into both split fragments
-        let firstTrPos = tableStart + 6;
-        while (firstTrPos < tableEnd) {
+        // Find structural header (colgroup, col, thead) between <table> and first <tr>
+        let firstTrPos = tableOpen + 6;
+        while (firstTrPos < tableClose) {
           firstTrPos = lowerHtml.indexOf('<tr', firstTrPos);
-          if (firstTrPos === -1 || firstTrPos >= tableEnd) { firstTrPos = tableOpenEnd; break; }
+          if (firstTrPos === -1 || firstTrPos >= tableClose) { firstTrPos = tableOpenEnd; break; }
           const nc = lowerHtml[firstTrPos + 3];
           if (nc === '>' || nc === ' ' || nc === '\n' || nc === '\t' || nc === '\r') break;
           firstTrPos++;
         }
-        const structuralHtml = firstTrPos > tableOpenEnd
-          ? html.substring(tableOpenEnd, firstTrPos)
-          : '';
+        const structuralHtml = firstTrPos > tableOpenEnd ? html.substring(tableOpenEnd, firstTrPos) : '';
 
-        // rowsBefore: content between structural header and first removed row
-        const rowsBefore = html.substring(firstTrPos, trStart);
-        // rowsAfter: content between last removed row and </table>
-        const rowsAfter = html.substring(trEnd, tableEnd - 8); // before </table>
+        if (keepSide === 'before') {
+          // Find the <tr> row boundary at/before splitPos
+          let trStart = splitPos;
+          while (trStart >= tableOpen) {
+            trStart = lowerHtml.lastIndexOf('<tr', trStart);
+            if (trStart === -1 || trStart < tableOpen) { trStart = -1; break; }
+            const nc = lowerHtml[trStart + 3];
+            if (nc === '>' || nc === ' ' || nc === '\n' || nc === '\t' || nc === '\r') break;
+            trStart--;
+          }
+          if (trStart === -1 || trStart <= firstTrPos) return ''; // no rows before section
+          const rows = html.substring(firstTrPos, trStart);
+          return rows.trim() ? tableOpenTag + structuralHtml + rows + '</table>' : '';
+        } else {
+          // Find the </tr> row boundary at/after splitPos
+          const trEndTag = lowerHtml.indexOf('</tr>', splitPos);
+          const trEnd = (trEndTag !== -1 && trEndTag < tableClose) ? trEndTag + 5 : splitPos;
+          const rows = html.substring(trEnd, tableClose - 8); // before </table>
+          return rows.trim() ? tableOpenTag + structuralHtml + rows + '</table>' : '';
+        }
+      };
 
-        const hasRowsBefore = rowsBefore.trim().length > 0;
-        const hasRowsAfter = rowsAfter.trim().length > 0;
+      // Helper: expand position to nearest tag boundary (for non-table positions)
+      const expandToTagBoundary = (pos: number, direction: 'start' | 'end'): number => {
+        if (direction === 'start') {
+          let checkPos = pos - 1;
+          while (checkPos >= 0 && html[checkPos] !== '>' && html[checkPos] !== '<') checkPos--;
+          return (checkPos >= 0 && html[checkPos] === '<') ? checkPos : pos;
+        } else {
+          let checkPos = pos;
+          while (checkPos < html.length && html[checkPos] !== '<' && html[checkPos] !== '>') checkPos++;
+          return (checkPos < html.length && html[checkPos] === '>') ? checkPos + 1 : pos;
+        }
+      };
 
-        // Replace the entire table with: [beforeTable] + marker + [afterTable]
-        expandedStart = tableStart;
-        expandedEnd = tableEnd;
+      // Identify the specific table each position is in
+      let startTableOpen = -1, startTableClose = -1;
+      let endTableOpen = -1, endTableClose = -1;
 
-        // Each fragment gets the table open tag + structural header + its rows
-        splitBeforeHtml = hasRowsBefore
-          ? tableOpenTag + structuralHtml + rowsBefore + '</table>'
-          : '';
-        splitAfterHtml = hasRowsAfter
-          ? tableOpenTag + structuralHtml + rowsAfter + '</table>'
-          : '';
+      if (startInTable) {
+        startTableOpen = lowerHtml.lastIndexOf('<table', htmlStartPos);
+        if (startTableOpen !== -1) startTableClose = findMatchingClose(startTableOpen);
+      }
+      if (endInTable) {
+        endTableOpen = lowerHtml.lastIndexOf('<table', htmlEndPos);
+        if (endTableOpen !== -1) endTableClose = findMatchingClose(endTableOpen);
+      }
+
+      const sameTable = startInTable && endInTable && startTableOpen === endTableOpen
+        && startTableOpen !== -1 && startTableClose !== -1;
+
+      if (sameTable) {
+        // Both positions in the SAME table — split into before/after fragments
+        expandedStart = startTableOpen;
+        expandedEnd = startTableClose;
+        splitBeforeHtml = splitTableAt(startTableOpen, startTableClose, htmlStartPos, 'before');
+        splitAfterHtml = splitTableAt(startTableOpen, startTableClose, htmlEndPos, 'after');
       } else {
-        // Couldn't find table boundaries, fall back to text boundaries
-        expandedStart = htmlStartPos;
-        expandedEnd = htmlEndPos;
+        // Different tables or mixed (one in table, one not)
+        // Each side is handled independently
+
+        // Start boundary
+        if (startInTable && startTableOpen !== -1 && startTableClose !== -1) {
+          expandedStart = startTableOpen;
+          splitBeforeHtml = splitTableAt(startTableOpen, startTableClose, htmlStartPos, 'before');
+        } else if (startInTable) {
+          // Fallback: couldn't find matching table close
+          expandedStart = expandToTagBoundary(htmlStartPos, 'start');
+        } else {
+          expandedStart = expandToTagBoundary(htmlStartPos, 'start');
+        }
+
+        // End boundary
+        if (endInTable && endTableOpen !== -1 && endTableClose !== -1) {
+          expandedEnd = endTableClose;
+          splitAfterHtml = splitTableAt(endTableOpen, endTableClose, htmlEndPos, 'after');
+        } else if (endInTable) {
+          // Fallback: couldn't find matching table close
+          expandedEnd = expandToTagBoundary(htmlEndPos, 'end');
+        } else {
+          expandedEnd = expandToTagBoundary(htmlEndPos, 'end');
+        }
+
+        // Ensure range covers the full section content
+        // (e.g., start in table but end after the table's close)
+        if (expandedEnd < htmlEndPos) expandedEnd = expandToTagBoundary(htmlEndPos, 'end');
+        if (expandedStart > htmlStartPos) expandedStart = expandToTagBoundary(htmlStartPos, 'start');
       }
     } else {
       // Not in a table — simple tag boundary expansion

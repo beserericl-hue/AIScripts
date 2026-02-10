@@ -2907,8 +2907,11 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
             splitBefore: range.splitBefore || '',
             splitAfter: range.splitAfter || ''
           });
-          console.log(`[Import] Repair T2: "${s.headerText}" range ${range.expandedStart}-${range.expandedEnd}` +
-            (range.splitBefore ? ' (table-split)' : ''));
+          const removedSnippet = range.removedHtml.substring(0, 120).replace(/\n/g, '\\n');
+          console.log(`[Import] Repair T2: "${s.headerText}" range ${range.expandedStart}-${range.expandedEnd} (${range.expandedEnd - range.expandedStart} chars)` +
+            (range.splitBefore ? ` splitBefore=${range.splitBefore.length}ch` : '') +
+            (range.splitAfter ? ` splitAfter=${range.splitAfter.length}ch` : '') +
+            ` removed: "${removedSnippet}..."`);
           continue;
         }
       }
@@ -2967,7 +2970,9 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
 
     let finalHtml = parts.join('');
 
-    // Tier 3: Sequential full-table expansion on already-modified HTML
+    // Tier 3: Sequential table-splitting on already-modified HTML
+    // Uses table-splitting (not full table expansion) so multiple sections
+    // in the same table each take only their rows, leaving the rest for the next section.
     for (const { section: s, marker } of tier3Queue) {
       const match = gridFsService.findSectionTextOffset(finalHtml, s.htmlContent, s.fullContent);
       if (!match) {
@@ -2976,19 +2981,28 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
         continue;
       }
 
-      // Use full table expansion (like initial insertion)
-      const range = gridFsService.findHtmlRange(finalHtml, match.textOffset, match.textLength);
+      const range = gridFsService.findHtmlRange(finalHtml, match.textOffset, match.textLength, { skipTableExpansion: true });
       if (!range) {
         markersFailed++;
         console.warn(`[Import] Repair T3: could not map HTML range for "${s.headerText}"`);
         continue;
       }
 
-      finalHtml = finalHtml.substring(0, range.expandedStart) + marker + finalHtml.substring(range.expandedEnd);
+      // Build replacement with table-split fragments (same as Tier 2)
+      let replacement = '';
+      if (range.splitBefore) replacement += range.splitBefore + '\n';
+      replacement += marker;
+      if (range.splitAfter) replacement += '\n' + range.splitAfter;
+
+      finalHtml = finalHtml.substring(0, range.expandedStart) + replacement + finalHtml.substring(range.expandedEnd);
       s.removedHtml = range.removedHtml;
       markersInserted++;
       tier3Count++;
-      console.log(`[Import] Repair T3: "${s.headerText}" at ${range.expandedStart}-${range.expandedEnd}`);
+      const t3Snippet = range.removedHtml.substring(0, 120).replace(/\n/g, '\\n');
+      console.log(`[Import] Repair T3: "${s.headerText}" at ${range.expandedStart}-${range.expandedEnd} (${range.expandedEnd - range.expandedStart} chars)` +
+        (range.splitBefore ? ` splitBefore=${range.splitBefore.length}ch` : '') +
+        (range.splitAfter ? ` splitAfter=${range.splitAfter.length}ch` : '') +
+        ` removed: "${t3Snippet}..."`);
     }
 
     // Diagnostic: verify table balance
