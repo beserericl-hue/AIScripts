@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
 
@@ -37,6 +37,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 /**
  * Hook for managing validation status of self-study sections
+ * Polls for results after triggering validation, then refreshes submission data
  */
 export function useValidationStatus({
   submissionId,
@@ -45,8 +46,10 @@ export function useValidationStatus({
 }: UseValidationStatusOptions) {
   const queryClient = useQueryClient();
   const [isValidating, setIsValidating] = useState(false);
+  const [waitingForResult, setWaitingForResult] = useState(false);
+  const previousStatusRef = useRef<string | null>(null);
 
-  // Fetch latest validation result
+  // Fetch latest validation result — polls every 3s while waiting for callback
   const { data: validationResult, isLoading } = useQuery<ValidationResponse | null>({
     queryKey: ['validation', submissionId, standardCode, specCode],
     queryFn: async () => {
@@ -68,7 +71,24 @@ export function useValidationStatus({
       }
     },
     enabled: !!submissionId && !!standardCode,
+    refetchInterval: waitingForResult ? 3000 : false,
   });
+
+  // When result changes from pending to pass/fail, stop polling and refresh submission
+  useEffect(() => {
+    const currentStatus = validationResult?.result?.status;
+    if (
+      waitingForResult &&
+      currentStatus &&
+      currentStatus !== 'pending' &&
+      previousStatusRef.current === 'pending'
+    ) {
+      setWaitingForResult(false);
+      // Refresh submission data so the validated counter updates
+      queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+    }
+    previousStatusRef.current = currentStatus ?? null;
+  }, [validationResult?.result?.status, waitingForResult, queryClient, submissionId]);
 
   // Trigger validation mutation
   const validateMutation = useMutation({
@@ -88,7 +108,9 @@ export function useValidationStatus({
       setIsValidating(false);
     },
     onSuccess: () => {
-      // Invalidate validation query to refresh results
+      // Start polling for the callback result
+      setWaitingForResult(true);
+      // Invalidate to immediately pick up the new "pending" record
       queryClient.invalidateQueries({
         queryKey: ['validation', submissionId, standardCode, specCode],
       });
@@ -113,7 +135,7 @@ export function useValidationStatus({
   return {
     validationResult,
     isLoading,
-    isValidating: isValidating || validateMutation.isPending,
+    isValidating: isValidating || validateMutation.isPending || waitingForResult,
     triggerValidation,
     getStandardValidationStatus,
     validationError: validateMutation.error,

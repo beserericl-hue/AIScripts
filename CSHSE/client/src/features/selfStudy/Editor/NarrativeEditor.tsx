@@ -669,7 +669,7 @@ export function NarrativeEditor({
                 ) : (
                   <CheckCircle className="w-4 h-4" />
                 )}
-                {validationStatus === 'pass' && !contentChangedSinceValidation ? 'Validated' : 'Validate'}
+                {isValidating ? 'Validating...' : validationStatus === 'pass' && !contentChangedSinceValidation ? 'Validated' : 'Validate'}
               </button>
             </div>
           )}
