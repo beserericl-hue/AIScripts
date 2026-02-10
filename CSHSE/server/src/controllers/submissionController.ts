@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Submission, ISubmission } from '../models/Submission';
+import { Institution } from '../models/Institution';
 import { ValidationResult } from '../models/ValidationResult';
 import { ValidationService } from '../services/validationService';
 import { emailService } from '../services/emailService';
@@ -622,6 +623,13 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
     });
 
     await submission.save();
+
+    // Link institution to this submission so evidence access works
+    if (institutionId) {
+      await Institution.findByIdAndUpdate(institutionId, {
+        currentSubmissionId: submission._id
+      });
+    }
 
     return res.status(201).json({
       submission,

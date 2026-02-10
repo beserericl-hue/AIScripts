@@ -207,7 +207,9 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new AuthorizationError('You do not have access to upload evidence for this submission');
   }
 
-  if (!institution) {
+  // Resolve institution ID: prefer linked institution, fall back to submission.institutionId
+  const resolvedInstitutionId = institution?._id || submission?.institutionId;
+  if (!resolvedInstitutionId) {
     throw new ValidationError('No institution found for this submission');
   }
 
@@ -223,7 +225,7 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   try {
     // Create evidence record with base64 encoded file
     const evidence = await SupportingEvidence.create({
-      institutionId: institution._id,
+      institutionId: resolvedInstitutionId,
       submissionId: new mongoose.Types.ObjectId(submissionId),
       uploadedBy: new mongoose.Types.ObjectId(userId),
       standardCode: standardCode || undefined,
@@ -295,7 +297,7 @@ export const addUrlEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   }
 
   // Verify access
-  const { hasAccess, institution } = await verifyEvidenceAccess(
+  const { hasAccess, submission: sub, institution } = await verifyEvidenceAccess(
     userId,
     userRole,
     submissionId
@@ -305,12 +307,14 @@ export const addUrlEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new AuthorizationError('You do not have access to add evidence for this submission');
   }
 
-  if (!institution) {
+  // Resolve institution ID: prefer linked institution, fall back to submission.institutionId
+  const resolvedInstitutionId = institution?._id || sub?.institutionId;
+  if (!resolvedInstitutionId) {
     throw new ValidationError('No institution found for this submission');
   }
 
   const evidence = await SupportingEvidence.create({
-    institutionId: institution._id,
+    institutionId: resolvedInstitutionId,
     submissionId: new mongoose.Types.ObjectId(submissionId),
     uploadedBy: new mongoose.Types.ObjectId(userId),
     standardCode: standardCode || undefined,
