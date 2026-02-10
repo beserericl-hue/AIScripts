@@ -811,7 +811,7 @@ export function findHtmlRange(
   textStartOffset: number,
   textLength: number,
   options?: { skipTableExpansion?: boolean }
-): { expandedStart: number; expandedEnd: number; removedHtml: string; splitBefore?: string; splitAfter?: string } | null {
+): { expandedStart: number; expandedEnd: number; removedHtml: string; splitBefore?: string; splitAfter?: string; sectionStart: number; sectionEnd: number } | null {
   let textPos = 0;
   let htmlStartPos = -1;
   let htmlEndPos = -1;
@@ -1053,7 +1053,9 @@ export function findHtmlRange(
     expandedEnd,
     removedHtml: html.substring(expandedStart, expandedEnd),
     splitBefore: splitBeforeHtml,
-    splitAfter: splitAfterHtml
+    splitAfter: splitAfterHtml,
+    sectionStart: htmlStartPos,
+    sectionEnd: htmlEndPos
   };
 }
 

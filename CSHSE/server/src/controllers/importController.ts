@@ -2857,6 +2857,7 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
       expandedStart: number;
       expandedEnd: number;
       removedHtml: string;
+      sectionHtml: string; // Section-specific HTML (not full table) for future T1
       splitBefore: string;
       splitAfter: string;
       tier: number;
@@ -2871,22 +2872,31 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
       const sectionType = s.isMatrix ? 'matrix' : (s.isAppendix ? 'appendix' : 'standard');
       const marker = `<!-- EXTRACTED:${s.id}:${sectionType}:${safeTitle}:${s.fullContent?.length || 0} -->`;
 
-      // Tier 1: Direct removedHtml match
+      // Tier 1: Direct removedHtml match (non-table content only)
+      // Skip T1 for table-based removedHtml: previous repairs stored the FULL table as removedHtml.
+      // Replacing the full table with just a marker destroys other sections in the same table.
+      // T2 with table-splitting handles table sections correctly.
       if (s.removedHtml && typeof s.removedHtml === 'string' && s.removedHtml.length > 0) {
-        const directIdx = result.htmlContent.indexOf(s.removedHtml);
-        if (directIdx !== -1) {
-          replacements.push({
-            section: s, marker,
-            expandedStart: directIdx,
-            expandedEnd: directIdx + s.removedHtml.length,
-            removedHtml: s.removedHtml,
-            splitBefore: '', splitAfter: '',
-            tier: 1
-          });
-          console.log(`[Import] Repair T1: direct match "${s.headerText}" at ${directIdx}-${directIdx + s.removedHtml.length}`);
-          continue;
+        const isTableRemoval = s.removedHtml.trimStart().toLowerCase().startsWith('<table');
+        if (isTableRemoval) {
+          console.log(`[Import] Repair T1: skipping "${s.headerText}" — removedHtml is full table (${s.removedHtml.length} chars), using T2`);
+        } else {
+          const directIdx = result.htmlContent.indexOf(s.removedHtml);
+          if (directIdx !== -1) {
+            replacements.push({
+              section: s, marker,
+              expandedStart: directIdx,
+              expandedEnd: directIdx + s.removedHtml.length,
+              removedHtml: s.removedHtml,
+              sectionHtml: s.removedHtml, // Non-table T1: removedHtml IS the section content
+              splitBefore: '', splitAfter: '',
+              tier: 1
+            });
+            console.log(`[Import] Repair T1: direct match "${s.headerText}" at ${directIdx}-${directIdx + s.removedHtml.length}`);
+            continue;
+          }
+          console.log(`[Import] Repair T1: removedHtml not found for "${s.headerText}", trying T2`);
         }
-        console.log(`[Import] Repair T1: removedHtml not found for "${s.headerText}", trying T2`);
       }
 
       // Tier 2: Text-offset matching with table-splitting
@@ -2904,6 +2914,7 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
             expandedStart: range.expandedStart,
             expandedEnd: range.expandedEnd,
             removedHtml: range.removedHtml,
+            sectionHtml: result.htmlContent.substring(range.sectionStart, range.sectionEnd),
             splitBefore: range.splitBefore || '',
             splitAfter: range.splitAfter || ''
           });
@@ -2963,7 +2974,9 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
       }
 
       lastEnd = r.expandedEnd;
-      r.section.removedHtml = r.removedHtml;
+      // Store section-specific HTML (not full table) so future T1 matches
+      // don't replace content belonging to other sections in the same table.
+      r.section.removedHtml = r.sectionHtml;
       markersInserted++;
     }
     parts.push(html.substring(lastEnd));
@@ -2988,6 +3001,9 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
         continue;
       }
 
+      // Store section-specific HTML before modifying finalHtml (positions become invalid after)
+      const sectionSpecificHtml = finalHtml.substring(range.sectionStart, range.sectionEnd);
+
       // Build replacement with table-split fragments (same as Tier 2)
       let replacement = '';
       if (range.splitBefore) replacement += range.splitBefore + '\n';
@@ -2995,7 +3011,7 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
       if (range.splitAfter) replacement += '\n' + range.splitAfter;
 
       finalHtml = finalHtml.substring(0, range.expandedStart) + replacement + finalHtml.substring(range.expandedEnd);
-      s.removedHtml = range.removedHtml;
+      s.removedHtml = sectionSpecificHtml || range.removedHtml;
       markersInserted++;
       tier3Count++;
       const t3Snippet = range.removedHtml.substring(0, 120).replace(/\n/g, '\\n');
