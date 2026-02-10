@@ -537,6 +537,7 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
 
   const handleCancelImport = async () => {
     if (!importId) return;
+    if (!window.confirm('Are you sure you want to cancel this import? All progress will be lost.')) return;
 
     setIsCancelling(true);
     try {

@@ -81,4 +81,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Start the server with dumb-init for proper PID 1 behavior
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/index.js"]
+CMD ["node", "--max-old-space-size=8192", "dist/index.js"]

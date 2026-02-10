@@ -2840,6 +2840,9 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
 
     console.log(`[Import] Repair: converted to HTML (${result.htmlContent.length} chars)`);
 
+    // Free the upload buffer — no longer needed after conversion
+    (file as any).buffer = null;
+
     // Re-insert markers using tiered matching strategy:
     // Tier 1: Direct removedHtml match (exact byte match, most reliable)
     // Tier 2: Text-offset matching with table-splitting (for sections without removedHtml)
@@ -2951,14 +2954,15 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
     }
 
     // Build the final HTML using array-join (single allocation)
-    const html = result.htmlContent;
+    let html: string | null = result.htmlContent;
     (result as any).htmlContent = ''; // Free reference
+    (result as any).rawText = ''; // Free rawText reference too
 
     const parts: string[] = [];
     let lastEnd = 0;
 
     for (const r of validReplacements) {
-      parts.push(html.substring(lastEnd, r.expandedStart));
+      parts.push(html!.substring(lastEnd, r.expandedStart));
 
       if (r.splitBefore || r.splitAfter) {
         // Table-split: [beforeTable] + marker + [afterTable]
@@ -2979,9 +2983,15 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
       r.section.removedHtml = r.sectionHtml;
       markersInserted++;
     }
-    parts.push(html.substring(lastEnd));
+    parts.push(html!.substring(lastEnd));
 
     let finalHtml = parts.join('');
+
+    // Free original HTML and parts array before T3 to reduce peak memory
+    // (parts holds SlicedString references to html, keeping the full 370MB alive)
+    html = null;
+    parts.length = 0;
+    replacements.length = 0;
 
     // Tier 3: Sequential table-splitting on already-modified HTML
     // Uses table-splitting (not full table expansion) so multiple sections
@@ -3021,16 +3031,36 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
         ` removed: "${t3Snippet}..."`);
     }
 
-    // Diagnostic: verify table balance
-    const tableOpenCount = (finalHtml.match(/<table[\s>]/gi) || []).length;
-    const tableCloseCount = (finalHtml.match(/<\/table>/gi) || []).length;
+    // Diagnostic: verify table balance (use indexOf loop instead of regex for large docs)
+    let tableOpenCount = 0;
+    let tableCloseCount = 0;
+    let searchPos = 0;
+    while ((searchPos = finalHtml.indexOf('<table', searchPos)) !== -1) {
+      const nextChar = finalHtml[searchPos + 6];
+      if (nextChar === ' ' || nextChar === '>' || nextChar === '\t' || nextChar === '\n') {
+        tableOpenCount++;
+      }
+      searchPos += 6;
+    }
+    searchPos = 0;
+    while ((searchPos = finalHtml.indexOf('</table>', searchPos)) !== -1) {
+      tableCloseCount++;
+      searchPos += 8;
+    }
     if (tableOpenCount !== tableCloseCount) {
       console.warn(`[Import] Repair WARNING: unbalanced tables! <table>=${tableOpenCount} </table>=${tableCloseCount}`);
     }
 
+    const memUsage = process.memoryUsage();
+    console.log(`[Import] Repair: memory before GridFS store — RSS=${Math.round(memUsage.rss / 1024 / 1024)}MB, heap=${Math.round(memUsage.heapUsed / 1024 / 1024)}MB/${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`);
+
     // Write to GridFS
+    const htmlSize = finalHtml.length;
     await gridFsService.storeHtmlContent(importId.toString(), finalHtml);
-    console.log(`[Import] Repair: stored final HTML (${finalHtml.length} chars) to GridFS`);
+    console.log(`[Import] Repair: stored final HTML (${htmlSize} chars) to GridFS`);
+
+    // Free finalHtml after GridFS store
+    finalHtml = '';
 
     // Save updated section records (with removedHtml persisted via schema fix)
     if (markersInserted > 0) {
@@ -3043,7 +3073,7 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
 
     return res.json({
       success: true,
-      htmlSize: finalHtml.length,
+      htmlSize,
       markersInserted,
       markersFailed,
       totalSections: sections.length,
