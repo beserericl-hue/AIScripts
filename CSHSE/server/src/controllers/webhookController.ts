@@ -15,12 +15,13 @@ interface AuthenticatedRequest extends Request {
  */
 export const triggerValidation = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { submissionId, standardCode, specCode } = req.body;
+    const { submissionId, standardCode, specCode, evidenceText } = req.body;
 
     console.log('[Validation] Trigger request received:', {
       submissionId,
       standardCode,
       specCode,
+      evidenceTextLength: evidenceText?.length || 0,
       userId: req.user?.id
     });
 
@@ -35,7 +36,8 @@ export const triggerValidation = async (req: AuthenticatedRequest, res: Response
       submissionId,
       standardCode,
       specCode,
-      'manual_save'
+      'manual_save',
+      evidenceText || ''
     );
 
     console.log('[Validation] Validation triggered successfully:', {

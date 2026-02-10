@@ -30,6 +30,7 @@ interface UseValidationStatusOptions {
 interface TriggerValidationParams {
   narrativeText: string;
   validationType: 'manual_save' | 'submit';
+  evidenceText?: string;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -71,7 +72,7 @@ export function useValidationStatus({
 
   // Trigger validation mutation
   const validateMutation = useMutation({
-    mutationFn: async ({ narrativeText, validationType }: TriggerValidationParams) => {
+    mutationFn: async ({ narrativeText, validationType, evidenceText }: TriggerValidationParams) => {
       setIsValidating(true);
       const response = await api.post(`${API_BASE}/webhooks/n8n/validate`, {
         submissionId,
@@ -79,6 +80,7 @@ export function useValidationStatus({
         specCode,
         narrativeText,
         validationType,
+        evidenceText,
       });
       return response.data;
     },

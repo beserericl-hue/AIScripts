@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 import { ValidationResult, IValidationResult, IValidationResultData } from '../models/ValidationResult';
 import { WebhookSettings, IWebhookSettings } from '../models/WebhookSettings';
 import { Submission } from '../models/Submission';
+import { SupportingEvidence } from '../models/SupportingEvidence';
+import { getStandardByCode } from '../data/standards';
 
 export interface ValidationRequest {
   submissionId: string;
@@ -9,11 +11,16 @@ export interface ValidationRequest {
   standardCode: string;
   specCode: string;
   narrativeText: string;
+  evidenceText: string;
   standardText: string;
   specificationText: string;
+  standardTitle: string;
+  standardDescription: string;
+  specTitle: string;
+  specText: string;
   supportingEvidence: {
-    documents: Array<{ filename: string; type: string; url?: string }>;
-    urls: Array<{ href: string; title: string }>;
+    documents: Array<{ filename: string; type: string; size?: number }>;
+    urls: Array<{ href: string; title: string; description?: string }>;
   };
   callbackUrl: string;
 }
@@ -41,7 +48,8 @@ export class ValidationService {
     submissionId: string,
     standardCode: string,
     specCode: string,
-    validationType: 'auto_save' | 'manual_save' | 'submit' = 'manual_save'
+    validationType: 'auto_save' | 'manual_save' | 'submit' = 'manual_save',
+    evidenceText: string = ''
   ): Promise<IValidationResult> {
     console.log('[ValidationService] triggerValidation called:', {
       submissionId,
@@ -143,17 +151,72 @@ export class ValidationService {
 
     console.log('[ValidationService] Callback URL:', callbackUrl);
 
+    // Look up standard and specification text
+    const standardDef = getStandardByCode(standardCode);
+    const specDef = standardDef?.specifications.find(sp => sp.code === specCode);
+
+    const standardTextFull = standardDef
+      ? `Standard ${standardDef.code}: ${standardDef.title}\n${standardDef.description}`
+      : '';
+    const specTextFull = specDef
+      ? `Specification ${specDef.code}: ${specDef.title}\n${specDef.text}`
+      : '';
+
+    console.log('[ValidationService] Standard text:', standardTextFull ? 'found' : 'not found');
+    console.log('[ValidationService] Spec text:', specTextFull ? 'found' : 'not found');
+
+    // Fetch supporting evidence from MongoDB
+    const evidenceDocs: Array<{ filename: string; type: string; size?: number }> = [];
+    const evidenceUrls: Array<{ href: string; title: string; description?: string }> = [];
+
+    try {
+      const evidence = await SupportingEvidence.find({
+        submissionId: new mongoose.Types.ObjectId(submissionId),
+        standardCode,
+        specCode,
+        isDeleted: false
+      });
+
+      for (const item of evidence) {
+        if (item.evidenceType === 'url' && item.url) {
+          evidenceUrls.push({
+            href: item.url.href,
+            title: item.url.title || item.url.href,
+            description: item.url.description
+          });
+        } else if (item.evidenceType === 'document' && item.file) {
+          evidenceDocs.push({
+            filename: item.file.originalName || item.file.filename,
+            type: item.file.mimeType,
+            size: item.file.size
+          });
+        }
+      }
+
+      console.log('[ValidationService] Found evidence:', {
+        urls: evidenceUrls.length,
+        documents: evidenceDocs.length
+      });
+    } catch (err) {
+      console.log('[ValidationService] Error fetching evidence (continuing):', err);
+    }
+
     const request: ValidationRequest = {
       submissionId,
       programLevel: submission.programLevel,
       standardCode,
       specCode,
       narrativeText: narrative.content,
-      standardText: '', // Would be populated from standards template
-      specificationText: '', // Would be populated from standards template
+      evidenceText,
+      standardText: standardTextFull,
+      specificationText: specTextFull,
+      standardTitle: standardDef?.title || '',
+      standardDescription: standardDef?.description || '',
+      specTitle: specDef?.title || '',
+      specText: specDef?.text || '',
       supportingEvidence: {
-        documents: [],
-        urls: []
+        documents: evidenceDocs,
+        urls: evidenceUrls
       },
       callbackUrl
     };
@@ -164,6 +227,11 @@ export class ValidationService {
       standardCode: request.standardCode,
       specCode: request.specCode,
       narrativeLength: request.narrativeText.length,
+      evidenceTextLength: request.evidenceText.length,
+      standardText: request.standardText ? 'present' : 'empty',
+      specText: request.specificationText ? 'present' : 'empty',
+      evidenceUrls: request.supportingEvidence.urls.length,
+      evidenceDocs: request.supportingEvidence.documents.length,
       callbackUrl: request.callbackUrl
     });
 

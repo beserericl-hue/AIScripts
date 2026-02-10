@@ -320,12 +320,16 @@ export function NarrativeEditor({
     // Save the content first
     await saveNow(currentContent);
 
-    // Then trigger validation workflow
+    // Get supporting evidence text from the evidence editor
+    const currentEvidenceText = supportingEvidenceEditor?.getHTML() || '';
+
+    // Then trigger validation workflow with narrative + evidence text
     await triggerValidation({
       narrativeText: currentContent,
       validationType: 'manual_save',
+      evidenceText: currentEvidenceText,
     });
-  }, [editor, saveNow, triggerValidation]);
+  }, [editor, supportingEvidenceEditor, saveNow, triggerValidation]);
 
   // Update editor content if initial content changes externally
   useEffect(() => {
