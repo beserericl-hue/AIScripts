@@ -19,18 +19,23 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 interface Evidence {
   _id: string;
-  filename?: string;
-  originalFilename?: string;
-  mimeType?: string;
-  url?: string;
-  title: string;
-  description?: string;
   evidenceType: 'document' | 'url' | 'image';
-  fileSize?: number;
-  linkedSpecs: Array<{
-    standardCode: string;
-    specCode: string;
-  }>;
+  // URL evidence (object from MongoDB)
+  url?: {
+    href: string;
+    title: string;
+    description?: string;
+  };
+  // File evidence
+  file?: {
+    filename: string;
+    originalName: string;
+    mimeType: string;
+    size: number;
+  };
+  metadata?: {
+    description?: string;
+  };
   createdAt: string;
 }
 
@@ -164,7 +169,7 @@ export function EvidencePanel({
   const getEvidenceIcon = (item: Evidence) => {
     if (item.evidenceType === 'url') return <Link2 className="w-4 h-4" />;
     if (item.evidenceType === 'image') return <ImageIcon className="w-4 h-4" />;
-    if (item.mimeType?.includes('pdf')) return <FileText className="w-4 h-4" />;
+    if (item.file?.mimeType?.includes('pdf')) return <FileText className="w-4 h-4" />;
     return <File className="w-4 h-4" />;
   };
 
@@ -248,18 +253,20 @@ export function EvidencePanel({
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span className="text-gray-400">{getEvidenceIcon(item)}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-800 truncate">{item.title}</p>
+                    <p className="text-sm text-gray-800 truncate">
+                      {item.evidenceType === 'url' ? item.url?.title : item.file?.originalName || 'Untitled'}
+                    </p>
                     <p className="text-xs text-gray-400">
                       {item.evidenceType === 'url'
-                        ? item.url
-                        : formatFileSize(item.fileSize)}
+                        ? item.url?.href
+                        : formatFileSize(item.file?.size)}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1 ml-2">
                   {item.evidenceType === 'url' ? (
                     <a
-                      href={item.url}
+                      href={item.url?.href}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="p-1 text-gray-400 hover:text-teal-600"
@@ -277,7 +284,7 @@ export function EvidencePanel({
                     </button>
                   )}
                   <button
-                    onClick={() => handleDelete(item._id, item.title)}
+                    onClick={() => handleDelete(item._id, item.url?.title || item.file?.originalName || 'evidence')}
                     disabled={deleteMutation.isPending}
                     className="p-1 text-gray-400 hover:text-red-600 disabled:opacity-50"
                     title="Delete"
