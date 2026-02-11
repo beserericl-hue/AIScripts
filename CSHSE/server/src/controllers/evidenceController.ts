@@ -18,6 +18,7 @@ interface AuthenticatedRequest extends Request {
     id: string;
     role: string;
     institutionId?: string;
+    isSuperuser?: boolean;
   };
   file?: Express.Multer.File;
 }
@@ -33,7 +34,8 @@ async function verifyEvidenceAccess(
   userId: string,
   userRole: string,
   submissionId: string,
-  institutionId?: string
+  institutionId?: string,
+  isSuperuser?: boolean
 ): Promise<{ hasAccess: boolean; submission: any; institution: any }> {
   // Get submission with institution info
   const submission = await Submission.findById(submissionId).lean();
@@ -50,8 +52,8 @@ async function verifyEvidenceAccess(
     institution = await Institution.findById((submission as any).institutionId).lean();
   }
 
-  // Admin has full access
-  if (userRole === 'admin') {
+  // Superusers and admins have full access
+  if (isSuperuser || userRole === 'admin') {
     return { hasAccess: true, submission, institution };
   }
 
@@ -102,6 +104,7 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
   const { standardCode, specCode, evidenceType } = req.query;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -111,7 +114,9 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
   const { hasAccess, institution } = await verifyEvidenceAccess(
     userId,
     userRole,
-    submissionId
+    submissionId,
+    undefined,
+    isSuperuser
   );
 
   if (!hasAccess) {
@@ -152,6 +157,7 @@ export const getEvidence = asyncHandler(async (req: AuthenticatedRequest, res: R
   const { submissionId, evidenceId } = req.params;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -186,6 +192,7 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const file = req.file;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -204,7 +211,9 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { hasAccess, submission, institution } = await verifyEvidenceAccess(
     userId,
     userRole,
-    submissionId
+    submissionId,
+    undefined,
+    isSuperuser
   );
 
   if (!hasAccess) {
@@ -279,6 +288,7 @@ export const addUrlEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { standardCode, specCode, url, title, description } = req.body;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -304,7 +314,9 @@ export const addUrlEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { hasAccess, submission: sub, institution } = await verifyEvidenceAccess(
     userId,
     userRole,
-    submissionId
+    submissionId,
+    undefined,
+    isSuperuser
   );
 
   if (!hasAccess) {
@@ -348,6 +360,7 @@ export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { standardCode, specCode, description, title } = req.body;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -412,6 +425,7 @@ export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { submissionId, evidenceId } = req.params;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -455,6 +469,7 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
   const { submissionId, evidenceId } = req.params;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -464,7 +479,9 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
   const { hasAccess, institution } = await verifyEvidenceAccess(
     userId,
     userRole,
-    submissionId
+    submissionId,
+    undefined,
+    isSuperuser
   );
 
   if (!hasAccess) {
@@ -537,6 +554,7 @@ export const linkEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
   const { standardCode, specCode } = req.body;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -582,6 +600,7 @@ export const unlinkEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { submissionId, evidenceId } = req.params;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -623,6 +642,7 @@ export const getEvidenceStats = asyncHandler(async (req: AuthenticatedRequest, r
   const { submissionId } = req.params;
   const userId = req.user?.id;
   const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -631,7 +651,9 @@ export const getEvidenceStats = asyncHandler(async (req: AuthenticatedRequest, r
   const { hasAccess, institution } = await verifyEvidenceAccess(
     userId,
     userRole,
-    submissionId
+    submissionId,
+    undefined,
+    isSuperuser
   );
 
   if (!hasAccess) {

@@ -245,7 +245,9 @@ export function EvidencePanel({
           </div>
         ) : evidence.length === 0 ? (
           <div className="p-4 text-center text-sm text-gray-500">
-            No evidence attached yet. Upload a file or add a URL.
+            {readOnly
+              ? 'No supporting evidence for this section.'
+              : 'No evidence attached yet. Upload a file or add a URL.'}
           </div>
         ) : (
           <ul className="divide-y divide-gray-100">
