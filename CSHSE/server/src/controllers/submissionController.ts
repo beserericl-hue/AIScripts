@@ -86,14 +86,16 @@ export const getSubmissionProgress = async (req: AuthenticatedRequest, res: Resp
     }
 
     // Calculate overall progress
-    const standardsStatus = submission.standardsStatus || {};
+    const statusEntries: any[] = submission.standardsStatus
+      ? Array.from(submission.standardsStatus.values())
+      : [];
     const totalStandards = 21;
     let completedStandards = 0;
     let submittedStandards = 0;
     let validatedStandards = 0;
     let failedStandards = 0;
 
-    Object.values(standardsStatus).forEach((status: any) => {
+    statusEntries.forEach((status: any) => {
       if (status.status === 'complete' || status.status === 'submitted' || status.status === 'validated') {
         completedStandards++;
       }
@@ -137,7 +139,9 @@ export const getSubmissionProgress = async (req: AuthenticatedRequest, res: Resp
         failed: failCount,
         pending: pendingCount
       },
-      standardsStatus,
+      standardsStatus: submission.standardsStatus
+        ? Object.fromEntries(submission.standardsStatus)
+        : {},
       selfStudyProgress: submission.selfStudyProgress || {}
     });
   } catch (error) {
@@ -310,16 +314,19 @@ export const submitStandard = async (req: AuthenticatedRequest, res: Response) =
 
     // Update submission status
     if (!submission.standardsStatus) {
-      submission.standardsStatus = {};
+      submission.standardsStatus = new Map();
     }
 
     if (failedSpecs.length === 0) {
       // All passed - mark as submitted
-      submission.standardsStatus[standardCode] = {
+      submission.standardsStatus.set(standardCode, {
+        completionPercentage: 100,
+        lastModified: new Date(),
+        ...(submission.standardsStatus.get(standardCode) || {}),
         status: 'submitted',
         validationStatus: 'pass',
         submittedAt: new Date()
-      };
+      });
       submission.markModified('standardsStatus');
       await submission.save();
 
@@ -430,13 +437,16 @@ export const revalidateFailed = async (req: AuthenticatedRequest, res: Response)
     // Update standard status if all now pass
     if (standardCode && failCount === 0 && passCount > 0) {
       if (!submission.standardsStatus) {
-        submission.standardsStatus = {};
+        submission.standardsStatus = new Map();
       }
-      submission.standardsStatus[standardCode] = {
+      submission.standardsStatus.set(standardCode, {
+        completionPercentage: 100,
+        lastModified: new Date(),
+        ...(submission.standardsStatus.get(standardCode) || {}),
         status: 'submitted',
         validationStatus: 'pass',
         submittedAt: new Date()
-      };
+      });
       submission.markModified('standardsStatus');
       await submission.save();
     }
@@ -503,20 +513,22 @@ export const markStandardComplete = async (req: AuthenticatedRequest, res: Respo
     }
 
     if (!submission.standardsStatus) {
-      submission.standardsStatus = {};
+      submission.standardsStatus = new Map();
     }
 
-    submission.standardsStatus[standardCode] = {
-      ...submission.standardsStatus[standardCode],
+    submission.standardsStatus.set(standardCode, {
+      completionPercentage: 100,
+      lastModified: new Date(),
+      ...(submission.standardsStatus.get(standardCode) || {}),
       status: 'complete'
-    };
+    });
 
     submission.markModified('standardsStatus');
     await submission.save();
 
     return res.json({
       message: `Standard ${standardCode} marked as complete`,
-      standardStatus: submission.standardsStatus[standardCode]
+      standardStatus: submission.standardsStatus.get(standardCode)
     });
   } catch (error) {
     console.error('Mark standard complete error:', error);
@@ -538,9 +550,11 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
       filter.institutionId = institutionId;
     }
 
-    // Filter by role
+    // Filter by role — scope program coordinators to their own institution
     if (req.user?.role === 'program_coordinator') {
-      filter.coordinatorId = req.user.id;
+      if (!filter.institutionId && (req.user as any).institutionId) {
+        filter.institutionId = (req.user as any).institutionId;
+      }
     }
 
     // Filter by status
@@ -678,7 +692,7 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
 
     for (const standard of activeSpec.standards) {
       for (const spec of standard.specifications || []) {
-        const statusKey = `${standard.code}.${spec.code}`;
+        const statusKey = `${standard.code}_${spec.code}`;
         const status = standardsStatus instanceof Map
           ? standardsStatus.get(statusKey)
           : standardsStatus[statusKey];
