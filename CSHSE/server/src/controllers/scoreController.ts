@@ -8,6 +8,7 @@ interface AuthenticatedRequest extends Request {
     email: string;
     firstName?: string;
     lastName?: string;
+    isSuperuser?: boolean;
   };
 }
 
@@ -18,7 +19,7 @@ interface AuthenticatedRequest extends Request {
  */
 export const upsertScore = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!['reader', 'lead_reader'].includes(req.user?.role || '')) {
+    if (!['reader', 'lead_reader'].includes(req.user?.role || '') && !req.user?.isSuperuser) {
       return res.status(403).json({ error: 'Only readers and lead readers can score' });
     }
 
@@ -70,7 +71,7 @@ export const upsertScore = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const deleteScore = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!['reader', 'lead_reader'].includes(req.user?.role || '')) {
+    if (!['reader', 'lead_reader'].includes(req.user?.role || '') && !req.user?.isSuperuser) {
       return res.status(403).json({ error: 'Only readers and lead readers can manage scores' });
     }
 

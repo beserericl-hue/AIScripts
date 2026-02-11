@@ -147,8 +147,8 @@ export const createComment = async (req: AuthenticatedRequest, res: Response) =>
       content
     } = req.body;
 
-    // Only readers and lead readers can create comments
-    if (!['reader', 'lead_reader'].includes(req.user?.role || '')) {
+    // Only readers, lead readers, and superusers (impersonating) can create comments
+    if (!['reader', 'lead_reader'].includes(req.user?.role || '') && !req.user?.isSuperuser) {
       return res.status(403).json({
         error: 'Only readers and lead readers can create comments'
       });
@@ -283,8 +283,8 @@ export const addReply = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ error: 'Comment not found' });
     }
 
-    // Program coordinators cannot see or interact with comments
-    if (req.user?.role === 'program_coordinator') {
+    // Program coordinators cannot see or interact with comments (superusers bypass)
+    if (req.user?.role === 'program_coordinator' && !req.user?.isSuperuser) {
       return res.status(403).json({ error: 'Program coordinators cannot access comments' });
     }
 
@@ -360,7 +360,7 @@ export const toggleResolve = async (req: AuthenticatedRequest, res: Response) =>
   try {
     const { commentId } = req.params;
 
-    if (!['reader', 'lead_reader'].includes(req.user?.role || '')) {
+    if (!['reader', 'lead_reader'].includes(req.user?.role || '') && !req.user?.isSuperuser) {
       return res.status(403).json({
         error: 'Only readers and lead readers can resolve comments'
       });
