@@ -988,7 +988,7 @@ export function NarrativeEditor({
       {showValidationModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className={`relative w-full max-w-lg mx-4 rounded-lg shadow-xl border ${
-            validationStatus === 'pass' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+            validationStatus === 'pass' ? 'bg-teal-100 border-teal-200' : 'bg-red-50 border-red-200'
           }`}>
             <div className="flex items-center justify-between p-4 border-b border-inherit">
               <div className="flex items-center gap-2">

@@ -146,6 +146,16 @@ export function Dashboard() {
     enabled: isProgramCoordinator && !!effectiveUser?.institutionId
   });
 
+  // Fetch standards definitions (for total spec count)
+  const { data: standardsData } = useQuery<{ code: string; specifications: { code: string }[] }[]>({
+    queryKey: ['standards'],
+    queryFn: async () => {
+      const response = await api.get(`${API_BASE}/standards`);
+      return response.data;
+    },
+    enabled: isProgramCoordinator
+  });
+
   // Fetch pending change requests
   const { data: changeRequestsData, isLoading: changeRequestsLoading } = useQuery({
     queryKey: ['pending-change-requests'],
@@ -253,22 +263,30 @@ export function Dashboard() {
     return siteVisits;
   }, [siteVisits, isProgramCoordinator, effectiveUser, myInstitution]);
 
-  // Calculate statistics for PC
+  // Calculate statistics for PC — count validated specs out of total specs
   const pcStats = useMemo(() => {
-    if (!mySubmission?.standardsStatus) {
-      return { completedItems: 0, totalItems: 21 }; // 21 standards by default
+    if (!standardsData || !mySubmission?.standardsStatus) {
+      return { completedItems: 0, totalItems: 83 };
     }
 
-    const statuses = Object.values(mySubmission.standardsStatus);
-    const completedItems = statuses.filter(
-      (s) => s.status === 'complete' || s.status === 'submitted' || s.status === 'validated'
-    ).length;
+    let completedItems = 0;
+    let totalItems = 0;
+
+    for (const standard of standardsData) {
+      for (const spec of standard.specifications || []) {
+        totalItems++;
+        const status = mySubmission.standardsStatus[`${standard.code}_${spec.code}`];
+        if (status?.validationStatus === 'pass' || status?.status === 'validated' || status?.status === 'complete' || status?.status === 'submitted') {
+          completedItems++;
+        }
+      }
+    }
 
     return {
       completedItems,
-      totalItems: statuses.length || 21
+      totalItems: totalItems || 83
     };
-  }, [mySubmission]);
+  }, [mySubmission, standardsData]);
 
   // Calculate statistics for Admin/other roles
   const stats = useMemo(() => {

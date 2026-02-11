@@ -484,11 +484,14 @@ export class ValidationService {
 
     standardsStatus.set(statusKey, {
       ...currentStatus,
+      status: status === 'pass' ? 'validated' : currentStatus.status,
       validationStatus: status,
       validatedAt: new Date(),
       lastModified: new Date()
     });
 
+    // Mark Map as modified so Mongoose persists the change
+    submission.markModified('standardsStatus');
     // Recalculate progress
     submission.recalculateProgress();
     await submission.save();
