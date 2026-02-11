@@ -16,6 +16,11 @@ interface AuthenticatedRequest extends Request {
  */
 export const getComments = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Comments are never visible to program coordinators
+    if (req.user?.role === 'program_coordinator') {
+      return res.json({ comments: [], groupedComments: {}, pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } });
+    }
+
     const { submissionId } = req.params;
     const { standardCode, specCode, page = '1', limit = '50' } = req.query;
 
@@ -69,6 +74,11 @@ export const getComments = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const getCommentSummary = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Comments are never visible to program coordinators
+    if (req.user?.role === 'program_coordinator') {
+      return res.json({ total: 0, unresolved: 0, bySection: [] });
+    }
+
     const { submissionId } = req.params;
 
     const pipeline = [
@@ -264,8 +274,12 @@ export const addReply = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ error: 'Comment not found' });
     }
 
-    // Program coordinators can only reply, not create comments
-    // All roles (reader, lead_reader, program_coordinator) can add replies
+    // Program coordinators cannot see or interact with comments
+    if (req.user?.role === 'program_coordinator') {
+      return res.status(403).json({ error: 'Program coordinators cannot access comments' });
+    }
+
+    // Only readers and lead readers can add replies
     const reply = {
       authorId: new mongoose.Types.ObjectId(req.user!.id),
       authorName: req.user!.name,
@@ -374,6 +388,11 @@ export const toggleResolve = async (req: AuthenticatedRequest, res: Response) =>
  */
 export const getCommentsForNavigation = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // Comments are never visible to program coordinators
+    if (req.user?.role === 'program_coordinator') {
+      return res.json({ comments: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0, hasFirst: false, hasPrevious: false, hasNext: false, hasLast: false }, navigation: { first: 1, previous: 1, next: 1, last: 1 } });
+    }
+
     const { submissionId } = req.params;
     const { page = '1', limit = '10' } = req.query;
 

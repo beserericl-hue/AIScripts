@@ -495,6 +495,12 @@ export class ValidationService {
     // Recalculate progress
     submission.recalculateProgress();
     await submission.save();
+
+    console.log(`[ValidationService] Updated standardsStatus key="${statusKey}" to validationStatus="${status}"`, {
+      submissionId,
+      mapSize: submission.standardsStatus.size,
+      savedEntry: submission.standardsStatus.get(statusKey)
+    });
   }
 
   /**

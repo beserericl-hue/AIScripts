@@ -63,9 +63,31 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
     const submissionObj = submission.toObject();
     const narrativeContent = narrativesMapToArray(submission.narratives);
 
+    // Explicitly flatten standardsStatus Map to POJO for JSON serialization
+    // (Mongoose Maps may not serialize correctly via toObject() alone)
+    const standardsStatus: Record<string, any> = {};
+    if (submission.standardsStatus) {
+      submission.standardsStatus.forEach((value: any, key: string) => {
+        standardsStatus[key] = typeof value?.toObject === 'function'
+          ? value.toObject()
+          : { ...value };
+      });
+    }
+
+    // Debug: log standardsStatus entries with validationStatus set
+    const validatedKeys = Object.entries(standardsStatus)
+      .filter(([, v]: [string, any]) => v?.validationStatus)
+      .map(([k, v]: [string, any]) => `${k}=${v.validationStatus}`);
+    if (validatedKeys.length > 0) {
+      console.log(`[getSubmission] ${submissionId} has ${validatedKeys.length} validated entries:`, validatedKeys.join(', '));
+    } else {
+      console.log(`[getSubmission] ${submissionId} standardsStatus has ${Object.keys(standardsStatus).length} keys, 0 with validationStatus`);
+    }
+
     return res.json({
       ...submissionObj,
-      narrativeContent
+      narrativeContent,
+      standardsStatus
     });
   } catch (error) {
     console.error('Get submission error:', error);
