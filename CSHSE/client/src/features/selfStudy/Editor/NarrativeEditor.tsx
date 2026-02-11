@@ -44,6 +44,8 @@ import {
   ChevronUp,
   FileText,
   Trash2,
+  Eye,
+  X,
 } from 'lucide-react';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useValidationStatus } from '../../../hooks/useValidationStatus';
@@ -139,6 +141,7 @@ export function NarrativeEditor({
 
   // State for clear section confirmation
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
 
   // Initialize TipTap editor with Word paste support
   const editor = useEditor({
@@ -376,9 +379,37 @@ export function NarrativeEditor({
         {/* Specification */}
         {specCode && (
           <div className="pt-3 border-t border-teal-200">
-            <h5 className="text-sm font-semibold text-teal-800 mb-1">
-              {standardCode}.{specCode} - {specTitle}
-            </h5>
+            <div className="flex items-center justify-between">
+              <h5 className="text-sm font-semibold text-teal-800 mb-1">
+                {standardCode}.{specCode} - {specTitle}
+              </h5>
+              {/* Validation status badge */}
+              {validationStatus !== 'pending' && feedback && (
+                <button
+                  onClick={() => setShowValidationModal(true)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                    validationStatus === 'pass'
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-red-100 text-red-700 hover:bg-red-200'
+                  }`}
+                  title="View validation details"
+                >
+                  {validationStatus === 'pass' ? (
+                    <CheckCircle className="w-3.5 h-3.5" />
+                  ) : (
+                    <AlertCircle className="w-3.5 h-3.5" />
+                  )}
+                  {validationStatus === 'pass' ? 'Passed' : 'Failed'}
+                  <Eye className="w-3.5 h-3.5 ml-0.5" />
+                </button>
+              )}
+              {isValidating && (
+                <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Validating...
+                </span>
+              )}
+            </div>
             <p className="text-sm text-teal-700">{standardText}</p>
           </div>
         )}
@@ -953,14 +984,58 @@ export function NarrativeEditor({
         </div>
       )}
 
-      {/* Validation Panel */}
-      <ValidationPanel
-        status={validationStatus}
-        isValidating={isValidating}
-        feedback={feedback}
-        suggestions={suggestions}
-        missingElements={missingElements}
-      />
+      {/* Validation Details Modal */}
+      {showValidationModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className={`relative w-full max-w-lg mx-4 rounded-lg shadow-xl border ${
+            validationStatus === 'pass' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+          }`}>
+            <div className="flex items-center justify-between p-4 border-b border-inherit">
+              <div className="flex items-center gap-2">
+                {validationStatus === 'pass' ? (
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                )}
+                <h3 className="font-semibold text-gray-900">
+                  {validationStatus === 'pass' ? 'Validation Passed' : 'Validation Failed'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowValidationModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+              {feedback && (
+                <p className="text-sm text-gray-700">{feedback}</p>
+              )}
+              {suggestions.length > 0 && (
+                <div>
+                  <h5 className="text-sm font-medium text-gray-700 mb-1">Suggestions:</h5>
+                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                    {suggestions.map((suggestion, index) => (
+                      <li key={index}>{suggestion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {missingElements.length > 0 && (
+                <div>
+                  <h5 className="text-sm font-medium text-red-700 mb-1">Missing Elements:</h5>
+                  <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
+                    {missingElements.map((element, index) => (
+                      <li key={index}>{element}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1068,87 +1143,5 @@ function SaveStatusIndicator({
   return null;
 }
 
-// Validation Panel Component
-function ValidationPanel({
-  status,
-  isValidating,
-  feedback,
-  suggestions,
-  missingElements,
-}: {
-  status: 'pass' | 'fail' | 'pending';
-  isValidating: boolean;
-  feedback: string | null;
-  suggestions: string[];
-  missingElements: string[];
-}) {
-  if (isValidating) {
-    return (
-      <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-        <div className="flex items-center gap-2 text-gray-600">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          <span>Validating content...</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (status === 'pending' && !feedback) {
-    return null;
-  }
-
-  const statusColors = {
-    pass: 'bg-green-50 border-green-200',
-    fail: 'bg-red-50 border-red-200',
-    pending: 'bg-gray-50 border-gray-200',
-  };
-
-  const statusIcons = {
-    pass: <CheckCircle className="w-5 h-5 text-green-600" />,
-    fail: <AlertCircle className="w-5 h-5 text-red-600" />,
-    pending: null,
-  };
-
-  const statusText = {
-    pass: 'Validation Passed',
-    fail: 'Validation Failed',
-    pending: 'Pending Validation',
-  };
-
-  return (
-    <div className={`mt-4 p-4 border rounded-lg ${statusColors[status]}`}>
-      <div className="flex items-center gap-2 mb-3">
-        {statusIcons[status]}
-        <h4 className="font-semibold">{statusText[status]}</h4>
-      </div>
-
-      {feedback && (
-        <p className="text-sm text-gray-700 mb-3">{feedback}</p>
-      )}
-
-      {suggestions.length > 0 && (
-        <div className="mb-3">
-          <h5 className="text-sm font-medium text-gray-700 mb-1">Suggestions:</h5>
-          <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-            {suggestions.map((suggestion, index) => (
-              <li key={index}>{suggestion}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {missingElements.length > 0 && (
-        <div>
-          <h5 className="text-sm font-medium text-red-700 mb-1">Missing Elements:</h5>
-          <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
-            {missingElements.map((element, index) => (
-              <li key={index}>{element}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
 
 export default NarrativeEditor;
