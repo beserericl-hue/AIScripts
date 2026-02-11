@@ -11,6 +11,8 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Send,
   X
 } from 'lucide-react';
@@ -49,6 +51,10 @@ interface CommentSidebarProps {
   currentUserId: string;
   currentUserRole: 'reader' | 'lead_reader' | 'program_coordinator' | 'admin';
   onCommentClick?: (comment: Comment) => void;
+  onNavigatePrev?: () => void;
+  onNavigateNext?: () => void;
+  hasPrevComment?: boolean;
+  hasNextComment?: boolean;
 }
 
 const roleColors: Record<string, string> = {
@@ -69,7 +75,11 @@ export function CommentSidebar({
   specCode,
   currentUserId,
   currentUserRole,
-  onCommentClick
+  onCommentClick,
+  onNavigatePrev,
+  onNavigateNext,
+  hasPrevComment = false,
+  hasNextComment = false,
 }: CommentSidebarProps) {
   const queryClient = useQueryClient();
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
@@ -200,19 +210,35 @@ export function CommentSidebar({
 
   const comments: Comment[] = data?.comments || [];
 
-  if (comments.length === 0) {
-    return null; // Don't show sidebar if no comments
-  }
-
   return (
     <div className="w-80 border-l border-gray-200 bg-gray-50 flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 bg-white">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-gray-600" />
-          <h3 className="font-semibold text-gray-900">
-            Comments ({comments.length})
-          </h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-gray-600" />
+            <h3 className="font-semibold text-gray-900">
+              Comments ({comments.length})
+            </h3>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onNavigatePrev}
+              disabled={!hasPrevComment}
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+              title="Previous section with comments"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={onNavigateNext}
+              disabled={!hasNextComment}
+              className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+              title="Next section with comments"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         <p className="text-xs text-gray-500 mt-1">
           Standard {standardCode}{specCode ? `, Spec ${specCode}` : ''}
@@ -221,6 +247,13 @@ export function CommentSidebar({
 
       {/* Comments List */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {comments.length === 0 && (
+          <div className="text-center py-8">
+            <MessageSquare className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm text-gray-500">No comments on this section yet.</p>
+            <p className="text-xs text-gray-400 mt-1">Select text in the editor and click "Add Comment" to get started.</p>
+          </div>
+        )}
         {comments.map((comment) => {
           const isExpanded = expandedComments.has(comment._id);
           const hasReplies = comment.replies.length > 0;

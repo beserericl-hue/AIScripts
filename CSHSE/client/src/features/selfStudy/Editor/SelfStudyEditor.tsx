@@ -21,6 +21,7 @@ import {
   Maximize2,
   ArrowRight,
   PlayCircle,
+  MessageSquarePlus,
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
@@ -245,6 +246,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeView, setActiveView] = useState<'standards' | 'curriculum'>('standards');
 
+  // Reviewer comment state
+  const [editorSelection, setEditorSelection] = useState<{ text: string; from: number; to: number } | null>(null);
+  const [showCommentModal, setShowCommentModal] = useState(false);
+  const [newCommentContent, setNewCommentContent] = useState('');
+
   // Import state
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -395,6 +401,73 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const currentScore = scoresData?.scores?.find(
     (s) => s.standardCode === selectedStandard && s.specCode === selectedSpec
   );
+
+  // Fetch global comment summary for Prev/Next navigation (reviewers only)
+  const { data: globalCommentSummary } = useQuery<{
+    total: number;
+    unresolved: number;
+    bySection: { standardCode: string; specCode: string; count: number }[];
+  }>({
+    queryKey: ['comments-summary', submissionId],
+    queryFn: async () => {
+      const response = await api.get(`/api/submissions/${submissionId}/comments/summary`);
+      return response.data;
+    },
+    enabled: isReviewer,
+  });
+
+  // Compute Prev/Next comment navigation
+  const commentSections = globalCommentSummary?.bySection || [];
+  const currentCommentSectionIdx = commentSections.findIndex(
+    (s) => s.standardCode === selectedStandard && s.specCode === selectedSpec
+  );
+  const hasPrevComment = currentCommentSectionIdx > 0;
+  const hasNextComment = currentCommentSectionIdx !== -1
+    ? currentCommentSectionIdx < commentSections.length - 1
+    : commentSections.length > 0;
+
+  const navigateToCommentSection = useCallback((direction: 'prev' | 'next') => {
+    if (commentSections.length === 0) return;
+    let targetIdx: number;
+    if (currentCommentSectionIdx === -1) {
+      targetIdx = direction === 'next' ? 0 : commentSections.length - 1;
+    } else {
+      targetIdx = direction === 'prev' ? currentCommentSectionIdx - 1 : currentCommentSectionIdx + 1;
+    }
+    if (targetIdx >= 0 && targetIdx < commentSections.length) {
+      const target = commentSections[targetIdx];
+      setSelectedStandard(target.standardCode);
+      setSelectedSpec(target.specCode || null);
+    }
+  }, [commentSections, currentCommentSectionIdx]);
+
+  // Create comment mutation
+  const createCommentMutation = useMutation({
+    mutationFn: async (data: {
+      selectedText: string;
+      selectionStart: number;
+      selectionEnd: number;
+      content: string;
+    }) => {
+      const response = await api.post(
+        `/api/submissions/${submissionId}/comments`,
+        {
+          standardCode: selectedStandard,
+          specCode: selectedSpec,
+          ...data,
+        }
+      );
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['comments', submissionId, selectedStandard, selectedSpec] });
+      queryClient.invalidateQueries({ queryKey: ['comment-summary', submissionId, selectedStandard, selectedSpec] });
+      queryClient.invalidateQueries({ queryKey: ['comments-summary', submissionId] });
+      setShowCommentModal(false);
+      setNewCommentContent('');
+      setEditorSelection(null);
+    },
+  });
 
   // Save narrative mutation
   const saveMutation = useMutation({
@@ -1912,6 +1985,21 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   </span>
                 </div>
 
+                {/* Add Comment Button */}
+                <button
+                  onClick={() => setShowCommentModal(true)}
+                  disabled={!editorSelection}
+                  className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg transition-colors ${
+                    editorSelection
+                      ? 'bg-teal-600 text-white hover:bg-teal-700'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                  title={editorSelection ? 'Add comment on selected text' : 'Select text in the editor first'}
+                >
+                  <MessageSquarePlus className="w-4 h-4" />
+                  Comment
+                </button>
+
                 {/* Score Control */}
                 <div className="flex items-center gap-1 text-sm text-gray-600">
                   <span className="font-medium">Score</span>
@@ -2043,6 +2131,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     onSaveSupportingEvidence={isProgramCoordinator ? handleSaveSupportingEvidence : undefined}
                     onCancel={isProgramCoordinator ? () => navigate('/self-study') : undefined}
                     readOnly={isReadOnly}
+                    onSelectionChange={isReviewer ? setEditorSelection : undefined}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-gray-500">
@@ -2075,12 +2164,15 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     currentUserId={userId}
                     currentUserRole={userRole as 'reader' | 'lead_reader'}
                     onCommentClick={(comment) => {
-                      // Navigate to the standard/spec where the comment was made
                       if (comment.standardCode !== selectedStandard || comment.specCode !== selectedSpec) {
                         setSelectedStandard(comment.standardCode);
                         setSelectedSpec(comment.specCode || null);
                       }
                     }}
+                    onNavigatePrev={() => navigateToCommentSection('prev')}
+                    onNavigateNext={() => navigateToCommentSection('next')}
+                    hasPrevComment={hasPrevComment}
+                    hasNextComment={hasNextComment}
                   />
                 </aside>
               )}
@@ -3233,6 +3325,84 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comment Creation Modal */}
+      {showCommentModal && editorSelection && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Add Comment</h3>
+              <button
+                onClick={() => {
+                  setShowCommentModal(false);
+                  setNewCommentContent('');
+                }}
+                className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {/* Selected text preview */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Selected Text</label>
+                <div className="px-3 py-2 bg-yellow-50 border-l-4 border-yellow-400 rounded-r-lg">
+                  <p className="text-sm text-yellow-800 italic line-clamp-4">
+                    "{editorSelection.text}"
+                  </p>
+                </div>
+              </div>
+
+              {/* Comment textarea */}
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Your Comment</label>
+                <textarea
+                  value={newCommentContent}
+                  onChange={(e) => setNewCommentContent(e.target.value)}
+                  placeholder="Write your comment..."
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 resize-none"
+                  rows={4}
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <button
+                onClick={() => {
+                  setShowCommentModal(false);
+                  setNewCommentContent('');
+                }}
+                className="px-4 py-2 text-sm text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (newCommentContent.trim() && editorSelection) {
+                    createCommentMutation.mutate({
+                      selectedText: editorSelection.text,
+                      selectionStart: editorSelection.from,
+                      selectionEnd: editorSelection.to,
+                      content: newCommentContent.trim(),
+                    });
+                  }
+                }}
+                disabled={!newCommentContent.trim() || createCommentMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:opacity-50 transition-colors"
+              >
+                {createCommentMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <MessageSquarePlus className="w-4 h-4" />
+                )}
+                Add Comment
               </button>
             </div>
           </div>

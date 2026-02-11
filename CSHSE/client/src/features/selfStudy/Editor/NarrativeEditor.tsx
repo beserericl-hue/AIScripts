@@ -66,6 +66,7 @@ interface NarrativeEditorProps {
   onContentChange?: (content: string) => void;
   onCancel?: () => void;
   readOnly?: boolean;
+  onSelectionChange?: (selection: { text: string; from: number; to: number } | null) => void;
 }
 
 /**
@@ -88,6 +89,7 @@ export function NarrativeEditor({
   onContentChange,
   onCancel,
   readOnly = false,
+  onSelectionChange,
 }: NarrativeEditorProps) {
   const [content, setContent] = useState(initialContent);
   const [supportingEvidenceCollapsed, setSupportingEvidenceCollapsed] = useState(true);
@@ -205,6 +207,15 @@ export function NarrativeEditor({
       onContentChange?.(html);
       triggerAutoSave(html);
       setContentChangedSinceValidation(true);
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection;
+      if (from === to) {
+        onSelectionChange?.(null);
+      } else {
+        const text = editor.state.doc.textBetween(from, to, ' ');
+        onSelectionChange?.({ text, from, to });
+      }
     },
     // Handle paste from Word/external sources
     editorProps: {
@@ -769,8 +780,8 @@ export function NarrativeEditor({
         </div>
       )}
 
-      {/* Bubble Menu for text selection */}
-      <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
+      {/* Bubble Menu for text selection (hidden in readOnly/reviewer mode) */}
+      {!readOnly && <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
         <div className="flex items-center gap-1 p-1 bg-gray-900 rounded-lg shadow-lg">
           <BubbleButton
             onClick={() => editor.chain().focus().toggleBold().run()}
@@ -804,7 +815,7 @@ export function NarrativeEditor({
             <LinkIcon className="w-4 h-4" />
           </BubbleButton>
         </div>
-      </BubbleMenu>
+      </BubbleMenu>}
 
       {/* Editor Content */}
       <div className="editor-content flex-1 border border-gray-200 rounded-b-lg overflow-auto max-w-full">
