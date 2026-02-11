@@ -43,12 +43,14 @@ interface EvidencePanelProps {
   submissionId: string;
   standardCode: string;
   specCode: string;
+  readOnly?: boolean;
 }
 
 export function EvidencePanel({
   submissionId,
   standardCode,
   specCode,
+  readOnly = false,
 }: EvidencePanelProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -193,37 +195,39 @@ export function EvidencePanel({
             ({evidence.length} item{evidence.length !== 1 ? 's' : ''})
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.gif"
-            onChange={handleFileSelect}
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploadMutation.isPending}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-            title="Upload file"
-          >
-            {uploadMutation.isPending ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Plus className="w-3 h-3" />
-            )}
-            File
-          </button>
-          <button
-            onClick={() => setShowUrlModal(true)}
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
-            title="Add URL link"
-          >
-            <Link2 className="w-3 h-3" />
-            URL
-          </button>
-        </div>
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.jpg,.jpeg,.png,.gif"
+              onChange={handleFileSelect}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadMutation.isPending}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
+              title="Upload file"
+            >
+              {uploadMutation.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Plus className="w-3 h-3" />
+              )}
+              File
+            </button>
+            <button
+              onClick={() => setShowUrlModal(true)}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
+              title="Add URL link"
+            >
+              <Link2 className="w-3 h-3" />
+              URL
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Error message */}
@@ -283,14 +287,14 @@ export function EvidencePanel({
                       <Download className="w-4 h-4" />
                     </button>
                   )}
-                  <button
+                  {!readOnly && <button
                     onClick={() => handleDelete(item._id, item.url?.title || item.file?.originalName || 'evidence')}
                     disabled={deleteMutation.isPending}
                     className="p-1 text-gray-400 hover:text-red-600 disabled:opacity-50"
                     title="Delete"
                   >
                     <Trash2 className="w-4 h-4" />
-                  </button>
+                  </button>}
                 </div>
               </li>
             ))}

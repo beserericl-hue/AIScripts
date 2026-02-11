@@ -28,12 +28,16 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
+import { CommentSidebar } from '../../comments';
 import { DocumentViewer, SectionTagger, TaggedSectionsList, SubExtractionViewerModal, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
 
 // Use consistent API paths without relying on environment variable
 
 interface SelfStudyEditorProps {
   submissionId: string;
+  userRole?: 'program_coordinator' | 'reader' | 'lead_reader' | 'admin';
+  userId?: string;
+  userName?: string;
 }
 
 interface NarrativeContent {
@@ -228,7 +232,11 @@ function SectionSelectionItem({
   );
 }
 
-export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
+export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator', userId, userName }: SelfStudyEditorProps) {
+  const isProgramCoordinator = userRole === 'program_coordinator';
+  const isReviewer = userRole === 'reader' || userRole === 'lead_reader';
+  const isReadOnly = !isProgramCoordinator;
+
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -340,6 +348,53 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
       return response.data;
     },
   });
+
+  // Fetch reviewer's scores for this submission (reviewers only)
+  const { data: scoresData } = useQuery<{ scores: { standardCode: string; specCode: string; score: number }[] }>({
+    queryKey: ['scores', submissionId],
+    queryFn: async () => {
+      const response = await api.get(`/api/submissions/${submissionId}/scores`);
+      return response.data;
+    },
+    enabled: isReviewer,
+  });
+
+  // Fetch comment summary for this submission (reviewers only)
+  const { data: commentSummary } = useQuery<{ total: number; unresolved: number }>({
+    queryKey: ['comment-summary', submissionId, selectedStandard, selectedSpec],
+    queryFn: async () => {
+      const params = new URLSearchParams({ standardCode: selectedStandard });
+      if (selectedSpec) params.append('specCode', selectedSpec);
+      const response = await api.get(`/api/submissions/${submissionId}/comments/summary?${params}`);
+      return response.data;
+    },
+    enabled: isReviewer,
+  });
+
+  // Score mutation (upsert)
+  const scoreMutation = useMutation({
+    mutationFn: async ({ standardCode, specCode, score }: { standardCode: string; specCode: string; score: number }) => {
+      await api.put(`/api/submissions/${submissionId}/scores`, { standardCode, specCode, score });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scores', submissionId] });
+    },
+  });
+
+  // Score delete mutation (clear score = "-")
+  const scoreDeleteMutation = useMutation({
+    mutationFn: async ({ standardCode, specCode }: { standardCode: string; specCode: string }) => {
+      await api.delete(`/api/submissions/${submissionId}/scores`, { data: { standardCode, specCode } });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['scores', submissionId] });
+    },
+  });
+
+  // Get current score for active substandard
+  const currentScore = scoresData?.scores?.find(
+    (s) => s.standardCode === selectedStandard && s.specCode === selectedSpec
+  );
 
   // Save narrative mutation
   const saveMutation = useMutation({
@@ -1762,52 +1817,132 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
             {/* Overall Progress */}
             <ProgressIndicator submission={submission} />
 
-            {/* Import Document Button */}
-            <button
-              onClick={handleImportButtonClick}
-              disabled={isCheckingExistingImport}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-              title="Import content from a PDF, Word, or PowerPoint document"
-            >
-              {isCheckingExistingImport ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Upload className="w-4 h-4" />
-              )}
-              Import Document
-            </button>
+            {isProgramCoordinator && (
+              <>
+                {/* Import Document Button */}
+                <button
+                  onClick={handleImportButtonClick}
+                  disabled={isCheckingExistingImport}
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  title="Import content from a PDF, Word, or PowerPoint document"
+                >
+                  {isCheckingExistingImport ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  Import Document
+                </button>
 
-            {/* Validation Progress */}
-            <span className="text-sm text-gray-500">
-              {validationProgress.validated}/{validationProgress.total} Validated
-            </span>
+                {/* Validation Progress */}
+                <span className="text-sm text-gray-500">
+                  {validationProgress.validated}/{validationProgress.total} Validated
+                </span>
 
-            {/* Submit Self-Study Button */}
-            <button
-              onClick={handleSubmitSelfStudy}
-              disabled={submitSelfStudyMutation.isPending || !isSelfStudyReadyForSubmit || isSubmissionLocked}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                isSubmissionLocked
-                  ? 'bg-green-600 text-white cursor-default'
-                  : 'bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed'
-              }`}
-              title={
-                isSubmissionLocked
-                  ? "Self-study has been submitted for review"
-                  : isSelfStudyReadyForSubmit
-                  ? "Submit self-study for review - this will lock the document"
-                  : `All specifications must be validated before submitting (${validationProgress.validated}/${validationProgress.total} complete)`
-              }
-            >
-              {submitSelfStudyMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : isSubmissionLocked ? (
-                <Check className="w-4 h-4" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-              {isSubmissionLocked ? 'Submitted' : 'Submit Self-Study for Review'}
-            </button>
+                {/* Submit Self-Study Button */}
+                <button
+                  onClick={handleSubmitSelfStudy}
+                  disabled={submitSelfStudyMutation.isPending || !isSelfStudyReadyForSubmit || isSubmissionLocked}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                    isSubmissionLocked
+                      ? 'bg-green-600 text-white cursor-default'
+                      : 'bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed'
+                  }`}
+                  title={
+                    isSubmissionLocked
+                      ? "Self-study has been submitted for review"
+                      : isSelfStudyReadyForSubmit
+                      ? "Submit self-study for review - this will lock the document"
+                      : `All specifications must be validated before submitting (${validationProgress.validated}/${validationProgress.total} complete)`
+                  }
+                >
+                  {submitSelfStudyMutation.isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : isSubmissionLocked ? (
+                    <Check className="w-4 h-4" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                  {isSubmissionLocked ? 'Submitted' : 'Submit Self-Study for Review'}
+                </button>
+              </>
+            )}
+
+            {isReviewer && (
+              <>
+                {/* Standard Navigator */}
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span className="font-medium">Standard</span>
+                  <button
+                    onClick={() => {
+                      const currentIdx = standards?.findIndex((s: any) => s.code === selectedStandard) ?? 0;
+                      if (currentIdx > 0 && standards) {
+                        setSelectedStandard(standards[currentIdx - 1].code);
+                        setSelectedSpec(standards[currentIdx - 1].specifications?.[0]?.code || 'a');
+                      }
+                    }}
+                    disabled={!standards || standards.findIndex((s: any) => s.code === selectedStandard) === 0}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="font-semibold">
+                    {standards ? (standards.findIndex((s: any) => s.code === selectedStandard) + 1) : '?'} of {standards?.length || 21}
+                  </span>
+                  <button
+                    onClick={() => {
+                      const currentIdx = standards?.findIndex((s: any) => s.code === selectedStandard) ?? 0;
+                      if (standards && currentIdx < standards.length - 1) {
+                        setSelectedStandard(standards[currentIdx + 1].code);
+                        setSelectedSpec(standards[currentIdx + 1].specifications?.[0]?.code || 'a');
+                      }
+                    }}
+                    disabled={!standards || standards.findIndex((s: any) => s.code === selectedStandard) === (standards?.length || 21) - 1}
+                    className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Comments Counter */}
+                <div className="flex items-center gap-1 text-sm text-gray-600">
+                  <span className="font-medium">Comments</span>
+                  <span className="bg-gray-100 px-2 py-0.5 rounded font-semibold">
+                    {commentSummary?.total ?? 0}
+                  </span>
+                </div>
+
+                {/* Score Control */}
+                <div className="flex items-center gap-1 text-sm text-gray-600">
+                  <span className="font-medium">Score</span>
+                  {['-', '0', '1', '2', '3'].map((val) => {
+                    const isActive = val === '-'
+                      ? currentScore === undefined
+                      : currentScore?.score === Number(val);
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => {
+                          if (!selectedSpec) return;
+                          if (val === '-') {
+                            scoreDeleteMutation.mutate({ standardCode: selectedStandard, specCode: selectedSpec });
+                          } else {
+                            scoreMutation.mutate({ standardCode: selectedStandard, specCode: selectedSpec, score: Number(val) });
+                          }
+                        }}
+                        className={`w-7 h-7 rounded text-xs font-semibold border transition-colors ${
+                          isActive
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -1905,8 +2040,9 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                     specTitle={getCurrentStandardData().specTitle}
                     standardText={getCurrentStandardData().specText}
                     onSave={handleSave}
-                    onSaveSupportingEvidence={handleSaveSupportingEvidence}
-                    onCancel={() => navigate('/self-study')}
+                    onSaveSupportingEvidence={isProgramCoordinator ? handleSaveSupportingEvidence : undefined}
+                    onCancel={isProgramCoordinator ? () => navigate('/self-study') : undefined}
+                    readOnly={isReadOnly}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-gray-500">
@@ -1923,10 +2059,31 @@ export function SelfStudyEditor({ submissionId }: SelfStudyEditorProps) {
                     submissionId={submissionId}
                     standardCode={selectedStandard}
                     specCode={selectedSpec}
+                    readOnly={isReadOnly}
                   />
                 </div>
               )}
             </main>
+
+              {/* Comment Sidebar - shown for reviewers only */}
+              {isReviewer && selectedSpec && userId && (
+                <aside className="w-80 flex-shrink-0 border-l border-gray-200 overflow-y-auto bg-white">
+                  <CommentSidebar
+                    submissionId={submissionId}
+                    standardCode={selectedStandard}
+                    specCode={selectedSpec}
+                    currentUserId={userId}
+                    currentUserRole={userRole as 'reader' | 'lead_reader'}
+                    onCommentClick={(comment) => {
+                      // Navigate to the standard/spec where the comment was made
+                      if (comment.standardCode !== selectedStandard || comment.specCode !== selectedSpec) {
+                        setSelectedStandard(comment.standardCode);
+                        setSelectedSpec(comment.specCode || null);
+                      }
+                    }}
+                  />
+                </aside>
+              )}
           </>
         )}
 

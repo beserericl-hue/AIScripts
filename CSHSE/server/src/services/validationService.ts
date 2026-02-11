@@ -471,36 +471,39 @@ export class ValidationService {
     specCode: string,
     status: 'pass' | 'fail'
   ): Promise<void> {
-    const submission = await Submission.findById(submissionId);
-    if (!submission) return;
-
-    const standardsStatus = submission.standardsStatus;
     const statusKey = `${standardCode}_${specCode}`;
-    const currentStatus = standardsStatus?.get(statusKey) || {
-      status: 'in_progress',
-      completionPercentage: 0,
-      lastModified: new Date()
+    const now = new Date();
+
+    // Use atomic $set to bypass Mongoose Map.set() persistence bug in Mongoose 8
+    // (Map.set + markModified + save does NOT persist subdocument fields)
+    const updateFields: Record<string, any> = {
+      [`standardsStatus.${statusKey}.validationStatus`]: status,
+      [`standardsStatus.${statusKey}.validatedAt`]: now,
+      [`standardsStatus.${statusKey}.lastModified`]: now,
     };
+    if (status === 'pass') {
+      updateFields[`standardsStatus.${statusKey}.status`] = 'validated';
+    }
 
-    standardsStatus.set(statusKey, {
-      ...currentStatus,
-      status: status === 'pass' ? 'validated' : currentStatus.status,
-      validationStatus: status,
-      validatedAt: new Date(),
-      lastModified: new Date()
-    });
+    const result = await Submission.updateOne(
+      { _id: submissionId },
+      { $set: updateFields }
+    );
 
-    // Mark Map as modified so Mongoose persists the change
-    submission.markModified('standardsStatus');
-    // Recalculate progress
-    submission.recalculateProgress();
-    await submission.save();
-
-    console.log(`[ValidationService] Updated standardsStatus key="${statusKey}" to validationStatus="${status}"`, {
+    console.log(`[ValidationService] Atomic $set standardsStatus.${statusKey}`, {
       submissionId,
-      mapSize: submission.standardsStatus.size,
-      savedEntry: submission.standardsStatus.get(statusKey)
+      validationStatus: status,
+      matched: result.matchedCount,
+      modified: result.modifiedCount
     });
+
+    // Re-fetch to recalculate progress (reads the atomically-updated data)
+    const submission = await Submission.findById(submissionId);
+    if (submission) {
+      submission.recalculateProgress();
+      submission.markModified('selfStudyProgress');
+      await submission.save();
+    }
   }
 
   /**

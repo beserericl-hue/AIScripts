@@ -35,6 +35,7 @@ import invitationsRouter from './routes/invitations';
 import specsRouter from './routes/specs';
 import filesRouter from './routes/files';
 import standardsRouter from './routes/standards';
+import scoresRouter from './routes/scores';
 
 // Load environment variables
 dotenv.config();
@@ -135,6 +136,7 @@ app.use('/api/change-requests', changeRequestsRouter);
 app.use('/api/admin/error-logs', errorLogsRouter);
 app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
+app.use('/api', scoresRouter);
 
 // Serve static files from React app build
 // Hashed assets (JS/CSS) get long cache, index.html always revalidates

@@ -576,7 +576,7 @@ export default function SelfStudyPage() {
         <div className="min-h-screen bg-gray-50 flex">
           {/* Editor on the left */}
           <div className="flex-1 overflow-auto">
-            <SelfStudyEditor submissionId={submissionId} />
+            <SelfStudyEditor submissionId={submissionId} userRole={effectiveRole as any} userId={effectiveUser?.id} userName={effectiveUser ? `${effectiveUser.firstName} ${effectiveUser.lastName}` : undefined} />
           </div>
 
           {/* Review Panel on the right */}
@@ -885,7 +885,7 @@ export default function SelfStudyPage() {
         </div>
       );
     }
-    return <SelfStudyEditor submissionId={submissionId} />;
+    return <SelfStudyEditor submissionId={submissionId} userRole={effectiveRole as any} userId={effectiveUser?.id} userName={effectiveUser ? `${effectiveUser.firstName} ${effectiveUser.lastName}` : undefined} />;
   }
 
   // Program Coordinator - Unassigned state

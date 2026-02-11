@@ -103,7 +103,6 @@ export interface ISubmission extends Document {
   updatedAt: Date;
 
   // Methods
-  updateStandardStatus(standardCode: string, status: Partial<IStandardStatusInfo>): void;
   recalculateProgress(): void;
 }
 
@@ -293,26 +292,8 @@ SubmissionSchema.pre('save', async function(next) {
   next();
 });
 
-// Method to update standard status
-SubmissionSchema.methods.updateStandardStatus = function(
-  standardCode: string,
-  status: Partial<IStandardStatusInfo>
-) {
-  const currentStatus = this.standardsStatus.get(standardCode) || {
-    status: 'not_started',
-    completionPercentage: 0,
-    lastModified: new Date()
-  };
-
-  this.standardsStatus.set(standardCode, {
-    ...currentStatus,
-    ...status,
-    lastModified: new Date()
-  });
-
-  // Update overall progress
-  this.selfStudyProgress.lastActivity = new Date();
-};
+// NOTE: updateStandardStatus() was removed — Mongoose 8 Map.set() does not persist
+// subdocument fields. Use atomic Submission.updateOne({ $set: { ... } }) instead.
 
 // Method to calculate progress
 SubmissionSchema.methods.recalculateProgress = function() {

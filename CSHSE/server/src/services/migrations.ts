@@ -77,35 +77,43 @@ async function backfillValidationStatus(): Promise<void> {
 
   let updated = 0;
   for (const [subId, validations] of bySubmission) {
+    // Use atomic $set to bypass Mongoose Map.set() persistence bug in Mongoose 8
+    const updateFields: Record<string, any> = {};
+    let changeCount = 0;
+
+    // First pass: check which entries need updating
     const submission = await Submission.findById(subId);
     if (!submission) continue;
 
-    let changed = false;
     for (const v of validations) {
       const statusKey = `${v._id.standardCode}_${v._id.specCode}`;
       const current = submission.standardsStatus?.get(statusKey);
       const resultStatus = v.latestResult.status;
 
-      // Only update if validationStatus is missing or different
       if (!current?.validationStatus || current.validationStatus !== resultStatus) {
-        const newStatus = {
-          ...(current || { status: 'in_progress', completionPercentage: 0 }),
-          status: resultStatus === 'pass' ? 'validated' : (current?.status || 'in_progress'),
-          validationStatus: resultStatus,
-          validatedAt: v.validatedAt,
-          lastModified: new Date()
-        };
-        submission.standardsStatus.set(statusKey, newStatus as any);
-        changed = true;
+        updateFields[`standardsStatus.${statusKey}.validationStatus`] = resultStatus;
+        updateFields[`standardsStatus.${statusKey}.validatedAt`] = v.validatedAt;
+        updateFields[`standardsStatus.${statusKey}.lastModified`] = new Date();
+        if (resultStatus === 'pass') {
+          updateFields[`standardsStatus.${statusKey}.status`] = 'validated';
+        }
+        changeCount++;
       }
     }
 
-    if (changed) {
-      submission.markModified('standardsStatus');
-      submission.recalculateProgress();
-      await submission.save();
+    if (changeCount > 0) {
+      await Submission.updateOne({ _id: subId }, { $set: updateFields });
+
+      // Re-fetch to recalculate progress
+      const refreshed = await Submission.findById(subId);
+      if (refreshed) {
+        refreshed.recalculateProgress();
+        refreshed.markModified('selfStudyProgress');
+        await refreshed.save();
+      }
+
       updated++;
-      console.log(`[Migration] Backfilled ${validations.length} validation statuses for submission ${subId}`);
+      console.log(`[Migration] Backfilled ${changeCount} validation statuses for submission ${subId}`);
     }
   }
 

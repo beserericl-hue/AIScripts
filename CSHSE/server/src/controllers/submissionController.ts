@@ -224,25 +224,23 @@ export const saveNarrative = async (req: AuthenticatedRequest, res: Response) =>
       supportingEvidenceText: hasSupportingEvidence ? supportingEvidenceText : (existingNarrative?.supportingEvidenceText || '')
     });
 
-    // Update standard status to in_progress if not already complete
-    if (!submission.standardsStatus) {
-      submission.standardsStatus = new Map();
-    }
-    // Use underscore separator for Mongoose Map keys (dots are not allowed in Map keys)
-    const statusKey = specCode ? `${standardCode}_${specCode}` : standardCode;
-    const currentStatus = submission.standardsStatus.get(statusKey);
-    if (!currentStatus || currentStatus.status === 'not_started') {
-      submission.standardsStatus.set(statusKey, {
-        status: 'in_progress',
-        completionPercentage: 0,
-        lastModified: new Date()
-      });
-    }
-
     // CRITICAL: Mark nested maps as modified for Mongoose to save them
     submission.markModified('narratives');
-    submission.markModified('standardsStatus');
     await submission.save();
+
+    // Use atomic $set for standardsStatus (Mongoose Map.set() doesn't persist in Mongoose 8)
+    const statusKey = specCode ? `${standardCode}_${specCode}` : standardCode;
+    const currentStatus = submission.standardsStatus?.get(statusKey);
+    if (!currentStatus || currentStatus.status === 'not_started') {
+      await Submission.updateOne(
+        { _id: submission._id },
+        { $set: {
+          [`standardsStatus.${statusKey}.status`]: 'in_progress',
+          [`standardsStatus.${statusKey}.completionPercentage`]: 0,
+          [`standardsStatus.${statusKey}.lastModified`]: new Date()
+        }}
+      );
+    }
 
     // Get the saved narrative for the response
     const savedNarrative = standardNarratives.get(specKey);
@@ -334,23 +332,19 @@ export const submitStandard = async (req: AuthenticatedRequest, res: Response) =
       }
     }
 
-    // Update submission status
-    if (!submission.standardsStatus) {
-      submission.standardsStatus = new Map();
-    }
-
+    // Update submission status (atomic $set creates the key if missing)
     if (failedSpecs.length === 0) {
-      // All passed - mark as submitted
-      submission.standardsStatus.set(standardCode, {
-        completionPercentage: 100,
-        lastModified: new Date(),
-        ...(submission.standardsStatus.get(standardCode) || {}),
-        status: 'submitted',
-        validationStatus: 'pass',
-        submittedAt: new Date()
-      });
-      submission.markModified('standardsStatus');
-      await submission.save();
+      // All passed - mark as submitted (atomic $set bypasses Mongoose 8 Map bug)
+      await Submission.updateOne(
+        { _id: submission._id },
+        { $set: {
+          [`standardsStatus.${standardCode}.status`]: 'submitted',
+          [`standardsStatus.${standardCode}.validationStatus`]: 'pass',
+          [`standardsStatus.${standardCode}.completionPercentage`]: 100,
+          [`standardsStatus.${standardCode}.submittedAt`]: new Date(),
+          [`standardsStatus.${standardCode}.lastModified`]: new Date()
+        }}
+      );
 
       return res.json({
         success: true,
@@ -358,13 +352,15 @@ export const submitStandard = async (req: AuthenticatedRequest, res: Response) =
         validationResults
       });
     } else {
-      // Some failed - mark as in_progress with failures
-      submission.standardsStatus[standardCode] = {
-        status: 'in_progress',
-        validationStatus: 'fail'
-      };
-      submission.markModified('standardsStatus');
-      await submission.save();
+      // Some failed - mark as in_progress with failures (atomic $set)
+      await Submission.updateOne(
+        { _id: submission._id },
+        { $set: {
+          [`standardsStatus.${standardCode}.status`]: 'in_progress',
+          [`standardsStatus.${standardCode}.validationStatus`]: 'fail',
+          [`standardsStatus.${standardCode}.lastModified`]: new Date()
+        }}
+      );
 
       return res.status(400).json({
         success: false,
@@ -456,21 +452,18 @@ export const revalidateFailed = async (req: AuthenticatedRequest, res: Response)
       }
     }
 
-    // Update standard status if all now pass
+    // Update standard status if all now pass (atomic $set bypasses Mongoose 8 Map bug)
     if (standardCode && failCount === 0 && passCount > 0) {
-      if (!submission.standardsStatus) {
-        submission.standardsStatus = new Map();
-      }
-      submission.standardsStatus.set(standardCode, {
-        completionPercentage: 100,
-        lastModified: new Date(),
-        ...(submission.standardsStatus.get(standardCode) || {}),
-        status: 'submitted',
-        validationStatus: 'pass',
-        submittedAt: new Date()
-      });
-      submission.markModified('standardsStatus');
-      await submission.save();
+      await Submission.updateOne(
+        { _id: submission._id },
+        { $set: {
+          [`standardsStatus.${standardCode}.status`]: 'submitted',
+          [`standardsStatus.${standardCode}.validationStatus`]: 'pass',
+          [`standardsStatus.${standardCode}.completionPercentage`]: 100,
+          [`standardsStatus.${standardCode}.submittedAt`]: new Date(),
+          [`standardsStatus.${standardCode}.lastModified`]: new Date()
+        }}
+      );
     }
 
     return res.json({
@@ -534,23 +527,18 @@ export const markStandardComplete = async (req: AuthenticatedRequest, res: Respo
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    if (!submission.standardsStatus) {
-      submission.standardsStatus = new Map();
-    }
-
-    submission.standardsStatus.set(standardCode, {
-      completionPercentage: 100,
-      lastModified: new Date(),
-      ...(submission.standardsStatus.get(standardCode) || {}),
-      status: 'complete'
-    });
-
-    submission.markModified('standardsStatus');
-    await submission.save();
+    // Atomic $set bypasses Mongoose 8 Map bug
+    await Submission.updateOne(
+      { _id: submission._id },
+      { $set: {
+        [`standardsStatus.${standardCode}.status`]: 'complete',
+        [`standardsStatus.${standardCode}.completionPercentage`]: 100,
+        [`standardsStatus.${standardCode}.lastModified`]: new Date()
+      }}
+    );
 
     return res.json({
-      message: `Standard ${standardCode} marked as complete`,
-      standardStatus: submission.standardsStatus.get(standardCode)
+      message: `Standard ${standardCode} marked as complete`
     });
   } catch (error) {
     console.error('Mark standard complete error:', error);
