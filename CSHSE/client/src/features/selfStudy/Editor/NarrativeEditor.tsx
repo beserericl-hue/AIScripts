@@ -282,6 +282,15 @@ export function NarrativeEditor({
       triggerSupportingEvidenceAutoSave(html);
       setContentChangedSinceValidation(true);
     },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection;
+      if (from === to) {
+        onSelectionChange?.(null);
+      } else {
+        const text = editor.state.doc.textBetween(from, to, ' ');
+        onSelectionChange?.({ text, from, to });
+      }
+    },
   });
 
   // Handle adding a link
@@ -426,8 +435,8 @@ export function NarrativeEditor({
         )}
       </div>
 
-      {/* Toolbar - Two rows for better organization */}
-      <div className="editor-toolbar bg-gray-100 rounded-t-lg border border-gray-200 border-b-0">
+      {/* Toolbar - Two rows for better organization (hidden in readOnly/reviewer mode) */}
+      {!readOnly && <div className="editor-toolbar bg-gray-100 rounded-t-lg border border-gray-200 border-b-0">
         {/* Primary toolbar row */}
         <div className="flex flex-wrap items-center gap-1 p-2 border-b border-gray-200">
           {/* Text formatting */}
@@ -717,7 +726,7 @@ export function NarrativeEditor({
           )}
         </div>
         </div>
-      </div>
+      </div>}
 
       {/* Link Dialog Modal */}
       {showLinkDialog && (
@@ -818,15 +827,15 @@ export function NarrativeEditor({
       </BubbleMenu>}
 
       {/* Editor Content */}
-      <div className="editor-content flex-1 border border-gray-200 rounded-b-lg overflow-auto max-w-full">
+      <div className={`editor-content flex-1 border border-gray-200 overflow-auto max-w-full ${readOnly ? 'rounded-lg' : 'rounded-b-lg'}`}>
         <EditorContent
           editor={editor}
           className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:max-w-full [&_.ProseMirror_table]:!table-auto [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[300px] [&_.ProseMirror]:overflow-x-auto"
         />
       </div>
 
-      {/* Supporting Evidence Section */}
-      {onSaveSupportingEvidence && (
+      {/* Supporting Evidence Section - visible to all roles when content exists or when editable */}
+      {(onSaveSupportingEvidence || initialSupportingEvidence) && (
         <div className="mt-4 border border-blue-200 rounded-lg overflow-hidden">
           {/* Header - Collapsible */}
           <button
@@ -843,13 +852,15 @@ export function NarrativeEditor({
               )}
             </div>
             <div className="flex items-center gap-2">
-              {/* Save status for supporting evidence */}
-              <SaveStatusIndicator
-                isSaving={isSavingSupportingEvidence}
-                hasUnsavedChanges={hasSupportingEvidenceUnsavedChanges}
-                lastSavedAt={supportingEvidenceLastSavedAt}
-                error={supportingEvidenceSaveError}
-              />
+              {/* Save status for supporting evidence (hidden in readOnly) */}
+              {!readOnly && (
+                <SaveStatusIndicator
+                  isSaving={isSavingSupportingEvidence}
+                  hasUnsavedChanges={hasSupportingEvidenceUnsavedChanges}
+                  lastSavedAt={supportingEvidenceLastSavedAt}
+                  error={supportingEvidenceSaveError}
+                />
+              )}
               {supportingEvidenceCollapsed ? (
                 <ChevronDown className="w-5 h-5 text-blue-600" />
               ) : (
@@ -862,8 +873,9 @@ export function NarrativeEditor({
           {!supportingEvidenceCollapsed && (
             <div className="p-4 bg-white">
               <p className="text-sm text-gray-600 mb-3">
-                This section contains additional supporting evidence imported from your document.
-                You can edit this content or use it as reference for your narrative.
+                {readOnly
+                  ? 'Additional supporting evidence provided by the program. Select text to add comments.'
+                  : 'This section contains additional supporting evidence imported from your document. You can edit this content or use it as reference for your narrative.'}
               </p>
               {supportingEvidenceEditor ? (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
