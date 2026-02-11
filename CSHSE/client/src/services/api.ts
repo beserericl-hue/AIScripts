@@ -7,7 +7,7 @@ export const api = axios.create({
   },
 });
 
-// Add auth token to requests
+// Add auth token and impersonation header to requests
 api.interceptors.request.use((config) => {
   const authStorage = localStorage.getItem('auth-storage');
   if (authStorage) {
@@ -15,6 +15,10 @@ api.interceptors.request.use((config) => {
       const { state } = JSON.parse(authStorage);
       if (state?.token) {
         config.headers.Authorization = `Bearer ${state.token}`;
+      }
+      // Send impersonated role so server can override for superusers
+      if (state?.impersonation?.isImpersonating && state.impersonation.impersonatedRole) {
+        config.headers['X-Impersonated-Role'] = state.impersonation.impersonatedRole;
       }
     } catch {
       // Ignore parse errors

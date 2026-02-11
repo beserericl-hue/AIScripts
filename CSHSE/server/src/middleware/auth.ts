@@ -56,12 +56,18 @@ export const authenticate = async (
         return res.status(401).json({ error: 'User not found' });
       }
 
+      // For superusers, allow role override via X-Impersonated-Role header
+      const impersonatedRole = req.headers['x-impersonated-role'] as string | undefined;
+      const effectiveRole = (user.isSuperuser && impersonatedRole)
+        ? impersonatedRole
+        : user.role;
+
       // Populate req.user with user information
       req.user = {
         id: user._id.toString(),
         _id: user._id.toString(),
         email: user.email,
-        role: user.role,
+        role: effectiveRole,
         firstName: user.firstName,
         lastName: user.lastName,
         name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,

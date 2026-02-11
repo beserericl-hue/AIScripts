@@ -7,7 +7,8 @@ interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     name: string;
-    role: 'admin' | 'reader' | 'lead_reader' | 'program_coordinator';
+    role: string;
+    isSuperuser?: boolean;
   };
 }
 
@@ -159,17 +160,25 @@ export const createComment = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    // Verify user is assigned to this submission
-    const userId = new mongoose.Types.ObjectId(req.user!.id);
-    const isAssigned =
-      submission.assignedReaders.some(r => r.equals(userId)) ||
-      submission.leadReader?.equals(userId);
+    // Verify user is assigned to this submission (superusers bypass)
+    if (!req.user!.isSuperuser) {
+      const userId = new mongoose.Types.ObjectId(req.user!.id);
+      const isAssigned =
+        submission.assignedReaders.some(r => r.equals(userId)) ||
+        submission.leadReader?.equals(userId);
 
-    if (!isAssigned) {
-      return res.status(403).json({
-        error: 'You are not assigned to this submission'
-      });
+      if (!isAssigned) {
+        return res.status(403).json({
+          error: 'You are not assigned to this submission'
+        });
+      }
     }
+
+    const roleLabels: Record<string, string> = {
+      reader: 'Reader', lead_reader: 'Lead Reader',
+      program_coordinator: 'Program Coordinator', admin: 'Admin'
+    };
+    const authorName = req.user!.name || roleLabels[req.user!.role] || req.user!.role;
 
     const comment = new Comment({
       submissionId,
@@ -179,7 +188,7 @@ export const createComment = async (req: AuthenticatedRequest, res: Response) =>
       selectionStart,
       selectionEnd,
       authorId: req.user!.id,
-      authorName: req.user!.name,
+      authorName,
       authorRole: req.user!.role,
       content,
       replies: []
