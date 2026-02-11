@@ -785,7 +785,7 @@ export async function insertHtmlMarker(
     // round-tripping: restoreMarker can do a simple 1:1 replacement.
     // Previous approach (removing rows, placing marker before table) created
     // an asymmetry that corrupted HTML on restore.
-    console.log(`[GridFSService] Text range is inside a table — expanding to full table boundaries`);
+    console.log(`[GridFSService] Text range is inside a table (startInTable=${startInTable}, endInTable=${endInTable})`);
 
     const tableStart = html.lastIndexOf('<table', htmlStartPos);
     const tableEndTag = html.indexOf('</table>', htmlEndPos);
@@ -794,7 +794,7 @@ export async function insertHtmlMarker(
       expandedStart = tableStart;
       expandedEnd = tableEndTag + 8; // "</table>".length
       console.log(`[GridFSService] Full table expansion: ${expandedStart}-${expandedEnd} ` +
-        `(original text range was ${htmlStartPos}-${htmlEndPos})`);
+        `(table=${expandedEnd - expandedStart} chars, original text range was ${htmlStartPos}-${htmlEndPos})`);
     } else {
       // Fallback: couldn't find table boundaries, use text range
       expandedStart = htmlStartPos;
@@ -830,8 +830,78 @@ export async function insertHtmlMarker(
   const htmlContextBefore = html.substring(Math.max(0, expandedStart - 300), expandedStart);
   const htmlContextAfter = html.substring(expandedEnd, Math.min(html.length, expandedEnd + 300));
 
-  // Build new HTML — simple replacement in all cases
-  const newHtml = html.substring(0, expandedStart) + marker + html.substring(expandedEnd);
+  // For table-expanded markers, compute row-level split fragments so that
+  // non-tagged table rows remain visible in the document on resume.
+  // The full table is still in removedHtml for accurate restoration.
+  let tableFragPrefix = '';
+  let tableFragSuffix = '';
+
+  if (wasTableExpanded) {
+    const sectionIdMatch = marker.match(/EXTRACTED:([^:]+):/);
+    const fragSectionId = sectionIdMatch?.[1] || 'unknown';
+    const lowerHtml = html.toLowerCase();
+    const tableOpenEnd = html.indexOf('>', expandedStart) + 1;
+    const tableOpenTag = html.substring(expandedStart, tableOpenEnd);
+
+    console.log(`[GridFSService] Computing table split fragments for section ${fragSectionId}`);
+    console.log(`[GridFSService] Table open tag: "${tableOpenTag.substring(0, 80)}"`);
+
+    // Find structural header (colgroup, col, thead) between <table> and first <tr>
+    let firstTrPos = expandedStart + 6;
+    while (firstTrPos < expandedEnd) {
+      firstTrPos = lowerHtml.indexOf('<tr', firstTrPos);
+      if (firstTrPos === -1 || firstTrPos >= expandedEnd) { firstTrPos = tableOpenEnd; break; }
+      const nc = lowerHtml[firstTrPos + 3];
+      if (nc === '>' || nc === ' ' || nc === '\n' || nc === '\t' || nc === '\r') break;
+      firstTrPos++;
+    }
+    const structuralHtml = firstTrPos > tableOpenEnd ? html.substring(tableOpenEnd, firstTrPos) : '';
+    console.log(`[GridFSService] Table structural header: ${structuralHtml.length} chars, firstTr at ${firstTrPos}`);
+
+    // splitBefore: rows from table start to just before the tagged content's row
+    let trStartOfTagged = htmlStartPos;
+    while (trStartOfTagged >= expandedStart) {
+      trStartOfTagged = lowerHtml.lastIndexOf('<tr', trStartOfTagged);
+      if (trStartOfTagged === -1 || trStartOfTagged < expandedStart) { trStartOfTagged = -1; break; }
+      const nc = lowerHtml[trStartOfTagged + 3];
+      if (nc === '>' || nc === ' ' || nc === '\n' || nc === '\t' || nc === '\r') break;
+      trStartOfTagged--;
+    }
+
+    let splitBefore = '';
+    if (trStartOfTagged !== -1 && trStartOfTagged > firstTrPos) {
+      const beforeRows = html.substring(firstTrPos, trStartOfTagged);
+      if (beforeRows.trim()) {
+        splitBefore = tableOpenTag + structuralHtml + beforeRows + '</table>';
+      }
+    }
+    console.log(`[GridFSService] splitBefore: ${splitBefore.length} chars (trStartOfTagged=${trStartOfTagged}, firstTrPos=${firstTrPos})`);
+    if (splitBefore) console.log(`[GridFSService] splitBefore preview: "${splitBefore.substring(0, 150).replace(/\n/g, '\\n')}..."`);
+
+    // splitAfter: rows from after the tagged content's last row to table end
+    const trEndTagAfter = lowerHtml.indexOf('</tr>', htmlEndPos);
+    const trEndAfter = (trEndTagAfter !== -1 && trEndTagAfter < expandedEnd) ? trEndTagAfter + 5 : htmlEndPos;
+    const afterRows = html.substring(trEndAfter, expandedEnd - 8); // before </table>
+
+    let splitAfter = '';
+    if (afterRows.trim()) {
+      splitAfter = tableOpenTag + structuralHtml + afterRows + '</table>';
+    }
+    console.log(`[GridFSService] splitAfter: ${splitAfter.length} chars (trEndAfter=${trEndAfter}, tableEnd=${expandedEnd})`);
+    if (splitAfter) console.log(`[GridFSService] splitAfter preview: "${splitAfter.substring(0, 150).replace(/\n/g, '\\n')}..."`);
+
+    // Wrap split fragments with TABLE_FRAG comments so restoreMarker can find the whole region
+    if (splitBefore || splitAfter) {
+      tableFragPrefix = `<!-- TABLE_FRAG_START:${fragSectionId} -->\n${splitBefore}${splitBefore ? '\n' : ''}`;
+      tableFragSuffix = `${splitAfter ? '\n' : ''}${splitAfter}\n<!-- TABLE_FRAG_END:${fragSectionId} -->`;
+      console.log(`[GridFSService] TABLE_FRAG wrappers: prefix=${tableFragPrefix.length} chars, suffix=${tableFragSuffix.length} chars`);
+    } else {
+      console.log(`[GridFSService] No split fragments (entire table is the tagged content)`);
+    }
+  }
+
+  // Build new HTML — for table content, includes split fragments around the marker
+  const newHtml = html.substring(0, expandedStart) + tableFragPrefix + marker + tableFragSuffix + html.substring(expandedEnd);
 
   const removedChars = expandedEnd - expandedStart;
   const snippet = removedHtml.substring(0, 100);
@@ -1127,59 +1197,83 @@ export async function restoreMarker(
   }
 
   const file = files[0];
+
+  // Search patterns: TABLE_FRAG wrappers (new-style) and EXTRACTED marker (old-style fallback)
+  const fragStartStr = `<!-- TABLE_FRAG_START:${sectionId} -->`;
+  const fragEndStr = `<!-- TABLE_FRAG_END:${sectionId} -->`;
   const markerPrefixStr = `<!-- EXTRACTED:${sectionId}:`;
+  const fragStartBuf = Buffer.from(fragStartStr, 'utf-8');
+  const fragEndBuf = Buffer.from(fragEndStr, 'utf-8');
   const markerPrefix = Buffer.from(markerPrefixStr, 'utf-8');
   const markerSuffix = Buffer.from('-->', 'utf-8');
 
   console.log(`[GridFSService] restoreMarker: scanning ${file.length} bytes for section ${sectionId}`);
+  console.log(`[GridFSService] restoreMarker: searching for TABLE_FRAG wrappers (${fragStartStr.length} chars) and EXTRACTED marker`);
 
-  // === Pass 1: Find marker byte position ===
-  let markerByteStart = -1;
-  let markerByteEnd = -1;
+  // === Pass 1: Find all relevant byte positions ===
+  // Search for both TABLE_FRAG wrappers and EXTRACTED marker in a single pass.
+  // TABLE_FRAG wrappers take priority (new-style table-split extraction).
+  // Falls back to EXTRACTED marker for old-style full-table replacement.
+  let fragStartBytePos = -1;
+  let fragEndBytePos = -1;
+  let extractedByteStart = -1;
+  let extractedByteEnd = -1;
 
   await new Promise<void>((resolve, reject) => {
     const stream = bucket.openDownloadStream(file._id);
     let byteOffset = 0;
-    let carryOver = Buffer.alloc(0); // carry-over for markers spanning chunk boundaries
+    let carryOver = Buffer.alloc(0);
 
     stream.on('data', (chunk: Buffer) => {
-      if (markerByteStart !== -1 && markerByteEnd !== -1) return; // already found
-
-      // Combine carry-over with current chunk for boundary searching
       const searchBuf = Buffer.concat([carryOver, chunk]);
+      const searchOffset = byteOffset - carryOver.length;
 
-      // Search for marker prefix
-      if (markerByteStart === -1) {
-        const prefixIdx = searchBuf.indexOf(markerPrefix);
-        if (prefixIdx !== -1) {
-          markerByteStart = byteOffset - carryOver.length + prefixIdx;
+      // Search for TABLE_FRAG_START
+      if (fragStartBytePos === -1) {
+        const idx = searchBuf.indexOf(fragStartBuf);
+        if (idx !== -1) {
+          fragStartBytePos = searchOffset + idx;
+          console.log(`[GridFSService] restoreMarker: found TABLE_FRAG_START at byte ${fragStartBytePos}`);
+        }
+      }
 
-          // Now find the closing --> after the prefix
-          const suffixIdx = searchBuf.indexOf(markerSuffix, prefixIdx + markerPrefix.length);
+      // Search for TABLE_FRAG_END (only after START found)
+      if (fragStartBytePos !== -1 && fragEndBytePos === -1) {
+        const idx = searchBuf.indexOf(fragEndBuf);
+        if (idx !== -1) {
+          fragEndBytePos = searchOffset + idx + fragEndBuf.length;
+          console.log(`[GridFSService] restoreMarker: found TABLE_FRAG_END at byte ${fragEndBytePos}`);
+        }
+      }
+
+      // Search for EXTRACTED marker (fallback, always searched)
+      if (extractedByteStart === -1) {
+        const idx = searchBuf.indexOf(markerPrefix);
+        if (idx !== -1) {
+          extractedByteStart = searchOffset + idx;
+          const suffixIdx = searchBuf.indexOf(markerSuffix, idx + markerPrefix.length);
           if (suffixIdx !== -1) {
-            markerByteEnd = byteOffset - carryOver.length + suffixIdx + markerSuffix.length;
-            console.log(`[GridFSService] restoreMarker: found marker at bytes ${markerByteStart}-${markerByteEnd}`);
+            extractedByteEnd = searchOffset + suffixIdx + markerSuffix.length;
+            console.log(`[GridFSService] restoreMarker: found EXTRACTED marker at bytes ${extractedByteStart}-${extractedByteEnd}`);
           }
         }
-      } else if (markerByteEnd === -1) {
-        // We found the prefix in a previous chunk but not the suffix yet
+      } else if (extractedByteEnd === -1) {
         const suffixIdx = searchBuf.indexOf(markerSuffix);
         if (suffixIdx !== -1) {
-          markerByteEnd = byteOffset - carryOver.length + suffixIdx + markerSuffix.length;
-          console.log(`[GridFSService] restoreMarker: found marker end at byte ${markerByteEnd}`);
+          extractedByteEnd = searchOffset + suffixIdx + markerSuffix.length;
+          console.log(`[GridFSService] restoreMarker: found EXTRACTED marker end at byte ${extractedByteEnd}`);
         }
       }
 
       byteOffset += chunk.length;
 
-      // Keep last 512 bytes as carry-over for boundary spanning
-      if (markerByteStart === -1) {
-        const overlapSize = Math.min(512, searchBuf.length);
-        carryOver = searchBuf.subarray(searchBuf.length - overlapSize);
-      } else if (markerByteEnd === -1) {
-        carryOver = searchBuf; // keep accumulating until we find the end
+      // Keep carry-over for patterns spanning chunk boundaries
+      const maxPatternLen = Math.max(fragStartBuf.length, fragEndBuf.length, markerPrefix.length);
+      if (extractedByteStart !== -1 && extractedByteEnd === -1) {
+        carryOver = searchBuf; // accumulating for --> suffix
       } else {
-        carryOver = Buffer.alloc(0);
+        const overlapSize = Math.min(maxPatternLen + 100, searchBuf.length);
+        carryOver = searchBuf.subarray(searchBuf.length - overlapSize);
       }
     });
 
@@ -1187,8 +1281,31 @@ export async function restoreMarker(
     stream.on('end', resolve);
   });
 
-  if (markerByteStart === -1 || markerByteEnd === -1) {
+  // Determine final replacement boundaries
+  let replaceByteStart: number;
+  let replaceByteEnd: number;
+
+  if (fragStartBytePos !== -1 && fragEndBytePos !== -1) {
+    // New-style: TABLE_FRAG wrappers found — replace entire fragment region
+    // (includes splitBefore table + marker + splitAfter table)
+    replaceByteStart = fragStartBytePos;
+    replaceByteEnd = fragEndBytePos;
+    console.log(`[GridFSService] restoreMarker: using TABLE_FRAG boundaries ${replaceByteStart}-${replaceByteEnd} ` +
+      `(${replaceByteEnd - replaceByteStart} bytes, includes split table fragments)`);
+  } else if (extractedByteStart !== -1 && extractedByteEnd !== -1) {
+    // Old-style: just the EXTRACTED comment marker (backward compatible)
+    replaceByteStart = extractedByteStart;
+    replaceByteEnd = extractedByteEnd;
+    console.log(`[GridFSService] restoreMarker: using EXTRACTED marker boundaries ${replaceByteStart}-${replaceByteEnd} ` +
+      `(${replaceByteEnd - replaceByteStart} bytes, no TABLE_FRAG wrappers found — old-style marker)`);
+  } else {
     console.log(`[GridFSService] restoreMarker: marker not found for section ${sectionId} in ${file.length} bytes`);
+    if (fragStartBytePos !== -1 && fragEndBytePos === -1) {
+      console.warn(`[GridFSService] restoreMarker: TABLE_FRAG_START found at ${fragStartBytePos} but TABLE_FRAG_END missing!`);
+    }
+    if (extractedByteStart !== -1 && extractedByteEnd === -1) {
+      console.warn(`[GridFSService] restoreMarker: EXTRACTED prefix found at ${extractedByteStart} but closing --> missing!`);
+    }
     return false;
   }
 
@@ -1198,7 +1315,9 @@ export async function restoreMarker(
   // GridFS allows multiple files with the same filename (keyed by _id).
   const fileId = file._id;
   const restoredBuffer = Buffer.from(htmlContent, 'utf-8');
-  const expectedSize = file.length - (markerByteEnd - markerByteStart) + restoredBuffer.length;
+  const expectedSize = file.length - (replaceByteEnd - replaceByteStart) + restoredBuffer.length;
+
+  console.log(`[GridFSService] restoreMarker: replacing ${replaceByteEnd - replaceByteStart} bytes with ${restoredBuffer.length} bytes (expected total: ${expectedSize})`);
 
   const readStream = bucket.openDownloadStream(fileId);
 
@@ -1220,14 +1339,14 @@ export async function restoreMarker(
       const chunkStart = byteOffset;
       const chunkEnd = byteOffset + chunk.length;
 
-      if (chunkEnd <= markerByteStart || chunkStart >= markerByteEnd) {
-        // Chunk entirely before or after marker — pass through
+      if (chunkEnd <= replaceByteStart || chunkStart >= replaceByteEnd) {
+        // Chunk entirely before or after replacement region — pass through
         uploadStream.write(chunk);
         totalWritten += chunk.length;
       } else {
-        // Chunk overlaps the marker region
-        if (chunkStart < markerByteStart) {
-          const before = chunk.subarray(0, markerByteStart - chunkStart);
+        // Chunk overlaps the replacement region
+        if (chunkStart < replaceByteStart) {
+          const before = chunk.subarray(0, replaceByteStart - chunkStart);
           uploadStream.write(before);
           totalWritten += before.length;
         }
@@ -1238,8 +1357,8 @@ export async function restoreMarker(
           restoredWritten = true;
         }
 
-        if (chunkEnd > markerByteEnd) {
-          const after = chunk.subarray(markerByteEnd - chunkStart);
+        if (chunkEnd > replaceByteEnd) {
+          const after = chunk.subarray(replaceByteEnd - chunkStart);
           uploadStream.write(after);
           totalWritten += after.length;
         }

@@ -531,18 +531,37 @@ STAGE 4: Review & Apply
 3. **Map** `textStartOffset` → `htmlStartPos` (byte position in HTML)
 4. **Map** `textStartOffset + textLength` → `htmlEndPos`
 5. **Detect** if range is inside a `<table>`:
-   - **YES:** Expand to full `<table>...</table>` boundaries
+   - **YES:** Expand to full `<table>...</table>` boundaries (for `removedHtml`)
    - **NO:** Expand to nearest tag boundaries (`<p>`, `<div>`, etc.)
-6. **Capture** `removedHtml` = HTML between expanded boundaries
-7. **Replace** range with marker comment
-8. **Store** updated HTML back to GridFS
+6. **Capture** `removedHtml` = HTML between expanded boundaries (full table for table content)
+7. **Table splitting** (if range was inside a table):
+   - Compute `splitBefore` = table with rows BEFORE the tagged rows
+   - Compute `splitAfter` = table with rows AFTER the tagged rows
+   - Wrap with `TABLE_FRAG_START/END` comments so `restoreMarker` can find the whole region
+8. **Replace** range with: `TABLE_FRAG_START + splitBefore + marker + splitAfter + TABLE_FRAG_END`
+9. **Store** updated HTML back to GridFS
+
+**Table-split HTML format (when tagged content is inside a table):**
+```html
+<!-- TABLE_FRAG_START:{sectionId} -->
+<table>...rows before tagged content...</table>
+<!-- EXTRACTED:{sectionId}:{type}:{title}:{length} -->
+<table>...rows after tagged content...</table>
+<!-- TABLE_FRAG_END:{sectionId} -->
+```
+
+This ensures non-tagged table rows remain visible in the document on resume,
+while `removedHtml` still stores the full original table for accurate restoration.
 
 ### How Markers Are Restored (Section Deletion)
 
 `restoreMarker` in gridFsService.ts — streaming two-pass approach:
 
-1. **Pass 1:** Stream through GridFS file to find marker byte positions
-2. **Pass 2:** Stream-copy file, replacing marker bytes with original HTML
+1. **Pass 1:** Stream through GridFS file searching for:
+   - `TABLE_FRAG_START/END` wrappers (new-style, includes split table fragments)
+   - `EXTRACTED` marker (old-style fallback, backward compatible)
+   - TABLE_FRAG wrappers take priority when found
+2. **Pass 2:** Stream-copy file, replacing the found region with `removedHtml` (full table)
 3. **Validate** output size before deleting original file
 
 ### How Markers Become Placeholders (Client-Side)
@@ -715,9 +734,13 @@ db.selfstudyimports.findOne(
 [GridFSService] insertHtmlMarker: scanned 25000 text chars, htmlStartPos=1988671, htmlEndPos=1999279
 [GridFSService] Inserting marker at text offset 25426 (HTML pos 1988671-1999279), removed 10608 chars
 
-# Table expansion
-[GridFSService] Text range is inside a table — expanding to full table boundaries
-[GridFSService] Full table expansion: 1988671-1999279
+# Table expansion with row-level splitting
+[GridFSService] Text range is inside a table (startInTable=true, endInTable=true)
+[GridFSService] Full table expansion: 1988671-1999279 (table=10608 chars, original text range was ...)
+[GridFSService] Computing table split fragments for section a1b2c3d4
+[GridFSService] splitBefore: 2500 chars (trStartOfTagged=1990000, firstTrPos=1988800)
+[GridFSService] splitAfter: 3200 chars (trEndAfter=1996000, tableEnd=1999279)
+[GridFSService] TABLE_FRAG wrappers: prefix=2560 chars, suffix=3260 chars
 
 # Repair tiers
 [Import] Repair T1: direct match "Section Title" at 12345-67890
