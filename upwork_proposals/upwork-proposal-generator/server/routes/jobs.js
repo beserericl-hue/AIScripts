@@ -1,6 +1,6 @@
 import express from 'express';
 import Job from '../models/Job.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
@@ -51,11 +51,12 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
-// Get pending jobs (status = pending only) - filtered by team
+// Get pending jobs (status = pending only) - filtered by team, excludes archived
 router.get('/pending', authenticate, async (req, res) => {
   try {
     let query = {
-      status: 'pending'
+      status: 'pending',
+      archived: { $ne: true }
     };
 
     // Add team filter
@@ -72,11 +73,12 @@ router.get('/pending', authenticate, async (req, res) => {
   }
 });
 
-// Get jobs with proposals (proposal_generated, submitted, won, lost, private) - filtered by team
+// Get jobs with proposals (proposal_generated, submitted, won, lost, private) - filtered by team, excludes archived
 router.get('/with-proposals', authenticate, async (req, res) => {
   try {
     let query = {
-      status: { $in: ['proposal_generated', 'submitted', 'won', 'lost', 'private'] }
+      status: { $in: ['proposal_generated', 'submitted', 'won', 'lost', 'private'] },
+      archived: { $ne: true }
     };
 
     // Add team filter
@@ -91,6 +93,74 @@ router.get('/with-proposals', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Error fetching jobs with proposals:', error);
     res.status(500).json({ error: 'Failed to fetch jobs with proposals' });
+  }
+});
+
+// Bulk archive pending jobs before a date - admin only
+router.post('/archive', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { beforeDate } = req.body;
+
+    if (!beforeDate) {
+      return res.status(400).json({ error: 'beforeDate is required' });
+    }
+
+    const cutoffDate = new Date(beforeDate);
+    let query = {
+      status: 'pending',
+      archived: { $ne: true },
+      createdAt: { $lt: cutoffDate }
+    };
+
+    // Add team filter
+    addTeamFilter(query, req.user);
+
+    const result = await Job.updateMany(query, { $set: { archived: true, updatedAt: Date.now() } });
+
+    res.json({ message: `Archived ${result.modifiedCount} pending jobs`, count: result.modifiedCount });
+  } catch (error) {
+    console.error('Error archiving jobs:', error);
+    res.status(500).json({ error: 'Failed to archive jobs' });
+  }
+});
+
+// Bulk unarchive jobs within a date range - admin only
+router.post('/unarchive', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { fromDate, toDate } = req.body;
+
+    if (!fromDate || !toDate) {
+      return res.status(400).json({ error: 'fromDate and toDate are required' });
+    }
+
+    let query = {
+      archived: true,
+      createdAt: { $gte: new Date(fromDate), $lte: new Date(toDate) }
+    };
+
+    // Add team filter
+    addTeamFilter(query, req.user);
+
+    const result = await Job.updateMany(query, { $set: { archived: false, updatedAt: Date.now() } });
+
+    res.json({ message: `Unarchived ${result.modifiedCount} jobs`, count: result.modifiedCount });
+  } catch (error) {
+    console.error('Error unarchiving jobs:', error);
+    res.status(500).json({ error: 'Failed to unarchive jobs' });
+  }
+});
+
+// Get archived jobs count by date range - admin only
+router.get('/archived-count', authenticate, requireAdmin, async (req, res) => {
+  try {
+    let query = { archived: true };
+    addTeamFilter(query, req.user);
+
+    const count = await Job.countDocuments(query);
+    res.json({ count });
+  } catch (error) {
+    console.error('Error counting archived jobs:', error);
+    res.status(500).json({ error: 'Failed to count archived jobs' });
   }
 });
 

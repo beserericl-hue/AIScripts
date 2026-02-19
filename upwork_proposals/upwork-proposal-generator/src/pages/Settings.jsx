@@ -22,7 +22,10 @@ import {
   UserMinus,
   Pencil,
   X,
-  FlaskConical
+  FlaskConical,
+  Archive,
+  ArchiveRestore,
+  Calendar
 } from 'lucide-react';
 
 const Settings = () => {
@@ -67,6 +70,14 @@ const Settings = () => {
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
   const [unassignedUsers, setUnassignedUsers] = useState([]);
+
+  // Archive state
+  const [archiveFilter, setArchiveFilter] = useState('thisWeek');
+  const [archiveCustomDate, setArchiveCustomDate] = useState('');
+  const [unarchiveFromDate, setUnarchiveFromDate] = useState('');
+  const [unarchiveToDate, setUnarchiveToDate] = useState('');
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archivedCount, setArchivedCount] = useState(0);
 
   // Password visibility
   const [showPasswords, setShowPasswords] = useState({});
@@ -428,6 +439,109 @@ const Settings = () => {
     }
   };
 
+  // Archive functions
+  const getArchiveCutoffDate = () => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    switch (archiveFilter) {
+      case 'thisWeek': {
+        const dayOfWeek = now.getDay();
+        const startOfWeek = new Date(startOfToday);
+        startOfWeek.setDate(startOfWeek.getDate() - dayOfWeek);
+        return startOfWeek.toISOString();
+      }
+      case 'thisMonth':
+        return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      case 'lastMonth':
+        return new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+      case 'custom':
+        return archiveCustomDate ? new Date(archiveCustomDate).toISOString() : null;
+      default:
+        return null;
+    }
+  };
+
+  const getArchiveFilterLabel = () => {
+    switch (archiveFilter) {
+      case 'thisWeek': return 'before This Week';
+      case 'thisMonth': return 'before This Month';
+      case 'lastMonth': return 'before Last Month';
+      case 'custom': return archiveCustomDate ? `before ${new Date(archiveCustomDate).toLocaleDateString()}` : '';
+      default: return '';
+    }
+  };
+
+  const fetchArchivedCount = async () => {
+    try {
+      const response = await api.get('/jobs/archived-count');
+      setArchivedCount(response.data.count);
+    } catch (err) {
+      console.error('Failed to fetch archived count:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'database' && user?.role === 'administrator') {
+      fetchArchivedCount();
+    }
+  }, [activeTab]);
+
+  const handleArchive = async () => {
+    const beforeDate = getArchiveCutoffDate();
+    if (!beforeDate) {
+      setError('Please select a valid date filter');
+      return;
+    }
+
+    const label = getArchiveFilterLabel();
+    if (!confirm(`Archive all pending jobs ${label}? They will be hidden from the dashboard.`)) return;
+
+    setArchiveLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const response = await api.post('/jobs/archive', { beforeDate });
+      setSuccess(`Archived ${response.data.count} pending jobs`);
+      fetchArchivedCount();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to archive jobs');
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
+  const handleUnarchive = async () => {
+    if (!unarchiveFromDate || !unarchiveToDate) {
+      setError('Please select both From and To dates');
+      return;
+    }
+
+    if (!confirm(`Unarchive jobs from ${new Date(unarchiveFromDate).toLocaleDateString()} to ${new Date(unarchiveToDate).toLocaleDateString()}?`)) return;
+
+    setArchiveLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      // Set toDate to end of day
+      const toDateEnd = new Date(unarchiveToDate);
+      toDateEnd.setHours(23, 59, 59, 999);
+
+      const response = await api.post('/jobs/unarchive', {
+        fromDate: new Date(unarchiveFromDate).toISOString(),
+        toDate: toDateEnd.toISOString()
+      });
+      setSuccess(`Unarchived ${response.data.count} jobs`);
+      fetchArchivedCount();
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to unarchive jobs');
+    } finally {
+      setArchiveLoading(false);
+    }
+  };
+
   const copyToClipboard = async (text, key) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -776,6 +890,120 @@ const Settings = () => {
                   <span>{loading ? 'Saving...' : 'Save Database Settings'}</span>
                 </button>
               </form>
+
+              {/* Archive Section - Admin Only */}
+              {user?.role === 'administrator' && (
+                <>
+                  <hr className="section-divider" />
+
+                  <h2>
+                    <Archive size={20} />
+                    Job Archive Management
+                  </h2>
+                  <p className="section-description">
+                    Archive old pending jobs to keep the dashboard clean. Archived jobs remain in the database but are hidden from normal views.
+                    {archivedCount > 0 && (
+                      <span className="archived-count-badge">{archivedCount} archived job{archivedCount !== 1 ? 's' : ''}</span>
+                    )}
+                  </p>
+
+                  {/* Archive Pending Jobs */}
+                  <div className="archive-section">
+                    <h3>
+                      <Archive size={16} />
+                      Archive Pending Jobs
+                    </h3>
+                    <p className="archive-description">
+                      Archive all pending jobs created before the selected time period.
+                    </p>
+
+                    <div className="archive-filter-buttons">
+                      {[
+                        { key: 'thisWeek', label: 'Before This Week' },
+                        { key: 'thisMonth', label: 'Before This Month' },
+                        { key: 'lastMonth', label: 'Before Last Month' },
+                        { key: 'custom', label: 'Custom Date' }
+                      ].map(({ key, label }) => (
+                        <button
+                          key={key}
+                          className={`archive-filter-btn ${archiveFilter === key ? 'active' : ''}`}
+                          onClick={() => setArchiveFilter(key)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {archiveFilter === 'custom' && (
+                      <div className="archive-custom-date">
+                        <label>
+                          <Calendar size={14} />
+                          Archive jobs before:
+                        </label>
+                        <input
+                          type="date"
+                          value={archiveCustomDate}
+                          onChange={(e) => setArchiveCustomDate(e.target.value)}
+                        />
+                      </div>
+                    )}
+
+                    <button
+                      className="btn-archive"
+                      onClick={handleArchive}
+                      disabled={archiveLoading || (archiveFilter === 'custom' && !archiveCustomDate)}
+                    >
+                      <Archive size={18} />
+                      <span>{archiveLoading ? 'Archiving...' : `Archive Pending Jobs ${getArchiveFilterLabel()}`}</span>
+                    </button>
+                  </div>
+
+                  {/* Unarchive Jobs */}
+                  <div className="archive-section">
+                    <h3>
+                      <ArchiveRestore size={16} />
+                      Unarchive Jobs
+                    </h3>
+                    <p className="archive-description">
+                      Restore archived jobs within a date range back to their original status.
+                    </p>
+
+                    <div className="unarchive-date-range">
+                      <div className="date-field">
+                        <label>
+                          <Calendar size={14} />
+                          From Date
+                        </label>
+                        <input
+                          type="date"
+                          value={unarchiveFromDate}
+                          onChange={(e) => setUnarchiveFromDate(e.target.value)}
+                        />
+                      </div>
+                      <div className="date-field">
+                        <label>
+                          <Calendar size={14} />
+                          To Date
+                        </label>
+                        <input
+                          type="date"
+                          value={unarchiveToDate}
+                          onChange={(e) => setUnarchiveToDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      className="btn-unarchive"
+                      onClick={handleUnarchive}
+                      disabled={archiveLoading || !unarchiveFromDate || !unarchiveToDate}
+                    >
+                      <ArchiveRestore size={18} />
+                      <span>{archiveLoading ? 'Unarchiving...' : 'Unarchive Jobs in Date Range'}</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

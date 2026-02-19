@@ -47,6 +47,12 @@ const jobSchema = new mongoose.Schema({
   userName: {
     type: String
   },
+  // Archive flag - archived jobs are hidden from normal views
+  archived: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   // Reference to the profile used for this job's proposal
   profileId: {
     type: mongoose.Schema.Types.ObjectId,
