@@ -27,7 +27,8 @@ import {
   MessageSquare,
   ScrollText,
   Image,
-  Lock
+  Lock,
+  Mail
 } from 'lucide-react';
 
 const Proposal = () => {
@@ -107,9 +108,20 @@ const Proposal = () => {
     };
   }, [jobId]);
 
-  // When team members load, ensure current user is still selected
+  // When team members load, auto-select by job's userName email or fall back to current user
   useEffect(() => {
     if (teamMembers.length > 0) {
+      // If job has a userName (email), find the matching team member
+      if (initialJob?.userName) {
+        const matchByEmail = teamMembers.find(
+          m => m.email?.toLowerCase() === initialJob.userName.toLowerCase()
+        );
+        if (matchByEmail) {
+          setSelectedUserId(matchByEmail._id);
+          return;
+        }
+      }
+
       const selectedInTeam = teamMembers.find(m => m._id === selectedUserId);
       if (!selectedInTeam) {
         const currentUserInTeam = teamMembers.find(m => m._id === user._id);
@@ -434,6 +446,14 @@ const Proposal = () => {
                     <p>{initialJob?.evaluationData?.scoreReasoning || 'No score reasoning available'}</p>
                   </div>
                 </div>
+
+                {/* User Name (email) */}
+                {initialJob?.userName && (
+                  <div className="job-username-display">
+                    <Mail size={14} />
+                    <span>{initialJob.userName}</span>
+                  </div>
+                )}
 
                 {/* Job Meta Fields */}
                 <div className="job-meta-fields">
