@@ -43,6 +43,10 @@ const jobSchema = new mongoose.Schema({
     ref: 'Team',
     index: true
   },
+  // Email of the user who received the job notification (from Delivered-To header)
+  userName: {
+    type: String
+  },
   // Reference to the profile used for this job's proposal
   profileId: {
     type: mongoose.Schema.Types.ObjectId,

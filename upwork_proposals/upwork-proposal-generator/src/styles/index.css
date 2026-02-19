@@ -3135,6 +3135,57 @@ button {
   }
 }
 
+/* User Filter Dropdown */
+.user-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.375rem;
+}
+
+.user-filter-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.user-filter-select {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  padding: 0.25rem 0.625rem;
+  cursor: pointer;
+  transition: var(--transition);
+  outline: none;
+  max-width: 220px;
+}
+
+.user-filter-select:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.user-filter-select:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(20, 168, 0, 0.15);
+}
+
+/* Job Item User Email */
+.job-item-user {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.675rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.job-item-user svg {
+  opacity: 0.6;
+}
+
 /* Pagination Styles */
 .pagination {
   display: flex;

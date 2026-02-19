@@ -17,6 +17,7 @@ import {
   User,
   Lock,
   Ban,
+  Mail,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -210,19 +211,30 @@ const Home = () => {
   const [proposalsSearch, setProposalsSearch] = useState('');
   const [pendingDateFilter, setPendingDateFilter] = useState('all');
   const [proposalsDateFilter, setProposalsDateFilter] = useState('all');
+  const [pendingUserFilter, setPendingUserFilter] = useState('all');
 
   // Get page numbers from URL params
   const pendingPage = parseInt(searchParams.get('pendingPage')) || 1;
   const proposalsPage = parseInt(searchParams.get('proposalsPage')) || 1;
 
-  // Filter pending jobs by search and date
+  // Collect unique userNames from pending jobs for the filter dropdown
+  const uniquePendingUsers = useMemo(() => {
+    const users = new Set();
+    pendingJobs.forEach(job => {
+      if (job.userName) users.add(job.userName);
+    });
+    return Array.from(users).sort();
+  }, [pendingJobs]);
+
+  // Filter pending jobs by search, date, and userName
   const filteredPendingJobs = useMemo(() => {
     return pendingJobs.filter(job => {
       const matchesSearch = testRegex(pendingSearch, job.title);
       const matchesDate = isDateInRange(job.createdAt, pendingDateFilter);
-      return matchesSearch && matchesDate;
+      const matchesUser = pendingUserFilter === 'all' || job.userName === pendingUserFilter;
+      return matchesSearch && matchesDate && matchesUser;
     });
-  }, [pendingJobs, pendingSearch, pendingDateFilter]);
+  }, [pendingJobs, pendingSearch, pendingDateFilter, pendingUserFilter]);
 
   // Filter proposal jobs by search and date
   const filteredProposalJobs = useMemo(() => {
@@ -500,6 +512,21 @@ const Home = () => {
                 </label>
               ))}
             </div>
+            {uniquePendingUsers.length > 0 && (
+              <div className="user-filter-group">
+                <Mail size={14} className="user-filter-icon" />
+                <select
+                  className="user-filter-select"
+                  value={pendingUserFilter}
+                  onChange={(e) => setPendingUserFilter(e.target.value)}
+                >
+                  <option value="all">All Users</option>
+                  {uniquePendingUsers.map(user => (
+                    <option key={user} value={user}>{user}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           <div className="jobs-list">
@@ -529,6 +556,12 @@ const Home = () => {
                       {job.rating && renderStars(job.rating)}
                       <span className="job-item-date">{formatDate(job.createdAt)}</span>
                     </div>
+                    {job.userName && (
+                      <div className="job-item-user">
+                        <Mail size={11} />
+                        <span>{job.userName}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="job-item-actions">
                     <button

@@ -51,6 +51,8 @@ const normalizeEvaluationPayload = (payload) => {
       // Team assignment
       teamId: payload.teamId || null,
       teamName: payload.teamName || null,
+      // User who received the notification email
+      userName: payload.userName || null,
       // Store original payload
       rawPayload: payload
     };
@@ -76,6 +78,7 @@ const normalizeEvaluationPayload = (payload) => {
     scoreReasoning: payload.scoreReasoning || '',
     teamId: payload.teamId || null,
     teamName: payload.teamName || null,
+    userName: payload.userName || null,
     rawPayload: payload
   };
 };
@@ -195,7 +198,8 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
           ...normalized,
           originalPayload: payload
         },
-        teamId: resolvedTeamId
+        teamId: resolvedTeamId,
+        userName: normalized.userName || null
       });
     } else if (job) {
       // Update existing job
@@ -212,6 +216,10 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
       // Only update teamId if provided and job doesn't already have one
       if (resolvedTeamId && !job.teamId) {
         job.teamId = resolvedTeamId;
+      }
+      // Update userName if provided
+      if (normalized.userName) {
+        job.userName = normalized.userName;
       }
     } else {
       return res.status(404).json({ error: 'Job not found and insufficient data to create' });
