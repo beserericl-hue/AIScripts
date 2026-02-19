@@ -1286,7 +1286,7 @@ button {
 /* Two-column layout for proposal page */
 .proposal-layout.proposal-two-column {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
 }
@@ -1309,6 +1309,7 @@ button {
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   padding: 1.5rem;
+  min-width: 0;
 }
 
 .proposal-form-panel .panel-card h2,
