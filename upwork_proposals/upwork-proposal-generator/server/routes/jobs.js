@@ -228,17 +228,29 @@ router.get('/by-job-id/:jobId', authenticate, async (req, res) => {
     // Add team filter
     addTeamFilter(query, req.user);
 
+    console.log(`[JOB-FETCH] Fetching jobId=${req.params.jobId} for user=${req.user.email} (teamId=${req.user.teamId || 'none'}), query=${JSON.stringify(query)}`);
+
     const job = await Job.findOne(query)
       .populate('createdBy', 'name email')
       .populate('profileId', 'name content');
 
     if (!job) {
+      // Check if job exists at all (without team filter) to detect team mismatch
+      const jobExists = await Job.findOne({ jobId: req.params.jobId }).select('jobId teamId status');
+      if (jobExists) {
+        console.warn(`[JOB-FETCH] TEAM MISMATCH: jobId=${req.params.jobId} exists (teamId=${jobExists.teamId}, status=${jobExists.status}) but user ${req.user.email} (teamId=${req.user.teamId}) cannot access it`);
+      } else {
+        console.warn(`[JOB-FETCH] Job NOT FOUND in database: jobId=${req.params.jobId}`);
+      }
       return res.status(404).json({ error: 'Job not found' });
     }
 
+    const hasProposalData = !!(job.proposalData && (job.proposalData.coverLetter || job.proposalData.docUrl || job.proposalData.mermaidDiagram));
+    console.log(`[JOB-FETCH] Found job: jobId=${job.jobId}, status=${job.status}, teamId=${job.teamId}, hasProposalData=${hasProposalData}, proposalData: coverLetter=${(job.proposalData?.coverLetter || '').length} chars, docUrl=${!!job.proposalData?.docUrl}, mermaidDiagram=${!!job.proposalData?.mermaidDiagram}`);
+
     res.json(job);
   } catch (error) {
-    console.error('Error fetching job:', error);
+    console.error(`[JOB-FETCH] ERROR fetching jobId=${req.params.jobId}: ${error.message}`, error.stack);
     res.status(500).json({ error: 'Failed to fetch job' });
   }
 });

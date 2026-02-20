@@ -127,6 +127,8 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
     const payload = req.body;
     const testMode = req.query.testMode === 'true';
 
+    console.log(`[EVALUATION] Received callback: jobId=${payload.jobId || 'NONE'}, testMode=${testMode}, hasScore=${!!payload.score}, hasJob=${!!payload.job}, userName=${payload.userName || 'NONE'}`);
+
     // Normalize payload (handles both old and new N8N formats)
     const normalized = normalizeEvaluationPayload(payload);
 
@@ -134,6 +136,7 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
     const validation = validateEvaluationPayload(payload);
 
     if (!validation.isValid) {
+      console.warn(`[EVALUATION] Validation failed: ${validation.errors.join(', ')}`);
       return res.status(400).json({
         error: validation.errors.join(', '),
         validation
@@ -226,6 +229,7 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
     }
 
     await job.save();
+    console.log(`[EVALUATION] Job saved: jobId=${job.jobId}, mongoId=${job._id}, status=${job.status}, teamId=${job.teamId}, userName=${job.userName || 'NONE'}, title="${job.title}"`);
 
     res.json({
       success: true,
@@ -234,7 +238,7 @@ router.post('/evaluation', authenticateApiKey, async (req, res) => {
       teamId: job.teamId
     });
   } catch (error) {
-    console.error('Evaluation webhook error:', error);
+    console.error(`[EVALUATION] ERROR: ${error.message}`, error.stack);
     res.status(500).json({ error: 'Failed to process evaluation' });
   }
 });
@@ -281,14 +285,21 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
     const { jobId, title, description, url, coverLetter, docUrl, mermaidDiagram, mermaidImageUrl, teamId, teamName } = payload;
     const testMode = req.query.testMode === 'true';
 
+    console.log(`[PROPOSAL-RESULT] Received callback: jobId=${jobId || 'NONE'}, testMode=${testMode}, fields: coverLetter=${!!coverLetter} (${(coverLetter || '').length} chars), docUrl=${!!docUrl}, mermaidDiagram=${!!mermaidDiagram}, mermaidImageUrl=${!!mermaidImageUrl}`);
+
     // Validate payload
     const validation = validateProposalResultPayload(payload);
 
     if (!validation.isValid) {
+      console.warn(`[PROPOSAL-RESULT] Validation failed for jobId=${jobId}: ${validation.errors.join(', ')}`);
       return res.status(400).json({
         error: validation.errors.join(', '),
         validation
       });
+    }
+
+    if (validation.warnings.length > 0) {
+      console.warn(`[PROPOSAL-RESULT] Warnings for jobId=${jobId}: ${validation.warnings.join('; ')}`);
     }
 
     // Generate jobId if not provided
@@ -296,10 +307,12 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
     if (!resolvedJobId) {
       const { v4: uuidv4 } = await import('uuid');
       resolvedJobId = uuidv4();
+      console.log(`[PROPOSAL-RESULT] No jobId provided, generated: ${resolvedJobId}`);
     }
 
     // If test mode, store data but don't save to database
     if (testMode) {
+      console.log(`[PROPOSAL-RESULT] Test mode active, storing in memory for jobId=${resolvedJobId}`);
       testModeData.set(resolvedJobId, {
         type: 'proposal-result',
         payload: { ...payload, jobId: resolvedJobId },
@@ -324,6 +337,7 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
     // If job doesn't exist, create a new one
     if (!job) {
       isNewJob = true;
+      console.log(`[PROPOSAL-RESULT] Job NOT found for jobId=${resolvedJobId}, creating new job`);
 
       // Resolve team by teamId or teamName
       // Fall back to callbackTeamId from settings if not specified
@@ -332,11 +346,17 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
         const team = await Team.findById(teamId);
         if (team) {
           resolvedTeamId = team._id;
+          console.log(`[PROPOSAL-RESULT] Resolved team by teamId: ${teamId}`);
+        } else {
+          console.warn(`[PROPOSAL-RESULT] teamId=${teamId} not found in database`);
         }
       } else if (teamName) {
         const team = await Team.findOne({ name: teamName, isActive: true });
         if (team) {
           resolvedTeamId = team._id;
+          console.log(`[PROPOSAL-RESULT] Resolved team by teamName: ${teamName} -> ${team._id}`);
+        } else {
+          console.warn(`[PROPOSAL-RESULT] teamName=${teamName} not found in database`);
         }
       }
       // Fall back to callbackTeamId from settings
@@ -344,6 +364,9 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
         const settingsWithTeam = await Settings.findOne({ callbackTeamId: { $ne: null } });
         if (settingsWithTeam && settingsWithTeam.callbackTeamId) {
           resolvedTeamId = settingsWithTeam.callbackTeamId;
+          console.log(`[PROPOSAL-RESULT] Using fallback callbackTeamId from settings: ${resolvedTeamId}`);
+        } else {
+          console.warn(`[PROPOSAL-RESULT] No team resolved - job will have no team assignment`);
         }
       }
 
@@ -355,6 +378,8 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
         status: 'proposal_generated',
         teamId: resolvedTeamId
       });
+    } else {
+      console.log(`[PROPOSAL-RESULT] Found existing job: jobId=${resolvedJobId}, mongoId=${job._id}, currentStatus=${job.status}, teamId=${job.teamId}`);
     }
 
     // Update job with proposal data
@@ -373,6 +398,7 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
     };
 
     await job.save();
+    console.log(`[PROPOSAL-RESULT] Job saved: jobId=${job.jobId}, mongoId=${job._id}, status=${job.status}, teamId=${job.teamId}, isNewJob=${isNewJob}, proposalData: coverLetter=${(job.proposalData.coverLetter || '').length} chars, docUrl=${!!job.proposalData.docUrl}, mermaidDiagram=${!!job.proposalData.mermaidDiagram}`);
 
     // Broadcast real-time update to connected clients
     broadcastProposalUpdate(job.jobId, {
@@ -389,7 +415,7 @@ router.post('/proposal-result', authenticateApiKey, async (req, res) => {
       isNewJob
     });
   } catch (error) {
-    console.error('Proposal result webhook error:', error);
+    console.error(`[PROPOSAL-RESULT] ERROR: ${error.message}`, error.stack);
     res.status(500).json({ error: 'Failed to process proposal result' });
   }
 });
