@@ -12,6 +12,7 @@ import {
   FileOperationError,
   logError
 } from '../services/errorLogger';
+import * as s3Service from '../services/s3Service';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -97,11 +98,12 @@ async function verifyEvidenceAccess(
 
 /**
  * List evidence for a submission
- * Only returns evidence the user is authorized to see
+ * Only returns evidence the user is authorized to see.
+ * By default only returns current versions; pass includeVersions=true for all.
  */
 export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId } = req.params;
-  const { standardCode, specCode, evidenceType } = req.query;
+  const { standardCode, specCode, evidenceType, includeVersions } = req.query;
   const userId = req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
@@ -128,6 +130,14 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
     submissionId: new mongoose.Types.ObjectId(submissionId),
     isDeleted: false
   };
+
+  // Only show current versions unless explicitly requesting all
+  if (includeVersions !== 'true') {
+    filter.$or = [
+      { isCurrentVersion: true },
+      { isCurrentVersion: { $exists: false } }  // backward compat for old records
+    ];
+  }
 
   if (standardCode) filter.standardCode = standardCode;
   if (specCode) filter.specCode = specCode;
@@ -184,7 +194,9 @@ export const getEvidence = asyncHandler(async (req: AuthenticatedRequest, res: R
 
 /**
  * Upload document evidence (Word, PDF, PPT, images)
- * Files are stored as base64 encoded binary in the database
+ * Files are stored in S3 if configured, otherwise falls back to base64 in MongoDB.
+ * Supports auto-versioning: if a file with the same originalName exists for the
+ * same institution+standard+spec, the old one is marked as a previous version.
  */
 export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId } = req.params;
@@ -226,17 +238,71 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new ValidationError('No institution found for this submission');
   }
 
+  const instIdStr = resolvedInstitutionId.toString();
+
   // Determine evidence type based on mime type
   let evidenceType: 'document' | 'image' = 'document';
   if (file.mimetype.startsWith('image/')) {
     evidenceType = 'image';
   }
 
-  // Convert file buffer to base64
-  const base64Data = file.buffer.toString('base64');
-
   try {
-    // Create evidence record with base64 encoded file
+    // --- Versioning: check if a current version with the same filename exists ---
+    const existingCurrent = await SupportingEvidence.findOne({
+      institutionId: resolvedInstitutionId,
+      standardCode: standardCode || { $exists: false },
+      specCode: specCode || { $exists: false },
+      'file.originalName': file.originalname,
+      isCurrentVersion: true,
+      isDeleted: false,
+    });
+
+    const previousVersionNumber = existingCurrent?.versionNumber || 0;
+    const newVersionNumber = previousVersionNumber + 1;
+    const newVersionId = `${instIdStr}-${newVersionNumber}`;
+
+    // If replacing, mark old version as superseded
+    if (existingCurrent) {
+      existingCurrent.isCurrentVersion = false;
+      // replacedById will be set after we create the new doc
+    }
+
+    // --- Upload to S3 or fall back to base64 ---
+    const useS3 = s3Service.isS3Configured();
+    let fileRecord: any;
+
+    if (useS3) {
+      const s3Key = s3Service.generateS3Key(instIdStr, newVersionId, file.originalname);
+      await s3Service.uploadFile(s3Key, file.buffer, file.mimetype);
+
+      fileRecord = {
+        filename: `${Date.now()}-${file.originalname}`,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        s3Key,
+        s3Bucket: process.env.AWS_S3_BUCKET_NAME,
+        storageType: 's3',
+        uploadedAt: new Date(),
+        uploadedBy: new mongoose.Types.ObjectId(userId),
+      };
+    } else {
+      // Legacy fallback: store as base64 in MongoDB
+      const base64Data = file.buffer.toString('base64');
+      fileRecord = {
+        filename: `${Date.now()}-${file.originalname}`,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        data: base64Data,
+        encoding: 'base64',
+        storageType: 'base64',
+        uploadedAt: new Date(),
+        uploadedBy: new mongoose.Types.ObjectId(userId),
+      };
+    }
+
+    // Create new evidence record
     const evidence = await SupportingEvidence.create({
       institutionId: resolvedInstitutionId,
       submissionId: new mongoose.Types.ObjectId(submissionId),
@@ -244,20 +310,22 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
       standardCode: standardCode || undefined,
       specCode: specCode || undefined,
       evidenceType,
-      file: {
-        filename: `${Date.now()}-${file.originalname}`,
-        originalName: file.originalname,
-        mimeType: file.mimetype,
-        size: file.size,
-        data: base64Data,
-        encoding: 'base64',
-        uploadedAt: new Date(),
-        uploadedBy: new mongoose.Types.ObjectId(userId)
-      },
+      file: fileRecord,
+      description: description || undefined,
       metadata: {
-        description: description || ''
-      }
+        description: description || '',
+      },
+      versionId: newVersionId,
+      versionNumber: newVersionNumber,
+      isCurrentVersion: true,
+      previousVersionId: existingCurrent?._id,
     });
+
+    // Update the old version to point to the new one
+    if (existingCurrent) {
+      existingCurrent.replacedById = evidence._id as mongoose.Types.ObjectId;
+      await existingCurrent.save();
+    }
 
     // Return response without the file data
     const responseEvidence = evidence.toObject();
@@ -265,17 +333,20 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
 
     res.status(201).json({
       message: 'Evidence uploaded successfully',
-      evidence: responseEvidence
+      evidence: responseEvidence,
+      versionInfo: existingCurrent
+        ? { replaced: true, previousVersion: previousVersionNumber, newVersion: newVersionNumber }
+        : { replaced: false, version: newVersionNumber },
     });
   } catch (error) {
     await logError(error as Error, req, {
       operation: 'uploadEvidence',
       submissionId,
-      filename: file.originalname
+      filename: file.originalname,
     });
     throw new FileOperationError('Failed to store evidence file', {
       filename: file.originalname,
-      size: file.size
+      size: file.size,
     });
   }
 });
@@ -463,7 +534,7 @@ export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res
 
 /**
  * Download evidence file
- * Decodes base64 data and sends as binary for proper file download
+ * Supports both S3 streaming and legacy base64 decoding
  */
 export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
@@ -515,25 +586,44 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
     throw new ValidationError('No URL available for this evidence');
   }
 
-  if (!evidence.file?.data) {
+  if (!evidence.file) {
     throw new NotFoundError('File data');
   }
 
   try {
-    // Decode base64 data to buffer
-    const fileBuffer = Buffer.from(evidence.file.data, 'base64');
+    const storageType = evidence.file.storageType || 'base64';
 
-    // Set headers for file download
-    res.setHeader('Content-Type', evidence.file.mimeType);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${encodeURIComponent(evidence.file.originalName)}"`
-    );
-    res.setHeader('Content-Length', fileBuffer.length);
+    if (storageType === 's3' && evidence.file.s3Key) {
+      // --- S3 download: stream directly to response ---
+      const { stream, contentLength } = await s3Service.downloadFile(evidence.file.s3Key);
 
-    // Send the file
-    res.send(fileBuffer);
+      res.setHeader('Content-Type', evidence.file.mimeType);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(evidence.file.originalName)}"`
+      );
+      if (contentLength) {
+        res.setHeader('Content-Length', contentLength);
+      }
+
+      stream.pipe(res);
+    } else if (evidence.file.data) {
+      // --- Legacy base64 download ---
+      const fileBuffer = Buffer.from(evidence.file.data, 'base64');
+
+      res.setHeader('Content-Type', evidence.file.mimeType);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${encodeURIComponent(evidence.file.originalName)}"`
+      );
+      res.setHeader('Content-Length', fileBuffer.length);
+
+      res.send(fileBuffer);
+    } else {
+      throw new NotFoundError('File data (no S3 key or base64 data found)');
+    }
   } catch (error) {
+    if (error instanceof NotFoundError) throw error;
     await logError(error as Error, req, {
       operation: 'downloadEvidence',
       evidenceId,

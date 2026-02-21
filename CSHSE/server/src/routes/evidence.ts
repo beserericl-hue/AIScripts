@@ -100,9 +100,13 @@ router.get('/submissions/:submissionId/evidence/:evidenceId', getEvidence);
 
 /**
  * @route   POST /api/submissions/:submissionId/evidence/upload
- * @desc    Upload document/image evidence
+ * @desc    Upload document/image evidence (stored in S3 if configured, base64 fallback)
  * @access  Private (Program Coordinator, Admin)
- * @note    Files are stored as base64 in database for secure access
+ * @body    file - The file (multipart/form-data)
+ * @body    standardCode - Standard code to link to
+ * @body    specCode - Spec code to link to
+ * @body    description - Short description of the file
+ * @note    Auto-versioning: re-uploading same filename to same standard/spec creates a new version
  */
 router.post(
   '/submissions/:submissionId/evidence/upload',

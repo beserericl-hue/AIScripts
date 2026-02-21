@@ -13,6 +13,7 @@ import {
   ExternalLink,
   File,
   Image as ImageIcon,
+  Upload,
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -32,10 +33,13 @@ interface Evidence {
     originalName: string;
     mimeType: string;
     size: number;
+    storageType?: 'base64' | 's3';
   };
   metadata?: {
     description?: string;
   };
+  description?: string;
+  versionNumber?: number;
   createdAt: string;
 }
 
@@ -57,6 +61,9 @@ export function EvidencePanel({
   const [showUrlModal, setShowUrlModal] = useState(false);
   const [urlForm, setUrlForm] = useState({ url: '', title: '', description: '' });
   const [uploadError, setUploadError] = useState<string | null>(null);
+  // Staged file upload: user picks a file, then enters description before uploading
+  const [stagedFile, setStagedFile] = useState<File | null>(null);
+  const [fileDescription, setFileDescription] = useState('');
 
   // Fetch evidence for this submission/spec
   const { data: evidenceData, isLoading } = useQuery({
@@ -76,12 +83,15 @@ export function EvidencePanel({
 
   // Upload file mutation
   const uploadMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, description }: { file: File; description: string }) => {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('standardCode', standardCode);
       formData.append('specCode', specCode);
       formData.append('title', file.name);
+      if (description) {
+        formData.append('description', description);
+      }
 
       const response = await api.post(
         `${API_BASE}/submissions/${submissionId}/evidence/upload`,
@@ -95,6 +105,8 @@ export function EvidencePanel({
         queryKey: ['evidence', submissionId, standardCode, specCode],
       });
       setUploadError(null);
+      setStagedFile(null);
+      setFileDescription('');
     },
     onError: (error: any) => {
       setUploadError(error.response?.data?.error || 'Failed to upload file');
@@ -140,12 +152,26 @@ export function EvidencePanel({
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      uploadMutation.mutate(file);
+      setStagedFile(file);
+      setFileDescription('');
+      setUploadError(null);
     }
-    // Reset input
+    // Reset input so same file can be re-selected
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  };
+
+  const handleConfirmUpload = () => {
+    if (stagedFile) {
+      uploadMutation.mutate({ file: stagedFile, description: fileDescription });
+    }
+  };
+
+  const handleCancelUpload = () => {
+    setStagedFile(null);
+    setFileDescription('');
+    setUploadError(null);
   };
 
   const handleAddUrl = (e: React.FormEvent) => {
@@ -182,6 +208,10 @@ export function EvidencePanel({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  const getDescription = (item: Evidence): string | undefined => {
+    return item.description || item.metadata?.description || undefined;
+  };
+
   return (
     <div className="evidence-panel border border-gray-200 rounded-lg bg-white">
       {/* Header */}
@@ -207,15 +237,11 @@ export function EvidencePanel({
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              disabled={uploadMutation.isPending}
+              disabled={uploadMutation.isPending || !!stagedFile}
               className="flex items-center gap-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
               title="Upload file"
             >
-              {uploadMutation.isPending ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Plus className="w-3 h-3" />
-              )}
+              <Plus className="w-3 h-3" />
               File
             </button>
             <button
@@ -229,6 +255,49 @@ export function EvidencePanel({
           </div>
         )}
       </div>
+
+      {/* Staged file upload form */}
+      {stagedFile && (
+        <div className="p-3 bg-teal-50 border-b border-teal-200">
+          <div className="flex items-center gap-2 mb-2">
+            <Upload className="w-4 h-4 text-teal-600" />
+            <span className="text-sm font-medium text-teal-800 truncate">
+              {stagedFile.name}
+            </span>
+            <span className="text-xs text-teal-600">
+              ({formatFileSize(stagedFile.size)})
+            </span>
+          </div>
+          <input
+            type="text"
+            value={fileDescription}
+            onChange={(e) => setFileDescription(e.target.value)}
+            placeholder="Short description of this file (optional)"
+            className="w-full px-2 py-1.5 text-sm border border-teal-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500 mb-2"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleConfirmUpload}
+              disabled={uploadMutation.isPending}
+              className="flex items-center gap-1 px-3 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50"
+            >
+              {uploadMutation.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Upload className="w-3 h-3" />
+              )}
+              Upload
+            </button>
+            <button
+              onClick={handleCancelUpload}
+              disabled={uploadMutation.isPending}
+              className="px-3 py-1 text-xs text-gray-600 hover:bg-gray-100 rounded"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Error message */}
       {uploadError && (
@@ -259,13 +328,20 @@ export function EvidencePanel({
                 <div className="flex items-center gap-2 min-w-0 flex-1">
                   <span className="text-gray-400">{getEvidenceIcon(item)}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-800 truncate">
-                      {item.evidenceType === 'url' ? item.url?.title : item.file?.originalName || 'Untitled'}
-                    </p>
-                    <p className="text-xs text-gray-400">
+                    <div className="flex items-center gap-1">
+                      <p className="text-sm text-gray-800 truncate">
+                        {item.evidenceType === 'url' ? item.url?.title : item.file?.originalName || 'Untitled'}
+                      </p>
+                      {item.versionNumber && item.versionNumber > 1 && (
+                        <span className="flex-shrink-0 text-xs px-1 py-0.5 bg-blue-100 text-blue-700 rounded">
+                          v{item.versionNumber}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-400 truncate">
                       {item.evidenceType === 'url'
                         ? item.url?.href
-                        : formatFileSize(item.file?.size)}
+                        : [formatFileSize(item.file?.size), getDescription(item)].filter(Boolean).join(' - ')}
                     </p>
                   </div>
                 </div>
