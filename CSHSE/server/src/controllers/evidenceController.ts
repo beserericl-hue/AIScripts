@@ -503,7 +503,7 @@ export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   }
 
   // Verify access
-  const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId);
+  const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId, undefined, isSuperuser);
   if (!hasAccess) {
     throw new AuthorizationError('You do not have access to delete this evidence');
   }
@@ -518,8 +518,14 @@ export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new NotFoundError('Evidence');
   }
 
-  // Only uploader or admin can delete
-  if (userRole !== 'admin' && evidence.uploadedBy.toString() !== userId) {
+  // Superusers, admins, program coordinators, or the uploader can delete
+  const canDelete =
+    isSuperuser ||
+    userRole === 'admin' ||
+    userRole === 'program_coordinator' ||
+    evidence.uploadedBy.toString() === userId;
+
+  if (!canDelete) {
     throw new AuthorizationError('You cannot delete this evidence');
   }
 

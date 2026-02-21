@@ -146,6 +146,10 @@ export function EvidencePanel({
       queryClient.invalidateQueries({
         queryKey: ['evidence', submissionId, standardCode, specCode],
       });
+      setUploadError(null);
+    },
+    onError: (error: any) => {
+      setUploadError(error.response?.data?.error || 'Failed to delete evidence');
     },
   });
 
