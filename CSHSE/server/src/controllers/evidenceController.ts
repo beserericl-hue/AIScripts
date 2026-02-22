@@ -108,7 +108,10 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
+  console.log('[Evidence] listEvidence called:', { submissionId, standardCode, specCode, evidenceType, userId, userRole, isSuperuser });
+
   if (!userId || !userRole) {
+    console.warn('[Evidence] listEvidence: No auth - userId:', userId, 'userRole:', userRole);
     throw new AuthorizationError('Authentication required');
   }
 
@@ -154,6 +157,7 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
     .sort({ createdAt: -1 })
     .lean();
 
+  console.log('[Evidence] listEvidence returning', evidence.length, 'items for submission', submissionId);
   res.json({
     evidence,
     count: evidence.length
@@ -206,16 +210,25 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
+  console.log('[Evidence] uploadEvidence called:', {
+    submissionId, standardCode, specCode, replaceExisting,
+    filename: file?.originalname, size: file?.size, mimetype: file?.mimetype,
+    userId, userRole, isSuperuser
+  });
+
   if (!userId || !userRole) {
+    console.warn('[Evidence] uploadEvidence: No auth');
     throw new AuthorizationError('Authentication required');
   }
 
   // Only program coordinators, admins, and superusers can upload
   if (!isSuperuser && userRole !== 'program_coordinator' && userRole !== 'admin') {
+    console.warn('[Evidence] uploadEvidence: Unauthorized role:', userRole);
     throw new AuthorizationError('Only program coordinators can upload evidence');
   }
 
   if (!file) {
+    console.warn('[Evidence] uploadEvidence: No file in request');
     throw new ValidationError('No file uploaded');
   }
 
@@ -350,6 +363,16 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
       existingCurrent.replacedById = evidence._id as mongoose.Types.ObjectId;
       await existingCurrent.save();
     }
+
+    console.log('[Evidence] uploadEvidence: Success', {
+      evidenceId: evidence._id,
+      filename: file.originalname,
+      storageType: fileRecord.storageType,
+      s3Key: fileRecord.s3Key,
+      versionNumber: newVersionNumber,
+      isReplace,
+      hadPreviousVersion: !!existingCurrent,
+    });
 
     // Return response without the file data
     const responseEvidence = evidence.toObject();
@@ -524,7 +547,10 @@ export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
+  console.log('[Evidence] deleteEvidence called:', { submissionId, evidenceId, userId, userRole, isSuperuser });
+
   if (!userId || !userRole) {
+    console.warn('[Evidence] deleteEvidence: No auth');
     throw new AuthorizationError('Authentication required');
   }
 
@@ -561,6 +587,7 @@ export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   evidence.deletedBy = new mongoose.Types.ObjectId(userId);
   await evidence.save();
 
+  console.log('[Evidence] deleteEvidence: Soft-deleted evidence', evidenceId, 'by user', userId);
   res.json({ message: 'Evidence deleted successfully' });
 });
 
@@ -574,7 +601,10 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
+  console.log('[Evidence] downloadEvidence called:', { submissionId, evidenceId, userId, userRole, isSuperuser });
+
   if (!userId || !userRole) {
+    console.warn('[Evidence] downloadEvidence: No auth - userId:', userId, 'userRole:', userRole);
     throw new AuthorizationError('Authentication required');
   }
 
@@ -619,11 +649,20 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
   }
 
   if (!evidence.file) {
+    console.warn('[Evidence] downloadEvidence: No file data for evidence', evidenceId);
     throw new NotFoundError('File data');
   }
 
   try {
     const storageType = evidence.file.storageType || 'base64';
+    console.log('[Evidence] downloadEvidence: Serving file', {
+      evidenceId,
+      filename: evidence.file.originalName,
+      storageType,
+      s3Key: evidence.file.s3Key,
+      hasBase64: !!evidence.file.data,
+      size: evidence.file.size,
+    });
 
     if (storageType === 's3' && evidence.file.s3Key) {
       // --- S3 download: stream directly to response ---

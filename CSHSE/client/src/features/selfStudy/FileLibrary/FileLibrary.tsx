@@ -290,11 +290,26 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
     }
   };
 
-  const handleDownload = (evidenceId: string) => {
-    window.open(
-      `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}/download`,
-      '_blank'
-    );
+  const handleDownload = async (evidenceId: string, filename?: string) => {
+    try {
+      const response = await api.get(
+        `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}/download`,
+        { responseType: 'blob' }
+      );
+      const blob = new Blob([response.data], {
+        type: response.headers['content-type'] || 'application/octet-stream',
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setUploadError(err.response?.data?.error || 'Failed to download file');
+    }
   };
 
   const formatFileSize = (bytes?: number): string => {
@@ -354,34 +369,37 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1 ml-2">
           {item.evidenceType === 'url' ? (
             <a
               href={item.url?.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-1.5 text-gray-400 hover:text-teal-600 rounded hover:bg-gray-100"
+              className="flex items-center gap-1 px-2 py-1 text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded hover:bg-teal-100 transition-colors"
               title="Open link"
             >
-              <ExternalLink className="w-4 h-4" />
+              <ExternalLink className="w-3.5 h-3.5" />
+              Open
             </a>
           ) : (
             <button
-              onClick={() => handleDownload(item._id)}
-              className="p-1.5 text-gray-400 hover:text-teal-600 rounded hover:bg-gray-100"
+              onClick={() => handleDownload(item._id, item.file?.originalName)}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded hover:bg-teal-100 transition-colors"
               title="Download"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5" />
+              Download
             </button>
           )}
           {!readOnly && (
             <button
               onClick={() => handleDelete(item._id, title)}
               disabled={deleteMutation.isPending}
-              className="p-1.5 text-gray-400 hover:text-red-600 rounded hover:bg-gray-100 disabled:opacity-50"
+              className="flex items-center gap-1 px-2 py-1 text-xs text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
               title="Delete"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
             </button>
           )}
         </div>
