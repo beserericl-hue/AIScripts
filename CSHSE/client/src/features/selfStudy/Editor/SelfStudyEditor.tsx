@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Grid3X3,
   BookOpen,
+  FolderOpen,
   Maximize2,
   ArrowRight,
   PlayCircle,
@@ -27,8 +28,8 @@ import { api } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
-import { EvidencePanel } from './EvidencePanel';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
+import { FileLibrary } from '../FileLibrary';
 import { CommentSidebar } from '../../comments';
 import { DocumentViewer, SectionTagger, TaggedSectionsList, SubExtractionViewerModal, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
 
@@ -244,7 +245,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [selectedStandard, setSelectedStandard] = useState('1');
   const [selectedSpec, setSelectedSpec] = useState<string | null>('a');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<'standards' | 'curriculum'>('standards');
+  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files'>('standards');
 
   // Reviewer comment state
   const [editorSelection, setEditorSelection] = useState<{ text: string; from: number; to: number } | null>(null);
@@ -1884,6 +1885,17 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 <Grid3X3 className="w-4 h-4" />
                 Curriculum Matrix
               </button>
+              <button
+                onClick={() => setActiveView('files')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  activeView === 'files'
+                    ? 'bg-teal-100 text-teal-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <FolderOpen className="w-4 h-4" />
+                Supporting File Library
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -2141,17 +2153,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 )}
               </div>
 
-              {/* Evidence Panel */}
-              {selectedSpec && (
-                <div className="mt-4">
-                  <EvidencePanel
-                    submissionId={submissionId}
-                    standardCode={selectedStandard}
-                    specCode={selectedSpec}
-                    readOnly={isReadOnly}
-                  />
-                </div>
-              )}
             </main>
 
               {/* Comment Sidebar - shown for reviewers only */}
@@ -2183,6 +2184,16 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           {activeView === 'curriculum' && (
             <main className="flex-1 overflow-hidden p-2">
               <CurriculumMatrixEditor submissionId={submissionId} />
+            </main>
+          )}
+
+          {/* Supporting File Library View */}
+          {activeView === 'files' && (
+            <main className="flex-1 overflow-hidden">
+              <FileLibrary
+                submissionId={submissionId}
+                readOnly={isReadOnly}
+              />
             </main>
           )}
         </div>

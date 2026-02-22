@@ -200,7 +200,7 @@ export const getEvidence = asyncHandler(async (req: AuthenticatedRequest, res: R
  */
 export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId } = req.params;
-  const { standardCode, specCode, description } = req.body;
+  const { standardCode, specCode, description, replaceExisting } = req.body;
   const file = req.file;
   const userId = req.user?.id;
   const userRole = req.user?.role;
@@ -210,8 +210,8 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new AuthorizationError('Authentication required');
   }
 
-  // Only program coordinators and admins can upload
-  if (userRole !== 'program_coordinator' && userRole !== 'admin') {
+  // Only program coordinators, admins, and superusers can upload
+  if (!isSuperuser && userRole !== 'program_coordinator' && userRole !== 'admin') {
     throw new AuthorizationError('Only program coordinators can upload evidence');
   }
 
@@ -257,14 +257,38 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
       isDeleted: false,
     });
 
-    const previousVersionNumber = existingCurrent?.versionNumber || 0;
-    const newVersionNumber = previousVersionNumber + 1;
-    const newVersionId = `${instIdStr}-${newVersionNumber}`;
+    const isReplace = replaceExisting === 'true';
+    let newVersionNumber: number;
+    let newVersionId: string;
 
-    // If replacing, mark old version as superseded
-    if (existingCurrent) {
-      existingCurrent.isCurrentVersion = false;
-      // replacedById will be set after we create the new doc
+    if (isReplace && existingCurrent) {
+      // Replace mode: soft-delete the old version and reuse version number 1
+      existingCurrent.isDeleted = true;
+      existingCurrent.deletedAt = new Date();
+      existingCurrent.deletedBy = new mongoose.Types.ObjectId(userId);
+      await existingCurrent.save();
+
+      // Also delete the old file from S3 if it was stored there
+      if (existingCurrent.file?.storageType === 's3' && existingCurrent.file?.s3Key) {
+        try {
+          await s3Service.deleteFile(existingCurrent.file.s3Key);
+        } catch (s3Err) {
+          console.warn('[uploadEvidence] Failed to delete old S3 file during replace:', s3Err);
+        }
+      }
+
+      newVersionNumber = 1;
+      newVersionId = `${instIdStr}-1`;
+    } else {
+      // Version mode: keep old version, increment version number
+      const previousVersionNumber = existingCurrent?.versionNumber || 0;
+      newVersionNumber = previousVersionNumber + 1;
+      newVersionId = `${instIdStr}-${newVersionNumber}`;
+
+      // Mark old version as superseded (replacedById set after new doc creation)
+      if (existingCurrent) {
+        existingCurrent.isCurrentVersion = false;
+      }
     }
 
     // --- Upload to S3 or fall back to base64 ---
@@ -318,11 +342,11 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
       versionId: newVersionId,
       versionNumber: newVersionNumber,
       isCurrentVersion: true,
-      previousVersionId: existingCurrent?._id,
+      previousVersionId: (!isReplace && existingCurrent) ? existingCurrent._id : undefined,
     });
 
-    // Update the old version to point to the new one
-    if (existingCurrent) {
+    // Update the old version to point to the new one (version mode only)
+    if (existingCurrent && !isReplace) {
       existingCurrent.replacedById = evidence._id as mongoose.Types.ObjectId;
       await existingCurrent.save();
     }
@@ -335,7 +359,9 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
       message: 'Evidence uploaded successfully',
       evidence: responseEvidence,
       versionInfo: existingCurrent
-        ? { replaced: true, previousVersion: previousVersionNumber, newVersion: newVersionNumber }
+        ? isReplace
+          ? { replaced: true, mode: 'replace', version: newVersionNumber }
+          : { replaced: true, mode: 'version', newVersion: newVersionNumber }
         : { replaced: false, version: newVersionNumber },
     });
   } catch (error) {
