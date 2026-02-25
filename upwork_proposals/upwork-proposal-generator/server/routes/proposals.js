@@ -56,8 +56,8 @@ router.post('/generate', authenticate, async (req, res) => {
       console.log(`[PROPOSAL-GENERATE] Updated existing job: jobId=${jobId}, mongoId=${job._id}, previousStatus=${job.status}, teamId=${job.teamId}`);
     }
 
-    // Mark job as 'generated' to remove it from pending list
-    job.status = 'generated';
+    // Save job first (keep status as 'pending' until webhook succeeds)
+    const previousStatus = job.status;
     await job.save();
 
     // Call N8N webhook
@@ -82,6 +82,11 @@ router.post('/generate', authenticate, async (req, res) => {
 
       console.log(`[PROPOSAL-GENERATE] N8N webhook response: status=${webhookResponse.status}, data=${JSON.stringify(webhookResponse.data).substring(0, 200)}`);
 
+      // Only mark as 'generated' AFTER successful webhook call
+      job.status = 'generated';
+      await job.save();
+      console.log(`[PROPOSAL-GENERATE] Job status updated to 'generated' after successful webhook for jobId=${job.jobId}`);
+
       res.json({
         message: 'Proposal generation initiated',
         job,
@@ -89,10 +94,15 @@ router.post('/generate', authenticate, async (req, res) => {
       });
     } catch (webhookError) {
       console.error(`[PROPOSAL-GENERATE] N8N webhook FAILED for jobId=${job.jobId}: ${webhookError.message}`, webhookError.response?.status, webhookError.response?.data);
-      res.json({
-        message: 'Job saved but webhook call failed',
-        job,
-        error: webhookError.message
+
+      // Revert status so the job stays visible in the pending list
+      job.status = previousStatus || 'pending';
+      await job.save();
+      console.warn(`[PROPOSAL-GENERATE] Reverted job status to '${job.status}' after webhook failure for jobId=${job.jobId}`);
+
+      res.status(502).json({
+        error: `N8N webhook failed: ${webhookError.message}. The job remains in your pending list — please try again.`,
+        job
       });
     }
   } catch (error) {
