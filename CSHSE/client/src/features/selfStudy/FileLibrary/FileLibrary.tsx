@@ -403,12 +403,12 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1 ml-2">
+        <div className="flex items-center gap-1 ml-2 whitespace-nowrap flex-shrink-0">
           {/* Preview button (eye icon) for previewable file types */}
           {item.evidenceType !== 'url' && isPreviewableType(item) && (
             <button
               onClick={() => setPreviewEvidence(item)}
-              className="flex items-center gap-1 px-2 py-1 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors whitespace-nowrap"
               title="Preview"
             >
               <Eye className="w-3.5 h-3.5" />
@@ -491,21 +491,21 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
         {/* Accordion header */}
         <button
           onClick={() => toggleStandard(standard.code)}
-          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors whitespace-nowrap"
         >
           {isExpanded ? (
             <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
           ) : (
             <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
           )}
-          <span className="text-sm font-semibold text-gray-800">
+          <span className="text-sm font-semibold text-gray-800 flex-shrink-0">
             Standard {standard.code}
           </span>
           <span className="text-sm text-gray-500 truncate flex-1">
             {standard.title}
           </span>
           {fileCount > 0 && (
-            <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full">
+            <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full whitespace-nowrap">
               {fileCount} file{fileCount !== 1 ? 's' : ''}
             </span>
           )}
@@ -533,8 +533,8 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
     <div className="flex flex-col h-full">
       {/* Header bar with upload buttons */}
       <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-gray-200 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <FolderOpen className="w-5 h-5 text-teal-600" />
+        <div className="flex items-center gap-3 whitespace-nowrap">
+          <FolderOpen className="w-5 h-5 text-teal-600 flex-shrink-0" />
           <h2 className="text-lg font-semibold text-gray-800">
             Supporting File Library
           </h2>
@@ -543,15 +543,15 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
           </span>
         </div>
         {!readOnly && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 whitespace-nowrap">
             <button
               onClick={() => {
                 setShowUrlForm(false);
                 setShowUploadForm(!showUploadForm);
               }}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors whitespace-nowrap"
             >
-              <Upload className="w-4 h-4" />
+              <Upload className="w-4 h-4 flex-shrink-0" />
               Upload File
             </button>
             <button
@@ -559,9 +559,9 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
                 setShowUploadForm(false);
                 setShowUrlForm(!showUrlForm);
               }}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors whitespace-nowrap"
             >
-              <Link2 className="w-4 h-4" />
+              <Link2 className="w-4 h-4 flex-shrink-0" />
               Add URL
             </button>
           </div>

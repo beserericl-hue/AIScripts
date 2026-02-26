@@ -156,7 +156,7 @@ function StandardItem({
 
         {/* Standard Info */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 whitespace-nowrap">
             <span className="font-medium truncate">
               Standard {standard.standardCode}
             </span>
@@ -166,7 +166,7 @@ function StandardItem({
               </span>
             )}
           </div>
-          <p className="text-xs text-gray-500 truncate">{standard.standardTitle}</p>
+          <p className="text-xs text-gray-500 truncate whitespace-nowrap">{standard.standardTitle}</p>
         </div>
       </button>
 
@@ -217,7 +217,7 @@ function SpecificationItem({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded text-left text-sm transition-colors ${
+      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded text-left text-sm transition-colors whitespace-nowrap ${
         isSelected
           ? 'bg-teal-100 text-teal-800'
           : 'hover:bg-gray-50 text-gray-600'

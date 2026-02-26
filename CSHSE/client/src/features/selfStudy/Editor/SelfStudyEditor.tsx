@@ -1842,9 +1842,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   return (
     <div className="self-study-editor flex flex-col bg-gray-50 h-[calc(100vh-64px)]">
       {/* Header */}
-      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 overflow-x-auto">
+        <div className="flex items-center justify-between whitespace-nowrap min-w-0">
+          <div className="flex items-center gap-4 min-w-0">
             <button
               onClick={() => navigate('/self-study')}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1862,43 +1862,43 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             </div>
 
             {/* View Tabs */}
-            <div className="flex items-center ml-6 border-l pl-6 border-gray-200">
+            <div className="flex items-center ml-6 border-l pl-6 border-gray-200 whitespace-nowrap">
               <button
                 onClick={() => setActiveView('standards')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                   activeView === 'standards'
                     ? 'bg-teal-100 text-teal-700'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <BookOpen className="w-4 h-4" />
+                <BookOpen className="w-4 h-4 flex-shrink-0" />
                 Standards
               </button>
               <button
                 onClick={() => setActiveView('curriculum')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                   activeView === 'curriculum'
                     ? 'bg-teal-100 text-teal-700'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <Grid3X3 className="w-4 h-4" />
+                <Grid3X3 className="w-4 h-4 flex-shrink-0" />
                 Curriculum Matrix
               </button>
               <button
                 onClick={() => setActiveView('files')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                   activeView === 'files'
                     ? 'bg-teal-100 text-teal-700'
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <FolderOpen className="w-4 h-4" />
+                <FolderOpen className="w-4 h-4 flex-shrink-0" />
                 Supporting File Library
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-shrink-0">
             {/* Overall Progress */}
             <ProgressIndicator submission={submission} />
 
@@ -1908,13 +1908,13 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 <button
                   onClick={handleImportButtonClick}
                   disabled={isCheckingExistingImport}
-                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 whitespace-nowrap"
                   title="Import content from a PDF, Word, or PowerPoint document"
                 >
                   {isCheckingExistingImport ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <Upload className="w-4 h-4" />
+                    <Upload className="w-4 h-4 flex-shrink-0" />
                   )}
                   Import Document
                 </button>
@@ -1928,7 +1928,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 <button
                   onClick={handleSubmitSelfStudy}
                   disabled={submitSelfStudyMutation.isPending || !isSelfStudyReadyForSubmit || isSubmissionLocked}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
                     isSubmissionLocked
                       ? 'bg-green-600 text-white cursor-default'
                       : 'bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed'

@@ -37,10 +37,12 @@
 
   html {
     @apply antialiased;
+    font-size: 18.4px; /* 15% larger than default 16px for accessibility */
   }
 
   body {
-    @apply bg-gray-50 text-foreground font-sans;
+    @apply bg-gray-50 font-sans;
+    color: #1a1a1a; /* Darker, more readable body text */
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
@@ -566,6 +568,21 @@
     background-color: #9ca3af;
   }
 
+  /* ========================================
+     ACCESSIBILITY: TEXT CONTRAST OVERRIDES
+     Darken light-gray text for WCAG readability
+     ======================================== */
+}
+
+/* These override Tailwind utilities for better text contrast */
+.text-gray-400 {
+  color: #6b7280 !important;   /* shifted from #9ca3af to gray-500 level */
+}
+.text-gray-500 {
+  color: #4b5563 !important;   /* shifted from #6b7280 to gray-600 level */
+}
+
+@layer components {
   /* ========================================
      ANIMATION CLASSES
      ======================================== */
