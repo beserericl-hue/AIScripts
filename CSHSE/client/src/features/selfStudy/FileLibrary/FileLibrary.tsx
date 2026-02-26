@@ -943,6 +943,9 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
           mimeType={previewEvidence.file?.mimeType}
           fileSize={previewEvidence.file?.size}
           onClose={() => setPreviewEvidence(null)}
+          onDescriptionUpdated={() => {
+            queryClient.invalidateQueries({ queryKey: ['evidence', submissionId] });
+          }}
         />
       )}
     </div>

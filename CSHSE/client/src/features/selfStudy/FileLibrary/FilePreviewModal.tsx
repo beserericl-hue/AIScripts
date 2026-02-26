@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Download, Loader2, AlertTriangle, FileText } from 'lucide-react';
+import { X, Download, Loader2, AlertTriangle, FileText, Check } from 'lucide-react';
 import { api } from '../../../services/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -11,6 +11,7 @@ interface FilePreviewModalProps {
   mimeType?: string;
   fileSize?: number;
   onClose: () => void;
+  onDescriptionUpdated?: () => void;
 }
 
 interface PreviewResponse {
@@ -29,11 +30,14 @@ export function FilePreviewModal({
   mimeType,
   fileSize,
   onClose,
+  onDescriptionUpdated,
 }: FilePreviewModalProps) {
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [savingSummary, setSavingSummary] = useState(false);
+  const [summarySaved, setSummarySaved] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +99,23 @@ export function FilePreviewModal({
       window.URL.revokeObjectURL(url);
     } catch {
       setError('Failed to download file');
+    }
+  };
+
+  const handleSaveSummaryAsDescription = async () => {
+    if (!preview?.summary || savingSummary) return;
+    setSavingSummary(true);
+    try {
+      await api.patch(
+        `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}`,
+        { description: preview.summary }
+      );
+      setSummarySaved(true);
+      onDescriptionUpdated?.();
+    } catch {
+      setError('Failed to save summary as description');
+    } finally {
+      setSavingSummary(false);
     }
   };
 
@@ -189,9 +210,31 @@ export function FilePreviewModal({
               {/* Summary box */}
               {preview.summary && (
                 <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
-                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-                    Summary
-                  </h3>
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Summary
+                    </h3>
+                    {summarySaved ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600">
+                        <Check className="w-3.5 h-3.5" />
+                        Saved as description
+                      </span>
+                    ) : (
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                          disabled={savingSummary}
+                          onChange={(e) => {
+                            if (e.target.checked) handleSaveSummaryAsDescription();
+                          }}
+                        />
+                        <span className="text-xs text-gray-500">
+                          {savingSummary ? 'Saving...' : 'Use as file description'}
+                        </span>
+                      </label>
+                    )}
+                  </div>
                   <p className="text-sm text-gray-700 leading-relaxed">
                     {preview.summary}
                   </p>
