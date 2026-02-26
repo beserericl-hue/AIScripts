@@ -487,10 +487,12 @@ export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new AuthorizationError('Authentication required');
   }
 
-  // Verify access
-  const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId);
-  if (!hasAccess) {
-    throw new AuthorizationError('You do not have access to update this evidence');
+  // Verify access — superusers bypass institution check
+  if (!isSuperuser) {
+    const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId);
+    if (!hasAccess) {
+      throw new AuthorizationError('You do not have access to update this evidence');
+    }
   }
 
   const evidence = await SupportingEvidence.findOne({
@@ -503,8 +505,9 @@ export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new NotFoundError('Evidence');
   }
 
-  // Only uploader, admin, or same institution program coordinator can update
+  // Only uploader, admin, superuser, or same institution program coordinator can update
   if (
+    !isSuperuser &&
     userRole !== 'admin' &&
     evidence.uploadedBy.toString() !== userId &&
     userRole !== 'program_coordinator'

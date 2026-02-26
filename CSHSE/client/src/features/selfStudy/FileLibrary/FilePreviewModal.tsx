@@ -38,6 +38,7 @@ export function FilePreviewModal({
   const [error, setError] = useState<string | null>(null);
   const [savingSummary, setSavingSummary] = useState(false);
   const [summarySaved, setSummarySaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -112,8 +113,9 @@ export function FilePreviewModal({
       );
       setSummarySaved(true);
       onDescriptionUpdated?.();
-    } catch {
-      setError('Failed to save summary as description');
+    } catch (err: any) {
+      const msg = err.response?.data?.error?.message || err.response?.data?.error || 'Failed to save';
+      setSaveError(typeof msg === 'string' ? msg : 'Failed to save description');
     } finally {
       setSavingSummary(false);
     }
@@ -235,6 +237,9 @@ export function FilePreviewModal({
                       </label>
                     )}
                   </div>
+                  {saveError && (
+                    <p className="text-xs text-red-600 mb-1">{saveError}</p>
+                  )}
                   <p className="text-sm text-gray-700 leading-relaxed">
                     {preview.summary}
                   </p>
