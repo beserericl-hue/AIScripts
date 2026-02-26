@@ -524,10 +524,15 @@ export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     if (description !== undefined) evidence.url.description = description;
   }
 
-  if (evidence.metadata) {
-    if (description !== undefined) evidence.metadata.description = description;
-  } else if (description !== undefined) {
-    evidence.metadata = { description };
+  if (description !== undefined) {
+    // Update top-level description
+    evidence.description = description;
+    // Also keep metadata.description in sync
+    if (evidence.metadata) {
+      evidence.metadata.description = description;
+    } else {
+      evidence.metadata = { description };
+    }
   }
 
   await evidence.save();
