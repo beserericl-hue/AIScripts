@@ -1,6 +1,7 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
+import { FilePreviewModal } from './FilePreviewModal';
 import {
   ChevronDown,
   ChevronRight,
@@ -18,6 +19,7 @@ import {
   X,
   Replace,
   History,
+  Eye,
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -82,6 +84,9 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
   const [urlForm, setUrlForm] = useState({ url: '', title: '', description: '' });
   const [urlStandard, setUrlStandard] = useState('');
   const [urlSpec, setUrlSpec] = useState('');
+
+  // Preview modal state
+  const [previewEvidence, setPreviewEvidence] = useState<Evidence | null>(null);
 
   // Fetch standards definitions
   const { data: standards } = useQuery<StandardDefinition[]>({
@@ -334,6 +339,16 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
   const partI = standards?.filter((s) => s.part === 'I') || [];
   const partII = standards?.filter((s) => s.part === 'II') || [];
 
+  const isPreviewableType = (item: Evidence): boolean => {
+    if (item.evidenceType === 'url') return false;
+    const mime = item.file?.mimeType || '';
+    return (
+      mime.includes('pdf') ||
+      mime.includes('wordprocessingml') ||
+      mime.startsWith('image/')
+    );
+  };
+
   const renderEvidenceItem = (item: Evidence) => {
     const title =
       item.evidenceType === 'url'
@@ -347,7 +362,26 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
         className="flex items-center justify-between py-2 px-3 hover:bg-gray-50 rounded group"
       >
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          {getEvidenceIcon(item)}
+          {/* Left icon: clickable download for files, link icon for URLs */}
+          {item.evidenceType === 'url' ? (
+            <a
+              href={item.url?.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-shrink-0 p-1 rounded hover:bg-blue-100 transition-colors"
+              title="Open link"
+            >
+              <Link2 className="w-4 h-4 text-blue-500" />
+            </a>
+          ) : (
+            <button
+              onClick={() => handleDownload(item._id, item.file?.originalName)}
+              className="flex-shrink-0 p-1 rounded hover:bg-teal-100 transition-colors"
+              title="Download file"
+            >
+              <Download className="w-4 h-4 text-teal-600" />
+            </button>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium text-gray-800 truncate">
@@ -370,7 +404,29 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2">
-          {item.evidenceType === 'url' ? (
+          {/* Preview button (eye icon) for previewable file types */}
+          {item.evidenceType !== 'url' && isPreviewableType(item) && (
+            <button
+              onClick={() => setPreviewEvidence(item)}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 rounded hover:bg-indigo-100 transition-colors"
+              title="Preview"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Preview
+            </button>
+          )}
+          {/* For non-previewable files, still show a download button on the right */}
+          {item.evidenceType !== 'url' && !isPreviewableType(item) && (
+            <button
+              onClick={() => handleDownload(item._id, item.file?.originalName)}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded hover:bg-teal-100 transition-colors"
+              title="Download"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download
+            </button>
+          )}
+          {item.evidenceType === 'url' && (
             <a
               href={item.url?.href}
               target="_blank"
@@ -381,15 +437,6 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
               <ExternalLink className="w-3.5 h-3.5" />
               Open
             </a>
-          ) : (
-            <button
-              onClick={() => handleDownload(item._id, item.file?.originalName)}
-              className="flex items-center gap-1 px-2 py-1 text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded hover:bg-teal-100 transition-colors"
-              title="Download"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download
-            </button>
           )}
           {!readOnly && (
             <button
@@ -886,6 +933,18 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
           </div>
         )}
       </div>
+
+      {/* Preview Modal */}
+      {previewEvidence && (
+        <FilePreviewModal
+          submissionId={submissionId}
+          evidenceId={previewEvidence._id}
+          fileName={previewEvidence.file?.originalName || 'File'}
+          mimeType={previewEvidence.file?.mimeType}
+          fileSize={previewEvidence.file?.size}
+          onClose={() => setPreviewEvidence(null)}
+        />
+      )}
     </div>
   );
 }

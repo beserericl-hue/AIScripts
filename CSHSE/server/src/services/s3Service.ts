@@ -174,6 +174,20 @@ export async function listFiles(
 }
 
 /**
+ * Download a file from S3 and return it as a Buffer.
+ * Used by the preview endpoint where we need the full file in memory
+ * for conversion (mammoth, pdf-parse).
+ */
+export async function downloadFileAsBuffer(key: string): Promise<Buffer> {
+  const { stream } = await downloadFile(key);
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
  * Check if S3 is configured (env vars present).
  * Returns false if credentials are missing — callers can fall back to base64.
  */

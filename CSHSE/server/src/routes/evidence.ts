@@ -8,6 +8,7 @@ import {
   updateEvidence,
   deleteEvidence,
   downloadEvidence,
+  previewEvidence,
   linkEvidence,
   unlinkEvidence,
   getEvidenceStats
@@ -134,6 +135,13 @@ router.patch('/submissions/:submissionId/evidence/:evidenceId', updateEvidence);
  * @access  Private (Uploader, Admin)
  */
 router.delete('/submissions/:submissionId/evidence/:evidenceId', deleteEvidence);
+
+/**
+ * @route   GET /api/submissions/:submissionId/evidence/:evidenceId/preview
+ * @desc    Preview evidence file content (PDF/DOCX → HTML, images → type hint)
+ * @access  Private (with access control)
+ */
+router.get('/submissions/:submissionId/evidence/:evidenceId/preview', previewEvidence);
 
 /**
  * @route   GET /api/submissions/:submissionId/evidence/:evidenceId/download

@@ -13,6 +13,7 @@ import {
   logError
 } from '../services/errorLogger';
 import * as s3Service from '../services/s3Service';
+import { documentParserService } from '../services/documentParser';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -863,5 +864,173 @@ export const getEvidenceStats = asyncHandler(async (req: AuthenticatedRequest, r
     linkedCount,
     unlinkedCount,
     total: linkedCount + unlinkedCount
+  });
+});
+
+// --- File Preview ---
+
+const PREVIEWABLE_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+]);
+
+const UNSUPPORTED_PREVIEW_TYPES = new Set([
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/msword', // .doc (old format)
+]);
+
+const MAX_PREVIEW_SIZE = 15 * 1024 * 1024; // 15MB
+
+function getFileTypeLabel(mimeType: string): string {
+  if (mimeType.includes('powerpoint') || mimeType.includes('presentationml')) return 'PowerPoint';
+  if (mimeType.includes('excel') || mimeType.includes('spreadsheetml')) return 'Excel';
+  if (mimeType.includes('msword')) return 'Word (.doc)';
+  return 'unsupported';
+}
+
+function formatBytesLabel(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Preview evidence file content
+ * Converts PDF/DOCX to HTML for in-browser display. Returns structured JSON
+ * so the client can render loading states, errors, and summaries.
+ */
+export const previewEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { submissionId, evidenceId } = req.params;
+  const userId = req.user?.id;
+  const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser;
+
+  if (!userId || !userRole) {
+    throw new AuthorizationError('Authentication required');
+  }
+
+  const { hasAccess, institution } = await verifyEvidenceAccess(
+    userId, userRole, submissionId, undefined, isSuperuser
+  );
+  if (!hasAccess) {
+    throw new AuthorizationError('You do not have access to preview this file');
+  }
+
+  const filter: any = { _id: evidenceId, submissionId, isDeleted: false };
+  if (userRole !== 'admin' && institution) {
+    filter.institutionId = institution._id;
+  }
+
+  const evidence = await SupportingEvidence.findOne(filter);
+  if (!evidence || !evidence.file) {
+    throw new NotFoundError('Evidence');
+  }
+
+  const mimeType = evidence.file.mimeType;
+  const fileSize = evidence.file.size;
+  const originalName = evidence.file.originalName;
+
+  // Unsupported types
+  if (UNSUPPORTED_PREVIEW_TYPES.has(mimeType)) {
+    return res.json({
+      previewable: false,
+      error: 'unsupported_type',
+      message: `${originalName} is a ${getFileTypeLabel(mimeType)} file which cannot be previewed. Please download the file to view it.`,
+      mimeType, originalName, size: fileSize,
+    });
+  }
+
+  // Images — client will fetch blob via download endpoint
+  if (mimeType.startsWith('image/')) {
+    return res.json({
+      previewable: true,
+      contentType: 'image',
+      downloadUrl: `/api/submissions/${submissionId}/evidence/${evidenceId}/download`,
+      mimeType, originalName, size: fileSize,
+    });
+  }
+
+  // Size threshold
+  if (fileSize > MAX_PREVIEW_SIZE) {
+    return res.json({
+      previewable: false,
+      error: 'file_too_large',
+      message: `${originalName} is ${formatBytesLabel(fileSize)} which exceeds the ${formatBytesLabel(MAX_PREVIEW_SIZE)} preview limit. Please download the file to view it.`,
+      mimeType, originalName, size: fileSize,
+    });
+  }
+
+  // Not a previewable type
+  if (!PREVIEWABLE_MIME_TYPES.has(mimeType)) {
+    return res.json({
+      previewable: false,
+      error: 'unsupported_type',
+      message: `Preview is not available for this file type. Please download the file to view it.`,
+      mimeType, originalName, size: fileSize,
+    });
+  }
+
+  // Get file buffer
+  let buffer: Buffer;
+  const storageType = evidence.file.storageType || 'base64';
+
+  if (storageType === 's3' && evidence.file.s3Key) {
+    buffer = await s3Service.downloadFileAsBuffer(evidence.file.s3Key);
+  } else if (evidence.file.data) {
+    buffer = Buffer.from(evidence.file.data, 'base64');
+  } else {
+    throw new NotFoundError('File data');
+  }
+
+  // Convert to HTML
+  let html: string;
+  let rawText: string;
+
+  try {
+    if (mimeType === 'application/pdf') {
+      const parsed = await documentParserService.parsePDF(buffer);
+      html = parsed.htmlContent;
+      rawText = parsed.rawText;
+    } else {
+      // DOCX
+      const parsed = await documentParserService.parseDOCX(buffer);
+      html = parsed.htmlContent;
+      rawText = parsed.rawText;
+    }
+  } catch (parseErr) {
+    console.error('[Evidence] previewEvidence: Parse error for', originalName, parseErr);
+    return res.json({
+      previewable: false,
+      error: 'parse_error',
+      message: `Could not convert ${originalName} for preview. Please download the file to view it.`,
+      mimeType, originalName, size: fileSize,
+    });
+  }
+
+  // Generate summary (first ~500 chars, ending at word boundary)
+  let summary = '';
+  if (rawText) {
+    const maxLen = 500;
+    let s = rawText.substring(0, maxLen + 50);
+    if (s.length > maxLen) {
+      const lastSpace = s.lastIndexOf(' ', maxLen);
+      s = s.substring(0, lastSpace > 0 ? lastSpace : maxLen) + '...';
+    }
+    summary = s.trim();
+  }
+
+  res.json({
+    previewable: true,
+    contentType: 'document',
+    html,
+    summary,
+    mimeType, originalName, size: fileSize,
   });
 });
