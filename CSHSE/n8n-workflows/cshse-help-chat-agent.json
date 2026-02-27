@@ -1,5 +1,5 @@
 {
-    "updatedAt": "2026-02-27T15:25:15.011Z",
+    "updatedAt": "2026-02-27T15:38:36.730Z",
     "createdAt": "2026-02-27T12:40:43.416Z",
     "id": "CaSsYIrSKyRRqRv8",
     "name": "CSHSE Help - Chat Agent",
@@ -11,7 +11,7 @@
             "parameters": {
                 "httpMethod": "POST",
                 "path": "help-chat",
-                "responseMode": "lastNode",
+                "responseMode": "responseNode",
                 "options": {}
             },
             "type": "n8n-nodes-base.webhook",
@@ -21,7 +21,8 @@
                 304
             ],
             "id": "webhook-chat",
-            "name": "Webhook - Chat"
+            "name": "Webhook - Chat",
+            "webhookId": "9c15ae85-f1af-4ac8-a704-f000455cf10d"
         },
         {
             "parameters": {
@@ -96,8 +97,8 @@
             "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
             "typeVersion": 1.2,
             "position": [
-                500,
-                720
+                1008,
+                688
             ],
             "id": "tool-llm",
             "name": "Tool LLM",
@@ -110,7 +111,6 @@
         },
         {
             "parameters": {
-                "mode": "retrieve",
                 "tableName": {
                     "__rl": true,
                     "value": "help_documents",
@@ -138,14 +138,13 @@
         },
         {
             "parameters": {
-                "model": "text-embedding-ada-002",
                 "options": {}
             },
             "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
             "typeVersion": 1,
             "position": [
                 640,
-                900
+                912
             ],
             "id": "embeddings-chat",
             "name": "OpenAI Embeddings",
@@ -185,7 +184,11 @@
             "name": "Respond to Chat"
         },
         {
-            "parameters": {},
+            "parameters": {
+                "sessionIdType": "customKey",
+                "sessionKey": "={{ $json.body.sessionId || \"default\" }}",
+                "contextWindowLength": 10
+            },
             "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
             "typeVersion": 1.5,
             "position": [
@@ -313,9 +316,9 @@
         "templateCredsSetupCompleted": true
     },
     "pinData": {},
-    "versionId": "04c3895d-e06d-4679-a795-5752fa0bff3a",
-    "activeVersionId": "04c3895d-e06d-4679-a795-5752fa0bff3a",
-    "versionCounter": 31,
+    "versionId": "2b134ea7-014a-41c9-91b3-2db2e5324cfc",
+    "activeVersionId": "2b134ea7-014a-41c9-91b3-2db2e5324cfc",
+    "versionCounter": 45,
     "triggerCount": 1,
     "shared": [
         {
@@ -338,16 +341,16 @@
     ],
     "tags": [],
     "activeVersion": {
-        "updatedAt": "2026-02-27T15:25:15.015Z",
-        "createdAt": "2026-02-27T15:25:15.015Z",
-        "versionId": "04c3895d-e06d-4679-a795-5752fa0bff3a",
+        "updatedAt": "2026-02-27T15:38:36.739Z",
+        "createdAt": "2026-02-27T15:38:36.739Z",
+        "versionId": "2b134ea7-014a-41c9-91b3-2db2e5324cfc",
         "workflowId": "CaSsYIrSKyRRqRv8",
         "nodes": [
             {
                 "parameters": {
                     "httpMethod": "POST",
                     "path": "help-chat",
-                    "responseMode": "lastNode",
+                    "responseMode": "responseNode",
                     "options": {}
                 },
                 "type": "n8n-nodes-base.webhook",
@@ -357,7 +360,8 @@
                     304
                 ],
                 "id": "webhook-chat",
-                "name": "Webhook - Chat"
+                "name": "Webhook - Chat",
+                "webhookId": "9c15ae85-f1af-4ac8-a704-f000455cf10d"
             },
             {
                 "parameters": {
@@ -432,8 +436,8 @@
                 "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
                 "typeVersion": 1.2,
                 "position": [
-                    500,
-                    720
+                    1008,
+                    688
                 ],
                 "id": "tool-llm",
                 "name": "Tool LLM",
@@ -446,7 +450,6 @@
             },
             {
                 "parameters": {
-                    "mode": "retrieve",
                     "tableName": {
                         "__rl": true,
                         "value": "help_documents",
@@ -474,14 +477,13 @@
             },
             {
                 "parameters": {
-                    "model": "text-embedding-ada-002",
                     "options": {}
                 },
                 "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
                 "typeVersion": 1,
                 "position": [
                     640,
-                    900
+                    912
                 ],
                 "id": "embeddings-chat",
                 "name": "OpenAI Embeddings",
@@ -521,7 +523,11 @@
                 "name": "Respond to Chat"
             },
             {
-                "parameters": {},
+                "parameters": {
+                    "sessionIdType": "customKey",
+                    "sessionKey": "={{ $json.body.sessionId || \"default\" }}",
+                    "contextWindowLength": 10
+                },
                 "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
                 "typeVersion": 1.5,
                 "position": [
@@ -645,10 +651,10 @@
         "autosaved": false,
         "workflowPublishHistory": [
             {
-                "createdAt": "2026-02-27T15:25:15.503Z",
-                "id": 38,
+                "createdAt": "2026-02-27T15:38:37.153Z",
+                "id": 52,
                 "workflowId": "CaSsYIrSKyRRqRv8",
-                "versionId": "04c3895d-e06d-4679-a795-5752fa0bff3a",
+                "versionId": "2b134ea7-014a-41c9-91b3-2db2e5324cfc",
                 "event": "activated",
                 "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
             }
