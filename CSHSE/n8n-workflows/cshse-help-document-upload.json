@@ -1,5 +1,5 @@
 {
-    "updatedAt": "2026-02-27T15:38:35.440Z",
+    "updatedAt": "2026-02-27T15:46:35.794Z",
     "createdAt": "2026-02-27T12:39:04.884Z",
     "id": "S7Z74PmDwbkL6wiF",
     "name": "CSHSE Help - Document Upload",
@@ -26,7 +26,7 @@
         },
         {
             "parameters": {
-                "jsCode": "// Generate UUID without crypto module\nfunction generateUUID() {\n  return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c === \"x\" ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Determine file type\nconst ext = fileName.split('.').pop().toLowerCase();\nconst isPdf = ext === 'pdf' || mimeType === 'application/pdf';\n\n// Generate job ID\nconst jobId = generateUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      isPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  const binFile = input.binary[binaryKey];\n  const binFileName = binFile.fileName || fileName;\n  const binExt = binFileName.split('.').pop().toLowerCase();\n  const binIsPdf = binExt === 'pdf' || (binFile.mimeType || '').includes('pdf');\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: binFileName,\n      isPdf: binIsPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: input.binary\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
+                "jsCode": "// Generate UUID without crypto module\nfunction generateUUID() {\n  return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c === \"x\" ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Determine file type\nconst ext = fileName.split('.').pop().toLowerCase();\nconst isPdf = ext === 'pdf' || mimeType === 'application/pdf';\n\n// Generate job ID\nconst jobId = generateUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      isPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  const binFile = input.binary[binaryKey];\n  const binFileName = binFile.fileName || fileName;\n  const binExt = binFileName.split('.').pop().toLowerCase();\n  const binIsPdf = binExt === 'pdf' || (binFile.mimeType || '').includes('pdf');\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: binFileName,\n      isPdf: binIsPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: { data: input.binary[binaryKey] }\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
             },
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
@@ -309,9 +309,9 @@
     "staticData": null,
     "meta": null,
     "pinData": {},
-    "versionId": "afd02559-e5da-4ca4-81fd-5ac08d1fa04e",
-    "activeVersionId": "afd02559-e5da-4ca4-81fd-5ac08d1fa04e",
-    "versionCounter": 26,
+    "versionId": "94561832-3696-4e16-a796-fb15fe618359",
+    "activeVersionId": "94561832-3696-4e16-a796-fb15fe618359",
+    "versionCounter": 34,
     "triggerCount": 1,
     "shared": [
         {
@@ -334,9 +334,9 @@
     ],
     "tags": [],
     "activeVersion": {
-        "updatedAt": "2026-02-27T15:38:35.445Z",
-        "createdAt": "2026-02-27T15:38:35.445Z",
-        "versionId": "afd02559-e5da-4ca4-81fd-5ac08d1fa04e",
+        "updatedAt": "2026-02-27T15:46:35.799Z",
+        "createdAt": "2026-02-27T15:46:35.799Z",
+        "versionId": "94561832-3696-4e16-a796-fb15fe618359",
         "workflowId": "S7Z74PmDwbkL6wiF",
         "nodes": [
             {
@@ -358,7 +358,7 @@
             },
             {
                 "parameters": {
-                    "jsCode": "// Generate UUID without crypto module\nfunction generateUUID() {\n  return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c === \"x\" ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Determine file type\nconst ext = fileName.split('.').pop().toLowerCase();\nconst isPdf = ext === 'pdf' || mimeType === 'application/pdf';\n\n// Generate job ID\nconst jobId = generateUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      isPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  const binFile = input.binary[binaryKey];\n  const binFileName = binFile.fileName || fileName;\n  const binExt = binFileName.split('.').pop().toLowerCase();\n  const binIsPdf = binExt === 'pdf' || (binFile.mimeType || '').includes('pdf');\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: binFileName,\n      isPdf: binIsPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: input.binary\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
+                    "jsCode": "// Generate UUID without crypto module\nfunction generateUUID() {\n  return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c === \"x\" ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Determine file type\nconst ext = fileName.split('.').pop().toLowerCase();\nconst isPdf = ext === 'pdf' || mimeType === 'application/pdf';\n\n// Generate job ID\nconst jobId = generateUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      isPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  const binFile = input.binary[binaryKey];\n  const binFileName = binFile.fileName || fileName;\n  const binExt = binFileName.split('.').pop().toLowerCase();\n  const binIsPdf = binExt === 'pdf' || (binFile.mimeType || '').includes('pdf');\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: binFileName,\n      isPdf: binIsPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: { data: input.binary[binaryKey] }\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
                 },
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
@@ -639,10 +639,10 @@
         "autosaved": false,
         "workflowPublishHistory": [
             {
-                "createdAt": "2026-02-27T15:38:35.788Z",
-                "id": 50,
+                "createdAt": "2026-02-27T15:46:36.279Z",
+                "id": 56,
                 "workflowId": "S7Z74PmDwbkL6wiF",
-                "versionId": "afd02559-e5da-4ca4-81fd-5ac08d1fa04e",
+                "versionId": "94561832-3696-4e16-a796-fb15fe618359",
                 "event": "activated",
                 "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
             }
