@@ -1,3 +1,279 @@
 {
-    "message": "'X-N8N-API-KEY' header required"
+    "updatedAt": "2026-02-27T15:21:13.408Z",
+    "createdAt": "2026-02-27T12:40:43.416Z",
+    "id": "CaSsYIrSKyRRqRv8",
+    "name": "CSHSE Help - Chat Agent",
+    "description": null,
+    "active": false,
+    "isArchived": false,
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "help-chat",
+                "responseMode": "lastNode",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                192,
+                304
+            ],
+            "id": "webhook-chat",
+            "name": "Webhook - Chat"
+        },
+        {
+            "parameters": {
+                "promptType": "define",
+                "text": "={{ $json.body.question }}",
+                "options": {
+                    "systemMessage": "You are a helpful assistant for the CSHSE Accreditation Self-Study Portal.\n\nYou answer questions about:\n1. The CSHSE accreditation self-study process (from the CSHSE Member Handbook)\n2. How to use the CSHSE Self-Study Portal software (from the User Guide)\n\nRules:\n- Only answer based on the provided context from the handbook and user guide\n- If you don't know the answer, say so and suggest contacting CSHSE support\n- Be concise but thorough\n- When referencing process steps, cite the handbook section\n- When explaining software features, provide step-by-step instructions\n- Format responses with markdown for readability"
+                }
+            },
+            "type": "@n8n/n8n-nodes-langchain.agent",
+            "typeVersion": 1.7,
+            "position": [
+                432,
+                304
+            ],
+            "id": "ai-agent",
+            "name": "AI Agent"
+        },
+        {
+            "parameters": {
+                "model": {
+                    "__rl": true,
+                    "value": "gpt-4o-mini",
+                    "mode": "list",
+                    "cachedResultName": "GPT-4O-MINI"
+                },
+                "options": {
+                    "temperature": 0.3
+                }
+            },
+            "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+            "typeVersion": 1.2,
+            "position": [
+                240,
+                544
+            ],
+            "id": "openai-chat",
+            "name": "OpenAI Chat Model",
+            "credentials": {
+                "openAiApi": {
+                    "id": "xSzPIySN61drme77",
+                    "name": "OpenAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "mode": "retrieve-as-tool",
+                "tableName": {
+                    "__rl": true,
+                    "value": "help_documents",
+                    "mode": "list",
+                    "cachedResultName": "help_documents"
+                },
+                "toolDescription": "Search the CSHSE Member Handbook and User Guide for relevant information about the accreditation process and portal software",
+                "options": {
+                    "queryName": "match_help_documents"
+                }
+            },
+            "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+            "typeVersion": 1,
+            "position": [
+                480,
+                544
+            ],
+            "id": "supabase-vector-store",
+            "name": "Supabase Vector Store",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "qU6Q7CRvJhUXZABY",
+                    "name": "Supabase account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "model": "text-embedding-ada-002",
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+            "typeVersion": 1,
+            "position": [
+                480,
+                720
+            ],
+            "id": "embeddings-chat",
+            "name": "OpenAI Embeddings",
+            "credentials": {
+                "openAiApi": {
+                    "id": "xSzPIySN61drme77",
+                    "name": "OpenAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nconst agentOutput = items[0]?.json?.output || items[0]?.json?.text || 'I could not find an answer to your question.';\n\nreturn [{\n  json: {\n    answer: agentOutput,\n    sources: []\n  }\n}];"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                704,
+                304
+            ],
+            "id": "format-response",
+            "name": "Format Response"
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify($json) }}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.5,
+            "position": [
+                912,
+                304
+            ],
+            "id": "respond-chat",
+            "name": "Respond to Chat"
+        },
+        {
+            "parameters": {},
+            "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
+            "typeVersion": 1.5,
+            "position": [
+                360,
+                544
+            ],
+            "id": "d26b5fac-7a02-43c3-95a0-0dea42d401f6",
+            "name": "Redis Chat Memory",
+            "credentials": {
+                "redis": {
+                    "id": "n8IeXB9NzHxHnxbd",
+                    "name": "Redis account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook - Chat": {
+            "main": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "AI Agent": {
+            "main": [
+                [
+                    {
+                        "node": "Format Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "OpenAI Chat Model": {
+            "ai_languageModel": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "ai_languageModel",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Supabase Vector Store": {
+            "ai_tool": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "ai_tool",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "OpenAI Embeddings": {
+            "ai_embedding": [
+                [
+                    {
+                        "node": "Supabase Vector Store",
+                        "type": "ai_embedding",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Response": {
+            "main": [
+                [
+                    {
+                        "node": "Respond to Chat",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Redis Chat Memory": {
+            "ai_memory": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "ai_memory",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": {
+        "templateCredsSetupCompleted": true
+    },
+    "pinData": {},
+    "versionId": "bd2b993a-3179-4993-872f-97c3d05856d0",
+    "activeVersionId": null,
+    "versionCounter": 28,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2026-02-27T12:40:43.416Z",
+            "createdAt": "2026-02-27T12:40:43.416Z",
+            "role": "workflow:owner",
+            "workflowId": "CaSsYIrSKyRRqRv8",
+            "projectId": "so6FfyLmNOjnxEMJ",
+            "project": {
+                "updatedAt": "2026-01-12T16:36:13.622Z",
+                "createdAt": "2026-01-12T15:34:50.204Z",
+                "id": "so6FfyLmNOjnxEMJ",
+                "name": "Eric Beser <eric@agileadtesting.com>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": null
 }
