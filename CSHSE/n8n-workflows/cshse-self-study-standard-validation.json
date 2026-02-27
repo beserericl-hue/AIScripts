@@ -1,0 +1,543 @@
+{
+    "updatedAt": "2026-02-25T22:24:37.918Z",
+    "createdAt": "2026-02-25T22:24:32.164Z",
+    "id": "IZTrxpnlQdfNJdUy",
+    "name": "CSHSE Self Study Standard Validation",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "validate-standard",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "b93a592a-0699-4d1a-83e7-ce517909a8d3",
+            "name": "Webhook - Validate Standard",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                -640,
+                288
+            ],
+            "webhookId": "validate-standard-webhook",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Validate input and extract fields from the validation request\nconst input = $input.first();\nconst json = input.json || {};\n\nlet body = {};\nif (json.body && typeof json.body === 'object') { body = json.body; } else if (json.callbackUrl) { body = json; }\n\nconst submissionId = body.submissionId;\nconst standardCode = body.standardCode;\nconst specCode = body.specCode;\nconst programLevel = body.programLevel || 'bachelors';\nconst callbackUrl = body.callbackUrl;\nconst narrativeText = body.narrativeText || '';\nconst evidenceText = body.evidenceText || '';\nconst standardText = body.standardText || '';\nconst specificationText = body.specificationText || '';\nconst standardTitle = body.standardTitle || '';\nconst standardDescription = body.standardDescription || '';\nconst specTitle = body.specTitle || '';\nconst specText = body.specText || '';\nconst evidenceUrls = body.supportingEvidence?.urls || [];\nconst evidenceFiles = body.supportingEvidence?.documents || [];\n\nif (!callbackUrl) { throw new Error('callbackUrl is required'); }\nif (!submissionId) { throw new Error('submissionId is required'); }\nif (!standardCode) { throw new Error('standardCode is required'); }\nif (!specCode) { throw new Error('specCode is required'); }\nif (!narrativeText && !evidenceText) { throw new Error('narrativeText or evidenceText is required'); }\n\nfunction sanitizeForApi(text) {\n  if (!text) return '';\n  let clean = text.replace(/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/g, '');\n  clean = clean.replace(/[\\u2018\\u2019]/g, \"'\").replace(/[\\u201C\\u201D]/g, '\"');\n  clean = clean.replace(/[\\u2013\\u2014]/g, '-');\n  clean = clean.replace(/[\\u2026]/g, '...');\n  clean = clean.replace(/[\\uFFFD\\uFFFE\\uFFFF]/g, '');\n  return clean;\n}\n\nfunction stripHtml(html) {\n  return html\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&[a-z]+;/gi, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\n// Strip HTML from narrative to get plain text for AI\nconst plainNarrative = sanitizeForApi(stripHtml(narrativeText));\nconst plainEvidence = sanitizeForApi(stripHtml(evidenceText));\n\nconsole.log('[Validate Input] submissionId:', submissionId);\nconsole.log('[Validate Input] standard:', standardCode, 'spec:', specCode);\nconsole.log('[Validate Input] narrative length:', plainNarrative.length);\nconsole.log('[Validate Input] evidence text length:', plainEvidence.length);\nconsole.log('[Validate Input] evidence URLs:', evidenceUrls.length);\nconsole.log('[Validate Input] evidence files:', evidenceFiles.length);\n\nreturn [{ json: {\n  submissionId,\n  standardCode,\n  specCode,\n  programLevel,\n  callbackUrl,\n  narrativeText: plainNarrative,\n  evidenceText: plainEvidence,\n  standardText: sanitizeForApi(standardText),\n  specificationText: sanitizeForApi(specificationText),\n  standardTitle: sanitizeForApi(standardTitle),\n  standardDescription: sanitizeForApi(standardDescription),\n  specTitle: sanitizeForApi(specTitle),\n  specText: sanitizeForApi(specText),\n  evidenceUrls,\n  evidenceFiles\n} }];"
+            },
+            "id": "8d4fedc5-25c0-49b4-909f-a2a56c65485c",
+            "name": "Validate Input",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -416,
+                288
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify({ status: 'accepted', executionId: $execution.id, submissionId: $json.submissionId, standardCode: $json.standardCode, specCode: $json.specCode }) }}",
+                "options": {}
+            },
+            "id": "c4ed7295-50c5-48f6-8631-cc42589977c3",
+            "name": "Respond Accepted",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.5,
+            "position": [
+                0,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Fetch HTML content from each evidence URL and extract plain text\nconst inputData = $input.first().json;\nconst evidenceUrls = inputData.evidenceUrls || [];\n\nlet fetchedContent = '';\nconst fetchResults = [];\n\nfor (const urlInfo of evidenceUrls) {\n  const href = urlInfo.href || urlInfo.url;\n  if (!href) continue;\n  \n  try {\n    console.log('[Fetch URLs] Fetching:', href);\n    const response = await fetch(href, {\n      signal: AbortSignal.timeout(15000),\n      headers: { 'User-Agent': 'CSHSE-Validator/1.0' }\n    });\n    \n    if (!response.ok) {\n      console.log('[Fetch URLs] HTTP error:', response.status, 'for', href);\n      fetchResults.push({ url: href, status: 'error', error: `HTTP ${response.status}` });\n      continue;\n    }\n    \n    const html = await response.text();\n    \n    // Strip HTML to plain text\n    const plainText = html\n      .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n      .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n      .replace(/<nav[^>]*>[\\s\\S]*?<\\/nav>/gi, '')\n      .replace(/<header[^>]*>[\\s\\S]*?<\\/header>/gi, '')\n      .replace(/<footer[^>]*>[\\s\\S]*?<\\/footer>/gi, '')\n      .replace(/<[^>]+>/g, ' ')\n      .replace(/&nbsp;/g, ' ')\n      .replace(/&[a-z]+;/gi, ' ')\n      .replace(/\\s+/g, ' ')\n      .trim();\n    \n    // Limit each URL content to 10000 chars\n    const truncated = plainText.length > 10000 ? plainText.substring(0, 10000) + '...[truncated]' : plainText;\n    \n    fetchedContent += `\\n\\n--- Content from: ${urlInfo.title || href} ---\\n${truncated}`;\n    fetchResults.push({ url: href, status: 'success', chars: truncated.length });\n    console.log('[Fetch URLs] Success:', href, '- chars:', truncated.length);\n  } catch (error) {\n    console.log('[Fetch URLs] Error fetching', href, ':', error.message);\n    fetchResults.push({ url: href, status: 'error', error: error.message });\n  }\n}\n\nconsole.log('[Fetch URLs] Fetched', fetchResults.filter(r => r.status === 'success').length, 'of', evidenceUrls.length, 'URLs');\n\nreturn [{ json: {\n  ...inputData,\n  fetchedUrlContent: fetchedContent.trim(),\n  fetchResults\n} }];"
+            },
+            "id": "b5bc37ea-2740-4253-a055-c3191ee6973c",
+            "name": "Fetch URL Content",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -192,
+                544
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Build the OpenAI evaluation prompt\nconst data = $input.first().json;\n\nconsole.log('[Build Prompt] Standard:', data.standardCode, 'Spec:', data.specCode);\nconsole.log('[Build Prompt] Narrative:', data.narrativeText?.length || 0, 'chars');\nconsole.log('[Build Prompt] Evidence text:', data.evidenceText?.length || 0, 'chars');\nconsole.log('[Build Prompt] Fetched URL content:', data.fetchedUrlContent?.length || 0, 'chars');\nconsole.log('[Build Prompt] Evidence files:', data.evidenceFiles?.length || 0);\n\n// Build the standard reference section\nlet standardReference = '';\nif (data.standardText) {\n  standardReference += data.standardText + '\\n\\n';\n}\nif (data.specificationText) {\n  standardReference += data.specificationText;\n} else if (data.specText) {\n  standardReference += `Specification ${data.specCode}: ${data.specTitle}\\n${data.specText}`;\n}\n\n// Build the evidence section\nlet evidenceSection = '';\nif (data.evidenceText) {\n  evidenceSection += `=== SUPPORTING EVIDENCE TEXT ===\\n${data.evidenceText}\\n\\n`;\n}\nif (data.fetchedUrlContent) {\n  evidenceSection += `=== CONTENT FROM EVIDENCE URLs ===\\n${data.fetchedUrlContent}\\n\\n`;\n}\nif (data.evidenceFiles && data.evidenceFiles.length > 0) {\n  evidenceSection += `=== EVIDENCE FILES ATTACHED ===\\n`;\n  for (const file of data.evidenceFiles) {\n    evidenceSection += `- ${file.filename || file.originalName} (${file.mimeType || file.type}, ${file.size ? Math.round(file.size / 1024) + 'KB' : 'size unknown'})\\n`;\n  }\n  evidenceSection += '\\n';\n}\n\nconst systemMessage = `You are a CSHSE (Council for Standards in Human Service Education) accreditation evaluator.\n\nYour task is to evaluate whether a self-study narrative and its supporting evidence adequately address and satisfy a specific CSHSE standard and subspecification.\n\nYou will be provided with:\n1. The CSHSE standard and subspecification text (what must be addressed)\n2. The narrative text written by the program (their response)\n3. Supporting evidence including text, content from URLs, and list of attached files\n\nEVALUATION CRITERIA:\n- Does the narrative directly address the requirements stated in the standard/subspecification?\n- Is there sufficient evidence to support the claims made in the narrative?\n- Are there specific examples, data, or documentation referenced?\n- Are there gaps or missing elements that should be addressed?\n- Is the narrative clear, well-organized, and professional?\n\nSCORING GUIDE:\n- 80-100: Pass - The narrative and evidence clearly satisfy the standard requirements\n- 60-79: Marginal - Some requirements met but notable gaps exist\n- 0-59: Fail - Significant requirements are unaddressed or unsupported\n\nA score of 80 or above = \"pass\", below 80 = \"fail\".\n\nProvide constructive, specific feedback that helps the program strengthen their self-study.`;\n\nconst userMessage = `=== CSHSE STANDARD REQUIREMENT ===\n\n${standardReference || 'Standard ' + data.standardCode + ', Specification ' + data.specCode}\n\n=== PROGRAM NARRATIVE ===\n\n${data.narrativeText || '[No narrative text provided]'}\n\n${evidenceSection ? evidenceSection : '=== NO SUPPORTING EVIDENCE PROVIDED ===\\n'}\n\nEvaluate whether the narrative and supporting evidence adequately address and satisfy the CSHSE standard and subspecification requirements above.\n\nProvide your response as JSON with these exact fields:\n- status: \"pass\" or \"fail\" (pass if score >= 80)\n- score: your score from 0-100 as a number\n- feedback: A detailed evaluation paragraph (3-5 sentences) explaining your assessment. Reference specific content from the narrative and evidence.\n- suggestions: An array of 1-4 specific, actionable suggestions for improvement. Even passing narratives can have suggestions.\n- missingElements: An array of 0-4 specific elements that are required by the standard but missing or insufficiently addressed in the narrative. Empty array if all elements are covered.`;\n\nconst openaiRequestBody = JSON.stringify({\n  model: 'gpt-4o-mini',\n  messages: [\n    { role: 'system', content: systemMessage },\n    { role: 'user', content: userMessage }\n  ],\n  temperature: 0.3,\n  max_tokens: 2000,\n  response_format: { type: 'json_object' }\n});\n\nconsole.log('[Build Prompt] Request body length:', openaiRequestBody.length);\n\nreturn [{ json: { ...data, openaiRequestBody } }];"
+            },
+            "id": "58345f5a-24fb-4052-9fa1-259866e4af39",
+            "name": "Build Evaluation Prompt",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                32,
+                544
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.openai.com/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "openAiApi",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ $json.openaiRequestBody }}",
+                "options": {
+                    "timeout": 120000
+                }
+            },
+            "id": "6da9e4fc-4600-4de7-b450-5f08bc4c0334",
+            "name": "Call OpenAI API",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                256,
+                544
+            ],
+            "credentials": {
+                "openAiApi": {
+                    "id": "xSzPIySN61drme77",
+                    "name": "OpenAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// Parse the OpenAI API response and extract evaluation result\nconst apiResponse = $input.first().json;\n\nconsole.log('[Parse LLM] Received API response');\n\nlet aiOutput = null;\n\ntry {\n  let responseText = '';\n  \n  if (apiResponse.choices && apiResponse.choices[0]?.message?.content) {\n    responseText = apiResponse.choices[0].message.content;\n    console.log('[Parse LLM] Extracted content from choices');\n  } else if (apiResponse.message?.content) {\n    responseText = apiResponse.message.content;\n  } else if (typeof apiResponse === 'string') {\n    responseText = apiResponse;\n  } else {\n    console.log('[Parse LLM] Unexpected response structure');\n    responseText = JSON.stringify(apiResponse);\n  }\n\n  console.log('[Parse LLM] Response preview:', responseText.substring(0, 300));\n  aiOutput = JSON.parse(responseText);\n  console.log('[Parse LLM] Successfully parsed JSON');\n\n} catch (parseError) {\n  console.log('[Parse LLM] Parse error:', parseError.message);\n  try {\n    const responseText = apiResponse.choices?.[0]?.message?.content || '';\n    const jsonMatch = responseText.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      aiOutput = JSON.parse(jsonMatch[0]);\n    }\n  } catch (e2) {\n    console.log('[Parse LLM] Secondary parse failed');\n  }\n}\n\nif (!aiOutput) {\n  aiOutput = {\n    status: 'fail',\n    score: 0,\n    feedback: 'Failed to parse AI evaluation response. Please try again.',\n    suggestions: ['Re-run validation'],\n    missingElements: []\n  };\n}\n\n// Normalize\nconst score = typeof aiOutput.score === 'number' ? aiOutput.score : parseInt(aiOutput.score, 10) || 0;\nconst result = {\n  status: score >= 80 ? 'pass' : 'fail',\n  score,\n  feedback: String(aiOutput.feedback || 'No feedback provided'),\n  suggestions: Array.isArray(aiOutput.suggestions) ? aiOutput.suggestions.map(String) : [],\n  missingElements: Array.isArray(aiOutput.missingElements) ? aiOutput.missingElements.map(String) : []\n};\n\nconsole.log('[Parse LLM] Final result:', JSON.stringify(result));\n\nreturn [{ json: result }];"
+            },
+            "id": "73458a4d-fb38-4114-b856-79a2ad985803",
+            "name": "Parse LLM Response",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                432,
+                544
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Format callback payload for the CSHSE app server\nconst evaluationResult = $input.first().json;\n\nconsole.log('[Format Callback] Evaluation result:', JSON.stringify(evaluationResult));\n\n// Get original input data\nlet inputData = null;\ntry {\n  inputData = $('Validate Input').first().json;\n} catch (e1) {\n  console.log('[Format Callback] Could not get data from Validate Input:', e1.message);\n  try {\n    inputData = $('Build Evaluation Prompt').first().json;\n  } catch (e2) {\n    console.log('[Format Callback] Could not get data from Build Prompt:', e2.message);\n  }\n}\n\nif (!inputData) {\n  inputData = {\n    callbackUrl: '',\n    submissionId: 'unknown',\n    standardCode: 'unknown',\n    specCode: 'unknown'\n  };\n}\n\nconsole.log('[Format Callback] Callback URL:', inputData.callbackUrl);\n\n// Build callback payload matching the ValidationResponse interface\nconst callbackPayload = {\n  executionId: $execution.id,\n  submissionId: inputData.submissionId,\n  standardCode: inputData.standardCode,\n  specCode: inputData.specCode,\n  result: {\n    status: evaluationResult.status,\n    score: evaluationResult.score,\n    feedback: evaluationResult.feedback,\n    suggestions: evaluationResult.suggestions,\n    missingElements: evaluationResult.missingElements\n  }\n};\n\nconsole.log('[Format Callback] Payload created for', inputData.standardCode, inputData.specCode);\n\nreturn [{ json: {\n  callbackUrl: inputData.callbackUrl,\n  payload: callbackPayload\n} }];"
+            },
+            "id": "0727fb18-bb09-4462-96c0-d61310df566d",
+            "name": "Format Validation Callback",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                624,
+                544
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $json.callbackUrl }}",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify($json.payload) }}",
+                "options": {
+                    "timeout": 30000
+                }
+            },
+            "id": "c690b75e-92b5-4776-a069-a53698c3cc34",
+            "name": "Send Validation Callback",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                848,
+                544
+            ]
+        }
+    ],
+    "connections": {
+        "Webhook - Validate Standard": {
+            "main": [
+                [
+                    {
+                        "node": "Validate Input",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate Input": {
+            "main": [
+                [
+                    {
+                        "node": "Respond Accepted",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Fetch URL Content",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch URL Content": {
+            "main": [
+                [
+                    {
+                        "node": "Build Evaluation Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Evaluation Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Call OpenAI API",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Call OpenAI API": {
+            "main": [
+                [
+                    {
+                        "node": "Parse LLM Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse LLM Response": {
+            "main": [
+                [
+                    {
+                        "node": "Format Validation Callback",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Validation Callback": {
+            "main": [
+                [
+                    {
+                        "node": "Send Validation Callback",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "binaryMode": "separate",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": {},
+    "versionId": "96afe907-c585-4541-a691-8ce2640d98d4",
+    "activeVersionId": "96afe907-c585-4541-a691-8ce2640d98d4",
+    "versionCounter": 4,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2026-02-25T22:24:32.164Z",
+            "createdAt": "2026-02-25T22:24:32.164Z",
+            "role": "workflow:owner",
+            "workflowId": "IZTrxpnlQdfNJdUy",
+            "projectId": "so6FfyLmNOjnxEMJ",
+            "project": {
+                "updatedAt": "2026-01-12T16:36:13.622Z",
+                "createdAt": "2026-01-12T15:34:50.204Z",
+                "id": "so6FfyLmNOjnxEMJ",
+                "name": "Eric Beser <eric@agileadtesting.com>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": {
+        "updatedAt": "2026-02-25T22:24:57.990Z",
+        "createdAt": "2026-02-25T22:24:37.923Z",
+        "versionId": "96afe907-c585-4541-a691-8ce2640d98d4",
+        "workflowId": "IZTrxpnlQdfNJdUy",
+        "nodes": [
+            {
+                "parameters": {
+                    "httpMethod": "POST",
+                    "path": "validate-standard",
+                    "responseMode": "responseNode",
+                    "options": {}
+                },
+                "id": "b93a592a-0699-4d1a-83e7-ce517909a8d3",
+                "name": "Webhook - Validate Standard",
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2.1,
+                "position": [
+                    -640,
+                    288
+                ],
+                "webhookId": "validate-standard-webhook",
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Validate input and extract fields from the validation request\nconst input = $input.first();\nconst json = input.json || {};\n\nlet body = {};\nif (json.body && typeof json.body === 'object') { body = json.body; } else if (json.callbackUrl) { body = json; }\n\nconst submissionId = body.submissionId;\nconst standardCode = body.standardCode;\nconst specCode = body.specCode;\nconst programLevel = body.programLevel || 'bachelors';\nconst callbackUrl = body.callbackUrl;\nconst narrativeText = body.narrativeText || '';\nconst evidenceText = body.evidenceText || '';\nconst standardText = body.standardText || '';\nconst specificationText = body.specificationText || '';\nconst standardTitle = body.standardTitle || '';\nconst standardDescription = body.standardDescription || '';\nconst specTitle = body.specTitle || '';\nconst specText = body.specText || '';\nconst evidenceUrls = body.supportingEvidence?.urls || [];\nconst evidenceFiles = body.supportingEvidence?.documents || [];\n\nif (!callbackUrl) { throw new Error('callbackUrl is required'); }\nif (!submissionId) { throw new Error('submissionId is required'); }\nif (!standardCode) { throw new Error('standardCode is required'); }\nif (!specCode) { throw new Error('specCode is required'); }\nif (!narrativeText && !evidenceText) { throw new Error('narrativeText or evidenceText is required'); }\n\nfunction sanitizeForApi(text) {\n  if (!text) return '';\n  let clean = text.replace(/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/g, '');\n  clean = clean.replace(/[\\u2018\\u2019]/g, \"'\").replace(/[\\u201C\\u201D]/g, '\"');\n  clean = clean.replace(/[\\u2013\\u2014]/g, '-');\n  clean = clean.replace(/[\\u2026]/g, '...');\n  clean = clean.replace(/[\\uFFFD\\uFFFE\\uFFFF]/g, '');\n  return clean;\n}\n\nfunction stripHtml(html) {\n  return html\n    .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&[a-z]+;/gi, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\n// Strip HTML from narrative to get plain text for AI\nconst plainNarrative = sanitizeForApi(stripHtml(narrativeText));\nconst plainEvidence = sanitizeForApi(stripHtml(evidenceText));\n\nconsole.log('[Validate Input] submissionId:', submissionId);\nconsole.log('[Validate Input] standard:', standardCode, 'spec:', specCode);\nconsole.log('[Validate Input] narrative length:', plainNarrative.length);\nconsole.log('[Validate Input] evidence text length:', plainEvidence.length);\nconsole.log('[Validate Input] evidence URLs:', evidenceUrls.length);\nconsole.log('[Validate Input] evidence files:', evidenceFiles.length);\n\nreturn [{ json: {\n  submissionId,\n  standardCode,\n  specCode,\n  programLevel,\n  callbackUrl,\n  narrativeText: plainNarrative,\n  evidenceText: plainEvidence,\n  standardText: sanitizeForApi(standardText),\n  specificationText: sanitizeForApi(specificationText),\n  standardTitle: sanitizeForApi(standardTitle),\n  standardDescription: sanitizeForApi(standardDescription),\n  specTitle: sanitizeForApi(specTitle),\n  specText: sanitizeForApi(specText),\n  evidenceUrls,\n  evidenceFiles\n} }];"
+                },
+                "id": "8d4fedc5-25c0-49b4-909f-a2a56c65485c",
+                "name": "Validate Input",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    -416,
+                    288
+                ]
+            },
+            {
+                "parameters": {
+                    "respondWith": "json",
+                    "responseBody": "={{ JSON.stringify({ status: 'accepted', executionId: $execution.id, submissionId: $json.submissionId, standardCode: $json.standardCode, specCode: $json.specCode }) }}",
+                    "options": {}
+                },
+                "id": "c4ed7295-50c5-48f6-8631-cc42589977c3",
+                "name": "Respond Accepted",
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1.5,
+                "position": [
+                    0,
+                    0
+                ]
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Fetch HTML content from each evidence URL and extract plain text\nconst inputData = $input.first().json;\nconst evidenceUrls = inputData.evidenceUrls || [];\n\nlet fetchedContent = '';\nconst fetchResults = [];\n\nfor (const urlInfo of evidenceUrls) {\n  const href = urlInfo.href || urlInfo.url;\n  if (!href) continue;\n  \n  try {\n    console.log('[Fetch URLs] Fetching:', href);\n    const response = await fetch(href, {\n      signal: AbortSignal.timeout(15000),\n      headers: { 'User-Agent': 'CSHSE-Validator/1.0' }\n    });\n    \n    if (!response.ok) {\n      console.log('[Fetch URLs] HTTP error:', response.status, 'for', href);\n      fetchResults.push({ url: href, status: 'error', error: `HTTP ${response.status}` });\n      continue;\n    }\n    \n    const html = await response.text();\n    \n    // Strip HTML to plain text\n    const plainText = html\n      .replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '')\n      .replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '')\n      .replace(/<nav[^>]*>[\\s\\S]*?<\\/nav>/gi, '')\n      .replace(/<header[^>]*>[\\s\\S]*?<\\/header>/gi, '')\n      .replace(/<footer[^>]*>[\\s\\S]*?<\\/footer>/gi, '')\n      .replace(/<[^>]+>/g, ' ')\n      .replace(/&nbsp;/g, ' ')\n      .replace(/&[a-z]+;/gi, ' ')\n      .replace(/\\s+/g, ' ')\n      .trim();\n    \n    // Limit each URL content to 10000 chars\n    const truncated = plainText.length > 10000 ? plainText.substring(0, 10000) + '...[truncated]' : plainText;\n    \n    fetchedContent += `\\n\\n--- Content from: ${urlInfo.title || href} ---\\n${truncated}`;\n    fetchResults.push({ url: href, status: 'success', chars: truncated.length });\n    console.log('[Fetch URLs] Success:', href, '- chars:', truncated.length);\n  } catch (error) {\n    console.log('[Fetch URLs] Error fetching', href, ':', error.message);\n    fetchResults.push({ url: href, status: 'error', error: error.message });\n  }\n}\n\nconsole.log('[Fetch URLs] Fetched', fetchResults.filter(r => r.status === 'success').length, 'of', evidenceUrls.length, 'URLs');\n\nreturn [{ json: {\n  ...inputData,\n  fetchedUrlContent: fetchedContent.trim(),\n  fetchResults\n} }];"
+                },
+                "id": "b5bc37ea-2740-4253-a055-c3191ee6973c",
+                "name": "Fetch URL Content",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    -192,
+                    544
+                ]
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Build the OpenAI evaluation prompt\nconst data = $input.first().json;\n\nconsole.log('[Build Prompt] Standard:', data.standardCode, 'Spec:', data.specCode);\nconsole.log('[Build Prompt] Narrative:', data.narrativeText?.length || 0, 'chars');\nconsole.log('[Build Prompt] Evidence text:', data.evidenceText?.length || 0, 'chars');\nconsole.log('[Build Prompt] Fetched URL content:', data.fetchedUrlContent?.length || 0, 'chars');\nconsole.log('[Build Prompt] Evidence files:', data.evidenceFiles?.length || 0);\n\n// Build the standard reference section\nlet standardReference = '';\nif (data.standardText) {\n  standardReference += data.standardText + '\\n\\n';\n}\nif (data.specificationText) {\n  standardReference += data.specificationText;\n} else if (data.specText) {\n  standardReference += `Specification ${data.specCode}: ${data.specTitle}\\n${data.specText}`;\n}\n\n// Build the evidence section\nlet evidenceSection = '';\nif (data.evidenceText) {\n  evidenceSection += `=== SUPPORTING EVIDENCE TEXT ===\\n${data.evidenceText}\\n\\n`;\n}\nif (data.fetchedUrlContent) {\n  evidenceSection += `=== CONTENT FROM EVIDENCE URLs ===\\n${data.fetchedUrlContent}\\n\\n`;\n}\nif (data.evidenceFiles && data.evidenceFiles.length > 0) {\n  evidenceSection += `=== EVIDENCE FILES ATTACHED ===\\n`;\n  for (const file of data.evidenceFiles) {\n    evidenceSection += `- ${file.filename || file.originalName} (${file.mimeType || file.type}, ${file.size ? Math.round(file.size / 1024) + 'KB' : 'size unknown'})\\n`;\n  }\n  evidenceSection += '\\n';\n}\n\nconst systemMessage = `You are a CSHSE (Council for Standards in Human Service Education) accreditation evaluator.\n\nYour task is to evaluate whether a self-study narrative and its supporting evidence adequately address and satisfy a specific CSHSE standard and subspecification.\n\nYou will be provided with:\n1. The CSHSE standard and subspecification text (what must be addressed)\n2. The narrative text written by the program (their response)\n3. Supporting evidence including text, content from URLs, and list of attached files\n\nEVALUATION CRITERIA:\n- Does the narrative directly address the requirements stated in the standard/subspecification?\n- Is there sufficient evidence to support the claims made in the narrative?\n- Are there specific examples, data, or documentation referenced?\n- Are there gaps or missing elements that should be addressed?\n- Is the narrative clear, well-organized, and professional?\n\nSCORING GUIDE:\n- 80-100: Pass - The narrative and evidence clearly satisfy the standard requirements\n- 60-79: Marginal - Some requirements met but notable gaps exist\n- 0-59: Fail - Significant requirements are unaddressed or unsupported\n\nA score of 80 or above = \"pass\", below 80 = \"fail\".\n\nProvide constructive, specific feedback that helps the program strengthen their self-study.`;\n\nconst userMessage = `=== CSHSE STANDARD REQUIREMENT ===\n\n${standardReference || 'Standard ' + data.standardCode + ', Specification ' + data.specCode}\n\n=== PROGRAM NARRATIVE ===\n\n${data.narrativeText || '[No narrative text provided]'}\n\n${evidenceSection ? evidenceSection : '=== NO SUPPORTING EVIDENCE PROVIDED ===\\n'}\n\nEvaluate whether the narrative and supporting evidence adequately address and satisfy the CSHSE standard and subspecification requirements above.\n\nProvide your response as JSON with these exact fields:\n- status: \"pass\" or \"fail\" (pass if score >= 80)\n- score: your score from 0-100 as a number\n- feedback: A detailed evaluation paragraph (3-5 sentences) explaining your assessment. Reference specific content from the narrative and evidence.\n- suggestions: An array of 1-4 specific, actionable suggestions for improvement. Even passing narratives can have suggestions.\n- missingElements: An array of 0-4 specific elements that are required by the standard but missing or insufficiently addressed in the narrative. Empty array if all elements are covered.`;\n\nconst openaiRequestBody = JSON.stringify({\n  model: 'gpt-4o-mini',\n  messages: [\n    { role: 'system', content: systemMessage },\n    { role: 'user', content: userMessage }\n  ],\n  temperature: 0.3,\n  max_tokens: 2000,\n  response_format: { type: 'json_object' }\n});\n\nconsole.log('[Build Prompt] Request body length:', openaiRequestBody.length);\n\nreturn [{ json: { ...data, openaiRequestBody } }];"
+                },
+                "id": "58345f5a-24fb-4052-9fa1-259866e4af39",
+                "name": "Build Evaluation Prompt",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    32,
+                    544
+                ]
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://api.openai.com/v1/chat/completions",
+                    "authentication": "predefinedCredentialType",
+                    "nodeCredentialType": "openAiApi",
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    },
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ $json.openaiRequestBody }}",
+                    "options": {
+                        "timeout": 120000
+                    }
+                },
+                "id": "6da9e4fc-4600-4de7-b450-5f08bc4c0334",
+                "name": "Call OpenAI API",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.3,
+                "position": [
+                    256,
+                    544
+                ],
+                "credentials": {
+                    "openAiApi": {
+                        "id": "xSzPIySN61drme77",
+                        "name": "OpenAi account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Parse the OpenAI API response and extract evaluation result\nconst apiResponse = $input.first().json;\n\nconsole.log('[Parse LLM] Received API response');\n\nlet aiOutput = null;\n\ntry {\n  let responseText = '';\n  \n  if (apiResponse.choices && apiResponse.choices[0]?.message?.content) {\n    responseText = apiResponse.choices[0].message.content;\n    console.log('[Parse LLM] Extracted content from choices');\n  } else if (apiResponse.message?.content) {\n    responseText = apiResponse.message.content;\n  } else if (typeof apiResponse === 'string') {\n    responseText = apiResponse;\n  } else {\n    console.log('[Parse LLM] Unexpected response structure');\n    responseText = JSON.stringify(apiResponse);\n  }\n\n  console.log('[Parse LLM] Response preview:', responseText.substring(0, 300));\n  aiOutput = JSON.parse(responseText);\n  console.log('[Parse LLM] Successfully parsed JSON');\n\n} catch (parseError) {\n  console.log('[Parse LLM] Parse error:', parseError.message);\n  try {\n    const responseText = apiResponse.choices?.[0]?.message?.content || '';\n    const jsonMatch = responseText.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      aiOutput = JSON.parse(jsonMatch[0]);\n    }\n  } catch (e2) {\n    console.log('[Parse LLM] Secondary parse failed');\n  }\n}\n\nif (!aiOutput) {\n  aiOutput = {\n    status: 'fail',\n    score: 0,\n    feedback: 'Failed to parse AI evaluation response. Please try again.',\n    suggestions: ['Re-run validation'],\n    missingElements: []\n  };\n}\n\n// Normalize\nconst score = typeof aiOutput.score === 'number' ? aiOutput.score : parseInt(aiOutput.score, 10) || 0;\nconst result = {\n  status: score >= 80 ? 'pass' : 'fail',\n  score,\n  feedback: String(aiOutput.feedback || 'No feedback provided'),\n  suggestions: Array.isArray(aiOutput.suggestions) ? aiOutput.suggestions.map(String) : [],\n  missingElements: Array.isArray(aiOutput.missingElements) ? aiOutput.missingElements.map(String) : []\n};\n\nconsole.log('[Parse LLM] Final result:', JSON.stringify(result));\n\nreturn [{ json: result }];"
+                },
+                "id": "73458a4d-fb38-4114-b856-79a2ad985803",
+                "name": "Parse LLM Response",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    432,
+                    544
+                ]
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Format callback payload for the CSHSE app server\nconst evaluationResult = $input.first().json;\n\nconsole.log('[Format Callback] Evaluation result:', JSON.stringify(evaluationResult));\n\n// Get original input data\nlet inputData = null;\ntry {\n  inputData = $('Validate Input').first().json;\n} catch (e1) {\n  console.log('[Format Callback] Could not get data from Validate Input:', e1.message);\n  try {\n    inputData = $('Build Evaluation Prompt').first().json;\n  } catch (e2) {\n    console.log('[Format Callback] Could not get data from Build Prompt:', e2.message);\n  }\n}\n\nif (!inputData) {\n  inputData = {\n    callbackUrl: '',\n    submissionId: 'unknown',\n    standardCode: 'unknown',\n    specCode: 'unknown'\n  };\n}\n\nconsole.log('[Format Callback] Callback URL:', inputData.callbackUrl);\n\n// Build callback payload matching the ValidationResponse interface\nconst callbackPayload = {\n  executionId: $execution.id,\n  submissionId: inputData.submissionId,\n  standardCode: inputData.standardCode,\n  specCode: inputData.specCode,\n  result: {\n    status: evaluationResult.status,\n    score: evaluationResult.score,\n    feedback: evaluationResult.feedback,\n    suggestions: evaluationResult.suggestions,\n    missingElements: evaluationResult.missingElements\n  }\n};\n\nconsole.log('[Format Callback] Payload created for', inputData.standardCode, inputData.specCode);\n\nreturn [{ json: {\n  callbackUrl: inputData.callbackUrl,\n  payload: callbackPayload\n} }];"
+                },
+                "id": "0727fb18-bb09-4462-96c0-d61310df566d",
+                "name": "Format Validation Callback",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    624,
+                    544
+                ]
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "={{ $json.callbackUrl }}",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify($json.payload) }}",
+                    "options": {
+                        "timeout": 30000
+                    }
+                },
+                "id": "c690b75e-92b5-4776-a069-a53698c3cc34",
+                "name": "Send Validation Callback",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.3,
+                "position": [
+                    848,
+                    544
+                ]
+            }
+        ],
+        "connections": {
+            "Webhook - Validate Standard": {
+                "main": [
+                    [
+                        {
+                            "node": "Validate Input",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Validate Input": {
+                "main": [
+                    [
+                        {
+                            "node": "Respond Accepted",
+                            "type": "main",
+                            "index": 0
+                        },
+                        {
+                            "node": "Fetch URL Content",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Fetch URL Content": {
+                "main": [
+                    [
+                        {
+                            "node": "Build Evaluation Prompt",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Build Evaluation Prompt": {
+                "main": [
+                    [
+                        {
+                            "node": "Call OpenAI API",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Call OpenAI API": {
+                "main": [
+                    [
+                        {
+                            "node": "Parse LLM Response",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Parse LLM Response": {
+                "main": [
+                    [
+                        {
+                            "node": "Format Validation Callback",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Format Validation Callback": {
+                "main": [
+                    [
+                        {
+                            "node": "Send Validation Callback",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Eric Beser",
+        "name": "Version 96afe907",
+        "description": "initial install",
+        "autosaved": true,
+        "workflowPublishHistory": [
+            {
+                "createdAt": "2026-02-25T22:24:57.984Z",
+                "id": 23,
+                "workflowId": "IZTrxpnlQdfNJdUy",
+                "versionId": "96afe907-c585-4541-a691-8ce2640d98d4",
+                "event": "activated",
+                "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        ]
+    }
+}

@@ -1,0 +1,585 @@
+{
+    "updatedAt": "2026-02-25T22:25:30.736Z",
+    "createdAt": "2026-02-25T22:25:19.662Z",
+    "id": "HZTaqIL88dHQyf7p",
+    "name": "CSHSE Specification Loader (PDF)",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "load-specifications",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "05020f32-2f4d-4815-9760-e28437fc2ef2",
+            "name": "Webhook - Load Specs",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                -448,
+                96
+            ],
+            "webhookId": "load-specs-webhook",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "const crypto = require('crypto');\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst specName = body.specName || 'CSHSE Standards';\nconst specVersion = body.specVersion || '1.0';\nconst specId = body.specId || null;\nconst callbackUrl = body.callbackUrl || null;\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'specification.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Generate job ID\nconst jobId = crypto.randomUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  // Convert base64 to Buffer\n  const buffer = Buffer.from(base64Data, 'base64');\n  \n  // Use n8n's binary data format\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  \n  return [{\n    json: {\n      jobId,\n      specName,\n      specVersion,\n      specId,\n      callbackUrl,\n      fileName,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  return [{\n    json: {\n      jobId,\n      specName,\n      specVersion,\n      specId,\n      callbackUrl,\n      fileName: input.binary[Object.keys(input.binary)[0]].fileName || fileName,\n      startedAt: new Date().toISOString()\n    },\n    binary: input.binary\n  }];\n} else {\n  throw new Error('No PDF file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
+            },
+            "id": "6ceca162-2dde-40e2-a521-8168c3f3de2f",
+            "name": "Validate Input",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -224,
+                96
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify({ status: 'accepted', jobId: $json.jobId, message: 'PDF processing started. Specifications will be loaded to vector store.' }) }}",
+                "options": {}
+            },
+            "id": "48aed2a2-3487-41ca-8de5-011b71f7378d",
+            "name": "Respond Immediately",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.5,
+            "position": [
+                0,
+                0
+            ]
+        },
+        {
+            "parameters": {},
+            "id": "27af2911-82b6-4511-951c-05f595087da3",
+            "name": "Load PDF Document",
+            "type": "n8n-nodes-base.readPDF",
+            "typeVersion": 1,
+            "position": [
+                0,
+                192
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst enrichedDocs = items.map((item, index) => {\n  const doc = item.json;\n  \n  return {\n    json: {\n      pageContent: doc.text || doc.pageContent || '',\n      metadata: {\n        specName: jobConfig.specName,\n        specVersion: jobConfig.specVersion,\n        specId: jobConfig.specId,\n        chunkIndex: index,\n        fileName: jobConfig.fileName,\n        numPages: doc.numpages || 0,\n        loadedAt: new Date().toISOString()\n      }\n    }\n  };\n});\n\nreturn enrichedDocs;"
+            },
+            "id": "07b6ffc3-2304-40d7-93ca-d62a7706e01f",
+            "name": "Add Metadata",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                224,
+                192
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst result = {\n  success: true,\n  jobId: jobConfig.jobId,\n  specName: jobConfig.specName,\n  specVersion: jobConfig.specVersion,\n  specId: jobConfig.specId,\n  fileName: jobConfig.fileName,\n  documentsLoaded: items.length,\n  processedAt: new Date().toISOString(),\n  processingDuration: Date.now() - new Date(jobConfig.startedAt).getTime(),\n  message: `Successfully loaded ${items.length} document chunks from ${jobConfig.fileName}`\n};\n\nreturn [{ json: { ...result, callbackUrl: jobConfig.callbackUrl } }];"
+            },
+            "id": "9d443c8d-15b4-4277-875d-fa00825d10a8",
+            "name": "Aggregate Results",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                896,
+                192
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $json.callbackUrl }}",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "X-API-Key",
+                            "value": "cshse_eXPTLboS18Gjgw_BTwEVJhe8CBiAjq9B"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"status\": \"completed\",\n  \"jobId\": {{ JSON.stringify($json.jobId) }},\n  \"specName\": {{ JSON.stringify($json.specName) }},\n  \"specVersion\": {{ JSON.stringify($json.specVersion) }},\n  \"specId\": {{ JSON.stringify($json.specId) }},\n  \"documentsLoaded\": {{ $json.documentsLoaded }},\n  \"fileName\": {{ JSON.stringify($json.fileName) }},\n  \"processedAt\": {{ JSON.stringify($json.processedAt) }},\n  \"message\": {{ JSON.stringify($json.message) }}\n}",
+                "options": {
+                    "timeout": 30000
+                }
+            },
+            "id": "3caaa596-e2eb-41d3-acd3-935a3dd57445",
+            "name": "Send Callback",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1344,
+                96
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.openai.com/v1/embeddings",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "openAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
+                "options": {
+                    "timeout": 60000
+                }
+            },
+            "id": "1b0fac8a-df27-45a1-8ee3-6f7028486895",
+            "name": "Get OpenAI Embeddings",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                448,
+                192
+            ],
+            "credentials": {
+                "openAiApi": {
+                    "id": "xSzPIySN61drme77",
+                    "name": "OpenAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "tableId": "cshse_specifications",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "content",
+                            "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.pageContent) }}"
+                        },
+                        {
+                            "fieldId": "metadata",
+                            "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.metadata) }}"
+                        },
+                        {
+                            "fieldId": "embedding",
+                            "fieldValue": "={{ JSON.stringify($json.data[0].embedding) }}"
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                672,
+                192
+            ],
+            "id": "4bf0000f-3460-446b-a157-6d0e2f4a8091",
+            "name": "Create a row",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "qU6Q7CRvJhUXZABY",
+                    "name": "Supabase account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook - Load Specs": {
+            "main": [
+                [
+                    {
+                        "node": "Validate Input",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate Input": {
+            "main": [
+                [
+                    {
+                        "node": "Respond Immediately",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Load PDF Document",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Load PDF Document": {
+            "main": [
+                [
+                    {
+                        "node": "Add Metadata",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Aggregate Results": {
+            "main": [
+                [
+                    {
+                        "node": "Send Callback",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Add Metadata": {
+            "main": [
+                [
+                    {
+                        "node": "Get OpenAI Embeddings",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get OpenAI Embeddings": {
+            "main": [
+                [
+                    {
+                        "node": "Create a row",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Create a row": {
+            "main": [
+                [
+                    {
+                        "node": "Aggregate Results",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "binaryMode": "separate",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": {
+        "templateCredsSetupCompleted": true
+    },
+    "pinData": {},
+    "versionId": "fd9a1efe-10bf-49bf-bd76-5fbe6c99a238",
+    "activeVersionId": "fd9a1efe-10bf-49bf-bd76-5fbe6c99a238",
+    "versionCounter": 5,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2026-02-25T22:25:19.662Z",
+            "createdAt": "2026-02-25T22:25:19.662Z",
+            "role": "workflow:owner",
+            "workflowId": "HZTaqIL88dHQyf7p",
+            "projectId": "so6FfyLmNOjnxEMJ",
+            "project": {
+                "updatedAt": "2026-01-12T16:36:13.622Z",
+                "createdAt": "2026-01-12T15:34:50.204Z",
+                "id": "so6FfyLmNOjnxEMJ",
+                "name": "Eric Beser <eric@agileadtesting.com>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": {
+        "updatedAt": "2026-02-25T22:25:48.280Z",
+        "createdAt": "2026-02-25T22:25:30.741Z",
+        "versionId": "fd9a1efe-10bf-49bf-bd76-5fbe6c99a238",
+        "workflowId": "HZTaqIL88dHQyf7p",
+        "nodes": [
+            {
+                "parameters": {
+                    "httpMethod": "POST",
+                    "path": "load-specifications",
+                    "responseMode": "responseNode",
+                    "options": {}
+                },
+                "id": "05020f32-2f4d-4815-9760-e28437fc2ef2",
+                "name": "Webhook - Load Specs",
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2.1,
+                "position": [
+                    -448,
+                    96
+                ],
+                "webhookId": "load-specs-webhook",
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "jsCode": "const crypto = require('crypto');\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst specName = body.specName || 'CSHSE Standards';\nconst specVersion = body.specVersion || '1.0';\nconst specId = body.specId || null;\nconst callbackUrl = body.callbackUrl || null;\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'specification.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Generate job ID\nconst jobId = crypto.randomUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  // Convert base64 to Buffer\n  const buffer = Buffer.from(base64Data, 'base64');\n  \n  // Use n8n's binary data format\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  \n  return [{\n    json: {\n      jobId,\n      specName,\n      specVersion,\n      specId,\n      callbackUrl,\n      fileName,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  return [{\n    json: {\n      jobId,\n      specName,\n      specVersion,\n      specId,\n      callbackUrl,\n      fileName: input.binary[Object.keys(input.binary)[0]].fileName || fileName,\n      startedAt: new Date().toISOString()\n    },\n    binary: input.binary\n  }];\n} else {\n  throw new Error('No PDF file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
+                },
+                "id": "6ceca162-2dde-40e2-a521-8168c3f3de2f",
+                "name": "Validate Input",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    -224,
+                    96
+                ]
+            },
+            {
+                "parameters": {
+                    "respondWith": "json",
+                    "responseBody": "={{ JSON.stringify({ status: 'accepted', jobId: $json.jobId, message: 'PDF processing started. Specifications will be loaded to vector store.' }) }}",
+                    "options": {}
+                },
+                "id": "48aed2a2-3487-41ca-8de5-011b71f7378d",
+                "name": "Respond Immediately",
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1.5,
+                "position": [
+                    0,
+                    0
+                ]
+            },
+            {
+                "parameters": {},
+                "id": "27af2911-82b6-4511-951c-05f595087da3",
+                "name": "Load PDF Document",
+                "type": "n8n-nodes-base.readPDF",
+                "typeVersion": 1,
+                "position": [
+                    0,
+                    192
+                ]
+            },
+            {
+                "parameters": {
+                    "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst enrichedDocs = items.map((item, index) => {\n  const doc = item.json;\n  \n  return {\n    json: {\n      pageContent: doc.text || doc.pageContent || '',\n      metadata: {\n        specName: jobConfig.specName,\n        specVersion: jobConfig.specVersion,\n        specId: jobConfig.specId,\n        chunkIndex: index,\n        fileName: jobConfig.fileName,\n        numPages: doc.numpages || 0,\n        loadedAt: new Date().toISOString()\n      }\n    }\n  };\n});\n\nreturn enrichedDocs;"
+                },
+                "id": "07b6ffc3-2304-40d7-93ca-d62a7706e01f",
+                "name": "Add Metadata",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    224,
+                    192
+                ]
+            },
+            {
+                "parameters": {
+                    "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst result = {\n  success: true,\n  jobId: jobConfig.jobId,\n  specName: jobConfig.specName,\n  specVersion: jobConfig.specVersion,\n  specId: jobConfig.specId,\n  fileName: jobConfig.fileName,\n  documentsLoaded: items.length,\n  processedAt: new Date().toISOString(),\n  processingDuration: Date.now() - new Date(jobConfig.startedAt).getTime(),\n  message: `Successfully loaded ${items.length} document chunks from ${jobConfig.fileName}`\n};\n\nreturn [{ json: { ...result, callbackUrl: jobConfig.callbackUrl } }];"
+                },
+                "id": "9d443c8d-15b4-4277-875d-fa00825d10a8",
+                "name": "Aggregate Results",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    896,
+                    192
+                ]
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "={{ $json.callbackUrl }}",
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "X-API-Key",
+                                "value": "cshse_eXPTLboS18Gjgw_BTwEVJhe8CBiAjq9B"
+                            }
+                        ]
+                    },
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={\n  \"status\": \"completed\",\n  \"jobId\": {{ JSON.stringify($json.jobId) }},\n  \"specName\": {{ JSON.stringify($json.specName) }},\n  \"specVersion\": {{ JSON.stringify($json.specVersion) }},\n  \"specId\": {{ JSON.stringify($json.specId) }},\n  \"documentsLoaded\": {{ $json.documentsLoaded }},\n  \"fileName\": {{ JSON.stringify($json.fileName) }},\n  \"processedAt\": {{ JSON.stringify($json.processedAt) }},\n  \"message\": {{ JSON.stringify($json.message) }}\n}",
+                    "options": {
+                        "timeout": 30000
+                    }
+                },
+                "id": "3caaa596-e2eb-41d3-acd3-935a3dd57445",
+                "name": "Send Callback",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    1344,
+                    96
+                ]
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://api.openai.com/v1/embeddings",
+                    "authentication": "predefinedCredentialType",
+                    "nodeCredentialType": "openAiApi",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
+                    "options": {
+                        "timeout": 60000
+                    }
+                },
+                "id": "1b0fac8a-df27-45a1-8ee3-6f7028486895",
+                "name": "Get OpenAI Embeddings",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    448,
+                    192
+                ],
+                "credentials": {
+                    "openAiApi": {
+                        "id": "xSzPIySN61drme77",
+                        "name": "OpenAi account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "tableId": "cshse_specifications",
+                    "fieldsUi": {
+                        "fieldValues": [
+                            {
+                                "fieldId": "content",
+                                "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.pageContent) }}"
+                            },
+                            {
+                                "fieldId": "metadata",
+                                "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.metadata) }}"
+                            },
+                            {
+                                "fieldId": "embedding",
+                                "fieldValue": "={{ JSON.stringify($json.data[0].embedding) }}"
+                            }
+                        ]
+                    }
+                },
+                "type": "n8n-nodes-base.supabase",
+                "typeVersion": 1,
+                "position": [
+                    672,
+                    192
+                ],
+                "id": "4bf0000f-3460-446b-a157-6d0e2f4a8091",
+                "name": "Create a row",
+                "credentials": {
+                    "supabaseApi": {
+                        "id": "qU6Q7CRvJhUXZABY",
+                        "name": "Supabase account"
+                    }
+                }
+            }
+        ],
+        "connections": {
+            "Webhook - Load Specs": {
+                "main": [
+                    [
+                        {
+                            "node": "Validate Input",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Validate Input": {
+                "main": [
+                    [
+                        {
+                            "node": "Respond Immediately",
+                            "type": "main",
+                            "index": 0
+                        },
+                        {
+                            "node": "Load PDF Document",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Load PDF Document": {
+                "main": [
+                    [
+                        {
+                            "node": "Add Metadata",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Aggregate Results": {
+                "main": [
+                    [
+                        {
+                            "node": "Send Callback",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Add Metadata": {
+                "main": [
+                    [
+                        {
+                            "node": "Get OpenAI Embeddings",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Get OpenAI Embeddings": {
+                "main": [
+                    [
+                        {
+                            "node": "Create a row",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Create a row": {
+                "main": [
+                    [
+                        {
+                            "node": "Aggregate Results",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Eric Beser",
+        "name": "Version fd9a1efe",
+        "description": "initial install",
+        "autosaved": true,
+        "workflowPublishHistory": [
+            {
+                "createdAt": "2026-02-25T22:25:48.267Z",
+                "id": 24,
+                "workflowId": "HZTaqIL88dHQyf7p",
+                "versionId": "fd9a1efe-10bf-49bf-bd76-5fbe6c99a238",
+                "event": "activated",
+                "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        ]
+    }
+}

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import {
   triggerValidation,
   receiveCallback,
@@ -13,7 +14,17 @@ import {
 } from '../controllers/webhookController';
 import { receiveSpecLoaderCallback } from '../controllers/specLoaderController';
 import { receiveDocumentMatcherCallback } from '../controllers/documentMatcherController';
+import { sendChatMessage, getHelpChatStatus, uploadHelpDocument } from '../controllers/helpChatController';
 import { authenticate, requireAdmin } from '../middleware/auth';
+
+const helpUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['application/pdf', 'text/markdown', 'text/plain'];
+    cb(null, allowed.includes(file.mimetype) || file.originalname.endsWith('.md'));
+  }
+});
 
 const router = Router();
 
@@ -47,6 +58,27 @@ router.use(authenticate);
  * @access  Private (Coordinator)
  */
 router.post('/n8n/validate', triggerValidation);
+
+/**
+ * @route   GET /api/webhooks/help/status
+ * @desc    Check if help chat is available
+ * @access  Private (any authenticated user)
+ */
+router.get('/help/status', getHelpChatStatus);
+
+/**
+ * @route   POST /api/webhooks/help/chat
+ * @desc    Send help question to N8N AI agent
+ * @access  Private (any authenticated user)
+ */
+router.post('/help/chat', sendChatMessage);
+
+/**
+ * @route   POST /api/webhooks/help/upload
+ * @desc    Upload a help document (PDF/MD) to the N8N vectorization webhook
+ * @access  Private (Admin)
+ */
+router.post('/help/upload', requireAdmin, helpUpload.single('file'), uploadHelpDocument);
 
 /**
  * @route   GET /api/webhooks/settings

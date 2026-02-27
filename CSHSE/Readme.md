@@ -61,10 +61,21 @@ This portal enables educational institutions to prepare and submit accreditation
 - **Assessment Cells**: Type (I/T/K/S) and Depth (L/M/H) per specification
 - **Import/Export**: CSV export and Excel import support
 
-### Evidence Management
-- **File Upload**: Drag-drop support for Word, PDF, PPT, images
+### Evidence & File Management
+- **S3 File Storage**: Files stored persistently in AWS S3 (Railway-compatible)
+- **File Upload**: Drag-drop support for Word, PDF, PPT, images (up to 50MB)
+- **Supporting File Library**: Accordion-based file browser organized by standard/specification
+- **File Preview**: Inline preview for PDF and DOCX (converted to HTML), images displayed directly
+- **File Summaries**: AI-generated summaries that can be saved as file descriptions
 - **URL Evidence**: Link external resources and documents
 - **Standard Linking**: Associate evidence with specific standards/specifications
+- **Auto-Versioning**: Re-uploading same filename creates a new version
+
+### AI Help Chat
+- **Floating Chat Bubble**: Accessible from all pages (bottom-right corner)
+- **RAG Pipeline**: Answers from CSHSE Member Handbook and User Guide via N8N workflow
+- **Contextual Help**: Questions about both the accreditation process and portal software
+- **Configurable**: Only visible when help_chat webhook is configured in admin settings
 
 ### Reader/Reviewer Portal
 - **Split-Screen View**: Standards + narrative on left, documents on right
@@ -102,11 +113,13 @@ This portal enables educational institutions to prepare and submit accreditation
 │          │                        │                                     │
 │          │                        ▼                                     │
 │          │              ┌─────────────────┐                            │
-│          │              │   N8N Webhooks  │                            │
-│          │              │  ┌───────────┐  │                            │
-│          │              │  │ Validator │  │  ◄── AI Analysis           │
-│          │              │  │ Spec Load │  │  ◄── PDF Parsing           │
+│          │              ┌─────────────────┐     ┌──────────────┐   │
+│          │              │   N8N Webhooks  │     │  AWS S3      │   │
+│          │              │  ┌───────────┐  │     │  (Evidence   │   │
+│          │              │  │ Validator │  │  ◄── AI Analysis   │  Files)     │   │
+│          │              │  │ Spec Load │  │  ◄── PDF Parsing   └──────────────┘   │
 │          │              │  │ Doc Match │  │  ◄── Section Mapping       │
+│          │              │  │ Help Chat │  │  ◄── RAG Pipeline          │
 │          │              │  └───────────┘  │                            │
 │          │              └─────────────────┘                            │
 │          │                                                              │
@@ -176,7 +189,7 @@ The application uses a hybrid storage approach:
 
 ## N8N Webhook Integration
 
-The application integrates with three N8N workflows for AI-powered document processing:
+The application integrates with N8N workflows for AI-powered document processing and help:
 
 ### 1. Validation Webhook (`n8n_validation`)
 
@@ -272,6 +285,31 @@ Maps imported document sections to standards using AI analysis.
       "rationale": "This section describes regional accreditation status."
     }
   }
+}
+```
+
+### 4. Help Chat Webhook (`help_chat`)
+
+AI-powered help assistant for CSHSE accreditation process and portal usage.
+
+**Check Availability**: `GET /api/webhooks/help/status`
+Returns `{ "available": true }` when configured.
+
+**Send Question**: `POST /api/webhooks/help/chat`
+
+**Request**:
+```json
+{
+  "question": "How do I submit my self-study for review?",
+  "sessionId": "session-1708990000000"
+}
+```
+
+**Response**:
+```json
+{
+  "answer": "To submit your self-study for review, follow these steps:\n1. Ensure all standards show 'Complete' status...",
+  "sources": []
 }
 ```
 
@@ -473,8 +511,15 @@ The application uses a visual manual tagging workflow for importing self-study d
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/submissions/:id/evidence` | List evidence |
-| POST | `/api/submissions/:id/evidence/upload` | Upload file |
+| GET | `/api/submissions/:id/evidence/stats` | Get evidence statistics |
+| POST | `/api/submissions/:id/evidence/upload` | Upload file (S3 or base64) |
 | POST | `/api/submissions/:id/evidence/url` | Add URL evidence |
+| PATCH | `/api/submissions/:id/evidence/:eid` | Update evidence metadata |
+| DELETE | `/api/submissions/:id/evidence/:eid` | Delete evidence |
+| GET | `/api/submissions/:id/evidence/:eid/preview` | Preview file content |
+| GET | `/api/submissions/:id/evidence/:eid/download` | Download file |
+| POST | `/api/submissions/:id/evidence/:eid/link` | Link to specification |
+| POST | `/api/submissions/:id/evidence/:eid/unlink` | Unlink from specification |
 
 ### Reviews
 | Method | Endpoint | Description |
@@ -498,6 +543,8 @@ The application uses a visual manual tagging workflow for importing self-study d
 | POST | `/api/webhooks/n8n/callback` | Receive validation result |
 | POST | `/api/webhooks/spec-loader/callback` | Receive spec load result |
 | POST | `/api/webhooks/document-matcher/callback` | Receive section mapping |
+| GET | `/api/webhooks/help/status` | Check if help chat is available |
+| POST | `/api/webhooks/help/chat` | Send help question to AI agent |
 
 ---
 
@@ -603,6 +650,52 @@ The multi-stage Dockerfile:
 ---
 
 ## Recent Changes
+
+### AI Help Chat System (February 2026)
+- **Feature**: AI-powered help assistant for accreditation guidance and portal usage
+- **Changes**:
+  - N8N "CSHSE Help - Chat Agent" workflow with RAG pipeline
+  - N8N "CSHSE Help - Document Upload" workflow for vectorizing knowledge base
+  - Supabase pgvector storage for document embeddings (OpenAI text-embedding-3-small)
+  - Floating chat bubble component accessible from all pages
+  - Server-side proxy at `POST /api/webhooks/help/chat`
+  - Availability check at `GET /api/webhooks/help/status` (chat hidden when unconfigured)
+  - Help Chat webhook type added to admin Webhook Settings UI
+  - Knowledge base: CSHSE Member Handbook + Readme.md User Guide
+
+### S3 File Storage (February 2026)
+- **Problem**: Evidence files stored locally were lost on Railway container restarts
+- **Solution**: AWS S3 integration for persistent file storage
+- **Changes**:
+  - Added `@aws-sdk/client-s3` and `@aws-sdk/lib-storage` dependencies
+  - S3 service for upload, download, delete, and presigned URL operations
+  - Evidence files stored in S3 with fallback to base64 when S3 is not configured
+  - Environment variables: `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`
+
+### Supporting File Library (February 2026)
+- **Feature**: Centralized file management for supporting evidence documents
+- **Changes**:
+  - Accordion-based file library tab in self-study editor
+  - Files organized by standard and specification
+  - Upload, preview, and delete with role-based permissions (program coordinators, superusers)
+  - File preview modal: PDF/DOCX converted to HTML, images displayed inline
+  - AI-generated file summaries with "save as description" checkbox
+  - Auto-versioning when re-uploading same filename to same standard/spec
+
+### Accessibility Improvements (February 2026)
+- **Problem**: End users reported text too small and hard to read
+- **Changes**:
+  - Root font size increased 15% (18.4px) for all rem-based sizing
+  - Body text color darkened to `#1a1a1a` for better contrast
+  - Gray text classes overridden for WCAG-compliant contrast ratios
+  - `whitespace-nowrap` on menus, tabs, sidebar navigation to prevent layout breakage
+  - Action buttons always visible (not hidden behind hover states)
+
+### Evidence Management Fixes (February 2026)
+- Fixed: Superusers can now update evidence metadata (description, etc.)
+- Fixed: Description syncs to both top-level and metadata fields
+- Fixed: Program coordinators and superusers can delete evidence
+- Fixed: Jobs persist in pending list when N8N webhook fails (prevents data loss)
 
 ### GridFS Storage Implementation (February 2026)
 - **Problem**: Documents producing 370MB+ HTML exceeded MongoDB's 16MB BSON limit

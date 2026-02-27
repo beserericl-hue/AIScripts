@@ -1,0 +1,337 @@
+{
+    "updatedAt": "2026-02-27T12:39:04.884Z",
+    "createdAt": "2026-02-27T12:39:04.884Z",
+    "id": "S7Z74PmDwbkL6wiF",
+    "name": "CSHSE Help - Document Upload",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "help-upload",
+                "options": {
+                    "rawBody": true
+                },
+                "responseMode": "lastNode"
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                180,
+                300
+            ],
+            "id": "webhook-upload",
+            "name": "Webhook - Upload Document"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Extract text from the uploaded file\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const binaryData = item.binary;\n  if (!binaryData || !binaryData.file) {\n    results.push({ json: { error: 'No file uploaded' } });\n    continue;\n  }\n\n  const fileData = binaryData.file;\n  const mimeType = fileData.mimeType || '';\n  const fileName = fileData.fileName || 'unknown';\n  const source = item.json.body?.source || 'unknown';\n  const title = item.json.body?.title || fileName;\n\n  // Get the buffer\n  const buffer = await this.helpers.getBinaryDataBuffer(item, 'file');\n  let text = '';\n\n  if (mimeType === 'application/pdf') {\n    // Use pdf-parse for PDF files\n    const pdfParse = require('pdf-parse');\n    const pdfData = await pdfParse(buffer);\n    text = pdfData.text;\n  } else if (mimeType === 'text/markdown' || fileName.endsWith('.md')) {\n    text = buffer.toString('utf-8');\n  } else if (mimeType === 'text/plain' || fileName.endsWith('.txt')) {\n    text = buffer.toString('utf-8');\n  } else {\n    results.push({ json: { error: `Unsupported file type: ${mimeType}` } });\n    continue;\n  }\n\n  // Split text into chunks with overlap\n  const chunkSize = 1000;\n  const chunkOverlap = 200;\n  const chunks = [];\n  let start = 0;\n\n  while (start < text.length) {\n    const end = Math.min(start + chunkSize, text.length);\n    const chunk = text.substring(start, end);\n    if (chunk.trim().length > 0) {\n      chunks.push({\n        json: {\n          content: chunk,\n          metadata: {\n            source: source,\n            title: title,\n            chunkIndex: chunks.length,\n            fileName: fileName\n          }\n        }\n      });\n    }\n    start += chunkSize - chunkOverlap;\n  }\n\n  results.push(...chunks);\n}\n\nreturn results;"
+            },
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                420,
+                300
+            ],
+            "id": "extract-text",
+            "name": "Extract & Chunk Text"
+        },
+        {
+            "parameters": {
+                "model": "text-embedding-3-small",
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+            "typeVersion": 1,
+            "position": [
+                820,
+                480
+            ],
+            "id": "embeddings",
+            "name": "OpenAI Embeddings",
+            "credentials": {
+                "openAiApi": {
+                    "id": "xSzPIySN61drme77",
+                    "name": "OpenAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "tableName": {
+                    "__rl": true,
+                    "value": "help_documents",
+                    "mode": "list",
+                    "cachedResultName": "help_documents"
+                },
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+            "typeVersion": 1,
+            "position": [
+                660,
+                300
+            ],
+            "id": "vector-store",
+            "name": "Supabase Vector Store",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "qU6Q7CRvJhUXZABY",
+                    "name": "Supabase account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify({ success: true, message: 'Documents processed and stored in vector database' }) }}"
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.5,
+            "position": [
+                900,
+                300
+            ],
+            "id": "respond",
+            "name": "Respond Success"
+        }
+    ],
+    "connections": {
+        "Webhook - Upload Document": {
+            "main": [
+                [
+                    {
+                        "node": "Extract & Chunk Text",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Extract & Chunk Text": {
+            "main": [
+                [
+                    {
+                        "node": "Supabase Vector Store",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Supabase Vector Store": {
+            "main": [
+                [
+                    {
+                        "node": "Respond Success",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "OpenAI Embeddings": {
+            "ai_embedding": [
+                [
+                    {
+                        "node": "Supabase Vector Store",
+                        "type": "ai_embedding",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "callerPolicy": "workflowsFromSameOwner",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": null,
+    "versionId": "7aa0f456-736d-4e53-a5ec-57e65e7b62ff",
+    "activeVersionId": "7aa0f456-736d-4e53-a5ec-57e65e7b62ff",
+    "versionCounter": 3,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2026-02-27T12:39:04.884Z",
+            "createdAt": "2026-02-27T12:39:04.884Z",
+            "role": "workflow:owner",
+            "workflowId": "S7Z74PmDwbkL6wiF",
+            "projectId": "so6FfyLmNOjnxEMJ",
+            "project": {
+                "updatedAt": "2026-01-12T16:36:13.622Z",
+                "createdAt": "2026-01-12T15:34:50.204Z",
+                "id": "so6FfyLmNOjnxEMJ",
+                "name": "Eric Beser <eric@agileadtesting.com>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": {
+        "updatedAt": "2026-02-27T12:39:04.909Z",
+        "createdAt": "2026-02-27T12:39:04.909Z",
+        "versionId": "7aa0f456-736d-4e53-a5ec-57e65e7b62ff",
+        "workflowId": "S7Z74PmDwbkL6wiF",
+        "nodes": [
+            {
+                "parameters": {
+                    "httpMethod": "POST",
+                    "path": "help-upload",
+                    "options": {
+                        "rawBody": true
+                    },
+                    "responseMode": "lastNode"
+                },
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2.1,
+                "position": [
+                    180,
+                    300
+                ],
+                "id": "webhook-upload",
+                "name": "Webhook - Upload Document"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Extract text from the uploaded file\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const binaryData = item.binary;\n  if (!binaryData || !binaryData.file) {\n    results.push({ json: { error: 'No file uploaded' } });\n    continue;\n  }\n\n  const fileData = binaryData.file;\n  const mimeType = fileData.mimeType || '';\n  const fileName = fileData.fileName || 'unknown';\n  const source = item.json.body?.source || 'unknown';\n  const title = item.json.body?.title || fileName;\n\n  // Get the buffer\n  const buffer = await this.helpers.getBinaryDataBuffer(item, 'file');\n  let text = '';\n\n  if (mimeType === 'application/pdf') {\n    // Use pdf-parse for PDF files\n    const pdfParse = require('pdf-parse');\n    const pdfData = await pdfParse(buffer);\n    text = pdfData.text;\n  } else if (mimeType === 'text/markdown' || fileName.endsWith('.md')) {\n    text = buffer.toString('utf-8');\n  } else if (mimeType === 'text/plain' || fileName.endsWith('.txt')) {\n    text = buffer.toString('utf-8');\n  } else {\n    results.push({ json: { error: `Unsupported file type: ${mimeType}` } });\n    continue;\n  }\n\n  // Split text into chunks with overlap\n  const chunkSize = 1000;\n  const chunkOverlap = 200;\n  const chunks = [];\n  let start = 0;\n\n  while (start < text.length) {\n    const end = Math.min(start + chunkSize, text.length);\n    const chunk = text.substring(start, end);\n    if (chunk.trim().length > 0) {\n      chunks.push({\n        json: {\n          content: chunk,\n          metadata: {\n            source: source,\n            title: title,\n            chunkIndex: chunks.length,\n            fileName: fileName\n          }\n        }\n      });\n    }\n    start += chunkSize - chunkOverlap;\n  }\n\n  results.push(...chunks);\n}\n\nreturn results;"
+                },
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    420,
+                    300
+                ],
+                "id": "extract-text",
+                "name": "Extract & Chunk Text"
+            },
+            {
+                "parameters": {
+                    "model": "text-embedding-3-small",
+                    "options": {}
+                },
+                "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+                "typeVersion": 1,
+                "position": [
+                    820,
+                    480
+                ],
+                "id": "embeddings",
+                "name": "OpenAI Embeddings",
+                "credentials": {
+                    "openAiApi": {
+                        "id": "xSzPIySN61drme77",
+                        "name": "OpenAi account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "tableName": {
+                        "__rl": true,
+                        "value": "help_documents",
+                        "mode": "list",
+                        "cachedResultName": "help_documents"
+                    },
+                    "options": {}
+                },
+                "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+                "typeVersion": 1,
+                "position": [
+                    660,
+                    300
+                ],
+                "id": "vector-store",
+                "name": "Supabase Vector Store",
+                "credentials": {
+                    "supabaseApi": {
+                        "id": "qU6Q7CRvJhUXZABY",
+                        "name": "Supabase account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "respondWith": "json",
+                    "responseBody": "={{ JSON.stringify({ success: true, message: 'Documents processed and stored in vector database' }) }}"
+                },
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1.5,
+                "position": [
+                    900,
+                    300
+                ],
+                "id": "respond",
+                "name": "Respond Success"
+            }
+        ],
+        "connections": {
+            "Webhook - Upload Document": {
+                "main": [
+                    [
+                        {
+                            "node": "Extract & Chunk Text",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Extract & Chunk Text": {
+                "main": [
+                    [
+                        {
+                            "node": "Supabase Vector Store",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Supabase Vector Store": {
+                "main": [
+                    [
+                        {
+                            "node": "Respond Success",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "OpenAI Embeddings": {
+                "ai_embedding": [
+                    [
+                        {
+                            "node": "Supabase Vector Store",
+                            "type": "ai_embedding",
+                            "index": 0
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Eric Beser",
+        "name": null,
+        "description": null,
+        "autosaved": false,
+        "workflowPublishHistory": [
+            {
+                "createdAt": "2026-02-27T12:39:17.470Z",
+                "id": 25,
+                "workflowId": "S7Z74PmDwbkL6wiF",
+                "versionId": "7aa0f456-736d-4e53-a5ec-57e65e7b62ff",
+                "event": "activated",
+                "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        ]
+    }
+}

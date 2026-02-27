@@ -17,9 +17,10 @@ import {
   FileText,
   Zap,
   Brain,
+  MessageCircle,
 } from 'lucide-react';
 
-type WebhookType = 'n8n_validation' | 'spec_loader' | 'document_matcher';
+type WebhookType = 'n8n_validation' | 'spec_loader' | 'document_matcher' | 'help_chat';
 
 interface WebhookSettingsData {
   id?: string;
@@ -27,6 +28,7 @@ interface WebhookSettingsData {
   name: string;
   description?: string;
   webhookUrl: string;
+  callbackUrl?: string;
   isActive: boolean;
   hasAuthentication?: boolean;
   authenticationType?: string;
@@ -65,10 +67,15 @@ const WEBHOOK_CONFIGS: Record<WebhookType, { label: string; description: string;
     label: 'Document Matcher',
     description: 'Analyzes imported documents and suggests standard/spec mappings',
     icon: <Brain className="w-5 h-5" />
+  },
+  help_chat: {
+    label: 'Help Chat',
+    description: 'AI-powered help assistant using CSHSE handbook and user guide',
+    icon: <MessageCircle className="w-5 h-5" />
   }
 };
 
-const WEBHOOK_TYPES: WebhookType[] = ['n8n_validation', 'spec_loader', 'document_matcher'];
+const WEBHOOK_TYPES: WebhookType[] = ['n8n_validation', 'spec_loader', 'document_matcher', 'help_chat'];
 
 /**
  * Admin webhook settings panel for N8N integration
@@ -80,22 +87,26 @@ export function WebhookSettings() {
   const [formData, setFormData] = useState<Record<WebhookType, Partial<WebhookSettingsData>>>({
     n8n_validation: {},
     spec_loader: {},
-    document_matcher: {}
+    document_matcher: {},
+    help_chat: {}
   });
   const [showApiKey, setShowApiKey] = useState<Record<WebhookType, boolean>>({
     n8n_validation: false,
     spec_loader: false,
-    document_matcher: false
+    document_matcher: false,
+    help_chat: false
   });
   const [testResults, setTestResults] = useState<Record<WebhookType, TestResult | null>>({
     n8n_validation: null,
     spec_loader: null,
-    document_matcher: null
+    document_matcher: null,
+    help_chat: null
   });
   const [hasChanges, setHasChanges] = useState<Record<WebhookType, boolean>>({
     n8n_validation: false,
     spec_loader: false,
-    document_matcher: false
+    document_matcher: false,
+    help_chat: false
   });
 
   // Fetch all webhook settings
@@ -113,7 +124,8 @@ export function WebhookSettings() {
       const newFormData: Record<WebhookType, Partial<WebhookSettingsData>> = {
         n8n_validation: {},
         spec_loader: {},
-        document_matcher: {}
+        document_matcher: {},
+        help_chat: {}
       };
 
       for (const setting of allSettings.settings) {
@@ -132,7 +144,8 @@ export function WebhookSettings() {
       setHasChanges({
         n8n_validation: false,
         spec_loader: false,
-        document_matcher: false
+        document_matcher: false,
+        help_chat: false
       });
     }
   }, [allSettings]);
@@ -141,7 +154,7 @@ export function WebhookSettings() {
   const saveMutation = useMutation({
     mutationFn: async ({ settingType, data }: { settingType: WebhookType; data: Partial<WebhookSettingsData> }) => {
       const config = WEBHOOK_CONFIGS[settingType];
-      const response = await api.put('/api/webhooks/settings', {
+      const payload: Record<string, any> = {
         settingType,
         name: config.label,
         description: config.description,
@@ -150,7 +163,11 @@ export function WebhookSettings() {
         authentication: data.authentication,
         retryConfig: data.retryConfig || { maxRetries: 3, retryDelayMs: 1000 },
         timeoutMs: data.timeoutMs || 30000
-      });
+      };
+      if (data.callbackUrl !== undefined) {
+        payload.callbackUrl = data.callbackUrl;
+      }
+      const response = await api.put('/api/webhooks/settings', payload);
       return response.data;
     },
     onSuccess: (_, variables) => {
@@ -317,6 +334,25 @@ export function WebhookSettings() {
                       The N8N webhook URL for {config.label.toLowerCase()}
                     </p>
                   </div>
+
+                  {/* Upload Webhook URL (help_chat only) */}
+                  {type === 'help_chat' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Upload Webhook URL
+                      </label>
+                      <input
+                        type="url"
+                        value={data.callbackUrl || ''}
+                        onChange={(e) => handleChange(type, 'callbackUrl', e.target.value)}
+                        placeholder="https://your-n8n-instance.com/webhook/help-upload"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        The N8N webhook URL for uploading help documents to the vector database
+                      </p>
+                    </div>
+                  )}
 
                   {/* Authentication */}
                   <div className="p-4 bg-gray-50 rounded-lg space-y-4">

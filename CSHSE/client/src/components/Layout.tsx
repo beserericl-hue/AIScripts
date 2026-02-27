@@ -1,5 +1,6 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { HelpChat } from './HelpChat';
 
 // Simple icon components
 const HomeIcon = () => (
@@ -172,6 +173,8 @@ export default function Layout() {
       <main className={isFullWidthRoute ? '' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'}>
         <Outlet />
       </main>
+
+      <HelpChat />
     </div>
   );
 }

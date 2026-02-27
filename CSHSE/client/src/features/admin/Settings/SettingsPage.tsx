@@ -7,7 +7,8 @@ import {
   Building2,
   ChevronRight,
   FileText,
-  Database
+  Database,
+  HelpCircle
 } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
 import { WebhookSettings } from '../WebhookSettings';
@@ -16,8 +17,9 @@ import { UserManagement } from './UserManagement';
 import { InstitutionManagement } from './InstitutionManagement';
 import { SpecManagement } from './SpecManagement';
 import { DataManagement } from './DataManagement';
+import { HelpDocumentUpload } from './HelpDocumentUpload';
 
-type SettingsSection = 'webhook' | 'api-keys' | 'data-management' | 'users' | 'institutions' | 'specs';
+type SettingsSection = 'webhook' | 'api-keys' | 'data-management' | 'users' | 'institutions' | 'specs' | 'help-docs';
 
 interface NavItem {
   id: SettingsSection;
@@ -69,6 +71,13 @@ const allNavItems: NavItem[] = [
     label: 'Spec Documents',
     icon: <FileText className="w-5 h-5" />,
     description: 'Manage accreditation spec versions',
+    access: 'admin'
+  },
+  {
+    id: 'help-docs',
+    label: 'Help Documents',
+    icon: <HelpCircle className="w-5 h-5" />,
+    description: 'Upload knowledge base documents for AI help chat',
     access: 'admin'
   }
 ];
@@ -122,6 +131,8 @@ export function SettingsPage() {
         return <InstitutionManagement />;
       case 'specs':
         return <SpecManagement />;
+      case 'help-docs':
+        return <HelpDocumentUpload />;
       default:
         return null;
     }

@@ -1,0 +1,563 @@
+{
+    "updatedAt": "2026-02-25T22:23:15.609Z",
+    "createdAt": "2026-02-25T22:09:05.297Z",
+    "id": "gxCdwSyHMFxSdEF3",
+    "name": "CSHSE Document Matcher",
+    "description": null,
+    "active": true,
+    "isArchived": false,
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "match-document",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "7df022dd-c0bc-440b-8305-15ff7aaf1b79",
+            "name": "Webhook - Match Document",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2.1,
+            "position": [
+                -736,
+                256
+            ],
+            "webhookId": "match-doc-webhook",
+            "onError": "continueRegularOutput"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Validate input and extract keywords for single section processing\nconst input = $input.first();\nconst json = input.json || {};\n\nlet body = {};\nif (json.body && typeof json.body === 'object') { body = json.body; } else if (json.callbackUrl) { body = json; }\n\nconst callbackUrl = body.callbackUrl;\nlet specName = body.specName;\nconst documentId = body.documentId || null;\nconst jobId = body.jobId;\nconst sectionIndex = body.sectionIndex;\nconst totalSections = body.totalSections;\nconst sectionHeading = body.sectionHeading || 'Untitled Section';\nconst htmlContentEncoded = body.htmlContent;\nconst htmlContentEncoding = body.htmlContentEncoding || 'base64';\nconst moreData = body.moreData !== undefined ? body.moreData : false;\nconst options = body.options || {};\n\nif (!callbackUrl) { throw new Error('callbackUrl is required'); }\nif (!specName) { throw new Error('specName is required'); }\nif (!jobId) { throw new Error('jobId is required'); }\nif (sectionIndex === undefined) { throw new Error('sectionIndex is required'); }\nif (!totalSections) { throw new Error('totalSections is required'); }\nif (!htmlContentEncoded) { throw new Error('htmlContent is required'); }\n\n// Strip version suffix from specName (e.g., 'BACCALAUREATE DEGREE v2025' -> 'BACCALAUREATE DEGREE')\n// This ensures it matches the specName stored in Supabase\nconst specNameForQuery = specName.replace(/\\s+v\\d+.*$/i, '').trim();\nconsole.log('[Validate] Original specName:', specName);\nconsole.log('[Validate] specName for query:', specNameForQuery);\n\nlet htmlContent;\ntry { if (htmlContentEncoding === 'base64') { htmlContent = Buffer.from(htmlContentEncoded, 'base64').toString('utf8'); } else { htmlContent = htmlContentEncoded; } } catch (e) { throw new Error('Failed to decode htmlContent: ' + e.message); }\n\nhtmlContent = htmlContent.replace(/<img[^>]*src=[\"']data:image\\/[^;]+;base64,[^\"']*[\"'][^>]*>/gi, '[image removed]');\nhtmlContent = htmlContent.replace(/data:image\\/[^;]+;base64,[a-zA-Z0-9+\\/=]+/gi, '[base64-image-removed]');\nhtmlContent = htmlContent.replace(/[a-zA-Z0-9+\\/=]{500,}/g, '[encoded-data-removed]');\nhtmlContent = htmlContent.replace(/\\s+/g, ' ').trim();\n\nfunction sanitizeForApi(text) {\n  if (!text) return '';\n  let clean = text.replace(/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/g, '');\n  clean = clean.replace(/[\\u2018\\u2019]/g, \"'\").replace(/[\\u201C\\u201D]/g, '\"');\n  clean = clean.replace(/[\\u2013\\u2014]/g, '-');\n  clean = clean.replace(/[\\u2026]/g, '...');\n  clean = clean.replace(/[\\uFFFD\\uFFFE\\uFFFF]/g, '');\n  return clean;\n}\n\nfunction stripHtml(html) { return html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '').replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\\[image removed\\]/gi, '').replace(/\\[base64-image-removed\\]/gi, '').replace(/\\[encoded-data-removed\\]/gi, '').replace(/\\s+/g, ' ').trim(); }\n\nconst plainTextContent = sanitizeForApi(stripHtml(htmlContent));\n\nconst stopwords = new Set(['a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'and', 'but', 'if', 'or', 'because', 'until', 'while', 'although', 'though', 'it', 'its', 'this', 'that', 'these', 'those', 'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'also', 'both', 'about', 'against', 'any', 'cannot', 'down', 'every', 'get', 'got', 'having', 'however', 'make', 'made', 'many', 'much', 'now', 'over', 'put', 'still', 'take', 'taken', 'took', 'want', 'way', 'well', 'even', 'like', 'said', 'say', 'says', 'see', 'seen', 'since', 'upon', 'within']);\n\nfunction extractKeywords(text) { if (!text || text.trim().length === 0) return 'program curriculum standards accreditation'; const MAX_LENGTH = 15000; const preservedPatterns = []; const patternRegexes = [/Standard\\s+\\d+[a-f]?/gi, /Part\\s+[IVX]+/gi, /Section\\s+[A-Z0-9]+/gi, /Appendix\\s+[A-Z0-9]+/gi, /\\d+\\.\\d+(\\.\\d+)?/g, /CSHSE/gi, /accreditation/gi, /curriculum/gi, /competenc(y|ies)/gi, /fieldwork/gi, /practicum/gi, /internship/gi, /assessment/gi, /evaluation/gi, /outcomes?/gi, /objectives?/gi, /faculty/gi, /students?/gi, /programs?/gi, /services?/gi, /supervisors?/gi]; let processedText = text; patternRegexes.forEach((regex) => { processedText = processedText.replace(regex, (match) => { preservedPatterns.push(match); return `__PRESERVED_${preservedPatterns.length - 1}__`; }); }); const words = processedText.toLowerCase().replace(/[^\\w\\s_]/g, ' ').split(/\\s+/).filter(word => { if (word.startsWith('__preserved_')) return true; if (word.length <= 2) return false; if (stopwords.has(word)) return false; return true; }); const keywords = words.map(word => { const match = word.match(/__preserved_(\\d+)__/i); if (match) return preservedPatterns[parseInt(match[1])]; return word; }); const seen = new Set(); const uniqueKeywords = keywords.filter(word => { const lower = word.toLowerCase(); if (seen.has(lower)) return false; seen.add(lower); return true; }); if (uniqueKeywords.length === 0) return 'program curriculum standards accreditation'; let result = uniqueKeywords.join(' '); if (result.length > MAX_LENGTH) { result = result.substring(0, MAX_LENGTH); } return sanitizeForApi(result); }\n\nconst keywordsForAI = extractKeywords(plainTextContent);\nconst cleanedRichTextContent = sanitizeForApi(htmlContent.replace(/\\[image removed\\]/g, '').replace(/\\[base64-image-removed\\]/g, '').replace(/\\[encoded-data-removed\\]/g, '').trim());\n\nreturn [{ json: { callbackUrl, specName: sanitizeForApi(specName), specNameForQuery: sanitizeForApi(specNameForQuery), documentId, jobId, sectionIndex, totalSections, moreData, options, heading: sanitizeForApi(sectionHeading), richTextContent: cleanedRichTextContent, plainTextContent, keywordsForAI } }];"
+            },
+            "id": "0005090a-6e57-4be6-988c-d2f5cb0bc070",
+            "name": "Validate Input & Extract Keywords",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -512,
+                256
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify({ status: 'accepted', sectionIndex: $json.sectionIndex }) }}",
+                "options": {}
+            },
+            "id": "0bd30a5d-d24f-425d-b9d9-db1a0df4677b",
+            "name": "Respond Accepted",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.5,
+            "position": [
+                0,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{ $json.callbackUrl }}",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ JSON.stringify($json.payload) }}",
+                "options": {
+                    "timeout": 30000
+                }
+            },
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                752,
+                512
+            ],
+            "id": "f0b2cb49-7c83-4153-89c8-6f52adb240be",
+            "name": "Send Section Callback"
+        },
+        {
+            "parameters": {
+                "jsCode": "// Format callback payload for single section result\n// Get the parsed AI output from the previous node\nconst aiResult = $input.first().json;\n\nconsole.log('[Format Callback] AI result:', JSON.stringify(aiResult));\n\n// Get the original input data - try multiple methods\nlet inputData = null;\n\ntry {\n  // Method 1: Direct reference to Validate node\n  inputData = $('Validate Input & Extract Keywords').first().json;\n} catch (e1) {\n  console.log('[Format Callback] Could not get data from Validate node:', e1.message);\n  try {\n    // Method 2: Try getting from Build Classification Prompt\n    inputData = $('Build Classification Prompt').first().json;\n  } catch (e2) {\n    console.log('[Format Callback] Could not get data from Build node:', e2.message);\n  }\n}\n\n// If we still don't have inputData, create defaults from execution context\nif (!inputData) {\n  console.log('[Format Callback] Using fallback - checking $execution');\n  // Use workflow static data or create minimal defaults\n  inputData = {\n    callbackUrl: '',\n    jobId: 'unknown',\n    documentId: null,\n    specName: 'unknown',\n    moreData: false,\n    sectionIndex: 0,\n    totalSections: 1,\n    heading: 'Unknown Section',\n    richTextContent: ''\n  };\n}\n\nconsole.log('[Format Callback] Input data keys:', Object.keys(inputData));\n\n// Build the match object based on AI result\nlet match;\n\nif (aiResult.status === 'matched' && aiResult.standardCode) {\n  match = {\n    status: 'matched',\n    standard: {\n      code: String(aiResult.standardCode),\n      title: String(aiResult.standardTitle || '')\n    },\n    subspecification: {\n      code: String(aiResult.subspecificationCode || ''),\n      title: String(aiResult.subspecificationTitle || '')\n    },\n    confidence: aiResult.confidence || 0,\n    rationale: String(aiResult.rationale || '')\n  };\n} else {\n  match = {\n    status: 'unmatched',\n    rationale: aiResult.rationale || 'No matching specification found'\n  };\n}\n\n// Build the callback payload\nconst callbackPayload = {\n  type: 'section_result',\n  jobId: inputData.jobId,\n  documentId: inputData.documentId,\n  specName: inputData.specName,\n  moreData: inputData.moreData,\n  sectionIndex: inputData.sectionIndex,\n  totalSections: inputData.totalSections,\n  section: {\n    heading: inputData.heading,\n    richTextContent: inputData.richTextContent,\n    match: match\n  }\n};\n\nconsole.log('[Format Callback] Callback payload created for section', inputData.sectionIndex);\n\nreturn [{\n  json: {\n    callbackUrl: inputData.callbackUrl,\n    payload: callbackPayload\n  }\n}];"
+            },
+            "id": "22a69207-bf0c-4876-97da-42ae5753b355",
+            "name": "Format Section Callback",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                528,
+                512
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "getAll",
+                "tableId": "cshse_specifications",
+                "returnAll": true,
+                "filterType": "none"
+            },
+            "id": "2ab727a6-54f6-4426-8ed3-bf61f93c614a",
+            "name": "Fetch All Specs",
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                -288,
+                512
+            ],
+            "credentials": {
+                "supabaseApi": {
+                    "id": "qU6Q7CRvJhUXZABY",
+                    "name": "Supabase account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "// Build the complete OpenAI API request\n// The AI needs the FULL specification text to compare against the document section\nconst inputData = $('Validate Input & Extract Keywords').item.json;\nconst specsData = $('Fetch All Specs').all();\n\nconsole.log('[Build Prompt] Received specs count:', specsData.length);\nconsole.log('[Build Prompt] Looking for specName:', inputData.specNameForQuery);\nconsole.log('[Build Prompt] Input heading:', inputData.heading);\n\n// Find the matching spec by specName\n// The Supabase table has one row per degree type (Associate, Bachelor's, Master's)\n// Each row contains the FULL specification text in the 'content' field\nlet matchingSpec = null;\nlet fullSpecContent = '';\n\nfor (const item of specsData) {\n  const spec = item.json;\n  \n  // The specName might be a direct field or in metadata\n  const specName = spec.specName || (typeof spec.metadata === 'string' ? JSON.parse(spec.metadata).specName : spec.metadata?.specName);\n  \n  console.log('[Build Prompt] Checking spec:', specName ? specName.substring(0, 50) : 'no specName');\n  \n  if (!specName) {\n    continue;\n  }\n  \n  // Case-insensitive comparison\n  const queryLower = inputData.specNameForQuery.toLowerCase();\n  const specNameLower = specName.toLowerCase();\n  \n  if (specNameLower.includes(queryLower) || queryLower.includes(specNameLower)) {\n    matchingSpec = spec;\n    fullSpecContent = spec.content || '';\n    console.log('[Build Prompt] Found matching spec! Content length:', fullSpecContent.length);\n    break;\n  }\n}\n\nif (!matchingSpec || !fullSpecContent) {\n  console.log('[Build Prompt] ERROR: No matching spec found for:', inputData.specNameForQuery);\n  console.log('[Build Prompt] Available specs:', specsData.map(s => s.json.specName || s.json.metadata?.specName).join(', '));\n  throw new Error('No matching specification found for: ' + inputData.specNameForQuery);\n}\n\nconsole.log('[Build Prompt] Full spec content length:', fullSpecContent.length);\n\n// System message explaining the task\nconst systemMessage = `You are a CSHSE (Council for Standards in Human Service Education) specification classification expert.\n\nYour task is to analyze a document section and determine which CSHSE standard and subspecification it best matches by comparing it against the complete CSHSE specification document provided.\n\nThe CSHSE specification document contains 21 standards organized into two parts:\n- Part I (Standards 1-10): Program standards covering program identity, organization, faculty, curriculum design, students, and assessment\n- Part II (Standards 11-21): Curriculum content standards covering knowledge areas, skills, values, and fieldwork requirements\n\nEach standard has subspecifications labeled a through f that describe specific requirements.\n\nINSTRUCTIONS:\n1. Read the FULL CSHSE specification document provided below\n2. Read the document section to be classified\n3. Compare the section content against ALL standards and subspecifications in the specification\n4. Identify the SINGLE BEST matching standard (1-21) and subspecification (a-f)\n5. If the content clearly relates to a specific standard but you cannot determine the exact subspecification, provide your best match\n6. If the content does not relate to any CSHSE standard (e.g., table of contents, acknowledgments, general administrative content), mark it as \"unmatched\"\n\nYou MUST provide a detailed rationale explaining WHY this section matches (or doesn't match) the specification. Reference specific language from BOTH the section AND the specification that supports your decision.`;\n\n// User message with the FULL spec and the section to classify\nconst userMessage = `=== COMPLETE CSHSE SPECIFICATION DOCUMENT ===\n\n${fullSpecContent}\n\n=== END OF SPECIFICATION DOCUMENT ===\n\n=== DOCUMENT SECTION TO CLASSIFY ===\n\nHeading: ${inputData.heading}\n\nContent:\n${inputData.keywordsForAI}\n\n=== END OF SECTION ===\n\nAnalyze this document section by comparing it against the COMPLETE CSHSE specification document above. Determine which standard and subspecification this section best matches.\n\nProvide your response as JSON with these exact fields:\n- status: \"matched\" or \"unmatched\"\n- standardCode: the standard number (1-21) as a string, or null if unmatched\n- standardTitle: the title of the matched standard, or null if unmatched\n- subspecificationCode: the subspecification letter (a-f) as a string, or null if unmatched/unknown\n- subspecificationTitle: the title of the matched subspecification, or null if unmatched\n- confidence: your confidence level from 0-100 as a number\n- rationale: A detailed explanation (2-4 sentences) of WHY this section matches or doesn't match. Reference specific content from BOTH the section AND the specification.`;\n\n// Build the OpenAI API request body\nconst openaiRequestBody = JSON.stringify({\n  model: 'gpt-4o-mini',\n  messages: [\n    { role: 'system', content: systemMessage },\n    { role: 'user', content: userMessage }\n  ],\n  temperature: 0.3,\n  max_tokens: 1500,\n  response_format: { type: 'json_object' }\n});\n\nconsole.log('[Build Prompt] Request body length:', openaiRequestBody.length);\nconsole.log('[Build Prompt] Spec content in prompt:', fullSpecContent.length, 'chars');\nconsole.log('[Build Prompt] Section keywords:', inputData.keywordsForAI?.length || 0, 'chars');\n\nreturn [{\n  json: {\n    ...inputData,\n    specContentLength: fullSpecContent.length,\n    openaiRequestBody\n  }\n}];"
+            },
+            "id": "2d4262e4-6e99-4e1f-8208-b8a91215652c",
+            "name": "Build Classification Prompt",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                -64,
+                512
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "// Parse the OpenAI API response and extract classification result\n// Also pass through the input data for the callback node\nconst apiResponse = $input.first().json;\n\nconsole.log('[Parse LLM] Received API response');\n\nlet aiOutput = null;\n\n// Extract the message content from OpenAI response\ntry {\n  let responseText = '';\n  \n  if (apiResponse.choices && apiResponse.choices[0]?.message?.content) {\n    responseText = apiResponse.choices[0].message.content;\n    console.log('[Parse LLM] Extracted content from choices');\n  } else if (apiResponse.message?.content) {\n    responseText = apiResponse.message.content;\n  } else if (typeof apiResponse === 'string') {\n    responseText = apiResponse;\n  } else {\n    console.log('[Parse LLM] Unexpected response structure');\n    responseText = JSON.stringify(apiResponse);\n  }\n\n  console.log('[Parse LLM] Response preview:', responseText.substring(0, 200));\n\n  // Parse the JSON response\n  aiOutput = JSON.parse(responseText);\n  console.log('[Parse LLM] Successfully parsed JSON');\n\n} catch (parseError) {\n  console.log('[Parse LLM] Parse error:', parseError.message);\n  \n  try {\n    const responseText = apiResponse.choices?.[0]?.message?.content || '';\n    const jsonMatch = responseText.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      aiOutput = JSON.parse(jsonMatch[0]);\n    }\n  } catch (e2) {\n    console.log('[Parse LLM] Secondary parse failed');\n  }\n}\n\n// Default if parsing failed\nif (!aiOutput) {\n  aiOutput = {\n    status: 'unmatched',\n    standardCode: null,\n    standardTitle: null,\n    subspecificationCode: null,\n    subspecificationTitle: null,\n    confidence: 0,\n    rationale: 'Failed to parse AI response'\n  };\n}\n\n// Normalize the result\nconst result = {\n  status: aiOutput.status || 'unmatched',\n  standardCode: aiOutput.standardCode ? String(aiOutput.standardCode) : null,\n  standardTitle: aiOutput.standardTitle ? String(aiOutput.standardTitle) : null,\n  subspecificationCode: aiOutput.subspecificationCode ? String(aiOutput.subspecificationCode) : null,\n  subspecificationTitle: aiOutput.subspecificationTitle ? String(aiOutput.subspecificationTitle) : null,\n  confidence: typeof aiOutput.confidence === 'number' ? aiOutput.confidence : parseInt(aiOutput.confidence, 10) || 0,\n  rationale: aiOutput.rationale ? String(aiOutput.rationale) : 'No rationale provided'\n};\n\nconsole.log('[Parse LLM] Final result:', JSON.stringify(result));\n\nreturn [{ json: result }];"
+            },
+            "id": "92c96833-bee4-413a-b5ab-02e5e8b25e19",
+            "name": "Parse LLM Response",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                336,
+                512
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.openai.com/v1/chat/completions",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "openAiApi",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{ $json.openaiRequestBody }}",
+                "options": {
+                    "timeout": 120000
+                }
+            },
+            "id": "abe19918-7c35-4b2c-a9cc-8947fd0e7168",
+            "name": "Call OpenAI API",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.3,
+            "position": [
+                160,
+                512
+            ],
+            "credentials": {
+                "openAiApi": {
+                    "id": "xSzPIySN61drme77",
+                    "name": "OpenAi account"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Webhook - Match Document": {
+            "main": [
+                [
+                    {
+                        "node": "Validate Input & Extract Keywords",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Validate Input & Extract Keywords": {
+            "main": [
+                [
+                    {
+                        "node": "Respond Accepted",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Fetch All Specs",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch All Specs": {
+            "main": [
+                [
+                    {
+                        "node": "Build Classification Prompt",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse LLM Response": {
+            "main": [
+                [
+                    {
+                        "node": "Format Section Callback",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Format Section Callback": {
+            "main": [
+                [
+                    {
+                        "node": "Send Section Callback",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Classification Prompt": {
+            "main": [
+                [
+                    {
+                        "node": "Call OpenAI API",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Call OpenAI API": {
+            "main": [
+                [
+                    {
+                        "node": "Parse LLM Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1",
+        "binaryMode": "separate",
+        "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": {
+        "templateCredsSetupCompleted": true
+    },
+    "pinData": {},
+    "versionId": "e1b66522-24c1-49ae-b1b8-226d6b3b5e18",
+    "activeVersionId": "e1b66522-24c1-49ae-b1b8-226d6b3b5e18",
+    "versionCounter": 5,
+    "triggerCount": 1,
+    "shared": [
+        {
+            "updatedAt": "2026-02-25T22:09:05.297Z",
+            "createdAt": "2026-02-25T22:09:05.297Z",
+            "role": "workflow:owner",
+            "workflowId": "gxCdwSyHMFxSdEF3",
+            "projectId": "so6FfyLmNOjnxEMJ",
+            "project": {
+                "updatedAt": "2026-01-12T16:36:13.622Z",
+                "createdAt": "2026-01-12T15:34:50.204Z",
+                "id": "so6FfyLmNOjnxEMJ",
+                "name": "Eric Beser <eric@agileadtesting.com>",
+                "type": "personal",
+                "icon": null,
+                "description": null,
+                "creatorId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        }
+    ],
+    "tags": [],
+    "activeVersion": {
+        "updatedAt": "2026-02-25T22:23:46.915Z",
+        "createdAt": "2026-02-25T22:23:15.616Z",
+        "versionId": "e1b66522-24c1-49ae-b1b8-226d6b3b5e18",
+        "workflowId": "gxCdwSyHMFxSdEF3",
+        "nodes": [
+            {
+                "parameters": {
+                    "httpMethod": "POST",
+                    "path": "match-document",
+                    "responseMode": "responseNode",
+                    "options": {}
+                },
+                "id": "7df022dd-c0bc-440b-8305-15ff7aaf1b79",
+                "name": "Webhook - Match Document",
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2.1,
+                "position": [
+                    -736,
+                    256
+                ],
+                "webhookId": "match-doc-webhook",
+                "onError": "continueRegularOutput"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Validate input and extract keywords for single section processing\nconst input = $input.first();\nconst json = input.json || {};\n\nlet body = {};\nif (json.body && typeof json.body === 'object') { body = json.body; } else if (json.callbackUrl) { body = json; }\n\nconst callbackUrl = body.callbackUrl;\nlet specName = body.specName;\nconst documentId = body.documentId || null;\nconst jobId = body.jobId;\nconst sectionIndex = body.sectionIndex;\nconst totalSections = body.totalSections;\nconst sectionHeading = body.sectionHeading || 'Untitled Section';\nconst htmlContentEncoded = body.htmlContent;\nconst htmlContentEncoding = body.htmlContentEncoding || 'base64';\nconst moreData = body.moreData !== undefined ? body.moreData : false;\nconst options = body.options || {};\n\nif (!callbackUrl) { throw new Error('callbackUrl is required'); }\nif (!specName) { throw new Error('specName is required'); }\nif (!jobId) { throw new Error('jobId is required'); }\nif (sectionIndex === undefined) { throw new Error('sectionIndex is required'); }\nif (!totalSections) { throw new Error('totalSections is required'); }\nif (!htmlContentEncoded) { throw new Error('htmlContent is required'); }\n\n// Strip version suffix from specName (e.g., 'BACCALAUREATE DEGREE v2025' -> 'BACCALAUREATE DEGREE')\n// This ensures it matches the specName stored in Supabase\nconst specNameForQuery = specName.replace(/\\s+v\\d+.*$/i, '').trim();\nconsole.log('[Validate] Original specName:', specName);\nconsole.log('[Validate] specName for query:', specNameForQuery);\n\nlet htmlContent;\ntry { if (htmlContentEncoding === 'base64') { htmlContent = Buffer.from(htmlContentEncoded, 'base64').toString('utf8'); } else { htmlContent = htmlContentEncoded; } } catch (e) { throw new Error('Failed to decode htmlContent: ' + e.message); }\n\nhtmlContent = htmlContent.replace(/<img[^>]*src=[\"']data:image\\/[^;]+;base64,[^\"']*[\"'][^>]*>/gi, '[image removed]');\nhtmlContent = htmlContent.replace(/data:image\\/[^;]+;base64,[a-zA-Z0-9+\\/=]+/gi, '[base64-image-removed]');\nhtmlContent = htmlContent.replace(/[a-zA-Z0-9+\\/=]{500,}/g, '[encoded-data-removed]');\nhtmlContent = htmlContent.replace(/\\s+/g, ' ').trim();\n\nfunction sanitizeForApi(text) {\n  if (!text) return '';\n  let clean = text.replace(/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/g, '');\n  clean = clean.replace(/[\\u2018\\u2019]/g, \"'\").replace(/[\\u201C\\u201D]/g, '\"');\n  clean = clean.replace(/[\\u2013\\u2014]/g, '-');\n  clean = clean.replace(/[\\u2026]/g, '...');\n  clean = clean.replace(/[\\uFFFD\\uFFFE\\uFFFF]/g, '');\n  return clean;\n}\n\nfunction stripHtml(html) { return html.replace(/<script[^>]*>[\\s\\S]*?<\\/script>/gi, '').replace(/<style[^>]*>[\\s\\S]*?<\\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\\[image removed\\]/gi, '').replace(/\\[base64-image-removed\\]/gi, '').replace(/\\[encoded-data-removed\\]/gi, '').replace(/\\s+/g, ' ').trim(); }\n\nconst plainTextContent = sanitizeForApi(stripHtml(htmlContent));\n\nconst stopwords = new Set(['a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from', 'as', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'why', 'how', 'all', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'and', 'but', 'if', 'or', 'because', 'until', 'while', 'although', 'though', 'it', 'its', 'this', 'that', 'these', 'those', 'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'also', 'both', 'about', 'against', 'any', 'cannot', 'down', 'every', 'get', 'got', 'having', 'however', 'make', 'made', 'many', 'much', 'now', 'over', 'put', 'still', 'take', 'taken', 'took', 'want', 'way', 'well', 'even', 'like', 'said', 'say', 'says', 'see', 'seen', 'since', 'upon', 'within']);\n\nfunction extractKeywords(text) { if (!text || text.trim().length === 0) return 'program curriculum standards accreditation'; const MAX_LENGTH = 15000; const preservedPatterns = []; const patternRegexes = [/Standard\\s+\\d+[a-f]?/gi, /Part\\s+[IVX]+/gi, /Section\\s+[A-Z0-9]+/gi, /Appendix\\s+[A-Z0-9]+/gi, /\\d+\\.\\d+(\\.\\d+)?/g, /CSHSE/gi, /accreditation/gi, /curriculum/gi, /competenc(y|ies)/gi, /fieldwork/gi, /practicum/gi, /internship/gi, /assessment/gi, /evaluation/gi, /outcomes?/gi, /objectives?/gi, /faculty/gi, /students?/gi, /programs?/gi, /services?/gi, /supervisors?/gi]; let processedText = text; patternRegexes.forEach((regex) => { processedText = processedText.replace(regex, (match) => { preservedPatterns.push(match); return `__PRESERVED_${preservedPatterns.length - 1}__`; }); }); const words = processedText.toLowerCase().replace(/[^\\w\\s_]/g, ' ').split(/\\s+/).filter(word => { if (word.startsWith('__preserved_')) return true; if (word.length <= 2) return false; if (stopwords.has(word)) return false; return true; }); const keywords = words.map(word => { const match = word.match(/__preserved_(\\d+)__/i); if (match) return preservedPatterns[parseInt(match[1])]; return word; }); const seen = new Set(); const uniqueKeywords = keywords.filter(word => { const lower = word.toLowerCase(); if (seen.has(lower)) return false; seen.add(lower); return true; }); if (uniqueKeywords.length === 0) return 'program curriculum standards accreditation'; let result = uniqueKeywords.join(' '); if (result.length > MAX_LENGTH) { result = result.substring(0, MAX_LENGTH); } return sanitizeForApi(result); }\n\nconst keywordsForAI = extractKeywords(plainTextContent);\nconst cleanedRichTextContent = sanitizeForApi(htmlContent.replace(/\\[image removed\\]/g, '').replace(/\\[base64-image-removed\\]/g, '').replace(/\\[encoded-data-removed\\]/g, '').trim());\n\nreturn [{ json: { callbackUrl, specName: sanitizeForApi(specName), specNameForQuery: sanitizeForApi(specNameForQuery), documentId, jobId, sectionIndex, totalSections, moreData, options, heading: sanitizeForApi(sectionHeading), richTextContent: cleanedRichTextContent, plainTextContent, keywordsForAI } }];"
+                },
+                "id": "0005090a-6e57-4be6-988c-d2f5cb0bc070",
+                "name": "Validate Input & Extract Keywords",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    -512,
+                    256
+                ]
+            },
+            {
+                "parameters": {
+                    "respondWith": "json",
+                    "responseBody": "={{ JSON.stringify({ status: 'accepted', sectionIndex: $json.sectionIndex }) }}",
+                    "options": {}
+                },
+                "id": "0bd30a5d-d24f-425d-b9d9-db1a0df4677b",
+                "name": "Respond Accepted",
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1.5,
+                "position": [
+                    0,
+                    0
+                ]
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "={{ $json.callbackUrl }}",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ JSON.stringify($json.payload) }}",
+                    "options": {
+                        "timeout": 30000
+                    }
+                },
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.3,
+                "position": [
+                    752,
+                    512
+                ],
+                "id": "f0b2cb49-7c83-4153-89c8-6f52adb240be",
+                "name": "Send Section Callback"
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Format callback payload for single section result\n// Get the parsed AI output from the previous node\nconst aiResult = $input.first().json;\n\nconsole.log('[Format Callback] AI result:', JSON.stringify(aiResult));\n\n// Get the original input data - try multiple methods\nlet inputData = null;\n\ntry {\n  // Method 1: Direct reference to Validate node\n  inputData = $('Validate Input & Extract Keywords').first().json;\n} catch (e1) {\n  console.log('[Format Callback] Could not get data from Validate node:', e1.message);\n  try {\n    // Method 2: Try getting from Build Classification Prompt\n    inputData = $('Build Classification Prompt').first().json;\n  } catch (e2) {\n    console.log('[Format Callback] Could not get data from Build node:', e2.message);\n  }\n}\n\n// If we still don't have inputData, create defaults from execution context\nif (!inputData) {\n  console.log('[Format Callback] Using fallback - checking $execution');\n  // Use workflow static data or create minimal defaults\n  inputData = {\n    callbackUrl: '',\n    jobId: 'unknown',\n    documentId: null,\n    specName: 'unknown',\n    moreData: false,\n    sectionIndex: 0,\n    totalSections: 1,\n    heading: 'Unknown Section',\n    richTextContent: ''\n  };\n}\n\nconsole.log('[Format Callback] Input data keys:', Object.keys(inputData));\n\n// Build the match object based on AI result\nlet match;\n\nif (aiResult.status === 'matched' && aiResult.standardCode) {\n  match = {\n    status: 'matched',\n    standard: {\n      code: String(aiResult.standardCode),\n      title: String(aiResult.standardTitle || '')\n    },\n    subspecification: {\n      code: String(aiResult.subspecificationCode || ''),\n      title: String(aiResult.subspecificationTitle || '')\n    },\n    confidence: aiResult.confidence || 0,\n    rationale: String(aiResult.rationale || '')\n  };\n} else {\n  match = {\n    status: 'unmatched',\n    rationale: aiResult.rationale || 'No matching specification found'\n  };\n}\n\n// Build the callback payload\nconst callbackPayload = {\n  type: 'section_result',\n  jobId: inputData.jobId,\n  documentId: inputData.documentId,\n  specName: inputData.specName,\n  moreData: inputData.moreData,\n  sectionIndex: inputData.sectionIndex,\n  totalSections: inputData.totalSections,\n  section: {\n    heading: inputData.heading,\n    richTextContent: inputData.richTextContent,\n    match: match\n  }\n};\n\nconsole.log('[Format Callback] Callback payload created for section', inputData.sectionIndex);\n\nreturn [{\n  json: {\n    callbackUrl: inputData.callbackUrl,\n    payload: callbackPayload\n  }\n}];"
+                },
+                "id": "22a69207-bf0c-4876-97da-42ae5753b355",
+                "name": "Format Section Callback",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    528,
+                    512
+                ]
+            },
+            {
+                "parameters": {
+                    "operation": "getAll",
+                    "tableId": "cshse_specifications",
+                    "returnAll": true,
+                    "filterType": "none"
+                },
+                "id": "2ab727a6-54f6-4426-8ed3-bf61f93c614a",
+                "name": "Fetch All Specs",
+                "type": "n8n-nodes-base.supabase",
+                "typeVersion": 1,
+                "position": [
+                    -288,
+                    512
+                ],
+                "credentials": {
+                    "supabaseApi": {
+                        "id": "qU6Q7CRvJhUXZABY",
+                        "name": "Supabase account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Build the complete OpenAI API request\n// The AI needs the FULL specification text to compare against the document section\nconst inputData = $('Validate Input & Extract Keywords').item.json;\nconst specsData = $('Fetch All Specs').all();\n\nconsole.log('[Build Prompt] Received specs count:', specsData.length);\nconsole.log('[Build Prompt] Looking for specName:', inputData.specNameForQuery);\nconsole.log('[Build Prompt] Input heading:', inputData.heading);\n\n// Find the matching spec by specName\n// The Supabase table has one row per degree type (Associate, Bachelor's, Master's)\n// Each row contains the FULL specification text in the 'content' field\nlet matchingSpec = null;\nlet fullSpecContent = '';\n\nfor (const item of specsData) {\n  const spec = item.json;\n  \n  // The specName might be a direct field or in metadata\n  const specName = spec.specName || (typeof spec.metadata === 'string' ? JSON.parse(spec.metadata).specName : spec.metadata?.specName);\n  \n  console.log('[Build Prompt] Checking spec:', specName ? specName.substring(0, 50) : 'no specName');\n  \n  if (!specName) {\n    continue;\n  }\n  \n  // Case-insensitive comparison\n  const queryLower = inputData.specNameForQuery.toLowerCase();\n  const specNameLower = specName.toLowerCase();\n  \n  if (specNameLower.includes(queryLower) || queryLower.includes(specNameLower)) {\n    matchingSpec = spec;\n    fullSpecContent = spec.content || '';\n    console.log('[Build Prompt] Found matching spec! Content length:', fullSpecContent.length);\n    break;\n  }\n}\n\nif (!matchingSpec || !fullSpecContent) {\n  console.log('[Build Prompt] ERROR: No matching spec found for:', inputData.specNameForQuery);\n  console.log('[Build Prompt] Available specs:', specsData.map(s => s.json.specName || s.json.metadata?.specName).join(', '));\n  throw new Error('No matching specification found for: ' + inputData.specNameForQuery);\n}\n\nconsole.log('[Build Prompt] Full spec content length:', fullSpecContent.length);\n\n// System message explaining the task\nconst systemMessage = `You are a CSHSE (Council for Standards in Human Service Education) specification classification expert.\n\nYour task is to analyze a document section and determine which CSHSE standard and subspecification it best matches by comparing it against the complete CSHSE specification document provided.\n\nThe CSHSE specification document contains 21 standards organized into two parts:\n- Part I (Standards 1-10): Program standards covering program identity, organization, faculty, curriculum design, students, and assessment\n- Part II (Standards 11-21): Curriculum content standards covering knowledge areas, skills, values, and fieldwork requirements\n\nEach standard has subspecifications labeled a through f that describe specific requirements.\n\nINSTRUCTIONS:\n1. Read the FULL CSHSE specification document provided below\n2. Read the document section to be classified\n3. Compare the section content against ALL standards and subspecifications in the specification\n4. Identify the SINGLE BEST matching standard (1-21) and subspecification (a-f)\n5. If the content clearly relates to a specific standard but you cannot determine the exact subspecification, provide your best match\n6. If the content does not relate to any CSHSE standard (e.g., table of contents, acknowledgments, general administrative content), mark it as \"unmatched\"\n\nYou MUST provide a detailed rationale explaining WHY this section matches (or doesn't match) the specification. Reference specific language from BOTH the section AND the specification that supports your decision.`;\n\n// User message with the FULL spec and the section to classify\nconst userMessage = `=== COMPLETE CSHSE SPECIFICATION DOCUMENT ===\n\n${fullSpecContent}\n\n=== END OF SPECIFICATION DOCUMENT ===\n\n=== DOCUMENT SECTION TO CLASSIFY ===\n\nHeading: ${inputData.heading}\n\nContent:\n${inputData.keywordsForAI}\n\n=== END OF SECTION ===\n\nAnalyze this document section by comparing it against the COMPLETE CSHSE specification document above. Determine which standard and subspecification this section best matches.\n\nProvide your response as JSON with these exact fields:\n- status: \"matched\" or \"unmatched\"\n- standardCode: the standard number (1-21) as a string, or null if unmatched\n- standardTitle: the title of the matched standard, or null if unmatched\n- subspecificationCode: the subspecification letter (a-f) as a string, or null if unmatched/unknown\n- subspecificationTitle: the title of the matched subspecification, or null if unmatched\n- confidence: your confidence level from 0-100 as a number\n- rationale: A detailed explanation (2-4 sentences) of WHY this section matches or doesn't match. Reference specific content from BOTH the section AND the specification.`;\n\n// Build the OpenAI API request body\nconst openaiRequestBody = JSON.stringify({\n  model: 'gpt-4o-mini',\n  messages: [\n    { role: 'system', content: systemMessage },\n    { role: 'user', content: userMessage }\n  ],\n  temperature: 0.3,\n  max_tokens: 1500,\n  response_format: { type: 'json_object' }\n});\n\nconsole.log('[Build Prompt] Request body length:', openaiRequestBody.length);\nconsole.log('[Build Prompt] Spec content in prompt:', fullSpecContent.length, 'chars');\nconsole.log('[Build Prompt] Section keywords:', inputData.keywordsForAI?.length || 0, 'chars');\n\nreturn [{\n  json: {\n    ...inputData,\n    specContentLength: fullSpecContent.length,\n    openaiRequestBody\n  }\n}];"
+                },
+                "id": "2d4262e4-6e99-4e1f-8208-b8a91215652c",
+                "name": "Build Classification Prompt",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    -64,
+                    512
+                ]
+            },
+            {
+                "parameters": {
+                    "jsCode": "// Parse the OpenAI API response and extract classification result\n// Also pass through the input data for the callback node\nconst apiResponse = $input.first().json;\n\nconsole.log('[Parse LLM] Received API response');\n\nlet aiOutput = null;\n\n// Extract the message content from OpenAI response\ntry {\n  let responseText = '';\n  \n  if (apiResponse.choices && apiResponse.choices[0]?.message?.content) {\n    responseText = apiResponse.choices[0].message.content;\n    console.log('[Parse LLM] Extracted content from choices');\n  } else if (apiResponse.message?.content) {\n    responseText = apiResponse.message.content;\n  } else if (typeof apiResponse === 'string') {\n    responseText = apiResponse;\n  } else {\n    console.log('[Parse LLM] Unexpected response structure');\n    responseText = JSON.stringify(apiResponse);\n  }\n\n  console.log('[Parse LLM] Response preview:', responseText.substring(0, 200));\n\n  // Parse the JSON response\n  aiOutput = JSON.parse(responseText);\n  console.log('[Parse LLM] Successfully parsed JSON');\n\n} catch (parseError) {\n  console.log('[Parse LLM] Parse error:', parseError.message);\n  \n  try {\n    const responseText = apiResponse.choices?.[0]?.message?.content || '';\n    const jsonMatch = responseText.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      aiOutput = JSON.parse(jsonMatch[0]);\n    }\n  } catch (e2) {\n    console.log('[Parse LLM] Secondary parse failed');\n  }\n}\n\n// Default if parsing failed\nif (!aiOutput) {\n  aiOutput = {\n    status: 'unmatched',\n    standardCode: null,\n    standardTitle: null,\n    subspecificationCode: null,\n    subspecificationTitle: null,\n    confidence: 0,\n    rationale: 'Failed to parse AI response'\n  };\n}\n\n// Normalize the result\nconst result = {\n  status: aiOutput.status || 'unmatched',\n  standardCode: aiOutput.standardCode ? String(aiOutput.standardCode) : null,\n  standardTitle: aiOutput.standardTitle ? String(aiOutput.standardTitle) : null,\n  subspecificationCode: aiOutput.subspecificationCode ? String(aiOutput.subspecificationCode) : null,\n  subspecificationTitle: aiOutput.subspecificationTitle ? String(aiOutput.subspecificationTitle) : null,\n  confidence: typeof aiOutput.confidence === 'number' ? aiOutput.confidence : parseInt(aiOutput.confidence, 10) || 0,\n  rationale: aiOutput.rationale ? String(aiOutput.rationale) : 'No rationale provided'\n};\n\nconsole.log('[Parse LLM] Final result:', JSON.stringify(result));\n\nreturn [{ json: result }];"
+                },
+                "id": "92c96833-bee4-413a-b5ab-02e5e8b25e19",
+                "name": "Parse LLM Response",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    336,
+                    512
+                ]
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://api.openai.com/v1/chat/completions",
+                    "authentication": "predefinedCredentialType",
+                    "nodeCredentialType": "openAiApi",
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    },
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={{ $json.openaiRequestBody }}",
+                    "options": {
+                        "timeout": 120000
+                    }
+                },
+                "id": "abe19918-7c35-4b2c-a9cc-8947fd0e7168",
+                "name": "Call OpenAI API",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.3,
+                "position": [
+                    160,
+                    512
+                ],
+                "credentials": {
+                    "openAiApi": {
+                        "id": "xSzPIySN61drme77",
+                        "name": "OpenAi account"
+                    }
+                }
+            }
+        ],
+        "connections": {
+            "Webhook - Match Document": {
+                "main": [
+                    [
+                        {
+                            "node": "Validate Input & Extract Keywords",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Validate Input & Extract Keywords": {
+                "main": [
+                    [
+                        {
+                            "node": "Respond Accepted",
+                            "type": "main",
+                            "index": 0
+                        },
+                        {
+                            "node": "Fetch All Specs",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Fetch All Specs": {
+                "main": [
+                    [
+                        {
+                            "node": "Build Classification Prompt",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Parse LLM Response": {
+                "main": [
+                    [
+                        {
+                            "node": "Format Section Callback",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Format Section Callback": {
+                "main": [
+                    [
+                        {
+                            "node": "Send Section Callback",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Build Classification Prompt": {
+                "main": [
+                    [
+                        {
+                            "node": "Call OpenAI API",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Call OpenAI API": {
+                "main": [
+                    [
+                        {
+                            "node": "Parse LLM Response",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Eric Beser",
+        "name": "Version e1b66522",
+        "description": "initial install",
+        "autosaved": true,
+        "workflowPublishHistory": [
+            {
+                "createdAt": "2026-02-25T22:23:46.833Z",
+                "id": 22,
+                "workflowId": "gxCdwSyHMFxSdEF3",
+                "versionId": "e1b66522-24c1-49ae-b1b8-226d6b3b5e18",
+                "event": "activated",
+                "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        ]
+    }
+}
