@@ -1,10 +1,10 @@
 {
-    "updatedAt": "2026-02-27T15:21:13.408Z",
+    "updatedAt": "2026-02-27T15:25:15.011Z",
     "createdAt": "2026-02-27T12:40:43.416Z",
     "id": "CaSsYIrSKyRRqRv8",
     "name": "CSHSE Help - Chat Agent",
     "description": null,
-    "active": false,
+    "active": true,
     "isArchived": false,
     "nodes": [
         {
@@ -69,14 +69,54 @@
         },
         {
             "parameters": {
-                "mode": "retrieve-as-tool",
+                "name": "search_help_docs",
+                "description": "Search the CSHSE Member Handbook and User Guide for relevant information about the accreditation process and portal software"
+            },
+            "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+            "typeVersion": 1,
+            "position": [
+                560,
+                544
+            ],
+            "id": "vector-tool",
+            "name": "Vector Store Tool"
+        },
+        {
+            "parameters": {
+                "model": {
+                    "__rl": true,
+                    "value": "gpt-4o-mini",
+                    "mode": "list",
+                    "cachedResultName": "GPT-4O-MINI"
+                },
+                "options": {
+                    "temperature": 0.1
+                }
+            },
+            "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+            "typeVersion": 1.2,
+            "position": [
+                500,
+                720
+            ],
+            "id": "tool-llm",
+            "name": "Tool LLM",
+            "credentials": {
+                "openAiApi": {
+                    "id": "xSzPIySN61drme77",
+                    "name": "OpenAi account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "mode": "retrieve",
                 "tableName": {
                     "__rl": true,
                     "value": "help_documents",
                     "mode": "list",
                     "cachedResultName": "help_documents"
                 },
-                "toolDescription": "Search the CSHSE Member Handbook and User Guide for relevant information about the accreditation process and portal software",
                 "options": {
                     "queryName": "match_help_documents"
                 }
@@ -84,8 +124,8 @@
             "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
             "typeVersion": 1,
             "position": [
-                480,
-                544
+                640,
+                720
             ],
             "id": "supabase-vector-store",
             "name": "Supabase Vector Store",
@@ -104,8 +144,8 @@
             "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
             "typeVersion": 1,
             "position": [
-                480,
-                720
+                640,
+                900
             ],
             "id": "embeddings-chat",
             "name": "OpenAI Embeddings",
@@ -149,7 +189,7 @@
             "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
             "typeVersion": 1.5,
             "position": [
-                360,
+                400,
                 544
             ],
             "id": "d26b5fac-7a02-43c3-95a0-0dea42d401f6",
@@ -196,12 +236,34 @@
                 ]
             ]
         },
-        "Supabase Vector Store": {
+        "Vector Store Tool": {
             "ai_tool": [
                 [
                     {
                         "node": "AI Agent",
                         "type": "ai_tool",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Tool LLM": {
+            "ai_languageModel": [
+                [
+                    {
+                        "node": "Vector Store Tool",
+                        "type": "ai_languageModel",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Supabase Vector Store": {
+            "ai_vectorStore": [
+                [
+                    {
+                        "node": "Vector Store Tool",
+                        "type": "ai_vectorStore",
                         "index": 0
                     }
                 ]
@@ -251,9 +313,9 @@
         "templateCredsSetupCompleted": true
     },
     "pinData": {},
-    "versionId": "bd2b993a-3179-4993-872f-97c3d05856d0",
-    "activeVersionId": null,
-    "versionCounter": 28,
+    "versionId": "04c3895d-e06d-4679-a795-5752fa0bff3a",
+    "activeVersionId": "04c3895d-e06d-4679-a795-5752fa0bff3a",
+    "versionCounter": 31,
     "triggerCount": 1,
     "shared": [
         {
@@ -275,5 +337,321 @@
         }
     ],
     "tags": [],
-    "activeVersion": null
+    "activeVersion": {
+        "updatedAt": "2026-02-27T15:25:15.015Z",
+        "createdAt": "2026-02-27T15:25:15.015Z",
+        "versionId": "04c3895d-e06d-4679-a795-5752fa0bff3a",
+        "workflowId": "CaSsYIrSKyRRqRv8",
+        "nodes": [
+            {
+                "parameters": {
+                    "httpMethod": "POST",
+                    "path": "help-chat",
+                    "responseMode": "lastNode",
+                    "options": {}
+                },
+                "type": "n8n-nodes-base.webhook",
+                "typeVersion": 2.1,
+                "position": [
+                    192,
+                    304
+                ],
+                "id": "webhook-chat",
+                "name": "Webhook - Chat"
+            },
+            {
+                "parameters": {
+                    "promptType": "define",
+                    "text": "={{ $json.body.question }}",
+                    "options": {
+                        "systemMessage": "You are a helpful assistant for the CSHSE Accreditation Self-Study Portal.\n\nYou answer questions about:\n1. The CSHSE accreditation self-study process (from the CSHSE Member Handbook)\n2. How to use the CSHSE Self-Study Portal software (from the User Guide)\n\nRules:\n- Only answer based on the provided context from the handbook and user guide\n- If you don't know the answer, say so and suggest contacting CSHSE support\n- Be concise but thorough\n- When referencing process steps, cite the handbook section\n- When explaining software features, provide step-by-step instructions\n- Format responses with markdown for readability"
+                    }
+                },
+                "type": "@n8n/n8n-nodes-langchain.agent",
+                "typeVersion": 1.7,
+                "position": [
+                    432,
+                    304
+                ],
+                "id": "ai-agent",
+                "name": "AI Agent"
+            },
+            {
+                "parameters": {
+                    "model": {
+                        "__rl": true,
+                        "value": "gpt-4o-mini",
+                        "mode": "list",
+                        "cachedResultName": "GPT-4O-MINI"
+                    },
+                    "options": {
+                        "temperature": 0.3
+                    }
+                },
+                "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+                "typeVersion": 1.2,
+                "position": [
+                    240,
+                    544
+                ],
+                "id": "openai-chat",
+                "name": "OpenAI Chat Model",
+                "credentials": {
+                    "openAiApi": {
+                        "id": "xSzPIySN61drme77",
+                        "name": "OpenAi account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "name": "search_help_docs",
+                    "description": "Search the CSHSE Member Handbook and User Guide for relevant information about the accreditation process and portal software"
+                },
+                "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
+                "typeVersion": 1,
+                "position": [
+                    560,
+                    544
+                ],
+                "id": "vector-tool",
+                "name": "Vector Store Tool"
+            },
+            {
+                "parameters": {
+                    "model": {
+                        "__rl": true,
+                        "value": "gpt-4o-mini",
+                        "mode": "list",
+                        "cachedResultName": "GPT-4O-MINI"
+                    },
+                    "options": {
+                        "temperature": 0.1
+                    }
+                },
+                "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+                "typeVersion": 1.2,
+                "position": [
+                    500,
+                    720
+                ],
+                "id": "tool-llm",
+                "name": "Tool LLM",
+                "credentials": {
+                    "openAiApi": {
+                        "id": "xSzPIySN61drme77",
+                        "name": "OpenAi account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "mode": "retrieve",
+                    "tableName": {
+                        "__rl": true,
+                        "value": "help_documents",
+                        "mode": "list",
+                        "cachedResultName": "help_documents"
+                    },
+                    "options": {
+                        "queryName": "match_help_documents"
+                    }
+                },
+                "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+                "typeVersion": 1,
+                "position": [
+                    640,
+                    720
+                ],
+                "id": "supabase-vector-store",
+                "name": "Supabase Vector Store",
+                "credentials": {
+                    "supabaseApi": {
+                        "id": "qU6Q7CRvJhUXZABY",
+                        "name": "Supabase account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "model": "text-embedding-ada-002",
+                    "options": {}
+                },
+                "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+                "typeVersion": 1,
+                "position": [
+                    640,
+                    900
+                ],
+                "id": "embeddings-chat",
+                "name": "OpenAI Embeddings",
+                "credentials": {
+                    "openAiApi": {
+                        "id": "xSzPIySN61drme77",
+                        "name": "OpenAi account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "jsCode": "const items = $input.all();\nconst agentOutput = items[0]?.json?.output || items[0]?.json?.text || 'I could not find an answer to your question.';\n\nreturn [{\n  json: {\n    answer: agentOutput,\n    sources: []\n  }\n}];"
+                },
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    704,
+                    304
+                ],
+                "id": "format-response",
+                "name": "Format Response"
+            },
+            {
+                "parameters": {
+                    "respondWith": "json",
+                    "responseBody": "={{ JSON.stringify($json) }}",
+                    "options": {}
+                },
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1.5,
+                "position": [
+                    912,
+                    304
+                ],
+                "id": "respond-chat",
+                "name": "Respond to Chat"
+            },
+            {
+                "parameters": {},
+                "type": "@n8n/n8n-nodes-langchain.memoryRedisChat",
+                "typeVersion": 1.5,
+                "position": [
+                    400,
+                    544
+                ],
+                "id": "d26b5fac-7a02-43c3-95a0-0dea42d401f6",
+                "name": "Redis Chat Memory",
+                "credentials": {
+                    "redis": {
+                        "id": "n8IeXB9NzHxHnxbd",
+                        "name": "Redis account"
+                    }
+                }
+            }
+        ],
+        "connections": {
+            "Webhook - Chat": {
+                "main": [
+                    [
+                        {
+                            "node": "AI Agent",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "AI Agent": {
+                "main": [
+                    [
+                        {
+                            "node": "Format Response",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "OpenAI Chat Model": {
+                "ai_languageModel": [
+                    [
+                        {
+                            "node": "AI Agent",
+                            "type": "ai_languageModel",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Vector Store Tool": {
+                "ai_tool": [
+                    [
+                        {
+                            "node": "AI Agent",
+                            "type": "ai_tool",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Tool LLM": {
+                "ai_languageModel": [
+                    [
+                        {
+                            "node": "Vector Store Tool",
+                            "type": "ai_languageModel",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Supabase Vector Store": {
+                "ai_vectorStore": [
+                    [
+                        {
+                            "node": "Vector Store Tool",
+                            "type": "ai_vectorStore",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "OpenAI Embeddings": {
+                "ai_embedding": [
+                    [
+                        {
+                            "node": "Supabase Vector Store",
+                            "type": "ai_embedding",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Format Response": {
+                "main": [
+                    [
+                        {
+                            "node": "Respond to Chat",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Redis Chat Memory": {
+                "ai_memory": [
+                    [
+                        {
+                            "node": "AI Agent",
+                            "type": "ai_memory",
+                            "index": 0
+                        }
+                    ]
+                ]
+            }
+        },
+        "authors": "Eric Beser",
+        "name": null,
+        "description": null,
+        "autosaved": false,
+        "workflowPublishHistory": [
+            {
+                "createdAt": "2026-02-27T15:25:15.503Z",
+                "id": 38,
+                "workflowId": "CaSsYIrSKyRRqRv8",
+                "versionId": "04c3895d-e06d-4679-a795-5752fa0bff3a",
+                "event": "activated",
+                "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            }
+        ]
+    }
 }
