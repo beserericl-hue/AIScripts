@@ -969,11 +969,18 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         // Clear selection state
         setCurrentSelection(null);
 
-        // Refresh submission data and WAIT for it to complete
+        // Refresh submission data FIRST and WAIT for it to complete
         console.log(`[SelfStudyEditor] Refreshing submission data...`);
         await queryClient.refetchQueries({ queryKey: ['submission', submissionId] });
 
-        // Force NarrativeEditor to remount with fresh content
+        // Navigate to the applied spec so the editor shows the correct content.
+        // This must happen AFTER refetchQueries so the NarrativeEditor mounts with fresh data.
+        setSelectedStandard(metadata.standardCode!);
+        setSelectedSpec(metadata.specCode!);
+
+        // Defer editor remount to next tick so React processes the navigation state change
+        // and useQuery reflects the updated cache before the NarrativeEditor remounts
+        await new Promise(resolve => setTimeout(resolve, 0));
         setEditorRefreshKey(prev => prev + 1);
 
         console.log(`[SelfStudyEditor] handleSaveSection COMPLETE (direct apply) for "${sectionTitle}"`);
@@ -1122,10 +1129,17 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       // Refresh tagged sections list
       await loadTaggedSections();
 
-      // Refresh submission data and WAIT for it to complete (ensures editor gets fresh content)
+      // Refresh submission data FIRST and WAIT for it to complete
       await queryClient.refetchQueries({ queryKey: ['submission', submissionId] });
 
-      // Force NarrativeEditor to remount with fresh content if user is on the same spec
+      // Navigate to the applied spec so the editor shows the correct content.
+      // This must happen AFTER refetchQueries so the NarrativeEditor mounts with fresh data.
+      setSelectedStandard(targetStandardCode);
+      setSelectedSpec(targetSpecCode);
+
+      // Defer editor remount to next tick so React processes the navigation state change
+      // and useQuery reflects the updated cache before the NarrativeEditor remounts
+      await new Promise(resolve => setTimeout(resolve, 0));
       setEditorRefreshKey(prev => prev + 1);
 
       console.log(`[SelfStudyEditor] Applied section "${section.title}" to ${targetStandardCode}.${targetSpecCode}${toSupportingEvidence ? ' (supporting evidence)' : ''}`);

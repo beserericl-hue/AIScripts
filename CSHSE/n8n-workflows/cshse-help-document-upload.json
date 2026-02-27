@@ -1,5 +1,5 @@
 {
-    "updatedAt": "2026-02-27T15:46:35.794Z",
+    "updatedAt": "2026-02-27T17:56:10.953Z",
     "createdAt": "2026-02-27T12:39:04.884Z",
     "id": "S7Z74PmDwbkL6wiF",
     "name": "CSHSE Help - Document Upload",
@@ -17,8 +17,8 @@
             "type": "n8n-nodes-base.webhook",
             "typeVersion": 2.1,
             "position": [
-                180,
-                340
+                192,
+                520
             ],
             "id": "webhook-upload",
             "name": "Webhook - Upload Document",
@@ -31,8 +31,8 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                400,
-                340
+                416,
+                520
             ],
             "id": "validate-input",
             "name": "Validate Input"
@@ -46,8 +46,8 @@
             "type": "n8n-nodes-base.respondToWebhook",
             "typeVersion": 1.5,
             "position": [
-                620,
-                200
+                624,
+                256
             ],
             "id": "respond-immediately",
             "name": "Respond Immediately"
@@ -79,22 +79,103 @@
             "type": "n8n-nodes-base.if",
             "typeVersion": 2.2,
             "position": [
-                620,
-                440
+                640,
+                616
             ],
             "id": "check-file-type",
             "name": "Is PDF?"
         },
         {
-            "parameters": {},
-            "type": "n8n-nodes-base.readPDF",
+            "parameters": {
+                "mode": "insert",
+                "tableName": {
+                    "__rl": true,
+                    "value": "help_documents",
+                    "mode": "list",
+                    "cachedResultName": "help_documents"
+                },
+                "options": {
+                    "queryName": "match_help_documents"
+                }
+            },
+            "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
             "typeVersion": 1,
             "position": [
-                860,
-                340
+                896,
+                208
             ],
-            "id": "load-pdf",
-            "name": "Load PDF Document"
+            "id": "pdf-vector-store",
+            "name": "PDF Vector Store Insert",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "qU6Q7CRvJhUXZABY",
+                    "name": "Supabase account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "dataType": "binary",
+                "options": {
+                    "metadata": {
+                        "metadataValues": [
+                            {
+                                "name": "source",
+                                "value": "={{ $('Validate Input').first().json.source }}"
+                            },
+                            {
+                                "name": "title",
+                                "value": "={{ $('Validate Input').first().json.title }}"
+                            },
+                            {
+                                "name": "fileName",
+                                "value": "={{ $('Validate Input').first().json.fileName }}"
+                            }
+                        ]
+                    }
+                }
+            },
+            "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+            "typeVersion": 1,
+            "position": [
+                992,
+                432
+            ],
+            "id": "pdf-data-loader",
+            "name": "PDF Data Loader"
+        },
+        {
+            "parameters": {
+                "chunkOverlap": 200,
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+            "typeVersion": 1,
+            "position": [
+                1072,
+                640
+            ],
+            "id": "pdf-text-splitter",
+            "name": "PDF Text Splitter"
+        },
+        {
+            "parameters": {
+                "options": {}
+            },
+            "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+            "typeVersion": 1,
+            "position": [
+                864,
+                432
+            ],
+            "id": "pdf-embeddings",
+            "name": "PDF Embeddings",
+            "credentials": {
+                "openAiApi": {
+                    "id": "xSzPIySN61drme77",
+                    "name": "OpenAi account"
+                }
+            }
         },
         {
             "parameters": {
@@ -103,8 +184,8 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                860,
-                540
+                1000,
+                816
             ],
             "id": "chunk-text",
             "name": "Chunk Text File"
@@ -116,8 +197,8 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1100,
-                440
+                1360,
+                816
             ],
             "id": "add-metadata",
             "name": "Add Metadata"
@@ -128,6 +209,15 @@
                 "url": "https://api.openai.com/v1/embeddings",
                 "authentication": "predefinedCredentialType",
                 "nodeCredentialType": "openAiApi",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        }
+                    ]
+                },
                 "sendBody": true,
                 "specifyBody": "json",
                 "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
@@ -138,8 +228,8 @@
             "type": "n8n-nodes-base.httpRequest",
             "typeVersion": 4.2,
             "position": [
-                1320,
-                440
+                1584,
+                816
             ],
             "id": "get-embeddings",
             "name": "Get OpenAI Embeddings",
@@ -173,8 +263,8 @@
             "type": "n8n-nodes-base.supabase",
             "typeVersion": 1,
             "position": [
-                1540,
-                440
+                1808,
+                816
             ],
             "id": "create-row",
             "name": "Create a row",
@@ -192,8 +282,8 @@
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                1760,
-                440
+                2032,
+                816
             ],
             "id": "aggregate-results",
             "name": "Aggregate Results"
@@ -231,7 +321,7 @@
             "main": [
                 [
                     {
-                        "node": "Load PDF Document",
+                        "node": "PDF Vector Store Insert",
                         "type": "main",
                         "index": 0
                     }
@@ -245,12 +335,34 @@
                 ]
             ]
         },
-        "Load PDF Document": {
-            "main": [
+        "PDF Data Loader": {
+            "ai_document": [
                 [
                     {
-                        "node": "Add Metadata",
-                        "type": "main",
+                        "node": "PDF Vector Store Insert",
+                        "type": "ai_document",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "PDF Text Splitter": {
+            "ai_textSplitter": [
+                [
+                    {
+                        "node": "PDF Data Loader",
+                        "type": "ai_textSplitter",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "PDF Embeddings": {
+            "ai_embedding": [
+                [
+                    {
+                        "node": "PDF Vector Store Insert",
+                        "type": "ai_embedding",
                         "index": 0
                     }
                 ]
@@ -309,9 +421,9 @@
     "staticData": null,
     "meta": null,
     "pinData": {},
-    "versionId": "94561832-3696-4e16-a796-fb15fe618359",
-    "activeVersionId": "94561832-3696-4e16-a796-fb15fe618359",
-    "versionCounter": 34,
+    "versionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
+    "activeVersionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
+    "versionCounter": 59,
     "triggerCount": 1,
     "shared": [
         {
@@ -334,9 +446,9 @@
     ],
     "tags": [],
     "activeVersion": {
-        "updatedAt": "2026-02-27T15:46:35.799Z",
-        "createdAt": "2026-02-27T15:46:35.799Z",
-        "versionId": "94561832-3696-4e16-a796-fb15fe618359",
+        "updatedAt": "2026-02-27T17:56:10.957Z",
+        "createdAt": "2026-02-27T17:56:10.957Z",
+        "versionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
         "workflowId": "S7Z74PmDwbkL6wiF",
         "nodes": [
             {
@@ -349,8 +461,8 @@
                 "type": "n8n-nodes-base.webhook",
                 "typeVersion": 2.1,
                 "position": [
-                    180,
-                    340
+                    192,
+                    520
                 ],
                 "id": "webhook-upload",
                 "name": "Webhook - Upload Document",
@@ -363,8 +475,8 @@
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    400,
-                    340
+                    416,
+                    520
                 ],
                 "id": "validate-input",
                 "name": "Validate Input"
@@ -378,8 +490,8 @@
                 "type": "n8n-nodes-base.respondToWebhook",
                 "typeVersion": 1.5,
                 "position": [
-                    620,
-                    200
+                    624,
+                    256
                 ],
                 "id": "respond-immediately",
                 "name": "Respond Immediately"
@@ -411,22 +523,103 @@
                 "type": "n8n-nodes-base.if",
                 "typeVersion": 2.2,
                 "position": [
-                    620,
-                    440
+                    640,
+                    616
                 ],
                 "id": "check-file-type",
                 "name": "Is PDF?"
             },
             {
-                "parameters": {},
-                "type": "n8n-nodes-base.readPDF",
+                "parameters": {
+                    "mode": "insert",
+                    "tableName": {
+                        "__rl": true,
+                        "value": "help_documents",
+                        "mode": "list",
+                        "cachedResultName": "help_documents"
+                    },
+                    "options": {
+                        "queryName": "match_help_documents"
+                    }
+                },
+                "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
                 "typeVersion": 1,
                 "position": [
-                    860,
-                    340
+                    896,
+                    208
                 ],
-                "id": "load-pdf",
-                "name": "Load PDF Document"
+                "id": "pdf-vector-store",
+                "name": "PDF Vector Store Insert",
+                "credentials": {
+                    "supabaseApi": {
+                        "id": "qU6Q7CRvJhUXZABY",
+                        "name": "Supabase account"
+                    }
+                }
+            },
+            {
+                "parameters": {
+                    "dataType": "binary",
+                    "options": {
+                        "metadata": {
+                            "metadataValues": [
+                                {
+                                    "name": "source",
+                                    "value": "={{ $('Validate Input').first().json.source }}"
+                                },
+                                {
+                                    "name": "title",
+                                    "value": "={{ $('Validate Input').first().json.title }}"
+                                },
+                                {
+                                    "name": "fileName",
+                                    "value": "={{ $('Validate Input').first().json.fileName }}"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+                "typeVersion": 1,
+                "position": [
+                    992,
+                    432
+                ],
+                "id": "pdf-data-loader",
+                "name": "PDF Data Loader"
+            },
+            {
+                "parameters": {
+                    "chunkOverlap": 200,
+                    "options": {}
+                },
+                "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+                "typeVersion": 1,
+                "position": [
+                    1072,
+                    640
+                ],
+                "id": "pdf-text-splitter",
+                "name": "PDF Text Splitter"
+            },
+            {
+                "parameters": {
+                    "options": {}
+                },
+                "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+                "typeVersion": 1,
+                "position": [
+                    864,
+                    432
+                ],
+                "id": "pdf-embeddings",
+                "name": "PDF Embeddings",
+                "credentials": {
+                    "openAiApi": {
+                        "id": "xSzPIySN61drme77",
+                        "name": "OpenAi account"
+                    }
+                }
             },
             {
                 "parameters": {
@@ -435,8 +628,8 @@
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    860,
-                    540
+                    1000,
+                    816
                 ],
                 "id": "chunk-text",
                 "name": "Chunk Text File"
@@ -448,8 +641,8 @@
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    1100,
-                    440
+                    1360,
+                    816
                 ],
                 "id": "add-metadata",
                 "name": "Add Metadata"
@@ -460,6 +653,15 @@
                     "url": "https://api.openai.com/v1/embeddings",
                     "authentication": "predefinedCredentialType",
                     "nodeCredentialType": "openAiApi",
+                    "sendHeaders": true,
+                    "headerParameters": {
+                        "parameters": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ]
+                    },
                     "sendBody": true,
                     "specifyBody": "json",
                     "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
@@ -470,8 +672,8 @@
                 "type": "n8n-nodes-base.httpRequest",
                 "typeVersion": 4.2,
                 "position": [
-                    1320,
-                    440
+                    1584,
+                    816
                 ],
                 "id": "get-embeddings",
                 "name": "Get OpenAI Embeddings",
@@ -505,8 +707,8 @@
                 "type": "n8n-nodes-base.supabase",
                 "typeVersion": 1,
                 "position": [
-                    1540,
-                    440
+                    1808,
+                    816
                 ],
                 "id": "create-row",
                 "name": "Create a row",
@@ -524,8 +726,8 @@
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    1760,
-                    440
+                    2032,
+                    816
                 ],
                 "id": "aggregate-results",
                 "name": "Aggregate Results"
@@ -563,7 +765,7 @@
                 "main": [
                     [
                         {
-                            "node": "Load PDF Document",
+                            "node": "PDF Vector Store Insert",
                             "type": "main",
                             "index": 0
                         }
@@ -577,12 +779,34 @@
                     ]
                 ]
             },
-            "Load PDF Document": {
-                "main": [
+            "PDF Data Loader": {
+                "ai_document": [
                     [
                         {
-                            "node": "Add Metadata",
-                            "type": "main",
+                            "node": "PDF Vector Store Insert",
+                            "type": "ai_document",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "PDF Text Splitter": {
+                "ai_textSplitter": [
+                    [
+                        {
+                            "node": "PDF Data Loader",
+                            "type": "ai_textSplitter",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "PDF Embeddings": {
+                "ai_embedding": [
+                    [
+                        {
+                            "node": "PDF Vector Store Insert",
+                            "type": "ai_embedding",
                             "index": 0
                         }
                     ]
@@ -639,10 +863,18 @@
         "autosaved": false,
         "workflowPublishHistory": [
             {
-                "createdAt": "2026-02-27T15:46:36.279Z",
-                "id": 56,
+                "createdAt": "2026-02-27T17:56:11.162Z",
+                "id": 69,
                 "workflowId": "S7Z74PmDwbkL6wiF",
-                "versionId": "94561832-3696-4e16-a796-fb15fe618359",
+                "versionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
+                "event": "deactivated",
+                "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            },
+            {
+                "createdAt": "2026-02-27T17:56:11.243Z",
+                "id": 70,
+                "workflowId": "S7Z74PmDwbkL6wiF",
+                "versionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
                 "event": "activated",
                 "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
             }

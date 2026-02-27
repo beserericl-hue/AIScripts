@@ -1,5 +1,5 @@
 {
-    "updatedAt": "2026-02-27T15:38:36.730Z",
+    "updatedAt": "2026-02-27T18:07:47.707Z",
     "createdAt": "2026-02-27T12:40:43.416Z",
     "id": "CaSsYIrSKyRRqRv8",
     "name": "CSHSE Help - Chat Agent",
@@ -71,7 +71,8 @@
         {
             "parameters": {
                 "name": "search_help_docs",
-                "description": "Search the CSHSE Member Handbook and User Guide for relevant information about the accreditation process and portal software"
+                "description": "Search the CSHSE Member Handbook and User Guide for relevant information about the accreditation process and portal software. Always use this tool to look up information before answering.",
+                "topK": 8
             },
             "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
             "typeVersion": 1,
@@ -315,10 +316,47 @@
     "meta": {
         "templateCredsSetupCompleted": true
     },
-    "pinData": {},
-    "versionId": "2b134ea7-014a-41c9-91b3-2db2e5324cfc",
-    "activeVersionId": "2b134ea7-014a-41c9-91b3-2db2e5324cfc",
-    "versionCounter": 45,
+    "pinData": {
+        "Webhook - Chat": [
+            {
+                "json": {
+                    "headers": {
+                        "host": "n8n.agileadautomation.com",
+                        "user-agent": "node",
+                        "content-length": "164",
+                        "accept": "*/*",
+                        "accept-encoding": "gzip, br",
+                        "accept-language": "*",
+                        "cdn-loop": "cloudflare; loops=1",
+                        "cf-connecting-ip": "8.228.105.57",
+                        "cf-ipcountry": "US",
+                        "cf-ray": "9d497b348a710736-IAD",
+                        "cf-visitor": "{\"scheme\":\"https\"}",
+                        "cf-warp-tag-id": "928c4c4e-610a-4fd2-a6d1-68d5b261c478",
+                        "connection": "keep-alive",
+                        "content-type": "application/json",
+                        "sec-fetch-mode": "cors",
+                        "x-forwarded-for": "8.228.105.57",
+                        "x-forwarded-proto": "https"
+                    },
+                    "params": {},
+                    "query": {},
+                    "body": {
+                        "question": "how do you load the spec documents",
+                        "sessionId": "session-1772213508554",
+                        "userId": "69768d944fd61f9313be39ef",
+                        "userRole": "admin",
+                        "userName": "Eric Beser"
+                    },
+                    "webhookUrl": "https://n8n.agileadautomation.com/webhook/help-chat",
+                    "executionMode": "production"
+                }
+            }
+        ]
+    },
+    "versionId": "e0d4473a-c2aa-41ba-a2f0-03b89e833b64",
+    "activeVersionId": "e0d4473a-c2aa-41ba-a2f0-03b89e833b64",
+    "versionCounter": 51,
     "triggerCount": 1,
     "shared": [
         {
@@ -341,9 +379,9 @@
     ],
     "tags": [],
     "activeVersion": {
-        "updatedAt": "2026-02-27T15:38:36.739Z",
-        "createdAt": "2026-02-27T15:38:36.739Z",
-        "versionId": "2b134ea7-014a-41c9-91b3-2db2e5324cfc",
+        "updatedAt": "2026-02-27T18:07:47.711Z",
+        "createdAt": "2026-02-27T18:07:47.711Z",
+        "versionId": "e0d4473a-c2aa-41ba-a2f0-03b89e833b64",
         "workflowId": "CaSsYIrSKyRRqRv8",
         "nodes": [
             {
@@ -410,7 +448,8 @@
             {
                 "parameters": {
                     "name": "search_help_docs",
-                    "description": "Search the CSHSE Member Handbook and User Guide for relevant information about the accreditation process and portal software"
+                    "description": "Search the CSHSE Member Handbook and User Guide for relevant information about the accreditation process and portal software. Always use this tool to look up information before answering.",
+                    "topK": 8
                 },
                 "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
                 "typeVersion": 1,
@@ -651,10 +690,18 @@
         "autosaved": false,
         "workflowPublishHistory": [
             {
-                "createdAt": "2026-02-27T15:38:37.153Z",
-                "id": 52,
+                "createdAt": "2026-02-27T18:07:47.907Z",
+                "id": 71,
                 "workflowId": "CaSsYIrSKyRRqRv8",
-                "versionId": "2b134ea7-014a-41c9-91b3-2db2e5324cfc",
+                "versionId": "e0d4473a-c2aa-41ba-a2f0-03b89e833b64",
+                "event": "deactivated",
+                "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+            },
+            {
+                "createdAt": "2026-02-27T18:07:47.959Z",
+                "id": 72,
+                "workflowId": "CaSsYIrSKyRRqRv8",
+                "versionId": "e0d4473a-c2aa-41ba-a2f0-03b89e833b64",
                 "event": "activated",
                 "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
             }
