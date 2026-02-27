@@ -11,7 +11,7 @@ export interface IRetryConfig {
   retryDelayMs: number;
 }
 
-export type WebhookSettingType = 'n8n_validation' | 'notification' | 'lead_reader_notification' | 'spec_loader' | 'document_matcher' | 'help_chat';
+export type WebhookSettingType = 'n8n_validation' | 'notification' | 'lead_reader_notification' | 'spec_loader' | 'document_matcher' | 'help_chat' | 'help_upload';
 
 export interface IWebhookSettings extends Document {
   settingType: WebhookSettingType;
@@ -47,7 +47,7 @@ const RetryConfigSchema = new Schema<IRetryConfig>({
 const WebhookSettingsSchema = new Schema<IWebhookSettings>({
   settingType: {
     type: String,
-    enum: ['n8n_validation', 'notification', 'lead_reader_notification', 'spec_loader', 'document_matcher', 'help_chat'],
+    enum: ['n8n_validation', 'notification', 'lead_reader_notification', 'spec_loader', 'document_matcher', 'help_chat', 'help_upload'],
     required: true
   },
   name: { type: String, required: true },

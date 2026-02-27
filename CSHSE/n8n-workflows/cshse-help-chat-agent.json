@@ -1,5 +1,5 @@
 {
-    "updatedAt": "2026-02-27T12:40:43.416Z",
+    "updatedAt": "2026-02-27T14:32:10.136Z",
     "createdAt": "2026-02-27T12:40:43.416Z",
     "id": "CaSsYIrSKyRRqRv8",
     "name": "CSHSE Help - Chat Agent",
@@ -78,7 +78,8 @@
                     "cachedResultName": "help_documents"
                 },
                 "options": {
-                    "searchK": 5
+                    "searchK": 5,
+                    "queryName": "match_help_documents"
                 }
             },
             "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
@@ -98,7 +99,7 @@
         },
         {
             "parameters": {
-                "model": "text-embedding-3-small",
+                "model": "text-embedding-ada-002",
                 "options": {}
             },
             "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
@@ -219,10 +220,10 @@
     },
     "staticData": null,
     "meta": null,
-    "pinData": null,
-    "versionId": "d8608b8f-8eb2-4f45-b25b-a76a9bca9fcf",
-    "activeVersionId": "d8608b8f-8eb2-4f45-b25b-a76a9bca9fcf",
-    "versionCounter": 3,
+    "pinData": {},
+    "versionId": "0a479c9c-aa80-46de-b877-566f09cc53f3",
+    "activeVersionId": "0a479c9c-aa80-46de-b877-566f09cc53f3",
+    "versionCounter": 8,
     "triggerCount": 1,
     "shared": [
         {
@@ -245,9 +246,9 @@
     ],
     "tags": [],
     "activeVersion": {
-        "updatedAt": "2026-02-27T12:40:43.440Z",
-        "createdAt": "2026-02-27T12:40:43.440Z",
-        "versionId": "d8608b8f-8eb2-4f45-b25b-a76a9bca9fcf",
+        "updatedAt": "2026-02-27T14:32:10.141Z",
+        "createdAt": "2026-02-27T14:32:10.141Z",
+        "versionId": "0a479c9c-aa80-46de-b877-566f09cc53f3",
         "workflowId": "CaSsYIrSKyRRqRv8",
         "nodes": [
             {
@@ -321,7 +322,8 @@
                         "cachedResultName": "help_documents"
                     },
                     "options": {
-                        "searchK": 5
+                        "searchK": 5,
+                        "queryName": "match_help_documents"
                     }
                 },
                 "type": "@n8n/n8n-nodes-langchain.toolVectorStore",
@@ -341,7 +343,7 @@
             },
             {
                 "parameters": {
-                    "model": "text-embedding-3-small",
+                    "model": "text-embedding-ada-002",
                     "options": {}
                 },
                 "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
@@ -461,10 +463,10 @@
         "autosaved": false,
         "workflowPublishHistory": [
             {
-                "createdAt": "2026-02-27T12:40:51.184Z",
-                "id": 26,
+                "createdAt": "2026-02-27T14:32:34.124Z",
+                "id": 30,
                 "workflowId": "CaSsYIrSKyRRqRv8",
-                "versionId": "d8608b8f-8eb2-4f45-b25b-a76a9bca9fcf",
+                "versionId": "0a479c9c-aa80-46de-b877-566f09cc53f3",
                 "event": "activated",
                 "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
             }

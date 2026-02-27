@@ -18,9 +18,10 @@ import {
   Zap,
   Brain,
   MessageCircle,
+  Upload,
 } from 'lucide-react';
 
-type WebhookType = 'n8n_validation' | 'spec_loader' | 'document_matcher' | 'help_chat';
+type WebhookType = 'n8n_validation' | 'spec_loader' | 'document_matcher' | 'help_chat' | 'help_upload';
 
 interface WebhookSettingsData {
   id?: string;
@@ -72,10 +73,15 @@ const WEBHOOK_CONFIGS: Record<WebhookType, { label: string; description: string;
     label: 'Help Chat',
     description: 'AI-powered help assistant using CSHSE handbook and user guide',
     icon: <MessageCircle className="w-5 h-5" />
+  },
+  help_upload: {
+    label: 'Help Document Upload',
+    description: 'Uploads help documents (PDF) to the AI knowledge base vector store',
+    icon: <Upload className="w-5 h-5" />
   }
 };
 
-const WEBHOOK_TYPES: WebhookType[] = ['n8n_validation', 'spec_loader', 'document_matcher', 'help_chat'];
+const WEBHOOK_TYPES: WebhookType[] = ['n8n_validation', 'spec_loader', 'document_matcher', 'help_chat', 'help_upload'];
 
 /**
  * Admin webhook settings panel for N8N integration
@@ -88,25 +94,29 @@ export function WebhookSettings() {
     n8n_validation: {},
     spec_loader: {},
     document_matcher: {},
-    help_chat: {}
+    help_chat: {},
+    help_upload: {}
   });
   const [showApiKey, setShowApiKey] = useState<Record<WebhookType, boolean>>({
     n8n_validation: false,
     spec_loader: false,
     document_matcher: false,
-    help_chat: false
+    help_chat: false,
+    help_upload: false
   });
   const [testResults, setTestResults] = useState<Record<WebhookType, TestResult | null>>({
     n8n_validation: null,
     spec_loader: null,
     document_matcher: null,
-    help_chat: null
+    help_chat: null,
+    help_upload: null
   });
   const [hasChanges, setHasChanges] = useState<Record<WebhookType, boolean>>({
     n8n_validation: false,
     spec_loader: false,
     document_matcher: false,
-    help_chat: false
+    help_chat: false,
+    help_upload: false
   });
 
   // Fetch all webhook settings
@@ -125,7 +135,8 @@ export function WebhookSettings() {
         n8n_validation: {},
         spec_loader: {},
         document_matcher: {},
-        help_chat: {}
+        help_chat: {},
+        help_upload: {}
       };
 
       for (const setting of allSettings.settings) {
@@ -145,7 +156,8 @@ export function WebhookSettings() {
         n8n_validation: false,
         spec_loader: false,
         document_matcher: false,
-        help_chat: false
+        help_chat: false,
+        help_upload: false
       });
     }
   }, [allSettings]);
@@ -334,25 +346,6 @@ export function WebhookSettings() {
                       The N8N webhook URL for {config.label.toLowerCase()}
                     </p>
                   </div>
-
-                  {/* Upload Webhook URL (help_chat only) */}
-                  {type === 'help_chat' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Upload Webhook URL
-                      </label>
-                      <input
-                        type="url"
-                        value={data.callbackUrl || ''}
-                        onChange={(e) => handleChange(type, 'callbackUrl', e.target.value)}
-                        placeholder="https://your-n8n-instance.com/webhook/help-upload"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      />
-                      <p className="mt-1 text-xs text-gray-500">
-                        The N8N webhook URL for uploading help documents to the vector database
-                      </p>
-                    </div>
-                  )}
 
                   {/* Authentication */}
                   <div className="p-4 bg-gray-50 rounded-lg space-y-4">

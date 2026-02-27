@@ -40,13 +40,13 @@ export const uploadHelpDocument = async (req: AuthenticatedRequest, res: Respons
     const { source, title } = req.body;
 
     const webhookSettings = await WebhookSettings.findOne({
-      settingType: 'help_chat',
+      settingType: 'help_upload',
       isActive: true
     });
 
-    if (!webhookSettings?.callbackUrl) {
+    if (!webhookSettings?.webhookUrl) {
       return res.status(503).json({
-        error: 'Help document upload webhook URL is not configured. Set the Upload URL in Help Chat settings.'
+        error: 'Help document upload webhook is not configured. Set up the Help Document Upload webhook in Superuser Settings.'
       });
     }
 
@@ -57,7 +57,7 @@ export const uploadHelpDocument = async (req: AuthenticatedRequest, res: Respons
     formData.append('source', source || 'handbook');
     formData.append('title', title || file.originalname);
 
-    const response = await fetch(webhookSettings.callbackUrl, {
+    const response = await fetch(webhookSettings.webhookUrl, {
       method: 'POST',
       body: formData,
       signal: AbortSignal.timeout(120000) // 2 min timeout for large files

@@ -1,5 +1,5 @@
 {
-    "updatedAt": "2026-02-27T12:39:04.884Z",
+    "updatedAt": "2026-02-27T14:30:20.760Z",
     "createdAt": "2026-02-27T12:39:04.884Z",
     "id": "S7Z74PmDwbkL6wiF",
     "name": "CSHSE Help - Document Upload",
@@ -11,46 +11,93 @@
             "parameters": {
                 "httpMethod": "POST",
                 "path": "help-upload",
-                "options": {
-                    "rawBody": true
-                },
-                "responseMode": "lastNode"
+                "responseMode": "responseNode",
+                "options": {}
             },
+            "id": "webhook-upload",
+            "name": "Webhook - Upload Document",
             "type": "n8n-nodes-base.webhook",
             "typeVersion": 2.1,
             "position": [
-                180,
-                300
+                -448,
+                96
             ],
-            "id": "webhook-upload",
-            "name": "Webhook - Upload Document"
+            "webhookId": "help-upload-webhook",
+            "onError": "continueRegularOutput"
         },
         {
             "parameters": {
-                "jsCode": "// Extract text from the uploaded file\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const binaryData = item.binary;\n  if (!binaryData || !binaryData.file) {\n    results.push({ json: { error: 'No file uploaded' } });\n    continue;\n  }\n\n  const fileData = binaryData.file;\n  const mimeType = fileData.mimeType || '';\n  const fileName = fileData.fileName || 'unknown';\n  const source = item.json.body?.source || 'unknown';\n  const title = item.json.body?.title || fileName;\n\n  // Get the buffer\n  const buffer = await this.helpers.getBinaryDataBuffer(item, 'file');\n  let text = '';\n\n  if (mimeType === 'application/pdf') {\n    // Use pdf-parse for PDF files\n    const pdfParse = require('pdf-parse');\n    const pdfData = await pdfParse(buffer);\n    text = pdfData.text;\n  } else if (mimeType === 'text/markdown' || fileName.endsWith('.md')) {\n    text = buffer.toString('utf-8');\n  } else if (mimeType === 'text/plain' || fileName.endsWith('.txt')) {\n    text = buffer.toString('utf-8');\n  } else {\n    results.push({ json: { error: `Unsupported file type: ${mimeType}` } });\n    continue;\n  }\n\n  // Split text into chunks with overlap\n  const chunkSize = 1000;\n  const chunkOverlap = 200;\n  const chunks = [];\n  let start = 0;\n\n  while (start < text.length) {\n    const end = Math.min(start + chunkSize, text.length);\n    const chunk = text.substring(start, end);\n    if (chunk.trim().length > 0) {\n      chunks.push({\n        json: {\n          content: chunk,\n          metadata: {\n            source: source,\n            title: title,\n            chunkIndex: chunks.length,\n            fileName: fileName\n          }\n        }\n      });\n    }\n    start += chunkSize - chunkOverlap;\n  }\n\n  results.push(...chunks);\n}\n\nreturn results;"
+                "jsCode": "const crypto = require('crypto');\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Generate job ID\nconst jobId = crypto.randomUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: input.binary[binaryKey].fileName || fileName,\n      startedAt: new Date().toISOString()\n    },\n    binary: input.binary\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
             },
+            "id": "validate-input",
+            "name": "Validate Input",
             "type": "n8n-nodes-base.code",
             "typeVersion": 2,
             "position": [
-                420,
-                300
-            ],
-            "id": "extract-text",
-            "name": "Extract & Chunk Text"
+                -224,
+                96
+            ]
         },
         {
             "parameters": {
-                "model": "text-embedding-3-small",
+                "respondWith": "json",
+                "responseBody": "={{ JSON.stringify({ status: 'accepted', jobId: $json.jobId, message: 'Help document processing started. Document will be loaded to vector store.' }) }}",
                 "options": {}
             },
-            "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+            "id": "respond-immediately",
+            "name": "Respond Immediately",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.5,
+            "position": [
+                0,
+                0
+            ]
+        },
+        {
+            "parameters": {},
+            "id": "load-pdf",
+            "name": "Load PDF Document",
+            "type": "n8n-nodes-base.readPDF",
             "typeVersion": 1,
             "position": [
-                820,
-                480
+                0,
+                192
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst enrichedDocs = items.map((item, index) => {\n  const doc = item.json;\n  \n  return {\n    json: {\n      pageContent: doc.text || doc.pageContent || '',\n      metadata: {\n        source: jobConfig.source,\n        title: jobConfig.title,\n        chunkIndex: index,\n        fileName: jobConfig.fileName,\n        numPages: doc.numpages || 0,\n        loadedAt: new Date().toISOString()\n      }\n    }\n  };\n});\n\nreturn enrichedDocs;"
+            },
+            "id": "add-metadata",
+            "name": "Add Metadata",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                224,
+                192
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.openai.com/v1/embeddings",
+                "authentication": "predefinedCredentialType",
+                "nodeCredentialType": "openAiApi",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
+                "options": {
+                    "timeout": 60000
+                }
+            },
+            "id": "get-embeddings",
+            "name": "Get OpenAI Embeddings",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                448,
+                192
             ],
-            "id": "embeddings",
-            "name": "OpenAI Embeddings",
             "credentials": {
                 "openAiApi": {
                     "id": "xSzPIySN61drme77",
@@ -60,22 +107,32 @@
         },
         {
             "parameters": {
-                "tableName": {
-                    "__rl": true,
-                    "value": "help_documents",
-                    "mode": "list",
-                    "cachedResultName": "help_documents"
-                },
-                "options": {}
+                "tableId": "help_documents",
+                "fieldsUi": {
+                    "fieldValues": [
+                        {
+                            "fieldId": "content",
+                            "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.pageContent) }}"
+                        },
+                        {
+                            "fieldId": "metadata",
+                            "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.metadata) }}"
+                        },
+                        {
+                            "fieldId": "embedding",
+                            "fieldValue": "={{ JSON.stringify($json.data[0].embedding) }}"
+                        }
+                    ]
+                }
             },
-            "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+            "type": "n8n-nodes-base.supabase",
             "typeVersion": 1,
             "position": [
-                660,
-                300
+                672,
+                192
             ],
-            "id": "vector-store",
-            "name": "Supabase Vector Store",
+            "id": "create-row",
+            "name": "Create a row",
             "credentials": {
                 "supabaseApi": {
                     "id": "qU6Q7CRvJhUXZABY",
@@ -85,17 +142,16 @@
         },
         {
             "parameters": {
-                "respondWith": "json",
-                "responseBody": "={{ JSON.stringify({ success: true, message: 'Documents processed and stored in vector database' }) }}"
+                "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst result = {\n  success: true,\n  jobId: jobConfig.jobId,\n  source: jobConfig.source,\n  title: jobConfig.title,\n  fileName: jobConfig.fileName,\n  documentsLoaded: items.length,\n  processedAt: new Date().toISOString(),\n  processingDuration: Date.now() - new Date(jobConfig.startedAt).getTime(),\n  message: `Successfully loaded ${items.length} document chunks from ${jobConfig.fileName}`\n};\n\nreturn [{ json: result }];"
             },
-            "type": "n8n-nodes-base.respondToWebhook",
-            "typeVersion": 1.5,
+            "id": "aggregate-results",
+            "name": "Aggregate Results",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
             "position": [
-                900,
-                300
-            ],
-            "id": "respond",
-            "name": "Respond Success"
+                896,
+                192
+            ]
         }
     ],
     "connections": {
@@ -103,41 +159,68 @@
             "main": [
                 [
                     {
-                        "node": "Extract & Chunk Text",
+                        "node": "Validate Input",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Extract & Chunk Text": {
+        "Validate Input": {
             "main": [
                 [
                     {
-                        "node": "Supabase Vector Store",
+                        "node": "Respond Immediately",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Load PDF Document",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Supabase Vector Store": {
+        "Load PDF Document": {
             "main": [
                 [
                     {
-                        "node": "Respond Success",
+                        "node": "Add Metadata",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "OpenAI Embeddings": {
-            "ai_embedding": [
+        "Add Metadata": {
+            "main": [
                 [
                     {
-                        "node": "Supabase Vector Store",
-                        "type": "ai_embedding",
+                        "node": "Get OpenAI Embeddings",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Get OpenAI Embeddings": {
+            "main": [
+                [
+                    {
+                        "node": "Create a row",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Create a row": {
+            "main": [
+                [
+                    {
+                        "node": "Aggregate Results",
+                        "type": "main",
                         "index": 0
                     }
                 ]
@@ -151,10 +234,10 @@
     },
     "staticData": null,
     "meta": null,
-    "pinData": null,
-    "versionId": "7aa0f456-736d-4e53-a5ec-57e65e7b62ff",
-    "activeVersionId": "7aa0f456-736d-4e53-a5ec-57e65e7b62ff",
-    "versionCounter": 3,
+    "pinData": {},
+    "versionId": "e201acdb-7563-45c4-b195-55f92fedc8b5",
+    "activeVersionId": "e201acdb-7563-45c4-b195-55f92fedc8b5",
+    "versionCounter": 11,
     "triggerCount": 1,
     "shared": [
         {
@@ -177,55 +260,102 @@
     ],
     "tags": [],
     "activeVersion": {
-        "updatedAt": "2026-02-27T12:39:04.909Z",
-        "createdAt": "2026-02-27T12:39:04.909Z",
-        "versionId": "7aa0f456-736d-4e53-a5ec-57e65e7b62ff",
+        "updatedAt": "2026-02-27T14:29:11.946Z",
+        "createdAt": "2026-02-27T14:29:11.946Z",
+        "versionId": "e201acdb-7563-45c4-b195-55f92fedc8b5",
         "workflowId": "S7Z74PmDwbkL6wiF",
         "nodes": [
             {
                 "parameters": {
                     "httpMethod": "POST",
                     "path": "help-upload",
-                    "options": {
-                        "rawBody": true
-                    },
-                    "responseMode": "lastNode"
+                    "responseMode": "responseNode",
+                    "options": {}
                 },
+                "id": "webhook-upload",
+                "name": "Webhook - Upload Document",
                 "type": "n8n-nodes-base.webhook",
                 "typeVersion": 2.1,
                 "position": [
-                    180,
-                    300
+                    -448,
+                    96
                 ],
-                "id": "webhook-upload",
-                "name": "Webhook - Upload Document"
+                "webhookId": "help-upload-webhook",
+                "onError": "continueRegularOutput"
             },
             {
                 "parameters": {
-                    "jsCode": "// Extract text from the uploaded file\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const binaryData = item.binary;\n  if (!binaryData || !binaryData.file) {\n    results.push({ json: { error: 'No file uploaded' } });\n    continue;\n  }\n\n  const fileData = binaryData.file;\n  const mimeType = fileData.mimeType || '';\n  const fileName = fileData.fileName || 'unknown';\n  const source = item.json.body?.source || 'unknown';\n  const title = item.json.body?.title || fileName;\n\n  // Get the buffer\n  const buffer = await this.helpers.getBinaryDataBuffer(item, 'file');\n  let text = '';\n\n  if (mimeType === 'application/pdf') {\n    // Use pdf-parse for PDF files\n    const pdfParse = require('pdf-parse');\n    const pdfData = await pdfParse(buffer);\n    text = pdfData.text;\n  } else if (mimeType === 'text/markdown' || fileName.endsWith('.md')) {\n    text = buffer.toString('utf-8');\n  } else if (mimeType === 'text/plain' || fileName.endsWith('.txt')) {\n    text = buffer.toString('utf-8');\n  } else {\n    results.push({ json: { error: `Unsupported file type: ${mimeType}` } });\n    continue;\n  }\n\n  // Split text into chunks with overlap\n  const chunkSize = 1000;\n  const chunkOverlap = 200;\n  const chunks = [];\n  let start = 0;\n\n  while (start < text.length) {\n    const end = Math.min(start + chunkSize, text.length);\n    const chunk = text.substring(start, end);\n    if (chunk.trim().length > 0) {\n      chunks.push({\n        json: {\n          content: chunk,\n          metadata: {\n            source: source,\n            title: title,\n            chunkIndex: chunks.length,\n            fileName: fileName\n          }\n        }\n      });\n    }\n    start += chunkSize - chunkOverlap;\n  }\n\n  results.push(...chunks);\n}\n\nreturn results;"
+                    "jsCode": "const crypto = require('crypto');\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Generate job ID\nconst jobId = crypto.randomUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: input.binary[binaryKey].fileName || fileName,\n      startedAt: new Date().toISOString()\n    },\n    binary: input.binary\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
                 },
+                "id": "validate-input",
+                "name": "Validate Input",
                 "type": "n8n-nodes-base.code",
                 "typeVersion": 2,
                 "position": [
-                    420,
-                    300
-                ],
-                "id": "extract-text",
-                "name": "Extract & Chunk Text"
+                    -224,
+                    96
+                ]
             },
             {
                 "parameters": {
-                    "model": "text-embedding-3-small",
+                    "respondWith": "json",
+                    "responseBody": "={{ JSON.stringify({ status: 'accepted', jobId: $json.jobId, message: 'Help document processing started. Document will be loaded to vector store.' }) }}",
                     "options": {}
                 },
-                "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+                "id": "respond-immediately",
+                "name": "Respond Immediately",
+                "type": "n8n-nodes-base.respondToWebhook",
+                "typeVersion": 1.5,
+                "position": [
+                    0,
+                    0
+                ]
+            },
+            {
+                "parameters": {},
+                "id": "load-pdf",
+                "name": "Load PDF Document",
+                "type": "n8n-nodes-base.readPDF",
                 "typeVersion": 1,
                 "position": [
-                    820,
-                    480
+                    0,
+                    192
+                ]
+            },
+            {
+                "parameters": {
+                    "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst enrichedDocs = items.map((item, index) => {\n  const doc = item.json;\n  \n  return {\n    json: {\n      pageContent: doc.text || doc.pageContent || '',\n      metadata: {\n        source: jobConfig.source,\n        title: jobConfig.title,\n        chunkIndex: index,\n        fileName: jobConfig.fileName,\n        numPages: doc.numpages || 0,\n        loadedAt: new Date().toISOString()\n      }\n    }\n  };\n});\n\nreturn enrichedDocs;"
+                },
+                "id": "add-metadata",
+                "name": "Add Metadata",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
+                "position": [
+                    224,
+                    192
+                ]
+            },
+            {
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://api.openai.com/v1/embeddings",
+                    "authentication": "predefinedCredentialType",
+                    "nodeCredentialType": "openAiApi",
+                    "sendBody": true,
+                    "specifyBody": "json",
+                    "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
+                    "options": {
+                        "timeout": 60000
+                    }
+                },
+                "id": "get-embeddings",
+                "name": "Get OpenAI Embeddings",
+                "type": "n8n-nodes-base.httpRequest",
+                "typeVersion": 4.2,
+                "position": [
+                    448,
+                    192
                 ],
-                "id": "embeddings",
-                "name": "OpenAI Embeddings",
                 "credentials": {
                     "openAiApi": {
                         "id": "xSzPIySN61drme77",
@@ -235,22 +365,32 @@
             },
             {
                 "parameters": {
-                    "tableName": {
-                        "__rl": true,
-                        "value": "help_documents",
-                        "mode": "list",
-                        "cachedResultName": "help_documents"
-                    },
-                    "options": {}
+                    "tableId": "help_documents",
+                    "fieldsUi": {
+                        "fieldValues": [
+                            {
+                                "fieldId": "content",
+                                "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.pageContent) }}"
+                            },
+                            {
+                                "fieldId": "metadata",
+                                "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.metadata) }}"
+                            },
+                            {
+                                "fieldId": "embedding",
+                                "fieldValue": "={{ JSON.stringify($json.data[0].embedding) }}"
+                            }
+                        ]
+                    }
                 },
-                "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+                "type": "n8n-nodes-base.supabase",
                 "typeVersion": 1,
                 "position": [
-                    660,
-                    300
+                    672,
+                    192
                 ],
-                "id": "vector-store",
-                "name": "Supabase Vector Store",
+                "id": "create-row",
+                "name": "Create a row",
                 "credentials": {
                     "supabaseApi": {
                         "id": "qU6Q7CRvJhUXZABY",
@@ -260,17 +400,16 @@
             },
             {
                 "parameters": {
-                    "respondWith": "json",
-                    "responseBody": "={{ JSON.stringify({ success: true, message: 'Documents processed and stored in vector database' }) }}"
+                    "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst result = {\n  success: true,\n  jobId: jobConfig.jobId,\n  source: jobConfig.source,\n  title: jobConfig.title,\n  fileName: jobConfig.fileName,\n  documentsLoaded: items.length,\n  processedAt: new Date().toISOString(),\n  processingDuration: Date.now() - new Date(jobConfig.startedAt).getTime(),\n  message: `Successfully loaded ${items.length} document chunks from ${jobConfig.fileName}`\n};\n\nreturn [{ json: result }];"
                 },
-                "type": "n8n-nodes-base.respondToWebhook",
-                "typeVersion": 1.5,
+                "id": "aggregate-results",
+                "name": "Aggregate Results",
+                "type": "n8n-nodes-base.code",
+                "typeVersion": 2,
                 "position": [
-                    900,
-                    300
-                ],
-                "id": "respond",
-                "name": "Respond Success"
+                    896,
+                    192
+                ]
             }
         ],
         "connections": {
@@ -278,41 +417,68 @@
                 "main": [
                     [
                         {
-                            "node": "Extract & Chunk Text",
+                            "node": "Validate Input",
                             "type": "main",
                             "index": 0
                         }
                     ]
                 ]
             },
-            "Extract & Chunk Text": {
+            "Validate Input": {
                 "main": [
                     [
                         {
-                            "node": "Supabase Vector Store",
+                            "node": "Respond Immediately",
+                            "type": "main",
+                            "index": 0
+                        },
+                        {
+                            "node": "Load PDF Document",
                             "type": "main",
                             "index": 0
                         }
                     ]
                 ]
             },
-            "Supabase Vector Store": {
+            "Load PDF Document": {
                 "main": [
                     [
                         {
-                            "node": "Respond Success",
+                            "node": "Add Metadata",
                             "type": "main",
                             "index": 0
                         }
                     ]
                 ]
             },
-            "OpenAI Embeddings": {
-                "ai_embedding": [
+            "Add Metadata": {
+                "main": [
                     [
                         {
-                            "node": "Supabase Vector Store",
-                            "type": "ai_embedding",
+                            "node": "Get OpenAI Embeddings",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Get OpenAI Embeddings": {
+                "main": [
+                    [
+                        {
+                            "node": "Create a row",
+                            "type": "main",
+                            "index": 0
+                        }
+                    ]
+                ]
+            },
+            "Create a row": {
+                "main": [
+                    [
+                        {
+                            "node": "Aggregate Results",
+                            "type": "main",
                             "index": 0
                         }
                     ]
@@ -325,10 +491,10 @@
         "autosaved": false,
         "workflowPublishHistory": [
             {
-                "createdAt": "2026-02-27T12:39:17.470Z",
-                "id": 25,
+                "createdAt": "2026-02-27T14:30:21.501Z",
+                "id": 28,
                 "workflowId": "S7Z74PmDwbkL6wiF",
-                "versionId": "7aa0f456-736d-4e53-a5ec-57e65e7b62ff",
+                "versionId": "e201acdb-7563-45c4-b195-55f92fedc8b5",
                 "event": "activated",
                 "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
             }
