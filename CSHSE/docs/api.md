@@ -25,7 +25,8 @@ This document describes the REST API endpoints for the CSHSE Self-Study and Revi
 15. [Reports](#reports)
 16. [Admin Settings](#admin-settings)
 17. [N8N Webhook Integration](#n8n-webhook-integration)
-18. [API Keys](#api-keys)
+18. [Help Document Upload & Chat](#help-document-upload--chat)
+19. [API Keys](#api-keys)
 
 ---
 
@@ -1097,6 +1098,196 @@ AI Analysis (Claude/OpenAI Node)
 Format Response (Code Node)
     ↓
 HTTP Request to Callback URL
+```
+
+---
+
+## Help Document Upload & Chat
+
+The Help system allows admins to upload documents (PDF, Markdown, plain text) to an AI knowledge base via an N8N vectorization workflow. The system tracks upload status through a callback mechanism secured with a per-document token.
+
+### POST /api/webhooks/help/upload
+Upload a help document to the N8N vectorization webhook. Creates a DB record to track processing status.
+
+**Access:** Private (Admin)
+
+**Request:** `multipart/form-data`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| file | File | The file to upload (PDF, MD, TXT). Max 50MB |
+| source | string | Document type: `handbook`, `user_guide`, or `reference` |
+| title | string | Document title (defaults to filename) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "docId": "67c1a2b3d4e5f6789012abcd",
+  "fileName": "CSHSE Member Handbook.pdf",
+  "fileSize": 2456789,
+  "source": "handbook",
+  "status": "processing",
+  "message": "Document upload started. Processing in background."
+}
+```
+
+**Flow:**
+1. Server creates a `HelpDocument` record with `status: "processing"` and a random `callbackToken`
+2. Server sends the file (base64-encoded) to the N8N webhook along with `callbackUrl`, `docId`, and `callbackToken`
+3. N8N responds immediately with `{ status: "accepted" }`, then processes asynchronously
+4. N8N vectorizes the document and stores chunks in Supabase vector store
+5. On completion, N8N POSTs to the callback URL with the token
+
+### POST /api/webhooks/help/upload/callback
+Receive completion callback from N8N when vectorization finishes.
+
+**Access:** Public (webhook callback, secured by callbackToken)
+
+**Request Body:**
+```json
+{
+  "docId": "67c1a2b3d4e5f6789012abcd",
+  "callbackToken": "a1b2c3d4e5f6...64_hex_chars",
+  "status": "success"
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| docId | string | The MongoDB document ID |
+| callbackToken | string | 32-byte hex token generated at upload time |
+| status | string | `success`, `loaded`, `completed`, `error`, or `failed` |
+| error | string | Error message (when status is `error` or `failed`) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "docId": "67c1a2b3d4e5f6789012abcd",
+  "status": "loaded"
+}
+```
+
+**Security:** The callback endpoint validates the `callbackToken` against the stored token in the DB. Returns `403` if the token is missing or doesn't match.
+
+### GET /api/webhooks/help/documents
+Get all uploaded help documents with their processing status.
+
+**Access:** Private (Admin)
+
+**Response:**
+```json
+[
+  {
+    "_id": "67c1a2b3d4e5f6789012abcd",
+    "fileName": "CSHSE Member Handbook.pdf",
+    "fileSize": 2456789,
+    "source": "handbook",
+    "title": "CSHSE Member Handbook.pdf",
+    "status": "loaded",
+    "uploadedBy": "user_123",
+    "uploadedAt": "2026-02-28T12:00:00Z",
+    "completedAt": "2026-02-28T12:02:15Z"
+  },
+  {
+    "_id": "67c1a2b3d4e5f6789012abce",
+    "fileName": "User Guide.md",
+    "fileSize": 45678,
+    "source": "user_guide",
+    "title": "User Guide.md",
+    "status": "processing",
+    "uploadedBy": "user_123",
+    "uploadedAt": "2026-02-28T12:05:00Z"
+  }
+]
+```
+
+**Note:** The `callbackToken` field is excluded from this response for security.
+
+**Polling:** The frontend polls this endpoint every 3 seconds when any document has `status: "processing"`.
+
+### DELETE /api/webhooks/help/documents/:id
+Delete a help document record from the database.
+
+**Access:** Private (Admin)
+
+**Response:**
+```json
+{
+  "success": true
+}
+```
+
+**Note:** This only removes the tracking record. It does not delete the vectorized chunks from the Supabase vector store.
+
+### GET /api/webhooks/help/status
+Check if the help chat is available (webhook configured and active).
+
+**Access:** Private (any authenticated user)
+
+**Response:**
+```json
+{
+  "available": true
+}
+```
+
+### POST /api/webhooks/help/chat
+Send a question to the AI help chat agent.
+
+**Access:** Private (any authenticated user)
+
+**Request Body:**
+```json
+{
+  "question": "How do you begin the self study?",
+  "sessionId": "optional_session_id"
+}
+```
+
+**Response:**
+```json
+{
+  "answer": "To begin the self study, you should first...",
+  "sources": []
+}
+```
+
+### HelpDocument Schema
+
+```typescript
+{
+  fileName: string;       // Original filename
+  fileSize: number;       // File size in bytes
+  source: 'handbook' | 'user_guide' | 'reference';
+  title: string;          // Document title
+  status: 'processing' | 'loaded' | 'error';
+  error?: string;         // Error message if status is 'error'
+  callbackToken: string;  // 32-byte hex token (not exposed to frontend)
+  uploadedBy: ObjectId;   // User who uploaded
+  uploadedAt: Date;       // Upload timestamp
+  completedAt?: Date;     // When vectorization completed
+}
+```
+
+### N8N Workflow: Help Document Upload
+
+```
+Webhook (POST /help-upload)
+    ↓
+Validate Input (extract file, callbackUrl, docId, callbackToken)
+    ↓ (fork)
+    ├→ Respond Immediately (returns { status: "accepted" })
+    └→ Is PDF?
+        ├→ [true]  PDF Vector Store Insert (LangChain: Supabase + OpenAI embeddings)
+        └→ [false] Chunk Text File → Add Metadata → Get OpenAI Embeddings → Create Row (Supabase)
+                                                                                    ↓
+                                                                            Aggregate Results
+        ↓ (both paths converge)
+    Has Callback? (check if callbackUrl is not empty)
+        ├→ [true]  Send Success Callback (POST to callbackUrl with docId, callbackToken, status)
+        └→ [false] (end)
 ```
 
 ---
