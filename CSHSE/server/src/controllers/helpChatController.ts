@@ -82,7 +82,8 @@ export const uploadHelpDocument = async (req: AuthenticatedRequest, res: Respons
       source: source || 'handbook',
       title: title || file.originalname,
       docId: helpDoc._id.toString(),
-      callbackUrl
+      callbackUrl,
+      callbackToken: helpDoc.callbackToken
     };
 
     console.log('[HelpUpload] Sending to n8n:', {
@@ -132,7 +133,7 @@ export const uploadHelpDocument = async (req: AuthenticatedRequest, res: Respons
 export const receiveHelpUploadCallback = async (req: Request, res: Response) => {
   try {
     console.log('[HelpUpload Callback] Received:', JSON.stringify(req.body));
-    const { docId, status, error: loadError } = req.body;
+    const { docId, callbackToken, status, error: loadError } = req.body;
 
     if (!docId) {
       return res.status(400).json({ error: 'Missing docId in callback' });
@@ -141,6 +142,12 @@ export const receiveHelpUploadCallback = async (req: Request, res: Response) => 
     const helpDoc = await HelpDocument.findById(docId);
     if (!helpDoc) {
       return res.status(404).json({ error: 'Help document not found' });
+    }
+
+    // Verify callback token to prevent unauthorized status updates
+    if (!callbackToken || callbackToken !== helpDoc.callbackToken) {
+      console.warn('[HelpUpload Callback] Invalid callback token for doc', docId);
+      return res.status(403).json({ error: 'Invalid callback token' });
     }
 
     if (status === 'success' || status === 'loaded' || status === 'completed') {
@@ -170,7 +177,7 @@ export const receiveHelpUploadCallback = async (req: Request, res: Response) => 
  */
 export const getHelpDocuments = async (_req: Request, res: Response) => {
   try {
-    const docs = await HelpDocument.find().sort({ uploadedAt: -1 });
+    const docs = await HelpDocument.find().select('-callbackToken').sort({ uploadedAt: -1 });
     return res.json(docs);
   } catch (error) {
     console.error('[HelpDocuments] Error:', error);

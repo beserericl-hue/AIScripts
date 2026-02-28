@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import crypto from 'crypto';
 
 export interface IHelpDocument extends Document {
   fileName: string;
@@ -7,6 +8,7 @@ export interface IHelpDocument extends Document {
   title: string;
   status: 'processing' | 'loaded' | 'error';
   error?: string;
+  callbackToken: string;
   uploadedBy: mongoose.Types.ObjectId;
   uploadedAt: Date;
   completedAt?: Date;
@@ -19,6 +21,7 @@ const HelpDocumentSchema = new Schema<IHelpDocument>({
   title: { type: String, required: true },
   status: { type: String, enum: ['processing', 'loaded', 'error'], default: 'processing' },
   error: { type: String },
+  callbackToken: { type: String, default: () => crypto.randomBytes(32).toString('hex') },
   uploadedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   uploadedAt: { type: Date, default: Date.now },
   completedAt: { type: Date }
