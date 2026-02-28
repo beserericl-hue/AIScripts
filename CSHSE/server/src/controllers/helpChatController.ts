@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { WebhookSettings } from '../models/WebhookSettings';
+import { HelpDocument } from '../models/HelpDocument';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -8,6 +9,15 @@ interface AuthenticatedRequest extends Request {
     firstName?: string;
     lastName?: string;
   };
+}
+
+/**
+ * Construct callback URL from request headers
+ */
+function getCallbackUrl(req: Request, callbackPath: string): string {
+  const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+  const host = req.get('host');
+  return `${protocol}://${host}${callbackPath}`;
 }
 
 /**
@@ -28,7 +38,7 @@ export const getHelpChatStatus = async (_req: Request, res: Response) => {
 
 /**
  * Upload a help document to the N8N vectorization webhook.
- * Uses the callbackUrl field from help_chat settings as the upload endpoint.
+ * Creates a DB record to track status and sends callbackUrl for completion notification.
  */
 export const uploadHelpDocument = async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -50,39 +60,138 @@ export const uploadHelpDocument = async (req: AuthenticatedRequest, res: Respons
       });
     }
 
-    // Build multipart form data to forward to N8N using native FormData
-    const formData = new globalThis.FormData();
-    const blob = new Blob([file.buffer], { type: file.mimetype });
-    formData.append('file', blob, file.originalname);
-    formData.append('source', source || 'handbook');
-    formData.append('title', title || file.originalname);
+    // Create DB record with status 'processing'
+    const helpDoc = await HelpDocument.create({
+      fileName: file.originalname,
+      fileSize: file.size,
+      source: source || 'handbook',
+      title: title || file.originalname,
+      status: 'processing',
+      uploadedBy: req.user?.id
+    });
+
+    // Construct callback URL for n8n to notify on completion
+    const callbackUrl = getCallbackUrl(req, '/api/webhooks/help/upload/callback');
+
+    // Send as JSON with base64-encoded file data (matches spec loader pattern)
+    const base64Data = file.buffer.toString('base64');
+    const payload = {
+      data: base64Data,
+      filename: file.originalname,
+      mimeType: file.mimetype,
+      source: source || 'handbook',
+      title: title || file.originalname,
+      docId: helpDoc._id.toString(),
+      callbackUrl
+    };
+
+    console.log('[HelpUpload] Sending to n8n:', {
+      filename: file.originalname,
+      mimeType: file.mimetype,
+      fileSize: file.size,
+      docId: helpDoc._id.toString(),
+      callbackUrl
+    });
 
     const response = await fetch(webhookSettings.webhookUrl, {
       method: 'POST',
-      body: formData,
-      signal: AbortSignal.timeout(120000) // 2 min timeout for large files
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(120000)
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[HelpUpload] N8N error:', response.status, errorText);
+      helpDoc.status = 'error';
+      helpDoc.error = `n8n returned ${response.status}: ${errorText}`;
+      await helpDoc.save();
       return res.status(502).json({
         error: 'Failed to upload document to help system.'
       });
     }
 
-    const data = await response.json() as any;
-
     return res.json({
       success: true,
+      docId: helpDoc._id,
       fileName: file.originalname,
       fileSize: file.size,
       source: source || 'handbook',
-      message: data.message || 'Document uploaded and processed successfully'
+      status: 'processing',
+      message: 'Document upload started. Processing in background.'
     });
   } catch (error) {
     console.error('[HelpUpload] Error:', error);
     return res.status(500).json({ error: 'Failed to upload help document' });
+  }
+};
+
+/**
+ * Receive callback from n8n when help document vectorization is complete
+ */
+export const receiveHelpUploadCallback = async (req: Request, res: Response) => {
+  try {
+    console.log('[HelpUpload Callback] Received:', JSON.stringify(req.body));
+    const { docId, status, error: loadError } = req.body;
+
+    if (!docId) {
+      return res.status(400).json({ error: 'Missing docId in callback' });
+    }
+
+    const helpDoc = await HelpDocument.findById(docId);
+    if (!helpDoc) {
+      return res.status(404).json({ error: 'Help document not found' });
+    }
+
+    if (status === 'success' || status === 'loaded' || status === 'completed') {
+      helpDoc.status = 'loaded';
+      helpDoc.completedAt = new Date();
+      helpDoc.error = undefined;
+    } else if (status === 'error' || status === 'failed') {
+      helpDoc.status = 'error';
+      helpDoc.error = loadError || 'Unknown error from vectorization service';
+    } else {
+      helpDoc.status = 'loaded';
+      helpDoc.completedAt = new Date();
+    }
+
+    await helpDoc.save();
+    console.log('[HelpUpload Callback] Updated doc', docId, 'to status:', helpDoc.status);
+
+    return res.json({ success: true, docId, status: helpDoc.status });
+  } catch (error) {
+    console.error('[HelpUpload Callback] Error:', error);
+    return res.status(500).json({ error: 'Failed to process callback' });
+  }
+};
+
+/**
+ * Get all help documents (DB-backed list replacing localStorage)
+ */
+export const getHelpDocuments = async (_req: Request, res: Response) => {
+  try {
+    const docs = await HelpDocument.find().sort({ uploadedAt: -1 });
+    return res.json(docs);
+  } catch (error) {
+    console.error('[HelpDocuments] Error:', error);
+    return res.status(500).json({ error: 'Failed to get help documents' });
+  }
+};
+
+/**
+ * Delete a help document record (does not remove from vector store)
+ */
+export const deleteHelpDocument = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const doc = await HelpDocument.findByIdAndDelete(id);
+    if (!doc) {
+      return res.status(404).json({ error: 'Help document not found' });
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('[HelpDocuments] Delete error:', error);
+    return res.status(500).json({ error: 'Failed to delete help document' });
   }
 };
 

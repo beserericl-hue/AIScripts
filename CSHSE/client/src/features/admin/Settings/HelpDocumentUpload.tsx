@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import {
   Upload,
@@ -7,33 +8,55 @@ import {
   AlertCircle,
   FileText,
   HelpCircle,
-  Trash2
+  Trash2,
+  Clock
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-interface UploadedDoc {
+interface HelpDoc {
+  _id: string;
   fileName: string;
-  source: string;
-  uploadedAt: string;
   fileSize: number;
+  source: string;
+  title: string;
+  status: 'processing' | 'loaded' | 'error';
+  error?: string;
+  uploadedAt: string;
+  completedAt?: string;
 }
 
 export function HelpDocumentUpload() {
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedDoc[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('helpDocsUploaded') || '[]');
-    } catch { return []; }
-  });
   const [selectedSource, setSelectedSource] = useState('handbook');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
 
-  const saveUploadedDocs = (docs: UploadedDoc[]) => {
-    setUploadedDocs(docs);
-    localStorage.setItem('helpDocsUploaded', JSON.stringify(docs));
-  };
+  // Fetch documents from DB with polling when any are processing
+  const { data: uploadedDocs = [], isLoading: loadingDocs } = useQuery<HelpDoc[]>({
+    queryKey: ['helpDocuments'],
+    queryFn: async () => {
+      const res = await api.get(`${API_BASE}/webhooks/help/documents`);
+      return res.data;
+    },
+    refetchInterval: (query) => {
+      const docs = query.state.data;
+      if (docs?.some((d) => d.status === 'processing')) {
+        return 3000; // Poll every 3s while processing
+      }
+      return false;
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`${API_BASE}/webhooks/help/documents/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['helpDocuments'] });
+    }
+  });
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -53,15 +76,10 @@ export function HelpDocumentUpload() {
         timeout: 120000
       });
 
-      setUploadResult({ success: true, message: response.data.message || 'Document uploaded successfully' });
+      setUploadResult({ success: true, message: response.data.message || 'Document upload started' });
 
-      const newDoc: UploadedDoc = {
-        fileName: file.name,
-        source: selectedSource,
-        uploadedAt: new Date().toISOString(),
-        fileSize: file.size
-      };
-      saveUploadedDocs([newDoc, ...uploadedDocs]);
+      // Refetch document list to show new processing entry
+      queryClient.invalidateQueries({ queryKey: ['helpDocuments'] });
     } catch (err: any) {
       const msg = err.response?.data?.error || 'Failed to upload document';
       setUploadResult({ success: false, message: msg });
@@ -71,15 +89,42 @@ export function HelpDocumentUpload() {
     }
   };
 
-  const removeDoc = (index: number) => {
-    const updated = uploadedDocs.filter((_, i) => i !== index);
-    saveUploadedDocs(updated);
-  };
-
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const sourceLabel = (source: string) => {
+    if (source === 'handbook') return 'Handbook';
+    if (source === 'user_guide') return 'User Guide';
+    return 'Reference';
+  };
+
+  const statusBadge = (doc: HelpDoc) => {
+    switch (doc.status) {
+      case 'processing':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Processing
+          </span>
+        );
+      case 'loaded':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            <CheckCircle className="w-3 h-3" />
+            Loaded
+          </span>
+        );
+      case 'error':
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800" title={doc.error}>
+            <AlertCircle className="w-3 h-3" />
+            Error
+          </span>
+        );
+    }
   };
 
   return (
@@ -135,7 +180,7 @@ export function HelpDocumentUpload() {
               {uploading && (
                 <div className="flex items-center gap-2 text-sm text-gray-500">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Uploading and processing...
+                  Uploading...
                 </div>
               )}
             </div>
@@ -170,7 +215,12 @@ export function HelpDocumentUpload() {
           Uploaded Documents ({uploadedDocs.length})
         </h3>
 
-        {uploadedDocs.length === 0 ? (
+        {loadingDocs ? (
+          <div className="flex items-center justify-center py-8 gap-2 text-gray-500">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span className="text-sm">Loading documents...</span>
+          </div>
+        ) : uploadedDocs.length === 0 ? (
           <div className="text-center py-8">
             <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500">No documents uploaded yet.</p>
@@ -180,23 +230,37 @@ export function HelpDocumentUpload() {
           </div>
         ) : (
           <div className="space-y-2">
-            {uploadedDocs.map((doc, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+            {uploadedDocs.map((doc) => (
+              <div key={doc._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center gap-3">
-                  <FileText className="w-4 h-4 text-teal-600" />
+                  <FileText className={`w-4 h-4 ${doc.status === 'loaded' ? 'text-teal-600' : doc.status === 'error' ? 'text-red-400' : 'text-yellow-500'}`} />
                   <div>
-                    <p className="text-sm font-medium text-gray-800">{doc.fileName}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-800">{doc.fileName}</p>
+                      {statusBadge(doc)}
+                    </div>
                     <p className="text-xs text-gray-500">
-                      {doc.source === 'handbook' ? 'Handbook' : doc.source === 'user_guide' ? 'User Guide' : 'Reference'}
+                      {sourceLabel(doc.source)}
                       {' · '}
                       {formatFileSize(doc.fileSize)}
                       {' · '}
                       {new Date(doc.uploadedAt).toLocaleDateString()}
+                      {doc.completedAt && (
+                        <>
+                          {' · '}
+                          <Clock className="w-3 h-3 inline" />{' '}
+                          {Math.round((new Date(doc.completedAt).getTime() - new Date(doc.uploadedAt).getTime()) / 1000)}s
+                        </>
+                      )}
                     </p>
+                    {doc.status === 'error' && doc.error && (
+                      <p className="text-xs text-red-600 mt-1">{doc.error}</p>
+                    )}
                   </div>
                 </div>
                 <button
-                  onClick={() => removeDoc(index)}
+                  onClick={() => deleteMutation.mutate(doc._id)}
+                  disabled={deleteMutation.isPending}
                   className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
                   title="Remove from list"
                 >

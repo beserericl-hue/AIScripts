@@ -1,883 +1,1089 @@
 {
-    "updatedAt": "2026-02-27T17:56:10.953Z",
-    "createdAt": "2026-02-27T12:39:04.884Z",
-    "id": "S7Z74PmDwbkL6wiF",
-    "name": "CSHSE Help - Document Upload",
-    "description": null,
-    "active": true,
-    "isArchived": false,
-    "nodes": [
-        {
-            "parameters": {
-                "httpMethod": "POST",
-                "path": "help-upload",
-                "responseMode": "responseNode",
-                "options": {}
-            },
-            "type": "n8n-nodes-base.webhook",
-            "typeVersion": 2.1,
-            "position": [
-                192,
-                520
-            ],
-            "id": "webhook-upload",
-            "name": "Webhook - Upload Document",
-            "webhookId": "655e3cc6-f1f8-47ea-90f1-87da8d880157"
-        },
-        {
-            "parameters": {
-                "jsCode": "// Generate UUID without crypto module\nfunction generateUUID() {\n  return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c === \"x\" ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Determine file type\nconst ext = fileName.split('.').pop().toLowerCase();\nconst isPdf = ext === 'pdf' || mimeType === 'application/pdf';\n\n// Generate job ID\nconst jobId = generateUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      isPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  const binFile = input.binary[binaryKey];\n  const binFileName = binFile.fileName || fileName;\n  const binExt = binFileName.split('.').pop().toLowerCase();\n  const binIsPdf = binExt === 'pdf' || (binFile.mimeType || '').includes('pdf');\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: binFileName,\n      isPdf: binIsPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: { data: input.binary[binaryKey] }\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
-            },
-            "type": "n8n-nodes-base.code",
-            "typeVersion": 2,
-            "position": [
-                416,
-                520
-            ],
-            "id": "validate-input",
-            "name": "Validate Input"
-        },
-        {
-            "parameters": {
-                "respondWith": "json",
-                "responseBody": "={{ JSON.stringify({ status: 'accepted', jobId: $json.jobId, message: 'Help document processing started. Document will be loaded to vector store.' }) }}",
-                "options": {}
-            },
-            "type": "n8n-nodes-base.respondToWebhook",
-            "typeVersion": 1.5,
-            "position": [
-                624,
-                256
-            ],
-            "id": "respond-immediately",
-            "name": "Respond Immediately"
-        },
-        {
-            "parameters": {
-                "conditions": {
-                    "options": {
-                        "caseSensitive": true,
-                        "leftValue": "",
-                        "typeValidation": "strict"
-                    },
-                    "conditions": [
-                        {
-                            "id": "pdf-check",
-                            "leftValue": "={{ $json.isPdf }}",
-                            "rightValue": true,
-                            "operator": {
-                                "type": "boolean",
-                                "operation": "equals",
-                                "singleValue": true
-                            }
-                        }
-                    ],
-                    "combinator": "and"
-                },
-                "options": {}
-            },
-            "type": "n8n-nodes-base.if",
-            "typeVersion": 2.2,
-            "position": [
-                640,
-                616
-            ],
-            "id": "check-file-type",
-            "name": "Is PDF?"
-        },
-        {
-            "parameters": {
-                "mode": "insert",
-                "tableName": {
-                    "__rl": true,
-                    "value": "help_documents",
-                    "mode": "list",
-                    "cachedResultName": "help_documents"
-                },
-                "options": {
-                    "queryName": "match_help_documents"
-                }
-            },
-            "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
-            "typeVersion": 1,
-            "position": [
-                896,
-                208
-            ],
-            "id": "pdf-vector-store",
-            "name": "PDF Vector Store Insert",
-            "credentials": {
-                "supabaseApi": {
-                    "id": "qU6Q7CRvJhUXZABY",
-                    "name": "Supabase account"
-                }
+  "updatedAt": "2026-02-28T12:02:18.320Z",
+  "createdAt": "2026-02-27T12:39:04.884Z",
+  "id": "S7Z74PmDwbkL6wiF",
+  "name": "CSHSE Help - Document Upload",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "help-upload",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        192,
+        520
+      ],
+      "id": "webhook-upload",
+      "name": "Webhook - Upload Document",
+      "webhookId": "655e3cc6-f1f8-47ea-90f1-87da8d880157"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate UUID without crypto module\nfunction generateUUID() {\n  return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c === \"x\" ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Get callback info for status tracking\nconst callbackUrl = body.callbackUrl || '';\nconst docId = body.docId || '';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Determine file type\nconst ext = fileName.split('.').pop().toLowerCase();\nconst isPdf = ext === 'pdf' || mimeType === 'application/pdf';\n\n// Generate job ID\nconst jobId = generateUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      isPdf,\n      callbackUrl,\n      docId,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  const binFile = input.binary[binaryKey];\n  const binFileName = binFile.fileName || fileName;\n  const binExt = binFileName.split('.').pop().toLowerCase();\n  const binIsPdf = binExt === 'pdf' || (binFile.mimeType || '').includes('pdf');\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: binFileName,\n      isPdf: binIsPdf,\n      callbackUrl,\n      docId,\n      startedAt: new Date().toISOString()\n    },\n    binary: { data: input.binary[binaryKey] }\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        520
+      ],
+      "id": "validate-input",
+      "name": "Validate Input"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'accepted', jobId: $json.jobId, message: 'Help document processing started. Document will be loaded to vector store.' }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        624,
+        256
+      ],
+      "id": "respond-immediately",
+      "name": "Respond Immediately"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "pdf-check",
+              "leftValue": "={{ $json.isPdf }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
             }
+          ],
+          "combinator": "and"
         },
-        {
-            "parameters": {
-                "dataType": "binary",
-                "options": {
-                    "metadata": {
-                        "metadataValues": [
-                            {
-                                "name": "source",
-                                "value": "={{ $('Validate Input').first().json.source }}"
-                            },
-                            {
-                                "name": "title",
-                                "value": "={{ $('Validate Input').first().json.title }}"
-                            },
-                            {
-                                "name": "fileName",
-                                "value": "={{ $('Validate Input').first().json.fileName }}"
-                            }
-                        ]
-                    }
-                }
-            },
-            "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
-            "typeVersion": 1,
-            "position": [
-                992,
-                432
-            ],
-            "id": "pdf-data-loader",
-            "name": "PDF Data Loader"
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        616
+      ],
+      "id": "check-file-type",
+      "name": "Is PDF?"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "tableName": {
+          "__rl": true,
+          "value": "help_documents",
+          "mode": "list",
+          "cachedResultName": "help_documents"
         },
-        {
-            "parameters": {
-                "chunkOverlap": 200,
-                "options": {}
-            },
-            "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
-            "typeVersion": 1,
-            "position": [
-                1072,
-                640
-            ],
-            "id": "pdf-text-splitter",
-            "name": "PDF Text Splitter"
-        },
-        {
-            "parameters": {
-                "options": {}
-            },
-            "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
-            "typeVersion": 1,
-            "position": [
-                864,
-                432
-            ],
-            "id": "pdf-embeddings",
-            "name": "PDF Embeddings",
-            "credentials": {
-                "openAiApi": {
-                    "id": "xSzPIySN61drme77",
-                    "name": "OpenAi account"
-                }
-            }
-        },
-        {
-            "parameters": {
-                "jsCode": "// Read text/markdown file from binary and split into chunks\nconst input = $input.first();\nconst binaryKey = Object.keys(input.binary)[0];\nconst binaryData = input.binary[binaryKey];\n\n// Get the text content from binary\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\nconst text = buffer.toString('utf-8');\n\nif (!text || text.trim().length === 0) {\n  throw new Error('File is empty or could not be read as text.');\n}\n\n// Chunk the text (1000 chars with 200 overlap, similar to typical RAG chunking)\nconst CHUNK_SIZE = 1000;\nconst CHUNK_OVERLAP = 200;\nconst chunks = [];\nlet start = 0;\n\nwhile (start < text.length) {\n  let end = start + CHUNK_SIZE;\n  \n  // Try to break at a paragraph or sentence boundary\n  if (end < text.length) {\n    // Look for paragraph break\n    const paraBreak = text.lastIndexOf('\\n\\n', end);\n    if (paraBreak > start + CHUNK_SIZE * 0.5) {\n      end = paraBreak + 2;\n    } else {\n      // Look for sentence break\n      const sentBreak = text.lastIndexOf('. ', end);\n      if (sentBreak > start + CHUNK_SIZE * 0.5) {\n        end = sentBreak + 2;\n      }\n    }\n  } else {\n    end = text.length;\n  }\n  \n  const chunk = text.slice(start, end).trim();\n  if (chunk.length > 0) {\n    chunks.push({\n      json: {\n        text: chunk,\n        numpages: 0\n      }\n    });\n  }\n  \n  start = end - CHUNK_OVERLAP;\n  if (start >= text.length) break;\n}\n\nreturn chunks;"
-            },
-            "type": "n8n-nodes-base.code",
-            "typeVersion": 2,
-            "position": [
-                1000,
-                816
-            ],
-            "id": "chunk-text",
-            "name": "Chunk Text File"
-        },
-        {
-            "parameters": {
-                "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst enrichedDocs = items.map((item, index) => {\n  const doc = item.json;\n  \n  return {\n    json: {\n      pageContent: doc.text || doc.pageContent || '',\n      metadata: {\n        source: jobConfig.source,\n        title: jobConfig.title,\n        chunkIndex: index,\n        fileName: jobConfig.fileName,\n        numPages: doc.numpages || 0,\n        loadedAt: new Date().toISOString()\n      }\n    }\n  };\n});\n\nreturn enrichedDocs;"
-            },
-            "type": "n8n-nodes-base.code",
-            "typeVersion": 2,
-            "position": [
-                1360,
-                816
-            ],
-            "id": "add-metadata",
-            "name": "Add Metadata"
-        },
-        {
-            "parameters": {
-                "method": "POST",
-                "url": "https://api.openai.com/v1/embeddings",
-                "authentication": "predefinedCredentialType",
-                "nodeCredentialType": "openAiApi",
-                "sendHeaders": true,
-                "headerParameters": {
-                    "parameters": [
-                        {
-                            "name": "Content-Type",
-                            "value": "application/json"
-                        }
-                    ]
-                },
-                "sendBody": true,
-                "specifyBody": "json",
-                "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
-                "options": {
-                    "timeout": 60000
-                }
-            },
-            "type": "n8n-nodes-base.httpRequest",
-            "typeVersion": 4.2,
-            "position": [
-                1584,
-                816
-            ],
-            "id": "get-embeddings",
-            "name": "Get OpenAI Embeddings",
-            "credentials": {
-                "openAiApi": {
-                    "id": "xSzPIySN61drme77",
-                    "name": "OpenAi account"
-                }
-            }
-        },
-        {
-            "parameters": {
-                "tableId": "help_documents",
-                "fieldsUi": {
-                    "fieldValues": [
-                        {
-                            "fieldId": "content",
-                            "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.pageContent) }}"
-                        },
-                        {
-                            "fieldId": "metadata",
-                            "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.metadata) }}"
-                        },
-                        {
-                            "fieldId": "embedding",
-                            "fieldValue": "={{ JSON.stringify($json.data[0].embedding) }}"
-                        }
-                    ]
-                }
-            },
-            "type": "n8n-nodes-base.supabase",
-            "typeVersion": 1,
-            "position": [
-                1808,
-                816
-            ],
-            "id": "create-row",
-            "name": "Create a row",
-            "credentials": {
-                "supabaseApi": {
-                    "id": "qU6Q7CRvJhUXZABY",
-                    "name": "Supabase account"
-                }
-            }
-        },
-        {
-            "parameters": {
-                "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst result = {\n  success: true,\n  jobId: jobConfig.jobId,\n  source: jobConfig.source,\n  title: jobConfig.title,\n  fileName: jobConfig.fileName,\n  documentsLoaded: items.length,\n  processedAt: new Date().toISOString(),\n  processingDuration: Date.now() - new Date(jobConfig.startedAt).getTime(),\n  message: `Successfully loaded ${items.length} document chunks from ${jobConfig.fileName}`\n};\n\nreturn [{ json: result }];"
-            },
-            "type": "n8n-nodes-base.code",
-            "typeVersion": 2,
-            "position": [
-                2032,
-                816
-            ],
-            "id": "aggregate-results",
-            "name": "Aggregate Results"
+        "options": {
+          "queryName": "match_help_documents"
         }
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1,
+      "position": [
+        896,
+        208
+      ],
+      "id": "pdf-vector-store",
+      "name": "PDF Vector Store Insert",
+      "credentials": {
+        "supabaseApi": {
+          "id": "qU6Q7CRvJhUXZABY",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataType": "binary",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "source",
+                "value": "={{ $('Validate Input').first().json.source }}"
+              },
+              {
+                "name": "title",
+                "value": "={{ $('Validate Input').first().json.title }}"
+              },
+              {
+                "name": "fileName",
+                "value": "={{ $('Validate Input').first().json.fileName }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1,
+      "position": [
+        992,
+        432
+      ],
+      "id": "pdf-data-loader",
+      "name": "PDF Data Loader"
+    },
+    {
+      "parameters": {
+        "chunkOverlap": 200,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        640
+      ],
+      "id": "pdf-text-splitter",
+      "name": "PDF Text Splitter"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1,
+      "position": [
+        864,
+        432
+      ],
+      "id": "pdf-embeddings",
+      "name": "PDF Embeddings",
+      "credentials": {
+        "openAiApi": {
+          "id": "xSzPIySN61drme77",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read text/markdown file from binary and split into chunks\nconst input = $input.first();\nconst binaryKey = Object.keys(input.binary)[0];\nconst binaryData = input.binary[binaryKey];\n\n// Get the text content from binary\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\nconst text = buffer.toString('utf-8');\n\nif (!text || text.trim().length === 0) {\n  throw new Error('File is empty or could not be read as text.');\n}\n\n// Chunk the text (1000 chars with 200 overlap, similar to typical RAG chunking)\nconst CHUNK_SIZE = 1000;\nconst CHUNK_OVERLAP = 200;\nconst chunks = [];\nlet start = 0;\n\nwhile (start < text.length) {\n  let end = start + CHUNK_SIZE;\n  \n  // Try to break at a paragraph or sentence boundary\n  if (end < text.length) {\n    // Look for paragraph break\n    const paraBreak = text.lastIndexOf('\\n\\n', end);\n    if (paraBreak > start + CHUNK_SIZE * 0.5) {\n      end = paraBreak + 2;\n    } else {\n      // Look for sentence break\n      const sentBreak = text.lastIndexOf('. ', end);\n      if (sentBreak > start + CHUNK_SIZE * 0.5) {\n        end = sentBreak + 2;\n      }\n    }\n  } else {\n    end = text.length;\n  }\n  \n  const chunk = text.slice(start, end).trim();\n  if (chunk.length > 0) {\n    chunks.push({\n      json: {\n        text: chunk,\n        numpages: 0\n      }\n    });\n  }\n  \n  start = end - CHUNK_OVERLAP;\n  if (start >= text.length) break;\n}\n\nreturn chunks;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        816
+      ],
+      "id": "chunk-text",
+      "name": "Chunk Text File"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst enrichedDocs = items.map((item, index) => {\n  const doc = item.json;\n  \n  return {\n    json: {\n      pageContent: doc.text || doc.pageContent || '',\n      metadata: {\n        source: jobConfig.source,\n        title: jobConfig.title,\n        chunkIndex: index,\n        fileName: jobConfig.fileName,\n        numPages: doc.numpages || 0,\n        loadedAt: new Date().toISOString()\n      }\n    }\n  };\n});\n\nreturn enrichedDocs;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        816
+      ],
+      "id": "add-metadata",
+      "name": "Add Metadata"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1584,
+        816
+      ],
+      "id": "get-embeddings",
+      "name": "Get OpenAI Embeddings",
+      "credentials": {
+        "openAiApi": {
+          "id": "xSzPIySN61drme77",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "help_documents",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "content",
+              "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.pageContent) }}"
+            },
+            {
+              "fieldId": "metadata",
+              "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.metadata) }}"
+            },
+            {
+              "fieldId": "embedding",
+              "fieldValue": "={{ JSON.stringify($json.data[0].embedding) }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1808,
+        816
+      ],
+      "id": "create-row",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "qU6Q7CRvJhUXZABY",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst result = {\n  success: true,\n  jobId: jobConfig.jobId,\n  source: jobConfig.source,\n  title: jobConfig.title,\n  fileName: jobConfig.fileName,\n  documentsLoaded: items.length,\n  processedAt: new Date().toISOString(),\n  processingDuration: Date.now() - new Date(jobConfig.startedAt).getTime(),\n  message: `Successfully loaded ${items.length} document chunks from ${jobConfig.fileName}`\n};\n\nreturn [{ json: result }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2032,
+        816
+      ],
+      "id": "aggregate-results",
+      "name": "Aggregate Results"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "callback-check",
+              "leftValue": "={{ $('Validate Input').first().json.callbackUrl }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2300,
+        500
+      ],
+      "id": "has-callback",
+      "name": "Has Callback?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Validate Input').first().json.callbackUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"docId\": {{ JSON.stringify($('Validate Input').first().json.docId) }},\n  \"status\": \"success\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2540,
+        400
+      ],
+      "id": "send-callback",
+      "name": "Send Success Callback"
+    }
+  ],
+  "connections": {
+    "Webhook - Upload Document": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Respond Immediately",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is PDF?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is PDF?": {
+      "main": [
+        [
+          {
+            "node": "PDF Vector Store Insert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chunk Text File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "PDF Vector Store Insert",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "PDF Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF Embeddings": {
+      "ai_embedding": [
+        [
+          {
+            "node": "PDF Vector Store Insert",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chunk Text File": {
+      "main": [
+        [
+          {
+            "node": "Add Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Metadata": {
+      "main": [
+        [
+          {
+            "node": "Get OpenAI Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get OpenAI Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF Vector Store Insert": {
+      "main": [
+        [
+          {
+            "node": "Has Callback?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Results": {
+      "main": [
+        [
+          {
+            "node": "Has Callback?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Callback?": {
+      "main": [
+        [
+          {
+            "node": "Send Success Callback",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "meta": null,
+  "pinData": {},
+  "versionId": "22791381-58fe-46bf-b232-311166e44abe",
+  "activeVersionId": "22791381-58fe-46bf-b232-311166e44abe",
+  "versionCounter": 64,
+  "triggerCount": 1,
+  "shared": [
+    {
+      "updatedAt": "2026-02-27T12:39:04.884Z",
+      "createdAt": "2026-02-27T12:39:04.884Z",
+      "role": "workflow:owner",
+      "workflowId": "S7Z74PmDwbkL6wiF",
+      "projectId": "so6FfyLmNOjnxEMJ",
+      "project": {
+        "updatedAt": "2026-01-12T16:36:13.622Z",
+        "createdAt": "2026-01-12T15:34:50.204Z",
+        "id": "so6FfyLmNOjnxEMJ",
+        "name": "Eric Beser <eric@agileadtesting.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+      }
+    }
+  ],
+  "tags": [],
+  "activeVersion": {
+    "updatedAt": "2026-02-28T12:02:18.325Z",
+    "createdAt": "2026-02-28T12:02:18.325Z",
+    "versionId": "22791381-58fe-46bf-b232-311166e44abe",
+    "workflowId": "S7Z74PmDwbkL6wiF",
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "help-upload",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          192,
+          520
+        ],
+        "id": "webhook-upload",
+        "name": "Webhook - Upload Document",
+        "webhookId": "655e3cc6-f1f8-47ea-90f1-87da8d880157"
+      },
+      {
+        "parameters": {
+          "jsCode": "// Generate UUID without crypto module\nfunction generateUUID() {\n  return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c === \"x\" ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Get callback info for status tracking\nconst callbackUrl = body.callbackUrl || '';\nconst docId = body.docId || '';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Determine file type\nconst ext = fileName.split('.').pop().toLowerCase();\nconst isPdf = ext === 'pdf' || mimeType === 'application/pdf';\n\n// Generate job ID\nconst jobId = generateUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      isPdf,\n      callbackUrl,\n      docId,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  const binFile = input.binary[binaryKey];\n  const binFileName = binFile.fileName || fileName;\n  const binExt = binFileName.split('.').pop().toLowerCase();\n  const binIsPdf = binExt === 'pdf' || (binFile.mimeType || '').includes('pdf');\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: binFileName,\n      isPdf: binIsPdf,\n      callbackUrl,\n      docId,\n      startedAt: new Date().toISOString()\n    },\n    binary: { data: input.binary[binaryKey] }\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          416,
+          520
+        ],
+        "id": "validate-input",
+        "name": "Validate Input"
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({ status: 'accepted', jobId: $json.jobId, message: 'Help document processing started. Document will be loaded to vector store.' }) }}",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          624,
+          256
+        ],
+        "id": "respond-immediately",
+        "name": "Respond Immediately"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "pdf-check",
+                "leftValue": "={{ $json.isPdf }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          640,
+          616
+        ],
+        "id": "check-file-type",
+        "name": "Is PDF?"
+      },
+      {
+        "parameters": {
+          "mode": "insert",
+          "tableName": {
+            "__rl": true,
+            "value": "help_documents",
+            "mode": "list",
+            "cachedResultName": "help_documents"
+          },
+          "options": {
+            "queryName": "match_help_documents"
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+        "typeVersion": 1,
+        "position": [
+          896,
+          208
+        ],
+        "id": "pdf-vector-store",
+        "name": "PDF Vector Store Insert",
+        "credentials": {
+          "supabaseApi": {
+            "id": "qU6Q7CRvJhUXZABY",
+            "name": "Supabase account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "dataType": "binary",
+          "options": {
+            "metadata": {
+              "metadataValues": [
+                {
+                  "name": "source",
+                  "value": "={{ $('Validate Input').first().json.source }}"
+                },
+                {
+                  "name": "title",
+                  "value": "={{ $('Validate Input').first().json.title }}"
+                },
+                {
+                  "name": "fileName",
+                  "value": "={{ $('Validate Input').first().json.fileName }}"
+                }
+              ]
+            }
+          }
+        },
+        "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+        "typeVersion": 1,
+        "position": [
+          992,
+          432
+        ],
+        "id": "pdf-data-loader",
+        "name": "PDF Data Loader"
+      },
+      {
+        "parameters": {
+          "chunkOverlap": 200,
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+        "typeVersion": 1,
+        "position": [
+          1072,
+          640
+        ],
+        "id": "pdf-text-splitter",
+        "name": "PDF Text Splitter"
+      },
+      {
+        "parameters": {
+          "options": {}
+        },
+        "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+        "typeVersion": 1,
+        "position": [
+          864,
+          432
+        ],
+        "id": "pdf-embeddings",
+        "name": "PDF Embeddings",
+        "credentials": {
+          "openAiApi": {
+            "id": "xSzPIySN61drme77",
+            "name": "OpenAi account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "// Read text/markdown file from binary and split into chunks\nconst input = $input.first();\nconst binaryKey = Object.keys(input.binary)[0];\nconst binaryData = input.binary[binaryKey];\n\n// Get the text content from binary\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\nconst text = buffer.toString('utf-8');\n\nif (!text || text.trim().length === 0) {\n  throw new Error('File is empty or could not be read as text.');\n}\n\n// Chunk the text (1000 chars with 200 overlap, similar to typical RAG chunking)\nconst CHUNK_SIZE = 1000;\nconst CHUNK_OVERLAP = 200;\nconst chunks = [];\nlet start = 0;\n\nwhile (start < text.length) {\n  let end = start + CHUNK_SIZE;\n  \n  // Try to break at a paragraph or sentence boundary\n  if (end < text.length) {\n    // Look for paragraph break\n    const paraBreak = text.lastIndexOf('\\n\\n', end);\n    if (paraBreak > start + CHUNK_SIZE * 0.5) {\n      end = paraBreak + 2;\n    } else {\n      // Look for sentence break\n      const sentBreak = text.lastIndexOf('. ', end);\n      if (sentBreak > start + CHUNK_SIZE * 0.5) {\n        end = sentBreak + 2;\n      }\n    }\n  } else {\n    end = text.length;\n  }\n  \n  const chunk = text.slice(start, end).trim();\n  if (chunk.length > 0) {\n    chunks.push({\n      json: {\n        text: chunk,\n        numpages: 0\n      }\n    });\n  }\n  \n  start = end - CHUNK_OVERLAP;\n  if (start >= text.length) break;\n}\n\nreturn chunks;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1000,
+          816
+        ],
+        "id": "chunk-text",
+        "name": "Chunk Text File"
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst enrichedDocs = items.map((item, index) => {\n  const doc = item.json;\n  \n  return {\n    json: {\n      pageContent: doc.text || doc.pageContent || '',\n      metadata: {\n        source: jobConfig.source,\n        title: jobConfig.title,\n        chunkIndex: index,\n        fileName: jobConfig.fileName,\n        numPages: doc.numpages || 0,\n        loadedAt: new Date().toISOString()\n      }\n    }\n  };\n});\n\nreturn enrichedDocs;"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1360,
+          816
+        ],
+        "id": "add-metadata",
+        "name": "Add Metadata"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.openai.com/v1/embeddings",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "openAiApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
+          "options": {
+            "timeout": 60000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1584,
+          816
+        ],
+        "id": "get-embeddings",
+        "name": "Get OpenAI Embeddings",
+        "credentials": {
+          "openAiApi": {
+            "id": "xSzPIySN61drme77",
+            "name": "OpenAi account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "tableId": "help_documents",
+          "fieldsUi": {
+            "fieldValues": [
+              {
+                "fieldId": "content",
+                "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.pageContent) }}"
+              },
+              {
+                "fieldId": "metadata",
+                "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.metadata) }}"
+              },
+              {
+                "fieldId": "embedding",
+                "fieldValue": "={{ JSON.stringify($json.data[0].embedding) }}"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.supabase",
+        "typeVersion": 1,
+        "position": [
+          1808,
+          816
+        ],
+        "id": "create-row",
+        "name": "Create a row",
+        "credentials": {
+          "supabaseApi": {
+            "id": "qU6Q7CRvJhUXZABY",
+            "name": "Supabase account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst result = {\n  success: true,\n  jobId: jobConfig.jobId,\n  source: jobConfig.source,\n  title: jobConfig.title,\n  fileName: jobConfig.fileName,\n  documentsLoaded: items.length,\n  processedAt: new Date().toISOString(),\n  processingDuration: Date.now() - new Date(jobConfig.startedAt).getTime(),\n  message: `Successfully loaded ${items.length} document chunks from ${jobConfig.fileName}`\n};\n\nreturn [{ json: result }];"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2032,
+          816
+        ],
+        "id": "aggregate-results",
+        "name": "Aggregate Results"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict"
+            },
+            "conditions": [
+              {
+                "id": "callback-check",
+                "leftValue": "={{ $('Validate Input').first().json.callbackUrl }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "string",
+                  "operation": "notEquals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          2300,
+          500
+        ],
+        "id": "has-callback",
+        "name": "Has Callback?"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('Validate Input').first().json.callbackUrl }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={\n  \"docId\": {{ JSON.stringify($('Validate Input').first().json.docId) }},\n  \"status\": \"success\"\n}",
+          "options": {
+            "timeout": 30000
+          }
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2540,
+          400
+        ],
+        "id": "send-callback",
+        "name": "Send Success Callback"
+      }
     ],
     "connections": {
-        "Webhook - Upload Document": {
-            "main": [
-                [
-                    {
-                        "node": "Validate Input",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Validate Input": {
-            "main": [
-                [
-                    {
-                        "node": "Respond Immediately",
-                        "type": "main",
-                        "index": 0
-                    },
-                    {
-                        "node": "Is PDF?",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Is PDF?": {
-            "main": [
-                [
-                    {
-                        "node": "PDF Vector Store Insert",
-                        "type": "main",
-                        "index": 0
-                    }
-                ],
-                [
-                    {
-                        "node": "Chunk Text File",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "PDF Data Loader": {
-            "ai_document": [
-                [
-                    {
-                        "node": "PDF Vector Store Insert",
-                        "type": "ai_document",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "PDF Text Splitter": {
-            "ai_textSplitter": [
-                [
-                    {
-                        "node": "PDF Data Loader",
-                        "type": "ai_textSplitter",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "PDF Embeddings": {
-            "ai_embedding": [
-                [
-                    {
-                        "node": "PDF Vector Store Insert",
-                        "type": "ai_embedding",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Chunk Text File": {
-            "main": [
-                [
-                    {
-                        "node": "Add Metadata",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Add Metadata": {
-            "main": [
-                [
-                    {
-                        "node": "Get OpenAI Embeddings",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Get OpenAI Embeddings": {
-            "main": [
-                [
-                    {
-                        "node": "Create a row",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        },
-        "Create a row": {
-            "main": [
-                [
-                    {
-                        "node": "Aggregate Results",
-                        "type": "main",
-                        "index": 0
-                    }
-                ]
-            ]
-        }
-    },
-    "settings": {
-        "executionOrder": "v1",
-        "callerPolicy": "workflowsFromSameOwner",
-        "availableInMCP": false
-    },
-    "staticData": null,
-    "meta": null,
-    "pinData": {},
-    "versionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
-    "activeVersionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
-    "versionCounter": 59,
-    "triggerCount": 1,
-    "shared": [
-        {
-            "updatedAt": "2026-02-27T12:39:04.884Z",
-            "createdAt": "2026-02-27T12:39:04.884Z",
-            "role": "workflow:owner",
-            "workflowId": "S7Z74PmDwbkL6wiF",
-            "projectId": "so6FfyLmNOjnxEMJ",
-            "project": {
-                "updatedAt": "2026-01-12T16:36:13.622Z",
-                "createdAt": "2026-01-12T15:34:50.204Z",
-                "id": "so6FfyLmNOjnxEMJ",
-                "name": "Eric Beser <eric@agileadtesting.com>",
-                "type": "personal",
-                "icon": null,
-                "description": null,
-                "creatorId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+      "Webhook - Upload Document": {
+        "main": [
+          [
+            {
+              "node": "Validate Input",
+              "type": "main",
+              "index": 0
             }
-        }
-    ],
-    "tags": [],
-    "activeVersion": {
-        "updatedAt": "2026-02-27T17:56:10.957Z",
-        "createdAt": "2026-02-27T17:56:10.957Z",
-        "versionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
-        "workflowId": "S7Z74PmDwbkL6wiF",
-        "nodes": [
-            {
-                "parameters": {
-                    "httpMethod": "POST",
-                    "path": "help-upload",
-                    "responseMode": "responseNode",
-                    "options": {}
-                },
-                "type": "n8n-nodes-base.webhook",
-                "typeVersion": 2.1,
-                "position": [
-                    192,
-                    520
-                ],
-                "id": "webhook-upload",
-                "name": "Webhook - Upload Document",
-                "webhookId": "655e3cc6-f1f8-47ea-90f1-87da8d880157"
-            },
-            {
-                "parameters": {
-                    "jsCode": "// Generate UUID without crypto module\nfunction generateUUID() {\n  return \"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx\".replace(/[xy]/g, function(c) {\n    var r = Math.random() * 16 | 0, v = c === \"x\" ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nconst input = $input.first();\nconst json = input.json || {};\nconst body = json.body || json;\n\n// Get metadata from request\nconst source = body.source || 'handbook';\nconst title = body.title || 'Help Document';\n\n// Check for base64 data in JSON body\nconst base64Data = body.data;\nconst fileName = body.filename || body.fileName || 'document.pdf';\nconst mimeType = body.mimeType || 'application/pdf';\n\n// Determine file type\nconst ext = fileName.split('.').pop().toLowerCase();\nconst isPdf = ext === 'pdf' || mimeType === 'application/pdf';\n\n// Generate job ID\nconst jobId = generateUUID();\n\n// If we have base64 data, convert it to binary properly\nif (base64Data) {\n  const buffer = Buffer.from(base64Data, 'base64');\n  const binaryData = await this.helpers.prepareBinaryData(\n    buffer,\n    fileName,\n    mimeType\n  );\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName,\n      isPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: {\n      data: binaryData\n    }\n  }];\n} else if (input.binary && Object.keys(input.binary).length > 0) {\n  // Use existing binary from multipart/form-data upload\n  const binaryKey = Object.keys(input.binary)[0];\n  const binFile = input.binary[binaryKey];\n  const binFileName = binFile.fileName || fileName;\n  const binExt = binFileName.split('.').pop().toLowerCase();\n  const binIsPdf = binExt === 'pdf' || (binFile.mimeType || '').includes('pdf');\n  return [{\n    json: {\n      jobId,\n      source,\n      title,\n      fileName: binFileName,\n      isPdf: binIsPdf,\n      startedAt: new Date().toISOString()\n    },\n    binary: { data: input.binary[binaryKey] }\n  }];\n} else {\n  throw new Error('No file provided. Send either base64-encoded \"data\" field or upload via multipart/form-data.');\n}"
-                },
-                "type": "n8n-nodes-base.code",
-                "typeVersion": 2,
-                "position": [
-                    416,
-                    520
-                ],
-                "id": "validate-input",
-                "name": "Validate Input"
-            },
-            {
-                "parameters": {
-                    "respondWith": "json",
-                    "responseBody": "={{ JSON.stringify({ status: 'accepted', jobId: $json.jobId, message: 'Help document processing started. Document will be loaded to vector store.' }) }}",
-                    "options": {}
-                },
-                "type": "n8n-nodes-base.respondToWebhook",
-                "typeVersion": 1.5,
-                "position": [
-                    624,
-                    256
-                ],
-                "id": "respond-immediately",
-                "name": "Respond Immediately"
-            },
-            {
-                "parameters": {
-                    "conditions": {
-                        "options": {
-                            "caseSensitive": true,
-                            "leftValue": "",
-                            "typeValidation": "strict"
-                        },
-                        "conditions": [
-                            {
-                                "id": "pdf-check",
-                                "leftValue": "={{ $json.isPdf }}",
-                                "rightValue": true,
-                                "operator": {
-                                    "type": "boolean",
-                                    "operation": "equals",
-                                    "singleValue": true
-                                }
-                            }
-                        ],
-                        "combinator": "and"
-                    },
-                    "options": {}
-                },
-                "type": "n8n-nodes-base.if",
-                "typeVersion": 2.2,
-                "position": [
-                    640,
-                    616
-                ],
-                "id": "check-file-type",
-                "name": "Is PDF?"
-            },
-            {
-                "parameters": {
-                    "mode": "insert",
-                    "tableName": {
-                        "__rl": true,
-                        "value": "help_documents",
-                        "mode": "list",
-                        "cachedResultName": "help_documents"
-                    },
-                    "options": {
-                        "queryName": "match_help_documents"
-                    }
-                },
-                "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
-                "typeVersion": 1,
-                "position": [
-                    896,
-                    208
-                ],
-                "id": "pdf-vector-store",
-                "name": "PDF Vector Store Insert",
-                "credentials": {
-                    "supabaseApi": {
-                        "id": "qU6Q7CRvJhUXZABY",
-                        "name": "Supabase account"
-                    }
-                }
-            },
-            {
-                "parameters": {
-                    "dataType": "binary",
-                    "options": {
-                        "metadata": {
-                            "metadataValues": [
-                                {
-                                    "name": "source",
-                                    "value": "={{ $('Validate Input').first().json.source }}"
-                                },
-                                {
-                                    "name": "title",
-                                    "value": "={{ $('Validate Input').first().json.title }}"
-                                },
-                                {
-                                    "name": "fileName",
-                                    "value": "={{ $('Validate Input').first().json.fileName }}"
-                                }
-                            ]
-                        }
-                    }
-                },
-                "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
-                "typeVersion": 1,
-                "position": [
-                    992,
-                    432
-                ],
-                "id": "pdf-data-loader",
-                "name": "PDF Data Loader"
-            },
-            {
-                "parameters": {
-                    "chunkOverlap": 200,
-                    "options": {}
-                },
-                "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
-                "typeVersion": 1,
-                "position": [
-                    1072,
-                    640
-                ],
-                "id": "pdf-text-splitter",
-                "name": "PDF Text Splitter"
-            },
-            {
-                "parameters": {
-                    "options": {}
-                },
-                "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
-                "typeVersion": 1,
-                "position": [
-                    864,
-                    432
-                ],
-                "id": "pdf-embeddings",
-                "name": "PDF Embeddings",
-                "credentials": {
-                    "openAiApi": {
-                        "id": "xSzPIySN61drme77",
-                        "name": "OpenAi account"
-                    }
-                }
-            },
-            {
-                "parameters": {
-                    "jsCode": "// Read text/markdown file from binary and split into chunks\nconst input = $input.first();\nconst binaryKey = Object.keys(input.binary)[0];\nconst binaryData = input.binary[binaryKey];\n\n// Get the text content from binary\nconst buffer = await this.helpers.getBinaryDataBuffer(0, binaryKey);\nconst text = buffer.toString('utf-8');\n\nif (!text || text.trim().length === 0) {\n  throw new Error('File is empty or could not be read as text.');\n}\n\n// Chunk the text (1000 chars with 200 overlap, similar to typical RAG chunking)\nconst CHUNK_SIZE = 1000;\nconst CHUNK_OVERLAP = 200;\nconst chunks = [];\nlet start = 0;\n\nwhile (start < text.length) {\n  let end = start + CHUNK_SIZE;\n  \n  // Try to break at a paragraph or sentence boundary\n  if (end < text.length) {\n    // Look for paragraph break\n    const paraBreak = text.lastIndexOf('\\n\\n', end);\n    if (paraBreak > start + CHUNK_SIZE * 0.5) {\n      end = paraBreak + 2;\n    } else {\n      // Look for sentence break\n      const sentBreak = text.lastIndexOf('. ', end);\n      if (sentBreak > start + CHUNK_SIZE * 0.5) {\n        end = sentBreak + 2;\n      }\n    }\n  } else {\n    end = text.length;\n  }\n  \n  const chunk = text.slice(start, end).trim();\n  if (chunk.length > 0) {\n    chunks.push({\n      json: {\n        text: chunk,\n        numpages: 0\n      }\n    });\n  }\n  \n  start = end - CHUNK_OVERLAP;\n  if (start >= text.length) break;\n}\n\nreturn chunks;"
-                },
-                "type": "n8n-nodes-base.code",
-                "typeVersion": 2,
-                "position": [
-                    1000,
-                    816
-                ],
-                "id": "chunk-text",
-                "name": "Chunk Text File"
-            },
-            {
-                "parameters": {
-                    "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst enrichedDocs = items.map((item, index) => {\n  const doc = item.json;\n  \n  return {\n    json: {\n      pageContent: doc.text || doc.pageContent || '',\n      metadata: {\n        source: jobConfig.source,\n        title: jobConfig.title,\n        chunkIndex: index,\n        fileName: jobConfig.fileName,\n        numPages: doc.numpages || 0,\n        loadedAt: new Date().toISOString()\n      }\n    }\n  };\n});\n\nreturn enrichedDocs;"
-                },
-                "type": "n8n-nodes-base.code",
-                "typeVersion": 2,
-                "position": [
-                    1360,
-                    816
-                ],
-                "id": "add-metadata",
-                "name": "Add Metadata"
-            },
-            {
-                "parameters": {
-                    "method": "POST",
-                    "url": "https://api.openai.com/v1/embeddings",
-                    "authentication": "predefinedCredentialType",
-                    "nodeCredentialType": "openAiApi",
-                    "sendHeaders": true,
-                    "headerParameters": {
-                        "parameters": [
-                            {
-                                "name": "Content-Type",
-                                "value": "application/json"
-                            }
-                        ]
-                    },
-                    "sendBody": true,
-                    "specifyBody": "json",
-                    "jsonBody": "={\n  \"input\": {{ JSON.stringify($json.pageContent) }},\n  \"model\": \"text-embedding-ada-002\"\n}",
-                    "options": {
-                        "timeout": 60000
-                    }
-                },
-                "type": "n8n-nodes-base.httpRequest",
-                "typeVersion": 4.2,
-                "position": [
-                    1584,
-                    816
-                ],
-                "id": "get-embeddings",
-                "name": "Get OpenAI Embeddings",
-                "credentials": {
-                    "openAiApi": {
-                        "id": "xSzPIySN61drme77",
-                        "name": "OpenAi account"
-                    }
-                }
-            },
-            {
-                "parameters": {
-                    "tableId": "help_documents",
-                    "fieldsUi": {
-                        "fieldValues": [
-                            {
-                                "fieldId": "content",
-                                "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.pageContent) }}"
-                            },
-                            {
-                                "fieldId": "metadata",
-                                "fieldValue": "={{ JSON.stringify($('Add Metadata').item.json.metadata) }}"
-                            },
-                            {
-                                "fieldId": "embedding",
-                                "fieldValue": "={{ JSON.stringify($json.data[0].embedding) }}"
-                            }
-                        ]
-                    }
-                },
-                "type": "n8n-nodes-base.supabase",
-                "typeVersion": 1,
-                "position": [
-                    1808,
-                    816
-                ],
-                "id": "create-row",
-                "name": "Create a row",
-                "credentials": {
-                    "supabaseApi": {
-                        "id": "qU6Q7CRvJhUXZABY",
-                        "name": "Supabase account"
-                    }
-                }
-            },
-            {
-                "parameters": {
-                    "jsCode": "const items = $input.all();\nconst jobConfig = $('Validate Input').first().json;\n\nconst result = {\n  success: true,\n  jobId: jobConfig.jobId,\n  source: jobConfig.source,\n  title: jobConfig.title,\n  fileName: jobConfig.fileName,\n  documentsLoaded: items.length,\n  processedAt: new Date().toISOString(),\n  processingDuration: Date.now() - new Date(jobConfig.startedAt).getTime(),\n  message: `Successfully loaded ${items.length} document chunks from ${jobConfig.fileName}`\n};\n\nreturn [{ json: result }];"
-                },
-                "type": "n8n-nodes-base.code",
-                "typeVersion": 2,
-                "position": [
-                    2032,
-                    816
-                ],
-                "id": "aggregate-results",
-                "name": "Aggregate Results"
-            }
-        ],
-        "connections": {
-            "Webhook - Upload Document": {
-                "main": [
-                    [
-                        {
-                            "node": "Validate Input",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Validate Input": {
-                "main": [
-                    [
-                        {
-                            "node": "Respond Immediately",
-                            "type": "main",
-                            "index": 0
-                        },
-                        {
-                            "node": "Is PDF?",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Is PDF?": {
-                "main": [
-                    [
-                        {
-                            "node": "PDF Vector Store Insert",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ],
-                    [
-                        {
-                            "node": "Chunk Text File",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "PDF Data Loader": {
-                "ai_document": [
-                    [
-                        {
-                            "node": "PDF Vector Store Insert",
-                            "type": "ai_document",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "PDF Text Splitter": {
-                "ai_textSplitter": [
-                    [
-                        {
-                            "node": "PDF Data Loader",
-                            "type": "ai_textSplitter",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "PDF Embeddings": {
-                "ai_embedding": [
-                    [
-                        {
-                            "node": "PDF Vector Store Insert",
-                            "type": "ai_embedding",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Chunk Text File": {
-                "main": [
-                    [
-                        {
-                            "node": "Add Metadata",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Add Metadata": {
-                "main": [
-                    [
-                        {
-                            "node": "Get OpenAI Embeddings",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Get OpenAI Embeddings": {
-                "main": [
-                    [
-                        {
-                            "node": "Create a row",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            },
-            "Create a row": {
-                "main": [
-                    [
-                        {
-                            "node": "Aggregate Results",
-                            "type": "main",
-                            "index": 0
-                        }
-                    ]
-                ]
-            }
-        },
-        "authors": "Eric Beser",
-        "name": null,
-        "description": null,
-        "autosaved": false,
-        "workflowPublishHistory": [
-            {
-                "createdAt": "2026-02-27T17:56:11.162Z",
-                "id": 69,
-                "workflowId": "S7Z74PmDwbkL6wiF",
-                "versionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
-                "event": "deactivated",
-                "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
-            },
-            {
-                "createdAt": "2026-02-27T17:56:11.243Z",
-                "id": 70,
-                "workflowId": "S7Z74PmDwbkL6wiF",
-                "versionId": "735de7a3-49bf-4a7e-b595-2499e1af2559",
-                "event": "activated",
-                "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
-            }
+          ]
         ]
-    }
+      },
+      "Validate Input": {
+        "main": [
+          [
+            {
+              "node": "Respond Immediately",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Is PDF?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Is PDF?": {
+        "main": [
+          [
+            {
+              "node": "PDF Vector Store Insert",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Chunk Text File",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "PDF Data Loader": {
+        "ai_document": [
+          [
+            {
+              "node": "PDF Vector Store Insert",
+              "type": "ai_document",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "PDF Text Splitter": {
+        "ai_textSplitter": [
+          [
+            {
+              "node": "PDF Data Loader",
+              "type": "ai_textSplitter",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "PDF Embeddings": {
+        "ai_embedding": [
+          [
+            {
+              "node": "PDF Vector Store Insert",
+              "type": "ai_embedding",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Chunk Text File": {
+        "main": [
+          [
+            {
+              "node": "Add Metadata",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Add Metadata": {
+        "main": [
+          [
+            {
+              "node": "Get OpenAI Embeddings",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get OpenAI Embeddings": {
+        "main": [
+          [
+            {
+              "node": "Create a row",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Create a row": {
+        "main": [
+          [
+            {
+              "node": "Aggregate Results",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "PDF Vector Store Insert": {
+        "main": [
+          [
+            {
+              "node": "Has Callback?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Aggregate Results": {
+        "main": [
+          [
+            {
+              "node": "Has Callback?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Callback?": {
+        "main": [
+          [
+            {
+              "node": "Send Success Callback",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          []
+        ]
+      }
+    },
+    "authors": "Eric Beser",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "workflowPublishHistory": [
+      {
+        "createdAt": "2026-02-28T12:02:18.487Z",
+        "id": 73,
+        "workflowId": "S7Z74PmDwbkL6wiF",
+        "versionId": "22791381-58fe-46bf-b232-311166e44abe",
+        "event": "deactivated",
+        "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+      },
+      {
+        "createdAt": "2026-02-28T12:02:18.535Z",
+        "id": 74,
+        "workflowId": "S7Z74PmDwbkL6wiF",
+        "versionId": "22791381-58fe-46bf-b232-311166e44abe",
+        "event": "activated",
+        "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+      },
+      {
+        "createdAt": "2026-02-28T12:02:25.306Z",
+        "id": 75,
+        "workflowId": "S7Z74PmDwbkL6wiF",
+        "versionId": "22791381-58fe-46bf-b232-311166e44abe",
+        "event": "deactivated",
+        "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+      },
+      {
+        "createdAt": "2026-02-28T12:02:25.357Z",
+        "id": 76,
+        "workflowId": "S7Z74PmDwbkL6wiF",
+        "versionId": "22791381-58fe-46bf-b232-311166e44abe",
+        "event": "activated",
+        "userId": "fd7cc91d-5051-4455-95a6-842a68ceadb7"
+      }
+    ]
+  }
 }

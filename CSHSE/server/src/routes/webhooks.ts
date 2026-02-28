@@ -14,7 +14,7 @@ import {
 } from '../controllers/webhookController';
 import { receiveSpecLoaderCallback } from '../controllers/specLoaderController';
 import { receiveDocumentMatcherCallback } from '../controllers/documentMatcherController';
-import { sendChatMessage, getHelpChatStatus, uploadHelpDocument } from '../controllers/helpChatController';
+import { sendChatMessage, getHelpChatStatus, uploadHelpDocument, receiveHelpUploadCallback, getHelpDocuments, deleteHelpDocument } from '../controllers/helpChatController';
 import { authenticate, requireAdmin } from '../middleware/auth';
 
 const helpUpload = multer({
@@ -49,6 +49,13 @@ router.post('/spec-loader/callback', receiveSpecLoaderCallback);
  */
 router.post('/document-matcher/callback', receiveDocumentMatcherCallback);
 
+/**
+ * @route   POST /api/webhooks/help/upload/callback
+ * @desc    Receive help document vectorization completion callback from N8N
+ * @access  Public (webhook callback)
+ */
+router.post('/help/upload/callback', receiveHelpUploadCallback);
+
 // All routes below require authentication
 router.use(authenticate);
 
@@ -79,6 +86,20 @@ router.post('/help/chat', sendChatMessage);
  * @access  Private (Admin)
  */
 router.post('/help/upload', requireAdmin, helpUpload.single('file'), uploadHelpDocument);
+
+/**
+ * @route   GET /api/webhooks/help/documents
+ * @desc    Get all help documents with status
+ * @access  Private (Admin)
+ */
+router.get('/help/documents', requireAdmin, getHelpDocuments);
+
+/**
+ * @route   DELETE /api/webhooks/help/documents/:id
+ * @desc    Delete a help document record (does not remove from vector store)
+ * @access  Private (Admin)
+ */
+router.delete('/help/documents/:id', requireAdmin, deleteHelpDocument);
 
 /**
  * @route   GET /api/webhooks/settings
