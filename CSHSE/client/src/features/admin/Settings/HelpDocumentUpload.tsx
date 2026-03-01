@@ -80,7 +80,8 @@ export function HelpDocumentUpload() {
         timeout: 120000
       });
 
-      setUploadResult({ success: true, message: response.data.message || 'Document upload started' });
+      // No success banner needed — the document list below shows status
+      setUploadResult(null);
 
       // Refetch document list to show new processing entry
       queryClient.invalidateQueries({ queryKey: ['helpDocuments'] });
@@ -193,21 +194,11 @@ export function HelpDocumentUpload() {
             </p>
           </div>
 
-          {/* Upload result */}
-          {uploadResult && (
-            <div className={`p-4 rounded-lg flex items-start gap-3 ${
-              uploadResult.success
-                ? 'bg-green-50 border border-green-200'
-                : 'bg-red-50 border border-red-200'
-            }`}>
-              {uploadResult.success ? (
-                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-              ) : (
-                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-              )}
-              <p className={`text-sm ${uploadResult.success ? 'text-green-800' : 'text-red-800'}`}>
-                {uploadResult.message}
-              </p>
+          {/* Upload error banner (success is shown in the document list below) */}
+          {uploadResult && !uploadResult.success && (
+            <div className="p-4 rounded-lg flex items-start gap-3 bg-red-50 border border-red-200">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-800">{uploadResult.message}</p>
             </div>
           )}
         </div>
