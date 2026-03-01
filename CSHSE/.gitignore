@@ -29,3 +29,9 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# Generated audit report files
+Make_Automation_Audit_Report.ps
+Make_Automation_Audit_Report.pdf
+Data for Eric - Лист1 (1).csv
+CSHSE Member Handbook - 2024 FINAL.pdf

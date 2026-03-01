@@ -248,6 +248,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files'>('standards');
 
   // Reviewer comment state
+  const [highlightedComment, setHighlightedComment] = useState<{ id: string; selectedText: string } | null>(null);
   const [editorSelection, setEditorSelection] = useState<{ text: string; from: number; to: number } | null>(null);
   const [showCommentModal, setShowCommentModal] = useState(false);
   const [newCommentContent, setNewCommentContent] = useState('');
@@ -2158,6 +2159,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     onCancel={isProgramCoordinator ? () => navigate('/self-study') : undefined}
                     readOnly={isReadOnly}
                     onSelectionChange={isReviewer ? setEditorSelection : undefined}
+                    highlightedComment={highlightedComment}
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full text-gray-500">
@@ -2179,10 +2181,19 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     currentUserId={userId}
                     currentUserRole={userRole as 'reader' | 'lead_reader'}
                     onCommentClick={(comment) => {
-                      if (comment.standardCode !== selectedStandard || comment.specCode !== selectedSpec) {
+                      const needsNavigation = comment.standardCode !== selectedStandard || comment.specCode !== selectedSpec;
+                      if (needsNavigation) {
                         setSelectedStandard(comment.standardCode);
                         setSelectedSpec(comment.specCode || null);
                       }
+                      // Clear any existing highlight, then set new one
+                      // Use timeout for cross-section nav to let editor remount
+                      setHighlightedComment(null);
+                      setTimeout(() => {
+                        setHighlightedComment({ id: comment._id, selectedText: comment.selectedText });
+                      }, needsNavigation ? 300 : 50);
+                      // Auto-clear highlight after 4 seconds
+                      setTimeout(() => setHighlightedComment(null), 4000);
                     }}
                     onNavigatePrev={() => navigateToCommentSection('prev')}
                     onNavigateNext={() => navigateToCommentSection('next')}

@@ -67,6 +67,7 @@ interface NarrativeEditorProps {
   onCancel?: () => void;
   readOnly?: boolean;
   onSelectionChange?: (selection: { text: string; from: number; to: number } | null) => void;
+  highlightedComment?: { id: string; selectedText: string } | null;
 }
 
 /**
@@ -90,6 +91,7 @@ export function NarrativeEditor({
   onCancel,
   readOnly = false,
   onSelectionChange,
+  highlightedComment,
 }: NarrativeEditorProps) {
   const [content, setContent] = useState(initialContent);
   const [supportingEvidenceCollapsed, setSupportingEvidenceCollapsed] = useState(true);
@@ -375,6 +377,95 @@ export function NarrativeEditor({
       }
     }
   }, [supportingEvidenceEditor, initialSupportingEvidence, hasSupportingEvidenceUnsavedChanges]);
+
+  // Utility: find text in a DOM container, highlight it, and return a cleanup function
+  const findAndHighlightText = useCallback((container: Element, searchText: string): (() => void) | null => {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let node: Text | null;
+
+    while ((node = walker.nextNode() as Text)) {
+      const idx = node.textContent?.indexOf(searchText) ?? -1;
+      if (idx === -1) continue;
+
+      try {
+        const range = document.createRange();
+        range.setStart(node, idx);
+        range.setEnd(node, idx + searchText.length);
+
+        const mark = document.createElement('mark');
+        mark.className = 'comment-highlight-pulse';
+        mark.style.cssText = 'background: #fbbf24; border-radius: 2px; padding: 1px 0; transition: background 1s ease-out;';
+        range.surroundContents(mark);
+        mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        // Fade out effect before removal
+        setTimeout(() => {
+          mark.style.background = 'transparent';
+        }, 2500);
+
+        return () => {
+          const parent = mark.parentNode;
+          if (parent) {
+            parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+            parent.normalize();
+          }
+        };
+      } catch {
+        // range.surroundContents can fail if text spans multiple elements — skip
+        continue;
+      }
+    }
+    return null;
+  }, []);
+
+  // Highlight comment source text when clicked from sidebar
+  useEffect(() => {
+    if (!highlightedComment?.selectedText) return;
+
+    const searchText = highlightedComment.selectedText;
+    let cleanupFn: (() => void) | null = null;
+
+    const doHighlight = () => {
+      // Search narrative editor first, then supporting evidence
+      const narrativeContainer = document.querySelector('.narrative-editor .editor-content .ProseMirror');
+      if (narrativeContainer) {
+        cleanupFn = findAndHighlightText(narrativeContainer, searchText);
+        if (cleanupFn) return;
+      }
+
+      // Not in narrative — check supporting evidence (expand if collapsed)
+      const evidenceContainer = document.querySelector('.narrative-editor .supporting-evidence-editor .ProseMirror');
+      if (evidenceContainer) {
+        cleanupFn = findAndHighlightText(evidenceContainer, searchText);
+        if (cleanupFn) return;
+      }
+
+      // Supporting evidence might be collapsed — expand and retry
+      if (!evidenceContainer && supportingEvidenceCollapsed) {
+        setSupportingEvidenceCollapsed(false);
+        requestAnimationFrame(() => {
+          const expanded = document.querySelector('.narrative-editor .supporting-evidence-editor .ProseMirror');
+          if (expanded) {
+            cleanupFn = findAndHighlightText(expanded, searchText);
+          }
+        });
+      }
+    };
+
+    // Small delay to ensure editor DOM is ready after navigation
+    const timer = setTimeout(doHighlight, 150);
+
+    // Cleanup highlight after 3 seconds
+    const cleanupTimer = setTimeout(() => {
+      cleanupFn?.();
+    }, 3500);
+
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(cleanupTimer);
+      cleanupFn?.();
+    };
+  }, [highlightedComment, supportingEvidenceCollapsed]);
 
   if (!editor) {
     return (
@@ -878,7 +969,7 @@ export function NarrativeEditor({
                   : 'This section contains additional supporting evidence imported from your document. You can edit this content or use it as reference for your narrative.'}
               </p>
               {supportingEvidenceEditor ? (
-                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                <div className="supporting-evidence-editor border border-gray-200 rounded-lg overflow-hidden">
                   {/* Compact Toolbar */}
                   {!readOnly && (
                     <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 bg-gray-50 border-b border-gray-200">

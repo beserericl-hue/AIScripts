@@ -178,9 +178,10 @@ export const receiveHelpUploadCallback = async (req: Request, res: Response) => 
 export const getHelpDocuments = async (_req: Request, res: Response) => {
   try {
     const docs = await HelpDocument.find().select('-callbackToken').sort({ uploadedAt: -1 });
+    console.log(`[HelpDocuments] Returning ${docs.length} documents`);
     return res.json(docs);
   } catch (error) {
-    console.error('[HelpDocuments] Error:', error);
+    console.error('[HelpDocuments] Error fetching documents:', error);
     return res.status(500).json({ error: 'Failed to get help documents' });
   }
 };

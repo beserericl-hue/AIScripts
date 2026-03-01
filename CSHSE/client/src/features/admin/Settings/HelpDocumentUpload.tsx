@@ -34,12 +34,16 @@ export function HelpDocumentUpload() {
   const queryClient = useQueryClient();
 
   // Fetch documents from DB with polling when any are processing
-  const { data: uploadedDocs = [], isLoading: loadingDocs } = useQuery<HelpDoc[]>({
+  const { data: uploadedDocs = [], isLoading: loadingDocs, isError: docsError, error: docsErrorDetail, refetch: refetchDocs } = useQuery<HelpDoc[]>({
     queryKey: ['helpDocuments'],
     queryFn: async () => {
       const res = await api.get(`${API_BASE}/webhooks/help/documents`);
       return res.data;
     },
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
+    staleTime: 0,
+    refetchOnMount: 'always',
     refetchInterval: (query) => {
       const docs = query.state.data;
       if (docs?.some((d) => d.status === 'processing')) {
@@ -219,6 +223,22 @@ export function HelpDocumentUpload() {
           <div className="flex items-center justify-center py-8 gap-2 text-gray-500">
             <Loader2 className="w-5 h-5 animate-spin" />
             <span className="text-sm">Loading documents...</span>
+          </div>
+        ) : docsError ? (
+          <div className="text-center py-8">
+            <AlertCircle className="w-10 h-10 text-red-300 mx-auto mb-3" />
+            <p className="text-sm text-red-600">Failed to load documents.</p>
+            <p className="text-xs text-red-400 mt-1">
+              {(docsErrorDetail as any)?.response?.status === 403
+                ? 'Admin access required to view documents.'
+                : (docsErrorDetail as any)?.message || 'Unknown error'}
+            </p>
+            <button
+              onClick={() => refetchDocs()}
+              className="mt-3 px-4 py-1.5 text-sm bg-teal-50 text-teal-700 rounded-lg hover:bg-teal-100 transition-colors"
+            >
+              Retry
+            </button>
           </div>
         ) : uploadedDocs.length === 0 ? (
           <div className="text-center py-8">
