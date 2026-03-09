@@ -21,6 +21,8 @@ import {
   Eye,
   Loader2,
   ClipboardCheck,
+  Download,
+  FolderOpen,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isWithinInterval, addDays } from 'date-fns';
 import { useAuthStore } from '../../store/authStore';
@@ -86,6 +88,14 @@ interface User {
   firstName: string;
   lastName: string;
   role: string;
+}
+
+interface SpecFile {
+  _id: string;
+  name: string;
+  version: string;
+  documentFileId?: string;
+  status: string;
 }
 
 interface DashboardFilters {
@@ -188,12 +198,57 @@ export function Dashboard() {
     enabled: !isProgramCoordinator
   });
 
+  // Fetch spec documents (for Files section)
+  const { data: specsData } = useQuery({
+    queryKey: ['specs-dashboard'],
+    queryFn: async () => {
+      const response = await api.get(`${API_BASE}/specs`, {
+        params: { status: 'active' },
+      });
+      return response.data;
+    },
+  });
+
   const institutions: Institution[] = institutionsData?.institutions || [];
   const myInstitution: Institution | null = myInstitutionData?.institution || null;
   const mySubmission: Submission | null = mySubmissionData?.submissions?.[0] || null;
   const changeRequests: ChangeRequest[] = changeRequestsData?.pendingRequests || [];
   const siteVisits: SiteVisit[] = siteVisitsData?.siteVisits || [];
   const users: User[] = usersData?.users || [];
+  const allSpecs: SpecFile[] = specsData?.specs || [];
+
+  // Filter specs with uploaded files
+  const specsWithFiles = useMemo(() => {
+    const withFiles = allSpecs.filter((s: SpecFile) => s.documentFileId);
+    if (isProgramCoordinator) {
+      // PC sees only their institution's spec
+      if (!myInstitution?.specId) return [];
+      return withFiles.filter((s: SpecFile) => s._id === myInstitution.specId);
+    }
+    // Readers / Lead Readers / Admin see all
+    return withFiles;
+  }, [allSpecs, isProgramCoordinator, myInstitution]);
+
+  const handleFileDownload = async (fileId: string, specName: string) => {
+    try {
+      const response = await api.get(`${API_BASE}/files/${fileId}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const contentDisposition = response.headers['content-disposition'];
+      const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
+      a.download = filenameMatch?.[1] || `${specName}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download file:', err);
+    }
+  };
 
   // Filter institutions (for non-PC roles)
   const filteredInstitutions = useMemo(() => {
@@ -556,6 +611,35 @@ export function Dashboard() {
                   )}
                 </div>
               </div>
+
+              {/* Files Section */}
+              {specsWithFiles.length > 0 && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
+                  <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                    <div className="flex items-center gap-2">
+                      <FolderOpen className="w-5 h-5 text-primary-500" />
+                      <h2 className="font-semibold text-gray-900">Files</h2>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {specsWithFiles.map((spec) => (
+                      <button
+                        key={spec._id}
+                        onClick={() => handleFileDownload(spec.documentFileId!, `${spec.name} v${spec.version}`)}
+                        className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 text-left transition-colors"
+                      >
+                        <FileCheck className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-900 truncate">
+                            {spec.name} v{spec.version}
+                          </p>
+                        </div>
+                        <Download className="w-4 h-4 text-gray-400" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -930,6 +1014,38 @@ export function Dashboard() {
                 </div>
               )}
             </div>
+
+            {/* Files Section */}
+            {specsWithFiles.length > 0 && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="w-5 h-5 text-primary-500" />
+                    <h2 className="font-semibold text-gray-900">Files</h2>
+                  </div>
+                  <span className="px-2 py-1 text-xs font-medium bg-primary-100 text-primary-700 rounded-full">
+                    {specsWithFiles.length} {specsWithFiles.length === 1 ? 'document' : 'documents'}
+                  </span>
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {specsWithFiles.map((spec) => (
+                    <button
+                      key={spec._id}
+                      onClick={() => handleFileDownload(spec.documentFileId!, `${spec.name} v${spec.version}`)}
+                      className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 text-left transition-colors"
+                    >
+                      <FileCheck className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">
+                          {spec.name} v{spec.version}
+                        </p>
+                      </div>
+                      <Download className="w-4 h-4 text-gray-400" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Institutions with Upcoming Deadlines */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
