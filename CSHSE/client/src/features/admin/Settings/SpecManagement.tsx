@@ -70,6 +70,25 @@ export function SpecManagement() {
     standardsCount: 21
   });
 
+  const handleFileDownload = async (fileId: string, filename?: string) => {
+    try {
+      const response = await api.get(`/api/files/${fileId}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download file:', err);
+    }
+  };
+
   // Fetch specs
   const { data: specsData, isLoading, error: fetchError } = useQuery({
     queryKey: ['specs-management'],
@@ -442,15 +461,17 @@ export function SpecManagement() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <a
-                          href={`/api/files/${formData.documentFileId || uploadedFile?._id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          type="button"
+                          onClick={() => handleFileDownload(
+                            formData.documentFileId || uploadedFile?._id || '',
+                            uploadedFile?.originalName
+                          )}
                           className="p-1 text-green-600 hover:text-green-800"
                           title="Download"
                         >
                           <Download className="w-4 h-4" />
-                        </a>
+                        </button>
                         <button
                           type="button"
                           onClick={handleRemoveFile}
@@ -551,6 +572,25 @@ interface SpecRowProps {
 
 function SpecRow({ spec, onEdit, onArchive, isArchiving }: SpecRowProps) {
   const queryClient = useQueryClient();
+
+  const handleFileDownload = async (fileId: string, filename?: string) => {
+    try {
+      const response = await api.get(`/api/files/${fileId}`, {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'document';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to download file:', err);
+    }
+  };
   const [showInstitutions, setShowInstitutions] = useState(false);
   const { data: institutionsData } = useQuery({
     queryKey: ['spec-institutions', spec._id],
@@ -663,15 +703,13 @@ function SpecRow({ spec, onEdit, onArchive, isArchiving }: SpecRowProps) {
             )}
             {/* Document links */}
             {spec.documentFileId && (
-              <a
-                href={`/api/files/${spec.documentFileId}`}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={() => handleFileDownload(spec.documentFileId!, spec.name + ' v' + spec.version)}
                 className="flex items-center gap-1 text-teal-600 hover:text-teal-700"
               >
                 <Download className="w-4 h-4" />
                 Download Document
-              </a>
+              </button>
             )}
             {spec.documentUrl && (
               <a
