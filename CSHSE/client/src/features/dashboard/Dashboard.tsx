@@ -38,7 +38,7 @@ interface Institution {
   assignedLeadReaderId?: { _id: string; firstName: string; lastName: string };
   assignedReaderIds: Array<{ _id: string; firstName: string; lastName: string }>;
   currentSubmissionId?: string;
-  specId?: string;
+  specId?: string | { _id: string; name: string; version: string; status: string };
   specName?: string;
 }
 
@@ -240,8 +240,14 @@ export function Dashboard() {
   const dashboardFiles = useMemo(() => {
     if (isProgramCoordinator) {
       // PC sees files linked to their institution's spec
-      if (myInstitution?.specId) {
-        return allDashboardFiles.filter((f) => f.relatedEntityId === myInstitution.specId);
+      // specId may be a string or a populated object { _id, name, version, status }
+      const specIdValue = myInstitution?.specId;
+      const resolvedSpecId = typeof specIdValue === 'object' && specIdValue?._id
+        ? specIdValue._id
+        : specIdValue;
+
+      if (resolvedSpecId) {
+        return allDashboardFiles.filter((f) => f.relatedEntityId === resolvedSpecId);
       }
       // Fallback: match by specName
       if (myInstitution?.specName) {
