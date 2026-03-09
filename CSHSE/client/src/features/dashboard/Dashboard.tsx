@@ -90,12 +90,19 @@ interface User {
   role: string;
 }
 
-interface SpecFile {
+interface DashboardFile {
+  _id: string;
+  originalName: string;
+  size: number;
+  relatedEntityId?: string;
+  description?: string;
+  createdAt: string;
+}
+
+interface SpecInfo {
   _id: string;
   name: string;
   version: string;
-  documentFileId?: string;
-  status: string;
 }
 
 interface DashboardFilters {
@@ -198,7 +205,18 @@ export function Dashboard() {
     enabled: !isProgramCoordinator
   });
 
-  // Fetch spec documents (for Files section)
+  // Fetch dashboard files (uploaded by admin in Settings > Dashboard Files)
+  const { data: dashboardFilesData } = useQuery({
+    queryKey: ['dashboard-files'],
+    queryFn: async () => {
+      const response = await api.get(`${API_BASE}/files`, {
+        params: { category: 'dashboard_document', limit: 100 },
+      });
+      return response.data;
+    },
+  });
+
+  // Fetch active specs (for mapping specId -> spec name in file display)
   const { data: specsData } = useQuery({
     queryKey: ['specs-dashboard'],
     queryFn: async () => {
@@ -215,29 +233,32 @@ export function Dashboard() {
   const changeRequests: ChangeRequest[] = changeRequestsData?.pendingRequests || [];
   const siteVisits: SiteVisit[] = siteVisitsData?.siteVisits || [];
   const users: User[] = usersData?.users || [];
-  const allSpecs: SpecFile[] = specsData?.specs || [];
+  const allDashboardFiles: DashboardFile[] = dashboardFilesData?.files || [];
+  const allSpecs: SpecInfo[] = specsData?.specs || [];
 
-  // Filter specs with uploaded files
-  const specsWithFiles = useMemo(() => {
-    const withFiles = allSpecs.filter((s: SpecFile) => s.documentFileId);
+  // Filter dashboard files based on role
+  const dashboardFiles = useMemo(() => {
     if (isProgramCoordinator) {
-      // PC sees only their institution's spec — match by specId or by specName
+      // PC sees files linked to their institution's spec
       if (myInstitution?.specId) {
-        return withFiles.filter((s: SpecFile) => s._id === myInstitution.specId);
+        return allDashboardFiles.filter((f) => f.relatedEntityId === myInstitution.specId);
       }
+      // Fallback: match by specName
       if (myInstitution?.specName) {
-        // specName format: "NAME vVERSION" — match against spec name+version
-        return withFiles.filter((s: SpecFile) =>
-          myInstitution.specName === `${s.name} v${s.version}`
+        const matchingSpec = allSpecs.find(
+          (s) => `${s.name} v${s.version}` === myInstitution.specName
         );
+        if (matchingSpec) {
+          return allDashboardFiles.filter((f) => f.relatedEntityId === matchingSpec._id);
+        }
       }
       return [];
     }
     // Readers / Lead Readers / Admin see all
-    return withFiles;
-  }, [allSpecs, isProgramCoordinator, myInstitution]);
+    return allDashboardFiles;
+  }, [allDashboardFiles, allSpecs, isProgramCoordinator, myInstitution]);
 
-  const handleFileDownload = async (fileId: string, specName: string) => {
+  const handleFileDownload = async (fileId: string, filename: string) => {
     try {
       const response = await api.get(`${API_BASE}/files/${fileId}`, {
         responseType: 'blob',
@@ -246,9 +267,7 @@ export function Dashboard() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const contentDisposition = response.headers['content-disposition'];
-      const filenameMatch = contentDisposition?.match(/filename="?(.+?)"?$/);
-      a.download = filenameMatch?.[1] || `${specName}.pdf`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -629,23 +648,26 @@ export function Dashboard() {
                   </div>
                 </div>
                 <div className="divide-y divide-gray-100">
-                  {specsWithFiles.length === 0 ? (
+                  {dashboardFiles.length === 0 ? (
                     <div className="p-6 text-center text-gray-500">
                       <FolderOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                       <p>No specification documents available</p>
                     </div>
                   ) : (
-                    specsWithFiles.map((spec) => (
+                    dashboardFiles.map((file) => (
                       <button
-                        key={spec._id}
-                        onClick={() => handleFileDownload(spec.documentFileId!, `${spec.name} v${spec.version}`)}
+                        key={file._id}
+                        onClick={() => handleFileDownload(file._id, file.originalName)}
                         className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 text-left transition-colors"
                       >
                         <FileCheck className="w-5 h-5 text-primary-500 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-gray-900 truncate">
-                            {spec.name} v{spec.version}
+                            {file.originalName}
                           </p>
+                          {file.description && (
+                            <p className="text-xs text-gray-500 truncate">{file.description}</p>
+                          )}
                         </div>
                         <Download className="w-4 h-4 text-gray-400" />
                       </button>
@@ -1035,30 +1057,33 @@ export function Dashboard() {
                   <FolderOpen className="w-5 h-5 text-primary-500" />
                   <h2 className="font-semibold text-gray-900">Files</h2>
                 </div>
-                {specsWithFiles.length > 0 && (
+                {dashboardFiles.length > 0 && (
                   <span className="px-2 py-1 text-xs font-medium bg-primary-100 text-primary-700 rounded-full">
-                    {specsWithFiles.length} {specsWithFiles.length === 1 ? 'document' : 'documents'}
+                    {dashboardFiles.length} {dashboardFiles.length === 1 ? 'document' : 'documents'}
                   </span>
                 )}
               </div>
               <div className="divide-y divide-gray-100">
-                {specsWithFiles.length === 0 ? (
+                {dashboardFiles.length === 0 ? (
                   <div className="p-6 text-center text-gray-500">
                     <FolderOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p>No specification documents available</p>
                   </div>
                 ) : (
-                  specsWithFiles.map((spec) => (
+                  dashboardFiles.map((file) => (
                     <button
-                      key={spec._id}
-                      onClick={() => handleFileDownload(spec.documentFileId!, `${spec.name} v${spec.version}`)}
+                      key={file._id}
+                      onClick={() => handleFileDownload(file._id, file.originalName)}
                       className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 text-left transition-colors"
                     >
                       <FileCheck className="w-5 h-5 text-primary-500 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-gray-900 truncate">
-                          {spec.name} v{spec.version}
+                          {file.originalName}
                         </p>
+                        {file.description && (
+                          <p className="text-xs text-gray-500 truncate">{file.description}</p>
+                        )}
                       </div>
                       <Download className="w-4 h-4 text-gray-400" />
                     </button>

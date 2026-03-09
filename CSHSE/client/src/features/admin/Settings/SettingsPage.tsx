@@ -8,7 +8,8 @@ import {
   ChevronRight,
   FileText,
   Database,
-  HelpCircle
+  HelpCircle,
+  FolderOpen
 } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
 import { WebhookSettings } from '../WebhookSettings';
@@ -18,8 +19,9 @@ import { InstitutionManagement } from './InstitutionManagement';
 import { SpecManagement } from './SpecManagement';
 import { DataManagement } from './DataManagement';
 import { HelpDocumentUpload } from './HelpDocumentUpload';
+import { DashboardFileUpload } from './DashboardFileUpload';
 
-type SettingsSection = 'webhook' | 'api-keys' | 'data-management' | 'users' | 'institutions' | 'specs' | 'help-docs';
+type SettingsSection = 'webhook' | 'api-keys' | 'data-management' | 'users' | 'institutions' | 'specs' | 'dashboard-files' | 'help-docs';
 
 interface NavItem {
   id: SettingsSection;
@@ -71,6 +73,13 @@ const allNavItems: NavItem[] = [
     label: 'Spec Documents',
     icon: <FileText className="w-5 h-5" />,
     description: 'Manage accreditation spec versions',
+    access: 'admin'
+  },
+  {
+    id: 'dashboard-files',
+    label: 'Dashboard Files',
+    icon: <FolderOpen className="w-5 h-5" />,
+    description: 'Upload spec files and matrices for PC dashboard',
     access: 'admin'
   },
   {
@@ -131,6 +140,8 @@ export function SettingsPage() {
         return <InstitutionManagement />;
       case 'specs':
         return <SpecManagement />;
+      case 'dashboard-files':
+        return <DashboardFileUpload />;
       case 'help-docs':
         return <HelpDocumentUpload />;
       default:

@@ -1,7 +1,7 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export type FileAccessScope = 'global' | 'institution';
-export type FileCategory = 'spec_document' | 'self_study_import' | 'evidence' | 'other';
+export type FileCategory = 'spec_document' | 'self_study_import' | 'evidence' | 'dashboard_document' | 'other';
 
 export interface IFile extends Document {
   filename: string;
@@ -79,7 +79,7 @@ const fileSchema = new Schema<IFile>(
     // Categorization
     category: {
       type: String,
-      enum: ['spec_document', 'self_study_import', 'evidence', 'other'],
+      enum: ['spec_document', 'self_study_import', 'evidence', 'dashboard_document', 'other'],
       required: true,
       index: true
     },
