@@ -221,9 +221,17 @@ export function Dashboard() {
   const specsWithFiles = useMemo(() => {
     const withFiles = allSpecs.filter((s: SpecFile) => s.documentFileId);
     if (isProgramCoordinator) {
-      // PC sees only their institution's spec
-      if (!myInstitution?.specId) return [];
-      return withFiles.filter((s: SpecFile) => s._id === myInstitution.specId);
+      // PC sees only their institution's spec — match by specId or by specName
+      if (myInstitution?.specId) {
+        return withFiles.filter((s: SpecFile) => s._id === myInstitution.specId);
+      }
+      if (myInstitution?.specName) {
+        // specName format: "NAME vVERSION" — match against spec name+version
+        return withFiles.filter((s: SpecFile) =>
+          myInstitution.specName === `${s.name} v${s.version}`
+        );
+      }
+      return [];
     }
     // Readers / Lead Readers / Admin see all
     return withFiles;
@@ -613,16 +621,21 @@ export function Dashboard() {
               </div>
 
               {/* Files Section */}
-              {specsWithFiles.length > 0 && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
-                  <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                    <div className="flex items-center gap-2">
-                      <FolderOpen className="w-5 h-5 text-primary-500" />
-                      <h2 className="font-semibold text-gray-900">Files</h2>
-                    </div>
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
+                <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <FolderOpen className="w-5 h-5 text-primary-500" />
+                    <h2 className="font-semibold text-gray-900">Files</h2>
                   </div>
-                  <div className="divide-y divide-gray-100">
-                    {specsWithFiles.map((spec) => (
+                </div>
+                <div className="divide-y divide-gray-100">
+                  {specsWithFiles.length === 0 ? (
+                    <div className="p-6 text-center text-gray-500">
+                      <FolderOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                      <p>No specification documents available</p>
+                    </div>
+                  ) : (
+                    specsWithFiles.map((spec) => (
                       <button
                         key={spec._id}
                         onClick={() => handleFileDownload(spec.documentFileId!, `${spec.name} v${spec.version}`)}
@@ -636,10 +649,10 @@ export function Dashboard() {
                         </div>
                         <Download className="w-4 h-4 text-gray-400" />
                       </button>
-                    ))}
-                  </div>
+                    ))
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
@@ -1016,19 +1029,26 @@ export function Dashboard() {
             </div>
 
             {/* Files Section */}
-            {specsWithFiles.length > 0 && (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
-                <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                  <div className="flex items-center gap-2">
-                    <FolderOpen className="w-5 h-5 text-primary-500" />
-                    <h2 className="font-semibold text-gray-900">Files</h2>
-                  </div>
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
+              <div className="flex items-center justify-between p-6 border-b border-gray-200">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="w-5 h-5 text-primary-500" />
+                  <h2 className="font-semibold text-gray-900">Files</h2>
+                </div>
+                {specsWithFiles.length > 0 && (
                   <span className="px-2 py-1 text-xs font-medium bg-primary-100 text-primary-700 rounded-full">
                     {specsWithFiles.length} {specsWithFiles.length === 1 ? 'document' : 'documents'}
                   </span>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {specsWithFiles.map((spec) => (
+                )}
+              </div>
+              <div className="divide-y divide-gray-100">
+                {specsWithFiles.length === 0 ? (
+                  <div className="p-6 text-center text-gray-500">
+                    <FolderOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No specification documents available</p>
+                  </div>
+                ) : (
+                  specsWithFiles.map((spec) => (
                     <button
                       key={spec._id}
                       onClick={() => handleFileDownload(spec.documentFileId!, `${spec.name} v${spec.version}`)}
@@ -1042,10 +1062,10 @@ export function Dashboard() {
                       </div>
                       <Download className="w-4 h-4 text-gray-400" />
                     </button>
-                  ))}
-                </div>
+                  ))
+                )}
               </div>
-            )}
+            </div>
 
             {/* Institutions with Upcoming Deadlines */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
