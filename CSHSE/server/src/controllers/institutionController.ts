@@ -11,11 +11,12 @@ import { AuthenticatedRequest } from '../middleware/auth';
  */
 export const getInstitutions = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { type, hasActiveSubmission, status, page = '1', limit = '50' } = req.query;
+    const { type, hasActiveSubmission, status, programCoordinatorId, page = '1', limit = '50' } = req.query;
 
     const query: any = {};
     if (type) query.type = type;
     if (status) query.status = status;
+    if (programCoordinatorId) query.programCoordinatorId = programCoordinatorId;
     if (hasActiveSubmission === 'true') {
       query.currentSubmissionId = { $exists: true, $ne: null };
     }

@@ -139,15 +139,17 @@ export function Dashboard() {
     enabled: !isProgramCoordinator
   });
 
-  // Fetch user's institution for Program Coordinator
-  const { data: myInstitutionData, isLoading: myInstitutionLoading } = useQuery({
-    queryKey: ['my-institution', effectiveUser?.institutionId],
+  // Fetch all institutions where the user is program coordinator
+  const { data: myInstitutionsData, isLoading: myInstitutionLoading } = useQuery({
+    queryKey: ['my-institutions', effectiveUser?.id],
     queryFn: async () => {
-      if (!effectiveUser?.institutionId) return null;
-      const response = await api.get(`${API_BASE}/institutions/${effectiveUser.institutionId}`);
+      if (!effectiveUser?.id) return null;
+      const response = await api.get(`${API_BASE}/institutions`, {
+        params: { programCoordinatorId: effectiveUser.id, limit: 50 },
+      });
       return response.data;
     },
-    enabled: isProgramCoordinator && !!effectiveUser?.institutionId
+    enabled: isProgramCoordinator && !!effectiveUser?.id
   });
 
   // Fetch submission for Program Coordinator
@@ -228,7 +230,11 @@ export function Dashboard() {
   });
 
   const institutions: Institution[] = institutionsData?.institutions || [];
-  const myInstitution: Institution | null = myInstitutionData?.institution || null;
+  const myInstitutions: Institution[] = myInstitutionsData?.institutions || [];
+  // Primary institution (first one, or matched by user.institutionId) for header/stats
+  const myInstitution: Institution | null = myInstitutions.find(
+    (inst) => inst._id === effectiveUser?.institutionId
+  ) || myInstitutions[0] || null;
   const mySubmission: Submission | null = mySubmissionData?.submissions?.[0] || null;
   const changeRequests: ChangeRequest[] = changeRequestsData?.pendingRequests || [];
   const siteVisits: SiteVisit[] = siteVisitsData?.siteVisits || [];
@@ -236,33 +242,34 @@ export function Dashboard() {
   const allDashboardFiles: DashboardFile[] = dashboardFilesData?.files || [];
   const allSpecs: SpecInfo[] = specsData?.specs || [];
 
+  // Resolve specIds from all PC institutions (handles both string and populated object)
+  const mySpecIds = useMemo(() => {
+    return myInstitutions
+      .map((inst) => {
+        const specIdValue = inst.specId;
+        if (typeof specIdValue === 'object' && specIdValue?._id) return specIdValue._id;
+        if (typeof specIdValue === 'string') return specIdValue;
+        // Fallback: match by specName
+        if (inst.specName) {
+          const match = allSpecs.find((s) => `${s.name} v${s.version}` === inst.specName);
+          if (match) return match._id;
+        }
+        return null;
+      })
+      .filter((id): id is string => id !== null);
+  }, [myInstitutions, allSpecs]);
+
   // Filter dashboard files based on role
   const dashboardFiles = useMemo(() => {
     if (isProgramCoordinator) {
-      // PC sees files linked to their institution's spec
-      // specId may be a string or a populated object { _id, name, version, status }
-      const specIdValue = myInstitution?.specId;
-      const resolvedSpecId = typeof specIdValue === 'object' && specIdValue?._id
-        ? specIdValue._id
-        : specIdValue;
-
-      if (resolvedSpecId) {
-        return allDashboardFiles.filter((f) => f.relatedEntityId === resolvedSpecId);
-      }
-      // Fallback: match by specName
-      if (myInstitution?.specName) {
-        const matchingSpec = allSpecs.find(
-          (s) => `${s.name} v${s.version}` === myInstitution.specName
-        );
-        if (matchingSpec) {
-          return allDashboardFiles.filter((f) => f.relatedEntityId === matchingSpec._id);
-        }
+      if (mySpecIds.length > 0) {
+        return allDashboardFiles.filter((f) => f.relatedEntityId && mySpecIds.includes(f.relatedEntityId));
       }
       return [];
     }
     // Readers / Lead Readers / Admin see all
     return allDashboardFiles;
-  }, [allDashboardFiles, allSpecs, isProgramCoordinator, myInstitution]);
+  }, [allDashboardFiles, mySpecIds, isProgramCoordinator]);
 
   const handleFileDownload = async (fileId: string, filename: string) => {
     try {
@@ -659,7 +666,47 @@ export function Dashboard() {
                       <FolderOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                       <p>No specification documents available</p>
                     </div>
+                  ) : myInstitutions.length > 1 ? (
+                    // Multiple institutions: group files by spec/institution
+                    <div>
+                      {myInstitutions.map((inst) => {
+                        const specIdValue = inst.specId;
+                        const resolvedSpecId = typeof specIdValue === 'object' && specIdValue?._id
+                          ? specIdValue._id
+                          : specIdValue;
+                        const instFiles = dashboardFiles.filter((f) => f.relatedEntityId === resolvedSpecId);
+                        if (instFiles.length === 0) return null;
+                        return (
+                          <div key={inst._id}>
+                            <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                {inst.name} — {inst.specName || 'Unknown Spec'}
+                              </p>
+                            </div>
+                            {instFiles.map((file) => (
+                              <button
+                                key={file._id}
+                                onClick={() => handleFileDownload(file._id, file.originalName)}
+                                className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 text-left transition-colors border-b border-gray-100 last:border-b-0"
+                              >
+                                <FileCheck className="w-5 h-5 text-primary-500 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-gray-900 truncate">
+                                    {file.originalName}
+                                  </p>
+                                  {file.description && (
+                                    <p className="text-xs text-gray-500 truncate">{file.description}</p>
+                                  )}
+                                </div>
+                                <Download className="w-4 h-4 text-gray-400" />
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })}
+                    </div>
                   ) : (
+                    // Single institution: flat list
                     dashboardFiles.map((file) => (
                       <button
                         key={file._id}
