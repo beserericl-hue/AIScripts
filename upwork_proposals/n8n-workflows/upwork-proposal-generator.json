@@ -1,0 +1,151 @@
+{
+  "id": "UhJQT9uqgzI6mV8d",
+  "name": "Upwork Proposal Generator",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "upwork-proposal-gen",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [-400, 0],
+      "id": "87725c06-0e07-439e-ae93-2a4dfc6796ff",
+      "name": "Webhook",
+      "webhookId": "c7a5e76a-d66d-4c9b-b7ba-5744cc1bcffe"
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "value": "k92IxLFG5AAdxKLu", "mode": "id" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "query": "={{ $json.body.description }}",
+            "profile": "={{ $json.body.profile }}",
+            "userSkills": "={{ $json.body.userSkills }}",
+            "additionalInfo": "={{ $json.body.additionalInfo }}"
+          },
+          "matchingColumns": ["query"],
+          "schema": [
+            { "id": "query", "displayName": "query", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "profile", "displayName": "profile", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "userSkills", "displayName": "userSkills", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "additionalInfo", "displayName": "additionalInfo", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [-48, -240],
+      "id": "exec-cover-letter",
+      "name": "Execute Cover Letter Workflow"
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "value": "77EdXuV1N49JIfLX", "mode": "id" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "query": "={{ $json.body.description }}",
+            "profile": "={{ $json.body.profile }}",
+            "userSkills": "={{ $json.body.userSkills }}",
+            "additionalInfo": "={{ $json.body.additionalInfo }}"
+          },
+          "matchingColumns": ["query"],
+          "schema": [
+            { "id": "query", "displayName": "query", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "profile", "displayName": "profile", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "userSkills", "displayName": "userSkills", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" },
+            { "id": "additionalInfo", "displayName": "additionalInfo", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }
+          ]
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [-48, 0],
+      "id": "exec-google-doc",
+      "name": "Execute Google Doc Workflow"
+    },
+    {
+      "parameters": {
+        "workflowId": { "__rl": true, "value": "l1ZP2f8omK8HNsCd", "mode": "list", "cachedResultUrl": "/workflow/l1ZP2f8omK8HNsCd", "cachedResultName": "Claude API - Mermaid Diagram Generator (Subworkflow)" },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": { "job_description": "={{ $json.body.description }}" },
+          "matchingColumns": ["job_description"],
+          "schema": [{ "id": "job_description", "displayName": "job_description", "required": false, "defaultMatch": false, "display": true, "canBeUsedToMatch": true, "type": "string" }]
+        },
+        "options": { "waitForSubWorkflow": true }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [-48, 208],
+      "id": "exec-mermaid",
+      "name": "Execute Mermaid Workflow",
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": { "mode": "combine", "combineBy": "combineAll", "options": {} },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [256, -80],
+      "id": "merge-cover-doc",
+      "name": "Merge Cover Letter and Doc"
+    },
+    {
+      "parameters": { "mode": "combine", "combineBy": "combineAll", "options": {} },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [512, 0],
+      "id": "merge-all",
+      "name": "Merge All Results"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst webhookData = $('Webhook').first().json.body;\n\nconst apiPayload = {\n  jobId: webhookData.jobId,\n  title: webhookData.title || '',\n  description: webhookData.description || '',\n  url: webhookData.url || '',\n  coverLetter: item.response || '',\n  docUrl: item.urlOfProposal || '',\n  mermaidDiagram: item.mermaidCode || '',\n  mermaidImageUrl: item.pngUrl || '',\n  teamId: webhookData.teamId || null\n};\n\nreturn [{ json: apiPayload }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [752, 0],
+      "id": "transform-payload-node",
+      "name": "Transform to API Format"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://upwork-proposal-production.up.railway.app/api/webhooks/proposal-result",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "X-API-Key", "value": "upw_db07c1a6e4d04940a204f8352cbb5cd6" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": { "timeout": 30000 }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1008, 0],
+      "id": "http-callback-node",
+      "name": "Send to Proposal Callback"
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{ "node": "Execute Cover Letter Workflow", "type": "main", "index": 0 }, { "node": "Execute Google Doc Workflow", "type": "main", "index": 0 }, { "node": "Execute Mermaid Workflow", "type": "main", "index": 0 }]] },
+    "Execute Cover Letter Workflow": { "main": [[{ "node": "Merge Cover Letter and Doc", "type": "main", "index": 0 }]] },
+    "Execute Google Doc Workflow": { "main": [[{ "node": "Merge Cover Letter and Doc", "type": "main", "index": 1 }]] },
+    "Merge Cover Letter and Doc": { "main": [[{ "node": "Merge All Results", "type": "main", "index": 0 }]] },
+    "Execute Mermaid Workflow": { "main": [[{ "node": "Merge All Results", "type": "main", "index": 1 }]] },
+    "Merge All Results": { "main": [[{ "node": "Transform to API Format", "type": "main", "index": 0 }]] },
+    "Transform to API Format": { "main": [[{ "node": "Send to Proposal Callback", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "callerPolicy": "workflowsFromSameOwner" }
+}

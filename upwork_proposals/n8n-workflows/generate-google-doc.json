@@ -1,0 +1,138 @@
+{
+  "id": "77EdXuV1N49JIfLX",
+  "name": "Upwork Proposal - Generate Google Doc",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            { "name": "query" },
+            { "name": "profile" },
+            { "name": "userSkills" },
+            { "name": "additionalInfo" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-784, -48],
+      "id": "bfc488f1-2c7d-434a-b3f9-358675349720",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c384b8ed-ec30-419a-9ecf-9f86bb2bb079", "name": "AboutMe", "value": "={{ $json.profile }}", "type": "string" },
+            { "id": "skills-field-002", "name": "UserSkills", "value": "={{ $json.userSkills }}", "type": "string" },
+            { "id": "addinfo-field-002", "name": "AdditionalInfo", "value": "={{ $json.additionalInfo }}", "type": "string" },
+            { "id": "jobdesc-field-002", "name": "JobDescription", "value": "={{ $json.query }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-528, -48],
+      "id": "5781e802-5324-493a-a3e6-62299a8a0066",
+      "name": "Set Variable"
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-5-mini", "mode": "list", "cachedResultName": "GPT-5-MINI" },
+        "responses": {
+          "values": [
+            { "role": "system", "content": "You are a highly effective freelance proposal writer for Upwork. You output structured JSON for Google Docs proposals." },
+            { "role": "system", "content": "=Write a highly effective freelance proposal for the following job.\n\nFollow these rules strictly:\n- Start with a strong, client-focused hook that reflects their problem (do NOT be generic)\n- Focus more on the client's needs and outcomes than on my background\n- Be concise, clear, and direct (avoid fluff)\n- Mirror the job description language to show relevance\n- Include a short \"approach\" section explaining how I would execute the work\n- Highlight only the most relevant experience (with 1 specific result if possible)\n- Maintain a professional but natural tone (not overly salesy)\n- Include answers to any client questions\n- Before the call to action, ask 1 smart, technical question about their setup or requirements\n- End with a clear call to action\n- Don't use emojis or flowery language\n- Write in first person using \"I\" language\n- If there's a name included somewhere in the description, add it for personalization\n\nJob Description:\n{{ $json.JobDescription }}\n\nMy Background:\n{{ $json.AboutMe }}\n\nMy Skills:\n{{ $json.UserSkills }}\n\nAdditional Notes:\n{{ $json.AdditionalInfo }}\n\nOutput your results in JSON using this format:\n\n{\n\"titleOfSystem\": \"\",\n\"briefExplanationOfSystem\": \"\",\n\"specificPartOfTheirRequest\": \"\",\n\"stepByStepBulletPoints\": \"\",\n\"leftToRightFlowWithArrows\": \"\",\n\"aboutMeBulletPoints\": \"\",\n\"userSkillsSummary\": \"\",\n\"additionalNotes\": \"\"\n}\n\nRules:\n- Return \"stepByStepBulletPoints\" and \"aboutMeBulletPoints\" as strings, delimit each bullet point with a \\n and include a -\n- In \"aboutMeBulletPoints\", prefer to mention social proof that includes $ and numbers\n- For \"leftToRightFlowWithArrows\", write a simplified left to right flow delimited by \"->\" strings\n- \"userSkillsSummary\" should be a concise comma-separated list of the most relevant skills for this job\n- \"additionalNotes\" should incorporate any additional info provided into the proposal context" },
+            { "content": "={\"jobDescription\" : \"{{ $('When Executed by Another Workflow').item.json.query }}\"}" }
+          ]
+        },
+        "builtInTools": {},
+        "options": { "textFormat": { "textOptions": { "type": "json_object", "verbosity": "low" } } }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [-320, -48],
+      "id": "74416968-4b43-4f10-adb9-68611f5a4a3d",
+      "name": "Message a model",
+      "credentials": { "openAiApi": { "id": "N3zJqsCmA4ORz82U", "name": "OpenAi account" } }
+    },
+    {
+      "parameters": {
+        "operation": "copy",
+        "fileId": { "__rl": true, "value": "14CVjCXygpInlxibHfNrOV9F5mR9W_6PsJzVQXid9ehc", "mode": "list", "cachedResultName": "Google Docs Upwork Proposal Template", "cachedResultUrl": "https://docs.google.com/document/d/14CVjCXygpInlxibHfNrOV9F5mR9W_6PsJzVQXid9ehc/edit?usp=drivesdk" },
+        "name": "={{ $json.output[0].content[0].text.titleOfSystem }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [0, -48],
+      "id": "6f0f0af2-d318-4638-83e2-917eb9ed3148",
+      "name": "Copy file",
+      "credentials": { "googleDriveOAuth2Api": { "id": "SIw8x6KHgpoGL44G", "name": "Google Drive account" } }
+    },
+    {
+      "parameters": {
+        "operation": "share",
+        "fileId": { "__rl": true, "value": "={{ $json.id }}", "mode": "id" },
+        "permissionsUi": { "permissionsValues": { "role": "reader", "type": "anyone" } },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [208, -48],
+      "id": "97c7304c-8854-4cc2-9be4-a32b5993d873",
+      "name": "Share file",
+      "credentials": { "googleDriveOAuth2Api": { "id": "SIw8x6KHgpoGL44G", "name": "Google Drive account" } }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "={{ $('Copy file').item.json.id }}",
+        "actionsUi": {
+          "actionFields": [
+            { "action": "replaceAll", "text": "=((titleOfSystem))", "replaceText": "={{ $('Message a model').item.json.output[0].content[0].text.titleOfSystem }}" },
+            { "action": "replaceAll", "text": "((briefExplanationOfSystem))", "replaceText": "={{ $('Message a model').item.json.output[0].content[0].text.briefExplanationOfSystem }}" },
+            { "action": "replaceAll", "text": "((specificPartOfTheirRequest))", "replaceText": "={{ $('Message a model').item.json.output[0].content[0].text.specificPartOfTheirRequest }}" },
+            { "action": "replaceAll", "text": "((stepByStepBulletPoints))", "replaceText": "={{ $('Message a model').item.json.output[0].content[0].text.stepByStepBulletPoints }}" },
+            { "action": "replaceAll", "text": "((leftToRightFlowWithArrows))", "replaceText": "={{ $('Message a model').item.json.output[0].content[0].text.leftToRightFlowWithArrows }}" },
+            { "action": "replaceAll", "text": "((aboutMeBulletPoints))", "replaceText": "={{ $('Message a model').item.json.output[0].content[0].text.aboutMeBulletPoints }}" },
+            { "action": "replaceAll", "text": "((userSkillsSummary))", "replaceText": "={{ $('Message a model').item.json.output[0].content[0].text.userSkillsSummary }}" },
+            { "action": "replaceAll", "text": "((additionalNotes))", "replaceText": "={{ $('Message a model').item.json.output[0].content[0].text.additionalNotes }}" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [416, -48],
+      "id": "41178f5b-06b5-47d4-a5cb-79d420236be6",
+      "name": "Update a document",
+      "credentials": { "googleDocsOAuth2Api": { "id": "MDz9H0bVPQyiZdVt", "name": "Google Docs account" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "0bab6382-2aba-487b-b0cf-cc74576e7c3e", "name": "urlOfProposal", "value": "=https://docs.google.com/document/d/{{ $json.documentId }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [624, -48],
+      "id": "7fe0bd7b-4df6-47e1-a6ac-00aab2d54d33",
+      "name": "Edit Fields"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": { "main": [[{ "node": "Set Variable", "type": "main", "index": 0 }]] },
+    "Message a model": { "main": [[{ "node": "Copy file", "type": "main", "index": 0 }]] },
+    "Set Variable": { "main": [[{ "node": "Message a model", "type": "main", "index": 0 }]] },
+    "Copy file": { "main": [[{ "node": "Share file", "type": "main", "index": 0 }]] },
+    "Share file": { "main": [[{ "node": "Update a document", "type": "main", "index": 0 }]] },
+    "Update a document": { "main": [[{ "node": "Edit Fields", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

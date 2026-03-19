@@ -1,0 +1,83 @@
+{
+  "id": "k92IxLFG5AAdxKLu",
+  "name": "Generate Upwork Proposal - Generate Application Copy",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            { "name": "query" },
+            { "name": "profile" },
+            { "name": "userSkills" },
+            { "name": "additionalInfo" }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [-352, -32],
+      "id": "c953840b-181b-479e-a61f-56a3fb7119fd",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "c384b8ed-ec30-419a-9ecf-9f86bb2bb079", "name": "AboutMe", "value": "={{ $json.profile }}", "type": "string" },
+            { "id": "skills-field-001", "name": "UserSkills", "value": "={{ $json.userSkills }}", "type": "string" },
+            { "id": "addinfo-field-001", "name": "AdditionalInfo", "value": "={{ $json.additionalInfo }}", "type": "string" },
+            { "id": "jobdesc-field-001", "name": "JobDescription", "value": "={{ $json.query }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-144, -32],
+      "id": "220aad91-dae1-4772-8aa0-bd0745284b1a",
+      "name": "Set Variable"
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-5-mini", "mode": "list", "cachedResultName": "GPT-5-MINI" },
+        "responses": {
+          "values": [
+            { "role": "system", "content": "You are a highly effective freelance proposal writer for Upwork." },
+            { "role": "system", "content": "=Write a highly effective freelance proposal for the following job.\n\nFollow these rules strictly:\n- Start with a strong, client-focused hook that reflects their problem (do NOT be generic)\n- Focus more on the client's needs and outcomes than on my background\n- Be concise, clear, and direct (avoid fluff)\n- Mirror the job description language to show relevance\n- Include a short \"approach\" section explaining how I would execute the work\n- Highlight only the most relevant experience (with 1 specific result if possible)\n- Maintain a professional but natural tone (not overly salesy)\n- Include answers to any client questions\n- Before the call to action, ask 1 smart, technical question about their setup or requirements\n- End with a clear call to action\n- Don't use emojis or flowery language\n- Write in first person\n- If there's a name included somewhere in the description, add it after \"Hi\"\n\nI just created a workflow diagram + a demo of your (thing) in no-code: $$$\n\nRules:\n- $$$ is what we are using to replace links later on. Leave that untouched.\n\nJob Description:\n{{ $json.JobDescription }}\n\nMy Background:\n{{ $json.AboutMe }}\n\nMy Skills:\n{{ $json.UserSkills }}\n\nAdditional Notes:\n{{ $json.AdditionalInfo }}\n\nOutput your results in JSON using this format:\n\n{\"proposal\":\"Your proposal\"}\n\nOutput only the final proposal in the JSON format above." },
+            { "content": "={\"jobDescription\" : \"{{ $('When Executed by Another Workflow').item.json.query }}\"}" }
+          ]
+        },
+        "builtInTools": {},
+        "options": { "textFormat": { "textOptions": { "type": "json_object", "verbosity": "low" } } }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [128, -32],
+      "id": "1bdce0f7-c465-4fe2-bac2-8acbf49a7783",
+      "name": "Message a model",
+      "credentials": { "openAiApi": { "id": "N3zJqsCmA4ORz82U", "name": "OpenAi account" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "40aa7eb4-98ea-4f18-97a1-19f229c99715", "name": "response", "value": "={{ $json.output[0].content[0].text.proposal }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [480, -32],
+      "id": "30381afc-a70a-4d62-a250-9e9326ba6c79",
+      "name": "Edit Fields1"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": { "main": [[{ "node": "Set Variable", "type": "main", "index": 0 }]] },
+    "Message a model": { "main": [[{ "node": "Edit Fields1", "type": "main", "index": 0 }]] },
+    "Set Variable": { "main": [[{ "node": "Message a model", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

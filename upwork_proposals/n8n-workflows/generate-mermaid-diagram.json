@@ -1,0 +1,55 @@
+{
+  "id": "1O31exZaJIrhL26i",
+  "name": "Upwork Proposal Generator - Generate Mermaid Diagram",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": { "workflowInputs": { "values": [{ "name": "query" }] } },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "id": "95e06324-05bc-499f-9c7b-ecdcb15f564f",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "modelId": { "__rl": true, "value": "gpt-5-mini", "mode": "list", "cachedResultName": "GPT-5-MINI" },
+        "responses": {
+          "values": [
+            { "role": "system", "content": "You are a helpful, intelligent mermaid.js code writer. " },
+            { "role": "system", "content": "=Your task is to take as input an Upwork job description and return as output a Mermaid diagram that I can visualize using a subsequent Mermaid.js tool.\n\nOutput your results in plaintext using Mermaid code formatting. Don't output anything but the Mermaid diagram code.\n\nHere's an example of what your output should look like:\n\ngraph TD;\nA-->B;\nA-->C;\nB-->D;\nC-->D;\n\nRules:\n\n- You only output flowcharts. Nothing else. No sequence diagrams, no Gantt charts—only flowcharts.\n- Do not output any accessory formatting information, like \"```mermaid\".\n- Your first character should be g." },
+            { "content": "={{ $json.query }}" }
+          ]
+        },
+        "builtInTools": {},
+        "options": { "textFormat": { "textOptions": { "type": "json_object", "verbosity": "low" } } }
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [208, 0],
+      "id": "5d9168ea-a20b-477c-b373-d911e750039f",
+      "name": "Message a model",
+      "credentials": { "openAiApi": { "id": "N3zJqsCmA4ORz82U", "name": "OpenAi account" } }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "5c6cfc5c-ac3a-4150-90b0-f3f01df14592", "name": "mermaidCode", "value": "={{ $json.output[0].content[0].text.text }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [560, 0],
+      "id": "935d63a4-e4a1-47e1-abbc-7dcdfbab27f7",
+      "name": "Edit Fields"
+    }
+  ],
+  "connections": {
+    "When Executed by Another Workflow": { "main": [[{ "node": "Message a model", "type": "main", "index": 0 }]] },
+    "Message a model": { "main": [[{ "node": "Edit Fields", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" }
+}
