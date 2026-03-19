@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -291,6 +291,55 @@ const Proposal = () => {
       setSavingProfile(false);
     }
   };
+
+  // Auto-save profile fields after user stops typing (1.5s debounce)
+  const autoSaveTimerRef = useRef(null);
+  const lastSavedRef = useRef({ profile: '', userSkills: '', additionalInfo: '' });
+
+  const autoSaveProfile = useCallback(async () => {
+    if (!selectedProfileId || !canEditProfile || isNewProfileMode) return;
+
+    const currentProfile = profiles.find(p => p._id === selectedProfileId);
+    if (!currentProfile) return;
+
+    // Only save if something actually changed
+    const hasChanges =
+      formData.profile !== (currentProfile.content || '') ||
+      formData.userSkills !== (currentProfile.userSkills || '') ||
+      formData.additionalInfo !== (currentProfile.additionalInfo || '');
+
+    if (!hasChanges) return;
+
+    try {
+      await api.put(`/profiles/${selectedProfileId}`, {
+        name: currentProfile.name,
+        content: formData.profile,
+        userSkills: formData.userSkills,
+        additionalInfo: formData.additionalInfo
+      });
+      // Silently update the profiles list without refetching
+      lastSavedRef.current = {
+        profile: formData.profile,
+        userSkills: formData.userSkills,
+        additionalInfo: formData.additionalInfo
+      };
+    } catch (err) {
+      console.error('Auto-save failed:', err);
+    }
+  }, [selectedProfileId, canEditProfile, isNewProfileMode, formData.profile, formData.userSkills, formData.additionalInfo, profiles]);
+
+  useEffect(() => {
+    if (!selectedProfileId || !canEditProfile || isNewProfileMode) return;
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveProfile();
+    }, 1500);
+
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [formData.profile, formData.userSkills, formData.additionalInfo, autoSaveProfile]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
