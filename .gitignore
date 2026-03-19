@@ -1,0 +1,6 @@
+# MCP config (contains API keys)
+**/.mcp.json
+
+# OS files
+.DS_Store
+**/.DS_Store

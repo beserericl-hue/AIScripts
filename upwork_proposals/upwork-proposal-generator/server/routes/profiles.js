@@ -72,7 +72,7 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create new profile
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { name, content } = req.body;
+    const { name, content, userSkills, additionalInfo } = req.body;
 
     if (!name?.trim()) {
       return res.status(400).json({ error: 'Profile name is required' });
@@ -94,6 +94,8 @@ router.post('/', authenticate, async (req, res) => {
     const profile = new Profile({
       name: name.trim(),
       content: content || '',
+      userSkills: userSkills || '',
+      additionalInfo: additionalInfo || '',
       userId: req.user._id,
       teamId: req.user.teamId || null, // Allow null teamId
       isLastUsed: profileCount === 0
@@ -116,7 +118,7 @@ router.post('/', authenticate, async (req, res) => {
 // Update profile
 router.put('/:id', authenticate, async (req, res) => {
   try {
-    const { name, content } = req.body;
+    const { name, content, userSkills, additionalInfo } = req.body;
 
     const profile = await Profile.findById(req.params.id);
 
@@ -144,6 +146,8 @@ router.put('/:id', authenticate, async (req, res) => {
 
     profile.name = name?.trim() || profile.name;
     profile.content = content !== undefined ? content : profile.content;
+    profile.userSkills = userSkills !== undefined ? userSkills : profile.userSkills;
+    profile.additionalInfo = additionalInfo !== undefined ? additionalInfo : profile.additionalInfo;
     await profile.save();
 
     res.json(profile);

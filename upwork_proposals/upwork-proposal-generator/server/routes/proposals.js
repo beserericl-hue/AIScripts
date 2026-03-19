@@ -9,7 +9,7 @@ const router = express.Router();
 // Generate proposal - calls N8N webhook
 router.post('/generate', authenticate, async (req, res) => {
   try {
-    const { jobId, title, description, profile, url } = req.body;
+    const { jobId, title, description, profile, url, userSkills, additionalInfo } = req.body;
 
     console.log(`[PROPOSAL-GENERATE] User ${req.user.email} (teamId=${req.user.teamId || 'none'}) requesting proposal for jobId=${jobId}, title="${title}"`);
 
@@ -72,6 +72,8 @@ router.post('/generate', authenticate, async (req, res) => {
         title,
         description,
         profile,
+        userSkills: userSkills || '',
+        additionalInfo: additionalInfo || '',
         url,
         userId: req.user._id.toString(),
         teamId: teamIdForCallback,

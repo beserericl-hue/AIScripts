@@ -11,6 +11,16 @@ const profileSchema = new mongoose.Schema({
     maxlength: 4000,
     default: ''
   },
+  userSkills: {
+    type: String,
+    maxlength: 4000,
+    default: ''
+  },
+  additionalInfo: {
+    type: String,
+    maxlength: 4000,
+    default: ''
+  },
   // User who owns this profile
   userId: {
     type: mongoose.Schema.Types.ObjectId,

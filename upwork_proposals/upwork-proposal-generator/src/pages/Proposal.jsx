@@ -43,7 +43,9 @@ const Proposal = () => {
     title: initialJob?.title || '',
     description: initialJob?.description || '',
     profile: initialJob?.profile || '',
-    url: initialJob?.url || ''
+    url: initialJob?.url || '',
+    userSkills: '',
+    additionalInfo: ''
   });
 
   const [jobId, setJobId] = useState(initialJob?.jobId || null);
@@ -146,7 +148,12 @@ const Proposal = () => {
     if (selectedProfileId && profiles.length > 0) {
       const selectedProfile = profiles.find(p => p._id === selectedProfileId);
       if (selectedProfile) {
-        setFormData(prev => ({ ...prev, profile: selectedProfile.content }));
+        setFormData(prev => ({
+          ...prev,
+          profile: selectedProfile.content,
+          userSkills: selectedProfile.userSkills || '',
+          additionalInfo: selectedProfile.additionalInfo || ''
+        }));
       }
     }
   }, [selectedProfileId, profiles]);
@@ -202,7 +209,7 @@ const Proposal = () => {
     if (profileId === 'new') {
       setIsCreatingNewProfile(true);
       setNewProfileName('');
-      setFormData(prev => ({ ...prev, profile: '' }));
+      setFormData(prev => ({ ...prev, profile: '', userSkills: '', additionalInfo: '' }));
     } else {
       setSelectedProfileId(profileId);
       setIsCreatingNewProfile(false);
@@ -221,7 +228,7 @@ const Proposal = () => {
   const handleNewProfile = () => {
     setIsCreatingNewProfile(true);
     setNewProfileName('');
-    setFormData(prev => ({ ...prev, profile: '' }));
+    setFormData(prev => ({ ...prev, profile: '', userSkills: '', additionalInfo: '' }));
   };
 
   const canEditProfile = selectedUserId === user?._id;
@@ -246,7 +253,9 @@ const Proposal = () => {
     try {
       const response = await api.post('/profiles', {
         name: newProfileName.trim(),
-        content: formData.profile
+        content: formData.profile,
+        userSkills: formData.userSkills,
+        additionalInfo: formData.additionalInfo
       });
 
       await fetchUserProfiles(user._id);
@@ -269,7 +278,9 @@ const Proposal = () => {
       const currentProfile = profiles.find(p => p._id === selectedProfileId);
       await api.put(`/profiles/${selectedProfileId}`, {
         name: currentProfile?.name,
-        content: formData.profile
+        content: formData.profile,
+        userSkills: formData.userSkills,
+        additionalInfo: formData.additionalInfo
       });
 
       await fetchUserProfiles(selectedUserId);
@@ -638,6 +649,44 @@ const Proposal = () => {
                     )}
                   </button>
                 )}
+              </div>
+
+              {/* User Skills */}
+              <div className="form-group profile-content-group">
+                <label htmlFor="userSkills">
+                  <Briefcase size={14} />
+                  User Skills
+                  {characterCount(formData.userSkills, 4000)}
+                </label>
+                <textarea
+                  id="userSkills"
+                  name="userSkills"
+                  value={formData.userSkills}
+                  onChange={handleInputChange}
+                  placeholder="List your relevant skills, tools, and technologies (e.g., React, Node.js, Python, AWS, n8n, Make.com...)"
+                  maxLength={4000}
+                  rows={4}
+                  disabled={!canEditProfile && !isNewProfileMode}
+                />
+              </div>
+
+              {/* Additional Info */}
+              <div className="form-group profile-content-group">
+                <label htmlFor="additionalInfo">
+                  <MessageSquare size={14} />
+                  Other Information to Include
+                  {characterCount(formData.additionalInfo, 4000)}
+                </label>
+                <textarea
+                  id="additionalInfo"
+                  name="additionalInfo"
+                  value={formData.additionalInfo}
+                  onChange={handleInputChange}
+                  placeholder="Any additional details to include in the proposal (e.g., relevant results, certifications, availability, rate...)"
+                  maxLength={4000}
+                  rows={4}
+                  disabled={!canEditProfile && !isNewProfileMode}
+                />
               </div>
 
               {/* Job URL */}
