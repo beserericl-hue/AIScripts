@@ -294,52 +294,48 @@ const Proposal = () => {
 
   // Auto-save profile fields after user stops typing (1.5s debounce)
   const autoSaveTimerRef = useRef(null);
-  const lastSavedRef = useRef({ profile: '', userSkills: '', additionalInfo: '' });
-
-  const autoSaveProfile = useCallback(async () => {
-    if (!selectedProfileId || !canEditProfile || isNewProfileMode) return;
-
-    const currentProfile = profiles.find(p => p._id === selectedProfileId);
-    if (!currentProfile) return;
-
-    // Only save if something actually changed
-    const hasChanges =
-      formData.profile !== (currentProfile.content || '') ||
-      formData.userSkills !== (currentProfile.userSkills || '') ||
-      formData.additionalInfo !== (currentProfile.additionalInfo || '');
-
-    if (!hasChanges) return;
-
-    try {
-      await api.put(`/profiles/${selectedProfileId}`, {
-        name: currentProfile.name,
-        content: formData.profile,
-        userSkills: formData.userSkills,
-        additionalInfo: formData.additionalInfo
-      });
-      // Silently update the profiles list without refetching
-      lastSavedRef.current = {
-        profile: formData.profile,
-        userSkills: formData.userSkills,
-        additionalInfo: formData.additionalInfo
-      };
-    } catch (err) {
-      console.error('Auto-save failed:', err);
-    }
-  }, [selectedProfileId, canEditProfile, isNewProfileMode, formData.profile, formData.userSkills, formData.additionalInfo, profiles]);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
+    // Skip auto-save on initial mount / profile load
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      return;
+    }
     if (!selectedProfileId || !canEditProfile || isNewProfileMode) return;
 
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(() => {
-      autoSaveProfile();
+    autoSaveTimerRef.current = setTimeout(async () => {
+      const currentProfile = profiles.find(p => p._id === selectedProfileId);
+      if (!currentProfile) return;
+
+      try {
+        await api.put(`/profiles/${selectedProfileId}`, {
+          name: currentProfile.name,
+          content: formData.profile,
+          userSkills: formData.userSkills,
+          additionalInfo: formData.additionalInfo
+        });
+        // Update local profiles state so switching profiles retains saved data
+        setProfiles(prev => prev.map(p =>
+          p._id === selectedProfileId
+            ? { ...p, content: formData.profile, userSkills: formData.userSkills, additionalInfo: formData.additionalInfo }
+            : p
+        ));
+      } catch (err) {
+        console.error('Auto-save failed:', err);
+      }
     }, 1500);
 
     return () => {
       if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     };
-  }, [formData.profile, formData.userSkills, formData.additionalInfo, autoSaveProfile]);
+  }, [formData.profile, formData.userSkills, formData.additionalInfo]);
+
+  // Reset mount flag when profile selection changes (prevent auto-save on load)
+  useEffect(() => {
+    isMountedRef.current = false;
+  }, [selectedProfileId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
