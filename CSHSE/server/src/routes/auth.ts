@@ -166,6 +166,51 @@ router.post('/logout', (_req: Request, res: Response) => {
 });
 
 /**
+ * @route   PUT /api/auth/change-password
+ * @desc    Change current user's password
+ * @access  Private
+ */
+router.put('/change-password', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.slice(7);
+    const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
+    const decoded = jwt.verify(token, jwtSecret) as any;
+
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    user.passwordHash = newPassword;
+    await user.save();
+
+    return res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+/**
  * @route   GET /api/auth/me
  * @desc    Get current user info
  * @access  Private
