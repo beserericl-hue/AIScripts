@@ -52,8 +52,7 @@ export default function Layout() {
 
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
-  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ newPassword: '', confirmPassword: '' });
   const [showNewPw, setShowNewPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [passwordError, setPasswordError] = useState('');
@@ -76,8 +75,8 @@ export default function Layout() {
     setPasswordError('');
     setPasswordSuccess('');
 
-    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-      setPasswordError('All fields are required');
+    if (!passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setPasswordError('Both fields are required');
       return;
     }
     if (passwordForm.newPassword.length < 8) {
@@ -92,11 +91,13 @@ export default function Layout() {
     setIsChangingPassword(true);
     try {
       await api.put('/api/auth/change-password', {
-        currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword,
+        userId: impersonation.isImpersonating && impersonation.impersonatedUser
+          ? impersonation.impersonatedUser.id
+          : undefined,
       });
       setPasswordSuccess('Password changed successfully');
-      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      setPasswordForm({ newPassword: '', confirmPassword: '' });
       setTimeout(() => {
         setShowChangePassword(false);
         setPasswordSuccess('');
@@ -112,6 +113,11 @@ export default function Layout() {
   const effectiveUser = getEffectiveUser();
   const showSettings = canAccessAdminSettings();
   const isCurrentlySuperuser = isSuperuser();
+
+  // Determine whose password is being changed
+  const passwordTargetUser = impersonation.isImpersonating && impersonation.impersonatedUser
+    ? impersonation.impersonatedUser
+    : effectiveUser;
 
   const navigation = [
     { name: 'Home', href: '/dashboard', icon: HomeIcon },
@@ -233,7 +239,7 @@ export default function Layout() {
                         setShowChangePassword(true);
                         setPasswordError('');
                         setPasswordSuccess('');
-                        setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+                        setPasswordForm({ newPassword: '', confirmPassword: '' });
                       }}
                       className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                     >
@@ -269,7 +275,10 @@ export default function Layout() {
       {showChangePassword && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Change Password</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Change Password</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              {passwordTargetUser?.firstName} {passwordTargetUser?.lastName}
+            </p>
 
             {passwordError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -283,29 +292,6 @@ export default function Layout() {
             )}
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
-                <div className="relative">
-                  <input
-                    type={showCurrentPw ? 'text' : 'password'}
-                    value={passwordForm.currentPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPw(!showCurrentPw)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showCurrentPw ? (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21" /></svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                    )}
-                  </button>
-                </div>
-              </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
                 <div className="relative">

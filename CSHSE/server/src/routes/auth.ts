@@ -167,7 +167,7 @@ router.post('/logout', (_req: Request, res: Response) => {
 
 /**
  * @route   PUT /api/auth/change-password
- * @desc    Change current user's password
+ * @desc    Change password for current user or impersonated user (admin/superuser only)
  * @access  Private
  */
 router.put('/change-password', async (req: Request, res: Response) => {
@@ -181,23 +181,29 @@ router.put('/change-password', async (req: Request, res: Response) => {
     const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
     const decoded = jwt.verify(token, jwtSecret) as any;
 
-    const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Current password and new password are required' });
+    const { newPassword, userId } = req.body;
+    if (!newPassword) {
+      return res.status(400).json({ error: 'New password is required' });
     }
 
     if (newPassword.length < 8) {
       return res.status(400).json({ error: 'New password must be at least 8 characters' });
     }
 
-    const user = await User.findById(decoded.id);
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    // Determine target user
+    let targetUserId = decoded.id;
+    if (userId && userId !== decoded.id) {
+      // Changing another user's password — only admin/superuser can do this
+      const callingUser = await User.findById(decoded.id).select('role isSuperuser');
+      if (!callingUser?.isSuperuser && callingUser?.role !== 'admin') {
+        return res.status(403).json({ error: 'Only admin or superuser can change another user\'s password' });
+      }
+      targetUserId = userId;
     }
 
-    const isMatch = await user.comparePassword(currentPassword);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
+    const user = await User.findById(targetUserId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
     user.passwordHash = newPassword;
