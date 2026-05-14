@@ -41,7 +41,10 @@ import scoresRouter from './routes/scores';
 dotenv.config();
 
 // Setup process-level error handlers for uncaught exceptions/rejections
-setupProcessErrorHandlers();
+// Skipped under NODE_ENV=test so they don't mask test failures.
+if (process.env.NODE_ENV !== 'test') {
+  setupProcessErrorHandlers();
+}
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -192,6 +195,9 @@ const startServer = async () => {
   }
 };
 
-startServer();
+// Skip auto-start under NODE_ENV=test so supertest can drive the app.
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
 export default app;
