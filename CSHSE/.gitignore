@@ -35,3 +35,24 @@ Make_Automation_Audit_Report.ps
 Make_Automation_Audit_Report.pdf
 Data for Eric - Лист1 (1).csv
 CSHSE Member Handbook - 2024 FINAL.pdf
+
+# Obsidian per-user files (any vault location)
+knowledgebase/*/.obsidian/workspace.json
+knowledgebase/*/.obsidian/workspace-mobile.json
+knowledgebase/*/.obsidian/cache
+knowledgebase/*/.obsidian/plugins
+knowledgebase/*/.obsidian/themes
+**/.obsidian/workspace.json
+**/.obsidian/workspace-mobile.json
+**/.obsidian/cache/
+**/.obsidian/plugins/
+**/.obsidian/themes/
+
+# Local Claude Code configuration (per-engineer)
+.claude/
+
+# MCP config (contains API keys — keep local; rotate any committed-historical key)
+.mcp.json
+
+# macOS
+**/.DS_Store
