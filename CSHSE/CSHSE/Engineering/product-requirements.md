@@ -86,7 +86,7 @@ This is **the central design driver** for [[evidence-document-review-pipeline|au
 
 ## User-requested additions (post-Handbook, 2026-05-11)
 
-These are not in the 2024 Member Handbook but were raised by the product owner 2026-05-11. They're real product requirements for beta; planned in [[sprint-plan-2026-05-11|S2.10 + Sprint 7]].
+These are not in the 2024 Member Handbook but were raised by the product owner on 2026-05-11 (U1, U2, U3) and 2026-05-14 (U4). They're real product requirements for beta; planned in [[sprint-plan-2026-05-11|S2.10, S4.10 + Sprint 7]].
 
 ### U1. Multiple Program Coordinators per Institution
 
@@ -131,6 +131,29 @@ The user provided Google Docs links 2026-05-11; templates should be saved into t
 - Cross-reference between matrix-listed courses and narrative HTML (the validation half of T2.2).
 
 **Scope:** Server-side template registry + reference doc storage; client-side template-driven generator + multi-matrix UI + directions panel + per-cell multi-letter input. No permission changes; no new role.
+
+### U4. Reader report — template-based DOCX export
+
+**Requirement:** Each reader produces a single Word-document report for the self-study they reviewed. The report is generated from a CSHSE-issued template (one template per degree level — Associate, Baccalaureate, Master's), populated with the reader's own comments slotted into the correct Standard / Sub-standard sections. The reader triggers generation when their review is complete. The generated DOCX is automatically copied to shared storage so the Lead Reader can pick up all three reader reports as input for compilation. There is exactly **one report per reader per submission**, and the template selected is driven by `review.programLevel` (no manual choice).
+
+**Source documents (the templates):** User provided Google Docs links 2026-05-14:
+- Associate-level reader report template — `1YBs8V1LDNTvob80xU-dFQOCMCpEtwH07`
+- Baccalaureate-level reader report template — `1Xz8VItPH0a4OKuUttZK69WlK1D7XzmLB`
+- Master's-level reader report template — `13uvbdX5ySF6ygJJ4MkN2hiW5zMBk4OiO`
+
+Templates should be saved into the repo at `docs/reader-report-templates/{associate,bachelors,masters}-reader-report-template.docx` so they are version-controlled, AND uploaded once to S3 under `reader-report-templates/{level}.docx` so the generator can fetch the active version without a redeploy. Admin re-uploads via Settings replace the S3 copy; the repo copy is the rollback seed.
+
+**Required behavior:**
+- Admin uploads / replaces each of the 3 templates from the Settings area; current uploaded-at + filename visible per level.
+- Reader on the review-complete screen sees a "Generate Report" button; clicking it produces the filled DOCX, persists `Review.readerReportS3Key`, and offers an immediate download.
+- Comments are placed by [Comment.standardCode](../../../../server/src/models/Comment.ts) (Standard) and [Comment.specCode](../../../../server/src/models/Comment.ts) (Sub-standard / Spec letter) — these fields already exist on the model, so no schema migration is needed.
+- On review submit ([reviewController.ts:470](../../../../server/src/controllers/reviewController.ts#L470)) the generator fires asynchronously and writes the DOCX to `submissions/{submissionId}/reader-reports/{reviewerId}.docx` in S3. Idempotent on re-submit.
+- Lead Reader's compilation view lists a download link per reader for the auto-shared DOCX; no manual upload needed.
+- Reader names appear as real names in the DOCX (the Lead Reader is the audience); PC-facing surfaces remain redacted per the reader-identity redaction rule.
+
+**Scope:** Template registry (server) + generator service + admin upload UI + reader-side button + lead-reader-side download link. Reuses the existing [s3Service](../../../../server/src/services/s3Service.ts) for storage and adds `docxtemplater` for template filling. No permission changes; no new role.
+
+**Today's behavior:** [reportController.ts](../../../../server/src/controllers/reportController.ts) only generates a generic PDF via [pdfGenerator.ts](../../../../server/src/services/pdfGenerator.ts); there is no DOCX path, no template registry, and no auto-copy to shared storage for the Lead Reader.
 
 ### U2. Joint Ventures (institution grouping)
 

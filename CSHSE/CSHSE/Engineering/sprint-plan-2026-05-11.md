@@ -12,7 +12,7 @@ last_reviewed: 2026-05-11
 
 # Sprint Plan — 2026-05-11
 
-**Supersedes [[sprint-plan-2026-05-10]].** Re-prioritised against the product-requirements audit ([[incomplete-features-2026-05-11]]) which surfaced Handbook-compliance gaps not in the prior plan. Originally compressed 8 → 6 sprints; expanded to 7 on 2026-05-11 to add the user-requested multi-PC support (S2.10) and Joint Venture grouping (Sprint 7) per [[product-requirements#user-requested-additions-post-handbook-2026-05-11]].
+**Supersedes [[sprint-plan-2026-05-10]].** Re-prioritised against the product-requirements audit ([[incomplete-features-2026-05-11]]) which surfaced Handbook-compliance gaps not in the prior plan. Originally compressed 8 → 6 sprints; expanded to 7 on 2026-05-11 to add the user-requested multi-PC support (S2.10) and Joint Venture grouping (Sprint 7). On 2026-05-14 S4.10 was added for the reader-report DOCX export (U4). All user-requested additions live in [[product-requirements#user-requested-additions-post-handbook-2026-05-11]].
 
 > **For Claude Code:** Each story is self-contained. Read the linked wiki concept page first for context, then make the listed code changes, then ensure the acceptance criteria pass. Stories are ordered within each sprint by dependency.
 
@@ -65,7 +65,7 @@ Wiki concept pages are durable; review pages and the audit table inside them are
 | 1 | Compliance + critical security | Handbook-rule violations closed; all 6 audit Criticals fixed | [[incomplete-features-2026-05-11]] H1–H4; [[security-audit-2026-05-10]] C1–C5 |
 | 2 | Auth hardening + input validation + multi-PC support | All Highs + key Mediums closed; safe auth surface; multi-PC per institution live (foundational for all downstream RBAC) | [[security-audit-2026-05-10]] H1–H7, M2, M5; [[product-requirements#u1-multiple-program-coordinators-per-institution]] |
 | 3 | Evidence AI review (server + n8n) + emails (env config + wire-up) + reader deadlines | New AI pipeline operational; env-driven SMTP / sender / domain config; every workflow email wired; 45-day reader timer ticking | [[evidence-document-review-pipeline]]; [[incomplete-features-2026-05-11]] T2.1, T2.3, T2.7 |
-| 4 | Evidence review UI + template-driven matrix editor + multi-matrix per submission | Evidence pills in 3 surfaces; matrix backend finally has a template-driven client with multi-instance support | [[incomplete-features-2026-05-11]] T1.2, T1.3, T2.1 (UI half); [[product-requirements#u3-template-driven-curriculum-matrices-with-multi-matrix-per-submission]] |
+| 4 | Evidence review UI + template-driven matrix editor + multi-matrix + reader-report DOCX export | Evidence pills in 3 surfaces; matrix backend finally has a template-driven client with multi-instance support; reader generates a DOCX report from CSHSE template on review-complete, auto-uploaded to S3 for Lead Reader pickup | [[incomplete-features-2026-05-11]] T1.2, T1.3, T2.1 (UI half); [[product-requirements#u3-template-driven-curriculum-matrices-with-multi-matrix-per-submission]]; [[product-requirements#u4-reader-report-template-based-docx-export]] |
 | 5 | Common-error checks + completion checklist + tests | Pre-submit gate; mechanizable Handbook checks live; test coverage ≥60/50% | [[incomplete-features-2026-05-11]] T2.2, T2.4 |
 | 6 | Board decisions, cycle scheduler, E2E, polish | Post-decision flow; cycle reminders; full E2E journeys; ops runbooks | [[incomplete-features-2026-05-11]] T2.6, T3.x; [[documentation-gaps-2026-05-10]] |
 | 7 | Joint Ventures (multi-institution organization) | JV entity + admin UI + dashboard grouping + reporting filter; **no permission changes** | [[product-requirements#u2-joint-ventures-institution-grouping]] |
@@ -1148,15 +1148,68 @@ Wiki concept pages are durable; review pages and the audit table inside them are
 
 ---
 
-**Sprint 4 grew on 2026-05-11** with the addition of S4.8 (template registry) and S4.9 (multi-matrix per submission). S4.3 also expanded from 4 to 5 days to cover template-driven row pre-population, the directions panel, and the new-matrix modal.
+## S4.10 — Reader-report DOCX export from template + auto-share with Lead Reader
+
+**Source:** [[product-requirements#u4-reader-report-template-based-docx-export]] — user-requested 2026-05-14.
+
+**Context:** [[client-features-deep-2026-05-10|comments + reviews]]. The existing PDF generator ([server/src/services/pdfGenerator.ts:31](../../../../server/src/services/pdfGenerator.ts#L31)) produces a generic PDF; the Handbook workflow requires a Word document filled from a CSHSE-issued template, with each reader's comments routed to the correct Standard / Sub-standard sections so the Lead Reader can compile. There is **one report per reader per submission**, and the template is chosen by `review.programLevel` — no manual selection.
+
+**Files:**
+- `docs/reader-report-templates/{associate,bachelors,masters}-reader-report-template.docx` — NEW. The three CSHSE-issued templates (Google Doc sources: `1YBs8V1LDNTvob80xU-dFQOCMCpEtwH07`, `1Xz8VItPH0a4OKuUttZK69WlK1D7XzmLB`, `13uvbdX5ySF6ygJJ4MkN2hiW5zMBk4OiO`). Saved as version-controlled DOCX with `{{standardN_comments}}` and `{{standardN_specM_comments}}` placeholders — one placeholder per Standard / Sub-standard the Handbook recognises (sourced from [data/standards.ts](../../../../server/src/data/standards.ts) so names cannot drift).
+- `server/src/data/readerReportTemplates.ts` — NEW. Registry: `{ associate: { s3Key, placeholderMap }, bachelors: {...}, masters: {...} }`. `placeholderMap` enumerates every `standardCode` / `specCode` the template expects.
+- `server/src/services/readerReportGenerator.ts` — NEW. `generateReaderReportDocx(reviewId): Promise<{ s3Key: string; buffer: Buffer }>`. Steps: fetch [Review](../../../../server/src/models/Review.ts), look up template by `review.programLevel`, fetch template DOCX from S3 (repo seed as fallback), fetch all [Comments](../../../../server/src/models/Comment.ts) authored by `review.reviewerId` for `submissionId = review.submissionId`, group by `(standardCode, specCode)`, render with `docxtemplater`, upload to S3 at `submissions/{submissionId}/reader-reports/{reviewerId}.docx`, persist `s3Key` on the Review.
+- `server/src/controllers/reportController.ts` — NEW handler `generateReaderReportDocx` modelled on the existing `generateReaderReportPDF` ([reportController.ts:19](../../../../server/src/controllers/reportController.ts#L19)) but writes DOCX + uploads to shared storage.
+- `server/src/routes/reports.ts:25` — add `POST /api/reports/reader/:reviewId/generate` (kicks off generation, returns s3Key) and `GET /api/reports/reader/:reviewId/docx` (streams or pre-signed-URL redirects).
+- `server/src/models/Review.ts` — add `readerReportS3Key?: string; readerReportGeneratedAt?: Date`.
+- `server/src/controllers/reviewController.ts:470` — `submitReview`: on transition to `submitted`, async-invoke `generateReaderReportDocx(review._id)` and persist the resulting key. Failures land in [ErrorLog](../../../../server/src/services/errorLogger.ts).
+- `server/src/controllers/leadReaderController.ts` — extend the list-reviews-for-submission response to include `readerReportS3Key` so the Lead Reader UI can download.
+- `client/src/features/admin/Settings/` — NEW `ReaderReportTemplatesPage.tsx` panel. Admin uploads each of the 3 templates to S3 under `reader-report-templates/{level}.docx`. Shows current filename + uploaded-at; supports replace. New tab on [SettingsPage.tsx](../../../../client/src/features/admin/Settings/SettingsPage.tsx).
+- `client/src/features/reviewer/` (or the reader review-workflow surface) — "Generate Report" button on the reader's review-complete screen. Enabled only when `review.status === 'submitted'` (or when all `assessments` are complete). Calls `POST .../generate` then `GET .../docx` and saves to disk.
+- `client/src/features/leadReader/` — compilation view lists each submitted reader and links to the auto-shared DOCX (download only — no Lead Reader upload; the auto-shared S3 copies *are* the upload).
+
+**Steps:**
+1. Add `docxtemplater` + `pizzip` to `server/package.json`. Both are MIT-licensed.
+2. Save the three Google Doc templates locally as `.docx`. Replace static "comment goes here" placeholder cells with `{{standardN_comments}}` (e.g., `{{standard11_comments}}`) and `{{standardN_specM_comments}}` (e.g., `{{standard11_specA_comments}}`). Commit to `docs/reader-report-templates/`. **Hard prerequisite — templates must exist before the registry can resolve.**
+3. Implement [`readerReportTemplates.ts`](../../../../server/src/data/readerReportTemplates.ts) registry, with placeholder names cross-checked against [data/standards.ts](../../../../server/src/data/standards.ts) at module load (throw on drift).
+4. Implement [`readerReportGenerator.ts`](../../../../server/src/services/readerReportGenerator.ts). Group comments by `(standardCode, specCode)` and render replies inline. Names in the DOCX are real names (Lead Reader audience); PC-facing surfaces keep the [[#s1-1|reader-identity redaction]] from S1.1.
+5. Add the controller + routes. RBAC: the reader who authored the review, the lead reader on the submission, and admin can fetch; everyone else 403.
+6. Wire `submitReview` to fire generation asynchronously. Idempotent — re-submit overwrites the prior DOCX at the same S3 key.
+7. Admin Settings panel — multipart POST to `/api/admin/reader-report-templates/:level` which calls [s3Service.uploadFile](../../../../server/src/services/s3Service.ts#L81).
+8. Reader UI "Generate Report" button — enabled when the review is complete; spinner during generation; downloads the DOCX on success.
+9. Lead Reader UI — render the per-reader download list. No upload UI.
+
+**Acceptance:**
+- [ ] Admin can upload each of the 3 templates from Settings; the currently active filename + uploaded-at is visible per level.
+- [ ] Reader on the review-complete screen can generate a DOCX whose body contains every comment they authored, placed under the correct Standard / Sub-standard heading from the template.
+- [ ] Template selection is driven entirely by `review.programLevel` — a Masters review never picks the Associate template; mismatching is impossible by construction.
+- [ ] On `submitReview`, the DOCX is uploaded to `s3://{bucket}/submissions/{submissionId}/reader-reports/{reviewerId}.docx` and `Review.readerReportS3Key` is set within 10s. Re-submit overwrites the same key.
+- [ ] Lead Reader sees a download link for each submitted reader's report on the compilation view; clicking downloads the auto-shared DOCX.
+- [ ] One report per degree level — reader has no template picker.
+- [ ] A reader who did not author the review gets 403 on both endpoints.
+
+**Test plan:**
+- **Unit:** `server/tests/unit/readerReportGenerator.test.ts` — table-driven: comments with 3 distinct `(standardCode, specCode)` triples → output buffer contains expected placeholder substitutions; missing-comments → placeholder renders empty. Use a tiny fixture DOCX (1 paragraph, 2 placeholders) in `server/tests/fixtures/`. Pure function; mock S3 template fetch.
+- **Unit:** `server/tests/unit/readerReportTemplates.test.ts` — registry `placeholderMap` is a strict subset of [data/standards.ts](../../../../server/src/data/standards.ts) codes for the matching program level (anti-drift).
+- **System / integration:** `server/tests/integration/reader-report-docx-generate.test.ts` — supertest: seed a submission + 3 reader comments + a stubbed `@aws-sdk/client-s3`; call `POST /api/reports/reader/:id/generate`; assert (a) `PutObjectCommand` invoked with the expected key, (b) `Review.readerReportS3Key` persists, (c) `GET .../docx` returns a non-empty buffer with `Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
+- **System / integration:** `server/tests/integration/submit-review-auto-generates-docx.test.ts` — submit a review → assert the generator was invoked and `readerReportS3Key` is set within 2s (use fake timers + flush microtasks).
+- **System / integration:** `server/tests/integration/reader-report-rbac.test.ts` — a reader who didn't author the review gets 403; a PC gets 403; the authoring reader, the lead reader on the submission, and admin succeed.
+- **System / integration:** `client/src/features/admin/Settings/ReaderReportTemplatesPage.test.tsx` — RTL + MSW: upload form posts multipart for `level=associate`; list re-renders with new uploaded-at.
+- **E2E:** extend S6.4 reviewer journey — complete a review → click "Generate Report" → assert DOCX downloads + Lead Reader sidebar shows the new file under the reader's entry.
+
+**Estimate:** 3 days (1 day registry + generator, 0.5 admin upload UI, 0.5 reader UI button + workflow wire-up, 0.5 lead-reader UI, 0.5 tests). **Depends:** [[#s1-1|S1.1]] (reader-identity redaction — establishes who the DOCX is "for"); templates committed to `docs/reader-report-templates/` (hard prerequisite). **Blocks:** none (Lead Reader compilation can still proceed manually if the generator is offline).
+
+---
+
+**Sprint 4 grew on 2026-05-11** with the addition of S4.8 (template registry) and S4.9 (multi-matrix per submission). S4.3 also expanded from 4 to 5 days. **On 2026-05-14** S4.10 was added for the reader-report DOCX export (U4), +3 days.
 
 **Sprint 4 success metrics:**
 - 3 evidence UIs show review pills.
 - Matrix client editor is functional **and template-driven** (largest Tier-1 gap closed; template-based per program level).
 - Multi-matrix per submission supported (S4.9).
 - Matrix template registry includes all 3 program levels with version-controlled DOCX references (S4.8).
+- Reader-report DOCX export operational: 3 program-level templates uploaded; reader generates a DOCX on review-complete that auto-uploads to S3 for Lead Reader pickup (S4.10).
 - Spec-letter hardcoding bug fixed.
-- Total estimate: ~14 days (was ~10.5; +1 day on S4.3 + 1.5 days S4.8 + 2 days S4.9). Overflows a single-engineer 7-day sprint — likely spills into Sprint 5 territory or needs two engineers.
+- Total estimate: ~17 days (was ~14; +3 days S4.10). Clearly overflows a single-engineer 7-day sprint — needs two engineers or partial spill into Sprint 5.
 
 ---
 
@@ -1756,6 +1809,7 @@ These don't fit in a single sprint:
 | Reader identity redaction to PCs | leaked | redacted |
 | Multiple PCs per institution (U1) | not supported | supported (S2.10) |
 | Joint Venture grouping (U2) | not supported | full CRUD + dashboard grouping + JV-filter reporting (Sprint 7) |
+| Reader-report DOCX export (U4) | manual / generic PDF only | template-driven DOCX per degree level; comments slotted by Standard / Sub-standard; auto-uploaded to S3 for Lead Reader (S4.10) |
 
 # Out of scope
 

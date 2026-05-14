@@ -291,3 +291,50 @@ Fetched the three docs via Google's text-export endpoint. Got structural summari
 - E2E: extended S6.4 coordinator journey covers create-from-template, fill cells with multi-letter combinations, create a second matrix, archive one.
 
 **Open item:** user must save the three CSHSE-issued DOCX files into `docs/matrix-templates/{associate,baccalaureate,masters}-matrix-template.docx` before S4.8 implementation begins. Sprint plan flags this as a hard prerequisite.
+
+## [2026-05-14] update | reader-report DOCX export (U4 added; S4.10 added)
+
+User supplied three Google Docs links containing CSHSE's official reader report templates (Associate, Baccalaureate, Master's) and asked for a new story that:
+1. Uploads the three templates into shared storage (S3).
+2. Collects each reader's comments on the self-study and exports a single Word document, with comments placed by Standard / Sub-standard.
+3. Auto-copies the generated DOCX to shared storage so the Lead Reader can pick up all reader reports as input for compilation.
+4. The reader generates the report when their review is complete.
+5. There is **one report per reader per submission**; the template is chosen by `review.programLevel`.
+
+Source documents (Google Doc IDs):
+- Associate: `1YBs8V1LDNTvob80xU-dFQOCMCpEtwH07`
+- Baccalaureate: `1Xz8VItPH0a4OKuUttZK69WlK1D7XzmLB`
+- Master's: `13uvbdX5ySF6ygJJ4MkN2hiW5zMBk4OiO`
+
+**Updated (concept):**
+- [[product-requirements]] — added **U4** (reader-report template-based DOCX export). Header updated: user-requested additions now span 2026-05-11 (U1/U2/U3) + 2026-05-14 (U4); planned-in pointer extended to `S2.10, S4.10 + Sprint 7`.
+
+**Updated (plan):**
+- [[sprint-plan-2026-05-11]] — **added S4.10** in Sprint 4 (reader-report DOCX generator + admin template upload + reader generate-button + lead-reader download list; 3 days). Sprint 4 success metrics and total-estimate roll-up updated (~14 → ~17 days). Anti-drift safeguard: template placeholder names cross-checked against [data/standards.ts](../../../../server/src/data/standards.ts) at module load.
+
+**Plan totals:**
+- 7 sprints → 7 sprints (no new sprint added; Sprint 4 absorbs).
+- 58 stories → 59 stories.
+- ~94.5 days → ~97.5 days.
+- Single-engineer Sprint 4 overflow now firmly two-engineer territory or partial spill into Sprint 5.
+
+**Reuse over new infrastructure** — S4.10 builds on what already exists:
+- [Comment.standardCode / specCode](../../../../server/src/models/Comment.ts) — already model comment placement by Standard / Sub-standard.
+- [s3Service](../../../../server/src/services/s3Service.ts) — already provides `uploadFile`/`downloadFile`/`isS3Configured`.
+- [reportController.generateReaderReportPDF](../../../../server/src/controllers/reportController.ts) — provides the RBAC pattern for the new DOCX handler.
+- [reviewController.submitReview](../../../../server/src/controllers/reviewController.ts) — the hook for async DOCX generation on review completion.
+
+**New dependencies:** `docxtemplater` + `pizzip` (both MIT). No `libreoffice` needed — DOCX is the output, not the input.
+
+**Test plans for the new story** follow the 3-layer convention:
+- Unit: generator placeholder substitution + registry anti-drift (`placeholderMap` ⊆ `data/standards.ts`).
+- System / integration: generate endpoint persists `Review.readerReportS3Key` and uploads to the expected S3 key; submit-review auto-generates within 2s; RBAC matrix (reader-not-author / PC / authoring-reader / lead-reader / admin); admin template-upload UI replaces the active S3 copy.
+- E2E: extends S6.4 reviewer journey — complete a review → "Generate Report" → DOCX downloads → Lead Reader view lists the new file.
+
+**Open items / hard prerequisites:**
+- User must save the three Google Doc templates locally as `.docx` and commit to `docs/reader-report-templates/{associate,bachelors,masters}-reader-report-template.docx` before S4.10 implementation begins (mirrors the S4.8 pattern for matrix templates).
+- Placeholder pattern is `{{standardN_comments}}` and `{{standardN_specM_comments}}`. The templates' static "comment goes here" cells must be replaced with these tokens.
+
+## [2026-05-14] update | sprint work moves to developer branch (consistent with main baseline)
+
+Per user direction: the sprint-plan + product-requirements baseline (with U4 / S4.10 added) is being placed on a new `developer` branch of the [beserericl-hue/AIScripts](https://github.com/beserericl-hue/AIScripts) repository. `developer` is branched from `main` at commit `7c8ec91` — identical to `origin/main` at the moment of branch creation, so the planning baseline is fully consistent with what Railway deploys before any development starts. The stale `origin/Development` branch (capital D, unmerged, last commit `e464b6d`) is unrelated and untouched.
