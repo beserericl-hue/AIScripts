@@ -76,6 +76,9 @@ export const createInvitation = async (req: AuthenticatedRequest, res: Response)
     const { email, name, role, institutionId, customMessage, permissions } = req.body;
 
     // Permission checks
+    if (role === 'admin' && userRole !== 'admin') {
+      return res.status(403).json({ error: 'Only admin can invite administrators' });
+    }
     if (role === 'program_coordinator' && userRole !== 'admin') {
       return res.status(403).json({ error: 'Only admin can invite program coordinators' });
     }

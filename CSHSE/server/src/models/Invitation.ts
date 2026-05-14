@@ -6,7 +6,7 @@ export type InvitationStatus = 'pending' | 'accepted' | 'expired' | 'revoked';
 export interface IInvitation extends Document {
   email: string;
   name: string;
-  role: 'program_coordinator' | 'reader' | 'lead_reader';
+  role: 'program_coordinator' | 'reader' | 'lead_reader' | 'admin';
   institutionId?: mongoose.Types.ObjectId;
   institutionName?: string;
 
@@ -51,7 +51,7 @@ const InvitationSchema = new Schema<IInvitation>({
   },
   role: {
     type: String,
-    enum: ['program_coordinator', 'reader', 'lead_reader'],
+    enum: ['program_coordinator', 'reader', 'lead_reader', 'admin'],
     required: true
   },
   institutionId: {

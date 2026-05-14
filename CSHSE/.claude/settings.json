@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(__NEW_LINE_38aa679317d3e365__ curl -s \"https://n8n.agileadautomation.com/api/v1/workflows/S7Z74PmDwbkL6wiF\" -H \"X-N8N-API-KEY: $N8N_KEY\")",
+      "Read(//tmp/**)",
+      "Read(//private/tmp/**)",
+      "Bash(for id in 518 517)",
+      "Bash(do)",
+      "Bash(echo \"=== Execution $id ===\")",
+      "Bash(done)",
+      "Read(//Users/ericbeser/Documents/GitHub/AIScripts/**)",
+      "Bash(__NEW_LINE_ca35be652a9a2d5c__ node /tmp/update-n8n-token.js)",
+      "WebFetch(domain:developers.make.com)",
+      "Read(//Users/ericbeser/**)",
+      "Bash(npx n8n-mcp --help)",
+      "Bash(npx n8n-mcp)",
+      "Bash(chmod +x /Users/ericbeser/.npm/_npx/b6a381d62ce0fe56/node_modules/.bin/n8n-mcp)",
+      "Bash(chmod +x /Users/ericbeser/.npm/_npx/b6a381d62ce0fe56/node_modules/n8n-mcp/dist/mcp/index.js)",
+      "Bash(claude --version)",
+      "Bash(claude mcp --help)",
+      "Bash(claude mcp list)",
+      "Bash(claude -p \"list my make.com scenarios\")",
+      "Bash(claude mcp remove make)",
+      "Bash(claude mcp add --transport http make https://mcp.make.com)",
+      "Bash(claude mcp add make -- npx @anthropic/make-mcp-server)",
+      "Bash(claude mcp login make)",
+      "Bash(chmod 600 /Users/ericbeser/.make_api_key)",
+      "Bash(ps2pdf /Users/ericbeser/Documents/GitHub/AIScripts/CSHSE/Make_Automation_Audit_Report.ps /Users/ericbeser/Documents/GitHub/AIScripts/CSHSE/Make_Automation_Audit_Report.pdf)",
+      "Bash(open /Users/ericbeser/Documents/GitHub/AIScripts/CSHSE/Make_Automation_Audit_Report.pdf)",
+      "Bash(ps2pdf Make_Automation_Audit_Report.ps Make_Automation_Audit_Report.pdf)",
+      "Bash(open Make_Automation_Audit_Report.pdf)",
+      "Bash(wc -l /Users/ericbeser/Documents/GitHub/AIScripts/CSHSE/client/src/features/selfStudy/Editor/*.tsx)",
+      "Bash(railway status)"
+    ],
+    "additionalDirectories": [
+      "/tmp",
+      "/Users/ericbeser/.npm/_npx/b6a381d62ce0fe56/node_modules/.n8n-mcp-gNeYNizp",
+      "/Users/ericbeser"
+    ]
+  }
+}

@@ -477,6 +477,7 @@ export function UserManagement() {
                   <option value="reader">Reader</option>
                   <option value="lead_reader">Lead Reader</option>
                   <option value="program_coordinator">Program Coordinator</option>
+                  <option value="admin">Administrator</option>
                 </select>
               </div>
 

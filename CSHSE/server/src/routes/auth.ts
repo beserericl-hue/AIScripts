@@ -166,6 +166,57 @@ router.post('/logout', (_req: Request, res: Response) => {
 });
 
 /**
+ * @route   PUT /api/auth/change-password
+ * @desc    Change password for current user or impersonated user (admin/superuser only)
+ * @access  Private
+ */
+router.put('/change-password', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.slice(7);
+    const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
+    const decoded = jwt.verify(token, jwtSecret) as any;
+
+    const { newPassword, userId } = req.body;
+    if (!newPassword) {
+      return res.status(400).json({ error: 'New password is required' });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+
+    // Determine target user
+    let targetUserId = decoded.id;
+    if (userId && userId !== decoded.id) {
+      // Changing another user's password — only admin/superuser can do this
+      const callingUser = await User.findById(decoded.id).select('role isSuperuser');
+      if (!callingUser?.isSuperuser && callingUser?.role !== 'admin') {
+        return res.status(403).json({ error: 'Only admin or superuser can change another user\'s password' });
+      }
+      targetUserId = userId;
+    }
+
+    const user = await User.findById(targetUserId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    user.passwordHash = newPassword;
+    await user.save();
+
+    return res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    return res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+/**
  * @route   GET /api/auth/me
  * @desc    Get current user info
  * @access  Private
