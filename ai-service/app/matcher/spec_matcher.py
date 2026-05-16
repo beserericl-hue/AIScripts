@@ -14,6 +14,7 @@ Cost budget per section: 1 embedding call (~0.001¢) + 1 Haiku call (~0.06¢) �
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from typing import Literal
 
@@ -81,14 +82,46 @@ def _build_prompt(section: Section, candidates: list[Candidate]) -> str:
         lines.append(f"     similarity: {c.similarity:.3f}")
     lines.extend([
         "",
-        "Respond with STRICT JSON only (no prose, no markdown fences). Schema:",
-        '{"primary_standard": "string|null", "primary_spec": "string|null",',
-        ' "primary_confidence": 0.0-1.0,',
-        ' "alternates": [{"standardCode": "string", "specCode": "string", "confidence": 0.0-1.0}, ...],',
-        ' "rationale": "1-2 sentence explanation",',
-        ' "is_supporting_evidence": boolean}',
+        "Respond with STRICT JSON only (no prose, no markdown fences).",
+        "",
+        "FIELD RULES (read carefully):",
+        '  "primary_standard": EXACTLY the standard code as a string of digits, e.g. "1", "2", "11" — NEVER include the word "Standard" or any title.',
+        '  "primary_spec":     EXACTLY one lowercase letter, e.g. "a", "b", "c" — NEVER include the standard title or the spec definition.',
+        '  "primary_confidence": float 0.0..1.0',
+        '  "alternates":       array of objects each with the same field rules: {"standardCode": "<digits>", "specCode": "<letter>", "confidence": <float>}',
+        '  "rationale":        1-2 sentence explanation',
+        '  "is_supporting_evidence": boolean',
+        "",
+        "EXAMPLE of a CORRECT response (for a section about student demographics):",
+        '{"primary_standard":"1","primary_spec":"e","primary_confidence":0.94,'
+        '"alternates":[{"standardCode":"1","specCode":"f","confidence":0.31}],'
+        '"rationale":"Section reports enrollment numbers and demographics directly matching the Specification text.","is_supporting_evidence":false}',
     ])
     return "\n".join(lines)
+
+
+_DIGITS_RE = re.compile(r"\d+")
+_LETTER_RE = re.compile(r"[a-z]")
+
+
+def _normalize_standard(value: object) -> str | None:
+    """Coerce Claude's primary_standard to bare digits ('1', '11', etc.).
+
+    Claude sometimes returns 'Standard 2' or '2.b' — strip to first digit run.
+    """
+    if value is None:
+        return None
+    m = _DIGITS_RE.search(str(value))
+    return m.group(0) if m else None
+
+
+def _normalize_spec(value: object) -> str | None:
+    """Coerce primary_spec to a single lowercase letter ('a'..'h')."""
+    if value is None:
+        return None
+    s = str(value).lower()
+    m = _LETTER_RE.search(s)
+    return m.group(0) if m else None
 
 
 def _parse_claude_response(text: str) -> dict:
@@ -213,13 +246,24 @@ class SpecMatcher:
                 candidates=[asdict(c) for c in candidates],
             )
 
+        primary_std = _normalize_standard(parsed.get("primary_standard"))
+        primary_spec = _normalize_spec(parsed.get("primary_spec"))
+        norm_alternates = []
+        for alt in parsed.get("alternates", []) or []:
+            ns = _normalize_standard(alt.get("standardCode"))
+            np = _normalize_spec(alt.get("specCode"))
+            if ns and np:
+                norm_alternates.append(
+                    {"standardCode": ns, "specCode": np, "confidence": float(alt.get("confidence", 0.0))}
+                )
+
         return Recommendation(
             section_id=section.id,
             section_heading=section.heading,
-            primary_standard=parsed.get("primary_standard"),
-            primary_spec=parsed.get("primary_spec"),
+            primary_standard=primary_std,
+            primary_spec=primary_spec,
             primary_confidence=float(parsed.get("primary_confidence", 0.0)),
-            alternates=parsed.get("alternates", []),
+            alternates=norm_alternates,
             rationale=parsed.get("rationale", ""),
             is_supporting_evidence=bool(parsed.get("is_supporting_evidence", False)),
             candidates=[asdict(c) for c in candidates],

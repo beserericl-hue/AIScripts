@@ -5,14 +5,21 @@ points for the active spec version.
 """
 from __future__ import annotations
 
+import uuid
+
 from app.embeddings.openai_client import EmbeddingClient
 from app.standards.loader import Specification, load_specifications
 from app.vector.qdrant_ops import VectorStore
 
+# Stable namespace so we always get the same UUID5 for the same spec key.
+# (Qdrant point IDs must be UUIDs or unsigned ints; this gets us deterministic
+# upserts so re-bootstrap is a no-op.)
+_NAMESPACE = uuid.UUID("4f6f5e63-7368-7365-7370-65637361636e")  # "cshseSpecCache"
+
 
 def _point_id(spec: Specification) -> str:
-    """Stable point id so re-bootstrap is a no-op upsert, not a duplicate."""
-    return f"{spec.program_level}:{spec.version}:{spec.standard_code}:{spec.spec_code}"
+    key = f"{spec.program_level}:{spec.version}:{spec.standard_code}:{spec.spec_code}"
+    return str(uuid.uuid5(_NAMESPACE, key))
 
 
 def _embedding_text(spec: Specification) -> str:
