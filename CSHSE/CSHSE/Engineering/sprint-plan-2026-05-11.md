@@ -5,9 +5,10 @@ type: plan
 tags: [sprint-plan, roadmap, claude-code, executable]
 plan_date: 2026-05-11
 horizon: ~14 weeks (7 × 2-week sprints)
-status: proposed
+status: superseded
 supersedes: sprint-plan-2026-05-10
-last_reviewed: 2026-05-11
+superseded_by: sprint-plan-2026-05-16
+last_reviewed: 2026-05-16
 ---
 
 # Sprint Plan — 2026-05-11

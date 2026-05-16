@@ -29,6 +29,8 @@ The catalog. One line per page. When answering a question, scan this first to fi
 - [[import-marker-mechanism]] — deep mechanical companion to import-pipeline: how the GridFS HTML physically shortens via `<!-- EXTRACTED:... -->` comment markers, table-frag wrappers, two-pass streaming restore, three-tier repair, /tmp lifecycle, and what's stored where.
 - [[repo-docs-reference]] — index of the four `/docs/*.md` files in the application repo (IMPORT_PROCESS_REFERENCE, api, n8n integration guide, claude-code prompt) with drift tracking against current code.
 - [[module-catalog]] — every server route ↔ controller ↔ service ↔ model and every client page ↔ feature ↔ component, one-line each.
+- [[railway-deployment-topology]] — two-env Railway topology (production/main, develop/developer), isolated MongoDBs, shared Tigris S3 bucket. GraphQL ops cookbook for branch-swap and env-creation.
+- [[db-migration-strategy]] — how every DB-touching sprint story flows develop → prod without breaking live readers. Forward-only migration runner, expand-contract for S2.10/S4.6 breaking changes, develop-from-prod refresh script, `dev/` prefix isolation for the shared S3 bucket.
 
 ## Reviews / audits (dated snapshots)
 
@@ -42,7 +44,9 @@ The catalog. One line per page. When answering a question, scan this first to fi
 ## Plans (dated, forward-looking)
 
 - [[sprint-plan-2026-05-10]] — eight-sprint roadmap. **Superseded by [[sprint-plan-2026-05-11]].**
-- [[sprint-plan-2026-05-11]] — six-sprint roadmap structured for Claude Code consumption. Fixes every gap in [[incomplete-features-2026-05-11]] + [[security-audit-2026-05-10]]. Each story carries file paths, line citations, acceptance criteria, tests.
+- [[sprint-plan-2026-05-11]] — seven-sprint roadmap. **Superseded by [[sprint-plan-2026-05-16]].**
+- [[sprint-plan-2026-05-16]] — eight-sprint roadmap. **NEW Sprint 1 = AI-Assisted Import Wizard** (Python FastAPI + Qdrant + Claude Haiku, linear-wizard UI). Original 7 sprints shift to Sprints 2-8. Detailed per-story spec for Sprint 1; cross-references prior plan for Sprints 2-8.
+- [[legacy-self-study-import]] — complete analysis of the current import flow + AI-augmented redesign that drives Sprint 1 of [[sprint-plan-2026-05-16]].
 
 ## Sources
 

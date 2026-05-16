@@ -292,6 +292,31 @@ Fetched the three docs via Google's text-export endpoint. Got structural summari
 
 **Open item:** user must save the three CSHSE-issued DOCX files into `docs/matrix-templates/{associate,baccalaureate,masters}-matrix-template.docx` before S4.8 implementation begins. Sprint plan flags this as a hard prerequisite.
 
+## [2026-05-14] update | reader-report DOCX export added (U4; S4.10)
+
+**Trigger:** Product owner provided three Google Doc reader-report templates (one per degree level — Associate `1YBs8V1LDNTvob80xU-dFQOCMCpEtwH07`, Baccalaureate `1Xz8VItPH0a4OKuUttZK69WlK1D7XzmLB`, Master's `13uvbdX5ySF6ygJJ4MkN2hiW5zMBk4OiO`) with a new workflow requirement: each reader generates a single Word-document report (filled from the template matching `review.programLevel`), with their comments placed by Standard / Sub-standard. The DOCX is auto-uploaded to shared storage (S3) on review submit so the Lead Reader can compile without manual upload.
+
+**Updated (concept):**
+- [[product-requirements]] — added **U4. Reader report — template-based DOCX export**. Documents the 3 template sources, S3 storage layout (`reader-report-templates/{level}.docx` + `submissions/{submissionId}/reader-reports/{reviewerId}.docx`), placeholder convention (`{{standardN[_specM]_comments}}`), and that the existing [Comment.standardCode](../../../server/src/models/Comment.ts) / `specCode` fields already carry the routing data so no schema migration is needed.
+
+**Updated (plan):**
+- [[sprint-plan-2026-05-11]] — **added S4.10** "Reader-report DOCX export from template + auto-share with Lead Reader" (3 days). New `server/src/data/readerReportTemplates.ts` registry, `server/src/services/readerReportGenerator.ts`, controller + routes, admin upload UI, reader "Generate Report" button, lead-reader download list. Triggered automatically from `submitReview` ([reviewController.ts:470](../../../server/src/controllers/reviewController.ts#L470)) so the S3 copy is ready by the time the Lead Reader looks. Sprint 4 grew from 14 → 17 days; will overflow a single-engineer 7-day sprint or partially spill into Sprint 5. At-a-glance roster + overall metrics tables updated.
+
+**Plan totals:**
+- 7 sprints → 7 sprints (no new sprint).
+- 58 stories → 59 stories.
+- ~94.5 days → ~97.5 days.
+- ~14.5 weeks → ~15 weeks at one engineer.
+
+**Test plan for S4.10** follows the 3-layer convention:
+- Unit: generator placeholder substitution; registry vs `data/standards.ts` anti-drift.
+- System / integration: `POST .../generate` writes to S3 + persists `Review.readerReportS3Key`; `submitReview` triggers generation; RBAC matrix (authoring reader / lead reader / admin succeed; PC + other readers 403); admin template-upload UI multipart POST.
+- E2E: extended S6.4 reviewer journey covers generate → download → Lead Reader sidebar shows the new file.
+
+**Open items:**
+- User must save the three Google Doc reader-report templates as DOCX into `docs/reader-report-templates/{associate,bachelors,masters}-reader-report-template.docx` with the `{{standardN[_specM]_comments}}` placeholders before S4.10 implementation begins. Hard prerequisite mirrored from the matrix-template pattern.
+- `docxtemplater` + `pizzip` need to be added to `server/package.json` as part of S4.10 setup.
+
 ## [2026-05-14] update | reader-report DOCX export (U4 added; S4.10 added)
 
 User supplied three Google Docs links containing CSHSE's official reader report templates (Associate, Baccalaureate, Master's) and asked for a new story that:
@@ -338,3 +363,76 @@ Source documents (Google Doc IDs):
 ## [2026-05-14] update | sprint work moves to developer branch (consistent with main baseline)
 
 Per user direction: the sprint-plan + product-requirements baseline (with U4 / S4.10 added) is being placed on a new `developer` branch of the [beserericl-hue/AIScripts](https://github.com/beserericl-hue/AIScripts) repository. `developer` is branched from `main` at commit `7c8ec91` — identical to `origin/main` at the moment of branch creation, so the planning baseline is fully consistent with what Railway deploys before any development starts. The stale `origin/Development` branch (capital D, unmerged, last commit `e464b6d`) is unrelated and untouched.
+
+## [2026-05-16] update | sprint plan resequenced — AI-assisted import wizard becomes Sprint 1
+
+New dated sprint plan [[sprint-plan-2026-05-16]] (eight sprints) supersedes [[sprint-plan-2026-05-11]] (seven sprints). User direction 2026-05-16: AI-assisted import wizard takes priority over the original Sprint 1 (security). Reasons: manual tagging of legacy self-studies (e.g. Stevenson 353 MB DOCX, 100+ sections) takes coordinators days; security work is critical but not blocking active users.
+
+**Decisions locked in (2026-05-16):**
+- New Python FastAPI microservice (`cshse-ai`) in Docker, deployed as a new Railway service per env. Repo path: `ai-service/` at AIScripts root.
+- **Qdrant** for vector storage; **single shared instance** lives in production env, dev env's instance sleeping. Collections are namespaced (`cshse_specs` shared, `cshse_sections_{prod|dev}`, `cshse_narratives_xinst_{prod|dev}`).
+- Anthropic Claude Haiku 4.5 for spec-matching adjudication with prompt caching.
+- Voyage `voyage-3-lite` recommended for embeddings (OpenAI `text-embedding-3-small` as alternative).
+- Linear 5-step wizard UI: Upload → Parse → Review splits → Review recommendations → Apply & finish.
+- **Cross-institution semantic search** wired but feature-flagged OFF pending CSHSE board approval.
+- **Document versioning** (S1.2): every imported and exported doc gets a `DocumentVersion` row + S3 versioned key. Foundational for institutional records across years; required by S5.10 (reader-report DOCX, was S4.10).
+
+**Qdrant installed today:**
+- Service `Qdrant` (id `88a41a9a-f0c4-46f2-be0b-b4ea7d62532d`) added to `bubbly-solace`. Prod deployment SUCCESS. Volumes created (prod: `qdrant-volume`, dev: `qdrant-volume-IHWH` — orphaned, dev instance sleeping). API key in `/tmp/cshse-creds-2026-05-16/qdrant.env`.
+
+**Sprint count:** 7 → 8. Original Sprint 1-7 shifts to Sprint 2-8. Mechanical renumber pass on the old plan (S1.x → S2.x, etc.) is staged as a separate PR.
+
+**Old plan status:** [[sprint-plan-2026-05-11]] marked `status: superseded`, `superseded_by: sprint-plan-2026-05-16`.
+
+**New concept page:** [[legacy-self-study-import]] — comprehensive analysis of the current import flow + the AI-augmented redesign that drives Sprint 1.
+
+## [2026-05-16] setup | bootstrap dev MongoDB from prod snapshot (one-shot mongodump/restore)
+
+Initial data sync, plus fixed two URI/DB-name bugs discovered along the way:
+
+**Bugs fixed:**
+1. **Dev CSHSE `MONGODB_URI` was missing `/CSHSE` database path** — left over from when I rebuilt the URI during the Mongo password mismatch fix earlier today. App had been writing to the default `test` database. Updated to `mongodb://mongo:<pw>@mongodb.railway.internal:27017/CSHSE?authSource=admin`.
+2. **Stale `test` database in dev Mongo** containing collections the CSHSE app had created when writing to the wrong DB. Dropped.
+
+**Data sync performed:**
+- Used Railway TCP proxies (prod: `turntable.proxy.rlwy.net:41283`, dev: `autorack.proxy.rlwy.net:37997`) — both already had public-TCP enabled on the MongoDB services.
+- `mongodump --uri="mongodb://mongo:<pw>@turntable.proxy.rlwy.net:41283/CSHSE?authSource=admin"` → `/tmp/cshse-prod-snapshot-{ts}/` (371MB total, includes 1418 GridFS chunks for htmlContent).
+- `mongorestore --drop --nsInclude='CSHSE.*'` into dev.
+- **Verified: 1481 / 1481 documents restored** across 21 collections matching prod exactly.
+- Redeployed dev CSHSE service → SUCCESS, `/health` 200.
+
+**No PII scrub applied** — dev env is currently single-user (Eric), no exposure. The eventual `db:sync-from-prod` script (sprint-zero infra item) will scrub by default per [[db-migration-strategy#layer-3--develop-from-prod-refresh-script]].
+
+**No prod data was touched.** The dump was a read-only operation against prod (mongodump opens cursors, doesn't write). Restore wrote only to dev.
+
+## [2026-05-16] audit | DB migration strategy for sprint changes, develop-to-prod sync model
+
+Walked [[sprint-plan-2026-05-11]] and catalogued every DB-touching story against the [[storage-layer|production data model]] (21 collections + GridFS + S3). Result: **9 new collections, 9 field additions, 1 TTL index — all additive (zero prod-data risk); 2 breaking changes** (S2.10 multi-PC, S4.6 description consolidation) **that require expand-contract rollout**.
+
+Designed a three-layer strategy now documented in [[db-migration-strategy]]:
+1. **Forward-only migration runner** in `server/src/migrations/` (doesn't exist yet — first sprint-zero infra). Numbered, idempotent, applied at boot before `app.listen`.
+2. **Expand-migrate-contract for the 2 breaking changes**: each ships in 2–3 PRs across sprint cycles so prod readers are never in a half-applied state.
+3. **`server/scripts/sync-from-prod.ts`**: one-direction mongodump+restore (prod → develop), reapplies all migrations on top, optional PII scrub. Refreshes develop's data without ever writing back to prod.
+
+Also flagged the shared-S3 wrinkle from [[railway-deployment-topology]]: develop and prod use the same Tigris bucket, so develop writes risk colliding with prod keys. Mitigation: add `S3_KEY_PREFIX` env var (`""` on prod, `"dev/"` on develop). Strict envvar-presence check at service init to prevent misconfiguration.
+
+**Sprint-zero infra needed before any DB story ships:** (a) migration runner, (b) S3_KEY_PREFIX support, (c) sync-from-prod script, (d) prod read-only Mongo user for sync access. ~1.5 days of work, all in.
+
+## [2026-05-16] setup | Railway two-env split (production/main + new develop/developer) with isolated Mongo and shared S3
+
+Stood up a parallel `develop` environment in the `bubbly-solace` Railway project so Sprint 1 security work can land off-production. **Production keeps its well-known DNS (`cshse.courseworx.media`)**.
+
+**Changes:**
+- **Production env**: CSHSE deploy trigger switched from `feature/s3-file-storage` → `main`. New build SUCCESS, serving traffic. `/health` 200.
+- **Develop env** (new): duplicated from production, CSHSE trigger pointed at `developer` branch. Public URL `https://cshse-develop.up.railway.app`. `/health` 200.
+- **Sleeping in develop**: `satisfied-clarity`, `upwork-proposal`, `WritersWorkbench`, `PROD Redis` (CSHSE doesn't use them).
+- **MongoDB**: each env has its own volume (full data isolation). Fixed an env-duplicate bug where develop's Mongo service had a fresh `MONGO_INITDB_ROOT_PASSWORD` (vSikCMqp...) but `MONGO_URL`/`MONGOPASSWORD` still held prod's old pw (NqsIvkud...) — caused the first dev deploy to crash with `MongoServerError: Authentication failed`. Realigned the dev Mongo service's exposed creds with its actual init pw.
+- **S3 / Tigris**: per spec, both envs share `cshse-filestorage-qlyj5pn`. Override needed because env-duplicate auto-provisioned a separate `cshse-filestorage-nvffngd` for develop; replaced develop's `AWS_*` vars with prod's so CSHSE in develop writes to the prod bucket.
+
+**Branch swap mechanics:** Railway CLI doesn't expose deployment-trigger edits, so used the GraphQL `deploymentTriggerUpdate` mutation (`backboard.railway.com/graphql/v2`, bearer from `~/.railway/config.json` user.accessToken). Documented in [[railway-deployment-topology]].
+
+**Key IDs** (for future ops): project `87cb760d-…`, service CSHSE `04e40a6b-…`, env production `e56e386b-…`, env develop `7b03b69a-…`, prod trigger `de23c3a8-…` (main), develop trigger `01b0bf86-…` (developer).
+
+**Open items:** decide whether `develop` auto-deploys on every push or needs manual promotion. (Re: the supposed orphan bucket — Railway has one Bucket entity per project, so there's no separate tile to delete; the physical `cshse-filestorage-nvffngd` bucket on Tigris is empty and costs nothing. Leave in place.)
+
+New concept page: [[railway-deployment-topology]]. Index updated.
