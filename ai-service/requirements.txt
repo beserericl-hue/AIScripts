@@ -11,3 +11,5 @@ pymongo==4.10.1
 PyJWT==2.9.0
 prometheus-client==0.21.0
 mammoth==1.8.0
+markdownify==0.13.1
+beautifulsoup4==4.12.3

@@ -85,6 +85,7 @@ def test_embedding_fallback_when_no_llm_key():
     assert rec.primary_spec == "d"
     assert 0.9 < rec.primary_confidence <= 1.0
     assert "fallback" in rec.rationale.lower()
+    assert rec.accept_state in {"auto_accept", "review_low_confidence", "review_letter_disagrees"}
 
 
 def test_parse_strict_json():
