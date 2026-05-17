@@ -364,6 +364,30 @@ Source documents (Google Doc IDs):
 
 Per user direction: the sprint-plan + product-requirements baseline (with U4 / S4.10 added) is being placed on a new `developer` branch of the [beserericl-hue/AIScripts](https://github.com/beserericl-hue/AIScripts) repository. `developer` is branched from `main` at commit `7c8ec91` — identical to `origin/main` at the moment of branch creation, so the planning baseline is fully consistent with what Railway deploys before any development starts. The stale `origin/Development` branch (capital D, unmerged, last commit `e464b6d`) is unrelated and untouched.
 
+## [2026-05-17] audit | architectural gap surfaced — import flow doesn't preserve original DOCX
+
+While testing Stevenson's classifications the user noticed AI returning South-Korea content as 1.d's narrative while the actual self-study editor shows the correct "Family Studies Program, Dr. Gigi Franyo, 1999" content. Root cause: the live `htmlContent` GridFS file is the post-extraction (mutated) version. Every time the human tags a section via the existing copy-paste flow, that section's HTML is replaced with an `<!-- EXTRACTED:... -->` marker comment and the bytes move to `selfstudyimports.detectedSections[].fullContent`. The deep walker reads the mutated HTML, not the original.
+
+**Storage inventory for Stevenson's import on 2026-05-17:**
+
+| Where | Has original DOCX bytes? | Notes |
+|---|---|---|
+| `selfstudyimports` doc | ❌ | only parsed HTML + extracted detectedSections |
+| `htmlContent` GridFS (352.9 MB) | ❌ | mutated by every human tag (sections removed) |
+| `files` collection | ❌ | 0 matches for this import |
+| `supportingevidences` (s3Key, storageType=s3) | ✅ | user uploaded DOCX manually as supporting evidence |
+
+The DOCX only exists because the user **separately** uploaded it as supporting evidence. The import flow itself doesn't preserve the original. **This is exactly what [[sprint-plan-2026-05-16#s1-2|S1.2 DocumentVersion]] was designed to fix** — every import would auto-save the DOCX as a versioned `kind='original_import'` record (model + service already built, 13 tests passing, just not wired into the upload controller yet).
+
+**Mitigation today:** the AI classify script now ALSO injects `detectedSections[].fullContent` from Mongo into the pipeline so the AI sees the already-tagged content. Result on Stevenson's 5 human-tagged sections:
+
+- **Agree** with human: 1.e, 1.f, 2.a (3/5)
+- **Disagree** with human (correctly flagged `review_letter_disagrees`): 1.d → AI picked 1.a; 2.b → AI picked 2.c
+
+The 1.d/1.a mismatch is a genuine ambiguity case: Stevenson's "history" section also discusses CSHSE accreditation milestones (the program "was awarded accreditation from CSHSE in October of 2004") — AI weighted the accreditation language more heavily. The wizard's `review_letter_disagrees` flag is the correct UX outcome — user sees both candidates and decides.
+
+**Next step:** wire S1.2 DocumentVersion into the import upload (~30 min of Node-side work). Then every import preserves the original DOCX in S3, the AI can read from there directly, and we stop the apples-to-oranges comparison.
+
 ## [2026-05-17] audit | by-spec coverage report — exact import-text per (standard, spec) slot
 
 Added a complementary vault page [[ai-import-stevenson-by-spec-2026-05-17]] that inverts the by-section view: for **every one of the 99 Baccalaureate specifications**, it shows the EXACT text the wizard would write to `narratives[std][spec].content` (narrative slot) and `.supportingEvidenceText` (supporting-evidence slot). Format the wizard uses on import:

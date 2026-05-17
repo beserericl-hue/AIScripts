@@ -40,8 +40,30 @@ _NUMERIC_MARKER_RE = re.compile(
     r"^\s*(\d{1,2})\s*\.?\s*([a-h])?\s*\.?\s*(.*)$", re.IGNORECASE
 )
 _RESPONSE_PREFIX_RE = re.compile(r"^\s*(response|comment|narrative)\s*[:.]\s*", re.IGNORECASE)
-_MATRIX_CELL_RE = re.compile(r"^\s*[ITKSLMH](?:\s*,\s*[ITKSLMH])*\s*$", re.IGNORECASE)
-_COURSE_NUMBER_RE = re.compile(r"^\s*[A-Z]{2,5}\s*\d{2,4}\s*$")
+# CSHSE curriculum-matrix cell content. Three formats observed in real
+# self-studies:
+#   1. Concatenated letters: ITM, KSH, IL, ITKL, TKSH (most common)
+#   2. Comma-separated:      I,T,M
+#   3. Single letter:        I or T or K
+# Letters: I (Introduce), T (Teach/Theory), K (Knowledge), S (Skill),
+#          L/M/H (Low/Moderate/High depth)
+_MATRIX_CELL_RE = re.compile(
+    r"^\s*[ITKSLMH]{1,6}(?:\s*,\s*[ITKSLMH]{1,6})*\s*$", re.IGNORECASE
+)
+# Some CSHSE matrices use 'x' marks instead of letter combos.
+_MATRIX_X_CELL_RE = re.compile(r"^\s*[xX✓]\s*$")
+_COURSE_NUMBER_RE = re.compile(r"^\s*[A-Z]{2,5}\s*\d{2,4}(?:\s*/\s*\d{2,4})?\s*$")
+# Strong signal: the literal phrase "Specifications for Standard N" appears
+# in a cell. This indicates a curriculum-matrix table almost certainly.
+_SPECS_FOR_STD_RE = re.compile(r"Specifications?\s+for\s+Standard\s+\d{1,2}", re.IGNORECASE)
+# Handbook subspec prompts almost always start with one of these imperative
+# verbs. When the FIRST column of a table is filled with these prompts, the
+# table is a curriculum-matrix template for some Standard.
+_HANDBOOK_VERB_RE = re.compile(
+    r"^\s*(Provide|Describe|Demonstrate|Include|Articulate|Identify|"
+    r"Document|Indicate|Specify|List|Outline|Explain|Address|Discuss)\b",
+    re.IGNORECASE,
+)
 
 
 def _extract_marker(text: str) -> Optional[tuple[Optional[str], Optional[str]]]:
@@ -154,13 +176,49 @@ def _classify_table(table: Tag) -> str:
     if not rows:
         return "unknown"
     cells = table.find_all(["td", "th"])
-    letter_combo_cells = sum(1 for c in cells if _MATRIX_CELL_RE.match(c.get_text().strip()))
-    course_cells = sum(1 for c in cells if _COURSE_NUMBER_RE.match(c.get_text().strip()))
-    if (letter_combo_cells >= 8 or course_cells >= 5) and len(rows) > 5:
+
+    # ---- curriculum_matrix signals (any one strong signal is enough) -----
+    cell_texts = [c.get_text().strip() for c in cells]
+
+    letter_combo_cells = sum(1 for txt in cell_texts if _MATRIX_CELL_RE.match(txt))
+    x_mark_cells = sum(1 for txt in cell_texts if _MATRIX_X_CELL_RE.match(txt))
+    course_cells = sum(1 for txt in cell_texts if _COURSE_NUMBER_RE.match(txt))
+
+    # Strong textual signal: a cell explicitly says "Specifications for Standard N"
+    has_specs_for_std = any(_SPECS_FOR_STD_RE.search(txt) for txt in cell_texts)
+
+    # First-column rows with Handbook-imperative verbs (Provide/Describe/...)
+    # indicate the column 0 is a list of spec prompts — classic matrix shape.
+    first_col_verb_rows = 0
+    for r in rows[:60]:
+        tds = r.find_all(["td", "th"])
+        if not tds:
+            continue
+        first_txt = (tds[0].get_text() or "").strip()
+        if _HANDBOOK_VERB_RE.match(first_txt) and len(first_txt.split()) > 4:
+            first_col_verb_rows += 1
+
+    # A curriculum matrix is a GRID — it MUST have grid-content cells
+    # (letter combos, x-marks, or course numbers). A template-subspec table
+    # also has Handbook-verb rows in column 0, so verb count alone is not
+    # enough — require grid content alongside.
+    has_grid_content = (
+        (letter_combo_cells + x_mark_cells) >= 4 or course_cells >= 5
+    )
+    # Weaker signal: explicit "Specifications for Standard N" header + ANY
+    # grid hint (even one letter combo / one x-mark / one course cell).
+    soft_grid_content = (
+        letter_combo_cells > 0 or x_mark_cells > 0 or course_cells > 0
+    )
+
+    if has_grid_content and len(rows) >= 4:
+        return "curriculum_matrix"
+    if has_specs_for_std and soft_grid_content and len(rows) >= 4:
+        return "curriculum_matrix"
+    if first_col_verb_rows >= 3 and soft_grid_content and len(rows) >= 4:
         return "curriculum_matrix"
 
-    # Template detection: rowspan-aware. Walk the virtual grid; count distinct
-    # rows whose first non-empty cell starts with a marker (a./b./.../1./11.a)
+    # ---- template_subspec (rowspan-aware) -----
     grid = _expand_table_with_spans(table)
     marker_rows = 0
     for row in grid[:100]:

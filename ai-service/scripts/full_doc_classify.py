@@ -47,7 +47,7 @@ from app.embeddings.openai_client import EmbeddingClient
 from app.embeddings.spec_cache import bootstrap_spec_cache
 from app.matcher.spec_matcher import Recommendation, SpecMatcher
 from app.splitter.deep_walker import deep_walk_with_fallback
-from app.splitter.sections import Section, split_markdown
+from app.splitter.sections import Section, _heuristic_flags, split_markdown
 from app.vector.qdrant_ops import VectorStore
 
 
@@ -225,13 +225,47 @@ def main():
     t0 = time.time()
     print("✂️  deep table walk (rowspan-aware, into <td>)…")
     raw_sections = deep_walk_with_fallback(html, base_id="stevenson")
-    sections = [s for s in raw_sections if s.word_count >= args.min_words]
-    print(
-        f"   {len(raw_sections)} raw sections, {len(sections)} after min-words filter "
-        f"({time.time()-t0:.1f}s)"
-    )
+    print(f"   {len(raw_sections)} from HTML ({time.time()-t0:.1f}s)")
 
-    # Sanity: tier distribution
+    # ALSO inject the already-extracted detectedSections from Mongo. The human's
+    # manual tagging moves content out of the live HTML into
+    # SelfStudyImport.detectedSections[].fullContent + leaves a comment marker.
+    # Our deep walker reads the post-extraction HTML, so without this injection
+    # we'd miss every section the human has already tagged.
+    detected_added = 0
+    for ds in imp.get("detectedSections") or []:
+        body = (ds.get("fullContent") or "").strip()
+        if len(body.split()) < args.min_words:
+            continue
+        flags = _heuristic_flags(body)
+        raw_sections.append(
+            Section(
+                id=f"stevenson:detected:{ds['id']}",
+                heading=(ds.get("headerText") or "").strip()[:200] or "(detected section)",
+                heading_level=2,
+                markdown=body,
+                byte_offset_start=int(ds.get("textStartOffset", 0)),
+                byte_offset_end=int(ds.get("textStartOffset", 0))
+                + int(ds.get("textLength", len(body))),
+                word_count=len(body.split()),
+                contains_table=bool(ds.get("wasTableExpanded", False)),
+                contains_image=False,
+                has_resume_signals=flags["hasResumeSignals"],
+                has_syllabus_signals=flags["hasSyllabusSignals"],
+                splitter_tier="detected_section_from_mongo",
+                flags={
+                    **flags,
+                    "humanTaggedStandard": ds.get("standardCode") or "",
+                    "humanTaggedSpec": ds.get("specCode") or "",
+                },
+            )
+        )
+        detected_added += 1
+    print(f"   + {detected_added} already-tagged sections from detectedSections")
+
+    sections = [s for s in raw_sections if s.word_count >= args.min_words]
+    print(f"   total: {len(raw_sections)} raw, {len(sections)} after min-words filter")
+
     tiers: dict[str, int] = {}
     for s in raw_sections:
         tiers[s.splitter_tier] = tiers.get(s.splitter_tier, 0) + 1
@@ -285,6 +319,11 @@ def main():
             "byteOffsetEnd": s.byte_offset_end,
             "containsTable": s.contains_table,
             "splitterTier": s.splitter_tier,
+            # Human tag (if any) — only present for sections sourced from
+            # SelfStudyImport.detectedSections. Lets the by-spec coverage
+            # report compare AI's pick to the human's pre-existing tag.
+            "humanTaggedStandard": s.flags.get("humanTaggedStandard") or None,
+            "humanTaggedSpec": s.flags.get("humanTaggedSpec") or None,
             "primary_standard": r.primary_standard,
             "primary_spec": r.primary_spec,
             "primary_confidence": r.primary_confidence,
@@ -294,9 +333,6 @@ def main():
             "doc_standard_hint": r.doc_standard_hint,
             "rationale": r.rationale,
             "alternates": r.alternates,
-            # Full section body — no truncation. The wizard imports the
-            # COMPLETE text to the narrative slot, so the report needs to
-            # show exactly what the user will see in the editor.
             "snippet": s.markdown,
             "snippet_truncated": False,
         }
