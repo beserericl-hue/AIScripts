@@ -294,8 +294,11 @@ def main():
             "doc_standard_hint": r.doc_standard_hint,
             "rationale": r.rationale,
             "alternates": r.alternates,
-            "snippet": s.markdown[:800],
-            "snippet_truncated": len(s.markdown) > 800,
+            # Full section body — no truncation. The wizard imports the
+            # COMPLETE text to the narrative slot, so the report needs to
+            # show exactly what the user will see in the editor.
+            "snippet": s.markdown,
+            "snippet_truncated": False,
         }
         for (s, r) in results
     ]

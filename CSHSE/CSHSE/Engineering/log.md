@@ -364,6 +364,35 @@ Source documents (Google Doc IDs):
 
 Per user direction: the sprint-plan + product-requirements baseline (with U4 / S4.10 added) is being placed on a new `developer` branch of the [beserericl-hue/AIScripts](https://github.com/beserericl-hue/AIScripts) repository. `developer` is branched from `main` at commit `7c8ec91` — identical to `origin/main` at the moment of branch creation, so the planning baseline is fully consistent with what Railway deploys before any development starts. The stale `origin/Development` branch (capital D, unmerged, last commit `e464b6d`) is unrelated and untouched.
 
+## [2026-05-17] audit | by-spec coverage report — exact import-text per (standard, spec) slot
+
+Added a complementary vault page [[ai-import-stevenson-by-spec-2026-05-17]] that inverts the by-section view: for **every one of the 99 Baccalaureate specifications**, it shows the EXACT text the wizard would write to `narratives[std][spec].content` (narrative slot) and `.supportingEvidenceText` (supporting-evidence slot). Format the wizard uses on import:
+
+```
+Standard {std}.{spec} — {standard_title}
+
+Prompt: {spec prompt from Handbook}
+
+Response:
+{section body — FULL text, no truncation}
+```
+
+Full snippets preserved end-to-end (re-ran classify with `snippet` field unbounded; JSON grew from 963 KB → 1.16 MB).
+
+**Coverage on Stevenson (real numbers from today's run):**
+
+| Bucket | Count | % of 99 specs |
+|---|---|---|
+| Specs with at least one **narrative** match | 86 | 87% |
+| Specs with at least one **supporting-evidence** match | 38 | 38% |
+| Specs with **any** matched content | 88 | 89% |
+| **Spec gaps** (zero matches → user must triage) | 8 | 8% |
+| Curriculum matrices identified | 5 | — |
+
+Plus 3 sections classified as `unknown` (off-topic content the AI confidently rejected — legal MOU language, South Korea geography, HIPAA boilerplate — these are correctly NOT imported).
+
+The 8 spec gaps tell the user immediately where Stevenson's self-study either doesn't address a spec OR the content is buried somewhere the deep walker didn't reach. They're listed with their Handbook prompts so the coordinator can verify manually.
+
 ## [2026-05-17] update | full Baccalaureate Handbook loaded (99 specs) — accuracy 4.2× on Stevenson
 
 Built [`app/standards/handbook_parser.py`](../../../../ai-service/app/standards/handbook_parser.py) that pulls the official CSHSE Baccalaureate Handbook PDF from Mongo (`specs._id 6977b95db1dffec75ea656fc`) and extracts every Standard + lettered subspec via pdfplumber + regex. Handles three Handbook formatting quirks: lettered subspecs (`a./b./c.`), bare-paragraph subspecs (Standard 2 uses imperative verbs without letter markers — parser assigns a-e by paragraph order), and bare-letter subspecs (Standard 3 uses `a /b /c ` without periods).
