@@ -364,6 +364,12 @@ Source documents (Google Doc IDs):
 
 Per user direction: the sprint-plan + product-requirements baseline (with U4 / S4.10 added) is being placed on a new `developer` branch of the [beserericl-hue/AIScripts](https://github.com/beserericl-hue/AIScripts) repository. `developer` is branched from `main` at commit `7c8ec91` — identical to `origin/main` at the moment of branch creation, so the planning baseline is fully consistent with what Railway deploys before any development starts. The stale `origin/Development` branch (capital D, unmerged, last commit `e464b6d`) is unrelated and untouched.
 
+## [2026-05-17] setup | Qdrant develop instance kept asleep — single shared instance in prod env
+
+Briefly woke develop's Qdrant ("dashboard shows offline, fix") then put it back to sleep after the user agreed it's cleaner to keep a single shared instance in the production env. The "offline" the dashboard showed was the sleeping develop instance; the prod Qdrant (which the AI service actually queries) was running fine.
+
+Topology + waking instructions now documented in [[railway-deployment-topology#qdrant--single-shared-instance-prod-env-only]].
+
 ## [2026-05-17] audit | AI import pipeline run end-to-end on Stevenson — 564 sections classified
 
 Ran [[sprint-plan-2026-05-16|Sprint 1]]'s AI import pipeline against the actual Stevenson University self-study DOCX in dev Mongo (`SelfStudyImport._id = 6988ea3dc92032593e6bb9cd`, 352.9 MB HTML).

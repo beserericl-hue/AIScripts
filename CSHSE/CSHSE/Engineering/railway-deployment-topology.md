@@ -180,6 +180,29 @@ railway logs                                    # find the last-known-good deplo
 railway redeploy --deployment <last-good-id>    # or use serviceInstanceDeployV2 with a known commitSha
 ```
 
+## Qdrant — single shared instance (prod env only)
+
+Both production and develop CSHSE services point at **one Qdrant service running in the production env** (`turntable.proxy.rlwy.net:17813` externally, `qdrant.railway.internal:6333` from inside the project). The develop env's Qdrant instance is intentionally **kept asleep**.
+
+**Why:** Qdrant holds spec embeddings (the same in every env — the CSHSE Handbook doesn't differ between prod and dev) and per-import section embeddings. Multi-env isolation is via Qdrant **collection-name suffixes**:
+
+- `cshse_specs` — shared read-only (every env reads the same spec definitions)
+- `cshse_sections_prod` / `cshse_sections_dev` — env-scoped per-import writes
+- `cshse_narratives_xinst_prod` / `…_dev` — env-scoped cross-institution data
+
+Running a second Qdrant in develop adds confusion (two sources of truth, double the storage cost, the dev instance lags or drifts from prod) for no operational benefit on a RAG retrieval workload. Confirmed by user 2026-05-17 after a brief experiment of waking dev's instance.
+
+If develop ever needs full isolation (e.g. you want to run destructive vector experiments without prod risk), wake it via:
+
+```bash
+TOKEN=$(jq -r .user.accessToken ~/.railway/config.json)
+curl -X POST https://backboard.railway.com/graphql/v2 \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"query":"mutation { serviceInstanceUpdate(environmentId: \"7b03b69a-53d3-4425-8b3b-0e517d6611de\", serviceId: \"88a41a9a-f0c4-46f2-be0b-b4ea7d62532d\", input: { sleepApplication: false }) }"}'
+```
+
+…then re-point the dev `cshse-ai` service's `QDRANT_URL` from `qdrant.railway.internal` to the dev-env Qdrant. Default: sleep, share prod's.
+
 ## Open items
 
 - Consider whether `develop` should auto-deploy on every push to `developer` (it does today) or require manual promotion. Auto-deploy is cheaper to operate; manual is safer if `developer` is unstable.
