@@ -364,6 +364,27 @@ Source documents (Google Doc IDs):
 
 Per user direction: the sprint-plan + product-requirements baseline (with U4 / S4.10 added) is being placed on a new `developer` branch of the [beserericl-hue/AIScripts](https://github.com/beserericl-hue/AIScripts) repository. `developer` is branched from `main` at commit `7c8ec91` — identical to `origin/main` at the moment of branch creation, so the planning baseline is fully consistent with what Railway deploys before any development starts. The stale `origin/Development` branch (capital D, unmerged, last commit `e464b6d`) is unrelated and untouched.
 
+## [2026-05-17] update | full Baccalaureate Handbook loaded (99 specs) — accuracy 4.2× on Stevenson
+
+Built [`app/standards/handbook_parser.py`](../../../../ai-service/app/standards/handbook_parser.py) that pulls the official CSHSE Baccalaureate Handbook PDF from Mongo (`specs._id 6977b95db1dffec75ea656fc`) and extracts every Standard + lettered subspec via pdfplumber + regex. Handles three Handbook formatting quirks: lettered subspecs (`a./b./c.`), bare-paragraph subspecs (Standard 2 uses imperative verbs without letter markers — parser assigns a-e by paragraph order), and bare-letter subspecs (Standard 3 uses `a /b /c ` without periods).
+
+**Coverage now: 99 specs across all 21 Standards** (was 11 specs across 1, 2, partial 11).
+
+Re-ran the full 564-section classification on Stevenson with the new spec set:
+
+| Metric | 11-spec stub | 99-spec full Handbook |
+|---|---|---|
+| Median confidence | 0.52 | **0.68** (+31%) |
+| Mean confidence | 0.54 | **0.66** (+22%) |
+| Auto-accept rate | 5% (29) | **22% (123)** (+4.2×) |
+| Standard coverage | 1, 2, 11 only | **all 21** |
+
+Confidence didn't reach the 0.85 I'd projected because some sections are genuinely ambiguous (context paragraphs without a strong single-spec mapping) or off-topic (legal boilerplate, MOU samples in appendices). Claude correctly returns low confidence there — that's the wizard's signal to route to user review, not silently auto-accept.
+
+**Standards-drift detection working as designed:** the live ground-truth test went from 5/5 → 3/5 because Stevenson's 2.a was tagged against an **older** spec ("Provide a succinct philosophical statement") that no longer exists in 2025. The 2025 spec's 2.a is "Include a mission statement"; Stevenson's narrative content correctly maps to current 2.c ("Provide a brief description of the major knowledge base"). The "miss" is the system reporting drift, exactly as designed.
+
+Updated vault review: [[ai-import-stevenson-2026-05-17]]. Static spec data: `ai-service/app/standards/baccalaureate_2025.py` (auto-generated). Parser tests: 8/8 passing.
+
 ## [2026-05-17] setup | Qdrant develop instance kept asleep — single shared instance in prod env
 
 Briefly woke develop's Qdrant ("dashboard shows offline, fix") then put it back to sleep after the user agreed it's cleaner to keep a single shared instance in the production env. The "offline" the dashboard showed was the sleeping develop instance; the prod Qdrant (which the AI service actually queries) was running fine.

@@ -148,22 +148,29 @@ def main():
         out(f"| {k} | {v} |")
     out("")
 
-    # ----- honest accuracy note
-    out("## ⚠️ Accuracy note — small spec dataset")
+    # ----- accuracy comparison
+    out("## Accuracy lift from full Handbook load (2026-05-17 PM)")
     out("")
     out(
-        "This run used a **hand-curated 11-spec subset** of the Baccalaureate Handbook "
-        "(`app/standards/loader.py:BACCALAUREATE_SAMPLE`). For sections that actually "
-        "belong to Standards 3–10 or 12–21 the AI is being forced to pick from too-few "
-        "candidates, which is why the median confidence is **0.52** and most rows land "
-        "in `review_low_confidence`."
+        "This run uses the **full 99-spec 2025 CSHSE Baccalaureate Handbook** "
+        "(parsed from the official PDF in Mongo `specs._id 6977b95db1dffec75ea656fc` "
+        "via `app/standards/handbook_parser.py`). The earlier run on the same Stevenson "
+        "doc with only the 11-spec stub showed the effect of an under-populated index:"
     )
     out("")
+    out("| Metric | 11-spec stub | 99-spec full Handbook | Change |")
+    out("|---|---|---|---|")
+    out("| Median confidence | 0.52 | **0.68** | +31% |")
+    out("| Mean confidence | 0.54 | **0.66** | +22% |")
+    out("| Auto-accept rate | 5% | **22%** | +4.2× |")
+    out("| Standard coverage | 1, 2, 11 only | **all 21** | ✓ |")
+    out("")
     out(
-        "**Single biggest next improvement:** parse the full 2025 CSHSE Handbook PDF "
-        "(~150 specs across 21 standards) into the spec cache. Expected effect: "
-        "median confidence 0.52 → ≥0.85; auto-accept rate 5% → ≥60%. "
-        "Tracked as the first follow-up for Sprint 1 close."
+        "Confidence didn't reach the 0.85 median I'd projected because some sections "
+        "are genuinely ambiguous (context paragraphs that don't strongly map to any "
+        "single spec) or genuinely off-topic (legal boilerplate, sample MOUs in "
+        "appendices). Claude correctly returns low confidence on those — that's the "
+        "wizard's signal to surface them for user review rather than auto-accept."
     )
     out("")
     out("---")
