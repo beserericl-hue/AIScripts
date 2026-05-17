@@ -46,6 +46,7 @@ from pymongo import MongoClient
 from app.embeddings.openai_client import EmbeddingClient
 from app.embeddings.spec_cache import bootstrap_spec_cache
 from app.matcher.spec_matcher import Recommendation, SpecMatcher
+from app.splitter.deep_walker import deep_walk_with_fallback
 from app.splitter.sections import Section, split_markdown
 from app.vector.qdrant_ops import VectorStore
 
@@ -222,18 +223,19 @@ def main():
     print(f"   {len(html)/1024/1024:.1f} MB read in {time.time()-t0:.1f}s")
 
     t0 = time.time()
-    print("📝 HTML → Markdown…")
-    md = _html_to_markdown(html)
-    print(f"   {len(md)/1024/1024:.1f} MB markdown in {time.time()-t0:.1f}s")
-
-    t0 = time.time()
-    print("✂️  splitting into sections…")
-    raw_sections = split_markdown(md, doc_id="stevenson")
+    print("✂️  deep table walk (rowspan-aware, into <td>)…")
+    raw_sections = deep_walk_with_fallback(html, base_id="stevenson")
     sections = [s for s in raw_sections if s.word_count >= args.min_words]
     print(
         f"   {len(raw_sections)} raw sections, {len(sections)} after min-words filter "
         f"({time.time()-t0:.1f}s)"
     )
+
+    # Sanity: tier distribution
+    tiers: dict[str, int] = {}
+    for s in raw_sections:
+        tiers[s.splitter_tier] = tiers.get(s.splitter_tier, 0) + 1
+    print(f"   tier distribution: {tiers}")
     if args.max_sections:
         sections = sections[: args.max_sections]
         print(f"   capped at {len(sections)} for this run")
