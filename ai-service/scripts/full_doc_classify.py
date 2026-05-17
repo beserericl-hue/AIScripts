@@ -317,7 +317,7 @@ def main():
     out(f"# Stevenson Full-Document Classification")
     out("")
     out(f"**File:** {imp['originalFilename']}  ")
-    out(f"**HTML size:** {len(html)/1024/1024:.1f} MB → {len(md)/1024/1024:.1f} MB Markdown  ")
+    out(f"**HTML size:** {len(html)/1024/1024:.1f} MB  ")
     out(f"**Sections classified:** {len(results)}  ")
     out("")
     out("## Section-type distribution")
