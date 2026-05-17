@@ -364,6 +364,22 @@ Source documents (Google Doc IDs):
 
 Per user direction: the sprint-plan + product-requirements baseline (with U4 / S4.10 added) is being placed on a new `developer` branch of the [beserericl-hue/AIScripts](https://github.com/beserericl-hue/AIScripts) repository. `developer` is branched from `main` at commit `7c8ec91` — identical to `origin/main` at the moment of branch creation, so the planning baseline is fully consistent with what Railway deploys before any development starts. The stale `origin/Development` branch (capital D, unmerged, last commit `e464b6d`) is unrelated and untouched.
 
+## [2026-05-17] audit | AI import pipeline run end-to-end on Stevenson — 564 sections classified
+
+Ran [[sprint-plan-2026-05-16|Sprint 1]]'s AI import pipeline against the actual Stevenson University self-study DOCX in dev Mongo (`SelfStudyImport._id = 6988ea3dc92032593e6bb9cd`, 352.9 MB HTML).
+
+**Pipeline:** deep table walker (rowspan-aware) → OpenAI `text-embedding-3-small` → Qdrant cosine search → Claude Haiku 4.5 adjudication. Result captured per-section: snippet read, AI's (standard, spec) pick, confidence, rationale, alternates, accept-state.
+
+**Numbers:**
+- 604 raw sections from inside tables (rowspan-aware extraction), 564 with ≥30 words
+- 115 seconds wall time, ~$0.45 total cost
+- 222 narrative_response / 84 supporting_evidence / 4 curriculum_matrix / 242 context / 12 unknown
+- 26 auto_accept / 84 review_letter_disagrees / 435 review_low_confidence / 19 review_unknown
+
+**Accuracy caveat:** the spec cache only has 11 hand-curated Baccalaureate specs (`app/standards/loader.py:BACCALAUREATE_SAMPLE`). Median confidence is 0.52 because Claude is being forced to pick from too-few candidates. Loading the full ~150 specs from the 2025 CSHSE Handbook is the next single-largest accuracy lever; tracked as the first follow-up for Sprint 1 close.
+
+**Deliverable:** [[ai-import-stevenson-2026-05-17]] — 760 KB vault review page, 564 per-section entries each showing the snippet that was read, Claude's pick, and Claude's rationale. Browsable in Obsidian.
+
 ## [2026-05-16] update | sprint plan resequenced — AI-assisted import wizard becomes Sprint 1
 
 New dated sprint plan [[sprint-plan-2026-05-16]] (eight sprints) supersedes [[sprint-plan-2026-05-11]] (seven sprints). User direction 2026-05-16: AI-assisted import wizard takes priority over the original Sprint 1 (security). Reasons: manual tagging of legacy self-studies (e.g. Stevenson 353 MB DOCX, 100+ sections) takes coordinators days; security work is critical but not blocking active users.

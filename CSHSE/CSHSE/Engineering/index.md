@@ -40,6 +40,7 @@ The catalog. One line per page. When answering a question, scan this first to fi
 - [[documentation-gaps-2026-05-10]] — what docs exist, drift, what's missing.
 - [[code-review-2026-05-10]] — comprehensive verify-and-catalog pass; answers the "EC3 folders" question; sequences the evidence-document-review work.
 - [[client-features-deep-2026-05-10]] — file-by-file documentation of every client feature, page, component, hook, store, service. Spotlights the file-upload critical path.
+- [[ai-import-stevenson-2026-05-17]] — dated record of running the AI import pipeline against Stevenson University's 2024 CSHSE Self-Study DOCX. 564 sections classified end-to-end (snippet read + AI pick + Claude rationale per section); 84 supporting evidence + 4 curriculum matrices auto-identified.
 
 ## Plans (dated, forward-looking)
 

@@ -284,6 +284,7 @@ def main():
             "byteOffsetStart": s.byte_offset_start,
             "byteOffsetEnd": s.byte_offset_end,
             "containsTable": s.contains_table,
+            "splitterTier": s.splitter_tier,
             "primary_standard": r.primary_standard,
             "primary_spec": r.primary_spec,
             "primary_confidence": r.primary_confidence,
@@ -293,6 +294,8 @@ def main():
             "doc_standard_hint": r.doc_standard_hint,
             "rationale": r.rationale,
             "alternates": r.alternates,
+            "snippet": s.markdown[:800],
+            "snippet_truncated": len(s.markdown) > 800,
         }
         for (s, r) in results
     ]
