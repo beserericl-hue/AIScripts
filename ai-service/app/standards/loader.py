@@ -159,9 +159,15 @@ BACCALAUREATE_SAMPLE: list[Specification] = [
 def load_specifications(program_level: ProgramLevel) -> list[Specification]:
     """Return the active Specification list for a program level.
 
-    MVP: returns ``BACCALAUREATE_SAMPLE`` for ``bachelors``; empty for others
-    (associate / masters loaders are TODO once PDF parsing lands).
+    Baccalaureate: returns the full 99-spec ``BACCALAUREATE_2025`` dataset
+    parsed from the official CSHSE Handbook PDF.
+
+    Associate / Master's: TODO — same parser, different PDF (planned for
+    Sprint 1 follow-up).
     """
     if program_level == "bachelors":
-        return BACCALAUREATE_SAMPLE
+        # Import lazily so the (parsed) data file is only loaded when needed.
+        from app.standards.baccalaureate_2025 import BACCALAUREATE_2025
+
+        return BACCALAUREATE_2025
     return []
