@@ -238,6 +238,22 @@ This is the headline pain point. Coordinators report "days" of manual copy-selec
 - **Backwards-compatible**: the existing tag pipeline (extract-section → insert-marker → finish-tagging) is untouched. The redesign adds a `pending_review` state before tagging, populated with recommendations. Coordinators can still fully manually tag any section.
 - **AI never writes directly to GridFS or narratives.** Every recommendation requires explicit user accept/reject. AI is a workflow accelerator, not an authority.
 
+### Wizard data destinations (locked in 2026-05-17)
+
+The end state after the wizard finishes:
+
+| Destination | What lands here | When |
+|---|---|---|
+| `DocumentVersion` (S3, kind=`original_import`) | The original DOCX **bytes**, untouched, immutable reference | At upload, before any parse |
+| `SelfStudyImport.extractedContent.htmlGridFSKey` + GridFS | The fresh mammoth-parsed HTML (re-derivable from S3) | After parse |
+| **`Submission.narratives[std][spec].content`** | **Narrative text the user ACCEPTED** in the wizard | On wizard finish |
+| **`Submission.narratives[std][spec].supportingEvidenceText`** | **Supporting-evidence text the user ACCEPTED** | On wizard finish |
+| **`SupportingEvidence` (S3 file + Mongo row)** | Each appendix item the user accepted as a discrete supporting file (CV, syllabus, etc.). May be a per-item split of the master DOCX. | On wizard finish |
+| **`SelfStudyImport.detectedSections[]` with `status='unmatched'`** | Sections the AI couldn't place + user skipped or marked "no spec" | On wizard finish |
+| **`SelfStudyImport.detectedSections[]` with `status='needs_review'`** | Sections the user explicitly punted to review later | On wizard finish |
+
+`detectedSections[]` doubles as the import workspace — anything not committed to `narratives` lives there with a status tag so the coordinator can return to triage later.
+
 ### Locked-in architecture (2026-05-16)
 
 | Component | Choice | Where it runs |
