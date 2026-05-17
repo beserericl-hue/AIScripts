@@ -1,34 +1,17 @@
 """Appendix splitter for CSHSE self-studies.
 
 The appendix is structured BY STANDARD: each "Standard N" text header in the
-appendix divides supporting-evidence items grouped under that Standard.
-Stevenson's appendix shows the pattern:
+appendix divides supporting-evidence items grouped under that Standard. Each
+top-level item under that Standard (Department Brochure, Faculty CVs, Field
+Placement Handbook, etc.) becomes a candidate ``SupportingEvidence`` record.
 
-    Standard 1
-      Counseling & Human Services Program Goals and Objectives
-      Department Brochure
-      Enrollment and Graduation Trends
-      Curriculum Display
-      ...
-    Standard 3
-      Advisory Board Roster
-      Advisory Board Minutes
-    Standard 6
-      Picture of Faculty
-      Faculty Curriculum Vitae
-        (each faculty CV is its own anchored sub-item: FacCVsRosicky,
-         FacCVsSwish, FacCVsWeiner, etc.)
-    Standard 7
-      Academic Affairs Council (AAC) By-Laws
-      Responsibilities of Department Chair
-      ...
-
-Each item becomes a candidate ``SupportingEvidence`` record tagged with the
-Standard. The AI matcher narrows down to the specific spec letter inside the
-Standard.
-
-Multi-CV scenarios (Standard 6) split via explicit anchors so each faculty
-gets its own evidence record.
+Refinement rules (2026-05-17):
+  - Minimum 30 words of body content per item (drops titles-only).
+  - Skip repeated TOC navigation text ("Table of Contents", repeated headers).
+  - Faculty CVs split via explicit anchors (FacCVsRosicky, FacCVsSwish, ...).
+  - Other items: use first-line short capitalized text as the title, then
+    accumulate body until the next title OR next Standard divider.
+  - Dedupe consecutive identical lines (the parser often emits headers twice).
 """
 from __future__ import annotations
 
@@ -80,6 +63,32 @@ def _is_standard_marker_text(text: str) -> Optional[str]:
     return None
 
 
+# Nav/boilerplate text that appears repeatedly in PDF-converted HTML
+_NOISE_PATTERNS = {
+    "table of contents",
+    "appendices",
+    "appendix",
+    "list of supporting documents",
+}
+_MIN_BODY_WORDS = 30  # raised from 5 — drops titles-only / headers-only items
+
+
+def _is_noise_text(t: str) -> bool:
+    return t.strip().lower() in _NOISE_PATTERNS
+
+
+def _dedupe_consecutive(parts: list[str]) -> list[str]:
+    """Drop consecutive duplicates that PDF→HTML conversion emits when the
+    same heading appears twice (once as the heading, once as text)."""
+    out: list[str] = []
+    prev = None
+    for p in parts:
+        if p and p != prev:
+            out.append(p)
+            prev = p
+    return out
+
+
 def walk_appendix(html_bytes: bytes, base_id: str = "doc") -> list[Section]:
     """Walk the appendix and emit one Section per supporting-evidence item.
 
@@ -95,9 +104,6 @@ def walk_appendix(html_bytes: bytes, base_id: str = "doc") -> list[Section]:
     if not app_start:
         return []
 
-    # Walk every block-level element after the appendix anchor, tracking the
-    # CURRENT Standard context and accumulating each item's body until the
-    # next item-start (any heading-like short paragraph) or next Standard.
     current_standard: Optional[str] = None
     current_title: Optional[str] = None
     current_body: list[str] = []
@@ -107,8 +113,10 @@ def walk_appendix(html_bytes: bytes, base_id: str = "doc") -> list[Section]:
     def flush():
         nonlocal current_title, current_body, current_anchor
         if current_title and current_standard:
-            body = "\n\n".join(p for p in current_body if p).strip()
-            if len(body.split()) >= 5:
+            body_parts = _dedupe_consecutive(current_body)
+            body = "\n\n".join(body_parts).strip()
+            words = body.split()
+            if len(words) >= _MIN_BODY_WORDS:
                 items.append(
                     AppendixItem(
                         item_title=current_title.strip()[:200],
@@ -126,7 +134,7 @@ def walk_appendix(html_bytes: bytes, base_id: str = "doc") -> list[Section]:
         if not isinstance(elem, Tag):
             continue
         text = elem.get_text(separator=" ", strip=True)
-        if not text:
+        if not text or _is_noise_text(text):
             continue
 
         # Standard-N divider — switches the active Standard
@@ -138,47 +146,57 @@ def walk_appendix(html_bytes: bytes, base_id: str = "doc") -> list[Section]:
 
         # Faculty CV explicit anchor — starts a new item for THIS faculty
         # member.
-        cv_anchor = elem.get("id") or (
-            elem.find("a", attrs={"id": True}).get("id")
-            if elem.find("a", attrs={"id": True})
-            else None
-        )
-        if cv_anchor and _FAC_CV_ANCHOR_RE.match(cv_anchor):
+        cv_anchor = None
+        if elem.has_attr("id") and _FAC_CV_ANCHOR_RE.match(elem.get("id", "")):
+            cv_anchor = elem.get("id")
+        else:
+            inner = elem.find("a", attrs={"id": True})
+            if inner and _FAC_CV_ANCHOR_RE.match(inner.get("id", "")):
+                cv_anchor = inner.get("id")
+        if cv_anchor:
             flush()
-            # The faculty name is usually the next short text
             current_title = text[:120]
             current_anchor = cv_anchor
             continue
 
-        # Short-line + capitalized first word + currently inside a Standard
-        # context = a new item header.
-        is_short = len(text) <= 120 and len(text.split()) <= 18
-        starts_capital = text[:1].isupper()
-        if (
-            is_short
-            and starts_capital
-            and current_standard
+        # Title detection: short paragraph, capital-led, no trailing colon.
+        # Only treat as NEW item if the previous one has substance.
+        is_short_title = (
+            len(text) <= 120
+            and len(text.split()) <= 18
+            and text[:1].isupper()
             and not text.endswith(":")
-        ):
-            # If we already have an open item, only treat this as a NEW item
-            # if the previous one has accumulated meaningful body text. This
-            # prevents 2-line titles from getting split.
-            if current_title is None or len(" ".join(current_body).split()) >= 30:
+        )
+        if is_short_title and current_standard:
+            cur_word_count = sum(len(p.split()) for p in current_body)
+            if current_title is None:
+                current_title = text
+                continue
+            if cur_word_count >= _MIN_BODY_WORDS:
                 flush()
                 current_title = text
                 continue
+            # Otherwise: previous item lacks body — treat this short text as
+            # a sub-title and merge with prior title.
+            current_title = (current_title + " — " + text)[:200] if current_title else text
+            continue
 
-        # Otherwise it's body content of the current item.
+        # Body content
         if current_title:
             current_body.append(text)
 
     flush()
 
-    # Convert to Section objects
+    # Filter out items whose body is just the title repeated.
+    real_items: list[AppendixItem] = []
+    for it in items:
+        body_minus_title = it.body_text.replace(it.item_title, "", 1).strip()
+        if len(body_minus_title.split()) >= _MIN_BODY_WORDS // 2:
+            real_items.append(it)
+
     sections: list[Section] = []
-    for item in items:
+    for item in real_items:
         flags = _heuristic_flags(item.body_text)
-        # Faculty CV detection
         is_faculty_cv = bool(item.appendix_anchor and _FAC_CV_ANCHOR_RE.match(item.appendix_anchor))
         if is_faculty_cv:
             flags["hasResumeSignals"] = True
@@ -204,5 +222,4 @@ def walk_appendix(html_bytes: bytes, base_id: str = "doc") -> list[Section]:
                 },
             )
         )
-
     return sections

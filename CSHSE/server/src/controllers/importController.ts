@@ -12,6 +12,7 @@ import { sectionMapperService } from '../services/sectionMapper';
 import { saveWithRetry, withRetry } from '../utils/dbRetry';
 import * as tempFileService from '../services/tempFileService';
 import * as gridFsService from '../services/gridFsService';
+import { recordVersion } from '../services/documentVersionService';
 import fs from 'fs/promises';
 import { createReadStream } from 'fs';
 
@@ -218,6 +219,34 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
 
     await importRecord.save();
     debugLog('Import record created', { importId: importRecord._id, submissionId });
+
+    // Preserve the ORIGINAL uploaded bytes as an immutable versioned record
+    // in S3. The AI import wizard reads from this S3 location going forward
+    // so it never depends on the mutated GridFS HTML. SHA-256 dedup means
+    // re-uploading identical bytes returns the same DocumentVersion row.
+    try {
+      const docVersion = await recordVersion({
+        ownerType: 'submission',
+        ownerId: new mongoose.Types.ObjectId(submissionId),
+        kind: 'original_import',
+        buffer: file.buffer,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        uploadedBy: new mongoose.Types.ObjectId(req.user?.id),
+        uploadedByName: req.user?.name || 'unknown',
+        metadata: { importId: importRecord._id as mongoose.Types.ObjectId },
+      });
+      debugLog('Original file preserved in S3', {
+        importId: importRecord._id,
+        documentVersionId: String(docVersion._id),
+        version: docVersion.version,
+        s3Key: docVersion.s3Key,
+      });
+    } catch (versionErr) {
+      // Non-fatal: preserve-original failure should NOT block the import.
+      // Legacy imports worked without this; we log and continue.
+      console.warn('[Import] recordVersion failed (non-fatal):', versionErr);
+    }
 
     // Construct callback URL for n8n
     const callbackUrl = getCallbackUrl(req, '/api/webhooks/document-matcher/callback');
