@@ -88,6 +88,88 @@ export interface IAppendixInfo {
   extractedAt?: Date;
 }
 
+/**
+ * AI Import Wizard — Sprint 1
+ *
+ * The AI wizard adds a parallel set of fields onto the existing
+ * SelfStudyImport record (rather than spawning a sibling collection)
+ * so a single import can flow through either the legacy n8n path or
+ * the AI path without losing identity. The `aiStatus` field is the
+ * source of truth for the wizard's state machine (UI spec §5); the
+ * existing `status` field stays in place for legacy compatibility.
+ */
+export interface IAIBucketItem {
+  sectionId: string;
+  heading: string;
+  snippet: string;
+  wordCount: number;
+  confidence: number;
+  acceptState: string;
+  rationale: string;
+}
+
+export interface IAIBucket {
+  standardCode: string;
+  specCode: string;
+  standardTitle: string;
+  specPrompt: string;
+  narratives: IAIBucketItem[];
+  evidenceText: IAIBucketItem[];
+  evidenceFiles: IAIBucketItem[];
+  matrixCells: any[];
+  coverageScore: number | null;
+  coverageCovered: boolean | null;
+  coverageGaps: string[];
+  coverageStrengths: string[];
+}
+
+export interface IAITag {
+  tagId: string;
+  sectionId: string;
+  summary: string;
+  fullText: string;
+  suggestedStd: string | null;
+  suggestedSpec: string | null;
+  confidence: number;
+  sourceHeading: string;
+  acceptState: string;
+  rationale: string;
+}
+
+export interface IAIPlaceholderSection {
+  paragraphIndex: number;
+  heading: string;
+  standardHint: string | null;
+  specHint: string | null;
+}
+
+export interface IAIStageProgress {
+  name: string;
+  state: 'queued' | 'running' | 'done' | 'skipped' | 'n/a' | 'failed';
+  detail?: string;
+  etaSeconds?: number | null;
+  startedAt?: Date;
+  completedAt?: Date;
+}
+
+export interface IAIFormatVerdict {
+  format: 'template' | 'self_study';
+  confidence: number;
+  signals: Record<string, any>;
+  reasoning: string;
+}
+
+export type AIImportStatus =
+  | 'idle'
+  | 'queued'
+  | 'parsing'
+  | 'parsed'
+  | 'applying'
+  | 'applied'
+  | 'finished'
+  | 'canceled'
+  | 'failed';
+
 export interface ISelfStudyImport extends Document {
   submissionId: mongoose.Types.ObjectId;
   originalFilename: string;
@@ -98,6 +180,42 @@ export interface ISelfStudyImport extends Document {
   processingStartedAt?: Date;
   processingCompletedAt?: Date;
   error?: string;
+
+  // ---------- AI Import Wizard fields (Sprint 1) ----------
+  aiStatus?: AIImportStatus;
+  aiJobId?: string;
+  aiS3Key?: string;
+  aiDocumentVersionId?: string;
+  aiProgramLevel?: 'associate' | 'bachelors' | 'masters';
+  aiForceFormat?: 'template' | 'self_study' | null;
+  aiIsReimport?: boolean;
+  aiQueuePosition?: number | null;
+  aiQueueDepth?: number | null;
+  aiEtaSeconds?: number | null;
+  aiFormat?: IAIFormatVerdict | null;
+  aiStages?: IAIStageProgress[];
+  aiBuckets?: Record<string, IAIBucket>;  // keyed "std.spec"; stored as Mixed for flexibility
+  aiTags?: IAITag[];
+  aiPlaceholderSections?: IAIPlaceholderSection[];
+  aiMatrices?: any[];
+  aiErrors?: string[];
+  aiStartedAt?: Date;
+  aiCompletedAt?: Date;
+  aiAppliedAt?: Date;
+  aiAppliedCounts?: {
+    narratives: number;
+    evidenceText: number;
+    evidenceFiles: number;
+    matrixCells: number;
+    tags: number;
+    placeholders: number;
+  };
+  /**
+   * Last idempotency key successfully processed by apply-ai. A retry
+   * with the same key returns the cached `aiAppliedCounts` instead of
+   * re-applying. See UI spec §11.5.
+   */
+  aiLastIdempotencyKey?: string;
   // Parsing progress (for real-time UI feedback)
   parsingProgress?: IParsingProgress;
   // N8N Document Matcher integration
@@ -125,6 +243,73 @@ export interface ISelfStudyImport extends Document {
   detectedSections?: IDetectedSection[];
   appendix?: IAppendixInfo;
 }
+
+// ---------- AI Import Wizard sub-schemas (Sprint 1) ----------
+
+const AIBucketItemSchema = new Schema<IAIBucketItem>({
+  sectionId: { type: String, required: true },
+  heading: { type: String, default: '' },
+  snippet: { type: String, default: '' },
+  wordCount: { type: Number, default: 0 },
+  confidence: { type: Number, default: 0 },
+  acceptState: { type: String, default: 'review_unknown' },
+  rationale: { type: String, default: '' }
+}, { _id: false });
+
+const AIBucketSchema = new Schema<IAIBucket>({
+  standardCode: { type: String, required: true },
+  specCode: { type: String, required: true },
+  standardTitle: { type: String, default: '' },
+  specPrompt: { type: String, default: '' },
+  narratives: { type: [AIBucketItemSchema], default: [] },
+  evidenceText: { type: [AIBucketItemSchema], default: [] },
+  evidenceFiles: { type: [AIBucketItemSchema], default: [] },
+  matrixCells: [{ type: Schema.Types.Mixed }],
+  coverageScore: { type: Number, default: null },
+  coverageCovered: { type: Boolean, default: null },
+  coverageGaps: { type: [String], default: [] },
+  coverageStrengths: { type: [String], default: [] }
+}, { _id: false });
+
+const AITagSchema = new Schema<IAITag>({
+  tagId: { type: String, required: true },
+  sectionId: { type: String, required: true },
+  summary: { type: String, default: '' },
+  fullText: { type: String, default: '' },
+  suggestedStd: { type: String, default: null },
+  suggestedSpec: { type: String, default: null },
+  confidence: { type: Number, default: 0 },
+  sourceHeading: { type: String, default: '' },
+  acceptState: { type: String, default: 'review_unknown' },
+  rationale: { type: String, default: '' }
+}, { _id: false });
+
+const AIPlaceholderSchema = new Schema<IAIPlaceholderSection>({
+  paragraphIndex: { type: Number, required: true },
+  heading: { type: String, required: true },
+  standardHint: { type: String, default: null },
+  specHint: { type: String, default: null }
+}, { _id: false });
+
+const AIStageSchema = new Schema<IAIStageProgress>({
+  name: { type: String, required: true },
+  state: {
+    type: String,
+    enum: ['queued', 'running', 'done', 'skipped', 'n/a', 'failed'],
+    required: true
+  },
+  detail: { type: String, default: '' },
+  etaSeconds: { type: Number, default: null },
+  startedAt: Date,
+  completedAt: Date
+}, { _id: false });
+
+const AIFormatVerdictSchema = new Schema<IAIFormatVerdict>({
+  format: { type: String, enum: ['template', 'self_study'], required: true },
+  confidence: { type: Number, required: true },
+  signals: { type: Schema.Types.Mixed, default: {} },
+  reasoning: { type: String, default: '' }
+}, { _id: false });
 
 const ExtractedSectionSchema = new Schema<IExtractedSection>({
   id: { type: String, required: true },
@@ -282,7 +467,53 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   unmappedContent: [UnmappedContentSchema],
   // Part 6: Detected sections for user selection before AI processing
   detectedSections: [DetectedSectionSchema],
-  appendix: AppendixInfoSchema
+  appendix: AppendixInfoSchema,
+
+  // ---------- AI Import Wizard (Sprint 1) ----------
+  aiStatus: {
+    type: String,
+    enum: ['idle', 'queued', 'parsing', 'parsed', 'applying', 'applied', 'finished', 'canceled', 'failed'],
+    default: undefined
+  },
+  aiJobId: String,
+  aiS3Key: String,
+  aiDocumentVersionId: String,
+  aiProgramLevel: {
+    type: String,
+    enum: ['associate', 'bachelors', 'masters']
+  },
+  aiForceFormat: {
+    type: String,
+    enum: ['template', 'self_study', null],
+    default: null
+  },
+  aiIsReimport: { type: Boolean, default: false },
+  aiQueuePosition: { type: Number, default: null },
+  aiQueueDepth: { type: Number, default: null },
+  aiEtaSeconds: { type: Number, default: null },
+  aiFormat: { type: AIFormatVerdictSchema, default: null },
+  aiStages: { type: [AIStageSchema], default: [] },
+  // Buckets are validated upstream by cshse-ai (Pydantic models on the
+  // service side); store as Mixed here so Mongoose's strict cast doesn't
+  // fight Map<string, IAIBucket> insertion patterns. Shape is documented
+  // by IAIBucket above.
+  aiBuckets: { type: Schema.Types.Mixed, default: undefined },
+  aiTags: { type: [AITagSchema], default: [] },
+  aiPlaceholderSections: { type: [AIPlaceholderSchema], default: [] },
+  aiMatrices: [{ type: Schema.Types.Mixed }],
+  aiErrors: { type: [String], default: [] },
+  aiStartedAt: Date,
+  aiCompletedAt: Date,
+  aiAppliedAt: Date,
+  aiAppliedCounts: {
+    narratives: { type: Number, default: 0 },
+    evidenceText: { type: Number, default: 0 },
+    evidenceFiles: { type: Number, default: 0 },
+    matrixCells: { type: Number, default: 0 },
+    tags: { type: Number, default: 0 },
+    placeholders: { type: Number, default: 0 }
+  },
+  aiLastIdempotencyKey: String
 }, {
   timestamps: true
 });

@@ -21,6 +21,7 @@ import reportsRouter from './routes/reports';
 import matrixRouter from './routes/matrix';
 import evidenceRouter from './routes/evidence';
 import submissionsRouter from './routes/submissions';
+import programCoursesRouter from './routes/programCourses';
 import adminRouter from './routes/admin';
 import commentsRouter from './routes/comments';
 import readerLockRouter from './routes/readerLock';
@@ -52,7 +53,15 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(compression()); // gzip responses — critical for 370MB document content
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({
+  limit: '50mb',
+  verify: (req: any, _res, buf) => {
+    // Capture the raw body for HMAC-signed webhooks (AI Import Wizard
+    // /ai-event and /ai-callback need byte-exact signature verification).
+    // Other routes ignore req.rawBody.
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Request logging middleware - logs all API requests for debugging
@@ -128,6 +137,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api', matrixRouter);
 app.use('/api', evidenceRouter);
 app.use('/api/submissions', submissionsRouter);
+app.use('/api/program-courses', programCoursesRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', commentsRouter);
 app.use('/api', readerLockRouter);

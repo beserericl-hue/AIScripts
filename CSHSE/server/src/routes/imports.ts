@@ -33,11 +33,32 @@ import {
   checkExistingImport,
   discardImport
 } from '../controllers/importController';
+import {
+  startAIImport,
+  getAIImportStatus,
+  streamAIImportEvents,
+  receiveAIEventWebhook,
+  receiveAICallback,
+  applyAIImport,
+  restartAIImport
+} from '../controllers/aiImportController';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
 
-// All routes require authentication
+// ============================================
+// AI Import Wizard webhooks (Sprint 1)
+// ============================================
+//
+// These two routes are called by the cshse-ai service, NOT the browser.
+// They authenticate via HMAC signature (raw body captured by the global
+// express.json verify hook in index.ts) and so are mounted BEFORE the
+// router.use(authenticate) gate below.
+
+router.post('/:importId/ai-event', receiveAIEventWebhook);
+router.post('/:importId/ai-callback', receiveAICallback);
+
+// All other routes require user authentication.
 router.use(authenticate);
 
 // Configure multer for file uploads
@@ -138,6 +159,22 @@ router.put('/:importId/unmapped/:sectionId', handleUnmapped);
  * @access  Private (Coordinator)
  */
 router.post('/:importId/cancel', cancelImport);
+
+// ============================================
+// AI Import Wizard (Sprint 1) — coordinator-facing routes
+// ============================================
+//
+// POST start-ai      — kick off a cshse-ai job
+// GET  ai-status     — synchronous snapshot (polling fallback)
+// GET  ai-events     — SSE primary live updates
+// POST apply-ai      — commit writes (stub in sub-sprint 1.a)
+// POST restart-ai    — re-run with a different forced format
+
+router.post('/:importId/start-ai', startAIImport);
+router.get('/:importId/ai-status', getAIImportStatus);
+router.get('/:importId/ai-events', streamAIImportEvents);
+router.post('/:importId/apply-ai', applyAIImport);
+router.post('/:importId/restart-ai', restartAIImport);
 
 // ============================================
 // PART 6: Section Selection Before AI Processing
