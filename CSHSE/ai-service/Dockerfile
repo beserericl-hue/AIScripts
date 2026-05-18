@@ -22,7 +22,6 @@ RUN chmod +x ./start.sh
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:8080/health" || exit 1
-
+# No Docker HEALTHCHECK — Railway probes /health externally via its
+# router (configured via deploy.healthcheckPath in railway.json).
 CMD ["/app/start.sh"]
