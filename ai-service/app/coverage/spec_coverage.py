@@ -144,6 +144,9 @@ class CoverageReviewer:
         except Exception as exc:
             # Persistent failure — surface a non-empty CoverageReview so the
             # caller doesn't crash on a long batch and the user sees the error.
+            # Include the API message (e.g. "credit balance is too low") in
+            # the suggestion field so the preview shows the real cause, not
+            # just the exception class name.
             return CoverageReview(
                 standard_code=spec.standard_code,
                 spec_code=spec.spec_code,
@@ -151,7 +154,7 @@ class CoverageReviewer:
                 coverage_score=0.0,
                 gaps=[f"coverage reviewer API error: {type(exc).__name__}"],
                 strengths=[],
-                suggestion="",
+                suggestion=f"{type(exc).__name__}: {str(exc)[:400]}",
                 raw_response="",
             )
         raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")

@@ -289,7 +289,7 @@ def test_search_gap_walks_past_rejected_candidates():
     # First two rejected, third accepted
     client = _fake_anthropic([
         '{"addresses_gap": false, "confidence": 0.2, "classification": "narrative_text", "rationale": "no"}',
-        '{"addresses_gap": true, "confidence": 0.5, "classification": "narrative_text", "rationale": "borderline"}',
+        '{"addresses_gap": true, "confidence": 0.4, "classification": "narrative_text", "rationale": "borderline"}',
         '{"addresses_gap": true, "confidence": 0.8, "classification": "evidence_file", "rationale": "yes"}',
     ])
 

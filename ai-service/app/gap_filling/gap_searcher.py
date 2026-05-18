@@ -32,7 +32,13 @@ from app.vector.qdrant_ops import SearchHit, VectorStore
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 DEFAULT_TOP_K = 5
-DEFAULT_CONFIDENCE_THRESHOLD = 0.65
+# Lowered from 0.65 → 0.50 after the 2026-05-18 Stevenson preview showed
+# 2/3800 verifier acceptance. The verifier's `confidence` field is now an
+# explicit band (see _build_verify_prompt): 0.80+ = direct documentation,
+# 0.50–0.79 = partial/contextual support, <0.50 = tangential. We want the
+# partial-support band to count, because accreditation evidence is rarely
+# a 1:1 gap closure.
+DEFAULT_CONFIDENCE_THRESHOLD = 0.50
 
 # Anthropic's 529 "overloaded" responses are transient — back off and retry
 # rather than letting one bad minute kill a long batch.
@@ -116,8 +122,10 @@ def _build_verify_prompt(spec: Specification, gap_text: str, candidate_body: str
             "You are an accreditation reviewer at CSHSE (Council for Standards",
             "in Human Service Education). The coverage review on a specific",
             "Specification flagged the SHORTCOMING below. We searched the",
-            "self-study's appendix and pulled a candidate snippet that *might*",
-            "fill the gap. Your job is to decide whether it actually does.",
+            "self-study's appendix and pulled a candidate snippet that may",
+            "serve as supporting evidence. Your job is to decide whether the",
+            "snippet is relevant evidence a reviewer would cite for this",
+            "shortcoming.",
             "",
             f"SPECIFICATION {spec.standard_code}.{spec.spec_code} ({spec.standard_title}):",
             f"  {spec.spec_text}",
@@ -128,10 +136,24 @@ def _build_verify_prompt(spec: Specification, gap_text: str, candidate_body: str
             "=== CANDIDATE APPENDIX SNIPPET ===",
             body,
             "",
-            "Evaluate whether the candidate snippet substantively addresses the",
-            "shortcoming. Be strict — surface-level keyword overlap is not",
-            "enough; the snippet must actually provide the missing content the",
-            "reviewer asked for.",
+            "Accreditation evidence is typically partial. A single appendix",
+            "item rarely closes a shortcoming on its own — a reviewer",
+            "assembles narrative plus multiple evidence items to determine",
+            "coverage. ACCEPT (addresses_gap=true) when the snippet provides",
+            "documentation, data, or examples a reviewer would reasonably",
+            "cite for this shortcoming, OR adds context that materially",
+            "advances coverage of the missing element (even partially).",
+            "REJECT only when the snippet is off-topic, contradicts the",
+            "shortcoming, or contains nothing a reviewer could plausibly",
+            "point to (e.g., a faculty CV when the gap asks for course",
+            "syllabi, or unrelated administrative content).",
+            "",
+            "Use the `confidence` field as an explicit band:",
+            "  - 0.80-1.00: direct documentation a reviewer would point to",
+            "  - 0.50-0.79: partial / contextual support that helps but",
+            "               doesn't close the shortcoming on its own",
+            "  - below 0.50: only tangentially related; reviewer unlikely",
+            "                to cite this item for this shortcoming",
             "",
             'Also classify the snippet shape: pick "evidence_file" if it is a',
             "standalone document (faculty CV, syllabus, meeting minutes, policy",
@@ -205,11 +227,13 @@ def verify_candidate(
         msg = _call_with_retry(client, model, prompt, max_tokens=300)
     except Exception as exc:
         # Persistent failure — degrade gracefully so the batch keeps moving.
+        # Carry the API message in the rationale so credit/quota/model-id
+        # issues surface in the preview without a separate diagnostic call.
         return GapVerification(
             addresses_gap=False,
             confidence=0.0,
             classification=_fallback_classification(candidate_body),
-            rationale=f"verifier API error: {type(exc).__name__}",
+            rationale=f"verifier API error: {type(exc).__name__}: {str(exc)[:300]}",
         )
     raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     try:

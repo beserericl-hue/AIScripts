@@ -24,24 +24,24 @@ Pipeline that produced this:
 ## Top-level summary
 
 - Specs in Handbook (Baccalaureate): **96**
-- Specs with at least one wizard write: **84**
+- Specs with at least one wizard write: **95**
 - Specs with narrative content: **81**
-- Specs with supporting-evidence text: **27**
-- Specs with supporting-evidence files: **11**
-- Total evidence files (with simulated S3 keys): **14**
+- Specs with supporting-evidence text: **87**
+- Specs with supporting-evidence files: **66**
+- Total evidence files (with simulated S3 keys): **113**
 - Tag list (user must triage in wizard's Tag List view): **47**
 - Sections skipped as `context`: **178**
 - Sections sent to `unknown` bucket: **6**
 - Appendix items indexed for gap-fill: **890**
-- Initial gaps flagged by coverage reviewer: **653**
-- Gaps filled from appendix (verified by Haiku): **2**
-- Appendix candidates rejected by Haiku verifier: **3798**
-- Gaps still remaining after gap-fill: **638**
+- Initial gaps flagged by coverage reviewer: **650**
+- Gaps filled from appendix (verified by Haiku): **333**
+- Appendix candidates rejected by Haiku verifier: **2314**
+- Gaps still remaining after gap-fill: **541**
 
 ## Simulated import identity
 
 - `submissionId`: `6986239a6612bf17f04a3217`
-- `documentVersionId`: `docver-cb9174cf`
+- `documentVersionId`: `docver-30058f35`
 - S3 bucket: `cshse-filestorage-qlyj5pn` (Tigris). Files below use key pattern `{submissionId}/{documentVersionId}/{slug}.docx`. Files are NOT actually uploaded by this preview; the wizard creates them on Step-5 Apply.
 
 ---
@@ -56,8 +56,8 @@ Each spec block shows the four wizard destinations and the gap-fill delta. A `�
 
 **Spec prompt:** _The program is part of a degree granting college or university that is regionally accredited._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.15**
+_(first-pass: covered=False, score=0.10; second-pass after gap-fill: covered=False, score=0.15, delta=+0.05)_
 
 #### Narrative content
 _Destination: `Submission.narratives[1][a].content`_
@@ -79,22 +79,34 @@ _(no supporting-evidence text auto-applied)_
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[1][a].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Survey questions 2015 Results* — Survey questions 2015 Resul | `survey-questions-2015-results-survey-questions-2015-results-` | 523 | 0.92 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/survey-questions-2015-results-survey-questions-2015-results-.docx` |
+
+_File 1 fills gap_: Narrative does not identify the name of the college or university
+
+```text
+2015 Results*
+
+Primary enrollment status at Stevenson: Traditional Student (Day) 100%  (8) Accelerated/online student (GPS) 0 Did you transfer to Stevenson from another college? No 88% Yes, from a Maryland community college 12% Yes, from a Maryland four-year college or university 0 Yes, from an out-of-state college or university 0 What was the highest degree you received from Stevenson University? Bachelor’s Degree 100% Master’s Degree 0 Are you currently employed? Yes, full-time 75% Yes, part-time 25% No, seeking employment 0 No not seeking employment 0 Select your current occupation from the list below: Educator (teacher, professor) 0 Engineer or Architect (engineering technician) 0 Financial (accountant, broker, financial analyst) 12% Health Professional 25% Information Systems (programmer/analyst, computer/software    engineer, electronic technician) 0 Legal Professional or Law Enforcement 0 Manager, Executive, Proprietor 0 Sales or Marketing (retail, real estate) 12% Scientist (physical, research, statistician, analyst) 0 Skilled trades (clerical, laborer, service occupation) 0 Social Worker 25% Other Professional 25% Where is your current place of employment Maryland 75% District of Columbia 0 Northern Virginia (suburbs of DC) 0 Neighboring state (DE, NJ, PA, WV, elsewhere in VA) 12% Other state or country (specifically: Delaware) 13% What is your annual salary in your current job? Less than $20,000 12% $20,000 to $29,999 38% $30,000 to $39,999 50% $40,000 to $49,999 0 
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence provided that the institution is regionally accredited
-- ⚠️ No documentation of the parent institution's regional accreditation status (e.g., SACSCOC, MSCHE, WASC, etc.)
-- ⚠️ No identification of the college/university name or its accrediting body
-- ⚠️ Narrative describes program history but does not address the institutional requirement
-- ⚠️ No supporting documents such as institutional accreditation certificates, letters, or official statements
+- ⚠️ No evidence provided that Stevenson University is regionally accredited (required by Specification 1.a)
+- ⚠️ No documentation of the institution's regional accreditation status, accrediting body, or current accreditation standing
+- ⚠️ No institutional accreditation certificate, letter, or official statement included
+- ⚠️ The narrative addresses program history only; it does not address the institutional accreditation requirement at all
+- ⚠️ Survey data (Evidence 1) is unrelated to Specification 1.a and does not support institutional accreditation status
 
 ---
 
-### `1.b` 🔴 — Institutional Requirements and Primary
+### `1.b` 🟢 — Institutional Requirements and Primary
 
 **Spec prompt:** _Provide evidence that the development of competent human services professionals is the primary objective of the program and the basis for the degree program title, design, goals and curriculum, teaching methodology, and program administration (e.g. through documents such as catalog, brochures, course syllabi, website, and marketing materials)._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.78**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=True, score=0.78, delta=+0.33)_
 
 #### Narrative content
 _Destination: `Submission.narratives[1][b].content`_
@@ -146,21 +158,139 @@ The curriculum is designed to give students a comprehensive understanding of how
 #### Supporting evidence — text
 _Destination: `Submission.narratives[1][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 80 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Degree program title alignment not explicitly demonstrated—no evidence showing how the title 'Counseling & Human Services' reflects the primary objective
+
+_Source heading:_ **Program Purpose and Outcomes — Program Purpose and Outcomes — Program Purpose — Program Purpose**
+
+```text
+The SU Counseling & Human Services Department prepares students to become effective professionals in the helping disciplines. The program focuses on skill development, problem solving, and the application of research and best practice principles. Students learn to help others and to prepare thoughtfully and systematically for their careers. To meet these commitments, the Counseling & Human Services Department offers its students a broad curriculum, learning experiences and professional activities beyond the classroom, and high levels of student-faculty interaction and collaboration.
+```
+
+##### Evidence text 2 — conf 0.72, 547 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Program administration documentation missing—no evidence of how administrative decisions, policies, or resource allocation prioritize professional competency development
+
+_Source heading:_ **Department Overview — Department Overview**
+
+```text
+Department Name Change: The program name change to “Counseling and Human Services” has been approved and will become official over the summer. It is hoped that the change will help with recruiting students.
+
+Graduate Survey Results: Feedback from graduating seniors last spring was reviewed. Students consistently point to their field experiences, and to faculty, as the most beneficial parts of the program. Partly in response to student concerns, the number of hours required for the practicum will be limited to 410 (9 credit hours). This is already the most common option for students, but the 12-credit hour (540 hour, 39 hour/week) option will be eliminated.
+
+Program Modifications: In response to student feedback and a departmental faculty retreat in December, we are proposing several program modifications and board input was solicited. In addition to reducing the practicum hours, we have changed the name of the addictions course to Psychopharmacology and Addictions and will be requiring it of all majors. The name of CHS 315 has been changed to Group Counseling (from Group Processes and Practices). We polled our current students on which topics classes they would be most interested in taking. The results are attached and were reviewed in the meeting. We discussed potential topics and advisory board members shared a number of helpful ideas. Related to the low interest expressed by students in classes on aging, Lisa Boone indicated that at CCBC a certificate in Elder Care runs be
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.62, 501 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Marketing materials not included—brochures and website content are referenced but not attached
+
+_Source heading:_ **Department Overview — Department Overview**
+
+```text
+Department Name Change: A proposal to change the name of the program to “Counseling and Human Services” has been submitted to MHEC. We are awaiting approval. This change should help us to recruit students into the program. The general consensus at the meeting was that this would be a positive change. It will be important for the program to be clear in all materials that students will NOT become licensed counselors once they complete the program.
+
+Program Move to Owings Mills: It is likely that academic programs will be moving from the Greenspring campus to the Owings Mills campus in the next couple of years. This is in order to consolidate programs at the OM campus, so students do not have to travel between campuses, and to take advantage of recent expansion on the OM campus. Several people expressed sadness at possibly leaving the lovely Greenspring campus. It currently looks like this would not happen until at least next summer.
+
+NOHS Conference: Department faculty will be attending the National Organization for Human Services conference in Des Moines on Oct. 18-21. Two students, Elizabeth Brown and Rebecca Rohe, will accompany the department and present a poster at the conference.
+
+January Term Trip: Lauri Weiner will be leading a group of students to Arizona in January to engage in social service projects on the Navaho Nation, if she gets enough students to run the trip.
+
+Articulation Agreements: Agreements with CCBC and AACC have been updated and signed. We will continue
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.68, 140 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No course syllabus examples provided—claims about course focus on human services competencies lack concrete documentation
+
+_Source heading:_ **Program Outcomes — Program Outcomes**
+
+```text
+Upon completion of the Counseling & Human Services program, graduates will be able to:
+
+Synthesize and appropriately apply key concepts, methods and values in human services to professional situations, independently and with minimal supervision. Apply research findings to analyze common problems encountered in the human services field and develop appropriate solutions.
+
+Synthesize and appropriately apply key concepts, methods and values in human services to professional situations, independently and with minimal supervision.
+
+Apply research findings to analyze common problems encountered in the human services field and develop appropriate solutions.
+
+3. 	Exhibit consistent professional attitudes and behaviors in applied human services settings.
+
+4. 	Exhibit culturally sensitive behavior in professional human services settings.
+
+5. 	Exhibit effective and appropriate interpersonal skills in professional human services settings.
+
+6. 	Based on comprehensive self-evaluation and feedback from faculty and supervisors, develop individualized professional development goals and objectives.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[1][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Paper contains obvious writing errors:  spelling and grammat | `paper-contains-obvious-writing-errors-spelling-and-grammatic` | 31 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/paper-contains-obvious-writing-errors-spelling-and-grammatic.docx` |
+| 2 | Brochure — Standard 1e — Standard 1e — Enrollment and Gradua | `brochure-standard-1e-standard-1e-enrollment-and-graduate-tre` | 54 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/brochure-standard-1e-standard-1e-enrollment-and-graduate-tre.docx` |
+| 3 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+
+_File 1 fills gap_: No actual supporting documents provided—narrative references 'Stevenson Catalog,' 'departmental brochure,' 'department website,' 'course descriptions,' and 'syllabi' but none are attached as evidence
+
+```text
+40-60
+
+0
+
+Telephone number:
+
+Stevenson email:
+
+Best times for phone contact:
+
+Office location:
+
+Prerequisite(s):
+
+Classroom or Studio Location:
+
+Scheduled Class Days and Time:
+
+Course Description:
+
+material to specific groups is highlighted.
+```
+
+_File 2 fills gap_: Program design and curriculum structure claims lack specificity—'table that outlines the courses' is mentioned but not provided
+
+```text
+2e
+
+or
+
+*Course offered ONLY during semester indicated (Fall or Spring).  SL = Service Learning course
+
+** Focused electives are courses related to Counseling & Human Services. A list of relevant courses is distributed each semester by the department. At least two focused electives must be CHS courses, if not in a track .
+```
+
+_File 3 fills gap_: Teaching methodology not addressed—no evidence of how instruction methods (e.g., experiential learning, field work pedagogy) support professional development
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents attached (catalog pages, brochures, website screenshots, syllabi) despite repeated references to them
-- ⚠️ Degree program title not explicitly analyzed or justified as reflecting human services professional development mission
-- ⚠️ Program design rationale not explained—why these three curriculum components (development/functioning, helping skills, field work) specifically prepare competent HS professionals
-- ⚠️ Teaching methodology not addressed—no description of how instructional approaches support competency development
-- ⚠️ Program administration practices not discussed—no evidence of how administrative decisions prioritize HS professional competency
-- ⚠️ Marketing materials and website content referenced but not provided
-- ⚠️ Course syllabi mentioned but not included as evidence
-- ⚠️ No explicit connection made between program objectives and CSHSE's definition of human services professional competencies
-- ⚠️ Graduate outcomes/assessment data not provided to demonstrate competency development is actually achieved
+- ⚠️ No direct evidence from course syllabi showing how individual courses embed human services competencies, learning outcomes, or teaching methodologies aligned to preparing competent HS professionals
+- ⚠️ Website evidence is mentioned but not provided; cannot verify that web content actually emphasizes HS professional development as primary objective
+- ⚠️ Brochure evidence (Evidence 3) is incomplete/fragmented—does not contain substantive content demonstrating how the brochure markets the program's primary objective
+- ⚠️ No evidence showing how program administration decisions (hiring, budgets, staffing) are explicitly driven by the objective of developing competent HS professionals
+- ⚠️ Marketing materials beyond brochure (e.g., recruitment materials, admissions literature) are not provided
+- ⚠️ Catalog excerpt provided but does not include the full program description or how the degree title/design reflects HS professional development as primary objective
 
 ---
 
@@ -168,8 +298,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Articulate how students are informed of the curricular and program expectations and requirements prior to admission._
 
-**Final coverage verdict:** covered=**False**, score=**0.65**
-_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.65, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.55**
+_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.55, delta=-0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[1][c].content`_
@@ -209,14 +339,37 @@ Classroom Policies: Regular class attendance and participation are necessary to 
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[1][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Brochure — Standard 1e — Standard 1e — Enrollment and Gradua | `brochure-standard-1e-standard-1e-enrollment-and-graduate-tre` | 54 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/brochure-standard-1e-standard-1e-enrollment-and-graduate-tre.docx` |
+| 2 | Department Issues | `department-issues` | 822 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/department-issues.docx` |
+
+_File 1 fills gap_: Missing documentation of specific curricular expectations (e.g., required courses, sequence, competencies, clinical/practicum requirements) that are shared before prospective students apply
+
+```text
+2e
+
+or
+
+*Course offered ONLY during semester indicated (Fall or Spring).  SL = Service Learning course
+
+** Focused electives are courses related to Counseling & Human Services. A list of relevant courses is distributed each semester by the department. At least two focused electives must be CHS courses, if not in a track .
+```
+
+_File 2 fills gap_: No mention of application materials, admissions website content, or pre-application information sessions that set expectations before the admission decision
+
+```text
+We discussed the departmental acronym and course designator. It was agreed that we should be consistent in referring to the department as CHS and use that as the designator for all courses. There will need to be a systematic effort to let students and other area of the college know about the shift. John will talk to Cheryl and the registrar about this. Use gradebook in Blackboard was discussed. We will all need to start doing using that feature in the fall. Several faculty offered to help anyone who needed to set up this feature. Students have had some questions about the eText for CHS 101. Faculty have been frustrated by a lack of clear instructions from the publisher and bookstore. The graduate panel for practicum students is scheduled for Feb. 25. Representative from two graduate programs (UMB MSW program and the Chicago School of Professional Psychology) will be included in the panel. We talked about a possible articulation with the UM program as John has heard indirectly that they may be open to this. If our students were able to get advanced standing when entering the program, that would be very beneficial. John will follow up on this. Faculty evaluation forms are due by Feb. 8. John has communicated with faculty as needed and apologized for the last minute request. The self-study for CSHSE reaccreditation is due at the end of the summer. John will be working on the report through the spring semester and will need input from faculty. He will be requesting specific infor
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence that prospective students (pre-admission) receive written curricular requirements—narrative mentions Open Houses and website but doesn't document what specific program expectations/requirements materials are available to prospects before they apply
-- ⚠️ No mention of how program requirements are communicated via admissions materials (viewbooks, website screenshots, recruitment brochures)—only that recruiters are briefed annually
-- ⚠️ Supporting evidence (Classroom Policies) addresses post-admission classroom expectations, not pre-admission program/curricular expectations
-- ⚠️ No documentation of what 'program website' contains regarding curricular structure, course sequences, prerequisites, or degree requirements
-- ⚠️ Lacks evidence that all prospective students (not just Open House attendees) systematically receive curricular expectations—Open House attendance is voluntary and optional
-- ⚠️ No evidence of written program overview, curriculum map, or degree requirements document shared with prospects prior to admission
+- ⚠️ No evidence provided demonstrating how prospective students are informed PRIOR to admission (pre-decision communication). Narrative describes post-admission orientation activities but lacks documentation of recruitment materials, website content, or admissions-stage communication.
+- ⚠️ Missing documentation of actual program expectations and requirements shared with prospective students. The narrative mentions 'Open Houses' and 'faculty meetings with recruiters' but provides no samples of recruitment brochures, website screenshots, or admission letters outlining curricular expectations.
+- ⚠️ No evidence of systematic messaging about program requirements at the point of application or decision. Evidence 2 appears to be a partial brochure but is incomplete ('[gap-fill]') and does not clearly demonstrate pre-admission information.
+- ⚠️ Narrative conflates pre-admission information with post-admission onboarding (student handbook, orientations, FYS 100). These are separate timepoints; CSHSE 1.c specifically asks about prior to admission.
+- ⚠️ No documentation showing what information is actually provided during 'Open Houses' or recruiter training, making claims unverifiable.
+- ⚠️ Supporting evidence materials (Evidence 2 and 3) do not substantiate the narrative claims; Evidence 3 is internal meeting notes unrelated to prospective student communication.
 
 ---
 
@@ -224,8 +377,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Provide a brief history of the program._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.15**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.15, delta=+0.15)_
 
 #### Narrative content
 _Destination: `Submission.narratives[1][d].content`_
@@ -234,19 +387,38 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[1][d].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 297 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of program evolution over time
+
+_Source heading:_ **Administered, collected and reviewed by individual faculty member — Standard 1c and 4b — Standard 1c — STEVENSON — STEVENSON — U N I V E R S I T Y — U N I V E R S I T Y — COUNSELING & HUMAN SERVICES D**
+
+```text
+4b
+
+2018-2019
+
+The results of the 2018-2019 Counseling & Human Services Program Evaluation confirm that the present curriculum and field experiences are effective in meeting the program mission, “to provide students with an educational foundation that will prepare them for meaningful and effective careers within the human services field and successful continuation of their education.” Student field placement evaluations also indicate that the program goals are being met.
+
+Twenty four students graduated in the 2018-2019 academic year. This is slightly lower than the previous year, but represents a stabilization in the decline of graduates, which is similar to the pattern for the number of majors. (see report below). The official number of majors for the Fall of 2019 will be reported on the census date of October 15.  A new cohort of certificate students at Sheppard Pratt will be starting this fall, but the exact number is not know at this time.
+
+Number of Graduates: 2013-14 2014-15 2015-16 2016-17 2017-18 2018-19 # Graduates 46 35 56 35 28 24 Admissions Report Fall 2014 Fall 2015 Fall 2016 Fall 2017 Fall 2018 Fall 2019 Number of Applicants 47 69 58 41 34 30 Number Accepted 27 24 29 20 24 21 Number Attending 6 6 8 5 8 6 Transfer Students 11 8 8 6 3 11 Number of Majors: Fall 2014 Fall 2015 Fall 2016 Fall 2017 Fall 2018 Fall 2019 Human Services 141 138 100 86 82 78 Fulltime:Parttime 136:5 133:5 98:2 83:3 78:4 75;2 Human Services Certificate 24 20 15 15 13 xx Number of Minors: # M
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[1][d].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative response provided to address the specification
-- ⚠️ No supporting evidence submitted to document program history
-- ⚠️ Missing foundational information: when the program was established
-- ⚠️ Missing program evolution details: how the program has developed over time
-- ⚠️ Missing contextual information: institutional context for program creation
-- ⚠️ Missing milestone information: significant program changes, expansions, or curriculum revisions
-- ⚠️ Missing documentation of program development trajectory
+- ⚠️ No narrative response provided — the specification explicitly requests a brief history of the program, which is entirely absent
+- ⚠️ No founding date or year the program was established
+- ⚠️ No information about program origins, initial mission, or how it began
+- ⚠️ No description of how the program has evolved over time
+- ⚠️ No information about major milestones, curriculum changes, or significant developments in program history
+- ⚠️ No context about why the program was created or what institutional need it addressed
+- ⚠️ No accreditation history or timeline of program recognition
+- ⚠️ Supporting evidence contains only recent enrollment/graduation data (2013-2019) and program evaluation results, not historical narrative
 
 ---
 
@@ -385,14 +557,59 @@ Number of Minors:
 16
 ```
 
+##### Evidence text 2 — conf 0.72, 297 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Gender breakdown is only provided for Fall 2023 (87% female); no gender data for other years or historical trends in gender composition
+
+_Source heading:_ **Administered, collected and reviewed by individual faculty member — Standard 1c and 4b — Standard 1c — STEVENSON — STEVENSON — U N I V E R S I T Y — U N I V E R S I T Y — COUNSELING & HUMAN SERVICES D**
+
+```text
+4b
+
+2018-2019
+
+The results of the 2018-2019 Counseling & Human Services Program Evaluation confirm that the present curriculum and field experiences are effective in meeting the program mission, “to provide students with an educational foundation that will prepare them for meaningful and effective careers within the human services field and successful continuation of their education.” Student field placement evaluations also indicate that the program goals are being met.
+
+Twenty four students graduated in the 2018-2019 academic year. This is slightly lower than the previous year, but represents a stabilization in the decline of graduates, which is similar to the pattern for the number of majors. (see report below). The official number of majors for the Fall of 2019 will be reported on the census date of October 15.  A new cohort of certificate students at Sheppard Pratt will be starting this fall, but the exact number is not know at this time.
+
+Number of Graduates: 2013-14 2014-15 2015-16 2016-17 2017-18 2018-19 # Graduates 46 35 56 35 28 24 Admissions Report Fall 2014 Fall 2015 Fall 2016 Fall 2017 Fall 2018 Fall 2019 Number of Applicants 47 69 58 41 34 30 Number Accepted 27 24 29 20 24 21 Number Attending 6 6 8 5 8 6 Transfer Students 11 8 8 6 3 11 Number of Majors: Fall 2014 Fall 2015 Fall 2016 Fall 2017 Fall 2018 Fall 2019 Human Services 141 138 100 86 82 78 Fulltime:Parttime 136:5 133:5 98:2 83:3 78:4 75;2 Human Services Certificate 24 20 15 15 13 xx Number of Minors: # M
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[1][e].linkedDocuments`_
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | Survey questions 2015 Results* — Survey questions 2015 Resul | `survey-questions-2015-results-survey-questions-2015-results-` | 523 | 0.75 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-cb9174cf/survey-questions-2015-results-survey-questions-2015-results-.docx` |
+| 1 | Elsewhere (Pennsylvania, Virginia) 33% — Elsewhere (Pennsylv | `elsewhere-pennsylvania-virginia-33-elsewhere-pennsylvania-vi` | 529 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/elsewhere-pennsylvania-virginia-33-elsewhere-pennsylvania-vi.docx` |
+| 2 | Survey questions 2015 Results* — Survey questions 2015 Resul | `survey-questions-2015-results-survey-questions-2015-results-` | 523 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/survey-questions-2015-results-survey-questions-2015-results-.docx` |
 
-_File 1 fills gap_: Gender breakdown is provided only for Fall 2023 (87% female); no historical gender data across years shown
+_File 1 fills gap_: Race/ethnicity data only provided for Fall 2023; no historical demographic trends across multiple years
+
+```text
+33%
+
+100%
+
+0
+
+17%
+
+0
+
+83%
+
+0
+
+100%
+
+0
+
+Survey questions 2015 Results* Primary enrollment status at Stevenson: Traditional Student (Day) 100%  (8) Accelerated/online student (GPS) 0 Did you transfer to Stevenson from another college? No 88% Yes, from a Maryland community college 12% Yes, from a Maryland four-year college or university 0 Yes, from an out-of-state college or university 0 What was the highest degree you received from Stevenson University? Bachelor’s Degree 100% Master’s Degree 0 Are you currently employed? Yes, full-time 75% Yes, part-time 25% No, seeking employment 0 No not seeking employment 0 Select your current occupation from the list below: Educator (teacher, professor) 0 Engineer or Architect (engineering technician) 0 Financial (accountant, broker, financial analyst) 12% Health Professional 25% Information Systems (programmer/analyst, computer/software    engineer, electronic technician) 0 Legal Professional or Law Enforcement 0 Manager, Executive, Proprietor 0 Sales or Marketing (retail, real estate) 12% Scientist (physical, research, statistician, analyst) 0 Skilled trades (clerical, laborer, service occupation) 0 Social Worker 25% Other Professional 25% Where is your current place of employment Maryland 75% District of Columbia 0 Northern Virginia (suburbs of DC) 0 Neighboring state (DE, NJ, PA, WV, elsewhere in VA) 12% Other state or country (specifically: Delaware) 13% What is your annual salary in your current job? Less than $20,000 12% $20,000 to $
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: Minor student demographic information completely absent (narrative and evidence provide only total numbers, not student characteristics)
 
 ```text
 2015 Results*
@@ -402,16 +619,16 @@ Primary enrollment status at Stevenson: Traditional Student (Day) 100%  (8) Acce
 ```
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ coverage reviewer API error: BadRequestError
+- ⚠️ LLM returned non-JSON response
 
 ---
 
-### `1.f` 🔴 — Institutional Requirements and Primary
+### `1.f` 🟢 — Institutional Requirements and Primary
 
 **Spec prompt:** _Provide a complete program description, courses required, time to completion, and other program details (refer to catalogs and other appendices)._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.00, delta=-0.65)_
+**Final coverage verdict:** covered=**True**, score=**0.82**
+_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=True, score=0.82, delta=+0.17)_
 
 #### Narrative content
 _Destination: `Submission.narratives[1][f].content`_
@@ -471,23 +688,144 @@ _Source heading:_ **Course Description:  Assists first-year students identify an
 Course Description:  Assists first-year students identify and use specific strategies for academic, personal, and social success in college. The First-Year Seminar also serves as a tool to introduce students to the Career Architecture process that will guide them through their time at Stevenson University.  Additional topics discussed in first-year seminar include, but are not limited to, University regulations and procedures, clarifying values and decision-making processes, and exploring the principles of career development.
 ```
 
+##### Evidence text 3 — conf 0.62, 34 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explicit statement of total credit hours for general education requirements (only stated as 'described in Introductory Section A.3.b' without detail)
+
+_Source heading:_ **Mathematics — MATH 135 Introduction to Math Reasoning — MATH 137 College Algebra — MATH 215 Math and Art (travel course) — Biology — BIO 113/113L General Biology — Forensic Science — FSCI 100 Intro. t**
+
+```text
+(3 credits, every semester)
+
+*BIO 104 Human Body and Contemp. Health
+
+(4 credits, Fall and Spring semesters)
+
+* recommended laboratory science course
+
+(4 credits, Fall and Spring semesters)
+
+(3 credits, Fall and Spring semesters)
+```
+
+##### Evidence text 4 — conf 0.65, 54 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No breakdown of elective credit hours or how many credits are required for the 2 CHS electives mentioned
+
+_Source heading:_ **Brochure — Standard 1e — Standard 1e — Enrollment and Graduate Trends — Standard 1f and 2e — Standard 1f — COUNSELING & HUMAN SERVICES—2019-2020 — COUNSELING & HUMAN SERVICES—2019-2020 — Suggested Seq**
+
+```text
+2e
+
+or
+
+*Course offered ONLY during semester indicated (Fall or Spring).  SL = Service Learning course
+
+** Focused electives are courses related to Counseling & Human Services. A list of relevant courses is distributed each semester by the department. At least two focused electives must be CHS courses, if not in a track .
+```
+
+##### Evidence text 5 — conf 0.62, 78 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No clear mapping showing how 120 total credits are distributed across required CHS courses, secondary requirements, general education, and electives
+
+_Source heading:_ **Track — Addictions & Mental Hlth Cns Track	Child, Adolescent & Family Srvs Track	Community Health Track — Addictions & Mental Hlth Cns Track	Child, Adolescent & Family Srvs Track	Community Health Trac**
+
+```text
+2 additional Focused Electives CHS 365 Coping, Resilience & Growth	CM 2XX Health Communication
+
+2 additional Focused Electives
+
+2 additional Focused Electives BIO 332 Epidemiology
+
+2 additional Focused Electives
+
+All Counseling & Human Services majors must take five Focused Electives, at least two of which need to be CHS courses chosen from the offerings below. Students who opt to complete a track must take the specific courses indicated by asterisks below as part of their five Focused Electives.
+```
+
+##### Evidence text 6 — conf 0.65, 71 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing course descriptions or learning objectives for the required CHS courses listed
+
+_Source heading:_ **This is also the text used for CHS 441 — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES**
+
+```text
+Course Objectives/Learning Outcomes: •Make meaningful connections between classroom learning and experiences in the field. (Career Exploration) •	Exhibit self-development. (Self-Discovery) 										•Demonstrate a professional attitude. (Career Preparation) 								•Engage in professional behaviors. (Career Preparation) 									•Demonstrate cultural sensitivity when interacting with individuals and families. (Career Preparation) 			•Display interpersonal skills. (Career Development Foundations)
+
+Course Objectives/Learning Outcomes:
+
+To determine if this course fulfills additional program or track outcomes, please see the department chair or program coordinator.
+```
+
+##### Evidence text 7 — conf 0.62, 59 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No information on prerequisite sequences or course sequencing recommendations across the 8 semesters
+
+_Source heading:_ **ENG 225 Topics in Creative Writing — FMI 101 Cinema I — FMI 211 Basic Screenwriting (spring) — FMI 231 Film and Moving Image History — MUS 102 Chorus (2 credits) — MUS 105 Orchestra (2 credits) — MUS**
+
+```text
+*CM 115 Interpersonal Communication
+
+* CM 120 Human Communication
+
+A lab science and MATH 136 Statistics are required; choose one additional math or science class If PSY 136 Statistics for Behav. and Social Sci. is taken in place of MATH 136 Intro. to Statistics, then MATH 135, MATH 137, or MATH 215 must be taken as third math/science course.
+```
+
+##### Evidence text 8 — conf 0.72, 631 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No mention of any experiential learning requirements beyond internship/practicum or their credit values
+
+_Source heading:_ **What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? — Briefly describe other activities you engaged in this week — What concerns or chal**
+
+```text
+Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences.
+
+Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-evaluation and share it with the field instructor. In addition the field instructor will complete an evaluation of the student. Once both parties sign both forms the evaluation tools must be submitted to the faculty supervisor for review both at midpoint and at the end of the semester. Field Instructor’s Evaluation- Each student will be evaluated by his/her instructor at midpoint and at the completion of the field experience. Students will be evaluated in terms of personal qualities, role expectations within the agency setting, and professional qualiti
+… (truncated, full text imported)
+```
+
+##### Evidence text 9 — conf 0.72, 84 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No clarification of whether dual-numbered courses (CHS 315/515, CHS 340/540) are taught at undergraduate level and what credit is awarded
+
+_Source heading:_ **Prerequisite: CHS 201 (with a grade of “C” or better) — CHS 340/540 - Administration of Human Services (3 credits; Spring only)**
+
+```text
+Prerequisite:
+
+Focuses on the skills required for the development, delivery, and administration of human service departments.  The course emphasizes organizational and work related issues in human services including department planning and development, personnel administration, fund raising and budgeting, administrative procedures, and evaluation. This course is offered at the 300-level and at the 500-level.  Students who anticipate continuing their education at the graduate level should register for the 500-level section; however, transferability of these courses to a graduate program is determined by the receiving institution.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[1][f].linkedDocuments`_
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | (data table) | `data-table` | 424 | 0.88 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
-| 2 | Community College Degree Requirements Stevenson Equivalency  | `community-college-degree-requirements-stevenson-equivalency-` | 269 | 0.92 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-cb9174cf/community-college-degree-requirements-stevenson-equivalency-.docx` |
+| 1 | (data table) | `data-table` | 424 | 0.88 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
+| 2 | Administered, collected and reviewed by individual faculty m | `administered-collected-and-reviewed-by-individual-faculty-me` | 297 | 0.75 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/administered-collected-and-reviewed-by-individual-faculty-me.docx` |
 
-_File 2 fills gap_: No explicit statement of total credit hours for general education requirements or breakdown by category
+_File 2 fills gap_: Graduation rate data includes apparent typo ('895' instead of likely '89.5%'), undermining data credibility
 
 ```text
-HEED 125 Ethics in Professional Practice Focused Elective Program Requirement 3 HUMS 110 Introduction to Human Services CHS 201 Human Services and Social Policy Program Requirement and GE Social Science 3 HUMS 122 Individual Counseling Techniques CHS 260 Counseling Strategies for Individuals Program Requirement 3 HUMS 123 Group Counseling Skills Meets CHS 315 Group Counseling Program Requirement 3 HUMS 124 Family Counseling CHS 101 Family Studies Program Requirement 3 HUMS 150 Community Resources and Partnerships Focused Elective Program Requirement 3 HUMS 250 Community Services Practicum Meets CHS 380 Internship Program Requirement 3 Elective: SU recommends HUMS 120 Medical Aspects of Chemical Dependency CHS 270 Psychopharmacology and Addictions Program Requirement 3 Elective (all options available will meet a focused elective requirement) Depends on course selected Program Requirement (Focused Elective) 3 PSYC 101 General Psychology PSY 101 Intro. to Psychology Program Requirement 3 PSYC 200 Lifespan Development PSY 108 Human Growth and Development Program Requirement 3 PSYC 203 Abnormal Psychology PSY 215 Psychopathology Program Requirement (Focused Elective) 3 ENGL 121 College Composition ENG 151 English Composition Program Requirement and GE 3 BIOL 101 General Biology I BIO 113 General Biology I GE lab science 4 Arts and Humanities Core Group A GE Humanities 3 Arts and Humanities Core Group B GE Humanities 3 Science Gen Ed Core GE math/science 3 Mathematics Gen Ed Core, 
+4b
+
+2018-2019
+
+The results of the 2018-2019 Counseling & Human Services Program Evaluation confirm that the present curriculum and field experiences are effective in meeting the program mission, “to provide students with an educational foundation that will prepare them for meaningful and effective careers within the human services field and successful continuation of their education.” Student field placement evaluations also indicate that the program goals are being met.
+
+Twenty four students graduated in the 2018-2019 academic year. This is slightly lower than the previous year, but represents a stabilization in the decline of graduates, which is similar to the pattern for the number of majors. (see report below). The official number of majors for the Fall of 2019 will be reported on the census date of October 15.  A new cohort of certificate students at Sheppard Pratt will be starting this fall, but the exact number is not know at this time.
+
+Number of Graduates: 2013-14 2014-15 2015-16 2016-17 2017-18 2018-19 # Graduates 46 35 56 35 28 24 Admissions Report Fall 2014 Fall 2015 Fall 2016 Fall 2017 Fall 2018 Fall 2019 Number of Applicants 47 69 58 41 34 30 Number Accepted 27 24 29 20 24 21 Number Attending 6 6 8 5 8 6 Transfer Students 11 8 8 6 3 11 Number of Majors: Fall 2014 Fall 2015 Fall 2016 Fall 2017 Fall 2018 Fall 2019 Human Services 141 138 100 86 82 78 Fulltime:Parttime 136:5 133:5 98:2 83:3 78:4 75;2 Human Services Certificate 24 20 15 15 13 xx Number of Minors: # M
 … (truncated, full DOCX preserves full body)
 ```
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ coverage reviewer API error: BadRequestError
+- ⚠️ No explicit statement of prerequisite structure or course sequencing (which courses must be taken before others)
+- ⚠️ Missing details on how electives are distributed across semesters or whether there are restrictions on when they can be taken
+- ⚠️ No mention of credit hour breakdown by category (major courses vs. general education vs. electives)
+- ⚠️ Incomplete articulation details: Evidence 1, 3 show transfer agreements but narrative doesn't discuss how transfer credits are integrated into the 120-credit requirement
+- ⚠️ No information on accelerated completion options, part-time pathways, or online/hybrid delivery modalities (if applicable)
+- ⚠️ Graduation rate data (57% in 4 years, 84% in 5 years, 895% in 6 years—note: 895% appears to be a typo) is provided but no explanation of what factors contribute to extended timelines
+- ⚠️ Missing clarification on whether CHS 315/515 and CHS 340/540 dual-level courses count differently toward the 120 credits
 
 ---
 
@@ -497,8 +835,8 @@ HEED 125 Ethics in Professional Practice Focused Elective Program Requirement 3 
 
 **Spec prompt:** _Include a mission statement for the program._
 
-**Final coverage verdict:** covered=**True**, score=**0.92**
-_(first-pass: covered=True, score=0.92; second-pass after gap-fill: covered=True, score=0.92, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.85**
+_(first-pass: covered=True, score=0.85; second-pass after gap-fill: covered=True, score=0.85, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[2][a].content`_
@@ -523,9 +861,10 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (e.g., program handbook excerpt, website screenshot, official mission statement document) to verify the stated mission
-- ⚠️ Mission statement is somewhat lengthy and could be more succinct; CSHSE typically expects concise mission statements
-- ⚠️ No explicit statement addressing how the program mission aligns with CSHSE standards or baccalaureate-level expectations in human services
+- ⚠️ No supporting evidence documents provided (e.g., official program mission statement document, website screenshots, catalog pages, or institutional alignment documentation)
+- ⚠️ Mission statement appears incomplete/truncated in the narrative (ends mid-sentence: 'The University is an innovative, coeducational, independent university offering undergraduate and graduate students a career-focused education marked by individualized attention, civility, and respect for difference. The university blends the liberal arts with career explorati[on]')
+- ⚠️ No explicit documentation showing formal approval or adoption of the stated mission by appropriate institutional bodies
+- ⚠️ Alignment with HaSS and university missions is described narratively but lacks supporting evidence (e.g., HaSS and SU mission statements, official documents)
 
 ---
 
@@ -533,8 +872,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Demonstrate alignment with the mission of the units in which the program is housed (e.g., department, college, university, etc.)_
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.35**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.35, delta=+0.35)_
 
 #### Narrative content
 _Destination: `Submission.narratives[2][b].content`_
@@ -543,29 +882,128 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[2][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.68, 76 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No narrative provided explaining the program's philosophical base or mission alignment
+
+_Source heading:_ **Having had prior experiences with needing help; giving back — Learn how to work with others — A stepping stone to graduate programs in counseling and social work — Interest in being a school counselor**
+
+```text
+What would our program motto be, if we had one? We make a difference Caring, Leaning, Growing, Giving Helping starts here
+
+What is our unique value proposition? What to students get from the program? Professional preparation/field experience The ability to apply theory to practice Caring faculty; personal mentoring A transformative experience; self-awareness and personal growth
+
+Professional preparation/field experience The ability to apply theory to practice Caring faculty; personal mentoring A transformative experience; self-awareness and personal growth
+```
+
+##### Evidence text 2 — conf 0.85, 88 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No articulation of college/university mission statement or goals
+
+_Source heading:_ **Vision — Vision — Values — Values**
+
+```text
+The University will become a national leader in collaborative career-focused liberal arts education and will equip its graduates to visualize and achieve excellence in a dynamic global community.
+
+The core values of the university provide a foundation for faculty, staff, and students to fulfill the mission and achieve the vision of the institution. The values are focused on community, learning, integrity, and excellence.
+
+Promoting a sense of community , the University embraces the common bonds and obligations within and beyond the campus while respecting individual and cultural differences.
+```
+
+##### Evidence text 3 — conf 0.72, 50 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No supporting evidence (mission documents, alignment matrices, policy statements, etc.) provided
+
+_Source heading:_ **Goals — Objectives — Activities and Tasks : For each objective, what will be done, by whom and when. — Activities and Tasks — How you will evaluate – simple statement for each objective. — How you wil**
+
+```text
+Objectives (Impact objectives) at least 3. These are clear, attainable and measurable and time limited. Focus on results and begin with an action verb.
+
+Appendices:
+
+Your mission statement Your Impact chart Your resume Letters of personal endorsement or support of donating resources. (not included as part of the 4 pages)
+```
+
+##### Evidence text 4 — conf 0.62, 248 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of alignment review or approval processes
+
+_Source heading:_ **AAC By-Laws — Academic Affairs Committee — Academic Affairs Committee — By-Laws — By-Laws**
+
+```text
+The purpose of the Academic Affairs Committee shall be to research, report on, and recommend to the Faculty Council actions relevant to the academic standards of the university. All recommendations by the committee to the Council shall be in writing.
+
+The guiding philosophy of the AAC is threefold:
+
+Peer-Review: The AAC encourages collaboration across disciplines and schools so that the entire institution contributes to and is aware of academic conversations, standards, and best practices. Alignment: The AAC looks for a clear progression of measurable competencies from the course objectives to the course level description to the track objectives to the program outcomes so that the AAC can chart the progress of students from when they enter a program to when they leave a program. Assessment: The AAC is more effective if it has accurate and current information about SU programs, so the AAC encourages periodic Program Review presentations.
+
+Peer-Review: The AAC encourages collaboration across disciplines and schools so that the entire institution contributes to and is aware of academic conversations, standards, and best practices.
+
+Alignment: The AAC looks for a clear progression of measurable competencies from the course objectives to the course level description to the track objectives to the program outcomes so that the AAC can chart the progress of students from when they enter a program to when they leave a program.
+
+Assessment: The AAC is more effective if it has accurate 
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[2][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Student Handbook — Department Mission, Goals and Objectives  | `student-handbook-department-mission-goals-and-objectives-dep` | 81 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/student-handbook-department-mission-goals-and-objectives-dep.docx` |
+| 2 | Think critically about complex ethical issues. — Practice th | `think-critically-about-complex-ethical-issues-practice-the-h` | 194 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/think-critically-about-complex-ethical-issues-practice-the-h.docx` |
+
+_File 1 fills gap_: No articulation of departmental mission statement or goals
+
+```text
+Department Mission, Goals and Objectives Curriculum Course Descriptions Graduate School and Career Opportunities Field Placement Prerequisites and Guidelines Avoiding Plagiarism NOHS Ethical Standards
+
+Field Placement Handbook Overview of Field Placements Prerequisites and Procedures Resolving Issues Agency Evaluation by Student University Supervisor Evaluation by Student Student Field Placement Evaluation New Major Form Department Faculty Meeting Minutes 2018-2019
+
+Field Placement Handbook Overview of Field Placements Prerequisites and Procedures Resolving Issues Agency Evaluation by Student University Supervisor Evaluation by Student Student Field Placement Evaluation
+```
+
+_File 2 fills gap_: No demonstration of how program outcomes, values, or curriculum reflect unit-level priorities
+
+```text
+From 2019-2020 catalog: http://stevenson.smartcatalogiq.com/2019-2020/Undergraduate-Catalog/Academic-Information/The-SEE-Student-Learning-Goals-and-Outcomes
+
+http://stevenson.smartcatalogiq.com/2019-2020/Undergraduate-Catalog/Academic-Information/The-SEE-Student-Learning-Goals-and-Outcomes
+
+(see next page)
+
+Standard 12.g   Processes to effect social change through advocacy work at all levels of society including community development, community and grass-roots organizing, and local and global activism
+
+Include advocacy and social change for marginalized populations.  Such advocacy can occur in the context of a human service agency but also by assisting and empowering individuals and community groups/organizations/churches to effectively advocate for resources and services that address their needs and concerns.
+
+Standard 14.g  Knowledge, theory, and skills are included, analyzed, and applied in the curriculum in regard to:  performing and elementary community needs assessment:
+
+Include a greater emphasis in the program on community development in contrast to the strong emphasis on service delivery within human services agencies.
+
+Standard 14.h   Knowledge, theory, and skills are included, analyzed, and applied in the curriculum in regard to conducting a basic program evaluation:
+
+Include more direct instruction on designing and conducting a program evaluation and on understanding research, in order to effectively identify, understand, and utilize evidence based practices.
+
+Con
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative statement articulating the program's philosophical base or educational approach
-- ⚠️ No evidence of alignment between program mission/philosophy and departmental mission
-- ⚠️ No evidence of alignment between program mission/philosophy and college-level mission
-- ⚠️ No evidence of alignment between program mission/philosophy and university-level mission
-- ⚠️ No documentation of how program goals/outcomes reflect unit missions
-- ⚠️ No demonstration of intentional integration of unit values into program curriculum or delivery
-- ⚠️ No evidence of stakeholder involvement in establishing philosophical alignment
-- ⚠️ No examples of program decisions or practices rooted in unit mission alignment
+- ⚠️ No narrative statement provided — the self-study is entirely silent on how the program philosophically aligns with departmental, college, or university mission
+- ⚠️ No explicit connection drawn between program values (caring, learning, growing, giving) and the stated university mission, vision, or core values (community, learning, integrity, excellence)
+- ⚠️ Missing analysis of how the program's 'unique value proposition' (professional preparation, theory-to-practice, personal mentoring, transformative experience) directly fulfills departmental mission and goals
+- ⚠️ No demonstration of alignment between program objectives and the university's stated vision of 'collaborative career-focused liberal arts education'
+- ⚠️ Evidence 6 (AAC By-Laws) describes institutional alignment processes but does not demonstrate that the program has actually completed alignment mapping or verification
+- ⚠️ Field Placement Handbook and Student Handbook are listed but content is not excerpted to show where/how mission alignment is documented within those materials
 
 ---
 
-### `2.c` 🟡 — Philosophical Base of Programs
+### `2.c` 🟢 — Philosophical Base of Programs
 
 **Spec prompt:** _Provide a brief description of the major knowledge base and theories from which the curriculum draws to support the conceptual framework (e.g. counseling theories, biopsychosocial, systems theory, change theory, etc.)._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.78**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=True, score=0.78, delta=+0.23)_
 
 #### Narrative content
 _Destination: `Submission.narratives[2][c].content`_
@@ -593,20 +1031,82 @@ Provide a brief description of the major knowledge base and theories from which 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[2][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 242 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No description of change theory or how selected theories explain therapeutic change mechanisms
+
+_Source heading:_ **Major Family Therapy Approaches**
+
+```text
+1. Object Relations. (Framo and Scharff).
+
+2. Experiential. (Satir and Whitaker).
+
+3. Transgenerational. (Bowen). Thinking, feeling, and behaving are tied to the family system. The individual’s problems arise and are maintained by relationship connections. Problems are passed from one generation to the next. Fusion = most vulnerable; Differentiation of self = least vulnerable. 4. Structural. (Minuchin). Focuses on how families are organized and what rules govern their transactions. Pays attention to rules, roles, alignments, coalitions, and boundaries. Challenges rigid, repetitive transactions within a family, helping to “unfreeze” them and allow family reorganization. 5. Strategic. (Haley). Assigns tasks to get family to change aspects of the system that maintain problematic behavior. Paradoxical interventions are employed to force clients to abandon symptoms. NOT interested in providing insight. 6. Cognitive-Behavioral. (Beck and Ellis). Maladaptive behaviors can be extinguished as the contingencies of reinforcement are altered. Focuses on communication skills, parent training skills, cognitive restructuring, etc. 7. Social Constructionist. (deShazer and Anderson). Suggests that each of our perceptions is not an exact duplication of the world, rather, a point of view seen through the limiting lens of our assumptions about people. Therapy involves jointly constructing new options that change past accounts and allow new alternatives. 8. Narrative. (Michael White). Our sense o
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.62, 143 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Disconnect between the detailed family therapy theories at beginning and the generic statement about 'various theoretical orientations' in the main narrative—unclear if family therapy is the primary framework or one among many
+
+_Source heading:_ **Part one (Family Description) 25 points — Part two (Family Therapy Demonstration) 25 points — Part three (Presentation on Your Assigned Theory) 25 points — Part four (Individual Participation) as grad**
+
+```text
+Major Family Therapy Approaches Object Relations. (Framo and Scharff). Experiential. (Satir and Whitaker). Transgenerational. (Bowen). Structural. (Minuchin). Strategic. (Haley). Cognitive-Behavioral. (Beck and Ellis). Social Constructionist. (deShazer and Anderson). Narrative. (Michael White). 1. Object Relations. (Framo and Scharff). Satisfying relationship with some “object” (e.g., parent) is a fundamental need. Helps client gain insight into early relationships (objects from past) and how they affect current relationships enabling individual development and fulfilling relationships. 2. Experiential. (Satir and Whitaker). Troubled families need a “growth experience” derived from an intimate interpersonal experience (therapy). By being real (authentic) and self-disclosing, families learn to be more honest, more expressive, and better able to achieve personal and interpersonal growth. For Satir, building self-esteem and learning to communicate openly are essential goals. Whitaker suggested that helping family members probe their own world of symbolic meanings frees them to activate innate growth processes.
+```
+
+##### Evidence text 3 — conf 0.62, 37 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No articulation of how biopsychosocial approach is operationalized through specific theories or course sequences
+
+_Source heading:_ **Articulate how diversity among individuals, families, and communities may affect the delivery of human services. — Locate and interpret sources appropriate to public policy, trends, and issues that af**
+
+```text
+Describe how personal, ethical (related to the NOHS/CSHSE Ethical Standards), and legal issues affect the delivery of human services.
+
+Compare and contrast major models of causation for psychopathology and major theoretical approaches for helping people in need.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[2][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Review Syllabus — Discuss 1 st Major Assignment due on 9/29 | `review-syllabus-discuss-1-st-major-assignment-due-on-9-29` | 81 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/review-syllabus-discuss-1-st-major-assignment-due-on-9-29.docx` |
+
+_File 1 fills gap_: Missing explanation of how systems theory is integrated into curriculum despite being named in the prompt example and relevant to family therapy approaches listed
+
+```text
+st
+
+9/29
+
+8/30		Adopting a Family Relationship Framework		G&G – CH. 1
+
+9/4		Genograms and Ecomaps				TBA
+
+9/6		Key Terms & Definitions of Family			IN CLASS MATERIALS
+
+9/11		Key Terms & Definitions of Family			IN CLASS MATERIALS
+
+9/13		Systems Theory and Systemic Thinking			G&G – CH. 4
+
+9/18		Family Development					G&G – CH. 2
+
+9/20		Diversity in Family Functioning				G&G – CH. 3
+
+9/25, 9/27	Origins & Growth of Family Therapy			G&G – CH. 5
+
+9/27 Family of Origin Project Due
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No explicit connection between listed theories and the program's stated biopsychosocial conceptual framework
-- ⚠️ Missing explanation of how the eclectic orientation is theoretically justified or operationalized in curriculum
-- ⚠️ No description of systems theory application, despite implicit relevance to family therapy content
-- ⚠️ Change theory is not addressed despite being explicitly mentioned in the Specification prompt as an example
-- ⚠️ Supporting evidence section is empty; no syllabus excerpts, course descriptions, or curriculum mapping provided
-- ⚠️ Disconnect between the two narrative sections: family therapy theories listed first are not integrated into the overall program philosophy description
-- ⚠️ No clarity on how multidisciplinary courses (psychology, sociology, psychopharmacology) connect to the theoretical knowledge base
-- ⚠️ Missing explanation of how liberal arts and general education core support or relate to the counseling-specific theoretical frameworks
+- ⚠️ Narrative does not explicitly connect the listed theories to a coherent CONCEPTUAL FRAMEWORK—it lists theories (psychoanalysis, behavioral, cognitive-behavioral, client-centered) but does not articulate how they integrate into an overarching philosophical base or organizing principle.
+- ⚠️ Missing explicit discussion of how SYSTEMS THEORY functions as a foundational knowledge base; while Evidence 1 shows 'Systems Theory and Systemic Thinking' is taught (9/13), the narrative does not explain systems theory as a core theoretical pillar.
+- ⚠️ No articulation of CHANGE THEORY or how theoretical approaches explain mechanism of change in the counseling/family therapy process.
+- ⚠️ Narrative emphasizes 'eclectic orientation' and 'flexibility' but does not explain the philosophical or theoretical rationale for eclecticism—why these particular theories are selected or how they cohere.
+- ⚠️ Evidence 2 and 3 provide rich descriptions of 8 family therapy approaches but these are NOT integrated into the program narrative; they appear as standalone evidence rather than explained as foundational to the conceptual framework.
 
 ---
 
@@ -614,8 +1114,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Describe the multidisciplinary, interdisciplinary, or transdisciplinary approach to knowledge, theories, and skills included in the curriculum._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.35**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.35, delta=+0.35)_
 
 #### Narrative content
 _Destination: `Submission.narratives[2][d].content`_
@@ -624,20 +1124,125 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[2][d].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 142 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No narrative description of the transdisciplinary approach to knowledge included in the curriculum
+
+_Source heading:_ **Human development: A cultural approach — Arnett — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — Course Objectives/Learning Outcomes: By the end of this cour**
+
+```text
+Course Objectives/Learning Outcomes:
+
+explain the basic theories, concepts, and research designs employed in the field of human development; describe how cultural similarities and differences influence development; use the elements of critical thinking to apply human growth and development concepts to your own life; explain the ethical concerns of studying and working with vulnerable populations; describe the various professions requiring knowledge of lifespan development.
+
+explain the basic theories, concepts, and research designs employed in the field of human development;
+
+describe how cultural similarities and differences influence development;
+
+use the elements of critical thinking to apply human growth and development concepts to your own life;
+
+explain the ethical concerns of studying and working with vulnerable populations;
+
+describe the various professions requiring knowledge of lifespan development.
+
+To determine if this course fulfills additional program or track outcomes, please see the department chair or program coordinator.
+```
+
+##### Evidence text 2 — conf 0.65, 230 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explanation of how skills are developed through multiple disciplinary perspectives
+
+_Source heading:_ **Interpret creative texts and/or works considering multiple interpretative perspectives and ways of reading. — Demonstrate an ability to adapt messages to contexts, audiences, and purposes using compet**
+
+```text
+Use language choices that are thoughtful, appropriate, and generally support the effectiveness of the message being communicated in varied contexts.
+
+The SU graduate will consider self, others, diverse societies and cultures, and the physical and natural worlds, while engaging with world problems, both contemporary and enduring.
+
+Outcomes, Goal 3:
+
+The SU graduate will be able to:
+
+Examine the complex dynamics of human systems by describing behavioral, interpersonal, or social phenomena both qualitatively and quantitatively and applying multiple perspectives in order to explain those phenomena. Examine the complex dynamics of natural systems by describing biological, chemical, or physical phenomena, interpreting data or patterns in data, and drawing conclusions using the appropriate scientific method. Examine the complex dynamics of human or natural systems by analyzing texts or cultural artifacts and applying multiple perspectives (cultural, ethical, or disciplinary) in order to communicate perceptions of human experience.
+
+Examine the complex dynamics of human systems by describing behavioral, interpersonal, or social phenomena both qualitatively and quantitatively and applying multiple perspectives in order to explain those phenomena.
+
+Examine the complex dynamics of natural systems by describing biological, chemical, or physical phenomena, interpreting data or patterns in data, and drawing conclusions using the appropriate scientific method.
+
+Examine the complex dynamics 
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.68, 332 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No supporting evidence documents (curriculum maps, course descriptions, syllabi, etc.) provided
+
+_Source heading:_ **Current Events**
+
+```text
+Each student will deliver a short oral summary of a recent (within the past year) news item pertaining to the topics covered in this course and pose 2 open-ended questions to the class for discussion.  Coverage should be succinct but thorough.
+
+2. Class Debates ( 10 %)
+
+10
+
+Each student will be assigned to one of three groups. The groups’ role will rotate during the semester.  Each group will have the opportunity of presenting support for or against a particular topic being considered.  The third group during each of these debates will listen to both sides and determine which side presented the most convincing evidence.
+
+3.  Response Papers (15%)
+
+(15%)
+
+Students will write 3 short (2-3 pages) response papers on topics assigned by the instructor. Papers can be opinion-based but must provide documentation supporting student’s opinion.
+
+4.  Cultural Autobiography (20%)
+
+(20%)
+
+Each student will write her/his own cultural autobiography to become more aware of one’s own background as well as how it impacts on relationships with others.  More details will be provided.
+
+5. Immigrant Interview (20%)
+
+(20%)
+
+Each student will interview someone who is an immigrant or whose parent/parents have immigrated to the U.S. and learn about that person’s experiences and how it affected the family.  Examples of questions will be given to students ahead of time.
+
+6. Group Presentation and Report (25%)
+
+(25%)
+
+Each student will choose a nation to study in-depth.  Students will examine how people f
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.68, 99 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of intentional integration of knowledge from multiple fields
+
+_Source heading:_ **SU Goal No. 4: Experiential Learning (EL) — SU Goal No. 4: Experiential Learning (EL)**
+
+```text
+The SU graduate will connect ideas and experiences from a variety of contexts, synthesizing and transferring learning to new, complex situations.
+
+Outcomes, Goal 4:
+
+The SU graduate will be able to:
+
+Compare life experiences and academic knowledge to infer situational similarities and differences and connect examples, facts, or theories from more than one field of study or perspective. Apply skills, abilities, theories, or methodologies gained in one situation to a new situation.
+
+Compare life experiences and academic knowledge to infer situational similarities and differences and connect examples, facts, or theories from more than one field of study or perspective.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[2][d].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative description of multidisciplinary approach to knowledge
-- ⚠️ No narrative description of interdisciplinary approach to knowledge
-- ⚠️ No narrative description of transdisciplinary approach to knowledge
-- ⚠️ No explanation of how theories are integrated across disciplines
-- ⚠️ No explanation of how skills are integrated across disciplines
-- ⚠️ No supporting evidence documents provided (curriculum maps, course syllabi, program descriptions, etc.)
-- ⚠️ No examples of how multiple disciplines are represented in coursework
-- ⚠️ No demonstration of how students engage with knowledge from multiple fields
+- ⚠️ No narrative provided at all—the self-study fails to explicitly describe the program's multidisciplinary, interdisciplinary, or transdisciplinary approach.
+- ⚠️ No clear articulation of how different disciplines or fields of knowledge are intentionally integrated across the curriculum.
+- ⚠️ Missing explanation of the theoretical or philosophical rationale for the chosen approach (why multidisciplinary vs. interdisciplinary vs. transdisciplinary).
+- ⚠️ No mapping showing which courses or program components represent which disciplinary perspectives or how they interconnect.
+- ⚠️ Limited evidence that the approach is systemic across the curriculum; evidence shows only isolated course outcomes and institutional goals rather than program-level curricular design.
+- ⚠️ No discussion of how students synthesize knowledge across disciplines or how the program structures that synthesis intentionally.
 
 ---
 
@@ -645,8 +1250,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Provide a matrix mapping the curriculum Standards (11-20) and Specifications to required courses. The information provided on the matrix must clearly reflect congruence with the information provided in the Self-Study narrative and the syllabi._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.35**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.35, delta=+0.35)_
 
 #### Narrative content
 _Destination: `Submission.narratives[2][e].content`_
@@ -655,11 +1260,100 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[2][e].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.68, 76 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No narrative provided explaining the philosophical base of the program
+
+_Source heading:_ **Having had prior experiences with needing help; giving back — Learn how to work with others — A stepping stone to graduate programs in counseling and social work — Interest in being a school counselor**
+
+```text
+What would our program motto be, if we had one? We make a difference Caring, Leaning, Growing, Giving Helping starts here
+
+What is our unique value proposition? What to students get from the program? Professional preparation/field experience The ability to apply theory to practice Caring faculty; personal mentoring A transformative experience; self-awareness and personal growth
+
+Professional preparation/field experience The ability to apply theory to practice Caring faculty; personal mentoring A transformative experience; self-awareness and personal growth
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[2][e].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Brochure — Standard 1e — Standard 1e — Enrollment and Gradua | `brochure-standard-1e-standard-1e-enrollment-and-graduate-tre` | 54 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/brochure-standard-1e-standard-1e-enrollment-and-graduate-tre.docx` |
+| 2 | Community College Degree Requirements Stevenson Equivalency  | `community-college-degree-requirements-stevenson-equivalency-` | 269 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/community-college-degree-requirements-stevenson-equivalency-.docx` |
+| 3 | Think critically about complex ethical issues. — Practice th | `think-critically-about-complex-ethical-issues-practice-the-h` | 194 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/think-critically-about-complex-ethical-issues-practice-the-h.docx` |
+| 4 | Paper contains obvious writing errors:  spelling and grammat | `paper-contains-obvious-writing-errors-spelling-and-grammatic` | 31 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/paper-contains-obvious-writing-errors-spelling-and-grammatic.docx` |
+
+_File 1 fills gap_: No curriculum matrix provided mapping Standards 11-20 to required courses
+
+```text
+2e
+
+or
+
+*Course offered ONLY during semester indicated (Fall or Spring).  SL = Service Learning course
+
+** Focused electives are courses related to Counseling & Human Services. A list of relevant courses is distributed each semester by the department. At least two focused electives must be CHS courses, if not in a track .
+```
+
+_File 2 fills gap_: No mapping of Specifications to required courses
+
+```text
+HEED 125 Ethics in Professional Practice Focused Elective Program Requirement 3 HUMS 110 Introduction to Human Services CHS 201 Human Services and Social Policy Program Requirement and GE Social Science 3 HUMS 122 Individual Counseling Techniques CHS 260 Counseling Strategies for Individuals Program Requirement 3 HUMS 123 Group Counseling Skills Meets CHS 315 Group Counseling Program Requirement 3 HUMS 124 Family Counseling CHS 101 Family Studies Program Requirement 3 HUMS 150 Community Resources and Partnerships Focused Elective Program Requirement 3 HUMS 250 Community Services Practicum Meets CHS 380 Internship Program Requirement 3 Elective: SU recommends HUMS 120 Medical Aspects of Chemical Dependency CHS 270 Psychopharmacology and Addictions Program Requirement 3 Elective (all options available will meet a focused elective requirement) Depends on course selected Program Requirement (Focused Elective) 3 PSYC 101 General Psychology PSY 101 Intro. to Psychology Program Requirement 3 PSYC 200 Lifespan Development PSY 108 Human Growth and Development Program Requirement 3 PSYC 203 Abnormal Psychology PSY 215 Psychopathology Program Requirement (Focused Elective) 3 ENGL 121 College Composition ENG 151 English Composition Program Requirement and GE 3 BIOL 101 General Biology I BIO 113 General Biology I GE lab science 4 Arts and Humanities Core Group A GE Humanities 3 Arts and Humanities Core Group B GE Humanities 3 Science Gen Ed Core GE math/science 3 Mathematics Gen Ed Core, 
+… (truncated, full DOCX preserves full body)
+```
+
+_File 3 fills gap_: No evidence of congruence between curriculum design and stated philosophy
+
+```text
+From 2019-2020 catalog: http://stevenson.smartcatalogiq.com/2019-2020/Undergraduate-Catalog/Academic-Information/The-SEE-Student-Learning-Goals-and-Outcomes
+
+http://stevenson.smartcatalogiq.com/2019-2020/Undergraduate-Catalog/Academic-Information/The-SEE-Student-Learning-Goals-and-Outcomes
+
+(see next page)
+
+Standard 12.g   Processes to effect social change through advocacy work at all levels of society including community development, community and grass-roots organizing, and local and global activism
+
+Include advocacy and social change for marginalized populations.  Such advocacy can occur in the context of a human service agency but also by assisting and empowering individuals and community groups/organizations/churches to effectively advocate for resources and services that address their needs and concerns.
+
+Standard 14.g  Knowledge, theory, and skills are included, analyzed, and applied in the curriculum in regard to:  performing and elementary community needs assessment:
+
+Include a greater emphasis in the program on community development in contrast to the strong emphasis on service delivery within human services agencies.
+
+Standard 14.h   Knowledge, theory, and skills are included, analyzed, and applied in the curriculum in regard to conducting a basic program evaluation:
+
+Include more direct instruction on designing and conducting a program evaluation and on understanding research, in order to effectively identify, understand, and utilize evidence based practices.
+
+Con
+… (truncated, full DOCX preserves full body)
+```
+
+_File 4 fills gap_: No syllabi or course documentation provided to verify alignment claims
+
+```text
+40-60
+
+0
+
+Telephone number:
+
+Stevenson email:
+
+Best times for phone contact:
+
+Office location:
+
+Prerequisite(s):
+
+Classroom or Studio Location:
+
+Scheduled Class Days and Time:
+
+Course Description:
+
+material to specific groups is highlighted.
+```
+
 #### Curriculum matrix cells
 _Destination: `CurriculumMatrix.cells[]`_
 
@@ -668,13 +1362,14 @@ _Destination: `CurriculumMatrix.cells[]`_
 - matrix: `(curriculum matrix table)`, col -1, code `(see matrix extractor)`, types [], depth `—`
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative provided explaining the philosophical base of the program
-- ⚠️ No curriculum matrix mapping Standards 11-20 to required courses
-- ⚠️ No matrix mapping Specifications to required courses
-- ⚠️ No syllabi provided to verify congruence between matrix and course documentation
-- ⚠️ No evidence of how program philosophy aligns with curriculum design
-- ⚠️ No demonstration of how Standards 11-20 are addressed across the curriculum
-- ⚠️ No evidence of intentional curriculum structure or sequencing based on philosophical framework
+- ⚠️ No narrative response provided at all—the self-study narrative section is completely absent
+- ⚠️ No curriculum matrix explicitly mapping Standards 11-20 and their associated Specifications to required courses
+- ⚠️ No clear congruence statement connecting narrative claims to syllabi content
+- ⚠️ Evidence 3 shows course equivalencies but does not map to CSHSE Standards 11-20 or their specific Specifications
+- ⚠️ Evidence 1 lists program values but does not connect them to philosophical base or curricular standards
+- ⚠️ Evidence 4 references Standards 12.g, 14.g, and 14.h but provides only feedback comments, not a mapping showing how curriculum addresses these
+- ⚠️ No evidence of syllabi being reviewed or cited to demonstrate congruence with stated philosophical base
+- ⚠️ Missing documentation of how electives and focused electives satisfy specific Standards/Specifications
 
 ---
 
@@ -684,8 +1379,8 @@ _Destination: `CurriculumMatrix.cells[]`_
 
 **Spec prompt:** _If the program is less than five years old, provide documentation that supported the initial development of the human services program (such as a community needs assessment)._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.15**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.15, delta=+0.15)_
 
 #### Narrative content
 _Destination: `Submission.narratives[3][a].content`_
@@ -694,18 +1389,28 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[3][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.55, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of community needs assessment submitted
+
+_Source heading:_ **ASSESSING THE NEEDS OF THE COMMUNITY — ASSESSING THE NEEDS OF THE COMMUNITY — The Community Tool Box and Conducting a Needs Assessment Meet in library computer lab — The Community Tool Box and — Condu**
+
+```text
+Week 5 9/25, 9/27 WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES Mehr, Chapter 6 (pp 102-110 only) Mehr Chapter 8 SEPT 27- Community Needs Assessment Action Plan – Questions due
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[3][a].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative explanation provided regarding program age or whether the less-than-five-years threshold applies
-- ⚠️ No documentation of community needs assessment submitted
-- ⚠️ No evidence of initial program development rationale or supporting research
-- ⚠️ No community stakeholder input or data presented
-- ⚠️ No documentation of how community needs informed curriculum or program design
-- ⚠️ Absence of any supporting materials (surveys, focus group reports, demographic data, letters of support, etc.)
+- ⚠️ No narrative statement provided explaining the program's founding date or age
+- ⚠️ No evidence that the program is actually less than five years old
+- ⚠️ No documentation of an actual community needs assessment (e.g., survey results, focus group reports, community data analysis, stakeholder interviews)
+- ⚠️ Evidence provided is only a syllabus excerpt mentioning a 'Community Needs Assessment Action Plan' as a coursework assignment, not evidence of institutional needs assessment supporting program development
+- ⚠️ No clear connection between any community assessment findings and the initial program design/development decisions
+- ⚠️ No supporting documents such as needs assessment reports, community partner letters, demographic analysis, or labor market data
+- ⚠️ Unclear whether the 'Action Plan' mentioned is a student assignment or institutional documentation
 
 ---
 
@@ -714,7 +1419,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _An Advisory Committee shall be established to provide feedback regarding local, state, and national trends and needs, policy changes, and to act as an advocate for the program. The committee should include individuals representing the human services field, such as field experience agencies, employing agencies, citizen advocacy groups, alums, current students, adjunct faculty, and other persons related to the field of human services. Provide the following: 1. A detailed description of the membership of the Advisory Committee (e.g. names, agencies, roles, relationship to program, etc.), 2. Minutes of advisory committee meetings from the last two years. 3. A narrative or table of how the committee interfaces with the program in relationship to specific issues._
 
 **Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.00, delta=-0.65)_
 
 #### Narrative content
 _Destination: `Submission.narratives[3][b].content`_
@@ -846,6 +1551,38 @@ _Source heading:_ **All members for the advisory board described current events 
 All members for the advisory board described current events at their places of employment. Lisa Boone gave an update on community college transfer issues and the status of a 4 year degree option, which is on hold for now. Recruitment efforts and conversion rates seem to benefit from personal touches. Arthur Hill reported that Kennedy Krieger has a new CEO and is seeking interns for their programs. Sheppard Pratt has a new administration and is offering diverse internship experiences, coordinated by new board member Tom Flis. He advocated for a focus on BCBA certification, since there is a great need. St. Elizabeth School is expanding its teaching space into the laundry building, which is being renovated. Debbie Boyce will be leaving the advisory board, but was thanked for her years of dedicated commitment to the Human Services program at SU. She brought Erika Rue to the meeting, who will be replacing her on the advisory board. Candice Edwards described governmental issues and reported that changes at the federal level have led to noticeable decreases in funding for TANF and other social welfare programs, as well as an increase in restrictions. There has been a crackdown on child support for non-custodial parents in the state and an increase in eligibility for daycare.
 ```
 
+##### Evidence text 3 — conf 0.72, 234 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Advisory Committee roster (Evidence 1) is incomplete - cuts off mid-entry at 'Erika' with no completion of final member(s), making full membership count unverifiable
+
+_Source heading:_ **Board Input and Suggestions — Board Input and Suggestions**
+
+```text
+All members for the advisory board described current events at their places of employment. Lisa Boone gave an update on community college transfer issues and the status of a 4 year degree option, which is on hold for now. Recruitment efforts and conversion rates seem to benefit from personal touches. Arthur Hill reported that Kennedy Krieger has a new CEO and is seeking interns for their programs. Sheppard Pratt has a new administration and is offering diverse internship experiences, coordinated by new board member Tom Flis. He advocated for a focus on BCBA certification, since there is a great need. St. Elizabeth School is expanding its teaching space into the laundry building, which is being renovated. Debbie Boyce will be leaving the advisory board, but was thanked for her years of dedicated commitment to the Human Services program at SU. She brought Erika Rue to the meeting, who will be replacing her on the advisory board. Candice Edwards described governmental issues and reported that changes at the federal level have led to noticeable decreases in funding for TANF and other social welfare programs, as well as an increase in restrictions. There has been a crackdown on child support for non-custodial parents in the state and an increase in eligibility for daycare.
+
+Upcoming Events : All are invited to the senior poster session on December 3 at 5:30 in the Pavilion on the Greenspring campus.
+```
+
+##### Evidence text 4 — conf 0.72, 59 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that staggered appointment cycles were followed or documented - specification requires multi-year terms and staggered replacement schedule; no appointment dates or term limits shown
+
+_Source heading:_ **Article I — Membership — Section I. Eligibility**
+
+```text
+Members of the Committee shall be full-time faculty members and shall be appointed by their respective schools.  Members must serve at least two years on the committee, and no school shall elect two new members in the same year.  The appointment cycles must be staggered so that only one new member from a school joins in the same year.
+```
+
+##### Evidence text 5 — conf 0.72, 32 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Limited detail on how the committee 'acts as an advocate for the program' - narrative focuses on feedback received but not on advocacy role execution
+
+_Source heading:_ **Write student recommendations for graduate school and employment — Consult with other program coordinators/department chairs — Write and disseminate annual department reports — Submit department Unit**
+
+```text
+Collaborate with admissions staff to promote the program Create written materials for use in recruitment Represent the program at admissions events Develop and maintain articulation agreements with 2-year colleges and graduate schools
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[3][b].linkedDocuments`_
 
@@ -878,19 +1615,65 @@ _AI rationale:_ The section describes data collection methods (field work, surve
 #### Supporting evidence — text
 _Destination: `Submission.narratives[3][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.58, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of what changing needs have been identified or addressed
+
+_Source heading:_ **ASSESSING THE NEEDS OF THE COMMUNITY — ASSESSING THE NEEDS OF THE COMMUNITY — The Community Tool Box and Conducting a Needs Assessment Meet in library computer lab — The Community Tool Box and — Condu**
+
+```text
+Week 5 9/25, 9/27 WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES Mehr, Chapter 6 (pp 102-110 only) Mehr Chapter 8 SEPT 27- Community Needs Assessment Action Plan – Questions due
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[3][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Upcoming Events — NEXT MEETING : Friday, February 16, 2018 a | `upcoming-events-next-meeting-friday-february-16-2018-at-8-30` | 303 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/upcoming-events-next-meeting-friday-february-16-2018-at-8-30.docx` |
+
+_File 1 fills gap_: No timeline or frequency for using these mechanisms to stay current with field changes
+
+```text
+4b
+
+Evaluation is a critical part of the Counseling & Human Services Department.  The needs of our communities, both our external community (agencies) and our internal community (students), are evaluated extensively and frequently through both quantitative and qualitative measures.
+
+1.  QUANTITATIVE MEASURES.  Quantitative measures and the timing for each are as follows:
+
+a.  Agency Evaluation by Student – At end of field placement
+
+b.  Course Evaluation by Student – At conclusion of fall and spring semester courses
+
+c.  Field Placement Prerequisites Checklist – Prior to fall and spring field placements
+
+d.  Graduate Acceptance by Graduate Programs – Annually at conclusion of spring semester
+
+e.  Graduate Evaluation by Employer – Every five years (1 year after graduation)
+
+f.  Program Evaluation by Senior – Immediately after completion of program
+
+g.  Program Evaluation/Student Field Placement Evaluation by Student and Field 	Instructor – At midpoint and end of field placement
+
+h.  Student Assessment by Faculty (Behavioral Indicators) – Commencing when student joins major.
+
+i.  University Faculty Supervisor Evaluation by Student – At end of field placement.
+
+2.  QUALITATIVE INFORMATION.  Qualitative information and the timing for each are as follows:
+
+a.  Advisory Board Meetings - One meeting per semester plus unscheduled 	communication
+
+b.  Faculty Evaluation by Department Chair – Course syllabi and objectives are reviewed every semester. Faculty members are observed when el
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence provided to support the narrative claims about field work activities or data collection
-- ⚠️ No description of HOW data collected is actually used to respond to changing field needs
-- ⚠️ No documentation of what 'changing needs' were identified or how the program modified curriculum/operations in response
-- ⚠️ No timeline or frequency specified for when these assessments occur
-- ⚠️ No examples of actual mechanisms implemented based on assessment findings
-- ⚠️ No demonstration that this process is systematic and ongoing, not ad hoc
-- ⚠️ No evidence of stakeholder involvement in interpreting or acting on findings
+- ⚠️ Narrative does not explicitly describe 'mechanisms used to respond to changing needs' — it only describes how data is collected, not how findings drive curricular or programmatic changes
+- ⚠️ No evidence of a feedback loop: narrative lacks description of how community assessment data leads to decisions, modifications, or responsive action
+- ⚠️ Supporting evidence (Evidence 1) is incomplete/truncated and does not clearly document a mechanism for responding to needs
+- ⚠️ Evidence 2 lists evaluation measures but does not specify which ones directly assess 'changing needs in the human services field' or how results trigger program response
+- ⚠️ No mention of how external stakeholder input (e.g., Advisory Board) directly influences curriculum, course content, or program design in response to field changes
+- ⚠️ Specification asks for 'other mechanisms' (implying mechanisms beyond the primary community assessment); the narrative focuses only on data collection, not alternative or supplementary response mechanisms
 
 ---
 
@@ -1075,18 +1858,31 @@ We will have four tests/exams.  Each test will combine multiple-choice and essay
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[4][a].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | STEVENSON — STEVENSON — U N I V E R S I T Y — U N I V E R S  | `stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i-t-y-` | 102 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i-t-y-.docx` |
+
+_File 1 fills gap_: LLM returned non-JSON response
+
+```text
+(Summary of Results 2018-2019 Academic Year – 24 Seniors Responded)
+
+Part 1 – Please respond anonymously to the following questions.  Please explain your response for any item with which you disagree.
+
+Item Strongly Agree Agree Somewhat No Opinion Disagree Somewhat Strongly Disagree 1 This program fulfilled my expectations. 92% 8% 2 The topics/courses were appropriate. 88% 12% 3 I received appropriate academic support from the Human Services faculty. 96% 4% 4 My field experiences supported concepts covered in class. 84% 16% 5 The program helped me develop self- understanding. 88% 12% 6 I would recommend this program to other students/professionals. 96% 4%
+```
+
 #### Gaps still remaining (user must address manually after import)
 - ⚠️ LLM returned non-JSON response
 
 ---
 
-### `4.b` 🟡 — Program Evaluation
+### `4.b` 🔴 — Program Evaluation
 
 **Spec prompt:** _The program shall conduct a formal program evaluation at least every five years. The formal evaluation shall include student surveys, agency surveys, graduate follow-up surveys, active participation of the advisory committee, involvement of agencies where students are in field placements, course and faculty evaluations, and evaluative data mandated or conducted by the institution. Provide the following: 1. A history of program evaluations 2. A description of the methodology 3. A summative analysis of the most recent evaluation 4. A description of how and in what way the evaluation resulted in any change._
 
-**Final coverage verdict:** covered=**False**, score=**0.52**
-_(first-pass: covered=False, score=0.52; second-pass after gap-fill: covered=False, score=0.52, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[4][b].content`_
@@ -1263,18 +2059,22 @@ No Opinion
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[4][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | STEVENSON — STEVENSON — U N I V E R S I T Y — U N I V E R S  | `stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i-t-y-` | 102 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i-t-y-.docx` |
+
+_File 1 fills gap_: LLM returned non-JSON response
+
+```text
+(Summary of Results 2018-2019 Academic Year – 24 Seniors Responded)
+
+Part 1 – Please respond anonymously to the following questions.  Please explain your response for any item with which you disagree.
+
+Item Strongly Agree Agree Somewhat No Opinion Disagree Somewhat Strongly Disagree 1 This program fulfilled my expectations. 92% 8% 2 The topics/courses were appropriate. 88% 12% 3 I received appropriate academic support from the Human Services faculty. 96% 4% 4 My field experiences supported concepts covered in class. 84% 16% 5 The program helped me develop self- understanding. 88% 12% 6 I would recommend this program to other students/professionals. 96% 4%
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No clear history of program evaluations provided—narrative claims 'annual' evaluations since 2005 but provides only one evaluation year (2018-2019) with no dates, frequency documentation, or timeline of prior evaluations
-- ⚠️ Agency surveys are mentioned as part of methodology but no actual agency survey data, results, or analysis is provided in supporting evidence
-- ⚠️ Graduate follow-up surveys are referenced but no actual graduate follow-up survey tool, data, or employer feedback is presented in evidence
-- ⚠️ Active participation of advisory committee is claimed but no documentation of advisory committee meeting minutes, recommendations, or their specific contributions to the evaluation process
-- ⚠️ No summative analysis of the most recent evaluation is provided—narrative includes student comments and quotes but lacks systematic analysis of quantitative results (e.g., percentages meeting standards, trend analysis)
-- ⚠️ No clear description of how evaluation results led to specific, documented program changes—narrative discusses 'possibility of reducing hours' and mentions student suggestions for new tracks but provides no evidence of implemented decisions or outcomes
-- ⚠️ Evaluation tools referenced in appendix are not provided as supporting evidence (Program Evaluation Plan, copies of evaluation instruments)
-- ⚠️ Course and faculty evaluations are mentioned as occurring but no actual data or results from these evaluations are included
-- ⚠️ Evaluative data mandated or conducted by the institution is not clearly identified or included
-- ⚠️ Supporting evidence tables show only field placement agency/supervisor evaluations; student surveys, graduate surveys, employer evaluations, and other required evaluation sources are absent
+- ⚠️ LLM returned non-JSON response
 
 ---
 
@@ -1282,8 +2082,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _The program must provide reliable information on its performance, including student achievement, to the public for the last two years. [NOTE: This Specification relates to accreditation standards or policies that require institutions or programs to provide timely, readily accessible, accurate, and consistent aggregate information to the public about institutional or programmatic performance and student achievement, as the institution or program determines such information. (Paragraph 12 (B)(1), 2019 CHEA Recognition Policy and Procedures)] Provide the following: 1. An active link to student achievement indicators on the Program’s website. 2. Aggregate data as evidence of student achievement. Include as many of the following as available: enrollment trends, retention, student learning outcomes, graduation rates, grade point average, student satisfaction, agency feedback, graduate transfer rates, graduate school or employment data, and alum surveys._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.35**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.35, delta=+0.35)_
 
 #### Narrative content
 _Destination: `Submission.narratives[4][c].content`_
@@ -1578,22 +2378,42 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | (data table) | `data-table` | 520 | 0.87 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
-| 2 | (data table) | `data-table` | 441 | 0.82 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
+| 1 | (data table) | `data-table` | 520 | 0.87 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
+| 2 | (data table) | `data-table` | 441 | 0.82 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
+| 3 | STEVENSON — STEVENSON — U N I V E R S I T Y — U N I V E R S  | `stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i-t-y-` | 102 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i-t-y-.docx` |
+
+_File 3 fills gap_: LLM returned non-JSON response
+
+```text
+(Summary of Results 2018-2019 Academic Year – 24 Seniors Responded)
+
+Part 1 – Please respond anonymously to the following questions.  Please explain your response for any item with which you disagree.
+
+Item Strongly Agree Agree Somewhat No Opinion Disagree Somewhat Strongly Disagree 1 This program fulfilled my expectations. 92% 8% 2 The topics/courses were appropriate. 88% 12% 3 I received appropriate academic support from the Human Services faculty. 96% 4% 4 My field experiences supported concepts covered in class. 84% 16% 5 The program helped me develop self- understanding. 88% 12% 6 I would recommend this program to other students/professionals. 96% 4%
+```
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ LLM returned non-JSON response
+- ⚠️ No active, functional link provided to the website page containing student achievement indicators; narrative mentions 'here' but link is not visible or testable in submission
+- ⚠️ No retention data provided for either of the two required years
+- ⚠️ No graduation rates provided for either year
+- ⚠️ No grade point average (GPA) aggregate data provided; only grading scale conversion tables submitted without actual student GPA outcomes
+- ⚠️ No student satisfaction data for the full two-year period; only one partial 2015 alumni survey and one 2018-2019 senior satisfaction survey included (inconsistent timeframe coverage)
+- ⚠️ No agency feedback data provided
+- ⚠️ Enrollment trend data incomplete; multiple snapshots mentioned (83 majors/16 minors, 83 majors/20 minors, 87 majors/20 minors) but no clear two-year comparison table or trend analysis with specific dates
+- ⚠️ Alumni employment and graduate school data incomplete; only fragmented 2015 survey results provided without clear two-year comparative data
+- ⚠️ No data on transfer rates to graduate programs
+- ⚠️ Evidence items 1-6 are duplicate grading scale tables unrelated to actual student achievement outcomes
 
 ---
 
 ## Standard 5
 
-### `5.a` 🔴 — Policies and Procedures for Admitting, Retaining, and Dismissing Students
+### `5.a` 🟡 — Policies and Procedures for Admitting, Retaining, and Dismissing Students
 
 **Spec prompt:** _Provide documentation of policies regarding the selection and admission of students._
 
-**Final coverage verdict:** covered=**False**, score=**0.35**
-_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.35, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.55**
+_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.55, delta=+0.20)_
 
 #### Narrative content
 _Destination: `Submission.narratives[5][a].content`_
@@ -1651,19 +2471,102 @@ Attendance   Each student is responsible for his or her own class attendance and
 #### Supporting evidence — text
 _Destination: `Submission.narratives[5][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 65 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of formal admission policies provided—narrative only references external University Catalog without attaching or excerpting the actual admission criteria, procedures, or standards
+
+_Source heading:_ **Certified Associate Counselor-Alcohol & Drug (CAC-AD) — DEPARTMENT PROCEDURES — DEPARTMENT PROCEDURES — ADMISSION PROCEDURES**
+
+```text
+SECTION II:
+
+Once admitted to Stevenson University, students may declare a major in Counseling & Human Services. There are no departmental admissions requirements. Students transferring from another major within the university (internal transfers) and students transferring from another institution (external transfers) should meet with the department chair to discuss how previously completed courses will fit into the major and to develop a plan of study.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[5][a].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | PREREQUISITES FOR FIELD PLACEMENTS — PREREQUISITES FOR FIELD | `prerequisites-for-field-placements-prerequisites-for-field-p` | 80 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/prerequisites-for-field-placements-prerequisites-for-field-p.docx` |
+| 2 | ARTICLE I.  SPONSOR RESPONSIBILITIES — ARTICLE I.  SPONSOR R | `article-i-sponsor-responsibilities-article-i-sponsor-respons` | 342 | 0.75 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/article-i-sponsor-responsibilities-article-i-sponsor-respons.docx` |
+
+_File 1 fills gap_: No evidence of program-specific admission requirements or screening criteria (e.g., prerequisite courses, GPA minimums, application materials, interviews)
+
+```text
+□ CHS 220
+
+□
+
+□ CHS 315/515 □ CHS 360
+
+□
+
+□ Demonstration of respect for others, interpersonal skills, and professionalism*
+
+□
+
+□ Permission of the Instructor
+
+□
+
+□ CHS 340/540
+
+□
+
+□ CHS 380
+
+□
+
+□ CHS 430
+
+□
+
+□ GPA of 2.5 or higher
+
+□
+
+□ Minimum grade of "C" in all required human services courses
+
+□
+
+□ Demonstration of  respect for others, interpersonal skills, and professionalism*
+
+□
+
+□ Permission of the Instructor
+
+□
+
+[ Handbook ]Standard 8a
+```
+
+_File 2 fills gap_: No documentation of how students are 'selected' for the program—selection process/criteria entirely absent
+
+```text
+A.         Selection.  The selection of students who are to participate in the Education Program at the HEALTH SYSTEM is to be made by the Sponsor in coordination with Health System’s manager of the Education Program in accordance with requirements as set forth below.
+
+1. The SPONSOR shall verify that the students meet the academic requirements of the SPONSOR for eligibility for "internship," "practicum" or field work" experiences for which they shall receive academic credit.
+
+2.  The SPONSOR shall warrant to the HEALTH SYSTEM that each student has on record with the SPONSOR a complete physical, showing general good health, freedom from tuberculosis and no other infectious diseases.  Upon request from the HEALTH SYSTEM, a copy of records reflecting the foregoing shall be made available to HEALTH SYSTEM.
+
+3. The SPONSOR shall inform each student that he/she must make formal application to the Education Program and be interviewed by the manager of the Education Program.  If suitable for placement, student must then have a successful interview with clinical staff in the area of assignment.
+
+4.  The SPONSOR shall inform each student that he/she must attend a three-hour orientation and must comply with all other requirements of the Sponsor for the Education Program.
+
+5.  The SPONSOR and the HEALTH SYSTEM shall select students without regard to race, sex, religion, color, national origin, or physical handicap.
+
+6.  The SPONSOR shall base selection of the students upon additional cr
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No direct link or copy of actual University admission policies/procedures provided as supporting evidence; only a reference to 'see online catalog'
-- ⚠️ Admission criteria not specified (e.g., GPA requirements, prerequisite courses, standardized test scores, or other selection benchmarks)
-- ⚠️ No documentation of how the program selects or evaluates applicants beyond relying on university-wide admission
-- ⚠️ No evidence of program-specific admission application materials or forms
-- ⚠️ Conflicting/unclear admission structure: narrative states students can enter 'at the beginning of first year or at any point throughout their college career' but lacks detail on how mid-program entry is evaluated or managed
-- ⚠️ No supporting evidence attached; all statements are unsubstantiated narrative only
-- ⚠️ Health insurance and physical exam requirements appear to be conditions of participation rather than admission, and lack clear integration into formal admission policy
+- ⚠️ Narrative defers entirely to 'University's admission policies' without providing or summarizing those policies; reviewer cannot evaluate program-specific admission documentation without seeing actual university catalog language
+- ⚠️ No documentation of criteria for selecting students INTO the Counseling & Human Services major itself—Evidence 1 states 'There are no departmental admissions requirements,' but this lacks detail on how/whether applications are reviewed
+- ⚠️ Missing documented selection criteria for admission to the major (e.g., GPA minimums, prerequisite courses, essay/interview requirements, professional suitability assessments)
+- ⚠️ Field placement prerequisites (Evidence 2) are listed but lack accompanying narrative explaining how these are communicated to students or enforced during admission to those experiences
+- ⚠️ No evidence of written admission policy document specific to the baccalaureate program; references to health system agreements and attendance policies do not constitute program admission documentation
+- ⚠️ Admission timing statement ('beginning of first year or at any point') lacks clarity on how mid-program entry students are vetted and assessed for prerequisite knowledge
 
 ---
 
@@ -1671,8 +2574,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Provide documentation of policies and procedures for referring students for personal and academic assistance. These policies must be consistent with the institution’s policies._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.65**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.65, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[5][b].content`_
@@ -1807,17 +2710,132 @@ _Source heading:_ **The Wellness Center - Stress is a normal part of being a stu
 The Wellness Center - Stress is a normal part of being a student. However, if personal, emotional, 		or physical concerns are interfering with your ability to be successful at Stevenson, please call the 		Wellness Center at 443-352-4200 to make an appointment. More information about the Wellness 		Center can be found at: http://www.stevenson.edu/student-life/health-wellness/
 ```
 
+##### Evidence text 3 — conf 0.62, 140 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Lacks a formal, step-by-step referral protocol specifying when, how, and by whom students should be referred for personal and academic assistance.
+
+_Source heading:_ **Professional Expectations Concerns — Professional Expectations Concerns**
+
+```text
+In the event that there are any concerns about professionalism, faculty will use the following form to document the concern and develop with the student a plan for improving the particular professional skills or behaviors that need work.
+
+The Counseling & Human Services Department is committed to helping all students in the program to develop appropriate and effective professional skills, attitudes and behaviors. This is an ongoing process that is never fully complete; there is always room for improvement. The purpose of this form is to document a concern about professional expectations and establish a plan for improvement.
+
+Student’s Name:
+
+Faculty Member’s Name:
+
+The following Professional Expectations have been identified as issues that need to be addressed (highlight or circle all that apply). Students must meet these expectations in order to be eligible for Field Placements (Internship and Practicum) .
+```
+
+##### Evidence text 4 — conf 0.65, 103 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documented criteria or triggers for initiating referrals (e.g., poor academic performance thresholds, attendance policies triggering referral).
+
+_Source heading:_ **A.  	Arrives punctually for classes and meetings. — B.  	Meets deadlines for assignments — C.  	Accepts constructive criticism and attempts to make appropriate adjustments — D.  	Demonstrates ethical**
+
+```text
+E.  	Communicates with CHS faculty clearly and in a timely manner about issues related to performance in class and field placements.
+
+In accordance with the Department’s obligation under CSHSE accreditation to prepare students who are “fit for the profession”, faculty members who have a concern about a student related to any of these indicators will document the concern with specific behaviors and will discuss their concern with the individual student. Serious or chronic concerns will be discussed by department faculty and students may be judged ineligible for internship or practicum based on failure to meet behavioral indicator prerequisites.
+
+( Student Handbook Statement )
+```
+
+##### Evidence text 5 — conf 0.62, 169 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing documentation of the Early Alert notification system mentioned in the narrative—no actual policy document or procedures are provided.
+
+_Source heading:_ **List of Minutes — List of Minutes — Minutes — Minutes — Counseling & Human Services Department Meeting — Counseling & Human Services Department Meeting — Friday, March 1, 2019 — John Rosicky			Tom Swi**
+
+```text
+12:00 – 1:30; Phone Conference
+
+Present:
+
+Nicole Rogers is having significant issues with her roommate who has a 30-year old boyfriend who stays frequently in the room. Loryn recognized this from class conversations and met with Nicole and Lauri. John has reported the issue to Sarah Mansfield in residence life. Alex Lutz has been having some issues in practicum, not turning in journals/reflections on time. The University Supervisor has expressed some concern. John will follow up in seminar. Kevin Joppy continues to have poor attendance and student work habits in CHS 201 with Loryn. He did not register for to re-take CHS 101 this semester. Lauri recommended an Early Alert, continuing to push him to meet expectations, and will follow up with him in advising.
+
+Nicole Rogers is having significant issues with her roommate who has a 30-year old boyfriend who stays frequently in the room. Loryn recognized this from class conversations and met with Nicole and Lauri. John has reported the issue to Sarah Mansfield in residence life.
+```
+
+##### Evidence text 6 — conf 0.62, 75 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of documented follow-up procedures, timelines, or communication protocols between faculty, Office of Student Success, and the Wellness Center.
+
+_Source heading:_ **Nicole Rogers — Alex Lutz**
+
+```text
+Alex Lutz has been having some issues in practicum, not turning in journals/reflections on time. The University Supervisor has expressed some concern. John will follow up in seminar.
+
+Kevin Joppy continues to have poor attendance and student work habits in CHS 201 with Loryn. He did not register for to re-take CHS 101 this semester. Lauri recommended an Early Alert, continuing to push him to meet expectations, and will follow up with him in advising.
+```
+
+##### Evidence text 7 — conf 0.62, 136 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Lacks documentation of student consent, privacy, and confidentiality procedures related to referrals.
+
+_Source heading:_ **Sexual or romantic relationships — STANDARD 7 Human service professionals ensure that their values or biases are not imposed upon their clients.**
+
+```text
+values or biases are not imposed
+
+STANDARD 8 Human service professionals protect the integrity, safety, and security of client records . Client information in written or electronic form that is shared with other professionals must have the client’s prior written consent except in the course of professional supervision or when legally obliged or permitted to share such information.
+
+integrity, safety, and security of client records
+
+STANDARD 9 When providing services through the use of technology, human service professionals take precautions to ensure and maintain confidentiality and comply with all relevant laws and requirements regarding storing, transmitting, and retrieving data . In addition, human service professionals ensure that clients are aware of any issues and concerns related to confidentiality, service issues, and how technology might negatively or positively impact the helping relationship.
+
+storing, transmitting, and retrieving data
+```
+
+##### Evidence text 8 — conf 0.62, 404 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Evidence items focus on disability accommodations and wellness resources but do not address the referral procedures themselves.
+
+_Source heading:_ **NOHS Conference, Oct. 25-27 — Admissions Events Open House, 9/22 (John) Open House, 10/13 (Mayaugust) Open House, 11/17 — Open House, 9/22 (John) Open House, 10/13 (Mayaugust) Open House, 11/17 — Open**
+
+```text
+12:00 – 1:30; LRC 104
+
+Present:
+
+Mayaugust is having a difficult time placing Destiny Stokes at an internship site. Destiny has interviewed at three places and been turned down. She expresses interests in administrative positions, but has not always followed through with suggested placements. She is not interested in ARC. We talked extensively about the issues involved and several suggestions were made about potential placement sites. Destiny has interviewed at Progress Unlimited and thought the interview went well. We’ll see how it goes. Kariza Govcalves was denied placement at the Shafer Center due to concerns expressed about her safety in working with potentially volatile youths given her visual impairment. The SU Disabilities Office is aware of this issue and based on concerns about discrimination has requested that we not use the Shafer Center. John will follow up with the new director of disabilities, Katey St. Clair Earle. Kariza is progressing towards a placement at St. Elizabeth School. Jaylin Johnson continues to be a concern based on inconsistent attendance. Mayaugust indicated that Alexis Grimes continues to be a concern. She has responded only when absolutely necessary. She considered switching to Interdisciplinary Studies and spoke with Dr. Horrocks, but decided to continue with Human Services. She still does not have a confirmed placement. It was pointed out that the responsibility needs to be on her to do the work needed to secure a placement. Noel Martin has 
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[5][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | ARTICLE II.  HEALTH SYSTEM RESPONSIBILITIES — ARTICLE II.  H | `article-ii-health-system-responsibilities-article-ii-health-` | 337 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/article-ii-health-system-responsibilities-article-ii-health-.docx` |
+
+_File 1 fills gap_: No formal policy document addressing retention or dismissal procedures in relation to referral outcomes.
+
+```text
+1.  The HEALTH SYSTEM shall be responsible for and retain absolute control over the organization, administration, operation, and financing of its services and the implementation of its Education Program.
+
+2.  The HEALTH SYSTEM shall provide each student with clinical training and service opportunities of an extent, quality, and range as are appropriate for student clinical training.
+
+3.  The SPONSOR shall be informed regarding significant changes in clinical facilities which may affect the SPONSOR.
+
+4.  The HEALTH SYSTEM shall retain the right to require the removal from, and deny access to, its facility of any student whose professional or social conduct is, in the opinion of the HEALTH SYSTEM, disruptive, disreputable, or otherwise destructive of the established practices of the HEALTH SYSTEM or its standing in the community.  Such action shall be reported promptly to SPONSOR's contact person as noted in III, F, below.
+
+B.         Accreditation.  The HEALTH SYSTEM shall retain its accreditation by the Joint Commission for the Accreditation of Hospitals or similar appropriate accrediting agency.
+
+C.         Medical Services.  The HEALTH SYSTEM agrees to furnish first aid for students, as available.  The parties acknowledge that the HEALTH SYSTEM is not a general acute care facility and does not maintain an acute care emergency room.
+
+D.         Hepatitis B.        The Centers for Disease Control recommend that all personnel working in a patient care environment receive the H
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No formal, documented referral procedures or referral form(s) explicitly provided as evidence. The narrative states 'no referral form is used' but does not document the alternative procedure in writing.
-- ⚠️ Missing explicit written policies and procedures specific to the Counseling & Human Services Program for referring students for personal and academic assistance. Evidence shows university-wide resources but not program-level policies.
-- ⚠️ No documentation of the actual Early Alert notification system mentioned in the narrative—procedures, triggers, or form are not provided as supporting evidence.
-- ⚠️ Missing clarity on the faculty-to-Office of Student Success referral process: no written protocol, template, or step-by-step procedure provided.
-- ⚠️ No documented procedures for how concerns discussed in faculty meetings are formally documented and referred; the process appears informal.
-- ⚠️ Limited evidence of how wellness referrals are tracked and communicated back to faculty ('keeping faculty members informed' is mentioned but not documented with evidence).
+- ⚠️ No formal, written referral procedures or referral form documented—narrative states 'no referral form is used,' which contradicts the specification's requirement for 'documentation of policies and procedures for referring students'
+- ⚠️ Missing explicit written policy on HOW and WHEN faculty should refer students (triggers, timelines, process steps)
+- ⚠️ No documented protocol for follow-up after referral is made—specification requires procedures, not just that follow-up occurs
+- ⚠️ Lack of formal referral tracking or documentation system described—no evidence of how referrals are logged or monitored
+- ⚠️ Missing written criteria for determining what constitutes need for personal vs. academic assistance referral
+- ⚠️ No evidence of consistency/alignment between program-specific referral procedures and institution-wide referral policies (specification requires policies 'must be consistent with the institution's policies')
 
 ---
 
@@ -1825,8 +2843,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Provide documentation of written policies and procedures describing the due process for probation, remediation, dismissal, appeal, and grievance procedures affecting students._
 
-**Final coverage verdict:** covered=**False**, score=**0.25**
-_(first-pass: covered=False, score=0.25; second-pass after gap-fill: covered=False, score=0.25, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.25; second-pass after gap-fill: covered=False, score=0.45, delta=+0.20)_
 
 #### Narrative content
 _Destination: `Submission.narratives[5][c].content`_
@@ -1870,20 +2888,113 @@ _Source heading:_ **The above Stevenson grading system will be used. Because you
 The above Stevenson grading system will be used. Because you have all semester to earn points, I do NOT negotiate grades at the end of the semester. Furthermore, I will NOT offer any extra credit assignment. I would be happy to talk to you about ways to improve your grade throughout the semester!
 ```
 
+##### Evidence text 3 — conf 0.62, 140 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of written probation procedures is provided or referenced with specificity
+
+_Source heading:_ **Professional Expectations Concerns — Professional Expectations Concerns**
+
+```text
+In the event that there are any concerns about professionalism, faculty will use the following form to document the concern and develop with the student a plan for improving the particular professional skills or behaviors that need work.
+
+The Counseling & Human Services Department is committed to helping all students in the program to develop appropriate and effective professional skills, attitudes and behaviors. This is an ongoing process that is never fully complete; there is always room for improvement. The purpose of this form is to document a concern about professional expectations and establish a plan for improvement.
+
+Student’s Name:
+
+Faculty Member’s Name:
+
+The following Professional Expectations have been identified as issues that need to be addressed (highlight or circle all that apply). Students must meet these expectations in order to be eligible for Field Placements (Internship and Practicum) .
+```
+
+##### Evidence text 4 — conf 0.65, 36 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of remediation procedures is provided (remediation is entirely absent from narrative and evidence)
+
+_Source heading:_ **F.  	Presents self and program in a positive manner.**
+
+```text
+Description of the specific behaviors that have raised this concern:
+
+specific
+
+Professional Development Plan . In order to meet professional expectations, the following plan has been agreed upon (include a timeline for reviewing progress, as appropriate):
+```
+
+##### Evidence text 5 — conf 0.72, 139 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of dismissal procedures specific to the counseling program is provided; only a vague reference to university policy
+
+_Source heading:_ **DISMISSAL PROCEDURES**
+
+```text
+Satisfactory performance in CHS 380 (internship and accompanying seminar) is required for the practicum (CHS 440).  Unsatisfactory performance (a grade below C) in CHS 380 will result in ineligibility for CHS 440.  Students whose performance in CHS 380 is unsatisfactory are permitted to repeat the course.  A second grade below C in CHS 380 will result in dismissal from the major.
+
+In order to be eligible for the practicum (CHS 440), students must have a 2.5 overall GPA and demonstrate adequate professionalism, as assessed by faculty. Any concerns related to meeting professional expectations will be communicated to students (see next section). Students who do not meet professional expectations, or have below a 2.5 GPA by the end of the semester before their practicum placement, will not be allowed to register for CHS 440 and may need to switch majors.
+```
+
+##### Evidence text 6 — conf 0.62, 103 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Evidence provided (grading policy, health system agreement excerpt) does not address probation, remediation, dismissal, appeal, or grievance procedures
+
+_Source heading:_ **A.  	Arrives punctually for classes and meetings. — B.  	Meets deadlines for assignments — C.  	Accepts constructive criticism and attempts to make appropriate adjustments — D.  	Demonstrates ethical**
+
+```text
+E.  	Communicates with CHS faculty clearly and in a timely manner about issues related to performance in class and field placements.
+
+In accordance with the Department’s obligation under CSHSE accreditation to prepare students who are “fit for the profession”, faculty members who have a concern about a student related to any of these indicators will document the concern with specific behaviors and will discuss their concern with the individual student. Serious or chronic concerns will be discussed by department faculty and students may be judged ineligible for internship or practicum based on failure to meet behavioral indicator prerequisites.
+
+( Student Handbook Statement )
+```
+
+##### Evidence text 7 — conf 0.72, 337 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence demonstrates how students access or are informed of these policies
+
+_Source heading:_ **ARTICLE II.  HEALTH SYSTEM RESPONSIBILITIES — ARTICLE II.  HEALTH SYSTEM RESPONSIBILITIES — A.         HEALTH SYSTEM Services and Facilities.**
+
+```text
+1.  The HEALTH SYSTEM shall be responsible for and retain absolute control over the organization, administration, operation, and financing of its services and the implementation of its Education Program.
+
+2.  The HEALTH SYSTEM shall provide each student with clinical training and service opportunities of an extent, quality, and range as are appropriate for student clinical training.
+
+3.  The SPONSOR shall be informed regarding significant changes in clinical facilities which may affect the SPONSOR.
+
+4.  The HEALTH SYSTEM shall retain the right to require the removal from, and deny access to, its facility of any student whose professional or social conduct is, in the opinion of the HEALTH SYSTEM, disruptive, disreputable, or otherwise destructive of the established practices of the HEALTH SYSTEM or its standing in the community.  Such action shall be reported promptly to SPONSOR's contact person as noted in III, F, below.
+
+B.         Accreditation.  The HEALTH SYSTEM shall retain its accreditation by the Joint Commission for the Accreditation of Hospitals or similar appropriate accrediting agency.
+
+C.         Medical Services.  The HEALTH SYSTEM agrees to furnish first aid for students, as available.  The parties acknowledge that the HEALTH SYSTEM is not a general acute care facility and does not maintain an acute care emergency room.
+
+D.         Hepatitis B.        The Centers for Disease Control recommend that all personnel working in a patient care environment receive the H
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[5][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Student Handbook — Department Mission, Goals and Objectives  | `student-handbook-department-mission-goals-and-objectives-dep` | 81 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/student-handbook-department-mission-goals-and-objectives-dep.docx` |
+
+_File 1 fills gap_: No documentation of grievance procedures is provided; only a reference to an external university manual is cited
+
+```text
+Department Mission, Goals and Objectives Curriculum Course Descriptions Graduate School and Career Opportunities Field Placement Prerequisites and Guidelines Avoiding Plagiarism NOHS Ethical Standards
+
+Field Placement Handbook Overview of Field Placements Prerequisites and Procedures Resolving Issues Agency Evaluation by Student University Supervisor Evaluation by Student Student Field Placement Evaluation New Major Form Department Faculty Meeting Minutes 2018-2019
+
+Field Placement Handbook Overview of Field Placements Prerequisites and Procedures Resolving Issues Agency Evaluation by Student University Supervisor Evaluation by Student Student Field Placement Evaluation
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No documentation of written probation policies or procedures provided
-- ⚠️ No documentation of remediation procedures provided (remediation explicitly required in Specification 5.c)
-- ⚠️ No documentation of dismissal due process procedures provided beyond vague reference to university manual
-- ⚠️ No documentation of appeal procedures specific to the counseling program provided
-- ⚠️ No documentation of grievance procedures specific to the counseling program provided
-- ⚠️ Evidence items do not substantiate the narrative claims—Evidence 1 is an unrelated health system confidentiality clause, Evidence 2 is a grading policy unrelated to due process
-- ⚠️ The thumb drive reference claims policies are 'included here' but no actual policy documents are attached or described
-- ⚠️ Narrative relies entirely on deferral to university-level policies without program-specific documentation
-- ⚠️ Late assignment and missed exam policies (Evidence 2, narrative) do not address probation, remediation, dismissal, appeal, or grievance procedures
+- ⚠️ No documentation of written probation procedures—specification explicitly requires 'probation' language; only dismissal is addressed
+- ⚠️ No documented remediation procedures—specification explicitly lists 'remediation' as a required element; only professional development plans are mentioned informally
+- ⚠️ No appeal procedures documented—specification requires 'appeal' procedures; narrative references university policy manual but no actual appeal process is provided in evidence
+- ⚠️ No grievance procedures documented—specification requires 'grievance procedures'; only a professional expectations concern form is provided, which is not a grievance mechanism
+- ⚠️ University Policy Manual (Vol. V) referenced but not attached as supporting evidence—narrative relies on external document not included in submission
+- ⚠️ No due process documentation specific to the CHS program—specification asks for program documentation, not generic university references
+- ⚠️ Late assignment/exam policies (Evidence 2) are academic policies, not student conduct due process procedures relevant to probation/dismissal
+- ⚠️ Health system training agreement (Evidence 1, 8) addresses removal from clinical sites but does not establish program-level probation, appeal, or grievance procedures
 
 ---
 
@@ -2047,6 +3158,21 @@ _Source heading:_ **Participation & Professionalism (10% of your total grade) Yo
 Participation & Professionalism (10% of your total grade) Your participation grade will be based on your professionalism, engagement, and contribution in large group and small group discussions and activities in class. There will be no opportunities to make up participation points. You must be present (both physically and mentally) in class in order to receive participation points. You will be given some early feedback regarding your participation and professionalism before the middle of the semester.  We are all colleagues and collaborators in learning. Therefore, we should all treat each other with the consideration and respect of professionals. Therefore, you will lose points for any non-professional activities. These include all disruptive and disrespectful behaviors including: using your computer device (e.g., laptop, cell phone, tablet, etc.) without approval from instructor (also see Policies on p.4 of the syllabus); tardiness or leaving class early;  missing appointments with faculty (or peers);  failing to work collaboratively and respectfully with peers;  participating in “extracurricular” conversations during class.
 ```
 
+##### Evidence text 3 — conf 0.68, 404 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ LLM returned non-JSON response
+
+_Source heading:_ **NOHS Conference, Oct. 25-27 — Admissions Events Open House, 9/22 (John) Open House, 10/13 (Mayaugust) Open House, 11/17 — Open House, 9/22 (John) Open House, 10/13 (Mayaugust) Open House, 11/17 — Open**
+
+```text
+12:00 – 1:30; LRC 104
+
+Present:
+
+Mayaugust is having a difficult time placing Destiny Stokes at an internship site. Destiny has interviewed at three places and been turned down. She expresses interests in administrative positions, but has not always followed through with suggested placements. She is not interested in ARC. We talked extensively about the issues involved and several suggestions were made about potential placement sites. Destiny has interviewed at Progress Unlimited and thought the interview went well. We’ll see how it goes. Kariza Govcalves was denied placement at the Shafer Center due to concerns expressed about her safety in working with potentially volatile youths given her visual impairment. The SU Disabilities Office is aware of this issue and based on concerns about discrimination has requested that we not use the Shafer Center. John will follow up with the new director of disabilities, Katey St. Clair Earle. Kariza is progressing towards a placement at St. Elizabeth School. Jaylin Johnson continues to be a concern based on inconsistent attendance. Mayaugust indicated that Alexis Grimes continues to be a concern. She has responded only when absolutely necessary. She considered switching to Interdisciplinary Studies and spoke with Dr. Horrocks, but decided to continue with Human Services. She still does not have a confirmed placement. It was pointed out that the responsibility needs to be on her to do the work needed to secure a placement. Noel Martin has 
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[5][d].linkedDocuments`_
 
@@ -2063,7 +3189,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _Include curriculum vitae of full-time and part-time faculty who teach human services courses. The vitae must demonstrate that: 1. Faculty have education in various disciplines and experience in human services or related fields 2. Teaching faculty have no less than one degree above the level of certificate or degree in which they teach. It is recommended that faculty have no less than a master’s degree._
 
 **Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.45, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[6][a].content`_
@@ -2094,20 +3220,106 @@ Appendix
 … (truncated, full text imported)
 ```
 
+##### Evidence text 2 — conf 0.72, 165 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No actual curriculum vitae documents are provided; Evidence 1 only references that vitae are 'included in the Appendix' but the appendix is not submitted for review
+
+_Source heading:_ **PROFESSIONAL EXPERIENCE — PROFESSIONAL EXPERIENCE — Counseling/Education — Counseling/Education**
+
+```text
+• Counseled voluntary and involuntary clients using a variety of treatment modalities
+
+- Individual, group, career, crisis and family counseling with children, adolescents, and adults
+
+• Administered, scored, and interpreted intelligence, aptitude, achievement, personality, neurological and                     vocational tests
+
+- Utilized tests to assist in program planning, placement, and training
+
+• Taught University, Community College, and High School courses in psychology, human services, sociology, education, family studies, research, instructional technology, counseling, government, and health & wellness
+
+- Supervised practicum students
+
+- Facilitated program planning and career decision-making
+
+- Served as a Thesis Advisor
+
+• Co-authored countywide middle school reading curriculum and the accompanying teachers’ manual
+
+-  Led in-service workshops to introduce the new curriculum
+
+• Assessed developmentally disabled populations, some with dual diagnoses
+
+- Developed treatment plans
+
+- Participated within the multi-disciplinary teams
+
+• Taught elementary school classes
+
+- Designed curriculum and wrote teachers’ manuals for the curriculum                                                                    - Sat on the math and reading program selection committees and trained teachers
+
+- Developed continuing education criteria
+```
+
+##### Evidence text 3 — conf 0.62, 33 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No systematic documentation showing all full-time and part-time faculty who teach human services courses; only partial narrative and one incomplete individual CV example (Evidence 2)
+
+_Source heading:_ **Adjunct Professor — Adjunct Professor**
+
+```text
+Instruct undergraduate courses in the human services, education and psychology departments. Courses taught include Counseling Strategies for Individuals, Child Development and Introduction to Human Services.
+
+2000– present	Baltimore County Public Schools	Baltimore, MD
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[6][a].linkedDocuments`_
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | (data table) | `data-table` | 845 | 0.92 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
+| 1 | (data table) | `data-table` | 845 | 0.92 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
+| 2 | EMPLOYMENT HISTORY — EMPLOYMENT HISTORY | `employment-history-employment-history` | 109 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/employment-history-employment-history.docx` |
+| 3 | Education — Education — Education | `education-education-education` | 104 | 0.75 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/education-education-education.docx` |
+
+_File 2 fills gap_: Incomplete faculty credential summary in Evidence 1—states 'three faculty members have a Ph.' but the sentence is cut off and does not specify Ph.D. or provide complete information
+
+```text
+2011- 2016  Student Support Liaison, Baltimore City Schools, Baltimore, MD
+
+2008-           Critical Incident Response, Crisis Care Network, Grandville, MI (Headquarters)
+
+2004-           Adjunct Professor, Stevenson University, Stevenson, MD              		                                 2002-           Licensed Clinical Professional Counselor, PsychoEducational Testing Service, Baltimore, MD
+
+1997-2001   General Studies, Psychology, Health & Wellness Teacher, and Senior Thesis Advisor, Beth Tfiloh                Community Day School, Baltimore, MD
+
+1996-1997  Adjunct Faculty, Graduate Assistant, Towson University, Department of Reading, Special      Education, and Instructional Technology, Towson, Maryland
+
+1995-2000  Executive Director, American Association of State Counseling Boards
+
+1990-1994 Psychologist Associate, Jewish Vocational Service, Baltimore, Maryland
+
+1979-1991 Assistant Professor, Catonsville and Dundalk Community Colleges, Maryland (now CCBC)
+
+1989-1991 Psychologist Associate, Rosewood Center, Owings Mills, Maryland
+```
+
+_File 3 fills gap_: No evidence addressing the recommended standard that faculty have 'no less than a master's degree'—only one example CV is provided, showing one faculty member with a master's degree
+
+```text
+2008-2012            Nova Southeastern University             Ft. Lauderdale, FL  Fischler School of Education and Human Services                      Dissertation: Program Evaluation of a Social-Emotional Learning Program at a Summer Camp for Children Experiencing Homelessness Doctor of Education      Concentration- Special Education 1996 - 1998	University of Maryland at Baltimore          Baltimore, MD Masters in Social Work      Concentration- Clinical- Mental Health 1988-1991            Syracuse University                                 Syracuse, NY Bachelors of Arts    Majors- Non-Violent Conflict and Change/ History
+
+2008-2012            Nova Southeastern University             Ft. Lauderdale, FL  Fischler School of Education and Human Services                      Dissertation: Program Evaluation of a Social-Emotional Learning Program at a Summer Camp for Children Experiencing Homelessness Doctor of Education      Concentration- Special Education
+```
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative response provided to introduce or contextualize the faculty credentials evidence
-- ⚠️ Evidence 1 is incomplete—text cuts off mid-sentence ('three faculty members have a Ph.') without completing the degree information
-- ⚠️ Only one sample CV provided (Evidence 2); Specification requires CVs for 'full-time and part-time faculty who teach human services courses'—no evidence of comprehensive faculty roster
-- ⚠️ Evidence 2 demonstrates one faculty member's education and experience but does not show verification that ALL faculty meet the requirement of 'no less than one degree above the level of certificate or degree in which they teach'
-- ⚠️ No systematic summary table or appendix reference confirming all faculty teaching human services courses have master's degrees or higher (the recommended standard)
-- ⚠️ Missing evidence of faculty diversity across disciplines—only one CV provided; cannot verify 'various disciplines' claim without additional examples
+- ⚠️ No narrative response provided—the specification explicitly requires a narrative to accompany supporting evidence
+- ⚠️ Incomplete CVs: Evidence 1 is truncated mid-sentence ('special educati...') and does not provide complete educational or professional history
+- ⚠️ Evidence 3 and 4 appear to be fragmented CV sections without clear identification of which faculty member they belong to
+- ⚠️ Evidence 5 is a single job description with no accompanying full CV demonstrating degree credentials or complete professional background
+- ⚠️ No systematic demonstration that ALL full-time and part-time faculty teaching human services courses have degrees above the certificate level
+- ⚠️ Unclear how many faculty are represented across the evidence items; some duplication and fragmentation make it difficult to confirm coverage of all teaching staff
+- ⚠️ No explicit verification that faculty hold at least one degree above the level at which they teach (e.g., master's degrees for teaching at baccalaureate level)
+- ⚠️ Incomplete evidence of interdisciplinary faculty backgrounds—only 2-3 partial CVs provided when multiple faculty members are likely teaching
 
 ---
 
@@ -2117,8 +3329,8 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 **Spec prompt:** _Document that faculty have the ultimate responsibility for setting policies and determining the content, implementation, and evaluation of the curriculum._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.35**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.35, delta=+0.35)_
 
 #### Narrative content
 _Destination: `Submission.narratives[7][a].content`_
@@ -2127,19 +3339,81 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[7][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 140 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No narrative provided explaining faculty's ultimate responsibility for curriculum
+
+_Source heading:_ **Teach two courses each semester (two course release time per semester for Department Chair responsibilities) — Serve on faculty committees — Administrative Responsibilities — Administrative Responsibi**
+
+```text
+Advise students majoring and minoring in Human Services Advise transfer students Mentor faculty members on an individual basis Conduct classroom observations of fulltime and adjunct faculty Plan, conduct, and disseminate results of faculty meetings Hire faculty in collaboration with the division Dean Conduct all program assessment procedures and disseminate results Schedule courses and assign instructors to teach them Communicate with possible future employers of students and coordinate employment opportunities with the Career Services Office Maintain connections with articulation partners, both community college and graduate school, and update articulation agreements Write student recommendations for graduate school and employment Consult with other program coordinators/department chairs Write and disseminate annual department reports Submit department Unit Action Plan and budget requests Develop and manage program budget Maintain Human Services Department website Coordinate curriculum development and review; monitor quality and effectiveness of all course offerings
+```
+
+##### Evidence text 2 — conf 0.62, 32 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of faculty involvement in curriculum implementation decisions
+
+_Source heading:_ **Section II. Proportionate Representation**
+
+```text
+Each school (Business, Education, Design, Sciences, Graduate and Professional Studies, and Humanities and Social Sciences) shall appoint two full-time faculty members.  A representative from the library shall also sit on the committee.
+```
+
+##### Evidence text 3 — conf 0.62, 34 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of faculty participation in curriculum evaluation processes
+
+_Source heading:_ **Faculty Member ________________________________ 	Date ___________ — Faculty Member ________________________________ 	Date ___________ — Supervisor _____________________________________	Date __________**
+
+```text
+Process :  After reviewing the summary of student evaluation data for each course reflect upon the following questions and provide a response. Comments are optional. This form will then be shared with your supervisor.
+```
+
+##### Evidence text 4 — conf 0.62, 248 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of faculty governance structures related to curricular authority
+
+_Source heading:_ **AAC By-Laws — Academic Affairs Committee — Academic Affairs Committee — By-Laws — By-Laws**
+
+```text
+The purpose of the Academic Affairs Committee shall be to research, report on, and recommend to the Faculty Council actions relevant to the academic standards of the university. All recommendations by the committee to the Council shall be in writing.
+
+The guiding philosophy of the AAC is threefold:
+
+Peer-Review: The AAC encourages collaboration across disciplines and schools so that the entire institution contributes to and is aware of academic conversations, standards, and best practices. Alignment: The AAC looks for a clear progression of measurable competencies from the course objectives to the course level description to the track objectives to the program outcomes so that the AAC can chart the progress of students from when they enter a program to when they leave a program. Assessment: The AAC is more effective if it has accurate and current information about SU programs, so the AAC encourages periodic Program Review presentations.
+
+Peer-Review: The AAC encourages collaboration across disciplines and schools so that the entire institution contributes to and is aware of academic conversations, standards, and best practices.
+
+Alignment: The AAC looks for a clear progression of measurable competencies from the course objectives to the course level description to the track objectives to the program outcomes so that the AAC can chart the progress of students from when they enter a program to when they leave a program.
+
+Assessment: The AAC is more effective if it has accurate 
+… (truncated, full text imported)
+```
+
+##### Evidence text 5 — conf 0.62, 57 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that faculty (not administrators or other stakeholders) have final authority over curriculum matters
+
+_Source heading:_ **Robert’s Rules — Section 7.  Submission Guidelines**
+
+```text
+Guidelines and meeting dates shall be disseminated to all Deans, Program Coordinators, and faculty members at the beginning of each academic year.
+
+All proposals must meet the outlined criteria in the AAC Style Sheet and the AAC Course Proposal Guidelines. All proposals must be vetted by the appropriate process described in the AAC document “Curricular Change Process.”
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[7][a].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative explanation of faculty responsibility for curriculum policy-setting
-- ⚠️ No documentation of faculty authority over curriculum content determination
-- ⚠️ No evidence of faculty involvement in curriculum implementation decisions
-- ⚠️ No documentation of faculty role in curriculum evaluation processes
-- ⚠️ No supporting evidence (e.g., governance documents, committee minutes, policy statements) provided
-- ⚠️ No demonstration of institutional structures that establish faculty primacy in curricular matters
-- ⚠️ No evidence of decision-making authority delegation or chain of responsibility
+- ⚠️ No narrative statement explaining or asserting that faculty have ultimate responsibility for curriculum
+- ⚠️ Evidence 1 lists program coordinator duties but does not clarify the distinction between coordinator administrative tasks and faculty's ultimate curricular authority
+- ⚠️ No evidence showing faculty governance body (e.g., curriculum committee) with explicit authority over curriculum content, implementation, or evaluation
+- ⚠️ Evidence 4 describes AAC's advisory/review role but does not establish that faculty (not administration or committees alone) retain final decision-making authority on curriculum
+- ⚠️ No documentation of faculty votes, approvals, or final sign-off on curricular decisions
+- ⚠️ Missing evidence of faculty involvement in setting curriculum policies at the program level
+- ⚠️ No clear separation of administrative coordination responsibilities from faculty's ultimate curricular authority
 
 ---
 
@@ -2147,8 +3421,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Essential program roles include administration, curriculum development and review, instruction, field supervision, program planning, program evaluation, student advising, and student evaluation. Provide the following: 1. A brief description of how these essential roles are fulfilled in the program 2. A table matching faculty and staff positions and names with these roles._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.45, delta=+0.45)_
 
 #### Narrative content
 _Destination: `Submission.narratives[7][b].content`_
@@ -2157,26 +3431,150 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[7][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.55, 40 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No narrative description of how essential roles are fulfilled
+
+_Source heading:_ **STEVENSON — STEVENSON — U  N  I  V  E  R  S  I  T  Y — U  N  I  V  E  R  S  I  T  Y — COUNSELING & HUMAN SERVICES DEPARTMENT — COUNSELING & HUMAN SERVICES DEPARTMENT — Responsibilities of Department C**
+
+```text
+The following list of responsibilities is not comprehensive but is intended to illustrate the scope of activities that the position entails.
+
+Teach two courses each semester (two course release time per semester for Department Chair responsibilities) Serve on faculty committees
+```
+
+##### Evidence text 2 — conf 0.72, 140 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of administration role assignment
+
+_Source heading:_ **Teach two courses each semester (two course release time per semester for Department Chair responsibilities) — Serve on faculty committees — Administrative Responsibilities — Administrative Responsibi**
+
+```text
+Advise students majoring and minoring in Human Services Advise transfer students Mentor faculty members on an individual basis Conduct classroom observations of fulltime and adjunct faculty Plan, conduct, and disseminate results of faculty meetings Hire faculty in collaboration with the division Dean Conduct all program assessment procedures and disseminate results Schedule courses and assign instructors to teach them Communicate with possible future employers of students and coordinate employment opportunities with the Career Services Office Maintain connections with articulation partners, both community college and graduate school, and update articulation agreements Write student recommendations for graduate school and employment Consult with other program coordinators/department chairs Write and disseminate annual department reports Submit department Unit Action Plan and budget requests Develop and manage program budget Maintain Human Services Department website Coordinate curriculum development and review; monitor quality and effectiveness of all course offerings
+```
+
+##### Evidence text 3 — conf 0.72, 279 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of field supervision role assignments
+
+_Source heading:_ **Standard 7b and 9b — Standard 7b — COUNSELING & HUMAN SERVICES DEPARTMENT — COUNSELING & HUMAN SERVICES DEPARTMENT — Responsibilities of University Supervisor for Field Placements — Responsibilities o**
+
+```text
+9b
+
+Attend first class meeting of CHS 441 to orient supervisees. Provide your supervisees your contact info (email, cell phone, etc.) and get this info from them. Discuss journaling to be sure that the weekly process you use is clear. Also discuss Learning Contracts & your Site Visit Agenda. Introduce self to field instructor by e-mail or phone call during first week and schedule a time for your midterm site visit. Respond weekly by e-mail to e-mailed journal entries from supervisees. Responses must be substantive and prompt (within 5 days of receipt of journal entry). Collaborate and sign off on Learning Contracts. Attend CHS 441 class on date Learning Contract is due and on date Mid-Term Evaluation is due to meet with your supervisees individually, review their Learning Contracts or Midterm Evals and discuss their progress. Visit placement site at mid-term to conference with field instructor and student (observation of student and one-on-one time with student if appropriate). Submit a brief report to the Field Placement Coordinator . Conduct additional visit(s) to placement site if needed. Communicate with Field Placement Coordinator about progress of student.
+
+Attend first class meeting of CHS 441 to orient supervisees. Provide your supervisees your contact info (email, cell phone, etc.) and get this info from them. Discuss journaling to be sure that the weekly process you use is clear. Also discuss Learning Contracts & your Site Visit Agenda.
+
+Introduce self to field inst
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.72, 171 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of program evaluation role assignments
+
+_Source heading:_ **B.  Dissemination of Results — B.  Dissemination of Results**
+
+```text
+The Department Chair is responsible for developing and coordinating program assessment procedures.  Thus, the results obtained from the sources listed above are collected and disseminated by him/her to the appropriate individuals and groups.  The results are indicative of the current relevance of the educational objectives and the effectiveness of the program and curriculum.
+
+1.  RESULTS DISSEMINATED TO FACULTY MEMBERS AND TO ADVISORY BOARD MEMBERS
+
+a.  Agency Evaluation by Student
+
+b.  Focus Group Report (Information pertinent to recipients)
+
+c.  Graduate Acceptance by Graduate Programs
+
+d.  Graduate Evaluation by Employer
+
+e.  Program Evaluation by Graduate
+
+f.  Program Evaluation by Senior
+
+g.  Program Evaluation/Student Field Placement Evaluation
+
+2.  RESULTS DISSEMINATED TO FIELD PLACEMENT COORDINATOR
+
+a.  Agency Evaluation by Student
+
+b.  Field Placements Prerequisites Checklists
+
+c.  Focus Group Report (Information pertinent to recipient)
+
+d.  Student Field Placement Evaluation
+
+e.  University Faculty Supervisor Evaluation by Student
+
+3.  RESULTS DISSEMINATED TO INDIVIDUAL FACULTY MEMBERS
+
+a.  Classroom Observation by Department Chair
+
+b.  Course Evaluation by Student
+
+c.  Focus Group Report (Information pertinent to recipient)
+
+4.  MIDTERM COURSE EVALUATION
+```
+
+##### Evidence text 5 — conf 0.72, 137 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of student advising role assignments
+
+_Source heading:_ **RETENTION PROCEDURES — Faculty Advisors**
+
+```text
+The retention of students is critical to the department.  Faculty advising, tutoring, and counseling services support this effort.
+
+The cornerstone for the retention of students in the Counseling & Human Services Department is the faculty advisor, who is important in helping each student achieve his or her personal and career goals.  Upon admission to the department, each student is assigned an advisor who is a Counseling & Human Services faculty member.  Faculty advisors assist in course planning and are a source of information about the department and about the college in general.  Although it is the responsibility of the student to become familiar with academic regulations presented in university publications, the advisor can provide background knowledge and assistance, with emphasis on the student’s own decision-making.  Advisors schedule weekly office hours and are available for individually requested appointments.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[7][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | DATES Hours Field Instructor Signature TOTAL HOURS — DATES H | `dates-hours-field-instructor-signature-total-hours-dates-hou` | 85 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/dates-hours-field-instructor-signature-total-hours-dates-hou.docx` |
+
+_File 1 fills gap_: No documentation of student evaluation role assignments
+
+```text
+14b
+
+8b
+
+Student:
+
+Placement/Agency:
+
+Field Instructor (Please print.):
+
+University Supervisor (Please print.):
+
+Evaluation is a very important phase of the learning process. The student and field instructor should each complete the same copy of the evaluation tool at midpoint and at the end of the semester.  Criteria for achievement of the program goals and objectives are expressed as Below Expectations, Meets Expectations, and Exceeds Expectations. If an objective or category within an objective does not apply, please rate it N.A. (Not Applicable).
+
+student
+
+field instructor
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative description of how essential roles (administration, curriculum development and review, instruction, field supervision, program planning, program evaluation, student advising, student evaluation) are fulfilled
-- ⚠️ No table matching faculty and staff positions/names with essential program roles
-- ⚠️ No evidence of role assignments or responsibility descriptions
-- ⚠️ No documentation of personnel structure or organizational chart
-- ⚠️ No demonstration of how each of the eight essential roles is addressed in the program
+- ⚠️ No narrative description provided — the specification explicitly requires 'a brief description of how these essential roles are fulfilled in the program,' which is entirely absent
+- ⚠️ No faculty/staff position table matching names and positions to the eight essential roles (administration, curriculum development and review, instruction, field supervision, program planning, program evaluation, student advising, and student evaluation)
+- ⚠️ No clear identification of who holds the 'administration' role or other essential roles by name and title
+- ⚠️ Evidence is fragmented and does not systematically map each of the eight essential roles to specific personnel
+- ⚠️ No evidence addressing 'program planning' as a distinct essential role
+- ⚠️ Instruction role is mentioned only obliquely (teaching references) without systematic assignment to named faculty
 
 ---
 
-### `7.c` 🔴 — Personnel Roles, Responsibilities, and Evaluation
+### `7.c` 🟡 — Personnel Roles, Responsibilities, and Evaluation
 
 **Spec prompt:** _Describe the process for faculty and staff evaluation. Documentation may come from a variety of sources and may include, among others, student evaluations, administrative review, comments from field placement agencies, and peer review._
 
-**Final coverage verdict:** covered=**False**, score=**0.35**
-_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.35, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.65**
+_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.65, delta=+0.30)_
 
 #### Narrative content
 _Destination: `Submission.narratives[7][c].content`_
@@ -2221,21 +3619,207 @@ _Source heading:_ **The following signatures verify that a conference has taken 
 The following signatures verify that a conference has taken place between the faculty member and the supervisor. These signatures do not necessarily certify that the employee agrees with the final evaluation score or all evaluation items. However, the faculty has the right to make written comments in this regard as seen in the section above.
 ```
 
+##### Evidence text 3 — conf 0.72, 65 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ NO NARRATIVE provided—the specification requires description of 'the process' for faculty and staff evaluation, which must be written and explanatory
+
+_Source heading:_ **Date							Signature — Date							Signature — Thanks for working with our students to help them be successful in their practicum experiences. — Thanks for working with our students to help them be suc**
+
+```text
+Purpose:
+
+Performance appraisal is an opportunity for supervisors and faculty to summarize 	the accomplishments of the past year and to dialogue about direction needed for continued growth as a professional educator.
+
+Process:
+
+The supervisor will complete the following document using appropriate resources such as the following:
+
+Annual Faculty Record Student Evaluations Faculty Response to Student Evaluations Review of course syllabi Classroom visits Faculty Development Plans
+```
+
+##### Evidence text 4 — conf 0.62, 34 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No description of the overall evaluation process, timeline, frequency, or procedures
+
+_Source heading:_ **Faculty Member ________________________________ 	Date ___________ — Faculty Member ________________________________ 	Date ___________ — Supervisor _____________________________________	Date __________**
+
+```text
+Process :  After reviewing the summary of student evaluation data for each course reflect upon the following questions and provide a response. Comments are optional. This form will then be shared with your supervisor.
+```
+
+##### Evidence text 5 — conf 0.72, 43 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of administrative review of faculty/staff performance
+
+_Source heading:_ **Annual Faculty Record — Student Evaluations — Faculty Response to Student Evaluations — Review of course syllabi — Classroom visits — Faculty Development Plans**
+
+```text
+The supervisor and faculty member will schedule a meeting to conduct the performance appraisal. A copy of the completed performance appraisal document will be forwarded for the review of the faculty member at least one week prior to a scheduled performance appraisal meeting.
+```
+
+##### Evidence text 6 — conf 0.72, 248 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of peer review mechanisms
+
+_Source heading:_ **AAC By-Laws — Academic Affairs Committee — Academic Affairs Committee — By-Laws — By-Laws**
+
+```text
+The purpose of the Academic Affairs Committee shall be to research, report on, and recommend to the Faculty Council actions relevant to the academic standards of the university. All recommendations by the committee to the Council shall be in writing.
+
+The guiding philosophy of the AAC is threefold:
+
+Peer-Review: The AAC encourages collaboration across disciplines and schools so that the entire institution contributes to and is aware of academic conversations, standards, and best practices. Alignment: The AAC looks for a clear progression of measurable competencies from the course objectives to the course level description to the track objectives to the program outcomes so that the AAC can chart the progress of students from when they enter a program to when they leave a program. Assessment: The AAC is more effective if it has accurate and current information about SU programs, so the AAC encourages periodic Program Review presentations.
+
+Peer-Review: The AAC encourages collaboration across disciplines and schools so that the entire institution contributes to and is aware of academic conversations, standards, and best practices.
+
+Alignment: The AAC looks for a clear progression of measurable competencies from the course objectives to the course level description to the track objectives to the program outcomes so that the AAC can chart the progress of students from when they enter a program to when they leave a program.
+
+Assessment: The AAC is more effective if it has accurate 
+… (truncated, full text imported)
+```
+
+##### Evidence text 7 — conf 0.72, 299 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of how evaluation results are used (professional development, retention decisions, etc.)
+
+_Source heading:_ **The supervisor and faculty member will schedule a meeting to conduct the performance appraisal.**
+
+```text
+A copy of the completed performance appraisal document will be forwarded for the review of the faculty member at least one week prior to a scheduled performance appraisal meeting.
+
+During the performance appraisal meeting, the faculty member and supervisor will have the opportunity to dialogue about the review and discuss professional development activities for the coming year. Faculty, in collaboration with the supervisor, should review their Faculty Development Plan for the current year and develop a Faculty Development Plan for the coming year. At the conclusion of the meeting, the faculty member, the supervisor and the Division Director, as appropriate, will sign the document and forward it to the VP and Dean for Academic Affairs. If the faculty member does not agree with the evaluation, written comments may be added to the document and forwarded within one week of the meeting. During the implementation phase of this process, the supervisor and faculty member may reflect on past years and the faculty’s performance over time.
+
+During the performance appraisal meeting, the faculty member and supervisor will have the opportunity to dialogue about the review and discuss professional development activities for the coming year.
+
+Faculty, in collaboration with the supervisor, should review their Faculty Development Plan for the current year and develop a Faculty Development Plan for the coming year.
+
+At the conclusion of the meeting, the faculty member, the supervisor and the Di
+… (truncated, full text imported)
+```
+
+##### Evidence text 8 — conf 0.65, 100 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of evaluation criteria or rubrics
+
+_Source heading:_ **N/A	Not applicable — Other – allows faculty and supervisor to describe an area not addressed in tool**
+
+```text
+Instructional Activity:
+
+____	 Presents evidence of current curricula, content, and organization through 	improved course syllabi, course references, text selection, and related 	instructional materials. ____	Follows current college and department guidelines and procedures
+
+____	 Presents evidence of current curricula, content, and organization through 	improved course syllabi, course references, text selection, and related 	instructional materials.
+
+____	Follows current college and department guidelines and procedures
+
+relevant to effective academic instruction.
+
+Submission of grades, reports and records in a thorough and timely manner. Accountability in class meeting times, office hours, and department meeting attendance. Follows college schedules for advising, exam schedules and similar responsibilities.
+```
+
+##### Evidence text 9 — conf 0.62, 49 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explanation of who conducts evaluations or roles/responsibilities in the process
+
+_Source heading:_ **Provide orientation for field instructors — Emphasize evaluation process — Continue to develop relationships with and visit new agencies — Throughout the semester — Mediate conflicts between internshi**
+
+```text
+Function as university supervisor for interns (e.g., telephone field instructor of each intern to discuss student progress)
+
+*Conduct brief group meetings with students going into a fall practicum (meet early in the semester) and with students going into a spring practicum the following year (meet late in the semester)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[7][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Strongly Agree Agree Disagree Strongly Disagree No Opinion — | `strongly-agree-agree-disagree-strongly-disagree-no-opinion-s` | 138 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/strongly-agree-agree-disagree-strongly-disagree-no-opinion-s.docx` |
+| 2 | Comments by Dean | `comments-by-dean` | 79 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/comments-by-dean.docx` |
+| 3 | Upcoming Events — NEXT MEETING : Friday, February 16, 2018 a | `upcoming-events-next-meeting-friday-february-16-2018-at-8-30` | 303 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/upcoming-events-next-meeting-friday-february-16-2018-at-8-30.docx` |
+
+_File 1 fills gap_: No evidence of field placement agency feedback being collected or used in evaluation
+
+```text
+1. The agency was adequate for meeting course objectives.
+
+2.  An adequate orientation      was provided by the agency.
+
+3.  The agency rules and regulations were explained clearly.
+
+4.  The field instructor was available to discuss issues or concerns related to the experience.
+
+5.  The field instructor was well prepared and organized.
+
+6.  The field instructor encouraged student questions and comments.
+
+7.  The field instructor provided useful feedback during the semester.
+
+8.  The staff was helpful and supportive to students.
+
+9.  The staff holds a positive attitude toward students and learning.
+
+To benefit future CHS students considering this placement, please respond to the following questions:
+
+What were your duties at the field placement? What qualities are necessary for success in this placement? What were the positive aspects of your field experience? What were the challenges of your field experience?
+```
+
+_File 2 fills gap_: Evidence 1 appears to be student evaluations of supervisors, not faculty/staff evaluation by administration
+
+```text
+(if applicable)
+
+Comments by Faculty:
+
+(attach additional sheets as needed)
+
+Recommendations for next evaluation period based on collaboration between faculty member and department director:
+
+The following signatures verify that a conference has taken place between the faculty member and the supervisor. These signatures do not necessarily certify that the employee agrees with the final evaluation score or all evaluation items. However, the faculty has the right to make written comments in this regard as seen in the section above.
+```
+
+_File 3 fills gap_: Evidence 2 mentions faculty right to respond but lacks context about the broader evaluation process and documentation standards
+
+```text
+4b
+
+Evaluation is a critical part of the Counseling & Human Services Department.  The needs of our communities, both our external community (agencies) and our internal community (students), are evaluated extensively and frequently through both quantitative and qualitative measures.
+
+1.  QUANTITATIVE MEASURES.  Quantitative measures and the timing for each are as follows:
+
+a.  Agency Evaluation by Student – At end of field placement
+
+b.  Course Evaluation by Student – At conclusion of fall and spring semester courses
+
+c.  Field Placement Prerequisites Checklist – Prior to fall and spring field placements
+
+d.  Graduate Acceptance by Graduate Programs – Annually at conclusion of spring semester
+
+e.  Graduate Evaluation by Employer – Every five years (1 year after graduation)
+
+f.  Program Evaluation by Senior – Immediately after completion of program
+
+g.  Program Evaluation/Student Field Placement Evaluation by Student and Field 	Instructor – At midpoint and end of field placement
+
+h.  Student Assessment by Faculty (Behavioral Indicators) – Commencing when student joins major.
+
+i.  University Faculty Supervisor Evaluation by Student – At end of field placement.
+
+2.  QUALITATIVE INFORMATION.  Qualitative information and the timing for each are as follows:
+
+a.  Advisory Board Meetings - One meeting per semester plus unscheduled 	communication
+
+b.  Faculty Evaluation by Department Chair – Course syllabi and objectives are reviewed every semester. Faculty members are observed when el
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative explanation provided; the specification explicitly asks to 'describe the process' but no descriptive text is included
-- ⚠️ No documentation of administrative review process or criteria for faculty/staff evaluation
-- ⚠️ No evidence of peer review process or documentation
-- ⚠️ No evidence of comments from field placement agencies being incorporated into evaluation
-- ⚠️ No clear description of how multiple evaluation sources are compiled, weighted, or used in summative decisions
-- ⚠️ No documentation of evaluation frequency, timeline, or procedures
-- ⚠️ No evidence of how student evaluations (Evidence 1) are formally integrated into personnel evaluation decisions
-- ⚠️ No description of evaluation standards, rubrics, or performance expectations
-- ⚠️ No evidence of appeal or remediation processes for faculty/staff
-- ⚠️ Evidence 2 demonstrates conference documentation but lacks context about evaluation procedures, standards, or how this fits into the broader evaluation system
+- ⚠️ No narrative explanation of the evaluation process—specification explicitly requests a description, but only evidence fragments are provided
+- ⚠️ No clear documentation of administrative review process for faculty evaluation (Evidence 3, 8, 9 mention 'supervisor' and 'Division Director' but lack detail on criteria, frequency, or procedures)
+- ⚠️ Peer review is mentioned only in Evidence 6 (AAC bylaws) but is not clearly integrated into the faculty evaluation process description
+- ⚠️ No evidence of how comments from field placement agencies are formally incorporated into faculty evaluation decisions (Evidence 7 shows student feedback about field instructors, not systematic agency feedback on faculty)
+- ⚠️ Missing documentation of consequences, remediation steps, or outcomes following evaluation (process describes documentation and conferencing but not what happens with results)
+- ⚠️ No explanation of how evaluation results are used for professional development decisions or tenure/promotion
 
 ---
 
@@ -2243,8 +3827,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Document how the evaluative process is used to identify strengths and limitations and how it is incorporated in specific procedures for improvement._
 
-**Final coverage verdict:** covered=**False**, score=**0.15**
-_(first-pass: covered=False, score=0.15; second-pass after gap-fill: covered=False, score=0.15, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.35**
+_(first-pass: covered=False, score=0.25; second-pass after gap-fill: covered=False, score=0.35, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[7][d].content`_
@@ -2286,19 +3870,97 @@ Rater 1 Score: ___________
 Rater 2 Score: ___________
 ```
 
+##### Evidence text 2 — conf 0.72, 98 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No narrative explanation provided; specification requires documentation of HOW the evaluative process identifies strengths and limitations
+
+_Source heading:_ **Process**
+
+```text
+Based upon the student evaluations and my own observations, I believe that the strengths of this course are: Based upon the student evaluations and my own observations, I believe that the concerns regarding the course are: In light of the strengths/concerns stated above, I will take the following action:
+
+Based upon the student evaluations and my own observations, I believe that the strengths of this course are:
+
+Based upon the student evaluations and my own observations, I believe that the concerns regarding the course are:
+
+In light of the strengths/concerns stated above, I will take the following action:
+```
+
+##### Evidence text 3 — conf 0.72, 42 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Evidence shows only raw performance ratings (averages 1.2–1.45 on 0–2 scale) with no interpretation of what these scores mean for identifying strengths vs. limitations
+
+_Source heading:_ **Faculty Performance Appraisal — Faculty Performance Appraisal — Department Chair Evaluation — Department Chair Evaluation — Faculty Member _______________________________________      Date ___________**
+
+```text
+Evaluation Scale: Evaluate the performance of the named faculty member by assigning a rating between four and zero to each of the following statements. Descriptions of the ratings are as follows:
+
+Evaluation Scale:
+
+3	Exceeds expectations
+
+2	Meets expectations
+
+1	Below expectations
+```
+
+##### Evidence text 4 — conf 0.62, 34 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing evidence of feedback loops or follow-up mechanisms showing evaluation → identified gap → improvement action
+
+_Source heading:_ **Faculty Member ________________________________ 	Date ___________ — Faculty Member ________________________________ 	Date ___________ — Supervisor _____________________________________	Date __________**
+
+```text
+Process :  After reviewing the summary of student evaluation data for each course reflect upon the following questions and provide a response. Comments are optional. This form will then be shared with your supervisor.
+```
+
+##### Evidence text 5 — conf 0.62, 65 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that individual evaluation results are connected to professional development plans or corrective action
+
+_Source heading:_ **Date							Signature — Date							Signature — Thanks for working with our students to help them be successful in their practicum experiences. — Thanks for working with our students to help them be suc**
+
+```text
+Purpose:
+
+Performance appraisal is an opportunity for supervisors and faculty to summarize 	the accomplishments of the past year and to dialogue about direction needed for continued growth as a professional educator.
+
+Process:
+
+The supervisor will complete the following document using appropriate resources such as the following:
+
+Annual Faculty Record Student Evaluations Faculty Response to Student Evaluations Review of course syllabi Classroom visits Faculty Development Plans
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[7][d].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Comments by Dean | `comments-by-dean` | 79 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/comments-by-dean.docx` |
+
+_File 1 fills gap_: No description of specific procedures for improvement that result from evaluation findings
+
+```text
+(if applicable)
+
+Comments by Faculty:
+
+(attach additional sheets as needed)
+
+Recommendations for next evaluation period based on collaboration between faculty member and department director:
+
+The following signatures verify that a conference has taken place between the faculty member and the supervisor. These signatures do not necessarily certify that the employee agrees with the final evaluation score or all evaluation items. However, the faculty has the right to make written comments in this regard as seen in the section above.
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative explanation provided; specification requires documentation of HOW the evaluative process is used
-- ⚠️ No evidence of how evaluation findings identify specific STRENGTHS of personnel
-- ⚠️ No evidence of how evaluation findings identify specific LIMITATIONS of personnel
-- ⚠️ No documentation of specific procedures for improvement that result FROM evaluation findings
-- ⚠️ No connection shown between evaluation data (ratings) and actual improvement actions taken
-- ⚠️ No evidence of follow-up or monitoring to assess whether improvement procedures were effective
-- ⚠️ Data table shows ratings only; lacks context for what triggered action, who reviewed results, or what next steps occurred
-- ⚠️ No demonstration of how low ratings (e.g., 1.2 average) triggered specific improvement planning
+- ⚠️ No narrative explanation provided—specification requires a written description of HOW the evaluative process identifies strengths and limitations
+- ⚠️ No explicit connection shown between evaluation findings and specific improvement procedures or action plans
+- ⚠️ Evidence 1 (data table) shows ratings but lacks interpretation of what these scores reveal about program or personnel strengths/limitations
+- ⚠️ Evidence 2 (gap-fill process form) is blank—no actual strengths, concerns, or actions are documented
+- ⚠️ Evidence 3 (Dean comments) is blank—no supervisory feedback or collaborative improvement planning evident
+- ⚠️ No demonstration of how evaluation results are systematically incorporated into ongoing professional development or program modifications
+- ⚠️ Missing evidence of follow-up or accountability mechanisms that verify improvements were implemented
 
 ---
 
@@ -2306,8 +3968,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Describe how faculty and staff are provided opportunities for relevant professional development._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.35**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.35, delta=+0.35)_
 
 #### Narrative content
 _Destination: `Submission.narratives[7][e].content`_
@@ -2316,22 +3978,91 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[7][e].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 303 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of institutional policies or programs supporting faculty/staff development
+
+_Source heading:_ **Upcoming Events — NEXT MEETING : Friday, February 16, 2018 at 8:30 in Campanella Room — NEXT MEETING — ADJOURNMENT 10:00 am — ADJOURNMENT — Standard 1c and 4b — Standard 1c — STEVENSON — STEVENSON — U**
+
+```text
+4b
+
+Evaluation is a critical part of the Counseling & Human Services Department.  The needs of our communities, both our external community (agencies) and our internal community (students), are evaluated extensively and frequently through both quantitative and qualitative measures.
+
+1.  QUANTITATIVE MEASURES.  Quantitative measures and the timing for each are as follows:
+
+a.  Agency Evaluation by Student – At end of field placement
+
+b.  Course Evaluation by Student – At conclusion of fall and spring semester courses
+
+c.  Field Placement Prerequisites Checklist – Prior to fall and spring field placements
+
+d.  Graduate Acceptance by Graduate Programs – Annually at conclusion of spring semester
+
+e.  Graduate Evaluation by Employer – Every five years (1 year after graduation)
+
+f.  Program Evaluation by Senior – Immediately after completion of program
+
+g.  Program Evaluation/Student Field Placement Evaluation by Student and Field 	Instructor – At midpoint and end of field placement
+
+h.  Student Assessment by Faculty (Behavioral Indicators) – Commencing when student joins major.
+
+i.  University Faculty Supervisor Evaluation by Student – At end of field placement.
+
+2.  QUALITATIVE INFORMATION.  Qualitative information and the timing for each are as follows:
+
+a.  Advisory Board Meetings - One meeting per semester plus unscheduled 	communication
+
+b.  Faculty Evaluation by Department Chair – Course syllabi and objectives are reviewed every semester. Faculty members are observed when el
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.62, 36 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No information on frequency, scope, or budget allocation for professional development
+
+_Source heading:_ **F.  	Presents self and program in a positive manner.**
+
+```text
+Description of the specific behaviors that have raised this concern:
+
+specific
+
+Professional Development Plan . In order to meet professional expectations, the following plan has been agreed upon (include a timeline for reviewing progress, as appropriate):
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[7][e].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Professional Competence and Scholarly Activity — Professiona | `professional-competence-and-scholarly-activity-professional-` | 124 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/professional-competence-and-scholarly-activity-professional-.docx` |
+
+_File 1 fills gap_: No narrative description of professional development opportunities provided
+
+```text
+____	Participates in professional development activities as described in the Guidelines for Promotion, Sabbatical and Educational Leave, section – Professional Competence and Scholarship. ____	Attends college-sponsored faculty development sessions that 			enhance professional growth. ____	Provides correct student advisement relative to course selection, 			degree 	matriculation, support services and career choice. ____	Exhibits appropriate interpersonal skills in dealing with colleagues, and administrators. ____	Other:
+
+____	Participates in professional development activities as described in the Guidelines for Promotion, Sabbatical and Educational Leave, section – Professional Competence and Scholarship.
+
+____	Attends college-sponsored faculty development sessions that 			enhance professional growth.
+
+____	Provides correct student advisement relative to course selection, 			degree 	matriculation, support services and career choice.
+
+____	Exhibits appropriate interpersonal skills in dealing with colleagues, and administrators.
+
+____	Other:
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative description of professional development opportunities provided
-- ⚠️ No evidence of institutional policies, programs, or structures supporting faculty/staff development
-- ⚠️ No documentation of types of professional development offered (conferences, workshops, training, etc.)
-- ⚠️ No evidence of budget allocation or resources dedicated to professional development
-- ⚠️ No description of how development opportunities relate to faculty/staff roles and responsibilities
-- ⚠️ No evidence of participation rates, attendance records, or tracking of professional development activities
-- ⚠️ No explanation of how professional development needs are assessed or identified
-- ⚠️ No evidence of professional development outcomes or impact on program quality
-- ⚠️ No documentation of support for credentials, certifications, or advanced degrees
-- ⚠️ No evidence of faculty/staff input or choice in professional development selection
+- ⚠️ No narrative response provided at all — the self-study offers zero descriptive context for how or why professional development opportunities are offered
+- ⚠️ No description of the types, range, or frequency of professional development activities available (e.g., workshops, conferences, training, mentoring, sabbaticals)
+- ⚠️ No evidence that professional development is tailored to faculty/staff roles, career stages, or identified needs within the program
+- ⚠️ No documentation of budget, resources, or institutional commitment to professional development
+- ⚠️ No evidence of how professional development aligns with program goals or evolving field standards in counseling/human services
+- ⚠️ Evidence 1 lists evaluation criteria for professional competence but does not describe what development opportunities are actually provided
+- ⚠️ Evidence 2 references a future meeting with no substantive content on professional development programs
+- ⚠️ Evidence 3 is a fragment about a Professional Development Plan template but provides no details on implementation or examples
 
 ---
 
@@ -2342,7 +4073,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _Demonstrate how the program 1. Includes intercultural fluency, and accessibility principles in program policies, procedures, and practices. 2. Includes intercultural fluency, and accessibility principles training for faculty and staff_
 
 **Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.55, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[8][a].content`_
@@ -2471,20 +4202,84 @@ Stevenson University commits itself to diversity as it relates to awareness, edu
 #### Supporting evidence — text
 _Destination: `Submission.narratives[8][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 46 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of accessibility principles integrated into program policies, procedures, or practices—only cultural competence is addressed
+
+_Source heading:_ **Exhibits openness and a non-judgmental attitude related to individual, cultural, and global differences 33% 67% — Exhibits openness and a non-judgmental attitude related to individual, cultural, and g**
+
+```text
+33%
+
+67%
+
+Provides services w/o discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation or socioeconomic status 29% 71%
+
+Provides services w/o discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation or socioeconomic status
+
+29%
+
+71%
+```
+
+##### Evidence text 2 — conf 0.62, 48 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Student handbook reference to 'culturally sensitive behavior' is cited but not attached or defined
+
+_Source heading:_ **Handbook**
+
+```text
+8a
+
+*Professional Expectations
+
+1.  Consistently Shows Respect for Others
+
+Demonstrates caring, respect, empathy, and genuineness when interacting with other students and 	faculty** Demonstrates sensitivity and non-judgmental attitude Demonstrates sensitivity to diversity exemplified by such factors as age, ethnicity, culture, race, 	disability, gender, religion, sexual orientation, or socioeconomic status
+```
+
+##### Evidence text 3 — conf 0.62, 369 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No concrete examples of how accessibility principles are embedded in admissions, curriculum design, field placement procedures, or student accommodations
+
+_Source heading:_ **Responsibility to Students — Responsibility to Students**
+
+```text
+STANDARD 37 Human service educators develop and implement culturally sensitive knowledge, awareness, and teaching methodologies .
+
+culturally sensitive knowledge, awareness, and teaching methodologies
+
+STANDARD 38 Human service educators are committed to the principles of access and inclusion and take all available and applicable steps to make education available to differently-abled students.
+
+access and inclusion
+
+STANDARD 39 Human service educators demonstrate high standards of scholarship in their scholarship, pedagogy, and professional service and stay current in the field by being members of their professional associations, attending workshops and conferences, and reviewing and/or conducting research.
+
+high standards of scholarship
+
+stay current in the field
+
+STANDARD 40 Human service educators recognize and acknowledge the contributions of students to the work of the educator in such activities as case material, grants, workshops, research, publications, and other related activities.
+
+recognize and acknowledge the contributions of students
+
+STANDARD 41 Human service educators monitor students' field experiences to ensure the quality of the placement site, supervisory experience, and learning experience towards the goals of personal, professional, academic, career, and civic development. When students experience potentially harmful events during field placements, educators provide reasonable investigation and response as necessary to safeguard the student.
+
+monitor stud
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[8][a].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence of specific accessibility principles integrated into program policies, procedures, and practices—only cultural competence is addressed
-- ⚠️ Faculty/staff training on accessibility is completely absent; only voluntary cultural competence training opportunities are mentioned
-- ⚠️ No documentation of mandatory or systematic cultural competence and accessibility training requirements for faculty and staff (acknowledged as 'voluntary' and 'in development')
-- ⚠️ No supporting evidence documents provided (e.g., course syllabus for CHS 220, field experience handbooks, professional expectations documents, training records, accessibility policies)
-- ⚠️ Intercultural fluency is implied but not explicitly defined or mapped to specific policies, procedures, or practices
-- ⚠️ Heavy repetition of university diversity statement (appears 6+ times) dilutes rather than strengthens the response and suggests padding
-- ⚠️ Student club activities and community service projects do not directly address how accessibility and intercultural fluency are embedded in program policies and procedures
-- ⚠️ No mention of how accessibility accommodations are formalized in program policies or how accessibility is monitored in field placements
+- ⚠️ No evidence that intercultural fluency and accessibility principles are explicitly integrated into written program policies and procedures—only cultural competence is mentioned
+- ⚠️ Faculty/staff training on intercultural fluency and accessibility is described as voluntary and informal (monthly meetings, optional workshops); no systematic, mandatory training requirement exists despite the university noting it is 'working on developing systematic requirements'
+- ⚠️ Accessibility principles are not addressed in the narrative or evidence—only diversity and cultural competence are discussed; no mention of how the program ensures physical, digital, or instructional accessibility
+- ⚠️ No documentation of specific accessibility accommodations, universal design practices, or policies ensuring students with disabilities have equitable access to program activities, field placements, or learning experiences
+- ⚠️ Evidence of faculty/staff training is anecdotal (Prof. Weiner leads discussions, voluntary HR trainings available) rather than documented, systematic, or outcome-measured
+- ⚠️ No clear mechanism to assess whether intercultural fluency or accessibility training has been completed by all faculty and staff, or its effectiveness
 
 ---
 
@@ -2587,7 +4382,30 @@ Robin DiAngelo opens a dialogue about the rampant and obvious racism that occurs
 #### Supporting evidence — text
 _Destination: `Submission.narratives[8][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 36 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ LLM returned non-JSON response
+
+_Source heading:_ **READING:  Lum, Chapter 12 — DUE 4-4: Immigrant Interview — ARABS and MUSLIMS — READING:  Lum, Chapter 13 — RELIGION — READING:   On Reserve — IMMIGRANTS AND REFUGEES — READING: Lum, Chapter 9, On Rese**
+
+```text
+4-9, 11 ARABS and MUSLIMS
+
+4-16 RELIGION
+
+4-18, 23, 25 IMMIGRANTS AND REFUGEES
+
+4-18 Debate 3
+
+4-30 LGBTQ
+
+5-2 PEOPLE WITH DISABILITIES
+
+5/7		Meet with Groups
+
+5-9, 14	 at 10:45 am DUE 5-9:  Written Culture Report
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[8][b].linkedDocuments`_
 
@@ -2603,8 +4421,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Include budgetary information that demonstrates sufficient funding, faculty, and staff to provide an ongoing and stable program._
 
-**Final coverage verdict:** covered=**False**, score=**0.35**
-_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.35, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.00, delta=-0.35)_
 
 #### Narrative content
 _Destination: `Submission.narratives[9][a].content`_
@@ -2690,28 +4508,54 @@ _Source heading:_ **This award is presented annually to two students who demonst
 This award is presented annually to two students who demonstrate academic excellence and a strong commitment to the field of human services.  The recipients, accompanied by Human Services Department faculty, attend a national conference for professionals in human services.  Upon their return, they disseminate information about their experience to the Stevenson community.
 ```
 
+##### Evidence text 3 — conf 0.72, 64 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No information on faculty positions, FTE allocations, or staffing structure to support the program
+
+_Source heading:_ **Outstanding interpersonal, communication and leadership skills — Expertise in curriculum development, shared governance, and learning outcomes assessment — Strong technology skills, including online i**
+
+```text
+Manage five departments (Psychology and Sociology; Teacher Education; Business Studies; Hospitality, Tourism and Culinary Arts; and Public Safety and Law) and Entrepreneurs Program 41 full-time faculty; total budget of about $3 million
+
+Manage five departments (Psychology and Sociology; Teacher Education; Business Studies; Hospitality, Tourism and Culinary Arts; and Public Safety and Law) and Entrepreneurs Program
+
+41 full-time faculty; total budget of about $3 million
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[9][a].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Counseling & Human Services Department Budget 2018-2019 — Co | `counseling-human-services-department-budget-2018-2019-counse` | 30 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/counseling-human-services-department-budget-2018-2019-counse.docx` |
+
+_File 1 fills gap_: No evidence of staff support (administrative, clerical, or other support personnel) dedicated to the program
+
+```text
+7-103-50040-637100-00 	SHS: HUMAN	0.00 	0.00 	0.00 	25.53 	25.53-
+
+SERVICES :
+
+7-103-50040-642800-00	 	SHS: HUMAN	1,237.39 	0.00 	0.00 	1,108.05 	129.34
+
+SERVICES :
+
+7-103-50040-647000-00 	SHS: HUMAN	0.00 	0.00 	0.00 	21.80 	21.80-
+
+SERVICES :
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No faculty roster or FTE allocations provided; narrative does not specify number of full-time/part-time faculty positions, their qualifications, or stability of staffing
-- ⚠️ No staff positions listed (administrative, clerical, advisors); narrative mentions only a student assistant whose role is incomplete
-- ⚠️ Budget is extremely limited ($8,683.89) and declining year-over-year; no analysis of whether this level of funding is sufficient to operate a baccalaureate program
-- ⚠️ No explanation of how faculty are compensated or funded (salary lines absent from budget); the budget shows only discretionary/operating expenses
-- ⚠️ No evidence that funding is 'ongoing and stable'—narrative explicitly states budget has been 'decreasing for the past few years'
-- ⚠️ Missing information on dedicated program administration/leadership support
-- ⚠️ Supporting evidence [Evidence 1] is a course syllabus/schedule (irrelevant to budget/staffing) and [Evidence 2] is about a student award, neither of which demonstrates program support
-- ⚠️ No multi-year budget trend analysis or projections demonstrating sustainability
+- ⚠️ LLM returned non-JSON response
 
 ---
 
-### `9.b` 🟡 — Program Support
+### `9.b` 🔴 — Program Support
 
 **Spec prompt:** _Describe how program and field experience coordination is considered in calculating the teaching loads of faculty. It is recommended that consideration be given to distance between sites, expectations of observation, documentation requirements, number of students enrolled in the field experience, and the characteristics of the student population._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.45, delta=-0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[9][b].content`_
@@ -2730,19 +4574,28 @@ Describe how program and field experience coordination is considered in calculat
 #### Supporting evidence — text
 _Destination: `Submission.narratives[9][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 616 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No consideration of student population characteristics (e.g., at-risk students, first-generation, etc.) in load calculations
+
+_Source heading:_ **Kevin Joppy — Department Issues**
+
+```text
+The list of seven potential practicum students for fall was distributed. Steven Sneed has a 2.375 GPA. He needs to get A’s and B’s this semester to bring that up to at least a 2.45 to be eligible for practicum. He has been given this message consistent for the past several semesters. His options, if he does not make the cutoff, are to switch to Interdisciplinary Studies or re-take courses. He is doing well in CHS 340 and 380 so far this semester; hopefully he will get the grades he needs to progress. All other students on the list look like they will meet requirements. There was a consensus that Tyler Steinberg general does the minimum needed to meet requirements, although his grades have improved in the past two semesters. We went through the course titles, descriptions and prerequisites for all courses and added Counseling & Human Services where appropriate. John will submit course change forms to the registrar’s office. Faculty were encouraged to submit academic integrity reports whenever there is a suspicion of a violation. There will be no travel study option offered this January. We will plan to offer another international study course in 2021. There was an extended discussion about options for taking students to a conference as part of the Professional Development Award. We do not have sufficient funds to take two students and all faculty to a conference that involves flying to the destination. Options we discussed included taking students, but just with one or two fac
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[9][b].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence of how distance between sites is systematically considered in calculating teaching loads—only mentioned as 'a consideration' without detail on implementation
-- ⚠️ Expectations of observation are not quantified or described (frequency, duration, or intensity of required supervision visits)
-- ⚠️ Documentation requirements are referenced but never specified or linked to workload calculation
-- ⚠️ Number of students enrolled in field experience is addressed only for adjunct supervisors (3-4 = 1 credit); no analysis of how this scales or impacts full-time faculty load
-- ⚠️ Characteristics of student population (e.g., at-risk students, first-generation, diverse needs) are not mentioned or considered in load calculations
-- ⚠️ No supporting evidence provided (job descriptions, load calculation worksheets, supervision visit logs, or agency distance data)
-- ⚠️ The Field Placement Coordinator's load appears heavy (3 courses + CHS 440 practicum + CHS 380 + coordination duties); no justification for whether the 1-course equivalency adequately accounts for all coordination responsibilities
+- ⚠️ No discussion of how distance between sites is factored into teaching load calculations for full-time faculty (only mentioned for adjunct supervisors)
+- ⚠️ Lacking explanation of how observation expectations and documentation requirements affect workload calculations
+- ⚠️ No analysis of how number of students enrolled in field experience impacts faculty teaching load adjustments
+- ⚠️ Missing consideration of student population characteristics (e.g., at-risk students, diverse needs) in load calculations
+- ⚠️ No evidence that load reductions or course equivalencies are adjusted based on field experience demands beyond the one-course credit for the Coordinator
+- ⚠️ Supporting evidence (Kevin Joppy memo) focuses on student eligibility, not faculty load considerations
 
 ---
 
@@ -2751,7 +4604,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _Describe how the program has adequate professional support staff to meet the needs of students, faculty, and administration._
 
 **Final coverage verdict:** covered=**False**, score=**0.35**
-_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.35, delta=+0.00)_
+_(first-pass: covered=False, score=0.25; second-pass after gap-fill: covered=False, score=0.35, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[9][c].content`_
@@ -2769,29 +4622,97 @@ Describe how the program has adequate professional support staff to meet the nee
 #### Supporting evidence — text
 _Destination: `Submission.narratives[9][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 140 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explanation of how support staff meets faculty needs beyond clerical tasks (e.g., advising support, assessment coordination, curriculum development)
+
+_Source heading:_ **Teach two courses each semester (two course release time per semester for Department Chair responsibilities) — Serve on faculty committees — Administrative Responsibilities — Administrative Responsibi**
+
+```text
+Advise students majoring and minoring in Human Services Advise transfer students Mentor faculty members on an individual basis Conduct classroom observations of fulltime and adjunct faculty Plan, conduct, and disseminate results of faculty meetings Hire faculty in collaboration with the division Dean Conduct all program assessment procedures and disseminate results Schedule courses and assign instructors to teach them Communicate with possible future employers of students and coordinate employment opportunities with the Career Services Office Maintain connections with articulation partners, both community college and graduate school, and update articulation agreements Write student recommendations for graduate school and employment Consult with other program coordinators/department chairs Write and disseminate annual department reports Submit department Unit Action Plan and budget requests Develop and manage program budget Maintain Human Services Department website Coordinate curriculum development and review; monitor quality and effectiveness of all course offerings
+```
+
+##### Evidence text 2 — conf 0.72, 155 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No discussion of student support services (academic advising, career counseling, disability services, mental health resources, etc.)
+
+_Source heading:_ **Academic Integrity Policy — ACADEMIC SERVICES — ACADEMIC SERVICES — ACADEMIC SERVICES — ACADEMIC SERVICES — ACADEMIC SERVICES**
+
+```text
+Disability Services The Office of Disability Services (ODS) facilitates equal access for every student who self-identifies as having a disability. If you are a student with a disability who needs accommodations in this class, please contact the Director of Disability Services at ODS@stevenson.edu. Once accommodations are authorized by ODS, please provide me (your instructor) with your approved accommodations memo as soon as possible. Accommodations are not retroactive. This is the link to the University’s Disability Support Services: http://www.stevenson.edu/academics/academic-resources/disability-support-services/
+
+Academic Link The Academic Link, located on Owings Mills in the Center for Student Success (GHS 101) and on Greenspring in Knott Hall (KH201), provides free tutoring for many classes. If you are having difficulty with or would benefit from discussing the material with an upper level peer, seek assistance early in the semester. Tutoring often makes a difference in a student’s grade. For more information regarding hours, scheduling appointments and accessing additional resources, please visit: http://www.stevenson.edu/academics/academic-resources/academic-link/
+```
+
+##### Evidence text 3 — conf 0.62, 154 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No identification of gaps or unmet needs, or how the program monitors adequacy of support
+
+_Source heading:_ **What did you feel was the least worthwhile part of this program?  Why? — What did you feel was the least worthwhile part of this program?  Why? — What did you feel was the least worthwhile part of thi**
+
+```text
+Many students indicated that there was no part of the program that was not worthwhile. Five students noted that the textbook for practicum was redundant and could have been used in the internship. A few students felt that the demands were overwhelming, particularly the practicum hours, while others indicated that the internship had too few hours to be effective.  Individual students mentioned specific courses and experiences (statistics, focused electives/budgeting class, the portfolio, and too much group work).
+
+Suggestions for improving the program:
+
+Only a few seniors offered suggestions for improving the program, but one theme was the expansion of course offerings and tracks. Suggestions included: more counseling classes, therapeutic play, disabilities, trauma and more psychology courses. One student suggested that University Supervisors visit sites more often and early in the semester to catch problems early. Another student requested more graduate school articulations.
+
+Explanation for disagreement with items on the checklist (Please list item number.):
+```
+
+##### Evidence text 4 — conf 0.62, 81 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Vague attribution of support ('greatly appreciated') without concrete evidence of effectiveness or capacity
+
+_Source heading:_ **The program helped me develop self- understanding. — The program helped me develop self- understanding. — I would recommend this program to other students/professionals. — I would recommend this progr**
+
+```text
+88%
+
+12%
+
+6 I would recommend this program to other students/professionals. 96% 4%
+
+6
+
+96%
+
+4%
+
+Field experiences (internship and practicum) were highlighted in the responses to the first question (over 75% of students mentioned this).  Students appreciated the opportunity to apply their classroom learning. Several students mentioned the support and guidance they received and how much they learned about themselves. Some specific courses/experiences were mentioned by individual students, such as the addiction courses, administration of human services, and student presentations.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[9][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Student’s Name: ____________________________________________ | `student-s-name-student-s-name-agency` | 98 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/student-s-name-student-s-name-agency.docx` |
+
+_File 1 fills gap_: No supporting evidence provided despite claims about staff assistance
+
+```text
+Strongly Agree Agree Disagree Strongly Disagree No Opinion 1. The agency was adequate for meeting course objectives. 2.  An adequate orientation      was provided by the agency. 3.  The agency rules and regulations were explained clearly. 4.  The field instructor was available to discuss issues or concerns related to the experience. 5.  The field instructor was well prepared and organized. 6.  The field instructor encouraged student questions and comments. 7.  The field instructor provided useful feedback during the semester. 8.  The staff was helpful and supportive to students. 9.  The staff holds a positive attitude toward students and learning.
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence of adequacy: narrative makes no claim that support staff are 'adequate' in number, qualifications, or capacity to meet needs
-- ⚠️ No assessment of student support needs: missing discussion of how student support needs are identified or whether current staffing meets them
-- ⚠️ No assessment of faculty support needs: missing discussion of how faculty support needs are identified or whether current staffing meets them
-- ⚠️ No assessment of administrative support needs: missing discussion of how administrative support needs are identified or whether current staffing meets them
-- ⚠️ No staffing structure/organization chart: no documentation of reporting lines, roles, responsibilities, or FTE allocations
-- ⚠️ No supporting evidence provided: narrative is entirely unsupported by documentation (job descriptions, organizational charts, needs assessments, staffing plans, or budget allocations)
-- ⚠️ Vague role descriptions: 'particularly helpful' and 'greatly appreciated' do not substantiate adequate capacity or coverage
-- ⚠️ No identification of gaps or future planning: no discussion of whether current staffing is sufficient or if gaps exist
+- ⚠️ No evidence of adequate secretarial/clerical staffing levels, FTE allocations, or whether current support is sufficient to meet actual demand
+- ⚠️ Narrative mentions only two support roles (receptionists, Administrative Assistant) with no detail on their responsibilities, availability, or workload capacity
+- ⚠️ No information about support staff for administration beyond vague mention of 'departmental materials' production
+- ⚠️ No evidence addressing student support services coordination or dedicated advising staff (Evidence 2 lists services but doesn't show program-specific support staffing)
+- ⚠️ Evidence 1 lists extensive Program Coordinator duties but provides no staffing plan, workload assessment, or confirmation that one person can adequately fulfill all these responsibilities
+- ⚠️ No documentation of support staff performance, adequacy assessments, or mechanisms to evaluate whether current staffing meets actual needs
+- ⚠️ No evidence of support for faculty professional development, research, or administrative workload beyond mentions in Evidence 1
+- ⚠️ Student feedback (Evidences 4-5) indicates unmet needs (request for more University Supervisor site visits, curriculum expansion) but no staffing response is documented
 
 ---
 
-### `9.d` 🔴 — Program Support
+### `9.d` 🟡 — Program Support
 
 **Spec prompt:** _Describe how there is adequate resource support (e.g., technology, library, computer labs, etc.) to meet the needs of students, faculty, and administration._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.65**
+_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.65, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[9][d].content`_
@@ -2976,12 +4897,41 @@ _Source heading:_ **Academic LinkThe John L. Stasiak Academic Link, located on O
 Academic LinkThe John L. Stasiak Academic Link, located on Owings Mills in the Center for Student Success (GHS 101), provides free tutoring for many classes. If you are having difficulty with or would benefit from discussing the material with an upper level peer, seek assistance early in the semester. Tutoring often makes a difference in a student’s grade. To view the tutoring schedule and sign up for an appointment, go to stevenson.go-redrock.com, visit the Link in person, or call 443-394-9300.
 ```
 
+##### Evidence text 3 — conf 0.62, 155 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing information about accessibility, hours of operation, or capacity constraints that might limit adequacy
+
+_Source heading:_ **Academic Integrity Policy — ACADEMIC SERVICES — ACADEMIC SERVICES — ACADEMIC SERVICES — ACADEMIC SERVICES — ACADEMIC SERVICES**
+
+```text
+Disability Services The Office of Disability Services (ODS) facilitates equal access for every student who self-identifies as having a disability. If you are a student with a disability who needs accommodations in this class, please contact the Director of Disability Services at ODS@stevenson.edu. Once accommodations are authorized by ODS, please provide me (your instructor) with your approved accommodations memo as soon as possible. Accommodations are not retroactive. This is the link to the University’s Disability Support Services: http://www.stevenson.edu/academics/academic-resources/disability-support-services/
+
+Academic Link The Academic Link, located on Owings Mills in the Center for Student Success (GHS 101) and on Greenspring in Knott Hall (KH201), provides free tutoring for many classes. If you are having difficulty with or would benefit from discussing the material with an upper level peer, seek assistance early in the semester. Tutoring often makes a difference in a student’s grade. For more information regarding hours, scheduling appointments and accessing additional resources, please visit: http://www.stevenson.edu/academics/academic-resources/academic-link/
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[9][d].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Department Issues | `department-issues` | 822 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/department-issues.docx` |
+
+_File 1 fills gap_: No explicit connection between listed resources and the specific needs of CSHSE students, faculty, and administration
+
+```text
+We discussed the departmental acronym and course designator. It was agreed that we should be consistent in referring to the department as CHS and use that as the designator for all courses. There will need to be a systematic effort to let students and other area of the college know about the shift. John will talk to Cheryl and the registrar about this. Use gradebook in Blackboard was discussed. We will all need to start doing using that feature in the fall. Several faculty offered to help anyone who needed to set up this feature. Students have had some questions about the eText for CHS 101. Faculty have been frustrated by a lack of clear instructions from the publisher and bookstore. The graduate panel for practicum students is scheduled for Feb. 25. Representative from two graduate programs (UMB MSW program and the Chicago School of Professional Psychology) will be included in the panel. We talked about a possible articulation with the UM program as John has heard indirectly that they may be open to this. If our students were able to get advanced standing when entering the program, that would be very beneficial. John will follow up on this. Faculty evaluation forms are due by Feb. 8. John has communicated with faculty as needed and apologized for the last minute request. The self-study for CSHSE reaccreditation is due at the end of the summer. John will be working on the report through the spring semester and will need input from faculty. He will be requesting specific infor
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ LLM returned non-JSON response
+- ⚠️ No evidence of needs assessment or how resource adequacy was determined for students, faculty, and administration—no data on usage, satisfaction, or alignment with program-specific needs
+- ⚠️ Missing information about technology support/help desk services and response times for technical issues
+- ⚠️ No discussion of administrative resources (e.g., software licenses, financial systems, management tools) specific to program/departmental administration
+- ⚠️ Lack of any assessment data or outcome measures demonstrating that current resources actually meet stated needs
+- ⚠️ No mention of funding mechanisms or budget allocation processes that ensure resource adequacy
+- ⚠️ Limited detail on whether resources specifically serve the CSHSE program's unique needs (e.g., counseling-specific databases, simulation labs, or specialty software)
+- ⚠️ Part-time faculty office resource sharing mentioned but not evaluated as adequate or inadequate
+- ⚠️ No evidence of systematic review or continuous improvement of resource support
 
 ---
 
@@ -2990,7 +4940,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _Describe office, classroom, meeting, and informal gathering spaces and how they meet the needs of students, faculty, and administration._
 
 **Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.55, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[9][e].content`_
@@ -3018,32 +4968,89 @@ Classrooms seem to be working effectively, despite a few adjustments. Students (
 #### Supporting evidence — text
 _Destination: `Submission.narratives[9][e].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 91 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No description of informal gathering spaces beyond vague reference to 'lounge areas'—lacks specificity on location, capacity, or functionality
+
+_Source heading:_ **Advisory Board Meeting, Sept. 21, 8:30-10:00 in Campanella — Graduate Panel, Oct. 1 at 6:00 in library — NOHS Conference, Oct. 25-27 — Admissions Events Open House, 9/22 (John) Open House, 10/13 (John**
+
+```text
+11:30 – 12:30; LRC 104
+
+Present:
+
+We will be moving to the MAC over winter break. Faculty have selected offices: N172 (John), N173 (Tom), N177 (Lauri), N178 (Mayaugust).  N174 and N176 will be shared with adjuncts from other departments and won’t be locked, but we can use them for space to meet with students. John will order boxes to be delivered to faculty offices so we can start working on packing up. He will also work on getting keys, signage and painting. We discussed other aspects of the move, as well.
+```
+
+##### Evidence text 2 — conf 0.62, 90 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No mention of accessibility features or accommodations in any spaces
+
+_Source heading:_ **ACADEMIC SERVICES & RESOURCES — ACADEMIC SERVICES & RESOURCES — ACADEMIC SERVICES & RESOURCES — ACADEMIC SERVICES & RESOURCES — ACADEMIC SERVICES & RESOURCES**
+
+```text
+Disability Services  - Stevenson University will make reasonable accommodations for students with documented disabilities. The Office of Disability Services (ODS) facilitates equal access for every student who self-identifies as having a disability. If you are a student with a disability who needs accommodations in this class, please contact the Director of Disability Services located in Garrison Hall South Room 138 or send an email to ODS@stevenson.edu. Once accommodations are authorized by ODS, please provide me (your instructor) with your approved accommodations memo as soon as possible. Accommodations are not retroactive.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[9][e].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Standard 8b — Standard 8b — CLASSROOM OBSERVATION — CLASSROO | `standard-8b-standard-8b-classroom-observation-classroom-obse` | 32 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/standard-8b-standard-8b-classroom-observation-classroom-obse.docx` |
+| 2 | List of Minutes — List of Minutes — Minutes — Minutes — Coun | `list-of-minutes-list-of-minutes-minutes-minutes-counseling-h` | 158 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/list-of-minutes-list-of-minutes-minutes-minutes-counseling-h.docx` |
+
+_File 1 fills gap_: No assessment of whether classroom spaces meet student learning needs (only lists equipment available)
+
+```text
+Faculty Member Visited:  					Date:
+
+Course Number/Section:
+
+Class Topic/Format:
+
+Classroom Environment:
+
+Comments:
+
+Observation Process:
+
+Instruction : (presentation of material, relevance of points covered, knowledge of subject 	matter, organization of material, explanation of terms/concepts)
+```
+
+_File 2 fills gap_: Discussion section appears to be raw meeting notes rather than reflective analysis of whether spaces adequately meet needs
+
+```text
+12:00 – 1:30; MAC N120
+
+Present:
+
+This was the first meeting of the semester and in the department’s new location on the Owings Mills North campus. Loryn talked about her trip to Cambodia and China over the winter break and John described the travel study trip to Ecuador. We hope to do another trip in January 2020, but John will not be able to go, so someone else will need to step forward.
+
+Classrooms seem to be working effectively, despite a few adjustments. Students (and faculty) are finding their way around the new building. We discussed use of OneDrive to access, store and download/upload files. John asked if there were supply needs, since we need to get our own now (Carol mentioned gradebooks). We discussed ideas for the bulletin board outside of faculty offices – ideas included: current events “In the News”, a list of field placement and employment sites, Ecuador pictures and other pictures of departmental events.
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No description of how meeting spaces specifically meet the needs of students, faculty, and administration—only that they exist
-- ⚠️ No evidence of informal gathering spaces or how they support student/faculty community
-- ⚠️ No assessment of whether office, classroom, and meeting spaces are adequate in quantity or quality relative to program enrollment
-- ⚠️ No mention of accessibility features or accommodations in any spaces
-- ⚠️ No discussion of how spaces support faculty-student interactions, mentoring, or advising
-- ⚠️ No supporting evidence (photos, floor plans, utilization data, surveys) provided to substantiate claims
-- ⚠️ Narrative includes irrelevant details (shuttle service, cafeterias, gyms) not central to program spaces
-- ⚠️ Casual mid-narrative discussion about OneDrive and supply needs undermines professional tone and clarity
-- ⚠️ No explicit connection between space features and how they meet administration's operational needs
+- ⚠️ No description of how informal gathering spaces meet the specific needs of students, faculty, and administration — only that they exist
+- ⚠️ Missing evidence of assessment or feedback regarding whether spaces adequately meet user needs
+- ⚠️ No detail on meeting room availability, booking procedures, or capacity to support program functions
+- ⚠️ Lacks explanation of how classroom technology and layout support course delivery and student learning outcomes
+- ⚠️ No discussion of how office spaces support faculty scholarship, mentoring, or administrative work
+- ⚠️ Missing information about accessibility of spaces for students with disabilities (referenced in evidence but not connected to space descriptions)
+- ⚠️ Lounge areas mentioned but not described in terms of how they function or meet needs
+- ⚠️ No data, survey results, or systematic evaluation of space adequacy provided
+- ⚠️ Brief mention of adjustments needed but no follow-up on whether issues were resolved
 
 ---
 
 ## Standard 10
 
-### `10.a` 🔴 — Evaluation of Transfer Credits and Prior Learning
+### `10.a` 🟡 — Evaluation of Transfer Credits and Prior Learning
 
 **Spec prompt:** _Describe formal policies and procedures, and informal practices for the transfer of credits and evaluation of prior learning._
 
-**Final coverage verdict:** covered=**False**, score=**0.25**
-_(first-pass: covered=False, score=0.25; second-pass after gap-fill: covered=False, score=0.25, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.65**
+_(first-pass: covered=False, score=0.25; second-pass after gap-fill: covered=False, score=0.65, delta=+0.40)_
 
 #### Narrative content
 _Destination: `Submission.narratives[10][a].content`_
@@ -3071,21 +5078,67 @@ The agreement may be terminated by either party for due cause and after adequate
 #### Supporting evidence — text
 _Destination: `Submission.narratives[10][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.68, 195 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No description of formal written policies and procedures for transfer credit evaluation
+
+_Source heading:_ **Students must maintain a 2.0 cumulative grade point average in order to transfer.**
+
+```text
+Credits earned from non-direct classroom instruction (including CLEP, AP, and other nationally recognized standardized examination scores) are included in the maximum of 70 credits that will be accepted by SU toward degree requirements.  An appropriate score is determined by SU, and student must submit original test scores/results to SU.  Tech Prep credits will not transfer.  Credit awarded for experiential learning (“life experience”) is not recognized by, and is not transferable to, SU.
+
+Students intending to transfer should complete the admission application for SU following the third semester of their Associate Degree program. Students should contact the Financial Aid Office at SU as soon as possible in regard to college deadlines for financial aid.
+
+While FCC and SU do not presently have a dual enrollment program should one be agreed to, this agreement will not preclude students from participation and students may apply for and receive the benefits of dual enrollment.  Those students would then be subject to the policies of said program should they apply.
+
+FCC students who have completed the A.A. degree in Human Services will be given every consideration for financial assistance and will be eligible to compete for academic scholarships at SU.
+```
+
+##### Evidence text 2 — conf 0.72, 356 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No description of institutional policies governing maximum transfer credits accepted
+
+_Source heading:_ **IN PROGRESS — IN PROGRESS — IN PROGRESS — Howard Community College — A.A. or A.S. Transfer Plan — Human Services, A.A. to Counseling & Human Services, B.S.**
+
+```text
+This transfer plan is intended for students pursuing an A.A. in Human Services at Howard Community College who are interested in pursuing a B.S. in Counseling & Human Services at Stevenson University. The equivalencies below demonstrate how a student can meet both the requirements of the associate degree and prepare for a seamless transfer to Stevenson. Any student who enters Stevenson with an A.A. or A.S. degree will have completed all general education requirements with the exception of composition II if not taken at the community college. Please note:
+
+Only courses that have course equivalencies are displayed. This guide does not show all transferable courses from this college. It also does not display all Stevenson University courses that will fulfill a specific requirement. Program requirements must be completed with a grade of C or better, and general education courses must be passed with a grade of D or better. Stevenson University will accept up to 70 credits from 2-year institutions. Up to 90 credits can be applied to degree requirements from a combination of 2-year institutions, 4-year institutions, and non-direct classroom instruction (including CLEP, AP, and other nationally recognized standardized examination scores). For additional information about credit transfer, please see: http://www.stevenson.edu/admissions-aid/getting-started/transfer-students/transfer-credit-evaluation/ For scholarship information please see the “Paying for College” page on: http://www.s
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[10][a].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | For scholarship information please see the “Paying for Colle | `for-scholarship-information-please-see-the-paying-for-colleg` | 309 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/for-scholarship-information-please-see-the-paying-for-colleg.docx` |
+| 2 | Community College Degree Requirements Stevenson Equivalency  | `community-college-degree-requirements-stevenson-equivalency-` | 269 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/community-college-degree-requirements-stevenson-equivalency-.docx` |
+
+_File 1 fills gap_: No explanation of criteria used to evaluate transfer credits (GPA requirements, course equivalency, recency, etc.)
+
+```text
+Transfer plans are intended to be used as planning tools. If you need additional assistance in selecting courses to take prior to transferring to Stevenson University, contact Stevenson Admissions at 443-352-4450.
+
+Community College Degree Requirements Stevenson Equivalency Category Credits Transferred HEED 125 Ethics in Professional Practice Focused Elective Program Requirement 3 HUMS 110 Introduction to Human Services CHS 201 Human Services and Social Policy Program Requirement and GE Social Science 3 HUMS 122 Individual Counseling Techniques CHS 260 Counseling Strategies for Individuals Program Requirement 3 HUMS 123 Group Counseling Skills Meets CHS 315 Group Counseling Program Requirement 3 HUMS 124 Family Counseling CHS 101 Family Studies Program Requirement 3 HUMS 150 Community Resources and Partnerships Focused Elective Program Requirement 3 HUMS 250 Community Services Practicum Meets CHS 380 Internship Program Requirement 3 Elective: SU recommends HUMS 120 Medical Aspects of Chemical Dependency CHS 270 Psychopharmacology and Addictions Program Requirement 3 Elective (all options available will meet a focused elective requirement) Depends on course selected Program Requirement (Focused Elective) 3 PSYC 101 General Psychology PSY 101 Intro. to Psychology Program Requirement 3 PSYC 200 Lifespan Development PSY 108 Human Growth and Development Program Requirement 3 PSYC 203 Abnormal Psychology PSY 215 Psychopathology Program Requirement (Focused Elective) 3 ENGL 121 Coll
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: No explanation of how credits are applied toward degree requirements (general education vs. major-specific)
+
+```text
+HEED 125 Ethics in Professional Practice Focused Elective Program Requirement 3 HUMS 110 Introduction to Human Services CHS 201 Human Services and Social Policy Program Requirement and GE Social Science 3 HUMS 122 Individual Counseling Techniques CHS 260 Counseling Strategies for Individuals Program Requirement 3 HUMS 123 Group Counseling Skills Meets CHS 315 Group Counseling Program Requirement 3 HUMS 124 Family Counseling CHS 101 Family Studies Program Requirement 3 HUMS 150 Community Resources and Partnerships Focused Elective Program Requirement 3 HUMS 250 Community Services Practicum Meets CHS 380 Internship Program Requirement 3 Elective: SU recommends HUMS 120 Medical Aspects of Chemical Dependency CHS 270 Psychopharmacology and Addictions Program Requirement 3 Elective (all options available will meet a focused elective requirement) Depends on course selected Program Requirement (Focused Elective) 3 PSYC 101 General Psychology PSY 101 Intro. to Psychology Program Requirement 3 PSYC 200 Lifespan Development PSY 108 Human Growth and Development Program Requirement 3 PSYC 203 Abnormal Psychology PSY 215 Psychopathology Program Requirement (Focused Elective) 3 ENGL 121 College Composition ENG 151 English Composition Program Requirement and GE 3 BIOL 101 General Biology I BIO 113 General Biology I GE lab science 4 Arts and Humanities Core Group A GE Humanities 3 Arts and Humanities Core Group B GE Humanities 3 Science Gen Ed Core GE math/science 3 Mathematics Gen Ed Core, 
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No description of formal policies and procedures for transfer credit evaluation process (e.g., who evaluates, timeline, criteria, documentation required)
-- ⚠️ No explanation of how prior learning is assessed or evaluated (methods, rubrics, responsible parties)
-- ⚠️ No detail on what constitutes 'appropriate score' for transfer credits or how equivalencies are determined
-- ⚠️ No information on appeal or grievance procedures for denied transfer credits
-- ⚠️ No description of how transferred credits are applied to degree requirements (e.g., general education, major, electives)
-- ⚠️ No explanation of GPA requirements, minimum grades needed for transfer, or grade replacement policies
-- ⚠️ No supporting evidence provided (policies, procedures documents, articulation agreements, evaluation forms, etc.)
-- ⚠️ Narrative only addresses articulation agreement specifics, not institutional transfer policies broadly
-- ⚠️ No mention of how students are informed of transfer credit decisions or transcript documentation
+- ⚠️ No description of FORMAL POLICIES AND PROCEDURES document(s) — only transfer agreements and articulation guides are referenced; no policy manual excerpts or institutional procedure documentation provided
+- ⚠️ No clear description of the INFORMAL PRACTICES for transfer credit evaluation — who reviews transfers, timelines, appeal processes, or decision-making authority are not explained
+- ⚠️ Prior learning evaluation is mentioned only in the negative ('credit awarded for experiential learning is not recognized') — no formal process, assessment method, or institutional practice for evaluating prior learning is described
+- ⚠️ No information on how transcript analysis is conducted, what documentation is required, or institutional procedures for credit-by-exam (CLEP, AP) beyond 'appropriate score is determined by SU'
+- ⚠️ Grade point average minimum (2.0) is mentioned in Evidence 1 but context is incomplete (text begins mid-sentence with gap-fill marker)
+- ⚠️ No description of who is responsible for transfer credit evaluation at the institution (registrar, admissions, academic advisor roles)
+- ⚠️ No timeline or procedure for when/how transfer decisions are communicated to students
 
 ---
 
@@ -3093,8 +5146,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Describe how students receive this information. II. CURRICULUM: BACCALAUREATE DEGREE_
 
-**Final coverage verdict:** covered=**True**, score=**0.82**
-_(first-pass: covered=True, score=0.82; second-pass after gap-fill: covered=True, score=0.82, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.85**
+_(first-pass: covered=True, score=0.85; second-pass after gap-fill: covered=True, score=0.85, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[10][b].content`_
@@ -3149,27 +5202,25 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | (data table) | `data-table` | 278 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
+| 1 | (data table) | `data-table` | 278 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No description of HOW or WHEN students receive transfer credit evaluation information (e.g., during orientation, advising sessions, in writing)
-- ⚠️ Missing timeline for transfer credit decisions and how long evaluation takes
-- ⚠️ No explanation of how students are informed of credit denials or partial credit awards
-- ⚠️ Lacks detail on who specifically communicates transfer decisions to students (registrar, advisor, department chair)
-- ⚠️ No mention of appeals process if students disagree with transfer credit evaluation
-- ⚠️ CLEP and IB credit procedures described but no detail on how students are informed of these options or results
-- ⚠️ Prior learning evaluation (CHS 380 waiver) criteria are clear, but process for student notification of approval/denial is not described
+- ⚠️ No description of HOW or WHEN students are informed about transfer credit decisions (e.g., is notification in writing, during advising, in admission letters?)
+- ⚠️ No mention of appeal or grievance procedures if a student disagrees with a transfer credit evaluation decision
+- ⚠️ Limited detail on timeline for transfer credit evaluation (when are decisions made relative to enrollment?)
+- ⚠️ No evidence of how prior learning from work experience (beyond the CHS 380 waiver) is systematically evaluated or communicated to students
+- ⚠️ Missing information on how non-regionally accredited institution credits are handled or communicated to students
 
 ---
 
 ## Standard 11
 
-### `11.a` 🔴 — Knowledge, Theory, Skills, and Values
+### `11.a` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _The historical roots of human services as a discipline and a profession._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.72**
+_(first-pass: covered=False, score=0.40; second-pass after gap-fill: covered=True, score=0.72, delta=+0.32)_
 
 #### Narrative content
 _Destination: `Submission.narratives[11][a].content`_
@@ -3227,14 +5278,39 @@ Identify the study population, the population to whom your findings would apply.
 #### Supporting evidence — text
 _Destination: `Submission.narratives[11][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 32 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that CHS 105 Week 2 history content actually covers historical roots—only a course schedule label is provided; no syllabus, learning outcomes, or assignment details demonstrating what 'history of human services' means or what students learn
+
+_Source heading:_ **Topics Covered Required Readings Due — Topics Covered — Topics Covered — Required Readings — Required Readings — Due — Due — Week 1 Aug 28 &30 COURSE OVERVIEW, FOUNDATIONAL CONCEPTS Piliavin, 2009 Alt**
+
+```text
+Week 2 Sept 4 & 6 THE HISTORY OF HELPING and MODERN DAY HUMAN SERVICES ROLES AND FUNCTIONS OF HUMAN SERVICE WORKERS DiGiovanni-CSHSE_Legacy.pdf (pp 9-14); Kincaid, 2009 -four essential components of CHS.pdf
+```
+
+##### Evidence text 2 — conf 0.62, 41 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Supporting evidence (Evidence 1 and 2) are course schedules for research methods and a helping skills course—neither directly substantiates historical content coverage
+
+_Source heading:_ **Types of Data — Types of Data — Descriptive Statistics — Descriptive Statistics — Quantitative II — Quantitative II**
+
+```text
+http://libweb.surrey.ac.uk/library/skills/Numeracy%20for%20professional%20purposes/2_Types%20of%20Data/index.htm
+
+http://libweb.surrey.ac.uk/library/skills/Numeracy%20for%20professional%20purposes/3_Basic%20Descriptive%20Statistics%20introduction/index.htm
+
+http://libweb.surrey.ac.uk/library/skills/Numeracy%20for%20professional%20purposes/4_Basic%20Descriptive%20Statistics/index.htm
+
+Week 11 April 15 Historical Research Research Limitations/ Implications/ Impact Assessment Assignment V -Literature Review Draft Due April 15 Individual Meetings UNIVERSITY CLOSED April 19 Historical Research http://www.okstate.edu/ag/agedcm4h/academic/aged5980a/5980/newpage19.htm Memory vs The Past http://www.history.ucsb.edu/faculty/marcuse/projects/reception/ReceptHistGornCHE004.htm History & the Web http://chnm.gmu.edu/essays-on-history-new-media/essays/?essayid=12
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[11][a].linkedDocuments`_
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | (data table) | `data-table` | 273 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
-| 2 | (data table) | `data-table` | 274 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
+| 1 | (data table) | `data-table` | 273 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
+| 2 | (data table) | `data-table` | 274 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
 
 #### Curriculum matrix cells
 _Destination: `CurriculumMatrix.cells[]`_
@@ -3245,14 +5321,14 @@ _Destination: `CurriculumMatrix.cells[]`_
 - matrix: `Baccalaureate Degree Level 2018Instructions: Use as many versions of the Matrix `, col -1, code `(see matrix extractor)`, types [], depth `—`
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence that CHS 105 course schedule actually includes Week 2 history content—course schedule provided (Evidence 2) does not show CHS 105 and begins with unrelated topics (Problem-Management Process, Service Learning)
-- ⚠️ Missing syllabus or detailed curriculum map showing where historical roots are explicitly taught across the named courses (CHS 105, 224, 430, 380, 440, 441)
-- ⚠️ No student learning outcome data, assignments, or assessments demonstrating students actually learned the historical roots of human services
-- ⚠️ Narrative mentions that CHS 224 students 'read social science research articles that influenced the development of the human services field' but provides no evidence or reading list
-- ⚠️ Vague reference to 'in-class discussion' and 'journal assignments' about agency history in field placement courses—no actual assignment prompts, rubrics, or student work provided
-- ⚠️ The narrative includes unrelated text about research study design (population, sampling, data collection) that does not address the specification
-- ⚠️ No evidence of how elective courses contribute to understanding historical roots
-- ⚠️ Missing documentation of program revisions' impact on teaching historical content
+- ⚠️ Narrative lacks specificity about what historical content is actually taught (e.g., which historical periods, movements, or foundational figures are covered in CHS 105 Week 2)
+- ⚠️ No evidence that students demonstrate mastery or learning of historical roots—only that topics are 'covered' through lectures and discussions; no assessment data provided
+- ⚠️ CHS 224 evidence (Evidence 1) shows research methods content but does NOT explicitly connect to how social science research influenced human services discipline development
+- ⚠️ CHS 430 family therapy history (Evidence 2) addresses one specific area but doesn't demonstrate breadth of historical discipline coverage
+- ⚠️ Field placement journal assignments (CHS 380, 440) focus on individual agency history, not the broader discipline/profession roots
+- ⚠️ No evidence addresses the distinction between human services as a 'discipline' versus 'profession'—specification asks for both
+- ⚠️ Narrative mentions electives but provides no evidence that electives systematically address historical roots
+- ⚠️ Supporting evidence includes fragmented course schedules but lacks syllabus excerpts, reading lists, or assignment rubrics that would demonstrate historical content rigor
 
 ---
 
@@ -3354,26 +5430,61 @@ Individual and
 … (truncated, full text imported)
 ```
 
+##### Evidence text 2 — conf 0.62, 65 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No specific legislation is named in the narrative (e.g., Americans with Disabilities Act, Family Medical Leave Act, Mental Health Parity Act, Affordable Care Act, specific welfare reform bills); only generic references to 'Great Society programs' and 'welfare reform'
+
+_Source heading:_ **Social Services Administration: March 2001 - March 2006**
+
+```text
+Social Services Administration:
+
+Provide statewide leadership to local departments of social services regarding matters of child maltreatment and in-home family services.  Monitor local departments for program effectiveness and compliance with statewide and federal regulations. Respond to inquiries from local and State politicians, including the Governor’s office and local community members. Developed the regulations for implementation of Maryland’s Safe Haven law (governing the abandonment of newborns)
+```
+
+##### Evidence text 3 — conf 0.62, 32 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Supporting evidence (course schedule) does not list actual legislation topics, bill names, or policy frameworks—Week 2 shows 'ISSUE-SPECIFIC SOCIAL POLICY' with 'Reading TBD,' indicating content is undefined
+
+_Source heading:_ **Topics Covered Required Readings Due — Topics Covered — Topics Covered — Required Readings — Required Readings — Due — Due — Week 1 Aug 28 &30 COURSE OVERVIEW, FOUNDATIONAL CONCEPTS Piliavin, 2009 Alt**
+
+```text
+Week 2 Sept 4 & 6 THE HISTORY OF HELPING and MODERN DAY HUMAN SERVICES ROLES AND FUNCTIONS OF HUMAN SERVICE WORKERS DiGiovanni-CSHSE_Legacy.pdf (pp 9-14); Kincaid, 2009 -four essential components of CHS.pdf
+```
+
+##### Evidence text 4 — conf 0.62, 37 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that students analyze how specific legislation shapes service delivery systems, eligibility criteria, funding mechanisms, or access barriers
+
+_Source heading:_ **Articulate how diversity among individuals, families, and communities may affect the delivery of human services. — Locate and interpret sources appropriate to public policy, trends, and issues that af**
+
+```text
+Describe how personal, ethical (related to the NOHS/CSHSE Ethical Standards), and legal issues affect the delivery of human services.
+
+Compare and contrast major models of causation for psychopathology and major theoretical approaches for helping people in need.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[11][b].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No specific legislation is named or discussed in the narrative or evidence (e.g., ADA, HIPAA, FERPA, Social Security Act, Medicaid, specific welfare reform laws). The specification requires knowledge of 'historical and current legislation' but only generic references to 'legislation' and 'legal issues' are provided.
-- ⚠️ Supporting evidence (course schedule) is incomplete and truncated—Week 9-10 'ISSUE-SPECIFIC SOCIAL POLICY' readings are marked 'TBD,' making it impossible to verify what legislation is actually assigned or covered.
-- ⚠️ CHS 101 'legislation affecting family structure' is mentioned but no specific family law examples are provided in evidence; course schedule excerpt does not include the cited 3/28 or 4/4 dates.
-- ⚠️ CHS 105 reference to 'Great Society programs, welfare reform' is plausible but no syllabus, reading list, or assignment details provided as corroborating evidence.
-- ⚠️ Field placement courses (CHS 380, 440, 441) are claimed to address legislation 'affecting their particular agency' but no evidence demonstrates systematic, structured coverage of federal/state legislation (e.g., through assignments, discussion guides, or assessment rubrics).
-- ⚠️ No evidence of assessment or learning outcomes demonstrating students can identify, analyze, or apply specific legislation to human service contexts.
+- ⚠️ No specific legislation is named (e.g., ADA, HIPAA, FERPA, Individuals with Disabilities Education Act, Mental Health Parity Act, Social Security Act, etc.)
+- ⚠️ Narrative claims CHS 105 covers 'Great Society programs, welfare reform and related topics' but Evidence 1 shows only 'ISSUE-SPECIFIC SOCIAL POLICY' with readings 'TBD' in Weeks 9-10, indicating content is undefined
+- ⚠️ Evidence 2 (Social Services Administration document) describes a single individual's job duties (2001-2006) but does not demonstrate course-based instruction on legislation
+- ⚠️ No evidence that students actually analyze, critique, or apply specific historical or current legislation; evidence suggests cursory mention rather than substantive engagement
+- ⚠️ Field placement courses (CHS 380, 440, 441) are claimed to address legislation 'affecting their particular agency' but no syllabi, assignments, or student work products are provided to verify this claim
+- ⚠️ Evidence 1 does not list required readings for CHS 105, CHS 340, CHS 430, or other courses mentioned in narrative; course schedules are incomplete
+- ⚠️ No demonstration that students can distinguish between historical legislation (e.g., Social Security Act, Civil Rights Act) and current legislation (e.g., recent amendments, policy changes)
 
 ---
 
-### `11.c` 🟡 — Knowledge, Theory, Skills, and Values
+### `11.c` 🔴 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _How public and private attitudes influence legislation and the interpretation of policies related to human services._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.45, delta=-0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[11][c].content`_
@@ -3392,28 +5503,62 @@ How public and private attitudes influence legislation and the interpretation of
 #### Supporting evidence — text
 _Destination: `Submission.narratives[11][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 181 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No assessment data or rubrics showing how student learning is measured for this competency
+
+_Source heading:_ **Synthesizes and appropriately applies key concepts, methods and values in human services to professional situations — Synthesizes and appropriately applies key concepts, methods and values in human se**
+
+```text
+Average Rating:
+
+1.45
+
+Identify which areas show the greatest difficulties with learning and which show the least:
+
+The application of key concepts, methods and values (Objective #6) was most evident in these artifacts. All artifacts were rated as adequate or excellent by both faculty raters.
+
+The demonstration of professional attitudes and behaviors (Objective #3) was rated based on professionalism of writing and presentation. Two artifacts were judged to be inadequate by at least one of the raters. While 80% or artifacts were rated as adequate or excellent, there was less consistency on this objective then on others.
+
+Use of Results (to impact course, program, assessment process, etc.):
+
+Students continue to struggle with consistently demonstrating professionalism in their writing and electronic communications. While most of them are able to maintain an acceptable degree of professionalism, this is an area that we will continue to emphasize. A new course was recently created (CHS 217 Professional Development in Counseling & Human Services) that will stress the importance of professionalism. We also continue to offer writing-intensive courses that require students to practice good writing skills.
+```
+
+##### Evidence text 2 — conf 0.62, 631 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of depth of analysis; references to 'group projects' and 'poster presentations' lack detail about rigor or learning outcomes
+
+_Source heading:_ **What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? — Briefly describe other activities you engaged in this week — What concerns or chal**
+
+```text
+Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences.
+
+Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-evaluation and share it with the field instructor. In addition the field instructor will complete an evaluation of the student. Once both parties sign both forms the evaluation tools must be submitted to the faculty supervisor for review both at midpoint and at the end of the semester. Field Instructor’s Evaluation- Each student will be evaluated by his/her instructor at midpoint and at the completion of the field experience. Students will be evaluated in terms of personal qualities, role expectations within the agency setting, and professional qualiti
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[11][c].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, assignments, course schedules, or rubrics) to verify that the described content actually exists and is taught as claimed
-- ⚠️ Narrative lacks specific examples of how attitudes influence legislation outcomes (e.g., does a course show how public opposition shaped welfare reform, or how private sector interests affected healthcare policy?)
-- ⚠️ No demonstration of student learning outcomes or assessment data showing students can actually analyze the relationship between attitudes and policy interpretation
-- ⚠️ Vague reference to 'Issues Presentation project' and 'Poster Presentations' without evidence of what these assignments require or assess
-- ⚠️ Insufficient detail on the depth of coverage in CHS 224 (Research Methods) regarding attitude-legislation influence—appears to be minimal ('week 2 discussion')
-- ⚠️ No evidence that students engage with competing or conflicting attitudes and their differential impacts on policy
-- ⚠️ Field placement courses (CHS 380, 440, 441) described as addressing the topic indirectly through student experience, but no required assignment framework shown to ensure systematic coverage
+- ⚠️ Narrative identifies courses where the topic is 'addressed' but provides no concrete evidence (syllabi, assignments, student work samples) demonstrating actual student learning about how public/private attitudes influence legislation and policy interpretation
+- ⚠️ No student artifacts or assessment data provided showing students can articulate or analyze the relationship between public attitudes, private attitudes, and legislative/policy outcomes
+- ⚠️ Evidence 1 discusses general professionalism and application of concepts but does not specifically measure competency on Specification 11.c content
+- ⚠️ Evidence 2 describes field placement evaluation procedures and reflective assignments but lacks evidence that students specifically analyzed how attitudes influenced legislation/policy at their agencies
+- ⚠️ No examples of actual student work (papers, projects, presentations) that demonstrate understanding of public vs. private attitude influence on specific legislation or policies
+- ⚠️ Narrative mentions 'Issues Presentation' and 'Poster Presentations' in field courses but provides no actual student samples or rubrics showing how these assessed Specification 11.c
+- ⚠️ No assessment data or learning outcome measurements specifically tied to this specification
 
 ---
 
-### `11.d` 🟡 — Knowledge, Theory, Skills, and Values
+### `11.d` 🔴 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _The broader sociopolitical issues that affect human service systems. 2. Human Systems Context: The human services professional must demonstrate an understanding of the structure and dynamics of organizations, communities, and society as well as the nature of individuals and groups. This understanding is prerequisite to the determination of appropriate responses to human needs._
 
-**Final coverage verdict:** covered=**False**, score=**0.65**
-_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.65, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.00, delta=-0.65)_
 
 #### Narrative content
 _Destination: `Submission.narratives[11][d].content`_
@@ -3452,19 +5597,74 @@ Exposure to a spectrum of political ideologies.Response: Exposure to a spectrum 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[11][d].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 140 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Specification requires demonstration of understanding of 'structure and dynamics of organizations, communities, and society' — narrative addresses some sociopolitical issues but lacks explicit evidence of organizational/community systems analysis
+
+_Source heading:_ **Apply the sociological imagination — Apply the sociological imagination**
+
+```text
+Work applies the sociological imagination convincingly: explains connections between author’s experience and society clearly & logically or supports shared experience method with at least one peer-reviewed source.
+
+Work applies the sociological imagination somewhat convincingly: explanation of connections between author’s experience and society lack sufficient clarity and logic or supports shared experience method with non-peer reviewed source.
+
+Work applies the sociological imagination in a manner that is not sufficiently convincing: explanation of connection between author’s experience & society lacks clarity or logic or uses shared experience method without support.
+
+Work applies the sociological imagination in a manner that is not coherent: explanation of connection between author’s experience & society is illogical & incoherent or shared experience claim is not supported.
+
+Work does not apply the sociological imagination: there is no evidence of attempt to apply the sociological imagination in the work.
+```
+
+##### Evidence text 2 — conf 0.62, 824 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that students demonstrate understanding of 'nature of individuals and groups' as foundational to determining appropriate responses to human needs
+
+_Source heading:_ **The paper should be a minimum of two full pages, double-spaced and a 12-point font. — Syllabi — Syllabi — Hannah Fonti Sample Response Paper — February 3, 2019 — Professor Weiner — CHS 220**
+
+```text
+We live in a modern world, and yet, some of our beliefs and practices regarding race reveal that our world may not be as developed as we would like. Looking at Baltimore City specifically, Freddie Gray is the perfect example that racism still exists in our society today. Racial profiling is common enough in our society that the term “Driving While Black” or DWB is used to address being pulled over by police officers for no apparent reason. Robin DiAngelo, through her presentation “Deconstructing White Privilege,” discusses racism in our society through her “white experience”; while informative about bias, racism and white superiority, she fails to address what we, as a society or as individuals, can do outside of recognition of racism.
+
+DiAngelo opens with how our country was founded on race and unequal power, she uses an example that could be understood by the masses explaining how men gave women the right to vote. She claims that this practice continues through “group prejudice backed by institutional power.” Her claim is easily seen through school and neighborhood segregation, she notes that bad neighborhoods are considered neighborhoods with people of color. What she fails to address about the school and neighborhood segregation is why this occurs; lower class neighborhoods are generally filled with people of color because of the cycle of poverty, statistics reveal that people of color are paid less than their white counterparts as well as the fact that women of color are
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.62, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of assessments measuring students' ability to analyze how organizational/community/societal structures affect service delivery and human needs determination
+
+_Source heading:_ **ASSESSING THE NEEDS OF THE COMMUNITY — ASSESSING THE NEEDS OF THE COMMUNITY — The Community Tool Box and Conducting a Needs Assessment Meet in library computer lab — The Community Tool Box and — Condu**
+
+```text
+Week 5 9/25, 9/27 WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES Mehr, Chapter 6 (pp 102-110 only) Mehr Chapter 8 SEPT 27- Community Needs Assessment Action Plan – Questions due
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[11][d].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Standard 8b — Standard 8b — CLASSROOM OBSERVATION — CLASSROO | `standard-8b-standard-8b-classroom-observation-classroom-obse` | 32 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/standard-8b-standard-8b-classroom-observation-classroom-obse.docx` |
+
+_File 1 fills gap_: No supporting evidence provided; narrative alone cannot verify claims about course content, assignments, or learning outcomes
+
+```text
+Faculty Member Visited:  					Date:
+
+Course Number/Section:
+
+Class Topic/Format:
+
+Classroom Environment:
+
+Comments:
+
+Observation Process:
+
+Instruction : (presentation of material, relevance of points covered, knowledge of subject 	matter, organization of material, explanation of terms/concepts)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided: syllabi, course schedules, assignments, or rubrics are referenced but not attached, making verification impossible
-- ⚠️ Incomplete coverage of 'structure and dynamics of organizations': while government/economic systems are mentioned, organizational structure, culture, and internal dynamics are minimally addressed
-- ⚠️ Limited evidence of 'dynamics of communities': narrative focuses heavily on families and governance systems but lacks explicit coverage of community-level structures and dynamics
-- ⚠️ Vague coverage of 'nature of individuals and groups': the narrative emphasizes diversity characteristics but does not clearly demonstrate teaching of individual development, group behavior, or group dynamics theory
-- ⚠️ Missing explicit connection between sociopolitical context and 'appropriate responses to human needs': the specification requires showing how understanding systems informs intervention decisions, but this causal link is not articulated
-- ⚠️ Field placement courses (CHS 380, 440, 441) claimed to address this but no concrete evidence (student reflections, assignment descriptions, or learning outcomes) is provided
-- ⚠️ Scope of 'broader sociopolitical issues' appears narrow: focuses primarily on government and economics, with limited attention to other systemic issues (healthcare systems, criminal justice, education systems, etc.)
+- ⚠️ LLM returned non-JSON response
 
 ---
 
@@ -3526,23 +5726,24 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | (data table) | `data-table` | 475 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
+| 1 | (data table) | `data-table` | 475 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence that students analyze or critically evaluate theories of human development—only exposure/coverage is demonstrated
-- ⚠️ Missing evidence showing how theories are applied in practice settings; narrative mentions field placement courses (CHS 380, 440, 441) require 'developmental context' but provides no concrete assessment or application examples
-- ⚠️ No evidence of explicit instruction in contemporary or culturally-informed developmental theories beyond traditional Western theorists (Freud, Erikson, Piaget); textbook description mentions 'cultural approach' but no supporting syllabi confirm this integration across the curriculum
-- ⚠️ Lacks evidence of how students develop skills in assessing or intervening based on developmental theory; narrative describes coverage but not demonstration of competency
-- ⚠️ Missing documentation showing how diversity factors (ethnicity, culture, gender, sexual orientation, ability, socioeconomic status) are integrated into the teaching of human development theories, despite Standard 12 requirement
+- ⚠️ No evidence showing HOW theories are analyzed or critically evaluated; narrative mentions theories (Freud, Erikson, Piaget) are 'addressed' but doesn't document comparative analysis or evaluation of theoretical frameworks
+- ⚠️ Missing explicit evidence of application of human development theories to practice contexts; narrative mentions CHS 315/515 and CHS 360 use 'stages of human development in therapeutic interventions' but provides no syllabi, assignments, or case studies demonstrating this application
+- ⚠️ CHS 430 Family Dynamics assignment (Family of Origin project) is described narratively but not provided as evidence; cannot verify depth of engagement with development theory
+- ⚠️ No evidence demonstrating how diversity/cultural context is integrated into human development theory instruction (specification 12.f requires emphasis on diversity in determining/meeting human needs)
+- ⚠️ Course schedule (Evidence 2) is incomplete—cuts off mid-Week 10; cannot verify full semester coverage of human development across lifespan
+- ⚠️ No assessment data, rubrics, or student work samples showing student mastery of human development theories
 
 ---
 
-### `12.b` 🟢 — Knowledge, Theory, Skills, and Values
+### `12.b` 🔴 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Small groups: 1. Overview of how small groups are used in human services settings 2. Theories of group dynamics 3. Group facilitation skills._
 
-**Final coverage verdict:** covered=**True**, score=**0.75**
-_(first-pass: covered=True, score=0.75; second-pass after gap-fill: covered=True, score=0.75, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[12][b].content`_
@@ -3665,19 +5866,16 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No explicit reference to specific group dynamics theories (e.g., Tuckman's stages, Yalom's curative factors, systems theory). Narrative mentions 'theories of group dynamics' are covered in CHS 315/515 Week 4 and CHS 430, but no syllabus excerpts, reading lists, or concrete examples of which theories are taught are provided.
-- ⚠️ Limited evidence of formalized assessment of group facilitation skills. While multiple courses list skill-building activities, there is no rubric, grading criteria, or explicit assessment tool shown for evaluating students' actual competence in facilitating groups.
-- ⚠️ Supporting evidence items (Evidence 2 and 3) are duplicates listing only family therapy journals; they do not directly support coverage of small group dynamics, theories, or facilitation. No evidence of required textbooks, theoretical frameworks, or skill-building resources is provided.
-- ⚠️ Internship (CHS 380) coverage of group facilitation skills is mentioned in narrative but incomplete—no detail on how students are supervised or evaluated in applying group facilitation skills in field settings.
+- ⚠️ LLM returned non-JSON response
 
 ---
 
-### `12.c` 🟡 — Knowledge, Theory, Skills, and Values
+### `12.c` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Changing family structures and roles._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.72**
+_(first-pass: covered=False, score=0.62; second-pass after gap-fill: covered=True, score=0.72, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[12][c].content`_
@@ -3735,29 +5933,94 @@ You will be assigned to “families”. These families will be the subjects of t
 #### Supporting evidence — text
 _Destination: `Submission.narratives[12][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 45 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that students demonstrate understanding of diverse family structures (single-parent, blended, LGBTQ+, multigenerational, non-traditional arrangements) despite brief mention of 'variations across cultures'
+
+_Source heading:_ **Articulate the impact of history and culture on various ethnic minority groups in the United States. — Describe how one’s culture, race and ethnicity influence seeking help, describing issues and inte**
+
+```text
+Identify demographic trends in the United States and how they will impact on the need to be culturally competent.
+
+Demonstrate a knowledge of diversity as it relates to other aspects of family including but not limited to religion, sexual orientation, disabilities, age and family structure.
+```
+
+##### Evidence text 2 — conf 0.72, 1051 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Korean family example appears disconnected from broader curriculum; unclear how this specific cultural content integrates with overall program teaching on changing family structures
+
+_Source heading:_ **Women’s March in South Korea; Retrieved from: https://studybreaks.com/news-politics/south-korea-women-march-for-justice/**
+
+```text
+https://studybreaks.com/news-politics/south-korea-women-march-for-justice/
+
+When it comes to family structure, family background and educational level are important considerations when in search of a partner (South Korea). This is where the old and the new may collide, as some individuals have love marriages, but some may meet their spouse through arranged meetings by parents, relatives, friends, or matchmakers (South Korea). Marriage in itself is seen as a right of passage that comes with its own social status as well, and it is seen as a union of their families as well in order to ensure the continuation of the husband’s family line (South Korea). Remarriages are rare, and in some instances, in more traditional locales, remarriages of widows are not allowed and remarriages after a divorce are difficult (South Korea). The South Korean familial household mostly consists of two-generation households, three-generation households are more traditional, but that in itself is fading and only 14.7% of the total population belonged to a three-generation household in 1995 (South Korea). When it comes to inheritance, it was nationally known for the eldest son to receive a larger portion of the parent’s inheritance because it is more common for the eldest son to be held against higher standards and be given most of the responsibility (South Korea). In 1989 however, after a revision of the Family Law, it re-stated that family inheritance must be divided “equally among sons and daughters 
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.72, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No assessment data showing students can apply knowledge of changing family structures in practice settings (field placements mentioned but no evidence of competency evaluation)
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[12][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Additional readings are specified in the Course Schedule. —  | `additional-readings-are-specified-in-the-course-schedule-cou` | 116 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/additional-readings-are-specified-in-the-course-schedule-cou.docx` |
+
+_File 1 fills gap_: Specification requires demonstration of student KNOWLEDGE, THEORY, SKILLS, and VALUES related to changing family structures—narrative addresses only knowledge/theory; skills and values assessment missing
+
+```text
+At the completion of the course, students should be able to:
+
+1.   Employ theoretical frameworks for studying the various structures and functions of families.  (Discipline Expertise)
+
+(Discipline Expertise)
+
+Describe individual and family growth and interactions across the life span, including “normal” stress in families as well as specific crises such as divorce and violence. (Discipline Expertise) Articulate the diversity of family life issues both domestically and internationally. (Discipline Expertise) Describe the reciprocal influences between both families and the work place and families and other social institutions.  (Discipline Expertise)
+
+Describe individual and family growth and interactions across the life span, including “normal” stress in families as well as specific crises such as divorce and violence. (Discipline Expertise)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabus excerpts, assignment rubrics, course materials, readings lists) to verify claims about course content
-- ⚠️ Vague references to 'especially unit on Issues in Contemporary Families' and 'units on Genograms and Ecomaps' without demonstrating actual curriculum content addresses changing structures/roles
-- ⚠️ No evidence that students engage with diverse family structures (single-parent, blended, same-sex, multigenerational, non-traditional arrangements) beyond Korean family example
-- ⚠️ Limited demonstration of theoretical frameworks used to analyze changing family structures—'variety of theoretical perspectives' mentioned but not specified
-- ⚠️ Field placement requirement mentioned (CHS 380, 440, 441) but no evidence provided showing how students actually apply knowledge of changing family structures in practice
-- ⚠️ Korean family example provided appears to be student work product rather than course design documentation; unclear if this represents program-level content or one assignment
-- ⚠️ No evidence of how learning outcomes are assessed regarding students' knowledge of changing family structures and roles
-- ⚠️ Insufficient evidence showing breadth of cultural and structural variations addressed across curriculum
+- ⚠️ Narrative lacks explicit connection between course content on changing family structures and the knowledge/theory/skills/values framework demanded by Spec 12.c; states topics are covered but does not articulate what specific knowledge, theories, or values students gain
+- ⚠️ No evidence that students understand WHY family structures are changing (historical, economic, social drivers) beyond cultural/geographic examples
+- ⚠️ Missing demonstration of how students develop VALUES related to diverse family structures; narrative focuses on knowledge/content rather than value development or critical reflection on heteronormative/traditional bias
+- ⚠️ South Korean family case study (Evidence 3) is presented as isolated example; lacks integration showing students compare/contrast across multiple family structures systematically
+- ⚠️ Field placement courses (CHS 380, 440, 441) are mentioned as addressing family structures but no evidence provided of what students actually learn or how competency is assessed in real-world contexts
+- ⚠️ Evidence 4 (supervisor ratings) shows students meet expectations but does not specifically measure or address learning on 'changing family structures and roles' construct
+- ⚠️ Narrative does not explicitly address skills students develop (e.g., genogram analysis, assessment of diverse family systems, etc.) beyond naming units
 
 ---
 
-### `12.d` 🟡 — Knowledge, Theory, Skills, and Values
+### `12.d` 🔴 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _An introduction to the organizational structures of communities._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.45, delta=-0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[12][d].content`_
@@ -3775,18 +6038,82 @@ An introduction to the organizational structures of communities.Response: The or
 #### Supporting evidence — text
 _Destination: `Submission.narratives[12][d].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 48 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Vague description of what 'organizational structures of communities' actually means—no clarity on whether this includes formal structures (government, agencies, nonprofits), informal networks, power dynamics, or systems thinking
+
+_Source heading:_ **Examine the family structure both in terms of what is the norm as well as what is acceptable. — Address the role of both the elderly and children and describe how they are treated. — Discuss gender ro**
+
+```text
+Explain how the political system is structured and what its impact may be on family life or how it may influence people immigrating to the United States.
+
+Provide information about significant holidays both religious and secular and explain any which are not part of the dominant American culture.
+```
+
+##### Evidence text 2 — conf 0.62, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No indication of student learning outcomes or how competency in this area is measured beyond field placement evaluation
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[12][d].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | DATES Hours Field Instructor Signature TOTAL HOURS — DATES H | `dates-hours-field-instructor-signature-total-hours-dates-hou` | 85 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/dates-hours-field-instructor-signature-total-hours-dates-hou.docx` |
+
+_File 1 fills gap_: Field placement evaluation form cited but not provided; cannot verify that 'customs, practices, beliefs and values' assessment aligns with 'organizational structures' requirement
+
+```text
+14b
+
+8b
+
+Student:
+
+Placement/Agency:
+
+Field Instructor (Please print.):
+
+University Supervisor (Please print.):
+
+Evaluation is a very important phase of the learning process. The student and field instructor should each complete the same copy of the evaluation tool at midpoint and at the end of the semester.  Criteria for achievement of the program goals and objectives are expressed as Below Expectations, Meets Expectations, and Exceeds Expectations. If an objective or category within an objective does not apply, please rate it N.A. (Not Applicable).
+
+student
+
+field instructor
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided (syllabi, assignment descriptions, learning outcomes, rubrics, student work samples) to verify claims about course content
-- ⚠️ Vague description of 'organizational structures' — unclear whether this means governance, agencies, institutions, resource networks, formal vs. informal structures, or decision-making hierarchies
-- ⚠️ No evidence that students can identify, analyze, or evaluate organizational structures (only that content is 'introduced')
-- ⚠️ No clear learning outcome or competency statement defining what 'introduction' means or at what depth students master this concept
-- ⚠️ Field placement evaluation criterion mentions 'cultures and communities' but does not explicitly assess understanding of organizational structures
-- ⚠️ Unclear how SOC 101 (non-major course) content is integrated into the CSHSE program or assessed for program-level competency
+- ⚠️ No evidence demonstrating what 'organizational structures of communities' specifically means or how it is defined in the curriculum
+- ⚠️ Narrative mentions courses but provides no syllabi, course outlines, or learning objectives showing community organizational structures are explicitly taught
+- ⚠️ Evidence 1 (gap-fill item) is incomplete and fragmented; does not show full assignment or how it assesses understanding of organizational structures
+- ⚠️ Evidence 2 (field placement evaluation form) is incomplete; only shows form structure, not actual completed evaluations or how the form measures community organizational knowledge
+- ⚠️ Evidence 3 (outcome data) references 'learning outcomes' but does not specify which outcome(s) relate to community organizational structures or provide actual outcome language
+- ⚠️ No evidence that SOC 101 content specifically covers organizational structures (only mentioned in narrative as 'in-class activities, discussions')
+- ⚠️ Missing concrete examples of what students actually learned about community organizations (e.g., sample assignments, student work, course readings on nonprofit structures, government agencies, service systems)
+- ⚠️ No evidence linking field placement experiences to demonstrated understanding of specific community organizational structures where students interned
+- ⚠️ Narrative references 'customs, practices, beliefs and values' but this is cultural competence, not organizational structures
 
 ---
 
@@ -3813,20 +6140,140 @@ An understanding of the capacities, limitations, and resiliency of human systems
 #### Supporting evidence — text
 _Destination: `Submission.narratives[12][e].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 230 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explicit definition or framework provided for what 'capacities, limitations, and resiliency of human systems' means in the program's context
+
+_Source heading:_ **Interpret creative texts and/or works considering multiple interpretative perspectives and ways of reading. — Demonstrate an ability to adapt messages to contexts, audiences, and purposes using compet**
+
+```text
+Use language choices that are thoughtful, appropriate, and generally support the effectiveness of the message being communicated in varied contexts.
+
+The SU graduate will consider self, others, diverse societies and cultures, and the physical and natural worlds, while engaging with world problems, both contemporary and enduring.
+
+Outcomes, Goal 3:
+
+The SU graduate will be able to:
+
+Examine the complex dynamics of human systems by describing behavioral, interpersonal, or social phenomena both qualitatively and quantitatively and applying multiple perspectives in order to explain those phenomena. Examine the complex dynamics of natural systems by describing biological, chemical, or physical phenomena, interpreting data or patterns in data, and drawing conclusions using the appropriate scientific method. Examine the complex dynamics of human or natural systems by analyzing texts or cultural artifacts and applying multiple perspectives (cultural, ethical, or disciplinary) in order to communicate perceptions of human experience.
+
+Examine the complex dynamics of human systems by describing behavioral, interpersonal, or social phenomena both qualitatively and quantitatively and applying multiple perspectives in order to explain those phenomena.
+
+Examine the complex dynamics of natural systems by describing biological, chemical, or physical phenomena, interpreting data or patterns in data, and drawing conclusions using the appropriate scientific method.
+
+Examine the complex dynamics 
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.62, 98 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ New course CHS 365 cited as covering resiliency but listed as taught 'for the first time in spring 2020'—no evidence of actual delivery or student learning outcomes
+
+_Source heading:_ **Prerequisite : PSY 101 and CHS 201(with a grade of “C” or better) — Prerequisite — CHS 365 – Coping, Resilience and Growth-Focused Counseling (3 credits; Spring even years) — CHS 365 – Coping, Resilie**
+
+```text
+Examines current theories, research and practices relating to resilience, coping and growth-focused counseling. Students learn to apply the science of flourishing and use empirical and experiential approaches to help clients enhance their lives. Students explore the importance of self-care and resilience in advancing their own personal and professional growth. Topics covered include the mental states of flow, mindfulness, happiness, pleasure, contentment, optimism and other positive emotions, character strengths, values, goal setting, wellness, the mind-body connection, self-esteem, meaningful relationships, and enabling institutions exemplified by positive education, positive work environments, healthy families, humane leadership, and the development of civic virtues.
+```
+
+##### Evidence text 3 — conf 0.62, 78 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Field placement courses mention 'reflection papers' but no examples or assessment criteria provided
+
+_Source heading:_ **Reflection on how your academic learning has affected you as a human service — Professional. — Examples of academic work that illustrate your competency. — Examples of academic work that illustrate yo**
+
+```text
+For each field experience, you should include the following:
+
+each
+
+Summary that includes name of placement, dates in placement, description of population (age, socio-economic mix, culture, special needs, etc.), and description of responsibilities. Discussion of what you have learned Supervisor's evaluation if you have participated in an internship or practicum (not required, but highly recommended)
+
+Summary that includes name of placement, dates in placement, description of population (age, socio-economic mix, culture, special needs, etc.), and description of responsibilities.
+```
+
+##### Evidence text 4 — conf 0.68, 116 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence distinguishing between what students learn about human systems at individual, family, organizational, or societal levels
+
+_Source heading:_ **Additional readings are specified in the Course Schedule. — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — Articulate the impact of culture and history on va**
+
+```text
+At the completion of the course, students should be able to:
+
+1.   Employ theoretical frameworks for studying the various structures and functions of families.  (Discipline Expertise)
+
+(Discipline Expertise)
+
+Describe individual and family growth and interactions across the life span, including “normal” stress in families as well as specific crises such as divorce and violence. (Discipline Expertise) Articulate the diversity of family life issues both domestically and internationally. (Discipline Expertise) Describe the reciprocal influences between both families and the work place and families and other social institutions.  (Discipline Expertise)
+
+Describe individual and family growth and interactions across the life span, including “normal” stress in families as well as specific crises such as divorce and violence. (Discipline Expertise)
+```
+
+##### Evidence text 5 — conf 0.62, 552 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Limited explanation of how 'limitations' and 'resiliency' specifically are taught beyond general course descriptions
+
+_Source heading:_ **Student Updates**
+
+```text
+Kayleigh Treshman was in a car accident. She is injured and will miss some class time, but she will be OK. She had missed a couple of classes before the accident as well.
+
+Department Issues:
+
+Thank you to Loryn for mentioning to folks at Levindale that we could possibly provide training in medical technology. I am in talks with Ann Davis at SUO on having us develop and provide non-credit training at both NCIA and at Levindale. Loryn will work with us on this initiative. Mayaugust is putting together materials for CHS 362 Trauma & Crisis Intervention. We decided to make it a 300 level class and include “trauma” in the title. That will be offered in the spring. Tom will be developing CHS 365 Coping, Resilience and Positive Psychology for the fall. The First Year Seminar class has 10 students. They will participate in Mustangs Make a Difference Day on Oct. 12
+
+Thank you to Loryn for mentioning to folks at Levindale that we could possibly provide training in medical technology. I am in talks with Ann Davis at SUO on having us develop and provide non-credit training at both NCIA and at Levindale. Loryn will work with us on this initiative.
+
+Mayaugust is putting together materials for CHS 362 Trauma & Crisis Intervention. We decided to make it a 300 level class and include “trauma” in the title. That will be offered in the spring. Tom will be developing CHS 365 Coping, Resilience and Positive Psychology for the fall.
+
+The First Year Seminar class has 10 students. They will particip
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[12][e].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Final exam date, time, and location:  May 13 @ 1.30 pm in DC | `final-exam-date-time-and-location-may-13-1-30-pm-in-dc-306-f` | 392 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/final-exam-date-time-and-location-may-13-1-30-pm-in-dc-306-f.docx` |
+| 2 | None — STEVENSON — STEVENSON — U N I V E R S I T Y — U N I V | `none-stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i` | 39 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/none-stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i.docx` |
+| 3 | Date Topics* Assignment — Date — Date — Date — Topics* — Top | `date-topics-assignment-date-date-date-topics-topics-topics-a` | 59 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/date-topics-assignment-date-date-date-topics-topics-topics-a.docx` |
+
+_File 1 fills gap_: No supporting evidence documents provided (syllabi, assignments, readings, rubrics, student work samples) to verify claims made in narrative
+
+```text
+Rubric for socio-autobiography paper:
+
+Parts of Paper Excellent Very Good Good Adequate Inadequate Use of Sociology Concepts Correctly uses 14-15 sociology concepts Correctly uses 12-13 sociology concepts Correctly uses 10-11 sociology concepts Correctly uses 7-9 sociology concepts Correctly uses 6 or less sociology concepts Pts: 70% Apply the sociological imagination Work applies the sociological imagination convincingly: explains connections between author’s experience and society clearly & logically or supports shared experience method with at least one peer-reviewed source. Work applies the sociological imagination somewhat convincingly: explanation of connections between author’s experience and society lack sufficient clarity and logic or supports shared experience method with non-peer reviewed source. Work applies the sociological imagination in a manner that is not sufficiently convincing: explanation of connection between author’s experience & society lacks clarity or logic or uses shared experience method without support. Work applies the sociological imagination in a manner that is not coherent: explanation of connection between author’s experience & society is illogical & incoherent or shared experience claim is not supported. Work does not apply the sociological imagination: there is no evidence of attempt to apply the sociological imagination in the work. Pts: 20% Use of grammar in work/paper Work written in proper English with proper grammatical structure, with 
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: No assessment data, student learning outcomes, or evidence of student learning related to this specification
+
+```text
+(Summary of Results, 2018-2019 Academic Year – 24 Students Responded)
+
+Date:
+
+Directions : The following tool is to be completed by the student at the end of the field experience. Mark an X in one box on each line.
+```
+
+_File 3 fills gap_: Vague references to course content (e.g., 'see particularly chapters') without actual documentation of those materials
+
+```text
+Week 1 January 29/31 Introductions, confidentiality, learning objectives, handbook, syllabus Read Chapter 1: The Big Picture, pp 2-20 only Read NOHS Ethical Standard 3, 8 and 9
+
+Week 2 February 5/7 Getting the most out of your experience- designing your placement/writing your learning contract Read Chapter 3: HQI Essentials, pp 53-64 only Journal #1 due before class via Blackboard
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided—narrative claims lack documentation (syllabi, assignments, readings, rubrics)
-- ⚠️ No explicit definition or conceptual framework for what 'capacities, limitations, and resiliency' means in the program's context
-- ⚠️ Unclear how 'human systems' is operationalized—appears to mix individual/family/organizational/policy levels without distinction
-- ⚠️ No assessment data demonstrating students actually achieve understanding of this concept (no learning outcome measures, rubrics, or student work samples)
-- ⚠️ CHS 365 listed as 'new' and 'taught for first time in spring 2020'—date is outdated; unclear if course was delivered and whether it is currently part of curriculum
-- ⚠️ Vague references to course content (e.g., 'see particularly chapters...', 'theme throughout') without actual evidence of learning activities or assignments
-- ⚠️ No evidence of how resiliency is distinct from or related to capacities and limitations—conflates concepts
-- ⚠️ Field placement reflection (CHS 380/440/441) mentioned but no examples of student reflections or guidance showing how students engage with this specification
+- ⚠️ No evidence of student learning outcomes or assessment results demonstrating student understanding of human systems capacities, limitations, and resiliency
+- ⚠️ Missing concrete examples or case studies showing how students apply these concepts in practice
+- ⚠️ No data on whether students in field placements (CHS 380, 440, 441) actually demonstrate competency in understanding human systems through their reflections or supervisor evaluations
+- ⚠️ Limited specificity on what 'capacities, limitations, and resiliency' means in the CHS curriculum—concepts remain largely undefined
+- ⚠️ No evidence that CHS 365 has been taught or assessed (narrative states it 'will be taught for the first time in spring 2020'; Evidence 8 mentions 'Tom will be developing' it for fall, suggesting it may not have been implemented)
+- ⚠️ Evidence 1 (socio-autobiography rubric) and Evidence 2 (generic university outcomes) are not clearly connected to the CHS program or this specification
+- ⚠️ Missing assessment data from the field experience reflection tool mentioned in Evidence 6
 
 ---
 
@@ -3853,20 +6300,85 @@ While talking about being white, DiAngelo mentions that everyone has their own e
 #### Supporting evidence — text
 _Destination: `Submission.narratives[12][f].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 45 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Lacks evidence of understanding how cultural group membership (beyond race) affects human needs assessment and service delivery
+
+_Source heading:_ **Articulate the impact of history and culture on various ethnic minority groups in the United States. — Describe how one’s culture, race and ethnicity influence seeking help, describing issues and inte**
+
+```text
+Identify demographic trends in the United States and how they will impact on the need to be culturally competent.
+
+Demonstrate a knowledge of diversity as it relates to other aspects of family including but not limited to religion, sexual orientation, disabilities, age and family structure.
+```
+
+##### Evidence text 2 — conf 0.62, 44 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No demonstration of how personal reflection translates to professional practice or competency
+
+_Source heading:_ **Discussion of what you have learned — Supervisor's evaluation if you have participated in an internship or practicum (not required, but highly recommended) — IV. Professionalism — IV. Professionalism**
+
+```text
+Reflection that provides insight into your philosophy, professional perceptions,       and/or values. Short and long term goals
+
+Your presentation is the culmination of your practicum experience.  As such, it will highlight your agency and describe your experience there. Your poster should include the following elements.
+```
+
+##### Evidence text 3 — conf 0.58, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Does not address how context shapes need determination in social work practice settings
+
+_Source heading:_ **ASSESSING THE NEEDS OF THE COMMUNITY — ASSESSING THE NEEDS OF THE COMMUNITY — The Community Tool Box and Conducting a Needs Assessment Meet in library computer lab — The Community Tool Box and — Condu**
+
+```text
+Week 5 9/25, 9/27 WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES Mehr, Chapter 6 (pp 102-110 only) Mehr Chapter 8 SEPT 27- Community Needs Assessment Action Plan – Questions due
+```
+
+##### Evidence text 4 — conf 0.62, 64 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Personal anecdote lacks analytical framework connecting experience to intercultural fluency theory/skills
+
+_Source heading:_ **If any of these qualities are true of you, you may want to include them in your presentation. — Professional skills, knowledge about profession — Personal learning — Personal learning — Field experien**
+
+```text
+"I have learned to…."
+
+"I have learned that…"
+
+(Sweitzer and King, 2009, p. 212).
+
+Your attitudes, values, behaviors, unresolved issues, psychosocial and cultural identities all contribute to your view your experience. Some of the qualities you have discovered in yourself you may consider to be 	positive; others may cause you difficulty.
+
+"I have learned that I am ……."
+
+"I have learned that I can……"
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[12][f].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Culturally competent, practice: A framework for understandin | `culturally-competent-practice-a-framework-for-understanding-` | 122 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/culturally-competent-practice-a-framework-for-understanding-.docx` |
+
+_File 1 fills gap_: No explicit connection to how intercultural fluency competency is developed or demonstrated in curriculum/coursework
+
+```text
+Course Objectives/Learning Outcomes: All syllabi must include the approved course learning outcomes.  See department for the approved learning outcomes.
+
+Course Objectives/Learning Outcomes:
+
+1.   	Identify one’s own ethnic heritage, history or cultural background, values and assumptions and how this can affect one’s experience as a practitioner.
+
+Articulate the impact of history and culture on various ethnic minority groups in the United States. Identify demographic trends in the United States and how they will impact on the need to be culturally competent. Describe how one’s culture, race and ethnicity influence seeking help, describing issues and interactions with others. Demonstrate a knowledge of diversity as it relates to other aspects of family including but not limited to religion, sexual orientation, disabilities, age and family structure.
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No explicit connection to human needs assessment or meeting human needs across cultural contexts
-- ⚠️ Missing demonstration of intercultural fluency as a professional competency or skill to be developed
-- ⚠️ Lacks evidence of understanding cultural group membership dynamics beyond personal anecdote
-- ⚠️ No discussion of how individual identities intersect with cultural group membership in social work practice
-- ⚠️ Absence of theoretical or conceptual framework linking context to service delivery or assessment
-- ⚠️ No mention of how this understanding would be applied in professional social work settings
-- ⚠️ Missing evidence of reflection on own cultural identity development or positionality
-- ⚠️ No supporting documentation (readings, course materials, assessments) provided to corroborate learning
+- ⚠️ Narrative does not demonstrate intercultural fluency or provide evidence of developing culturally humble practice skills; it remains at a reflective/critical thinking level without translating to applied competence
+- ⚠️ No evidence that the student learned how to assess or meet human needs through a cultural lens—the narrative is anecdotal about neighborhood perceptions rather than about applying cultural understanding to direct practice or service delivery
+- ⚠️ Missing explicit connection between cultural group membership/individual identities and how they determine or shape service responses; narrative critiques white dominance but does not show how this insight informs professional action or client-centered practice
+- ⚠️ Evidence items (1-5) document course objectives and reflection prompts but do not demonstrate student mastery of intercultural fluency or application to meeting human needs; no artifacts show integration of cultural competence into actual practice decisions
+- ⚠️ Specification requires emphasis on 'context and the role of intercultural fluency'—narrative addresses context (neighborhood comparison) but lacks evidence of fluency development or cultural humility in professional role
 
 ---
 
@@ -3874,8 +6386,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Processes to effect social change through advocacy work at all levels of society including community development, community and grassroots organizing, and local and global activism._
 
-**Final coverage verdict:** covered=**False**, score=**0.35**
-_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.35, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.45, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[12][g].content`_
@@ -3893,20 +6405,60 @@ Processes to effect social change through advocacy work at all levels of society
 #### Supporting evidence — text
 _Destination: `Submission.narratives[12][g].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of community development processes being taught or applied
+
+_Source heading:_ **ASSESSING THE NEEDS OF THE COMMUNITY — ASSESSING THE NEEDS OF THE COMMUNITY — The Community Tool Box and Conducting a Needs Assessment Meet in library computer lab — The Community Tool Box and — Condu**
+
+```text
+Week 5 9/25, 9/27 WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES Mehr, Chapter 6 (pp 102-110 only) Mehr Chapter 8 SEPT 27- Community Needs Assessment Action Plan – Questions due
+```
+
+##### Evidence text 2 — conf 0.78, 422 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No demonstration of how students learn to assess community needs and design advocacy responses
+
+_Source heading:_ **Individually — CONDUCTING THE NEEDS ASSESSMENT — CONDUCTING THE NEEDS ASSESSMENT**
+
+```text
+1. Create a Needs Assessment Action Plan:
+
+Formulate Needs Assessment Questions. What do you want to learn about this special population? Meet with your group to develop questions that will guide your inquiry into the needs of this community of people. If you were going to create a program or advocate for changes in public policy for this special population, what information would you first need to know about this special population? Review existing data. What do you already know about the community? Possible sources include your annotated bibliography and previous field experiences. This is an opportunity for team members to share the information with each other. Determine what information you still need to know and how you will gather that information. You will complete the Community Needs Assessment Action Plan with your group.
+
+Formulate Needs Assessment Questions. What do you want to learn about this special population? Meet with your group to develop questions that will guide your inquiry into the needs of this community of people. If you were going to create a program or advocate for changes in public policy for this special population, what information would you first need to know about this special population?
+
+Review existing data. What do you already know about the community? Possible sources include your annotated bibliography and previous field experiences. This is an opportunity for team members to share the information with each other.
+
+Determine what informati
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[12][g].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | None — STEVENSON — STEVENSON — U N I V E R S I T Y — U N I V | `none-stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i` | 39 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/none-stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i.docx` |
+
+_File 1 fills gap_: No evidence of experiential learning (e.g., student-led organizing campaigns, community partnership projects)
+
+```text
+(Summary of Results, 2018-2019 Academic Year – 24 Students Responded)
+
+Date:
+
+Directions : The following tool is to be completed by the student at the end of the field experience. Mark an X in one box on each line.
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided (syllabi, assignments, readings, or student work samples) to verify claims about course content
-- ⚠️ No concrete examples of advocacy assignments, projects, or learning outcomes demonstrating student competency in advocacy skills
-- ⚠️ Community development processes not explicitly addressed—only mentioned in passing without description of how students learn development strategies
-- ⚠️ Grassroots organizing content claimed but not evidenced; no description of organizing models, tactics, or student application
-- ⚠️ Local and global activism distinction unclear; global activism barely mentioned despite being explicitly required by specification
-- ⚠️ No evidence of how students develop and practice actual advocacy skills (e.g., policy briefs, testimony, campaign planning, stakeholder engagement)
-- ⚠️ No assessment data showing students can effect social change or demonstrate advocacy competencies
-- ⚠️ Internship (CHS 380) mentioned only as 'discussions' without evidence of hands-on advocacy experience or outcomes
+- ⚠️ No evidence of explicit instruction or learning activities on grassroots organizing skills and methods
+- ⚠️ Local and global activism content is mentioned in narrative but no supporting syllabi, assignment descriptions, or student work demonstrate specific learning activities addressing activism at local or global levels
+- ⚠️ Community development processes and strategies are not explicitly addressed in provided evidence; narrative claims CHS 340 covers this but no syllabus excerpt or assignment details are provided
+- ⚠️ Evidence 3 appears to be an incomplete assessment tool (summary of results from 2018-2019 with no actual results, criteria, or data shown) and does not demonstrate student learning or competency attainment
+- ⚠️ No student work samples, assignments, or outcome data demonstrating student mastery of advocacy, community organizing, or activism processes
+- ⚠️ CHS 224 Research Methods is mentioned as supporting advocacy, but no evidence shows how research skills connect to advocacy practice
+- ⚠️ SOC 101 is mentioned but no syllabus content, assignment details, or evidence provided
 
 ---
 
@@ -3914,8 +6466,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Processes to analyze, interpret, and effect policies and laws at local, state, and national levels that influence services delivery systems. 3. Human Service Delivery Systems Context: The demand for services and the funding of educational programs has been closely related to identifiable human conditions including, among others: aging, delinquency, crime, poverty, mental illness, physical illness, chemical dependency, and disabilities. The needs that arise in these conditions provide the focus for the human services profession._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.00, delta=-0.55)_
 
 #### Narrative content
 _Destination: `Submission.narratives[12][h].content`_
@@ -3963,20 +6515,93 @@ STANDARD 12 Human service professionals are aware of local, state, and federal l
 #### Supporting evidence — text
 _Destination: `Submission.narratives[12][h].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 189 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No specific examples of how students learn about local, state, and national level policy differences or specific legislation affecting service delivery
+
+_Source heading:_ **COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES**
+
+```text
+Course Objectives/Learning Outcomes: Identify the goals, functions, and organization of human services and their relationship to the various roles of human service workers. Identify specific examples of treatment and prevention programs that have been designed to help resolve family and individual problems. Articulate how diversity among individuals, families, and communities may affect the delivery of human services. Describe how personal, ethical (related to the NOHS/CSHSE Ethical Standards), and legal issues affect the delivery of human services. Locate and interpret sources appropriate to public policy, trends, and issues that affect individuals and families. Specify how his/her personal values and goals relate to a career in human services. Identify and apply principles of assessment, planning, brokering, and case management. Compare and contrast major models of causation for psychopathology and major theoretical approaches for helping people in need. Assess the needs of a specific community or population.
+
+Course Objectives/Learning Outcomes: Identify the goals, functions, and organization of human services and their relationship to the various roles of human service workers.
+
+Course Objectives/Learning Outcomes:
+
+Identify specific examples of treatment and prevention programs that have been designed to help resolve family and individual problems.
+```
+
+##### Evidence text 2 — conf 0.62, 32 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing coverage of how students understand the connection between identifiable human conditions (aging, delinquency, crime, poverty, mental illness, physical illness, chemical dependency, disabilities) and policy/funding systems
+
+_Source heading:_ **Topics Covered Required Readings Due — Topics Covered — Topics Covered — Required Readings — Required Readings — Due — Due — Week 1 Aug 28 &30 COURSE OVERVIEW, FOUNDATIONAL CONCEPTS Piliavin, 2009 Alt**
+
+```text
+Week 2 Sept 4 & 6 THE HISTORY OF HELPING and MODERN DAY HUMAN SERVICES ROLES AND FUNCTIONS OF HUMAN SERVICE WORKERS DiGiovanni-CSHSE_Legacy.pdf (pp 9-14); Kincaid, 2009 -four essential components of CHS.pdf
+```
+
+##### Evidence text 3 — conf 0.72, 56 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Limited explicit coverage of aging/older adults topic; one sentence mentions 'older adults' but provides no course details or learning outcomes
+
+_Source heading:_ **Prerequisite: CHS 101, PSY 101 or SOC 101 (with a grade of “C” or better) — CHS 235 – Adult Development & Aging (3 credits; Spring in even years) — CHS 235 – Adult Development & Aging**
+
+```text
+Prerequisite:
+
+Provides the student with an opportunity to learn the effects of a variety of physical, personal, psychological and social issues faced by older adults and their families. Emphasis is placed on functional health status, social roles, social relationships, family issues, and the impact of these factors on specific services and the community at all levels.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[12][h].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Office location: Manning Academic Center, N178. — Office hou | `office-location-manning-academic-center-n178-office-hours-tu` | 218 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/office-location-manning-academic-center-n178-office-hours-tu.docx` |
+
+_File 1 fills gap_: Field placement courses (CHS 380, 440) mentioned but no syllabi, assignments, or evaluation methods provided to demonstrate actual policy engagement
+
+```text
+Office location:
+
+Office hours:
+
+Section number:
+
+Credits:
+
+Prerequisite(s):
+
+Classroom or Studio Location:
+
+Scheduled Class Days and Time:
+
+Course Description: CHS 380 is a three-credit course. This field experience provides students with a hands-on, realistic experience in a human services community-based agency. Concurrently, students will participate in a guided seminar once a week.
+
+Course Description:
+
+Instructional Methods Used in this Course: Course objectives will be achieved by a variety of methods which include lecture, class discussions, a reflection paper, journaling, and fieldwork.
+
+Instructional Methods Used in this Course:
+
+Required and Recommended Texts, Manuals, and Supplies:
+
+Sweitzer, H., & King, M. (2019). The successful internship: Personal professional, and civic development in experiential learning (5th ed.).  Belmont, CA:  Brooks/Cole.
+
+*Only sections of four chapters of this book are required for CHS 380. You may use the book on reserve in the library instead of purchasing it. However, you will be required to read the rest of the book for CHS 441.
+
+*Only sections of four chapters of this book are required for CHS 380.
+
+2018-2019 Field Placement Handbook, Human Services, Stevenson University Ethical Standards for Human Services Professionals, National Organization for Human Services (NOHS). Available at http://www.nationalhumanservices.org/ethical-standards-for-hs-professionals
+
+2018-2019 Field Placement Handbook, Human Services, Stevenson University
+
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence provided to verify any claims made in the narrative; supporting documentation is completely absent
-- ⚠️ Specification requires demonstration of processes to 'effect' (create/implement change in) policies and laws, but narrative only addresses analysis and interpretation
-- ⚠️ No explicit connection to the specific human conditions listed in the specification (aging, delinquency, crime, poverty, mental illness, physical illness, chemical dependency, disabilities) that drive service delivery systems
-- ⚠️ Aging services emphasis mentioned in specification prompt is not addressed in narrative response
-- ⚠️ No demonstration of how students learn about LOCAL, STATE, and NATIONAL policy levels—distinctions are blurred or absent
-- ⚠️ Standard 12 requires advocacy for regulatory change and understanding conflict between law and ethics/client rights; narrative does not address this critical ethical dimension
-- ⚠️ Field placement courses (CHS 380, 440, 441) are mentioned but with no detail on what students actually do to analyze or effect policy change
-- ⚠️ No evidence of student learning outcomes, assignments, assessments, or work samples demonstrating competency in policy analysis or advocacy
+- ⚠️ LLM returned non-JSON response
 
 ---
 
@@ -3987,7 +6612,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _The range and characteristics of human service delivery systems and organizations._
 
 **Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.55, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[13][a].content`_
@@ -4006,28 +6631,38 @@ The range and characteristics of human services delivery systems and organizatio
 #### Supporting evidence — text
 _Destination: `Submission.narratives[13][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 32 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Lacks concrete examples of which specific delivery systems and organizational models are covered in each course
+
+_Source heading:_ **Topics Covered Required Readings Due — Topics Covered — Topics Covered — Required Readings — Required Readings — Due — Due — Week 1 Aug 28 &30 COURSE OVERVIEW, FOUNDATIONAL CONCEPTS Piliavin, 2009 Alt**
+
+```text
+Week 2 Sept 4 & 6 THE HISTORY OF HELPING and MODERN DAY HUMAN SERVICES ROLES AND FUNCTIONS OF HUMAN SERVICE WORKERS DiGiovanni-CSHSE_Legacy.pdf (pp 9-14); Kincaid, 2009 -four essential components of CHS.pdf
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[13][a].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, assignments, rubrics, student work samples) to verify claims about course content and learning activities
-- ⚠️ Narrative does not distinguish between different TYPES of human service delivery systems (e.g., public vs. private, for-profit vs. nonprofit, formal vs. informal, mental health vs. social services vs. substance abuse treatment)
-- ⚠️ No explicit description of organizational structures, models, or frameworks students learn (e.g., hierarchical, flat, matrix organizations; funding models; governance structures)
-- ⚠️ Narrative does not clarify what 'characteristics' of organizations are taught (e.g., mission, goals, staffing patterns, accreditation, ethical frameworks, legal requirements)
-- ⚠️ No evidence of comparative analysis across multiple delivery systems or organizations
-- ⚠️ Internship and practicum experiences (CHS 380, CHS 441) are mentioned but lack detail about how students systematically learn organizational structures vs. only observing their single placement site
-- ⚠️ No indication of breadth of systems covered—unclear whether students learn about health services, child welfare, aging services, corrections, employment services, etc.
+- ⚠️ No evidence of explicit learning outcomes or competencies students must demonstrate regarding understanding delivery systems and organizational characteristics
+- ⚠️ Missing concrete evidence of what 'range' means—no documentation showing students learn about diverse delivery models (public vs. private, nonprofit vs. for-profit, universal vs. targeted, etc.)
+- ⚠️ No evidence of how 'characteristics' are defined or assessed (e.g., funding mechanisms, governance structures, staffing models, service accessibility, accountability systems)
+- ⚠️ Single supporting document provided (syllabus excerpt) covers only history and roles/functions; does not document depth across the seven courses claimed
+- ⚠️ No assessment rubrics, assignments, or student work samples demonstrating mastery of this specification
+- ⚠️ Missing evidence from PSY 101, PSY 108, SOC 101 courses mentioned in narrative
+- ⚠️ No documentation of comparative analysis of different organizational models or systems
+- ⚠️ Internship and practicum evidence relies solely on discussions and journaling without tangible deliverables showing systems/organizational knowledge
 
 ---
 
-### `13.b` 🔴 — Knowledge, Theory, Skills, and Values
+### `13.b` 🟡 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _The range of populations served, and needs addressed by human services professionals._
 
-**Final coverage verdict:** covered=**False**, score=**0.35**
-_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.35, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.55**
+_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.55, delta=+0.20)_
 
 #### Narrative content
 _Destination: `Submission.narratives[13][b].content`_
@@ -4045,19 +6680,111 @@ The range of populations served and needs addressed by human services profession
 #### Supporting evidence — text
 _Destination: `Submission.narratives[13][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 224 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No identification of specific populations served (e.g., children, elderly, homeless, mental health, substance abuse, individuals with disabilities, LGBTQ+, low-income families)
+
+_Source heading:_ **MULTICULTURAL AND ETHICAL ISSUES IN HUMAN SERVICES STRESS MANAGEMENT FINAL REVIEW — MULTICULTURAL AND ETHICAL ISSUES IN HUMAN SERVICES — STRESS MANAGEMENT — FINAL REVIEW — NOHS Code of Ethics — NOHS C**
+
+```text
+12/13
+
+8-10 AM
+
+**Quiz Questions are due every Thursday before class unless otherwise noted.
+
+Choose a special population group with a potential human services need.  Examples include but are not limited to: College students and involvement in healthy activities, the elderly and keeping active socially, abused or neglected children, college students and substance abuse, the chronically homeless, the social needs of disabled youth or reintegration of incarcerated. Your group has some flexibility with choosing the topic. Get approval from your instructor on your special population before you begin. Individually , begin your research by completing the Annotated Bibliography assignment. This will provide you with some background information as you and your team move forward with your Community Needs Assessment.
+
+Choose a special population group with a potential human services need.  Examples include but are not limited to: College students and involvement in healthy activities, the elderly and keeping active socially, abused or neglected children, college students and substance abuse, the chronically homeless, the social needs of disabled youth or reintegration of incarcerated. Your group has some flexibility with choosing the topic. Get approval from your instructor on your special population before you begin.
+
+Individually , begin your research by completing the Annotated Bibliography assignment. This will provide you with some background information as you and your team move 
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.72, 52 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that students can articulate or demonstrate understanding of diverse populations and differentiated service needs
+
+_Source heading:_ **Demonstrate an awareness of diversity by adapting helping approaches to reflect the needs of clients’ culture. — Exhibit openness and a non-judgmental attitude related to individual, cultural, and glo**
+
+```text
+Explain and appraise the customs, practices, beliefs and values of the cultures and communities within which he or she practices.
+
+Provide services without discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation, or socioeconomic status.
+
+5. Exhibit effective and appropriate interpersonal skills in professional human services settings.
+```
+
+##### Evidence text 3 — conf 0.62, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No assessment data showing students comprehend range of populations and needs
+
+_Source heading:_ **ASSESSING THE NEEDS OF THE COMMUNITY — ASSESSING THE NEEDS OF THE COMMUNITY — The Community Tool Box and Conducting a Needs Assessment Meet in library computer lab — The Community Tool Box and — Condu**
+
+```text
+Week 5 9/25, 9/27 WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES Mehr, Chapter 6 (pp 102-110 only) Mehr Chapter 8 SEPT 27- Community Needs Assessment Action Plan – Questions due
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[13][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Current Events | `current-events` | 332 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/current-events.docx` |
+| 2 | Lower Division Stevenson Requirements — Lower Division Steve | `lower-division-stevenson-requirements-lower-division-stevens` | 210 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/lower-division-stevenson-requirements-lower-division-stevens.docx` |
+
+_File 1 fills gap_: Narrative lists courses but provides minimal detail about actual content delivery; vague language ('in-class activities,' 'discussions') without concrete examples
+
+```text
+Each student will deliver a short oral summary of a recent (within the past year) news item pertaining to the topics covered in this course and pose 2 open-ended questions to the class for discussion.  Coverage should be succinct but thorough.
+
+2. Class Debates ( 10 %)
+
+10
+
+Each student will be assigned to one of three groups. The groups’ role will rotate during the semester.  Each group will have the opportunity of presenting support for or against a particular topic being considered.  The third group during each of these debates will listen to both sides and determine which side presented the most convincing evidence.
+
+3.  Response Papers (15%)
+
+(15%)
+
+Students will write 3 short (2-3 pages) response papers on topics assigned by the instructor. Papers can be opinion-based but must provide documentation supporting student’s opinion.
+
+4.  Cultural Autobiography (20%)
+
+(20%)
+
+Each student will write her/his own cultural autobiography to become more aware of one’s own background as well as how it impacts on relationships with others.  More details will be provided.
+
+5. Immigrant Interview (20%)
+
+(20%)
+
+Each student will interview someone who is an immigrant or whose parent/parents have immigrated to the U.S. and learn about that person’s experiences and how it affected the family.  Examples of questions will be given to students ahead of time.
+
+6. Group Presentation and Report (25%)
+
+(25%)
+
+Each student will choose a nation to study in-depth.  Students will examine how people f
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: Cross-disciplinary courses (PSY, SOC) listed but their contribution to this specific specification is unclear without supporting materials
+
+```text
+Articulated Courses-AACC Articulated Courses – SU BIO 101 Fundamentals of Biology or BIO 230 Structure and Function of the Human Body BIO 104 The Human Body and Contemporary Health Issues COM 111/COM 116 Fundamentals of Oral Communication or COM 131 Oral Interpretation CM 101 Public Speaking CSI 112 Computing/Information Technology IS 134 MS Windows and Office Applications ENG 111 Composition and Introduction to Literature* ENG 151 English Composition* ENG 112 Composition and Introduction to Literature 2* ENG 152 Writing About Literature* Health/Fitness/Wellness Gen. Ed. Requirement** Physical Education (1 credit)** HUS 100 Introduction to Human Services CHS 201 Introduction to Human Services HUS 101 Human Services Ethics in Practice Focused Elective HUS 114 Beginning Counseling Techniques Focused Elective HUS 115 Fieldwork: Beginning Counseling and Assessment Techniques Focused Elective HUS 130 Introduction to Family Counseling Focused Elective HUS 141 Group Dynamics Focused Elective HUS 210 Fieldwork: Crisis Intervention and Counseling Focused Elective HUS 211 Crisis Intervention and Counseling Focused Elective HUS 216 Theories of Counseling Focused Elective HUS 217 Fieldwork: Theories of Counseling Focused Elective MAT 135 Elementary Statistics MATH 140 Basic Statistics PSY 111 Introduction to Psychology PSY 101 Introduction to Psychology PSY 214 Introduction to Abnormal Psychology PSY 215 Psychopathology SOC 111 Introduction to Sociology SOC 101 Introduction to Sociology
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, assignments, rubrics, student work samples) to verify claims about course content
-- ⚠️ Narrative lists courses but provides no concrete examples of specific populations served (e.g., homeless, elderly, children, individuals with mental illness, veterans, LGBTQ+)
-- ⚠️ No examples of specific needs addressed (e.g., mental health, substance abuse, housing, employment, trauma, poverty)
-- ⚠️ Vague pedagogical descriptions ('in-class activities,' 'discussions,' 'lectures') without detail on what populations or needs are actually covered
-- ⚠️ No evidence of breadth across vulnerable/underserved populations required by human services context
-- ⚠️ No demonstration of how students learn to identify and respond to diverse population needs
-- ⚠️ Unclear how PSY 101, PSY 108, and SOC 101 specifically address range of populations served by human services professionals
+- ⚠️ Narrative lists courses but provides no concrete evidence of what specific populations or needs are actually taught in each course
+- ⚠️ No syllabus excerpts, learning outcomes, or assignment descriptions are provided for core courses (CHS 340, CHS 105, CHS 220, CHS 430) that allegedly address this specification
+- ⚠️ Evidence 1 shows a special populations assignment but does not demonstrate the full range of populations or needs systematically covered across the curriculum
+- ⚠️ Evidence 4 is incomplete/fragmented and does not clarify content on range of populations
+- ⚠️ Evidence 5 is a course articulation matrix unrelated to demonstrating knowledge of populations served and needs addressed
+- ⚠️ No evidence demonstrates student mastery or learning outcomes related to understanding diverse populations and their needs
+- ⚠️ Narrative mentions PSY 101, PSY 108, and SOC 101 but these are general education courses; insufficient evidence that they substantively address human services-specific populations and needs
+- ⚠️ Missing documentation of how curriculum systematically covers vulnerable/at-risk populations, special populations, and corresponding intervention needs
 
 ---
 
@@ -4066,7 +6793,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _The major models used to conceptualize and integrate prevention, maintenance, intervention, rehabilitation, and healthy functioning._
 
 **Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.00, delta=-0.45)_
 
 #### Narrative content
 _Destination: `Submission.narratives[13][c].content`_
@@ -4124,6 +6851,18 @@ _Source heading:_ **Prepares students with the knowledge and skills required to 
 Prepares students with the knowledge and skills required to effectively assess and treat persons with substance abuse problems and other addiction disorders.  Topics include theory and techniques of assessment and counseling approaches for individuals with addiction disorders, working with family and significant others, dynamics of counseling special populations, and case management.  This course is taken concurrently with CHS 370.
 ```
 
+##### Evidence text 2 — conf 0.62, 37 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explicit definition or explanation of what constitutes the 'major models' (e.g., biopsychosocial, ecological, public health prevention framework, etc.) that integrate all five domains
+
+_Source heading:_ **Articulate how diversity among individuals, families, and communities may affect the delivery of human services. — Locate and interpret sources appropriate to public policy, trends, and issues that af**
+
+```text
+Describe how personal, ethical (related to the NOHS/CSHSE Ethical Standards), and legal issues affect the delivery of human services.
+
+Compare and contrast major models of causation for psychopathology and major theoretical approaches for helping people in need.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[13][c].linkedDocuments`_
 
@@ -4166,20 +6905,124 @@ DiAngelo opens with how our country was founded on race and unequal power, she u
 #### Supporting evidence — text
 _Destination: `Submission.narratives[13][d].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 824 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No demonstration that students develop understanding of systemic vs. individual causes of poverty
+
+_Source heading:_ **The paper should be a minimum of two full pages, double-spaced and a 12-point font. — Syllabi — Syllabi — Hannah Fonti Sample Response Paper — February 3, 2019 — Professor Weiner — CHS 220**
+
+```text
+We live in a modern world, and yet, some of our beliefs and practices regarding race reveal that our world may not be as developed as we would like. Looking at Baltimore City specifically, Freddie Gray is the perfect example that racism still exists in our society today. Racial profiling is common enough in our society that the term “Driving While Black” or DWB is used to address being pulled over by police officers for no apparent reason. Robin DiAngelo, through her presentation “Deconstructing White Privilege,” discusses racism in our society through her “white experience”; while informative about bias, racism and white superiority, she fails to address what we, as a society or as individuals, can do outside of recognition of racism.
+
+DiAngelo opens with how our country was founded on race and unequal power, she uses an example that could be understood by the masses explaining how men gave women the right to vote. She claims that this practice continues through “group prejudice backed by institutional power.” Her claim is easily seen through school and neighborhood segregation, she notes that bad neighborhoods are considered neighborhoods with people of color. What she fails to address about the school and neighborhood segregation is why this occurs; lower class neighborhoods are generally filled with people of color because of the cycle of poverty, statistics reveal that people of color are paid less than their white counterparts as well as the fact that women of color are
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.62, 76 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing evidence of how 'implications' of poverty are addressed (policy impacts, service delivery, client outcomes, etc.)
+
+_Source heading:_ **What had previous research indicated?  (Summarize; don’t rewrite the literature review!) — What did the researchers want to find out?  (What goals, objectives, hypotheses, or research questions did th**
+
+```text
+(a) From whom did they collect their data?  (b) What types of data did they collect?
+
+React to the article by addressing the following questions:
+
+What are the implications/applications of the findings of this specific study for (a) human services workers and (b) families?
+
+(Use the specific findings from the study to answer the questions)
+
+Based on your own thoughts and experiences, do the findings seem valid?  (Do they “make sense”?)  Explain why or why not.
+```
+
+##### Evidence text 3 — conf 0.62, 48 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Cross-listed courses (PSY 101, PSY 108, SOC 101) mentioned but not documented as required or integrated into CHS program
+
+_Source heading:_ **PSY 215 Psychopathology — PSY 215 Psychopathology — PSY 215 Psychopathology — SOCL 101 Introduction to Sociology Satisfies CCBC HUMS Program Requirement of SOCL 102 Social Problems — SOCL 101 Introduc**
+
+```text
+3
+
+SOCL 101 Introduction to Sociology Satisfies CCBC HUMS Program Requirement of SOCL 102 Social Problems 3 SOC 101 Introduction to Sociology 3
+
+3
+
+HUMS 205 Techniques of Group Counseling 3 CHS 215 Satisfies CHS 315 Group Process and Practice once student enters the SU HUMS program. 3
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[13][d].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Current Events | `current-events` | 332 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/current-events.docx` |
+| 2 | Standard 8b — Standard 8b — CLASSROOM OBSERVATION — CLASSROO | `standard-8b-standard-8b-classroom-observation-classroom-obse` | 32 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/standard-8b-standard-8b-classroom-observation-classroom-obse.docx` |
+
+_File 1 fills gap_: Narrative lists courses but provides no concrete examples of how systemic causes of poverty are actually taught or assessed
+
+```text
+Each student will deliver a short oral summary of a recent (within the past year) news item pertaining to the topics covered in this course and pose 2 open-ended questions to the class for discussion.  Coverage should be succinct but thorough.
+
+2. Class Debates ( 10 %)
+
+10
+
+Each student will be assigned to one of three groups. The groups’ role will rotate during the semester.  Each group will have the opportunity of presenting support for or against a particular topic being considered.  The third group during each of these debates will listen to both sides and determine which side presented the most convincing evidence.
+
+3.  Response Papers (15%)
+
+(15%)
+
+Students will write 3 short (2-3 pages) response papers on topics assigned by the instructor. Papers can be opinion-based but must provide documentation supporting student’s opinion.
+
+4.  Cultural Autobiography (20%)
+
+(20%)
+
+Each student will write her/his own cultural autobiography to become more aware of one’s own background as well as how it impacts on relationships with others.  More details will be provided.
+
+5. Immigrant Interview (20%)
+
+(20%)
+
+Each student will interview someone who is an immigrant or whose parent/parents have immigrated to the U.S. and learn about that person’s experiences and how it affected the family.  Examples of questions will be given to students ahead of time.
+
+6. Group Presentation and Report (25%)
+
+(25%)
+
+Each student will choose a nation to study in-depth.  Students will examine how people f
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: Vague pedagogical descriptions ('lecture,' 'reading,' 'discussion') without specifics about depth or rigor
+
+```text
+Faculty Member Visited:  					Date:
+
+Course Number/Section:
+
+Class Topic/Format:
+
+Classroom Environment:
+
+Comments:
+
+Observation Process:
+
+Instruction : (presentation of material, relevance of points covered, knowledge of subject 	matter, organization of material, explanation of terms/concepts)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence (syllabi, assignments, student work samples, or rubrics) provided to verify that courses actually teach systemic causes of poverty
-- ⚠️ Narrative lists courses but provides minimal detail on specific content, learning outcomes, or assessment methods demonstrating mastery of this competency
-- ⚠️ No evidence of student learning or competency demonstration (exams, papers, projects, reflections) that shows students understand systemic causes
-- ⚠️ Field placement learning (CHS 380, 440, 441) mentioned but not described—no evidence of how placement experiences build understanding of systemic poverty
-- ⚠️ Second paragraph appears to be student work/reflection on DiAngelo rather than institutional evidence of curriculum design or assessment
-- ⚠️ No clear connection between 'understanding systemic causes' and 'implications'—implications are largely absent
-- ⚠️ PSY 101, PSY 108, SOC 101 are mentioned as 'required courses in other majors' but unclear how/whether CHS majors take these or how they integrate into CHS curriculum
-- ⚠️ No assessment data, rubrics, or evaluation criteria showing how the program measures whether students achieve this specification
+- ⚠️ No evidence that students demonstrate *understanding* of systemic causes of poverty—only that topics are listed as course content; assignments shown (response papers, debates, current events) do not explicitly require analysis of systemic poverty causes
+- ⚠️ Missing assessment data: no rubrics, student work samples, or learning outcome results demonstrating whether students actually achieved this competency
+- ⚠️ No evidence of direct instruction on *implications* of systemic poverty (e.g., for policy, practice, family systems, or human services delivery)
+- ⚠️ Supporting evidence items (Evidence 1-5) are disconnected from the narrative; most are syllabus fragments or observation templates, not actual student work or course materials addressing poverty specifically
+- ⚠️ Evidence 2 student paper addresses racism and racial profiling but does not explicitly connect systemic poverty causes to implications for human services practice or client outcomes
+- ⚠️ Cross-listed courses (PSY 101, PSY 108, SOC 101) are named but no syllabi, learning objectives, or specific assignments are provided to verify poverty content
+- ⚠️ No distinction between *coverage* of topic (mentioned in readings/lectures) versus *mastery* (students can explain, analyze, or apply understanding)
 
 ---
 
@@ -4188,7 +7031,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _An understanding of national and global social policies and their influence on human service delivery._
 
 **Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.45, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[13][e].content`_
@@ -4216,19 +7059,104 @@ In regard to the LGBTQ+ community, South Korea, especially within the Christian 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[13][e].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 66 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Vague teaching methods listed ('lecture,' 'discussion,' 'reading') without evidence of how students demonstrate understanding of policy influence on service delivery
+
+_Source heading:_ **Course Description**
+
+```text
+Instructional Methods Used in this Course: Course objectives will be achieved by a variety of methods which include lecture, class discussions, team projects, papers, videos, and fieldwork
+
+Instructional Methods Used in this Course:
+
+Required and Recommended Texts, Manuals, and Supplies: Lum, D. (Ed).  (2011). Culturally competent, practice: A framework for understanding diverse groups and justice issues .  Belmont:  Brooks/Cole.
+
+Required and Recommended Texts, Manuals, and Supplies:
+```
+
+##### Evidence text 2 — conf 0.62, 1051 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ The South Korea LGBTQ+ example is disconnected from the main response and does not clearly connect to how national/global policies influence human service delivery
+
+_Source heading:_ **Women’s March in South Korea; Retrieved from: https://studybreaks.com/news-politics/south-korea-women-march-for-justice/**
+
+```text
+https://studybreaks.com/news-politics/south-korea-women-march-for-justice/
+
+When it comes to family structure, family background and educational level are important considerations when in search of a partner (South Korea). This is where the old and the new may collide, as some individuals have love marriages, but some may meet their spouse through arranged meetings by parents, relatives, friends, or matchmakers (South Korea). Marriage in itself is seen as a right of passage that comes with its own social status as well, and it is seen as a union of their families as well in order to ensure the continuation of the husband’s family line (South Korea). Remarriages are rare, and in some instances, in more traditional locales, remarriages of widows are not allowed and remarriages after a divorce are difficult (South Korea). The South Korean familial household mostly consists of two-generation households, three-generation households are more traditional, but that in itself is fading and only 14.7% of the total population belonged to a three-generation household in 1995 (South Korea). When it comes to inheritance, it was nationally known for the eldest son to receive a larger portion of the parent’s inheritance because it is more common for the eldest son to be held against higher standards and be given most of the responsibility (South Korea). In 1989 however, after a revision of the Family Law, it re-stated that family inheritance must be divided “equally among sons and daughters 
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.62, 189 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing explicit connection between policy content and actual human service delivery impact—courses listed but their relevance to service delivery outcomes unclear
+
+_Source heading:_ **COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES**
+
+```text
+Course Objectives/Learning Outcomes: Identify the goals, functions, and organization of human services and their relationship to the various roles of human service workers. Identify specific examples of treatment and prevention programs that have been designed to help resolve family and individual problems. Articulate how diversity among individuals, families, and communities may affect the delivery of human services. Describe how personal, ethical (related to the NOHS/CSHSE Ethical Standards), and legal issues affect the delivery of human services. Locate and interpret sources appropriate to public policy, trends, and issues that affect individuals and families. Specify how his/her personal values and goals relate to a career in human services. Identify and apply principles of assessment, planning, brokering, and case management. Compare and contrast major models of causation for psychopathology and major theoretical approaches for helping people in need. Assess the needs of a specific community or population.
+
+Course Objectives/Learning Outcomes: Identify the goals, functions, and organization of human services and their relationship to the various roles of human service workers.
+
+Course Objectives/Learning Outcomes:
+
+Identify specific examples of treatment and prevention programs that have been designed to help resolve family and individual problems.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[13][e].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Current Events | `current-events` | 332 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/current-events.docx` |
+
+_File 1 fills gap_: No supporting evidence provided (syllabus excerpts, assignment rubrics, course schedules, or sample country reports) to verify claims about curriculum content
+
+```text
+Each student will deliver a short oral summary of a recent (within the past year) news item pertaining to the topics covered in this course and pose 2 open-ended questions to the class for discussion.  Coverage should be succinct but thorough.
+
+2. Class Debates ( 10 %)
+
+10
+
+Each student will be assigned to one of three groups. The groups’ role will rotate during the semester.  Each group will have the opportunity of presenting support for or against a particular topic being considered.  The third group during each of these debates will listen to both sides and determine which side presented the most convincing evidence.
+
+3.  Response Papers (15%)
+
+(15%)
+
+Students will write 3 short (2-3 pages) response papers on topics assigned by the instructor. Papers can be opinion-based but must provide documentation supporting student’s opinion.
+
+4.  Cultural Autobiography (20%)
+
+(20%)
+
+Each student will write her/his own cultural autobiography to become more aware of one’s own background as well as how it impacts on relationships with others.  More details will be provided.
+
+5. Immigrant Interview (20%)
+
+(20%)
+
+Each student will interview someone who is an immigrant or whose parent/parents have immigrated to the U.S. and learn about that person’s experiences and how it affected the family.  Examples of questions will be given to students ahead of time.
+
+6. Group Presentation and Report (25%)
+
+(25%)
+
+Each student will choose a nation to study in-depth.  Students will examine how people f
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided (syllabi, assignments, rubrics, or student work samples) to verify that courses actually teach national and global social policies and their influence on human service delivery
-- ⚠️ Vague course descriptions lack specificity about *which* national and global policies are taught (e.g., healthcare policy, welfare reform, immigration policy, child protection laws, mental health parity legislation)
-- ⚠️ No clear connection demonstrated between policy content and *influence on human service delivery*—the specification requires understanding how policies shape service systems, not just awareness that policies exist
-- ⚠️ South Korea LGBTQ+ policy example appears disconnected from the main response and lacks context for how this policy knowledge influences human service delivery
-- ⚠️ No evidence that field placements (CHS 380, CHS 440) integrate policy learning or require students to analyze how policies affect their practice settings
-- ⚠️ Cross-listed courses (PSY 101, SOC 101) are mentioned but no evidence provided that these courses explicitly address the specification or how they integrate into the human services curriculum
-- ⚠️ No assessment data, student learning outcomes, or evaluation methods documented to demonstrate student mastery of understanding policies and their influence on service delivery
+- ⚠️ Narrative does not explain HOW national and global social policies influence human service delivery—only that policies are 'addressed' in courses
+- ⚠️ No evidence demonstrates student learning outcomes or competency related to understanding policy influence on service delivery
+- ⚠️ The extensive South Korea LGBTQ+ and family structure content in narrative appears disconnected from specification requirement; unclear how this example illustrates policy understanding
+- ⚠️ No evidence of student work (assignments, papers, exams) showing mastery of the relationship between policies and service delivery
+- ⚠️ Field placement courses (CHS 380, 440) are mentioned but no syllabus, assignments, or learning objectives provided to show policy-related competencies
+- ⚠️ Narrative references PSY 101 and SOC 101 but provides no course syllabi or evidence these courses adequately address human service delivery contexts
+- ⚠️ No discussion of how students analyze or critically evaluate policy impacts on vulnerable populations or marginalized communities within human services
+- ⚠️ Missing evidence of how students apply policy understanding to actual practice scenarios or case management decisions
 
 ---
 
@@ -4237,7 +7165,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _Constituency building and other advocacy skills such as lobbying, grassroots movements, and community development and organizing. 4. Discipline Inquiry and Information Literacy Context: The delivery of human services depends on the appropriate integration of various forms of information._
 
 **Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.55, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[13][f].content`_
@@ -4266,22 +7194,115 @@ Obtain, synthesize, and clearly report information from various sources.Response
 #### Supporting evidence — text
 _Destination: `Submission.narratives[13][f].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No assessment data showing students actually master advocacy skills; no rubrics, projects, or competency demonstrations provided
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.62, 133 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Information literacy context mentioned in spec but narrative conflates information gathering with advocacy—these are separate competencies
+
+_Source heading:_ **Writing Mechanics (15) — Total (150) — Total (150) — Syllabi — Syllabi — STEVENSON — STEVENSON — U  N  I  V  E  R  S  I  T  Y — U  N  I  V  E  R  S  I  T  Y — COUNSELING & HUMAN SERVICES DEPARTMENT —**
+
+```text
+The personal enrichment of each student is central to Stevenson’s mission; “enlarging one’s horizons and integrating one’s total capabilities” are key elements in the fulfillment of the mission.  In the following assignment your horizon will be enlarged as you learn new information and then integrate it by thinking about it critically and reflecting upon it.
+
+There are many controversial issues related to families.  In this assignment, you will investigate one of these issues by reading and preparing for but not conducting fieldwork.  After you have collected your data, you will present both sides of the issue to the class in a team presentation.  In an individual written report, you will summarize and react to a journal article, discuss your fieldwork preparation, and reflect on your topic.
+
+preparing for but not conducting
+
+both sides
+```
+
+##### Evidence text 3 — conf 0.62, 48 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ SOC 101 cited as 'required course in other majors' but unclear if all CHS majors must take it or how it's integrated
+
+_Source heading:_ **PSY 215 Psychopathology — PSY 215 Psychopathology — PSY 215 Psychopathology — SOCL 101 Introduction to Sociology Satisfies CCBC HUMS Program Requirement of SOCL 102 Social Problems — SOCL 101 Introduc**
+
+```text
+3
+
+SOCL 101 Introduction to Sociology Satisfies CCBC HUMS Program Requirement of SOCL 102 Social Problems 3 SOC 101 Introduction to Sociology 3
+
+3
+
+HUMS 205 Techniques of Group Counseling 3 CHS 215 Satisfies CHS 315 Group Process and Practice once student enters the SU HUMS program. 3
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[13][f].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Think critically about complex ethical issues. — Practice th | `think-critically-about-complex-ethical-issues-practice-the-h` | 194 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/think-critically-about-complex-ethical-issues-practice-the-h.docx` |
+| 2 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+
+_File 1 fills gap_: Community organizing skills mentioned generically but no clear curriculum mapping showing where/how this is taught
+
+```text
+From 2019-2020 catalog: http://stevenson.smartcatalogiq.com/2019-2020/Undergraduate-Catalog/Academic-Information/The-SEE-Student-Learning-Goals-and-Outcomes
+
+http://stevenson.smartcatalogiq.com/2019-2020/Undergraduate-Catalog/Academic-Information/The-SEE-Student-Learning-Goals-and-Outcomes
+
+(see next page)
+
+Standard 12.g   Processes to effect social change through advocacy work at all levels of society including community development, community and grass-roots organizing, and local and global activism
+
+Include advocacy and social change for marginalized populations.  Such advocacy can occur in the context of a human service agency but also by assisting and empowering individuals and community groups/organizations/churches to effectively advocate for resources and services that address their needs and concerns.
+
+Standard 14.g  Knowledge, theory, and skills are included, analyzed, and applied in the curriculum in regard to:  performing and elementary community needs assessment:
+
+Include a greater emphasis in the program on community development in contrast to the strong emphasis on service delivery within human services agencies.
+
+Standard 14.h   Knowledge, theory, and skills are included, analyzed, and applied in the curriculum in regard to conducting a basic program evaluation:
+
+Include more direct instruction on designing and conducting a program evaluation and on understanding research, in order to effectively identify, understand, and utilize evidence based practices.
+
+Con
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: Field placement learning outcomes for advocacy skills (CHS 380, 440) described vaguely without supervision plans or competency assessment
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided (syllabi, assignments, course schedules, rubrics) to verify claims about course content and learning outcomes
-- ⚠️ Constituency building component is vaguely described; no concrete examples of how students learn to build constituencies or what deliverables demonstrate this skill
-- ⚠️ Lobbying skills are mentioned in specification but not addressed in narrative response
-- ⚠️ Grassroots movements instruction claimed but not substantiated with course details, assignments, or assessment methods
-- ⚠️ Community organizing skills mentioned in specification but narrative focuses primarily on community development; distinction unclear
-- ⚠️ Information literacy context is addressed but lacks integration with advocacy/constituency building components as the specification requires
-- ⚠️ No evidence of how 'discipline inquiry' specifically relates to human services advocacy work
-- ⚠️ Field placement courses (CHS 380, 440) claim to address these topics but narrative ends mid-sentence without completion
-- ⚠️ No assessment data or student learning outcomes demonstrating mastery of advocacy skills
-- ⚠️ SOC 101 is mentioned as addressing constituency building but no detail provided about content or relevance to human services
+- ⚠️ No explicit evidence that students learn and practice lobbying skills or techniques; narrative mentions 'lobbying' in the specification but provides no course content, assignments, or learning activities demonstrating this.
+- ⚠️ Grassroots movements are mentioned in narrative (CHS 224) but no syllabus excerpts, assignment descriptions, or student work samples demonstrate what students actually learn or produce regarding grassroots organizing methodology.
+- ⚠️ Community development and organizing are listed as course topics but lack concrete evidence of student learning outcomes, assignments, or field experience activities demonstrating competency in these skills.
+- ⚠️ No evidence provided that students actually conduct or complete a community needs assessment as a standalone learning activity; CHS 105 'Community Needs assignment' is referenced but not attached or described.
+- ⚠️ Field placement evaluations (Evidence 2, 4) do not include specific ratings or comments on constituency building, advocacy, or community organizing skills—they measure generic competencies only.
+- ⚠️ No syllabus content, assignment rubrics, or student work samples directly demonstrating instruction in advocacy skills, lobbying techniques, or grassroots movement strategy.
+- ⚠️ The 'Discipline Inquiry and Information Literacy' sub-element (second part of 13.f) is addressed for generic information gathering, but not specifically in the context of advocacy and community organizing research needs.
 
 ---
 
@@ -4291,8 +7312,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Obtain, synthesize, and report information from various sources._
 
-**Final coverage verdict:** covered=**False**, score=**0.35**
-_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.35, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.45, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[14][a].content`_
@@ -4332,20 +7353,115 @@ The best way to can develop writing skills in writing literature reviews is to r
 #### Supporting evidence — text
 _Destination: `Submission.narratives[14][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 45 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Specification 14.a asks to 'obtain, synthesize, and report information from various sources' but the narrative focuses almost exclusively on assessing client needs—a different competency entirely
+
+_Source heading:_ **Objectives/Outcomes — Communicate effectively with others, both orally and in writing. — Demonstrate caring, respect, empathy, and genuineness when interacting with others. — Establish appropriate rap**
+
+```text
+Communicate effectively with others, both orally and in writing. Demonstrate caring, respect, empathy, and genuineness when interacting with others. Establish appropriate rapport with clients.
+
+6. Synthesize and appropriately apply key concepts, methods and values in human services to professional situations, independently and with minimal supervision.
+```
+
+##### Evidence text 2 — conf 0.62, 133 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence demonstrates students actually synthesizing information from multiple, diverse sources (e.g., literature, data, stakeholder interviews, community resources, research databases)
+
+_Source heading:_ **Writing Mechanics (15) — Total (150) — Total (150) — Syllabi — Syllabi — STEVENSON — STEVENSON — U  N  I  V  E  R  S  I  T  Y — U  N  I  V  E  R  S  I  T  Y — COUNSELING & HUMAN SERVICES DEPARTMENT —**
+
+```text
+The personal enrichment of each student is central to Stevenson’s mission; “enlarging one’s horizons and integrating one’s total capabilities” are key elements in the fulfillment of the mission.  In the following assignment your horizon will be enlarged as you learn new information and then integrate it by thinking about it critically and reflecting upon it.
+
+There are many controversial issues related to families.  In this assignment, you will investigate one of these issues by reading and preparing for but not conducting fieldwork.  After you have collected your data, you will present both sides of the issue to the class in a team presentation.  In an individual written report, you will summarize and react to a journal article, discuss your fieldwork preparation, and reflect on your topic.
+
+preparing for but not conducting
+
+both sides
+```
+
+##### Evidence text 3 — conf 0.62, 95 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ The tangential paragraph about literature reviews (appearing mid-response) is disconnected from the rest and does not address how students obtain/synthesize/report across various sources
+
+_Source heading:_ **Assignment V:  Literature Review DRAFT 1 March 25, DRAFT 2 April 15 — Assignment V:  Literature Review — Assignment V:  Literature Review**
+
+```text
+The best way to can develop writing skills in writing literature reviews is to read others' literature reviews. The write-up should reveal what is known about the topic generally, theoretically, and empirically, and the variables in your proposal. Your reader should have a fair knowledge of what others have said or found about your topic from the write-up.  Organize the literature review by themes or subthemes.  It’s a good idea to use your variables as themes or subthemes. WHY IS THIS TOPIC RELEVANT/ IMPORTANT/NECESSARY? Remember to Use at least eight (8) primary sources.
+
+eight (8)
+```
+
+##### Evidence text 4 — conf 0.62, 279 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No artifacts showing student work that demonstrates synthesis of multiple sources or how reporting is structured/evaluated
+
+_Source heading:_ **In 2018, professional portfolios of seniors were analyzed. — In 2018, professional portfolios of seniors were analyzed.**
+
+```text
+Program outcomes assessed:
+
+2.	Based on comprehensive self-evaluation and feedback from faculty and supervisors, develop individualized professional development goals and objectives.
+
+3.	Exhibit consistent professional attitudes and behaviors in applied human services settings.
+
+6.	Synthesize and appropriately apply key concepts, methods and values in human services to professional situations, independently and with minimal supervision.
+
+Methodology:
+
+Professional portfolios were collected from one of the two CHS 441 Seminar in Human Services courses that graduating seniors complete in conjunction with their practicum experience in their last semester. A total of 10 portfolios were examined (59% of graduating students). Each portfolio was rated independently by two faculty members on each of the three outcomes, using the attached rubric and a 3-points scale. Ratings were: Inadequate/No Evidence (0), Adequate/Satisfactory (1), and Excellent (2). Raters gave the same ratings on 83% of the items. When ratings were different, they were averaged together.
+
+Data Summary:
+
+The average scores on each outcome are listed below. On all measures, half or more artifacts were rated as adequate. An addition 30-40% were rated as excellent. Three artifacts were rated as inadequate by at least one rater (one for professional development goals and two for professional attitudes and behaviors).
+
+Criteria/Performance Rating Scoring points Inadequate/ No Evidence 0 Adequate/ Satisfactory 1 Excelle
+… (truncated, full text imported)
+```
+
+##### Evidence text 5 — conf 0.62, 41 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Does not address breadth of 'various sources'—no mention of primary/secondary research, community data, policy documents, stakeholder consultation, etc.
+
+_Source heading:_ **Types of Data — Types of Data — Descriptive Statistics — Descriptive Statistics — Quantitative II — Quantitative II**
+
+```text
+http://libweb.surrey.ac.uk/library/skills/Numeracy%20for%20professional%20purposes/2_Types%20of%20Data/index.htm
+
+http://libweb.surrey.ac.uk/library/skills/Numeracy%20for%20professional%20purposes/3_Basic%20Descriptive%20Statistics%20introduction/index.htm
+
+http://libweb.surrey.ac.uk/library/skills/Numeracy%20for%20professional%20purposes/4_Basic%20Descriptive%20Statistics/index.htm
+
+Week 11 April 15 Historical Research Research Limitations/ Implications/ Impact Assessment Assignment V -Literature Review Draft Due April 15 Individual Meetings UNIVERSITY CLOSED April 19 Historical Research http://www.okstate.edu/ag/agedcm4h/academic/aged5980a/5980/newpage19.htm Memory vs The Past http://www.history.ucsb.edu/faculty/marcuse/projects/reception/ReceptHistGornCHE004.htm History & the Web http://chnm.gmu.edu/essays-on-history-new-media/essays/?essayid=12
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[14][a].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | SU Goal No. 5: Career Readiness (CR) — SU Goal No. 5: Career | `su-goal-no-5-career-readiness-cr-su-goal-no-5-career-readine` | 520 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/su-goal-no-5-career-readiness-cr-su-goal-no-5-career-readine.docx` |
+
+_File 1 fills gap_: Zero supporting evidence documents provided; claims about courses and assignments (Team Research Project, Interview Project, etc.) are unsubstantiated
+
+```text
+The SU graduate will demonstrate personal direction, professional know-how, and discipline expertise in preparation for entry into the workplace or graduate studies.
+
+Graded Assignments:
+
+Journals (10%): Complete bi-weekly field note summaries. This summary should be between 100-250 words. Each summary is to include the following: What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? Briefly describe other activities you engaged in this week What concerns or challenges are you experiencing? Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences. Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-e
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ Specification 14.a requires demonstration of ability to 'obtain, synthesize, and report information from various sources' but narrative focuses primarily on assessing client needs rather than the information synthesis and reporting competency
-- ⚠️ No evidence of curriculum content addressing how to identify, locate, and obtain information from diverse sources (academic databases, primary sources, secondary sources, community resources, etc.)
-- ⚠️ Missing evidence demonstrating synthesis skills—how students integrate and analyze information from multiple sources to draw conclusions or create new understanding
-- ⚠️ No documentation of reporting/communication formats (written reports, oral presentations, policy briefs, data summaries) required across courses
-- ⚠️ Narrative contains irrelevant content about literature review writing that does not correspond to Specification 14.a requirements
-- ⚠️ Supporting evidence section is completely empty—no syllabi, assignments, rubrics, or student work samples provided
-- ⚠️ No evidence showing use of 'various sources' (e.g., empirical research, statistical data, community data, policy documents, expert consultation)
-- ⚠️ Missing assessment data demonstrating student proficiency in obtaining, synthesizing, and reporting information
+- ⚠️ Specification 14.a asks to 'obtain, synthesize, and report information from various sources' — the narrative focuses heavily on assessing client needs but provides minimal evidence of systematic instruction in synthesizing information from multiple sources across the curriculum
+- ⚠️ No clear curriculum map showing which courses explicitly teach information synthesis skills (e.g., literature review methodology, source evaluation, cross-source comparison)
+- ⚠️ Evidence 3 mentions literature review requirements (8 primary sources, organizing by themes) but provides only the assignment prompt, not evidence that students are taught HOW to synthesize across sources or that this is assessed
+- ⚠️ Missing demonstration of how 'reporting' (communicating synthesized findings) is taught and assessed across courses — Evidence 1 mentions communication outcomes but doesn't connect to synthesis of information from various sources
+- ⚠️ Evidence 6 provides external links to research methods resources but these appear disconnected from course syllabi or clear integration into the curriculum narrative
+- ⚠️ No evidence of scaffolding or progression in information synthesis skills across the curriculum (e.g., freshman through senior level)
+- ⚠️ Assessment data (Evidence 5) evaluates professional development and application of concepts but does not measure students' ability to obtain, synthesize, and report information from various sources
 
 ---
 
@@ -4353,8 +7469,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Assess the quality of information from various sources, including but not limited to print, audio, video, web, and social media, and understand its application._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.62**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.62, delta=+0.17)_
 
 #### Narrative content
 _Destination: `Submission.narratives[14][b].content`_
@@ -4451,28 +7567,78 @@ Child Development
 Parents
 ```
 
+##### Evidence text 3 — conf 0.72, 150 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of explicit instruction on assessing VIDEO sources (e.g., YouTube, streaming platforms, documentary films)
+
+_Source heading:_ **Video Review	    -	due May 3 (Optional: only as Extra-Credit) — Video Review	    -	due May 3 (Optional: only as Extra-Credit) — Video Review	    -	due May 3 (Optional: only as Extra-Credit)**
+
+```text
+Students who so desire may write a 2-3 page review of the documentary Generation M: Misogyny in Media and Culture.  Your opening paragraph summarily captures the video’s theme, explains it and states the subthemes under which it is discussed in the video.  Dedicate each subsequent paragraph to each of the subthemes: identify the subtheme and summarize how the video explains or discusses it ensuring that the key points of a subtheme are sufficiently reflected in your summary.  In your final/concluding paragraph, comment critically on the documentary with reference specifically to the video’s theme, highlighting any insights this video affords you on the general topic of gender inequality.  Make sure to correct all spelling and grammatical mistakes in your paper before submission.  Spelling and grammatical mistakes will be penalized with point deduction.
+
+Students who do this assignment are required to include (write) the pledge at the top (beginning) of this paper.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[14][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Current Events | `current-events` | 332 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/current-events.docx` |
+
+_File 1 fills gap_: Narrative lists courses but provides no specific examples of assignments that require evaluation of audio, video, social media, or diverse web sources
+
+```text
+Each student will deliver a short oral summary of a recent (within the past year) news item pertaining to the topics covered in this course and pose 2 open-ended questions to the class for discussion.  Coverage should be succinct but thorough.
+
+2. Class Debates ( 10 %)
+
+10
+
+Each student will be assigned to one of three groups. The groups’ role will rotate during the semester.  Each group will have the opportunity of presenting support for or against a particular topic being considered.  The third group during each of these debates will listen to both sides and determine which side presented the most convincing evidence.
+
+3.  Response Papers (15%)
+
+(15%)
+
+Students will write 3 short (2-3 pages) response papers on topics assigned by the instructor. Papers can be opinion-based but must provide documentation supporting student’s opinion.
+
+4.  Cultural Autobiography (20%)
+
+(20%)
+
+Each student will write her/his own cultural autobiography to become more aware of one’s own background as well as how it impacts on relationships with others.  More details will be provided.
+
+5. Immigrant Interview (20%)
+
+(20%)
+
+Each student will interview someone who is an immigrant or whose parent/parents have immigrated to the U.S. and learn about that person’s experiences and how it affected the family.  Examples of questions will be given to students ahead of time.
+
+6. Group Presentation and Report (25%)
+
+(25%)
+
+Each student will choose a nation to study in-depth.  Students will examine how people f
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence of instruction or assessment of audio sources (podcasts, audiobooks, recorded interviews, etc.)
-- ⚠️ No evidence of instruction or assessment of video sources (documentaries, news broadcasts, YouTube, streaming content, etc.)
-- ⚠️ No evidence of instruction or assessment of social media sources (Facebook, Twitter, Instagram, TikTok, etc.) or their credibility challenges
-- ⚠️ No evidence of explicit web evaluation skills (domain analysis, website authority, fact-checking websites, identifying misinformation/disinformation)
-- ⚠️ Supporting evidence is limited to journal vs. magazine distinction only; does not address all source types listed in the specification
-- ⚠️ No documentation of student assignments or assessments that specifically evaluate these multiple source types
-- ⚠️ Narrative lacks specific learning outcomes or rubrics demonstrating how students demonstrate competency in assessing quality across diverse media formats
-- ⚠️ Missing evidence of how students apply their assessment skills in real-world contexts with contemporary media
+- ⚠️ No explicit evidence that students assess quality of AUDIO sources specifically; only video, print, web, and social media mentioned in assignments
+- ⚠️ Narrative claims CHS 224 'emphasizes critical analysis of research findings' but Evidence 3 (Video Review) shows only documentary summary/critique, not comparative source quality assessment across media types
+- ⚠️ No demonstrated instruction on evaluating SOCIAL MEDIA as a source type; assignments reference news, documentaries, magazines, and journals, but not TikTok, Twitter, Instagram, or other social platforms
+- ⚠️ Evidence 1 and 2 teach scholarly vs. popular distinction but do not address quality assessment of WEB sources specifically (credibility, domain, author authority, bias indicators)
+- ⚠️ Narrative lacks evidence that students understand APPLICATION of quality assessment skills—how to use evaluated information in actual human services decision-making or practice contexts
+- ⚠️ CHS 380 Internship and CHS 440/441 Practicum claim to address these skills through journaling and discussion, but no actual assignment descriptions or rubrics provided showing what quality assessment looks like in practice
 
 ---
 
-### `14.c` 🟡 — Knowledge, Theory, Skills, and Values
+### `14.c` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Upholding confidentiality and using appropriate means to share information._
 
-**Final coverage verdict:** covered=**False**, score=**0.65**
-_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.65, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.78**
+_(first-pass: covered=False, score=0.60; second-pass after gap-fill: covered=True, score=0.78, delta=+0.18)_
 
 #### Narrative content
 _Destination: `Submission.narratives[14][c].content`_
@@ -4520,28 +7686,146 @@ STANDARD 42 Human service educators establish and uphold appropriate guidelines 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[14][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 136 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Technology-related confidentiality (STANDARD 9) is mentioned in the narrative but not addressed in course content or field requirements; no evidence of instruction on data storage, transmission, retrieval, or technology impact on helping relationships
+
+_Source heading:_ **Sexual or romantic relationships — STANDARD 7 Human service professionals ensure that their values or biases are not imposed upon their clients.**
+
+```text
+values or biases are not imposed
+
+STANDARD 8 Human service professionals protect the integrity, safety, and security of client records . Client information in written or electronic form that is shared with other professionals must have the client’s prior written consent except in the course of professional supervision or when legally obliged or permitted to share such information.
+
+integrity, safety, and security of client records
+
+STANDARD 9 When providing services through the use of technology, human service professionals take precautions to ensure and maintain confidentiality and comply with all relevant laws and requirements regarding storing, transmitting, and retrieving data . In addition, human service professionals ensure that clients are aware of any issues and concerns related to confidentiality, service issues, and how technology might negatively or positively impact the helping relationship.
+
+storing, transmitting, and retrieving data
+```
+
+##### Evidence text 2 — conf 0.92, 369 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Student disclosure protections (STANDARD 42) are not mentioned; no evidence of guidelines for self-disclosure activities, opt-out mechanisms, or processing protocols in coursework
+
+_Source heading:_ **Responsibility to Students — Responsibility to Students**
+
+```text
+STANDARD 37 Human service educators develop and implement culturally sensitive knowledge, awareness, and teaching methodologies .
+
+culturally sensitive knowledge, awareness, and teaching methodologies
+
+STANDARD 38 Human service educators are committed to the principles of access and inclusion and take all available and applicable steps to make education available to differently-abled students.
+
+access and inclusion
+
+STANDARD 39 Human service educators demonstrate high standards of scholarship in their scholarship, pedagogy, and professional service and stay current in the field by being members of their professional associations, attending workshops and conferences, and reviewing and/or conducting research.
+
+high standards of scholarship
+
+stay current in the field
+
+STANDARD 40 Human service educators recognize and acknowledge the contributions of students to the work of the educator in such activities as case material, grants, workshops, research, publications, and other related activities.
+
+recognize and acknowledge the contributions of students
+
+STANDARD 41 Human service educators monitor students' field experiences to ensure the quality of the placement site, supervisory experience, and learning experience towards the goals of personal, professional, academic, career, and civic development. When students experience potentially harmful events during field placements, educators provide reasonable investigation and response as necessary to safeguard the student.
+
+monitor stud
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[14][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Office location: Manning Academic Center, N178. — Office hou | `office-location-manning-academic-center-n178-office-hours-tu` | 218 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/office-location-manning-academic-center-n178-office-hours-tu.docx` |
+| 2 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+| 3 | Thomas Flis — Sheppard Pratt Health System, Inc. — Baltimore | `thomas-flis-sheppard-pratt-health-system-inc-baltimore-md-21` | 664 | 0.75 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/thomas-flis-sheppard-pratt-health-system-inc-baltimore-md-21.docx` |
+
+_File 1 fills gap_: No supporting evidence documents provided despite multiple specific references (CHS 105 schedule, CHS 224 Week 4 materials, Student Field Placement Evaluation, NOHS Code appendix)
+
+```text
+Office location:
+
+Office hours:
+
+Section number:
+
+Credits:
+
+Prerequisite(s):
+
+Classroom or Studio Location:
+
+Scheduled Class Days and Time:
+
+Course Description: CHS 380 is a three-credit course. This field experience provides students with a hands-on, realistic experience in a human services community-based agency. Concurrently, students will participate in a guided seminar once a week.
+
+Course Description:
+
+Instructional Methods Used in this Course: Course objectives will be achieved by a variety of methods which include lecture, class discussions, a reflection paper, journaling, and fieldwork.
+
+Instructional Methods Used in this Course:
+
+Required and Recommended Texts, Manuals, and Supplies:
+
+Sweitzer, H., & King, M. (2019). The successful internship: Personal professional, and civic development in experiential learning (5th ed.).  Belmont, CA:  Brooks/Cole.
+
+*Only sections of four chapters of this book are required for CHS 380. You may use the book on reserve in the library instead of purchasing it. However, you will be required to read the rest of the book for CHS 441.
+
+*Only sections of four chapters of this book are required for CHS 380.
+
+2018-2019 Field Placement Handbook, Human Services, Stevenson University Ethical Standards for Human Services Professionals, National Organization for Human Services (NOHS). Available at http://www.nationalhumanservices.org/ethical-standards-for-hs-professionals
+
+2018-2019 Field Placement Handbook, Human Services, Stevenson University
+
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: Limited evidence of how confidentiality instruction is assessed and evaluated beyond field placement evaluation; no rubrics, assignments, or exam questions provided
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
+_File 3 fills gap_: No evidence of specific legal frameworks or state/federal laws covered (HIPAA, state privacy laws, etc.) despite mentioning 'legal' issues in CHS 105
+
+```text
+6501 North Charles Street, P.O. Box 6815
+
+2.  Health Insurance.  Each student accepted into the Education Program, as a condition of participation, must carry health insurance including major medical coverage adequate to cover the student’s needs in case of any accident, injury or illness while participating in the HEALTH SYSTEM’s  Education Program, and shall furnish proof of such insurance to HEALTH SYSTEM upon request.
+
+C. Confidentiality; HIPAA Compliance. In the course of a student’s participation in the Education Program, the student and the SPONSOR staff may become privy to, or may receive or create certain confidential health or medical information relating to persons being treated in the HEALTH SYSTEM (“Protected Health Information”), the confidentiality of which is regulated by the Health Insurance Portability and Accountability Act of 1996, Public Law 104-191 (“HIPAA”).  SPONSOR agrees to maintain and to require all students to maintain the confidentiality of all Protected Health Information as required by HIPAA. Not in limitation of the foregoing, but in addition thereto:
+
+(i)	Neither the SPONSOR nor any student shall directly or indirectly use, divulge, reveal, report, publish, transfer or disclose any Protected Health Information other than as may be strictly necessary to perform its duties under this Agreement.
+
+(ii)	SPONSOR agrees to maintain and use appropriate safeguards to prevent the use or disclosure of Protected Health Information other than as needed to
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, course schedules, evaluation forms, or NOHS code referenced in narrative are missing)
-- ⚠️ No demonstration of how confidentiality instruction addresses technology-related concerns (STANDARD 9 mentioned but not evidenced in courses or field placements)
-- ⚠️ No evidence of student guidelines or opt-out mechanisms for self-disclosure activities (STANDARD 42 requirements not demonstrated)
-- ⚠️ Internship/practicum evaluation form cited but not attached to verify confidentiality assessment criteria
-- ⚠️ No evidence of how clients are informed about confidentiality limits, exceptions (harm clause), or technology risks
-- ⚠️ Narrative lists courses but provides no syllabi excerpts, assignment descriptions, or learning outcomes documentation
-- ⚠️ No evidence of field site requirements documentation that supposedly emphasizes confidentiality
+- ⚠️ No evidence demonstrating how students are taught to identify when confidentiality must be breached (e.g., duty to warn, abuse reporting, imminent danger) beyond the vague phrase 'except when such confidentiality would cause harm'
+- ⚠️ Limited evidence of explicit instruction on appropriate means/methods to share information (e.g., what channels are appropriate, with whom, in what format, documentation requirements)
+- ⚠️ No evidence addressing STANDARD 9's requirement that students ensure clients are aware of confidentiality issues, technology risks, and how technology impacts the helping relationship
+- ⚠️ No evidence of assessment data showing students actually demonstrate competency in deciding when/how to appropriately share information—only that field supervisors rated them on 'protecting client privacy' in general
+- ⚠️ Missing evidence of how STANDARD 42 (student disclosure guidelines with opt-out provisions) is actually implemented in courses like CHS 105, 315, 360 that involve sensitive personal material
+- ⚠️ No curriculum evidence showing instruction on secure data storage, transmission, or retrieval practices (STANDARD 9)
 
 ---
 
-### `14.d` 🟡 — Knowledge, Theory, Skills, and Values
+### `14.d` 🔴 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Using technology, including artificial intelligence, to locate, evaluate, and disseminate information. 5. Program Planning and Evaluation Context: A significant component of the human services profession involves assessing the needs of clients and client groups, and planning programs and interventions to assist them in promoting optimal functioning, growth, and goal attainment. At regular intervals, the outcomes must be evaluated, and necessary adjustments made to the plan, both at an individual client and program level._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.00, delta=-0.55)_
 
 #### Narrative content
 _Destination: `Submission.narratives[14][d].content`_
@@ -4559,18 +7843,99 @@ Using technology to locate, evaluate, and disseminate information. Response:Skil
 #### Supporting evidence — text
 _Destination: `Submission.narratives[14][d].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 44 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Information dissemination under-developed: While location and evaluation are mentioned repeatedly, dissemination is minimally addressed (only 'professionally present' in CHS 217 and reference to internship/practicum, but no detail on what dissemination skills are taught or how they're assessed).
+
+_Source heading:_ **Discussion of what you have learned — Supervisor's evaluation if you have participated in an internship or practicum (not required, but highly recommended) — IV. Professionalism — IV. Professionalism**
+
+```text
+Reflection that provides insight into your philosophy, professional perceptions,       and/or values. Short and long term goals
+
+Your presentation is the culmination of your practicum experience.  As such, it will highlight your agency and describe your experience there. Your poster should include the following elements.
+```
+
+##### Evidence text 2 — conf 0.62, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Program planning/evaluation context not connected: Specification references 'Program Planning and Evaluation Context' and assessing client needs at individual and program levels. Narrative does not explicitly connect information literacy skills to program needs assessment, intervention planning, or outcome evaluation in human services settings.
+
+_Source heading:_ **ASSESSING THE NEEDS OF THE COMMUNITY — ASSESSING THE NEEDS OF THE COMMUNITY — The Community Tool Box and Conducting a Needs Assessment Meet in library computer lab — The Community Tool Box and — Condu**
+
+```text
+Week 5 9/25, 9/27 WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES Mehr, Chapter 6 (pp 102-110 only) Mehr Chapter 8 SEPT 27- Community Needs Assessment Action Plan – Questions due
+```
+
+##### Evidence text 3 — conf 0.72, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Assessment of student competency unclear: Narrative lists courses but does not explain how mastery of these skills is measured, what competency standards are expected, or how students demonstrate proficiency across the curriculum.
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[14][d].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Current Events | `current-events` | 332 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/current-events.docx` |
+
+_File 1 fills gap_: No evidence provided: Narrative cites syllabi, assignments (Critical Analysis, Team Research Project, country report), and Student Evaluation item I.A., but none of these documents are attached to support claims.
+
+```text
+Each student will deliver a short oral summary of a recent (within the past year) news item pertaining to the topics covered in this course and pose 2 open-ended questions to the class for discussion.  Coverage should be succinct but thorough.
+
+2. Class Debates ( 10 %)
+
+10
+
+Each student will be assigned to one of three groups. The groups’ role will rotate during the semester.  Each group will have the opportunity of presenting support for or against a particular topic being considered.  The third group during each of these debates will listen to both sides and determine which side presented the most convincing evidence.
+
+3.  Response Papers (15%)
+
+(15%)
+
+Students will write 3 short (2-3 pages) response papers on topics assigned by the instructor. Papers can be opinion-based but must provide documentation supporting student’s opinion.
+
+4.  Cultural Autobiography (20%)
+
+(20%)
+
+Each student will write her/his own cultural autobiography to become more aware of one’s own background as well as how it impacts on relationships with others.  More details will be provided.
+
+5. Immigrant Interview (20%)
+
+(20%)
+
+Each student will interview someone who is an immigrant or whose parent/parents have immigrated to the U.S. and learn about that person’s experiences and how it affected the family.  Examples of questions will be given to students ahead of time.
+
+6. Group Presentation and Report (25%)
+
+(25%)
+
+Each student will choose a nation to study in-depth.  Students will examine how people f
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence provided: narrative cites syllabi, assignments (Critical Analysis, Team Research Project, country report), and Student Evaluation item I.A., but NONE of these documents are attached or submitted for review
-- ⚠️ AI component missing: Specification explicitly requires 'including artificial intelligence' but narrative makes no mention of how AI tools (ChatGPT, research databases with AI features, AI-assisted literature review, etc.) are taught or integrated
-- ⚠️ Evaluation/dissemination underdeveloped: narrative emphasizes 'locating and evaluating information' but provides minimal evidence of 'disseminate information' component—only brief mention of CHS 217 'professionally present' without detail
-- ⚠️ Program-level planning/evaluation connection unclear: Specification's context emphasizes 'program planning and evaluation' and 'adjustments made to the plan at individual client and program level,' but narrative does not connect technology use to program assessment, outcome evaluation, or data-driven decision-making
-- ⚠️ Client/population needs assessment missing: no evidence that students learn to use technology to assess client needs or program outcomes, which is central to the Specification's intent
-- ⚠️ No demonstration of student learning outcomes: narrative lists courses but provides no evidence of what students actually know or can do with technology after instruction
+- ⚠️ LLM returned non-JSON response
 
 ---
 
@@ -4580,8 +7945,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Knowledge and skills to analyze and assess the needs of clients or client groups._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.35**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.35, delta=+0.35)_
 
 #### Narrative content
 _Destination: `Submission.narratives[15][a].content`_
@@ -4590,7 +7955,87 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[15][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 85 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No narrative explaining how the program teaches students to analyze client/client group needs
+
+_Source heading:_ **Additional readings will be assignment throughout the semester . — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES**
+
+```text
+.
+
+Course Objectives/Learning Outcomes: At the completion of this course students should be able to do the following:
+
+Course Objectives/Learning Outcomes:
+
+Analyze his or her own natural style of helping and its impact on clients. Demonstrate knowledge of and competency in the basic skills of interviewing. Apply a model of helping to methods and skills that make the model work. Identify ethical and legal guidelines for work with clients. Describe the basic structure of the interview and how it can be applied to different theories.
+```
+
+##### Evidence text 2 — conf 0.62, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of curriculum content addressing needs assessment theories or frameworks
+
+_Source heading:_ **ASSESSING THE NEEDS OF THE COMMUNITY — ASSESSING THE NEEDS OF THE COMMUNITY — The Community Tool Box and Conducting a Needs Assessment Meet in library computer lab — The Community Tool Box and — Condu**
+
+```text
+Week 5 9/25, 9/27 WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES Mehr, Chapter 6 (pp 102-110 only) Mehr Chapter 8 SEPT 27- Community Needs Assessment Action Plan – Questions due
+```
+
+##### Evidence text 3 — conf 0.72, 631 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of practice opportunities (simulations, field placements, case studies) where students apply needs assessment
+
+_Source heading:_ **What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? — Briefly describe other activities you engaged in this week — What concerns or chal**
+
+```text
+Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences.
+
+Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-evaluation and share it with the field instructor. In addition the field instructor will complete an evaluation of the student. Once both parties sign both forms the evaluation tools must be submitted to the faculty supervisor for review both at midpoint and at the end of the semester. Field Instructor’s Evaluation- Each student will be evaluated by his/her instructor at midpoint and at the completion of the field experience. Students will be evaluated in terms of personal qualities, role expectations within the agency setting, and professional qualiti
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.68, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of how the program evaluates student ability to conduct or interpret needs assessments
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
+##### Evidence text 5 — conf 0.68, 243 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No reference to professional standards or ethical frameworks guiding needs assessment practice
+
+_Source heading:_ **Handbook — ETHICAL STANDARDS FOR HUMAN SERVICES PROFESSIONALS — ETHICAL STANDARDS FOR HUMAN SERVICES PROFESSIONALS — National Organization for Human Services, Adopted 2015 — National Organization for**
+
+```text
+Human services is a profession developed in response to the direction of human needs and human problems in the 1960’s. Characterized by an appreciation of human beings in all of their diversity, human services offers assistance to its clients within the context of their communities and environments. Human service professionals and those who educate them promote and encourage the unique values and characteristics of human services. In so doing, human service professionals uphold the integrity and ethics of the profession, promote client and community well-being, and enhance their own professional growth.
+
+The fundamental values of the human services profession include respecting the dignity and welfare of all people; promoting self-determination; honoring cultural diversity; advocating for social justice; and acting with integrity, honesty, genuineness and objectivity.
+
+Human service professionals consider these standards in ethical and professional decision making. Conflicts may exist between this code and laws, workplace policies, cultural practices, credentialing boards, and personal beliefs. Ethical-decision making processes should be employed to assure careful choices.  Although ethical codes are not legal documents, they may be used to address issues related to the behavior of human service professionals.
+
+Persons who use this code include members of the National Organization for Human Services, students in relevant academic degree programs, faculty in those same program
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[15][a].linkedDocuments`_
 
@@ -4601,13 +8046,13 @@ _Destination: `CurriculumMatrix.cells[]`_
 - matrix: `(curriculum matrix table)`, col -1, code `(see matrix extractor)`, types [], depth `—`
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative describing how the program teaches students to analyze client/client group needs
-- ⚠️ No evidence of curriculum content addressing needs assessment frameworks or models
-- ⚠️ No demonstration of assessment methods (e.g., interviews, observations, standardized tools) taught to students
-- ⚠️ No evidence of coursework or learning outcomes related to individual vs. group-level needs analysis
-- ⚠️ No documentation of how students practice or apply needs assessment skills (practicum, case studies, simulations)
-- ⚠️ No evidence of evaluation of student competency in needs analysis and assessment
-- ⚠️ No supporting materials such as syllabi, assignments, rubrics, or student work samples demonstrating this competency
+- ⚠️ No narrative statement provided—the self-study offers zero explicit articulation of how the program teaches students to analyze and assess client or client group needs
+- ⚠️ Evidence 1 lists course objectives but only mentions 'demonstrate knowledge of and competency in basic skills of interviewing' and 'apply a model of helping'—does not explicitly address needs analysis or assessment competencies
+- ⚠️ Evidence 2 references 'Community Needs Assessment Action Plan' in Week 5 but provides no syllabus details, assignment rubrics, or learning outcomes tied to that activity
+- ⚠️ Evidence 3 describes field placement evaluation criteria (personal qualities, professional qualities, role expectations) but does not specify whether supervisors assess students' ability to analyze or assess client needs
+- ⚠️ Evidence 4 presents quantitative supervisor ratings but the learning outcomes being measured are not clearly mapped to Specification 15.a; no explicit reference to 'needs assessment' or 'needs analysis' appears in the outcome language
+- ⚠️ No course assignments, case studies, role-plays, or practice scenarios are documented that demonstrate how students develop skills in assessing client/group needs
+- ⚠️ Evidence 5 provides ethical standards context but does not connect values or ethics to the specific competency of analyzing/assessing client needs
 
 ---
 
@@ -4615,8 +8060,8 @@ _Destination: `CurriculumMatrix.cells[]`_
 
 **Spec prompt:** _Skills to develop goals, design and implement a plan of action._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.00, delta=-0.55)_
 
 #### Narrative content
 _Destination: `Submission.narratives[15][b].content`_
@@ -4635,19 +8080,96 @@ Skills to develop goals, and design and implement a plan of action.Response: The
 #### Supporting evidence — text
 _Destination: `Submission.narratives[15][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 132 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explicit connection to the full scope of goal-setting and action-planning frameworks (e.g., SMART goals, theory-based models, step-by-step planning processes)
+
+_Source heading:_ **Defines the problem and explains precisely what your organization wants to change. — Provide current data from a variety of sources such as national studies, surveys, news media articles. — Simply int**
+
+```text
+Focus on the target population you want to help.  Here is where you do a review of the literature.
+
+Goals (at least 1) These are broad, global descriptions of something you want to accomplish over a period of time.  They are idealistic and timeless and should inspire us. Objectives (Impact objectives) at least 3. These are clear, attainable and measurable and time limited. Focus on results and begin with an action verb. Activities and Tasks : For each objective, what will be done, by whom and when. How you will evaluate – simple statement for each objective. A simple budget (Sample attached) Appendices:
+
+Goals (at least 1) These are broad, global descriptions of something you want to accomplish over a period of time.  They are idealistic and timeless and should inspire us.
+```
+
+##### Evidence text 2 — conf 0.62, 50 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing documentation of how 'plan of action' is defined and taught—does this include implementation monitoring, timeline development, resource allocation, or evaluation?
+
+_Source heading:_ **Goals — Objectives — Activities and Tasks : For each objective, what will be done, by whom and when. — Activities and Tasks — How you will evaluate – simple statement for each objective. — How you wil**
+
+```text
+Objectives (Impact objectives) at least 3. These are clear, attainable and measurable and time limited. Focus on results and begin with an action verb.
+
+Appendices:
+
+Your mission statement Your Impact chart Your resume Letters of personal endorsement or support of donating resources. (not included as part of the 4 pages)
+```
+
+##### Evidence text 3 — conf 0.72, 279 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No assessment data showing students actually develop and demonstrate these skills (e.g., graded assignments, rubric scores, competency verification)
+
+_Source heading:_ **In 2018, professional portfolios of seniors were analyzed. — In 2018, professional portfolios of seniors were analyzed.**
+
+```text
+Program outcomes assessed:
+
+2.	Based on comprehensive self-evaluation and feedback from faculty and supervisors, develop individualized professional development goals and objectives.
+
+3.	Exhibit consistent professional attitudes and behaviors in applied human services settings.
+
+6.	Synthesize and appropriately apply key concepts, methods and values in human services to professional situations, independently and with minimal supervision.
+
+Methodology:
+
+Professional portfolios were collected from one of the two CHS 441 Seminar in Human Services courses that graduating seniors complete in conjunction with their practicum experience in their last semester. A total of 10 portfolios were examined (59% of graduating students). Each portfolio was rated independently by two faculty members on each of the three outcomes, using the attached rubric and a 3-points scale. Ratings were: Inadequate/No Evidence (0), Adequate/Satisfactory (1), and Excellent (2). Raters gave the same ratings on 83% of the items. When ratings were different, they were averaged together.
+
+Data Summary:
+
+The average scores on each outcome are listed below. On all measures, half or more artifacts were rated as adequate. An addition 30-40% were rated as excellent. Three artifacts were rated as inadequate by at least one rater (one for professional development goals and two for professional attitudes and behaviors).
+
+Criteria/Performance Rating Scoring points Inadequate/ No Evidence 0 Adequate/ Satisfactory 1 Excelle
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.68, 248 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Internship/Practicum courses (CHS 380, 440) mentioned but no evidence of structured skill development or competency assessment in these field settings
+
+_Source heading:_ **Practicum — Practicum**
+
+```text
+During their senior year, students spend a full semester in a 9-credit (410 hours) field experience in a non-profit, human services setting (CHS 440).  Like the internship, the practicum experience allows students to apply the knowledge and skills learned throughout the program.  In the practicum, students function much like entry level staff members and are valued members of service teams. Concurrently, students enroll in CHS 441, a 3-credit course entitled Seminar in Human Services.  The seminar provides students an opportunity to discuss and reflect upon issues that may arise during the practicum.  Topics that are covered include the role of the student in a professional setting as well as issues that pertain to the field of human services.
+
+Students develop personal learning objectives and document progress toward meeting the objectives by journaling with their faculty supervisor. As part of the seminar, students augment individual portfolios developed in prior human services courses and present a discussion of their experience at the end of the semester.  Additional assignments may be required for the courses or from the human services agency.
+
+At the beginning of the semester before starting a practicum, students meet with the Field Placement Coordinator to establish eligibility, discuss placement interests, and develop a list of appropriate agencies for students to contact for an interview. Student eligibility is assessed by the department, according to the criteria be
+… (truncated, full text imported)
+```
+
+##### Evidence text 5 — conf 0.62, 33 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Unclear whether goal-setting and planning skills are taught as standalone competencies or only incidentally within other content areas
+
+_Source heading:_ **SU Goal No. 5: Career Readiness (CR) — SU Goal No. 5: Career Readiness (CR) — SU Goal No. 6: Ethics in Practice (EIP) — SU Goal No. 6: Ethics in Practice (EIP) — The SU graduate will practice integrit**
+
+```text
+The SU graduate will demonstrate personal direction, professional know-how, and discipline expertise in preparation for entry into the workplace or graduate studies.
+
+1-28 Framing the Experience; Understanding Yourself
+
+2-4 Drafting a Learning Contract
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[15][b].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, course materials, assignments, rubrics) to verify claims about course content and learning activities
-- ⚠️ No specific examples of student learning outcomes or assessment data demonstrating students actually acquired these skills
-- ⚠️ Specification requires 'skills' (plural, actionable competencies) but narrative lists only courses without defining what specific, measurable skills students develop
-- ⚠️ No evidence of how 'design and implement' is distinguished from 'develop goals' in instruction or assessment
-- ⚠️ Vague descriptions of learning activities ('in-class activities,' 'discussions,' 'lectures') lack detail about how skill development is structured or scaffolded
-- ⚠️ No documentation of assessment methods or rubrics used to evaluate student competency in goal-setting and action planning
-- ⚠️ Missing evidence of how skills are evaluated across field placements (CHS 380, 440) with concrete examples of student performance
+- ⚠️ LLM returned non-JSON response
 
 ---
 
@@ -4675,19 +8197,121 @@ Skills to evaluate the outcomes of the plan and the impact on the client or clie
 #### Supporting evidence — text
 _Destination: `Submission.narratives[15][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.68, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Specification requires demonstration of 'skills' but narrative only lists courses and general teaching methods without evidence of what specific evaluation skills students actually develop
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.62, 631 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Unclear whether evaluation skills are taught as standalone competency or only incidentally within other course content
+
+_Source heading:_ **What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? — Briefly describe other activities you engaged in this week — What concerns or chal**
+
+```text
+Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences.
+
+Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-evaluation and share it with the field instructor. In addition the field instructor will complete an evaluation of the student. Once both parties sign both forms the evaluation tools must be submitted to the faculty supervisor for review both at midpoint and at the end of the semester. Field Instructor’s Evaluation- Each student will be evaluated by his/her instructor at midpoint and at the completion of the field experience. Students will be evaluated in terms of personal qualities, role expectations within the agency setting, and professional qualiti
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.72, 279 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of student demonstrated proficiency through assignments, projects, or practicum evaluations
+
+_Source heading:_ **In 2018, professional portfolios of seniors were analyzed. — In 2018, professional portfolios of seniors were analyzed.**
+
+```text
+Program outcomes assessed:
+
+2.	Based on comprehensive self-evaluation and feedback from faculty and supervisors, develop individualized professional development goals and objectives.
+
+3.	Exhibit consistent professional attitudes and behaviors in applied human services settings.
+
+6.	Synthesize and appropriately apply key concepts, methods and values in human services to professional situations, independently and with minimal supervision.
+
+Methodology:
+
+Professional portfolios were collected from one of the two CHS 441 Seminar in Human Services courses that graduating seniors complete in conjunction with their practicum experience in their last semester. A total of 10 portfolios were examined (59% of graduating students). Each portfolio was rated independently by two faculty members on each of the three outcomes, using the attached rubric and a 3-points scale. Ratings were: Inadequate/No Evidence (0), Adequate/Satisfactory (1), and Excellent (2). Raters gave the same ratings on 83% of the items. When ratings were different, they were averaged together.
+
+Data Summary:
+
+The average scores on each outcome are listed below. On all measures, half or more artifacts were rated as adequate. An addition 30-40% were rated as excellent. Three artifacts were rated as inadequate by at least one rater (one for professional development goals and two for professional attitudes and behaviors).
+
+Criteria/Performance Rating Scoring points Inadequate/ No Evidence 0 Adequate/ Satisfactory 1 Excelle
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[15][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | None — STEVENSON — STEVENSON — U N I V E R S I T Y — U N I V | `none-stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i` | 39 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/none-stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i.docx` |
+| 2 | Think critically about complex ethical issues. — Practice th | `think-critically-about-complex-ethical-issues-practice-the-h` | 194 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/think-critically-about-complex-ethical-issues-practice-the-h.docx` |
+
+_File 1 fills gap_: No evidence that students demonstrate competency in selecting appropriate evaluation tools or outcome measures
+
+```text
+(Summary of Results, 2018-2019 Academic Year – 24 Students Responded)
+
+Date:
+
+Directions : The following tool is to be completed by the student at the end of the field experience. Mark an X in one box on each line.
+```
+
+_File 2 fills gap_: Missing evidence of how students learn to evaluate impact specifically on 'client groups' (plural/systemic level) versus individual clients
+
+```text
+From 2019-2020 catalog: http://stevenson.smartcatalogiq.com/2019-2020/Undergraduate-Catalog/Academic-Information/The-SEE-Student-Learning-Goals-and-Outcomes
+
+http://stevenson.smartcatalogiq.com/2019-2020/Undergraduate-Catalog/Academic-Information/The-SEE-Student-Learning-Goals-and-Outcomes
+
+(see next page)
+
+Standard 12.g   Processes to effect social change through advocacy work at all levels of society including community development, community and grass-roots organizing, and local and global activism
+
+Include advocacy and social change for marginalized populations.  Such advocacy can occur in the context of a human service agency but also by assisting and empowering individuals and community groups/organizations/churches to effectively advocate for resources and services that address their needs and concerns.
+
+Standard 14.g  Knowledge, theory, and skills are included, analyzed, and applied in the curriculum in regard to:  performing and elementary community needs assessment:
+
+Include a greater emphasis in the program on community development in contrast to the strong emphasis on service delivery within human services agencies.
+
+Standard 14.h   Knowledge, theory, and skills are included, analyzed, and applied in the curriculum in regard to conducting a basic program evaluation:
+
+Include more direct instruction on designing and conducting a program evaluation and on understanding research, in order to effectively identify, understand, and utilize evidence based practices.
+
+Con
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided (syllabi, assignment rubrics, course schedules, student work samples) to verify claims about course content and learning activities
-- ⚠️ Lacks explicit evidence that students develop evaluative SKILLS (not just knowledge); narrative describes what courses cover the topic but not how students practice or demonstrate competency in outcome evaluation
-- ⚠️ No documentation of assessment methods or criteria used to measure whether students actually achieve the skill of evaluating plan outcomes and client impact
-- ⚠️ Missing evidence of what 'evaluation of outcomes' specifically entails—no examples of evaluation tools, frameworks, or methodologies students learn to use
-- ⚠️ No demonstration of how skills progress across the curriculum from foundational (CHS 105) to applied (CHS 380, 440)
-- ⚠️ Internship and Practicum (CHS 380, 440) described only by teaching methods (journaling, discussions, guest speakers) without evidence of direct student application or evaluation of actual client outcomes
-- ⚠️ No student learning outcome statements or competency rubrics demonstrating mastery of outcome evaluation skills
+- ⚠️ No direct evidence that students can actually evaluate outcomes of intervention plans — narrative lists courses but provides no assessment data showing students demonstrate this specific skill
+- ⚠️ Missing concrete examples of how students evaluate impact on clients/client groups — the narrative mentions 'Team Research Project' and 'Group Project' but provides no rubrics, student work samples, or assessment results showing competency
+- ⚠️ Evidence 1 shows supervisor ratings are generic (apply key concepts, professional writing) but does not specifically assess 'skills to evaluate outcomes of the plan and impact on client or client group'
+- ⚠️ Evidence 5 (portfolio assessment) evaluates professional development goals and professional attitudes but not the core skill of outcome evaluation
+- ⚠️ No assessment data demonstrating students can evaluate plan outcomes or client impact — all supporting evidence is indirect or tangential to the specification
+- ⚠️ The accreditation feedback in Evidence 3 explicitly recommends 'more direct instruction on designing and conducting a program evaluation' — suggesting the program acknowledged this gap was not adequately addressed
 
 ---
 
@@ -4697,8 +8321,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Intake interviewing_
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.25**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.25, delta=+0.25)_
 
 #### Narrative content
 _Destination: `Submission.narratives[16][a].content`_
@@ -4707,22 +8331,114 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[16][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.65, 107 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of curriculum materials, syllabi, or course descriptions documenting intake interviewing content
+
+_Source heading:_ **Syllabi — Syllabi — CHS 360 - COUNSELING STRATEGIES FOR INDIVIDUALS — CHS 360 - COUNSELING STRATEGIES FOR INDIVIDUALS — FALL, 2018 — FALL, 2018 — INSTRUCTOR INFORMATION — INSTRUCTOR INFORMATION — INST**
+
+```text
+Stevenson email:
+
+Best times for phone contact:
+
+Office location:
+
+Prerequisite(s):
+
+Classroom or Studio Location:
+
+Scheduled Class Days and Time:
+
+Course Description: Investigates models and methods for helping individuals in need. Students develop skills through the practice of intervention techniques.
+
+Course Description:
+
+Instructional Methods Used in this Course: Course objectives will be achieved by a variety of methods that include lectures, class discussions, videos, papers, and in-class activities, including mock interviews that will be taped.
+
+Instructional Methods Used in this Course:
+
+Required and Recommended Texts, Manuals, and Supplies: Egan, G., (2010). The Skilled Helper (11 th ed.). Belmont, CA:  Brooks/Cole
+
+Required and Recommended Texts, Manuals, and Supplies:
+
+th
+```
+
+##### Evidence text 2 — conf 0.62, 174 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No demonstration of specific knowledge content (e.g., engagement strategies, assessment, rapport-building, information gathering)
+
+_Source heading:_ **H.    Speaks and writes professionally. — H.    Speaks and writes professionally. — H.    Speaks and writes professionally. — I.    Uses initiative in interpreting and following instructions. — I.**
+
+```text
+Please remember to rate goals and objectives. self-evaluation field instructor’s evaluation expectations expectations Comments (optional) below meets exceeds below meets exceeds IV : Exhibits culturally sensitive behavior. Demonstrates an awareness of diversity by adapting helping approaches to the needs of others’ culture. B.   Demonstrates knowledge about the customs, practices, beliefs and values of the cultures and communities within which he or she practices. Exhibits openness and a non-judgmental attitude related to individual, cultural, and global differences. D.   Provides services w/o discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation or socioeconomic status. V:  Exhibits effective and appropriate interpersonal skills. Communicates effectively with others, both orally and in writing. Demonstrates caring, respect, empathy, and genuineness when interacting with others. Establishes appropriate rapport with others. VI:  Synthesizes and applies key concepts, methods and values in human services to professional situations. Applies key concepts, perspectives, methods, and values related to human services. Displays understanding of how services are delivered to individuals and families. Helps others by using basic counseling/listening skills, as appropriate.
+```
+
+##### Evidence text 3 — conf 0.65, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of skill development or practice opportunities (e.g., role-plays, simulations, field practicum)
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.65, 52 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of theoretical frameworks or values (e.g., cultural humility, anti-oppressive practice, self-determination) integrated into intake interviewing instruction
+
+_Source heading:_ **Demonstrate an awareness of diversity by adapting helping approaches to reflect the needs of clients’ culture. — Exhibit openness and a non-judgmental attitude related to individual, cultural, and glo**
+
+```text
+Explain and appraise the customs, practices, beliefs and values of the cultures and communities within which he or she practices.
+
+Provide services without discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation, or socioeconomic status.
+
+5. Exhibit effective and appropriate interpersonal skills in professional human services settings.
+```
+
+##### Evidence text 5 — conf 0.62, 70 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of how intake interviewing aligns with NASW Code of Ethics or other professional standards
+
+_Source heading:_ **Student Policy Manual — Ethics in Field Work — Ethics in Field Work**
+
+```text
+Ethical behavior in the field involves making sound decisions concerning issues such as confidentiality.  Information regarding clients/personnel must be kept confidential and shared only in an appropriate professional context.  Confidentiality is a significant aspect of professionalism and must be maintained at all times.  Standards that address confidentiality and other ethical issues are contained in the code of standards of the National Organization for Human Services (Please see Appendix).
+
+SECTION III:
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[16][a].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative describing how intake interviewing knowledge is taught or integrated into curriculum
-- ⚠️ No narrative explaining theoretical foundations of intake interviewing
-- ⚠️ No narrative detailing specific skills students develop in intake interviewing
-- ⚠️ No narrative addressing professional values related to intake interviewing
-- ⚠️ No syllabus, course materials, or assignment descriptions demonstrating intake interviewing content
-- ⚠️ No evidence of learning outcomes or competencies specific to intake interviewing
-- ⚠️ No documentation of instructional methods (e.g., role plays, simulations, practice interviews)
-- ⚠️ No evidence of assessment strategies measuring student competency in intake interviewing
-- ⚠️ No evidence of field placement or practicum requirements involving intake interviewing
-- ⚠️ No readings, frameworks, or theoretical models cited to support intake interviewing instruction
+- ⚠️ No narrative statement provided addressing intake interviewing directly or explaining how it is taught and assessed
+- ⚠️ No evidence of specific intake interviewing curriculum content, learning outcomes, or competencies defined for students
+- ⚠️ No syllabus or course materials showing intake interview-specific skills (rapport building, information gathering, assessment, documentation) are explicitly taught
+- ⚠️ No assessment data or student work samples demonstrating mastery of intake interviewing skills specifically
+- ⚠️ Evidence 1 (CHS 360) mentions 'mock interviews' but provides no detail about whether these are intake interviews or what competencies are assessed
+- ⚠️ No evidence of intake interview practice, role-play, or simulation assignments with evaluation rubrics
+- ⚠️ No demonstration of how intake interviewing connects to CSHSE knowledge, theory, skills, and values framework
+- ⚠️ Missing evidence of faculty expertise or training in teaching intake interviewing
 
 ---
 
@@ -4730,8 +8446,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Helping skills:_
 
-**Final coverage verdict:** covered=**False**, score=**0.35**
-_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.35, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[16][b].content`_
@@ -4749,29 +8465,133 @@ As this is a skills-based course, there will be many hands-on activities designe
 #### Supporting evidence — text
 _Destination: `Submission.narratives[16][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 174 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of specific helping skills taught (e.g., attending, reflecting, summarizing, confrontation, etc.)
+
+_Source heading:_ **H.    Speaks and writes professionally. — H.    Speaks and writes professionally. — H.    Speaks and writes professionally. — I.    Uses initiative in interpreting and following instructions. — I.**
+
+```text
+Please remember to rate goals and objectives. self-evaluation field instructor’s evaluation expectations expectations Comments (optional) below meets exceeds below meets exceeds IV : Exhibits culturally sensitive behavior. Demonstrates an awareness of diversity by adapting helping approaches to the needs of others’ culture. B.   Demonstrates knowledge about the customs, practices, beliefs and values of the cultures and communities within which he or she practices. Exhibits openness and a non-judgmental attitude related to individual, cultural, and global differences. D.   Provides services w/o discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation or socioeconomic status. V:  Exhibits effective and appropriate interpersonal skills. Communicates effectively with others, both orally and in writing. Demonstrates caring, respect, empathy, and genuineness when interacting with others. Establishes appropriate rapport with others. VI:  Synthesizes and applies key concepts, methods and values in human services to professional situations. Applies key concepts, perspectives, methods, and values related to human services. Displays understanding of how services are delivered to individuals and families. Helps others by using basic counseling/listening skills, as appropriate.
+```
+
+##### Evidence text 2 — conf 0.72, 143 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of which counseling theories or models guide the helping skills instruction
+
+_Source heading:_ **Part one (Family Description) 25 points — Part two (Family Therapy Demonstration) 25 points — Part three (Presentation on Your Assigned Theory) 25 points — Part four (Individual Participation) as grad**
+
+```text
+Major Family Therapy Approaches Object Relations. (Framo and Scharff). Experiential. (Satir and Whitaker). Transgenerational. (Bowen). Structural. (Minuchin). Strategic. (Haley). Cognitive-Behavioral. (Beck and Ellis). Social Constructionist. (deShazer and Anderson). Narrative. (Michael White). 1. Object Relations. (Framo and Scharff). Satisfying relationship with some “object” (e.g., parent) is a fundamental need. Helps client gain insight into early relationships (objects from past) and how they affect current relationships enabling individual development and fulfilling relationships. 2. Experiential. (Satir and Whitaker). Troubled families need a “growth experience” derived from an intimate interpersonal experience (therapy). By being real (authentic) and self-disclosing, families learn to be more honest, more expressive, and better able to achieve personal and interpersonal growth. For Satir, building self-esteem and learning to communicate openly are essential goals. Whitaker suggested that helping family members probe their own world of symbolic meanings frees them to activate innate growth processes.
+```
+
+##### Evidence text 3 — conf 0.72, 52 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No mention of ethical values or multicultural competence integrated into skills training
+
+_Source heading:_ **Demonstrate an awareness of diversity by adapting helping approaches to reflect the needs of clients’ culture. — Exhibit openness and a non-judgmental attitude related to individual, cultural, and glo**
+
+```text
+Explain and appraise the customs, practices, beliefs and values of the cultures and communities within which he or she practices.
+
+Provide services without discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation, or socioeconomic status.
+
+5. Exhibit effective and appropriate interpersonal skills in professional human services settings.
+```
+
+##### Evidence text 4 — conf 0.75, 279 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of assessment rubrics or specific criteria for evaluating skill demonstration
+
+_Source heading:_ **In 2018, professional portfolios of seniors were analyzed. — In 2018, professional portfolios of seniors were analyzed.**
+
+```text
+Program outcomes assessed:
+
+2.	Based on comprehensive self-evaluation and feedback from faculty and supervisors, develop individualized professional development goals and objectives.
+
+3.	Exhibit consistent professional attitudes and behaviors in applied human services settings.
+
+6.	Synthesize and appropriately apply key concepts, methods and values in human services to professional situations, independently and with minimal supervision.
+
+Methodology:
+
+Professional portfolios were collected from one of the two CHS 441 Seminar in Human Services courses that graduating seniors complete in conjunction with their practicum experience in their last semester. A total of 10 portfolios were examined (59% of graduating students). Each portfolio was rated independently by two faculty members on each of the three outcomes, using the attached rubric and a 3-points scale. Ratings were: Inadequate/No Evidence (0), Adequate/Satisfactory (1), and Excellent (2). Raters gave the same ratings on 83% of the items. When ratings were different, they were averaged together.
+
+Data Summary:
+
+The average scores on each outcome are listed below. On all measures, half or more artifacts were rated as adequate. An addition 30-40% were rated as excellent. Three artifacts were rated as inadequate by at least one rater (one for professional development goals and two for professional attitudes and behaviors).
+
+Criteria/Performance Rating Scoring points Inadequate/ No Evidence 0 Adequate/ Satisfactory 1 Excelle
+… (truncated, full text imported)
+```
+
+##### Evidence text 5 — conf 0.62, 42 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No clarification of how self-reflection activities specifically address helping skill development
+
+_Source heading:_ **Objectives/Outcomes**
+
+```text
+Accept constructive criticism and attempt to make appropriate adjustments. Analyze one’s own interpersonal strengths and weaknesses and their application to therapeutic settings. Develop personal goals and objectives. Exhibit attitudes and behaviors related to self-care and wellness. Seek guidance from faculty and supervisors.
+```
+
+##### Evidence text 6 — conf 0.72, 127 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No mention of how students develop awareness of their own assumptions, biases, or values in helping relationships
+
+_Source heading:_ **Responsibility to Self — Responsibility to Self**
+
+```text
+STANDARD 34 Human service professionals are aware of their own cultural backgrounds , beliefs, values, and biases. They recognize the potential impact of their backgrounds on their relationships with others and work diligently to provide culturally competent service to all of their clients.
+
+aware of their own cultural backgrounds
+
+STANDARD 35 Human service professionals strive to develop and maintain healthy personal growth to ensure that they are capable of giving optimal services to clients. When they find that they are physically, emotionally, psychologically, or otherwise not able to offer such services, they identify alternative services for clients.
+
+healthy personal growth
+
+STANDARD 36 Human service professionals hold a commitment to lifelong learning and continually advance their knowledge and skills to serve clients more effectively.
+
+commitment to lifelong learning
+```
+
+##### Evidence text 7 — conf 0.62, 33 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Unclear what 'guided self-reflection activities' entail or how they measure skill competency
+
+_Source heading:_ **SU Goal No. 5: Career Readiness (CR) — SU Goal No. 5: Career Readiness (CR) — SU Goal No. 6: Ethics in Practice (EIP) — SU Goal No. 6: Ethics in Practice (EIP) — The SU graduate will practice integrit**
+
+```text
+The SU graduate will demonstrate personal direction, professional know-how, and discipline expertise in preparation for entry into the workplace or graduate studies.
+
+1-28 Framing the Experience; Understanding Yourself
+
+2-4 Drafting a Learning Contract
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[16][b].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No identification of specific helping skills being taught (e.g., attending, reflection, summarization, confrontation, etc.)
-- ⚠️ No description of theoretical frameworks or models underpinning the skills instruction
-- ⚠️ No evidence of how values (e.g., cultural competence, ethical practice, client-centered approach) are integrated into helping skills development
-- ⚠️ No supporting evidence provided (syllabus, rubrics, assignments, course materials) to document what is actually taught
-- ⚠️ No explanation of how students demonstrate competency or mastery of specific helping skills
-- ⚠️ No mention of feedback mechanisms or how students receive evaluative input on skill performance
-- ⚠️ Vague assessment criteria ('willingness to try') without clear skill-based learning outcomes
-- ⚠️ No reference to how helping skills align with counseling standards or professional competencies
+- ⚠️ Narrative does not explicitly define or describe what 'helping skills' means in the context of counseling/human services (e.g., active listening, empathy, reflection, reframing, etc.)
+- ⚠️ No specific helping skills are named or demonstrated in the narrative; only generic references to 'individual counseling skills' without concrete examples
+- ⚠️ Narrative lacks connection between the role-play activities described and actual helping skill competencies students are expected to develop
+- ⚠️ Supporting evidence is fragmented and poorly organized; Evidence 2 on family therapy approaches does not address individual helping skills at all
+- ⚠️ No clear assessment rubric or performance standards shown that specifically measure helping skills competency (e.g., micro-skills like paraphrasing, summarizing, non-verbal attending)
+- ⚠️ Narrative mentions 'willingness to try new strategies' but does not explain what specific skills are being practiced or how competence is evaluated
+- ⚠️ Evidence 4 portfolio assessment focuses on professional development goals and attitudes, not on demonstrable helping skills
+- ⚠️ Missing evidence of how students demonstrate core helping skills such as rapport-building, active listening, empathy, reflection, or problem-solving techniques
 
 ---
 
-### `16.c` 🔴 — Knowledge, Theory, Skills, and Values
+### `16.c` 🟡 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Identification and use of appropriate resources and referrals. 2. Group facilitation 3. Use of consultation 7. Interpersonal Communication Context: The ability to create genuine and empathic relationships with others is central to the human services profession. These skills are applicable to all levels of education, and a greater proficiency is expected at each progressively higher level._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.62**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.62, delta=+0.17)_
 
 #### Narrative content
 _Destination: `Submission.narratives[16][c].content`_
@@ -4822,28 +8642,102 @@ _Source heading:_ **How would you best succeed in this course?  You can best suc
 How would you best succeed in this course?  You can best succeed by engaging in active and intentional reading/learning of the assigned materials and coming to class ready to actively participate in the class discussions by making comments, asking and answering questions.  This means you will read the materials for each class in advance.  To make everyone’s involvement possible, the class will be split into small groups to generate questions/comments on the week’s topic for class discussion.  In this way, all class members will have an opportunity to actively participate, talk, so we can all break the monotony of hearing just my voice.  Please note that if the class gets too quiet, I might call on class members to share their thoughts and I hope those so asked won’t consider it as “picking” on them.
 ```
 
+##### Evidence text 2 — conf 0.72, 58 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of specific assignments, assessments, or learning outcomes directly tied to group facilitation competency
+
+_Source heading:_ **What did you learn about yourself through this process?**
+
+```text
+Focus on the qualities about yourself that might either enhance or detract from your effectiveness as a group leader.
+
+Express concretely what this class taught you about being a group member and a group leader, as well as what you learned about how groups function, the stages of a group, and specific techniques to facilitate the group process.
+```
+
+##### Evidence text 3 — conf 0.62, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of student work products, rubrics, or field evaluator feedback that specifically measures group facilitation or consultation skills
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.62, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Interpersonal communication context emphasizes empathy and genuineness in relationships, but evidence focuses only on classroom participation norms rather than demonstrating skill development in this area
+
+_Source heading:_ **Demonstrates caring, respect, empathy, and genuineness when interacting with other students and 	faculty** — Demonstrates sensitivity and non-judgmental attitude — A. 	Communicates effectively with ot**
+
+```text
+Demonstrates sensitivity to diversity exemplified by such factors as age, ethnicity, culture, race, 	disability, gender, religion, sexual orientation, or socioeconomic status
+
+2. Consistently Displays Interpersonal Skills
+
+3.  Consistently Displays Professionalism
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[16][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Continuance and Progression Policies, if applicable: Not app | `continuance-and-progression-policies-if-applicable-not-appli` | 313 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/continuance-and-progression-policies-if-applicable-not-appli.docx` |
+
+_File 1 fills gap_: Supporting evidence provided (syllabus excerpt on active participation) does not demonstrate actual teaching or assessment of resources/referrals, group facilitation, or consultation skills
+
+```text
+Continuance and Progression Policies, if applicable:
+
+Standards:
+
+Course Requirements :
+
+As this is a skills-based course, there will be many hands-on activities designed to practice and 			perform individual counseling skills. Students’ participation in these activities is critical to the learning 		process. Grading of students participation in these activities will take into consideration students’ 		demonstration of knowledge and understanding of the skills, willingness to try new strategies and even 		make mistakes. In addition to role-play activities, students will also be assessed on their contribution 		to classroom discussions and participation in guided self-reflection activities.
+
+2.	Exams  (30%)
+
+There are two exams:  the midterm and final exam. The exams may consist of multiple choice, short 		answer and essay questions, covering information from the text, supplemental readings as well 			as information presented in class
+
+3.	Service Learning (20%)
+
+As part of the course, you will have the opportunity to apply concepts and skills taught in the 			classroom to real world situations. Counseling strategies students will complete 15-20 hours of 			volunteer service at one of six partner human services agencies. During the second week of class, 		representatives from our partner agencies will provide an overview of the service opportunities. 			Selection of service experiences will take place in week three with orientation in week four, service 		beginning in week five
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ Group facilitation is mentioned in course titles (CHS 315/515 Group Counseling) but no narrative explanation of how this competency is taught, assessed, or demonstrated by students
-- ⚠️ Use of consultation is not addressed anywhere in the narrative or evidence; this is a core element of Spec 16.c that is completely absent
-- ⚠️ Interpersonal Communication Context is minimally addressed; while 'helping skills' and 'establishing helping relationships' are mentioned, there is no explicit discussion of creating genuine and empathic relationships or the progression of proficiency expected at the baccalaureate level
-- ⚠️ Supporting evidence provided (one syllabus excerpt) is generic and does not demonstrate actual student learning outcomes, assignments, or assessments related to the four specific competencies listed in the specification
-- ⚠️ No evidence of how proficiency in interpersonal communication is measured or evaluated beyond vague references to field instructor evaluations
-- ⚠️ Narrative response is incomplete; it cuts off mid-sentence under 'Identification and use of appropriate resources and referrals' without finishing the response
+- ⚠️ Group facilitation is mentioned only tangentially in Evidence 3 (self-reflection on group leadership) but lacks concrete course content documentation showing how group facilitation skills are systematically taught and assessed across the curriculum
+- ⚠️ Use of consultation is not addressed anywhere in the narrative or supporting evidence; no courses, assignments, or field evaluation criteria demonstrate instruction or assessment of consultation skills
+- ⚠️ Identification and use of appropriate resources and referrals is asserted in the narrative but the response is incomplete (cuts off mid-sentence) and Evidence items do not substantiate this claim with specific course content, assignments, or student outcome data
+- ⚠️ No evidence demonstrates progressive skill development or increasing proficiency levels across the baccalaureate program; all evidence focuses on individual courses or final practicum without showing scaffolding
+- ⚠️ Interpersonal communication context and the development of genuine/empathic relationships are described generically in the narrative but lack specific pedagogical strategies, assignments, or rubrics showing how empathy and genuineness are explicitly taught and evaluated
 
 ---
 
 ## Standard 17
 
-### `17.a` 🔴 — Knowledge, Theory, Skills, and Values
+### `17.a` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Clarifying expectations._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.72**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=True, score=0.72, delta=+0.27)_
 
 #### Narrative content
 _Destination: `Submission.narratives[17][a].content`_
@@ -4872,28 +8766,149 @@ Class will be comprised of lectures, discussions, demonstrations, group activiti
 #### Supporting evidence — text
 _Destination: `Submission.narratives[17][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 84 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No supporting evidence provided (syllabus excerpts, assignment rubrics, student work samples, or course materials referenced in narrative are missing)
+
+_Source heading:_ **LATE ASSIGNMENTS OR PRESENTATIONS — LATE ASSIGNMENTS OR PRESENTATIONS**
+
+```text
+Students will not receive credit for assignments submitted late or missed exams without prior approval of the instructor. Student must provide a documented valid excuse explaining why they could not complete the assignment. Examples of documented valid excuses that will be considered are those involving illness, family emergencies, and catastrophic incidents, all of which can be verified through documentation and directly affect the involved student. If you miss an assignment without an acceptable documented valid excuse, you will earn a grade of Zero .
+```
+
+##### Evidence text 2 — conf 0.72, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of how clarifying expectations is measured, assessed, or demonstrated as a competency across the curriculum
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[17][a].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Date Topics* Assignment — Date — Date — Date — Topics* — Top | `date-topics-assignment-date-date-date-topics-topics-topics-a` | 59 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/date-topics-assignment-date-date-date-topics-topics-topics-a.docx` |
+| 2 | Professional Expectations Concerns — Professional Expectatio | `professional-expectations-concerns-professional-expectations` | 140 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/professional-expectations-concerns-professional-expectations.docx` |
+| 3 | DATES Hours Field Instructor Signature TOTAL HOURS — DATES H | `dates-hours-field-instructor-signature-total-hours-dates-hou` | 85 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/dates-hours-field-instructor-signature-total-hours-dates-hou.docx` |
+| 4 | Current Events | `current-events` | 332 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/current-events.docx` |
+
+_File 1 fills gap_: Narrative claims specific course content (e.g., 'CHS 101 unit on Communication,' 'CHS 360 chapters 2-6,' 'CHS 315 weeks 5-6') but provides no documents to verify these exist or how they address clarifying expectations
+
+```text
+Week 1 January 29/31 Introductions, confidentiality, learning objectives, handbook, syllabus Read Chapter 1: The Big Picture, pp 2-20 only Read NOHS Ethical Standard 3, 8 and 9
+
+Week 2 February 5/7 Getting the most out of your experience- designing your placement/writing your learning contract Read Chapter 3: HQI Essentials, pp 53-64 only Journal #1 due before class via Blackboard
+```
+
+_File 2 fills gap_: No definition or clarity on what 'clarifying expectations' means within the program's human services framework—is this about counselor-client expectations, organizational expectations, learning expectations, or all three?
+
+```text
+In the event that there are any concerns about professionalism, faculty will use the following form to document the concern and develop with the student a plan for improving the particular professional skills or behaviors that need work.
+
+The Counseling & Human Services Department is committed to helping all students in the program to develop appropriate and effective professional skills, attitudes and behaviors. This is an ongoing process that is never fully complete; there is always room for improvement. The purpose of this form is to document a concern about professional expectations and establish a plan for improvement.
+
+Student’s Name:
+
+Faculty Member’s Name:
+
+The following Professional Expectations have been identified as issues that need to be addressed (highlight or circle all that apply). Students must meet these expectations in order to be eligible for Field Placements (Internship and Practicum) .
+```
+
+_File 3 fills gap_: Field placement evaluation referenced (Student Field Placement Evaluation, Section VI) is not attached; cannot verify it actually assesses clarifying expectations
+
+```text
+14b
+
+8b
+
+Student:
+
+Placement/Agency:
+
+Field Instructor (Please print.):
+
+University Supervisor (Please print.):
+
+Evaluation is a very important phase of the learning process. The student and field instructor should each complete the same copy of the evaluation tool at midpoint and at the end of the semester.  Criteria for achievement of the program goals and objectives are expressed as Below Expectations, Meets Expectations, and Exceeds Expectations. If an objective or category within an objective does not apply, please rate it N.A. (Not Applicable).
+
+student
+
+field instructor
+```
+
+_File 4 fills gap_: Narrative lists 10 courses but provides minimal detail on *how* clarifying expectations is taught and learned—mostly titles and vague references to 'discussions' and 'assignments'
+
+```text
+Each student will deliver a short oral summary of a recent (within the past year) news item pertaining to the topics covered in this course and pose 2 open-ended questions to the class for discussion.  Coverage should be succinct but thorough.
+
+2. Class Debates ( 10 %)
+
+10
+
+Each student will be assigned to one of three groups. The groups’ role will rotate during the semester.  Each group will have the opportunity of presenting support for or against a particular topic being considered.  The third group during each of these debates will listen to both sides and determine which side presented the most convincing evidence.
+
+3.  Response Papers (15%)
+
+(15%)
+
+Students will write 3 short (2-3 pages) response papers on topics assigned by the instructor. Papers can be opinion-based but must provide documentation supporting student’s opinion.
+
+4.  Cultural Autobiography (20%)
+
+(20%)
+
+Each student will write her/his own cultural autobiography to become more aware of one’s own background as well as how it impacts on relationships with others.  More details will be provided.
+
+5. Immigrant Interview (20%)
+
+(20%)
+
+Each student will interview someone who is an immigrant or whose parent/parents have immigrated to the U.S. and learn about that person’s experiences and how it affected the family.  Examples of questions will be given to students ahead of time.
+
+6. Group Presentation and Report (25%)
+
+(25%)
+
+Each student will choose a nation to study in-depth.  Students will examine how people f
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, assignments, rubrics, student work samples) to verify claims about course content and learning activities
-- ⚠️ Specification 17.a requires clarifying 'expectations' but the narrative does not define what 'expectations' means in the context of human services competencies
-- ⚠️ No assessment data or evidence that students actually demonstrate the ability to clarify expectations; claims are curriculum-based only, not outcome-based
-- ⚠️ Missing explicit connection between clarifying expectations as a core human services skill/competency and how it aligns with CSHSE standards or professional values
-- ⚠️ No evidence of how clarifying expectations is assessed or measured (e.g., rubrics, competency evaluations, grades)
-- ⚠️ Final paragraph about class preparation expectations is unrelated to the skill of clarifying expectations in human services practice
-- ⚠️ No evidence of validation that the listed courses actually teach this skill at the depth and rigor expected for baccalaureate-level human services
+- ⚠️ Narrative does not explain HOW clarifying expectations is taught or what specific pedagogical methods are used beyond generic listing ('lectures, discussions, demonstrations')
+- ⚠️ No evidence of explicit learning outcomes or competency statements specific to 'clarifying expectations' skill
+- ⚠️ Limited concrete examples of what 'clarifying expectations' means in human services context (e.g., clarifying client goals, agency roles, therapeutic boundaries)
+- ⚠️ Evidence 6 (assignment descriptions) does not directly connect to clarifying expectations—appears to be from a different course on current events/cultural issues
+- ⚠️ No evidence of assessment tools specifically measuring clarifying expectations competency; Evidence 5 data is generic ('applies key concepts') rather than skill-specific
+- ⚠️ Field placement evaluation (Evidence 4) mentions learning outcomes but actual rubric criteria for 'clarifying expectations' are not provided
+- ⚠️ Narrative mentions 'journaling' in field placements but does not explain how journals assess clarifying expectations skill
 
 ---
 
-### `17.b` 🟡 — Knowledge, Theory, Skills, and Values
+### `17.b` 🔴 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Dealing effectively with conflict._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.00, delta=-0.45)_
 
 #### Narrative content
 _Destination: `Submission.narratives[17][b].content`_
@@ -4912,27 +8927,96 @@ Dealing effectively with conflict.Response:Dealing effectively with conflict is 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[17][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No demonstration of how conflict resolution skills are assessed or measured across the identified courses
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.72, 195 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No clarification of whether conflict resolution is taught as interpersonal (with clients/colleagues), organizational (within agencies), or both contexts
+
+_Source heading:_ **Responsibility to Colleagues — Responsibility to Colleagues**
+
+```text
+STANDARD 19 Human service professionals avoid duplicating another professional's helping relationship with a client. They consult with other professionals who are assisting the client in a different type of relationship when it is in the best interest of the client to do so. In addition, human services professionals seek ways to actively collaborate and coordinate with other professionals when appropriate.
+
+avoid duplicating another professional's helping relationship
+
+STANDARD 20 When human service professionals have a conflict with a colleague , they first seek out the colleague in an attempt to manage the problem. If this effort fails, the professional then seeks the assistance of supervisors, consultants, or other professionals in efforts to address the conflict.
+
+conflict with a colleague
+
+STANDARD 21 Human service professionals respond appropriately to unethical and problematic behavior of colleagues . Usually this means initially talking directly with the colleague and if no satisfactory resolution is achieved, reporting the colleague's behavior to supervisory or administrative staff.
+
+respond appropriately to unethical and problematic behavior of colleagues
+
+STANDARD 22 All consultations between human service professionals are kept private , unless to do so would result in harm to clients or communities.
+
+consultations
+
+are kept private
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[17][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | SU Goal No. 5: Career Readiness (CR) — SU Goal No. 5: Career | `su-goal-no-5-career-readiness-cr-su-goal-no-5-career-readine` | 280 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/su-goal-no-5-career-readiness-cr-su-goal-no-5-career-readine.docx` |
+| 2 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+
+_File 1 fills gap_: Vague references to course topics (e.g., 'Transition Stage of a Group,' 'chapters 2-6') without concrete evidence linking these to conflict resolution instruction
+
+```text
+The SU graduate will demonstrate personal direction, professional know-how, and discipline expertise in preparation for entry into the workplace or graduate studies.
+
+COURSE SCHEDULE INFORMATION Date (ONE1, ONE 2) Topic Readings Other Strategies January 28, 30 Overview of Course Leading the Organization Handouts Chapters 1 and 2 Introduction and Envisioning Activity.  Team Development February 4, 6 Strategic Planning/Designing Programs Chapter 4 Part A and B Working on Team Presentations February 11, 13 Creating a Strategic Plan. Implementing Action Plans/Problem Solving Chapter 4 Part A and B Team Presentations Quiz: chapters 1,2, and 4 February 18, 20 Managing Employees and Managing Challenges Chapter 5 A and B Team Presentations and Hiring Strategies February 25, 27 Supervising Staff/Assessing and Evaluating Staff/ Time Management Chapters 6,7, and 8 540 Presentations March 4, 6 Making Meetings Productive/ Improving Communication & Handling Conflicts/team Building Chapters 9,10 and 11 Quiz: Chapters 5,6,7 and 8 Review for Midterm March 11, 13 Midterm Covers chapters 1 through 11 (except 3) March 18-24 Spring Break March 25, 27 Managing Finances/Strategic Resource Development/Preparing Effective Proposals, Seeking Funding Chapters 13,14,15 and 16 Evidenced Based Programs and Seeking Funding April 1, 3 Evidence Based Management Chapter 17 Quiz Chapters 13,14,15,16. Work on individual projects April 8, 10 Ethical Dilemmas in Management/Humanizing the Organization Chapters 18 
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: No evidence that field placement evaluations actually assess conflict management skills or examples of student performance data
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabus excerpts, assignment examples, rubrics, student work samples) to verify claims about conflict resolution content
-- ⚠️ Narrative claims specific course topics (e.g., 'Transition Stage of a Group,' 'Client Self-Challenging,' 'systemic and structural approaches') but provides no artifacts demonstrating these topics actually address conflict resolution skills
-- ⚠️ No evidence of assessment data showing students actually develop competency in dealing with conflict (e.g., no evaluation results, rubric scores, or student demonstrations)
-- ⚠️ Lacks clarity on what 'dealing effectively with conflict' means operationally—narrative doesn't define the specific knowledge, skills, and values students should demonstrate
-- ⚠️ No evidence of how conflict resolution is taught across different contexts (interpersonal, organizational, therapeutic, research) or whether students integrate learning across courses
-- ⚠️ Missing documentation of field placement evaluations cited in narrative (Student Field Placement Evaluation, Section VI) that would show real-world application of conflict resolution skills
+- ⚠️ LLM returned non-JSON response
 
 ---
 
-### `17.c` 🟡 — Knowledge, Theory, Skills, and Values
+### `17.c` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Establishing rapport with clients._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.78**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=True, score=0.78, delta=+0.23)_
 
 #### Narrative content
 _Destination: `Submission.narratives[17][c].content`_
@@ -4951,20 +9035,105 @@ Establishing rapport with clients.Response:Establishing rapport with clients is 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[17][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of assessment data demonstrating students actually achieved competency in establishing rapport
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.62, 45 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Narrative does not explain what 'establishing rapport' means operationally or what specific skills/knowledge are taught
+
+_Source heading:_ **Objectives/Outcomes — Communicate effectively with others, both orally and in writing. — Demonstrate caring, respect, empathy, and genuineness when interacting with others. — Establish appropriate rap**
+
+```text
+Communicate effectively with others, both orally and in writing. Demonstrate caring, respect, empathy, and genuineness when interacting with others. Establish appropriate rapport with clients.
+
+6. Synthesize and appropriately apply key concepts, methods and values in human services to professional situations, independently and with minimal supervision.
+```
+
+##### Evidence text 3 — conf 0.62, 59 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing evidence from clinical skills courses (CHS 315, 360) that claim to emphasize rapport techniques—no chapter citations or assignment details provided
+
+_Source heading:_ **Date Topics* Assignment — Date — Date — Date — Topics* — Topics* — Topics* — Assignment — Assignment — Assignment — Week 1 January 29/31 — Week 1 — Week 1 — January 29/31 — January 29/31 — Introductio**
+
+```text
+Week 1 January 29/31 Introductions, confidentiality, learning objectives, handbook, syllabus Read Chapter 1: The Big Picture, pp 2-20 only Read NOHS Ethical Standard 3, 8 and 9
+
+Week 2 February 5/7 Getting the most out of your experience- designing your placement/writing your learning contract Read Chapter 3: HQI Essentials, pp 53-64 only Journal #1 due before class via Blackboard
+```
+
+##### Evidence text 4 — conf 0.75, 660 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Student Field Placement Evaluation form is cited but not included; unclear if it directly assesses rapport-building competency
+
+_Source heading:_ **University of Maryland, Baltimore - School of Social Work — Loyola University – Counseling Psychology; Pastoral Counseling — Stevenson – Healthcare Management — Stevenson – Community Based Education a**
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[17][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE | `course-outcomes-course-outcomes-course-outcomes-course-outco` | 90 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/course-outcomes-course-outcomes-course-outcomes-course-outco.docx` |
+
+_File 1 fills gap_: Narrative lacks explicit connection between course content and measurable student learning outcomes related to rapport-building
+
+```text
+Course Objectives/Learning Outcomes:
+
+1.	Apply connections between classroom learning and field experiences.  (Career Exploration)
+
+2.	Analyze their own natural style of helping and its impact. (Career Development Foundations)
+
+3.	Demonstrate a professional attitude and engage in professional behavior. (Career Preparation)
+
+4.	Demonstrate sensitivity to diversity. (Career Preparation)
+
+5.	Display appropriate interpersonal skills. (Career Development Foundations)
+
+6.	Exhibit continuing self-development. (Self-Discovery)
+
+7.	Present a professional portfolio at a job interview. (Career Preparation)
+
+To determine if this course fulfills additional program or track outcomes, please see the department chair or program coordinator.
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, assignments, rubrics, student work samples) to verify that the described content actually exists in courses
-- ⚠️ Lacks specific learning outcomes or competency statements defining what 'establishing rapport' means in the program's context
-- ⚠️ No assessment data demonstrating that students actually achieve competency in rapport-building
-- ⚠️ Missing evidence of how rapport-building is taught and evaluated in field placements (CHS 380/440/441)
-- ⚠️ No examples of actual assignments (e.g., the Immigrant Interview, interview projects, Issue Presentation) to confirm they address rapport-building
-- ⚠️ Lacks clarity on which knowledge (theory), skills, and values related to rapport are explicitly taught vs. assumed
-- ⚠️ No documentation of student learning outcomes or performance data on rapport competency
-- ⚠️ References to specific textbook chapters (e.g., CHS 360, chapters 3-4) are not substantiated with syllabi
+- ⚠️ Narrative lists 9 courses but provides sparse detail on how rapport-building is taught in most (e.g., CHS 224, 430 lack specific assignments or activities beyond passing mention)
+- ⚠️ No explicit evidence of curriculum mapping showing progression of rapport-building skill development across the sequence (foundation → intermediate → advanced/capstone)
+- ⚠️ Limited documentation of teaching methods: narrative mentions 'in-class activities and discussions' and 'lectures' but Evidence 4 shows only syllabus/orientation material, not actual instructional content demonstrating rapport techniques
+- ⚠️ Field evaluation data (Evidence 5) show 'Establishes appropriate rapport with others' at 77% exceeds/meets—solid but not exceptional; no triangulation with other assessment methods (e.g., portfolio review, classroom assignments, direct observation) mentioned in narrative
+- ⚠️ No evidence of explicit instruction in rapport-building techniques (e.g., active listening, non-verbal cues, validation) in foundational courses; CHS 105 mention is vague ('Defining Roles and Problems')
 
 ---
 
@@ -4972,8 +9141,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Developing and sustaining behaviors that are congruent with the values and ethical standards outlined by the National Organization for Human Services/Council for Standards in Human Service Education (available at https://www.nationalhumanservices.org/ethical-standards-for- hsprofessionals). 8. Administrative Context: A holistic approach to human services recognizes direct and indirect services as components of the same system. Administrative support (indirect service) is essential to the effective delivery of direct services to clients or client groups._
 
-**Final coverage verdict:** covered=**False**, score=**0.65**
-_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.65, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.55**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[17][d].content`_
@@ -5020,16 +9189,33 @@ _Source heading:_ **Course Description:  This course emphasizes the organization
 Course Description:  This course emphasizes the organizational and work-related issues in human services, including program planning, development, and evaluation; personnel administration; fundraising and budgeting; and administrative procedures. Students will focus on professional writing throughout this course, including writing a strategic plan and program proposal. Students who anticipate continuing their education at the graduate level should register for the 500-level section; however, transferability of these courses to a graduate program is determined by the receiving institution.
 ```
 
+##### Evidence text 2 — conf 0.62, 243 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explicit reference to the National Organization for Human Services/Council for Standards in Human Service Education (NOHS/CSHSE) ethical standards document itself—narrative does not demonstrate that students engage directly with or are evaluated against those specific standards
+
+_Source heading:_ **Handbook — ETHICAL STANDARDS FOR HUMAN SERVICES PROFESSIONALS — ETHICAL STANDARDS FOR HUMAN SERVICES PROFESSIONALS — National Organization for Human Services, Adopted 2015 — National Organization for**
+
+```text
+Human services is a profession developed in response to the direction of human needs and human problems in the 1960’s. Characterized by an appreciation of human beings in all of their diversity, human services offers assistance to its clients within the context of their communities and environments. Human service professionals and those who educate them promote and encourage the unique values and characteristics of human services. In so doing, human service professionals uphold the integrity and ethics of the profession, promote client and community well-being, and enhance their own professional growth.
+
+The fundamental values of the human services profession include respecting the dignity and welfare of all people; promoting self-determination; honoring cultural diversity; advocating for social justice; and acting with integrity, honesty, genuineness and objectivity.
+
+Human service professionals consider these standards in ethical and professional decision making. Conflicts may exist between this code and laws, workplace policies, cultural practices, credentialing boards, and personal beliefs. Ethical-decision making processes should be employed to assure careful choices.  Although ethical codes are not legal documents, they may be used to address issues related to the behavior of human service professionals.
+
+Persons who use this code include members of the National Organization for Human Services, students in relevant academic degree programs, faculty in those same program
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[17][d].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No explicit reference to the NOHS/CSHSE Ethical Standards document itself—the narrative does not demonstrate that students engage directly with or are assessed against the specific ethical standards outlined in the national guidelines
-- ⚠️ Administrative context requirement inadequately addressed—the specification explicitly requires attention to 'administrative support (indirect service) as essential to effective delivery of direct services,' but the narrative focuses almost entirely on direct service clinical skills; the single supporting evidence item on administrative coursework is disconnected from the ethical standards discussion
-- ⚠️ Missing evidence of how ethical standards are integrated into administrative/indirect service roles—no documentation that students learning program planning, budgeting, personnel administration, etc. are expected to apply the NOHS ethical standards to those contexts
-- ⚠️ Incomplete assessment documentation—while field placement evaluation is mentioned, no actual rubric, scoring data, or examples are provided showing how 'consistent ethical behavior' is specifically measured against the national ethical standards
-- ⚠️ Sustainability of ethical behaviors not clearly demonstrated—the narrative acknowledges ongoing struggles with professionalism but provides limited evidence of systematic reinforcement mechanisms or assessment of long-term ethical practice maintenance
+- ⚠️ No evidence that students explicitly learn or reference the NOHS/CSHSE Ethical Standards document itself—the narrative lists courses but doesn't show students studying the actual standards framework
+- ⚠️ Administrative context requirement is completely absent: the specification explicitly requires addressing how 'administrative support (indirect service) is essential to effective delivery of direct services,' yet the narrative focuses entirely on direct service/clinical skills with no connection to administrative ethics or indirect service roles
+- ⚠️ Evidence 1 (administrative course description) is disconnected from the narrative—the narrative never mentions this course or how administrative coursework develops ethical behaviors in indirect service contexts
+- ⚠️ No evidence demonstrating how students learn to sustain ethical behaviors specifically in administrative/indirect service roles (e.g., budgeting with integrity, personnel decisions, program evaluation ethics)
+- ⚠️ The narrative acknowledges a weakness (students struggling with professionalism in writing/communications) but provides no evidence of how this gap is being systematically addressed beyond creating a new course
 
 ---
 
@@ -5039,8 +9225,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Principles of leadership and management._
 
-**Final coverage verdict:** covered=**True**, score=**0.82**
-_(first-pass: covered=True, score=0.82; second-pass after gap-fill: covered=True, score=0.82, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.78**
+_(first-pass: covered=True, score=0.78; second-pass after gap-fill: covered=True, score=0.78, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[18][a].content`_
@@ -5064,14 +9250,15 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | (data table) | `data-table` | 258 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
+| 1 | (data table) | `data-table` | 258 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No explicit evidence that students demonstrate competency in applying leadership/management principles (e.g., rubrics, graded assignments, learning outcome data showing mastery levels)
-- ⚠️ Limited documentation of how leadership/management principles are assessed across the five courses mentioned (CHS 340/540, 430, 380, 440, 441); only CHS 340/540 has detailed evidence
-- ⚠️ No evidence of how values-based leadership or ethical leadership dimensions are integrated beyond brief mention of 'Ethical Dilemmas in Management' as one lecture topic
-- ⚠️ Field placement evaluation (Student Field Placement Evaluation, Section III) is referenced but not provided; cannot verify that leadership/management competency is actually measured in internship/practicum settings
-- ⚠️ No student learning outcome data, assessment results, or examples demonstrating that students can articulate, apply, or evaluate leadership/management principles
+- ⚠️ No explicit evidence that students demonstrate understanding of different leadership theories or theoretical frameworks (e.g., transformational, servant, situational leadership models)
+- ⚠️ Limited documentation of how values-based leadership is explicitly taught or assessed; ethical dilemmas mentioned only in course schedule but not connected to values development
+- ⚠️ No evidence of assessment outcomes showing student mastery of leadership/management principles (e.g., rubrics, grades, competency levels from field evaluations)
+- ⚠️ Field placement evaluation mentioned but not provided; unclear what specific leadership competencies are assessed and at what proficiency level
+- ⚠️ No evidence that students learn to apply leadership principles across diverse organizational contexts or populations served
+- ⚠️ Missing evidence of how students develop self-awareness or reflective practice regarding their own leadership style and values
 
 ---
 
@@ -5080,7 +9267,7 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 **Spec prompt:** _Human resources and volunteer management._
 
 **Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.55, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[18][b].content`_
@@ -5098,29 +9285,64 @@ Human resources and volunteer management.Response:Human resources issues and vol
 #### Supporting evidence — text
 _Destination: `Submission.narratives[18][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 631 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No supporting evidence documents provided (syllabi, assignment rubrics, course schedules, field placement evaluation forms, student work samples, or poster presentations) to substantiate claims made in narrative
+
+_Source heading:_ **What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? — Briefly describe other activities you engaged in this week — What concerns or chal**
+
+```text
+Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences.
+
+Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-evaluation and share it with the field instructor. In addition the field instructor will complete an evaluation of the student. Once both parties sign both forms the evaluation tools must be submitted to the faculty supervisor for review both at midpoint and at the end of the semester. Field Instructor’s Evaluation- Each student will be evaluated by his/her instructor at midpoint and at the completion of the field experience. Students will be evaluated in terms of personal qualities, role expectations within the agency setting, and professional qualiti
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[18][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Internship Documentation (5%) — Student Evaluation of the Fi | `internship-documentation-5-student-evaluation-of-the-field-e` | 355 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/internship-documentation-5-student-evaluation-of-the-field-e.docx` |
+| 2 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+
+_File 1 fills gap_: Missing documentation of how students develop specific skills (e.g., conducting performance reviews, managing conflict, legal/ethical HR issues, volunteer program design)
+
+```text
+Course Calendar:
+
+Date Topics* Assignment Week 1 January 29/31 Introductions, confidentiality, learning objectives, handbook, syllabus Read Chapter 1: The Big Picture, pp 2-20 only Read NOHS Ethical Standard 3, 8 and 9 Week 2 February 5/7 Getting the most out of your experience- designing your placement/writing your learning contract Read Chapter 3: HQI Essentials, pp 53-64 only Journal #1 due before class via Blackboard Week 3 February 12/14 Being Informed, Staying Engaged and Becoming a Professional - Building Expertise --NOHS Ethical Standard 31 & 36 Read Chapter 4: HQI, pp89-116 Learning objectives due in class.  Hardcopy . Signed. Week 4 February 19/21 GS Get to know your client community --NOHS Ethical Standard 1, 11, 15, & 26 Journal 2 due in class. Hardcopy. Week 5 February 26/28 Career Building Professional portfolios Internship Issue Paper 1 Due. Blackboard before class . Week 6 March 5/6 GS Career Building -resume writing and interviewing Journal 3 due in class. Hardcopy. Week 7 March 12/14 Where are the boundaries? Dual relationships and self-disclosure --NOHS Ethical Standards 5, 6, and 33 Midpoint evaluation due in class. Hardcopy. March 18 through 22 SPRING BREAK NO CLASS Week 8 March 26/28 GS Self-Assessments Read Chapter 5, Self Awareness, pp. 122-132 Journal 4 due in class. Hardcopy.* special journal prompt Week 9 April 2/4 GS Career Building Graduate School Speakers Series Week 10 April 9/11 Work-Life Balance- Cultivating life-long habits of self-care Journ
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: Field placement evaluation form referenced but not provided; unclear whether it assesses HR/volunteer management competencies or only 'professional attitude and behavior'
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided (syllabus excerpts, assignment descriptions, rubrics, student work samples) to substantiate claims about course content coverage
-- ⚠️ Specification requires 'Knowledge, Theory, Skills, and Values' but narrative only describes where topics are mentioned, not what theoretical frameworks or conceptual models are taught
-- ⚠️ No evidence that volunteer management is formally assessed or evaluated as a distinct competency; mention of volunteers is vague ('importance of volunteers is included in units')
-- ⚠️ Human resources skills (recruitment, hiring, retention, conflict resolution, performance management) are listed in specification but narrative only emphasizes supervision
-- ⚠️ No documentation of how students demonstrate competency in HR/volunteer management (no rubrics, assessment tools, or student performance data provided)
-- ⚠️ Fieldwork evaluation form referenced (Student Field Placement Evaluation, Section III) but not provided; cannot verify it measures HR/volunteer management competencies
-- ⚠️ No evidence of explicit instruction on diversity, equity, or ethical dimensions of HR management
-- ⚠️ Unclear how 'values' component (ethics, social justice in HR practices) is addressed across courses
+- ⚠️ No evidence of teaching HR competencies such as recruitment, hiring, selection, or staffing processes
+- ⚠️ Volunteer management is mentioned only in passing ('importance of volunteers is included in units on staff management') with no concrete evidence of curriculum content, assignments, or learning outcomes related to volunteer recruitment, retention, training, or supervision
+- ⚠️ No course syllabus, learning objectives, or assignment descriptions provided for CHS 340/540 to substantiate claims about HR and volunteer management depth
+- ⚠️ Field placement evaluations (Evidence 3) assess student professional behavior and goal-setting but do not evaluate competence in HR management or volunteer supervision skills
+- ⚠️ Missing evidence of student knowledge/demonstration of HR topics such as compensation, benefits, performance management, organizational culture, or conflict resolution in HR contexts
+- ⚠️ No evidence of students completing assignments specifically focused on HR functions (e.g., job descriptions, hiring processes, volunteer management plans)
+- ⚠️ Narrative references 'Team Project/Strategic Plan Appraisal' and 'Seeking Resources Project' but these assignments are not described or attached as evidence
 
 ---
 
-### `18.c` 🟡 — Knowledge, Theory, Skills, and Values
+### `18.c` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Grant writing, fundraising, and other funding sources._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.78**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=True, score=0.78, delta=+0.23)_
 
 #### Narrative content
 _Destination: `Submission.narratives[18][c].content`_
@@ -5138,19 +9360,57 @@ Grant writing, fundraising, and other funding sources.Response:Grant writing, fu
 #### Supporting evidence — text
 _Destination: `Submission.narratives[18][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 43 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Vague description of 'other funding sources' — unclear what types are actually covered (e.g., government grants, private foundations, corporate sponsorships, individual donations, social enterprise models)
+
+_Source heading:_ **March 4, 6 — March 4, 6 — March 4, 6 — Making Meetings Productive/ Improving Communication & Handling Conflicts/team Building — Making Meetings Productive/ Improving Communication & Handling Conflicts**
+
+```text
+March 25, 27 Managing Finances/Strategic Resource Development/Preparing Effective Proposals, Seeking Funding Chapters 13,14,15 and 16 Evidenced Based Programs and Seeking Funding
+
+April 22, 24 Seeking Resources/Working with a Board of Trustees Chapter 12 Presentations continued /Speaker regarding working in a Human Services agency
+```
+
+##### Evidence text 2 — conf 0.62, 46 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Unclear whether all human services students encounter this content or only those selecting certain courses/placements
+
+_Source heading:_ **Apply key concepts, perspectives, methods, and values related to human services. — Display understanding of how services are delivered to individuals and families. — Help others by using appropriate c**
+
+```text
+[ Handbook ]
+
+or
+
+*Course offered ONLY during semester indicated (Fall or Spring).
+
+** Focused electives are courses related to Counseling & Human Services. A list of relevant courses is distributed each semester by the department. At least two focused electives must be CHS courses .
+```
+
+##### Evidence text 3 — conf 0.72, 193 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Limited detail on 'Seeking Resources Project' in CHS 340/540 — scope, expectations, and assessment method not specified
+
+_Source heading:_ **Final Exam (20%) The final for the format will be similar to that of the midterm.**
+
+```text
+Team Project/Strategic Plan Appraisal (20%) You will work with other members of the class to design a strategic plan for a Human Services program which includes the creation of a vision and mission statement, program objectives, and means for assessing progress.  The project will be presented in class by the team and the written plan will be submitted on the day of the presentation. Students participating at the 540 level will, after doing a site visit to a Human Services Agency, present a brief oral report of their appraisal of the agency’s strategic plan and submit a written analysis.
+
+Students participating at the 540 level will, after doing a site visit to a Human Services Agency, present a brief oral report of their appraisal of the agency’s strategic plan and submit a written analysis.
+
+Seeking Resources Project (20%) You will create an individual project which involves the seeking of resources for an organization.  For this project, you will develop a grant proposal to support an idea or program in the field of Human Services.  This project will be presented to the class orally and an individual written report will be submitted as well.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[18][c].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (course syllabi, assignment rubrics, student work samples) to substantiate claims about grant writing instruction
-- ⚠️ No evidence of specific learning outcomes or competencies assessed related to grant writing, fundraising, or funding source identification
-- ⚠️ Grant writing content described as 'primarily addressed' in CHS 340/540 but no details about specific grant-writing skills taught (e.g., needs assessment, budget justification, logic models, RFP analysis)
-- ⚠️ Fundraising strategies mentioned only vaguely as 'depending on their placement site' with no systematic curriculum integration or assessment
-- ⚠️ No mention of instruction on identifying/researching funding sources (foundations, government agencies, corporate sponsors, individual donors) as distinct from writing grants
-- ⚠️ Field placement reporting (CHS 441 poster presentation) described as observational rather than demonstrating student competency in actual grant writing or fundraising
-- ⚠️ No evidence that all students encounter grant writing/fundraising instruction or assessment; reliance on elective internships/practicums creates inconsistent coverage
+- ⚠️ No evidence of explicit instruction on OTHER FUNDING SOURCES beyond grant writing (e.g., individual donations, corporate sponsorships, government contracts, crowdfunding, earned income strategies, endowments)
+- ⚠️ Limited evidence of FUNDRAISING instruction separate from grant writing—narrative mentions 'fundraising initiative' participation in field placements but provides no curricular documentation of structured fundraising education
+- ⚠️ No demonstration of student competency assessment specific to fundraising skills (Evidence 3 focuses on grant proposals and strategic planning, not fundraising outcomes)
+- ⚠️ Minimal detail on how CHS 224, 380, 440, and 441 actually address this topic—narrative lists them but supporting evidence does not substantiate their contributions
 
 ---
 
@@ -5158,8 +9418,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Legal, ethical, and regulatory issues, and risk management._
 
-**Final coverage verdict:** covered=**False**, score=**0.52**
-_(first-pass: covered=False, score=0.52; second-pass after gap-fill: covered=False, score=0.52, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.55**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[18][d].content`_
@@ -5177,20 +9437,87 @@ Legal, ethical, and regulatory issues, and risk management.Response:Legal, ethic
 #### Supporting evidence — text
 _Destination: `Submission.narratives[18][d].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.68, 70 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Ethical issues are mentioned but without specificity - no detail on which ethical frameworks, dilemmas, or codes of ethics are addressed (e.g., NOHS Code of Ethics, conflicts of interest, boundary violations)
+
+_Source heading:_ **Student Policy Manual — Ethics in Field Work — Ethics in Field Work**
+
+```text
+Ethical behavior in the field involves making sound decisions concerning issues such as confidentiality.  Information regarding clients/personnel must be kept confidential and shared only in an appropriate professional context.  Confidentiality is a significant aspect of professionalism and must be maintained at all times.  Standards that address confidentiality and other ethical issues are contained in the code of standards of the National Organization for Human Services (Please see Appendix).
+
+SECTION III:
+```
+
+##### Evidence text 2 — conf 0.62, 117 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Poster presentation described for CHS 441 but no sample student work or rubric provided to verify learning outcomes achieved
+
+_Source heading:_ **Your grade for this presentation will equal 100 points, an exam grade. — Your grade for this presentation will equal 100 points, an exam grade. — CHS 224 — CHS — Syllabi — Syllabi — Research Proposal**
+
+```text
+Introduction (20 points) Problem Statement/Research Question Hypothesis Operationalization (possible 10 points) Literature Review (25 points) Summary Relevant-Why is this study necessary/ important? (possible 20 points) Method (25 points) Research Design discussion Data collection plan Analysis of Data Hypothesis Proven? (possible 10 points) Implications (10 points) How would this impact society? Needs Assessment (possible 10 points) Limitations (10 points) What difficulties might you encounter? (possible 10 points) Conclusion (20 points) (possible 10 points) Appendix: Instrument (20 points) Proper placement in proposal (10 points) (possible 10 points) Appendix: References # of References (8 required) (40 points) (possible 10 points) Format (20 points) APA Format throughout paper APA style Reference page Preparedness (possible 10 points) *Power Point = extra credit
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[18][d].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | ARTICLE II.  HEALTH SYSTEM RESPONSIBILITIES — ARTICLE II.  H | `article-ii-health-system-responsibilities-article-ii-health-` | 337 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/article-ii-health-system-responsibilities-article-ii-health-.docx` |
+| 2 | Instructional Methods Used in this Course: Lecture, group pr | `instructional-methods-used-in-this-course-lecture-group-proj` | 56 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/instructional-methods-used-in-this-course-lecture-group-proj.docx` |
+| 3 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.68 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+
+_File 1 fills gap_: Regulatory compliance content not demonstrated - narrative references 'regulatory issues' but does not specify which regulations are covered (e.g., HIPAA, mandated reporting, licensing laws, ADA)
+
+```text
+1.  The HEALTH SYSTEM shall be responsible for and retain absolute control over the organization, administration, operation, and financing of its services and the implementation of its Education Program.
+
+2.  The HEALTH SYSTEM shall provide each student with clinical training and service opportunities of an extent, quality, and range as are appropriate for student clinical training.
+
+3.  The SPONSOR shall be informed regarding significant changes in clinical facilities which may affect the SPONSOR.
+
+4.  The HEALTH SYSTEM shall retain the right to require the removal from, and deny access to, its facility of any student whose professional or social conduct is, in the opinion of the HEALTH SYSTEM, disruptive, disreputable, or otherwise destructive of the established practices of the HEALTH SYSTEM or its standing in the community.  Such action shall be reported promptly to SPONSOR's contact person as noted in III, F, below.
+
+B.         Accreditation.  The HEALTH SYSTEM shall retain its accreditation by the Joint Commission for the Accreditation of Hospitals or similar appropriate accrediting agency.
+
+C.         Medical Services.  The HEALTH SYSTEM agrees to furnish first aid for students, as available.  The parties acknowledge that the HEALTH SYSTEM is not a general acute care facility and does not maintain an acute care emergency room.
+
+D.         Hepatitis B.        The Centers for Disease Control recommend that all personnel working in a patient care environment receive the H
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: Limited evidence of knowledge/theory component - narrative focuses on where topics appear but not what theoretical foundations or conceptual frameworks students learn
+
+```text
+Instructional Methods Used in this Course:
+
+Required and Recommended Texts, Manuals, and Supplies:
+
+Course Objectives/Learning Outcomes:
+
+Demonstrate competence with the scientific method Read, comprehend, and critically evaluate peer-reviewed articles Search extant data bases for relevant materials on any topic Write a coherent research proposal and present in class. Describe the place of ethics in social research
+```
+
+_File 3 fills gap_: Field placement assessment (Student Field Placement Evaluation, Section III) referenced but not provided as evidence; unclear whether this actually evaluates legal/ethical/regulatory competency or just general performance
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided (syllabi, assignments, rubrics, student work samples, field placement evaluations) to verify claims about content coverage
-- ⚠️ Lack of concrete examples of legal/ethical/regulatory issues actually taught (e.g., confidentiality laws, mandatory reporting, HIPAA, licensing regulations, liability)
-- ⚠️ No evidence of explicit risk management instruction or competency assessment
-- ⚠️ Values component of the specification is not addressed in the narrative
-- ⚠️ No documentation of how field placement experiences integrate legal/ethical/regulatory learning or how field instructor evaluations assess these competencies
-- ⚠️ CHS 224 description mentions research ethics but doesn't clarify how this connects to human services legal/ethical practice
-- ⚠️ No evidence of assessment methods or learning outcomes related to legal/ethical/regulatory knowledge and skills
-- ⚠️ Field placement evaluation reference (Section III) is mentioned but not provided as evidence
+- ⚠️ No evidence of explicit instruction on legal frameworks, statutes, or regulations governing human services (e.g., HIPAA, ADA, state licensing laws, mandatory reporting)
+- ⚠️ Risk management content is mentioned in narrative but not demonstrated in supporting evidence; no syllabus excerpts, assignments, or assessment data show what risk management topics are taught
+- ⚠️ No evidence of specific ethical codes or standards being taught beyond a brief reference to NOHS standards in the field work policy; CSHSE expects demonstration of knowledge of NOHS Ethical Standards
+- ⚠️ Assessment of legal/ethical/risk management competency is indirect and limited; field placement evaluation (Evidence 4) does not include specific behavioral items measuring legal knowledge, ethical decision-making, or risk management skills
+- ⚠️ CHS 224 evidence (Evidence 3) shows ethics in research methodology only—does not address broader legal/ethical/regulatory issues in human services practice
+- ⚠️ No evidence of how legal/ethical issues are assessed in CHS 340/540, which is identified as the primary course; no rubrics, assignments, or exam questions provided
+- ⚠️ Health system agreement (Evidence 2) addresses institutional policies but does not evidence student learning about legal/ethical/risk management concepts
 
 ---
 
@@ -5217,29 +9544,65 @@ Budget and financial management.Response:Budget and financial management issues 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[18][e].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of rubrics, assignments, or evaluation tools that measure client-centered or ethical dimensions of financial decision-making
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[18][e].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | None — STEVENSON — STEVENSON — U N I V E R S I T Y — U N I V | `none-stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i` | 39 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/none-stevenson-stevenson-u-n-i-v-e-r-s-i-t-y-u-n-i-v-e-r-s-i.docx` |
+
+_File 1 fills gap_: No assessment data or student learning outcomes showing students actually achieved competency in budget and financial management
+
+```text
+(Summary of Results, 2018-2019 Academic Year – 24 Students Responded)
+
+Date:
+
+Directions : The following tool is to be completed by the student at the end of the field experience. Mark an X in one box on each line.
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence provided to support narrative claims about course content, assignments, or student learning outcomes related to budget and financial management
-- ⚠️ Missing explicit connection to 'Client-Related Values and Attitudes' — the narrative addresses technical budget/financial skills but does not address the ethical values and attitudes intrinsic to responsible financial stewardship in human services
-- ⚠️ No documentation of how students develop values regarding fiscal responsibility, ethical use of resources, or advocacy for adequate client services funding
-- ⚠️ Lack of assessment data showing students actually achieve competency in budget/financial management or develop appropriate professional values in this domain
-- ⚠️ No evidence of specific learning outcomes, rubrics, or evaluation methods that demonstrate students can apply budgeting knowledge with professional integrity
-- ⚠️ Missing examples of how courses address the ethical implications of budget decisions on client services and vulnerable populations
+- ⚠️ No evidence that budget and financial management content addresses CLIENT-RELATED VALUES AND ATTITUDES—the specification explicitly requires this ethical/values dimension, but narrative focuses only on technical skills (creating budgets, seeking resources, grant writing)
+- ⚠️ Supporting evidence (Evidence 2) is incomplete/illegible—appears to be a field placement evaluation tool but the actual assessment data on budget/financial management competency is missing or cut off
+- ⚠️ No assessment data specifically measuring student learning on budget and financial management; Evidence 2 appears to measure general professionalism/key concepts but does not isolate financial management outcomes
+- ⚠️ Narrative does not explain how the course content connects budget/financial decisions to professional values, ethics, or client welfare—the values/attitudes context required by the specification is absent
+- ⚠️ No evidence that students are assessed on understanding the ethical dimensions of resource allocation, equity in funding, or how financial constraints affect client services
 
 ---
 
 ## Standard 19
 
-### `19.a` 🟡 — Knowledge, Theory, Skills, and Values
+### `19.a` 🔴 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _The least intrusive intervention in the least restrictive environment._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[19][a].content`_
@@ -5257,21 +9620,70 @@ The least intrusive intervention in the least restrictive environment.Response:C
 #### Supporting evidence — text
 _Destination: `Submission.narratives[19][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 181 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence demonstrating how students are actually assessed on this competency (e.g., rubrics, evaluation tools, competency-based assessments)
+
+_Source heading:_ **Synthesizes and appropriately applies key concepts, methods and values in human services to professional situations — Synthesizes and appropriately applies key concepts, methods and values in human se**
+
+```text
+Average Rating:
+
+1.45
+
+Identify which areas show the greatest difficulties with learning and which show the least:
+
+The application of key concepts, methods and values (Objective #6) was most evident in these artifacts. All artifacts were rated as adequate or excellent by both faculty raters.
+
+The demonstration of professional attitudes and behaviors (Objective #3) was rated based on professionalism of writing and presentation. Two artifacts were judged to be inadequate by at least one of the raters. While 80% or artifacts were rated as adequate or excellent, there was less consistency on this objective then on others.
+
+Use of Results (to impact course, program, assessment process, etc.):
+
+Students continue to struggle with consistently demonstrating professionalism in their writing and electronic communications. While most of them are able to maintain an acceptable degree of professionalism, this is an area that we will continue to emphasize. A new course was recently created (CHS 217 Professional Development in Counseling & Human Services) that will stress the importance of professionalism. We also continue to offer writing-intensive courses that require students to practice good writing skills.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[19][a].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Standard 8b — Standard 8b — CLASSROOM OBSERVATION — CLASSROO | `standard-8b-standard-8b-classroom-observation-classroom-obse` | 32 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/standard-8b-standard-8b-classroom-observation-classroom-obse.docx` |
+| 2 | Date Topics* Assignment — Date — Date — Date — Topics* — Top | `date-topics-assignment-date-date-date-topics-topics-topics-a` | 59 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/date-topics-assignment-date-date-date-topics-topics-topics-a.docx` |
+
+_File 1 fills gap_: No supporting evidence documents provided (course syllabi, assignments, rubrics, student work samples) to verify claims about instruction and assessment
+
+```text
+Faculty Member Visited:  					Date:
+
+Course Number/Section:
+
+Class Topic/Format:
+
+Classroom Environment:
+
+Comments:
+
+Observation Process:
+
+Instruction : (presentation of material, relevance of points covered, knowledge of subject 	matter, organization of material, explanation of terms/concepts)
+```
+
+_File 2 fills gap_: Vague references to 'discussions,' 'lectures,' and 'class activities' without specifics on content, learning outcomes, or measurable objectives
+
+```text
+Week 1 January 29/31 Introductions, confidentiality, learning objectives, handbook, syllabus Read Chapter 1: The Big Picture, pp 2-20 only Read NOHS Ethical Standard 3, 8 and 9
+
+Week 2 February 5/7 Getting the most out of your experience- designing your placement/writing your learning contract Read Chapter 3: HQI Essentials, pp 53-64 only Journal #1 due before class via Blackboard
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (course syllabi, assignments, rubrics, student work samples) to verify claims about content coverage
-- ⚠️ No explicit definition or explanation of what 'least intrusive intervention' means in the program's context
-- ⚠️ No explicit definition or explanation of what 'least restrictive environment' means in the program's context
-- ⚠️ No description of how students demonstrate mastery or competency in applying this principle
-- ⚠️ No assessment data or evaluation results showing students can apply this principle in practice
-- ⚠️ Vague reference to 'Student Field Placement Evaluation, Section III' without showing actual evaluation criteria or evidence that this principle is assessed
-- ⚠️ No examples of specific assignments, case studies, or scenarios used to teach this principle
-- ⚠️ No evidence of how this principle is integrated into clinical skills courses beyond listing course numbers
-- ⚠️ No documentation of field instructor feedback or evaluation outcomes related to this competency
+- ⚠️ No evidence that students can actually define, identify, or distinguish 'least intrusive intervention' from more intrusive alternatives in concrete scenarios
+- ⚠️ No evidence demonstrating understanding of 'least restrictive environment' as a legal/ethical concept or its application in practice decisions
+- ⚠️ Supporting evidence does not directly assess this specification—Evidence 2 addresses 'professional attitudes and behaviors' generally, not this specific principle
+- ⚠️ Evidence 3 (course schedule) shows readings assigned (NOHS standards) but no assessment data on whether students mastered the principle
+- ⚠️ No artifacts, rubrics, or student work samples demonstrating student competency in applying this principle to case scenarios or field placements
+- ⚠️ Narrative lists 8 courses where principle is 'taught' but provides no evidence of assessment, learning outcomes measurement, or demonstrated competency
+- ⚠️ Field Placement Evaluation mentioned but not provided; unclear if it actually assesses competency in least intrusive/least restrictive decision-making
 
 ---
 
@@ -5279,8 +9691,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Client self-determination._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.00, delta=-0.45)_
 
 #### Narrative content
 _Destination: `Submission.narratives[19][b].content`_
@@ -5308,30 +9720,81 @@ STANDARD 2 Human service professionals obtain informed consent to provide servic
 #### Supporting evidence — text
 _Destination: `Submission.narratives[19][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 312 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Client withdrawal of consent not addressed: no discussion of how students learn about clients' right to withdraw consent or how to implement this in practice
+
+_Source heading:_ **Responsibility to Clients — Responsibility to Clients — STANDARD 1 Human service professionals recognize and build on client and community strengths .**
+
+```text
+client and community strengths
+
+STANDARD 2 Human service professionals obtain informed consent to provide services to clients at the beginning of the helping relationship. Clients should be informed that they may withdraw consent at any time except where denied by court order and should be able to ask questions before agreeing to the services. Clients who are unable to give consent should have those who are legally able to give consent for them review an informed consent statement and provide appropriate consent.
+
+informed consent
+
+STANDARD 3 Human service professionals protect the client's right to privacy and confidentiality except when such confidentiality would cause serious harm to the client or others, when agency guidelines state otherwise, or under other stated conditions (e.g., local, state, or federal laws). Human service professionals inform clients of the limits of confidentiality prior to the onset of the helping relationship.
+
+right to privacy and confidentiality
+
+STANDARD 4 If it is suspected that danger or harm may occur to the client or to others as a result of a client's behavior, the human service professional acts in an appropriate and professional manner to protect the safety of those individuals. This may involve, but is not limited to, seeking consultation, supervision, and/or breaking the confidentiality of the relationship.
+
+danger or harm may occur
+
+STANDARD 5 Human service professionals recognize that multiple relationships may increase the risk of 
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[19][b].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Internship Documentation (5%) — Student Evaluation of the Fi | `internship-documentation-5-student-evaluation-of-the-field-e` | 355 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/internship-documentation-5-student-evaluation-of-the-field-e.docx` |
+| 2 | DATES Hours Field Instructor Signature TOTAL HOURS — DATES H | `dates-hours-field-instructor-signature-total-hours-dates-hou` | 85 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/dates-hours-field-instructor-signature-total-hours-dates-hou.docx` |
+
+_File 1 fills gap_: No evidence provided: narrative references course materials and evaluations but provides zero supporting documentation (syllabi, assignments, rubrics, evaluation forms, student work samples)
+
+```text
+Course Calendar:
+
+Date Topics* Assignment Week 1 January 29/31 Introductions, confidentiality, learning objectives, handbook, syllabus Read Chapter 1: The Big Picture, pp 2-20 only Read NOHS Ethical Standard 3, 8 and 9 Week 2 February 5/7 Getting the most out of your experience- designing your placement/writing your learning contract Read Chapter 3: HQI Essentials, pp 53-64 only Journal #1 due before class via Blackboard Week 3 February 12/14 Being Informed, Staying Engaged and Becoming a Professional - Building Expertise --NOHS Ethical Standard 31 & 36 Read Chapter 4: HQI, pp89-116 Learning objectives due in class.  Hardcopy . Signed. Week 4 February 19/21 GS Get to know your client community --NOHS Ethical Standard 1, 11, 15, & 26 Journal 2 due in class. Hardcopy. Week 5 February 26/28 Career Building Professional portfolios Internship Issue Paper 1 Due. Blackboard before class . Week 6 March 5/6 GS Career Building -resume writing and interviewing Journal 3 due in class. Hardcopy. Week 7 March 12/14 Where are the boundaries? Dual relationships and self-disclosure --NOHS Ethical Standards 5, 6, and 33 Midpoint evaluation due in class. Hardcopy. March 18 through 22 SPRING BREAK NO CLASS Week 8 March 26/28 GS Self-Assessments Read Chapter 5, Self Awareness, pp. 122-132 Journal 4 due in class. Hardcopy.* special journal prompt Week 9 April 2/4 GS Career Building Graduate School Speakers Series Week 10 April 9/11 Work-Life Balance- Cultivating life-long habits of self-care Journ
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: Field placement evaluation claims unsupported: references 'Student Field Placement Evaluation, Section III' but does not provide the actual form, criteria, or evidence that self-determination/informed consent is evaluated
+
+```text
+14b
+
+8b
+
+Student:
+
+Placement/Agency:
+
+Field Instructor (Please print.):
+
+University Supervisor (Please print.):
+
+Evaluation is a very important phase of the learning process. The student and field instructor should each complete the same copy of the evaluation tool at midpoint and at the end of the semester.  Criteria for achievement of the program goals and objectives are expressed as Below Expectations, Meets Expectations, and Exceeds Expectations. If an objective or category within an objective does not apply, please rate it N.A. (Not Applicable).
+
+student
+
+field instructor
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence provided; narrative alone is insufficient for accreditation review
-- ⚠️ No demonstration of how informed consent procedures are taught or practiced
-- ⚠️ No evidence that students learn about withdrawal of consent and client right to refuse services
-- ⚠️ No evidence addressing clients unable to give consent (minors, guardianship situations, court orders)
-- ⚠️ No documentation of actual course materials, syllabi, assignments, or rubrics referenced in narrative
-- ⚠️ No evidence of how field instructors evaluate students' competence in obtaining and explaining informed consent
-- ⚠️ Student Field Placement Evaluation form mentioned but not provided; cannot verify it assesses informed consent competency
-- ⚠️ Narrative does not explicitly address the STANDARD 2 requirement regarding informed consent documentation and procedures
-- ⚠️ No evidence of how ethical standards around self-determination/informed consent are integrated into clinical courses
+- ⚠️ LLM returned non-JSON response
 
 ---
 
-### `19.c` 🟡 — Knowledge, Theory, Skills, and Values
+### `19.c` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Confidentiality of information._
 
-**Final coverage verdict:** covered=**False**, score=**0.65**
-_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.65, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.72**
+_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=True, score=0.72, delta=+0.07)_
 
 #### Narrative content
 _Destination: `Submission.narratives[19][c].content`_
@@ -5397,27 +9860,106 @@ _Source heading:_ **(v)	SPONSOR agrees to maintain records of any disclosures of
 (v)	SPONSOR agrees to maintain records of any disclosures of Protected Health Information, and within ten days of a request by HEALTH SYSTEM for an accounting of disclosures of Protected Health Information, SPONSOR shall make available to HEALTH SYSTEM the information to provide such an accounting of disclosures.  At a minimum, such information shall include the date of disclosure, the name of the entity or person who received the Protected Health Information, and, if known, the address of such entity or person, a brief description of the Protected Health Information disclosed, and a statement of the purpose of the disclosure.
 ```
 
+##### Evidence text 2 — conf 0.72, 312 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that students are taught to inform clients of the limits of confidentiality PRIOR to onset of helping relationship (Standard 3 requirement)
+
+_Source heading:_ **Responsibility to Clients — Responsibility to Clients — STANDARD 1 Human service professionals recognize and build on client and community strengths .**
+
+```text
+client and community strengths
+
+STANDARD 2 Human service professionals obtain informed consent to provide services to clients at the beginning of the helping relationship. Clients should be informed that they may withdraw consent at any time except where denied by court order and should be able to ask questions before agreeing to the services. Clients who are unable to give consent should have those who are legally able to give consent for them review an informed consent statement and provide appropriate consent.
+
+informed consent
+
+STANDARD 3 Human service professionals protect the client's right to privacy and confidentiality except when such confidentiality would cause serious harm to the client or others, when agency guidelines state otherwise, or under other stated conditions (e.g., local, state, or federal laws). Human service professionals inform clients of the limits of confidentiality prior to the onset of the helping relationship.
+
+right to privacy and confidentiality
+
+STANDARD 4 If it is suspected that danger or harm may occur to the client or to others as a result of a client's behavior, the human service professional acts in an appropriate and professional manner to protect the safety of those individuals. This may involve, but is not limited to, seeking consultation, supervision, and/or breaking the confidentiality of the relationship.
+
+danger or harm may occur
+
+STANDARD 5 Human service professionals recognize that multiple relationships may increase the risk of 
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.62, 136 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of instruction on exceptions to confidentiality (serious harm to client/others, agency guidelines, legal obligations) - only general confidentiality principle stated
+
+_Source heading:_ **Sexual or romantic relationships — STANDARD 7 Human service professionals ensure that their values or biases are not imposed upon their clients.**
+
+```text
+values or biases are not imposed
+
+STANDARD 8 Human service professionals protect the integrity, safety, and security of client records . Client information in written or electronic form that is shared with other professionals must have the client’s prior written consent except in the course of professional supervision or when legally obliged or permitted to share such information.
+
+integrity, safety, and security of client records
+
+STANDARD 9 When providing services through the use of technology, human service professionals take precautions to ensure and maintain confidentiality and comply with all relevant laws and requirements regarding storing, transmitting, and retrieving data . In addition, human service professionals ensure that clients are aware of any issues and concerns related to confidentiality, service issues, and how technology might negatively or positively impact the helping relationship.
+
+storing, transmitting, and retrieving data
+```
+
+##### Evidence text 4 — conf 0.68, 70 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Supporting evidence provided (HIPAA disclosure accounting procedures) is administrative/institutional rather than student-facing educational content about confidentiality practices
+
+_Source heading:_ **Student Policy Manual — Ethics in Field Work — Ethics in Field Work**
+
+```text
+Ethical behavior in the field involves making sound decisions concerning issues such as confidentiality.  Information regarding clients/personnel must be kept confidential and shared only in an appropriate professional context.  Confidentiality is a significant aspect of professionalism and must be maintained at all times.  Standards that address confidentiality and other ethical issues are contained in the code of standards of the National Organization for Human Services (Please see Appendix).
+
+SECTION III:
+```
+
+##### Evidence text 5 — conf 0.62, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of specific learning activities, assignments, or assessments demonstrating student competency in applying confidentiality principles (e.g., case studies, scenario responses, documented field instructor evaluations)
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[19][c].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence that students are taught to inform clients of the limits of confidentiality prior to onset of helping relationship (STANDARD 3 requirement)
-- ⚠️ No demonstration of how exceptions to confidentiality (serious harm, agency guidelines, legal obligations) are explicitly taught or evaluated
-- ⚠️ No evidence of instruction on HIPAA compliance beyond administrative agreement language; students may not understand their obligations
-- ⚠️ No evidence of how electronic security and integrity of client records is addressed in curriculum (STANDARD 8)
-- ⚠️ Supporting evidence provided (HIPAA disclosure accounting) is administrative/institutional rather than curriculum or student-focused
-- ⚠️ No course syllabus excerpts, assignments, or evaluation tools showing confidentiality competency assessment
-- ⚠️ Missing evidence that students understand conditions under which confidentiality may be breached and their legal/ethical obligations in those scenarios
+- ⚠️ No explicit evidence that students are taught to inform clients of the limits of confidentiality prior to onset of helping relationship (STANDARD 3 requirement)
+- ⚠️ Limited documentation of how technology-related confidentiality (STANDARD 9: storing, transmitting, retrieving data) is addressed in curriculum
+- ⚠️ No clear evidence of instruction on exceptions to confidentiality (duty to warn/protect when danger or harm may occur per STANDARD 4)
+- ⚠️ Narrative mentions field placement evaluation but does not provide actual completed evaluation examples showing confidentiality competency assessment
+- ⚠️ No evidence of how students learn about client consent requirements for sharing information with other professionals (STANDARD 8)
+- ⚠️ Missing documentation of training on HIPAA compliance procedures beyond the policy statement included
 
 ---
 
-### `19.d` 🟡 — Knowledge, Theory, Skills, and Values
+### `19.d` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _The worth and uniqueness of individuals based on intercultural fluency, including how they identify and the cultural groups to which they belong._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.78**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=True, score=0.78, delta=+0.23)_
 
 #### Narrative content
 _Destination: `Submission.narratives[19][d].content`_
@@ -5436,18 +9978,115 @@ The worth and uniqueness of individuals including culture, ethnicity, race, clas
 #### Supporting evidence — text
 _Destination: `Submission.narratives[19][d].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 79 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing explicit connection between 'worth and uniqueness' and 'intercultural fluency'—these are related but distinct concepts; fluency requires skill development beyond awareness
+
+_Source heading:_ **Speak and write professionally in applied human services settings. — Use initiative in interpreting and following instructions in applied human services settings. — Objectives/Outcomes**
+
+```text
+4. Exhibit culturally sensitive behavior in professional human services settings.
+
+Demonstrate an awareness of diversity by adapting helping approaches to reflect the needs of clients’ culture. Explain and appraise the customs, practices, beliefs and values of the cultures and communities within which he or she practices. Exhibit openness and a non-judgmental attitude related to individual, cultural, and global differences. Provide services without discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation, or socioeconomic status.
+```
+
+##### Evidence text 2 — conf 0.62, 824 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No mention of how the program addresses students' understanding of their own cultural identity and positionality—a foundational element of intercultural fluency
+
+_Source heading:_ **The paper should be a minimum of two full pages, double-spaced and a 12-point font. — Syllabi — Syllabi — Hannah Fonti Sample Response Paper — February 3, 2019 — Professor Weiner — CHS 220**
+
+```text
+We live in a modern world, and yet, some of our beliefs and practices regarding race reveal that our world may not be as developed as we would like. Looking at Baltimore City specifically, Freddie Gray is the perfect example that racism still exists in our society today. Racial profiling is common enough in our society that the term “Driving While Black” or DWB is used to address being pulled over by police officers for no apparent reason. Robin DiAngelo, through her presentation “Deconstructing White Privilege,” discusses racism in our society through her “white experience”; while informative about bias, racism and white superiority, she fails to address what we, as a society or as individuals, can do outside of recognition of racism.
+
+DiAngelo opens with how our country was founded on race and unequal power, she uses an example that could be understood by the masses explaining how men gave women the right to vote. She claims that this practice continues through “group prejudice backed by institutional power.” Her claim is easily seen through school and neighborhood segregation, she notes that bad neighborhoods are considered neighborhoods with people of color. What she fails to address about the school and neighborhood segregation is why this occurs; lower class neighborhoods are generally filled with people of color because of the cycle of poverty, statistics reveal that people of color are paid less than their white counterparts as well as the fact that women of color are
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.62, 45 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Unclear whether students engage with content on structural/systemic dimensions of culture or only individual-level diversity awareness
+
+_Source heading:_ **Articulate the impact of history and culture on various ethnic minority groups in the United States. — Describe how one’s culture, race and ethnicity influence seeking help, describing issues and inte**
+
+```text
+Identify demographic trends in the United States and how they will impact on the need to be culturally competent.
+
+Demonstrate a knowledge of diversity as it relates to other aspects of family including but not limited to religion, sexual orientation, disabilities, age and family structure.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[19][d].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | This is also the text used for CHS 441 — COURSE OUTCOMES — C | `this-is-also-the-text-used-for-chs-441-course-outcomes-cours` | 71 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/this-is-also-the-text-used-for-chs-441-course-outcomes-cours.docx` |
+| 2 | Current Events | `current-events` | 332 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/current-events.docx` |
+| 3 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.75 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+
+_File 1 fills gap_: No supporting evidence provided (syllabi, assignments, rubrics, student work samples) to verify claims about course content and learning outcomes
+
+```text
+Course Objectives/Learning Outcomes: •Make meaningful connections between classroom learning and experiences in the field. (Career Exploration) •	Exhibit self-development. (Self-Discovery) 										•Demonstrate a professional attitude. (Career Preparation) 								•Engage in professional behaviors. (Career Preparation) 									•Demonstrate cultural sensitivity when interacting with individuals and families. (Career Preparation) 			•Display interpersonal skills. (Career Development Foundations)
+
+Course Objectives/Learning Outcomes:
+
+To determine if this course fulfills additional program or track outcomes, please see the department chair or program coordinator.
+```
+
+_File 2 fills gap_: Narrative lists courses but does not explain HOW intercultural fluency is specifically developed or what competencies students demonstrate
+
+```text
+Each student will deliver a short oral summary of a recent (within the past year) news item pertaining to the topics covered in this course and pose 2 open-ended questions to the class for discussion.  Coverage should be succinct but thorough.
+
+2. Class Debates ( 10 %)
+
+10
+
+Each student will be assigned to one of three groups. The groups’ role will rotate during the semester.  Each group will have the opportunity of presenting support for or against a particular topic being considered.  The third group during each of these debates will listen to both sides and determine which side presented the most convincing evidence.
+
+3.  Response Papers (15%)
+
+(15%)
+
+Students will write 3 short (2-3 pages) response papers on topics assigned by the instructor. Papers can be opinion-based but must provide documentation supporting student’s opinion.
+
+4.  Cultural Autobiography (20%)
+
+(20%)
+
+Each student will write her/his own cultural autobiography to become more aware of one’s own background as well as how it impacts on relationships with others.  More details will be provided.
+
+5. Immigrant Interview (20%)
+
+(20%)
+
+Each student will interview someone who is an immigrant or whose parent/parents have immigrated to the U.S. and learn about that person’s experiences and how it affected the family.  Examples of questions will be given to students ahead of time.
+
+6. Group Presentation and Report (25%)
+
+(25%)
+
+Each student will choose a nation to study in-depth.  Students will examine how people f
+… (truncated, full DOCX preserves full body)
+```
+
+_File 3 fills gap_: Lacks documentation of how field placements assess or reinforce intercultural fluency (reference to 'Student Field Placement Evaluation, Section IV' is unsubstantiated)
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided; narrative claims cannot be verified (e.g., course syllabi, assignments, evaluation rubrics, student work samples)
-- ⚠️ Specification requires 'intercultural fluency' specifically—narrative addresses diversity awareness/competence but does not explicitly demonstrate how students develop fluency (ability to navigate, communicate, and work effectively across cultural differences)
-- ⚠️ No evidence of assessment data showing student learning outcomes related to intercultural fluency or the worth/uniqueness of individuals
-- ⚠️ Narrative lists many courses but provides minimal detail on how intercultural fluency is taught or practiced in each (e.g., what specific skills, what learning activities beyond 'lecture and discussion')
-- ⚠️ Missing evidence of how students demonstrate intercultural fluency in practice (field placement evaluation referenced but not provided; no sample evaluations or rubrics shown)
-- ⚠️ No demonstration of how the program measures or documents students' ability to recognize and respect how individuals identify and their cultural group belonging—a key part of the specification
+- ⚠️ No explicit definition or teaching of 'intercultural fluency' as a distinct competency—the narrative addresses diversity awareness and cultural sensitivity but does not articulate how students develop the dynamic, reciprocal skill of intercultural fluency (ability to communicate and work effectively across cultures).
+- ⚠️ Limited evidence of students developing awareness of how individuals identify themselves across multiple cultural identities simultaneously; Evidence 5 (racism paper) and Evidence 2 (immigrant interview) touch on single-identity aspects but lack demonstration of intersectional or fluid identity work.
+- ⚠️ No explicit evidence showing how students learn to recognize and honor the worth of individuals based on their self-identified cultural group membership; Evidence 3 lists protected categories but does not demonstrate teaching of self-identification or individual agency in cultural identity.
+- ⚠️ Missing direct assessment data linking intercultural fluency development to student learning outcomes; Evidence 4 shows field supervisors rated 'culturally sensitive behavior' but does not disaggregate what specific intercultural fluency competencies were evaluated.
 
 ---
 
@@ -5479,16 +10118,40 @@ _(no supporting-evidence text auto-applied)_
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[19][e].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | DATES Hours Field Instructor Signature TOTAL HOURS — DATES H | `dates-hours-field-instructor-signature-total-hours-dates-hou` | 85 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/dates-hours-field-instructor-signature-total-hours-dates-hou.docx` |
+
+_File 1 fills gap_: No documentation of how field instructors evaluate students' demonstrated belief in change potential (reference to 'Student Field Placement Evaluation, Section II-IV' is made but document not provided)
+
+```text
+14b
+
+8b
+
+Student:
+
+Placement/Agency:
+
+Field Instructor (Please print.):
+
+University Supervisor (Please print.):
+
+Evaluation is a very important phase of the learning process. The student and field instructor should each complete the same copy of the evaluation tool at midpoint and at the end of the semester.  Criteria for achievement of the program goals and objectives are expressed as Below Expectations, Meets Expectations, and Exceeds Expectations. If an objective or category within an objective does not apply, please rate it N.A. (Not Applicable).
+
+student
+
+field instructor
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (course syllabi, assignments, rubrics, student work samples) to validate claims made in the narrative
-- ⚠️ Narrative lists courses but does not explicitly explain HOW each course teaches the belief that change is possible—lacks specific pedagogical strategies or learning activities
-- ⚠️ No evidence of student learning outcomes or assessment data demonstrating students actually developed this belief
-- ⚠️ Missing explanation of how systems-level change (not just individual change) is taught; narrative focuses heavily on counseling/intervention skills rather than macro-level advocacy or social change
-- ⚠️ No mention of critical consciousness, social justice frameworks, or empowerment models that typically ground belief in societal changeability
-- ⚠️ Field placement evaluation referenced but not provided; no evidence of how field instructors assess this specific belief or competency
-- ⚠️ Narrative does not address how students move from theoretical understanding to internalized belief—the distinction between knowing change is possible and believing it
-- ⚠️ No description of how students who may hold fatalistic or deficit-based worldviews are specifically engaged to develop this belief
+- ⚠️ No evidence provided that directly demonstrates student learning or mastery of the belief that change is possible; only course titles and assignment names are listed without content showing what students actually learned
+- ⚠️ Missing explicit connection between coursework and the development of this specific belief/value; narrative lists courses but doesn't explain HOW instruction cultivates this belief
+- ⚠️ No student work samples, reflections, or demonstrated competencies showing students actually adopted or applied this belief in practice
+- ⚠️ Field placement evaluation form shown is incomplete/blank (Evidence 1 contains only header and formatting information, no actual evaluation criteria or student outcomes related to belief in change)
+- ⚠️ No evidence of assessment data showing students meet or exceed expectations on this specific belief outcome
+- ⚠️ Narrative mentions 'mentored and evaluated by field instructor' but provides no actual evaluation results, rubrics, or exemplars demonstrating this assessment occurred
+- ⚠️ Missing clarity on whether students develop a personal, integrated belief in change or merely learn about it cognitively
 
 ---
 
@@ -5519,24 +10182,38 @@ _(no supporting-evidence text auto-applied)_
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[19][f].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+
+_File 1 fills gap_: No supporting evidence documents provided (course syllabi, assignments, rubrics, student work samples, field placement evaluation forms) to verify claims about interdisciplinary team approaches
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (course syllabi, assignments, rubrics, field placement evaluation forms, student work samples)
-- ⚠️ Narrative lists courses but provides minimal detail on what 'interdisciplinary team approaches' actually means or entails in each context
-- ⚠️ No evidence of how students learn to work with professionals from OTHER disciplines (e.g., social workers, nurses, counselors, case managers, etc.) - narrative focuses on internal human services team structures
-- ⚠️ No documentation of learning outcomes, competencies, or assessment criteria specific to interdisciplinary teamwork
-- ⚠️ Vague references to 'group assignments' and 'field instructor evaluation' without concrete examples or artifacts
-- ⚠️ No evidence that students demonstrate competency in interdisciplinary problem-solving (e.g., grades, evaluation rubrics, portfolio artifacts)
-- ⚠️ Field Placement Evaluation form referenced but not provided; cannot verify it actually assesses interdisciplinary teamwork skills
+- ⚠️ No evidence that interdisciplinary team approaches are explicitly taught as a distinct problem-solving methodology or framework in the courses listed
+- ⚠️ Narrative mentions 'working in teams' and 'treatment teams' but provides no concrete examples of how students learn to apply interdisciplinary problem-solving models or techniques
+- ⚠️ Field Placement Evaluation data does not include any specific items measuring interdisciplinary team collaboration or team problem-solving competency; Goal V (interpersonal skills) and Goal III (professional attitudes) are generic and do not capture interdisciplinary team dynamics
+- ⚠️ No evidence of curriculum mapping showing which courses teach specific interdisciplinary frameworks, conflict resolution in teams, or role differentiation across disciplines
+- ⚠️ Narrative references 'group assignment analyzing family therapy models' in CHS 430 but does not explain whether this involves truly interdisciplinary teams or just peer groups
+- ⚠️ Missing evidence that students demonstrate competency in working with professionals from other disciplines (social work, medicine, psychology, etc.) beyond their own human services field
+- ⚠️ No syllabi excerpts, assignment rubrics, or learning outcomes that explicitly connect course content to interdisciplinary problem-solving competency
 
 ---
 
-### `19.g` 🔴 — Knowledge, Theory, Skills, and Values
+### `19.g` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Appropriate professional boundaries._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.72**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=True, score=0.72, delta=+0.27)_
 
 #### Narrative content
 _Destination: `Submission.narratives[19][g].content`_
@@ -5585,20 +10262,140 @@ STANDARD 19 Human service professionals avoid duplicating another professional's
 #### Supporting evidence — text
 _Destination: `Submission.narratives[19][g].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 312 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explicit definition or explanation of what 'appropriate professional boundaries' means in the human services context
+
+_Source heading:_ **Responsibility to Clients — Responsibility to Clients — STANDARD 1 Human service professionals recognize and build on client and community strengths .**
+
+```text
+client and community strengths
+
+STANDARD 2 Human service professionals obtain informed consent to provide services to clients at the beginning of the helping relationship. Clients should be informed that they may withdraw consent at any time except where denied by court order and should be able to ask questions before agreeing to the services. Clients who are unable to give consent should have those who are legally able to give consent for them review an informed consent statement and provide appropriate consent.
+
+informed consent
+
+STANDARD 3 Human service professionals protect the client's right to privacy and confidentiality except when such confidentiality would cause serious harm to the client or others, when agency guidelines state otherwise, or under other stated conditions (e.g., local, state, or federal laws). Human service professionals inform clients of the limits of confidentiality prior to the onset of the helping relationship.
+
+right to privacy and confidentiality
+
+STANDARD 4 If it is suspected that danger or harm may occur to the client or to others as a result of a client's behavior, the human service professional acts in an appropriate and professional manner to protect the safety of those individuals. This may involve, but is not limited to, seeking consultation, supervision, and/or breaking the confidentiality of the relationship.
+
+danger or harm may occur
+
+STANDARD 5 Human service professionals recognize that multiple relationships may increase the risk of 
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.72, 35 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Standard 5 (dual/multiple relationships and impaired judgment) is mentioned in narrative but not directly addressed in course descriptions or evidence
+
+_Source heading:_ **Week 4 February 19/21 GS — Week 4 — Week 4 — February 19/21 — February 19/21 — GS — GS — Get to know your client community --NOHS Ethical Standard 1, 11, 15, & 26 — Get to know your client community -**
+
+```text
+in class. Hardcopy.
+
+-resume writing and interviewing
+
+in class. Hardcopy.
+
+Week 7 March 12/14 Where are the boundaries? Dual relationships and self-disclosure --NOHS Ethical Standards 5, 6, and 33 Midpoint evaluation due in class. Hardcopy.
+```
+
+##### Evidence text 3 — conf 0.72, 195 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Standard 19 (avoiding duplication, consultation with other professionals, collaboration/coordination) is listed but absent from the narrative course descriptions
+
+_Source heading:_ **Responsibility to Colleagues — Responsibility to Colleagues**
+
+```text
+STANDARD 19 Human service professionals avoid duplicating another professional's helping relationship with a client. They consult with other professionals who are assisting the client in a different type of relationship when it is in the best interest of the client to do so. In addition, human services professionals seek ways to actively collaborate and coordinate with other professionals when appropriate.
+
+avoid duplicating another professional's helping relationship
+
+STANDARD 20 When human service professionals have a conflict with a colleague , they first seek out the colleague in an attempt to manage the problem. If this effort fails, the professional then seeks the assistance of supervisors, consultants, or other professionals in efforts to address the conflict.
+
+conflict with a colleague
+
+STANDARD 21 Human service professionals respond appropriately to unethical and problematic behavior of colleagues . Usually this means initially talking directly with the colleague and if no satisfactory resolution is achieved, reporting the colleague's behavior to supervisory or administrative staff.
+
+respond appropriately to unethical and problematic behavior of colleagues
+
+STANDARD 22 All consultations between human service professionals are kept private , unless to do so would result in harm to clients or communities.
+
+consultations
+
+are kept private
+```
+
+##### Evidence text 4 — conf 0.62, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of assessment or student demonstration of boundary-setting competence (e.g., evaluation rubrics, student reflections, case studies)
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
+##### Evidence text 5 — conf 0.68, 369 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of how boundary violations or ethical dilemmas are addressed in the curriculum or how students learn to recognize and respond to boundary crossing
+
+_Source heading:_ **Responsibility to Students — Responsibility to Students**
+
+```text
+STANDARD 37 Human service educators develop and implement culturally sensitive knowledge, awareness, and teaching methodologies .
+
+culturally sensitive knowledge, awareness, and teaching methodologies
+
+STANDARD 38 Human service educators are committed to the principles of access and inclusion and take all available and applicable steps to make education available to differently-abled students.
+
+access and inclusion
+
+STANDARD 39 Human service educators demonstrate high standards of scholarship in their scholarship, pedagogy, and professional service and stay current in the field by being members of their professional associations, attending workshops and conferences, and reviewing and/or conducting research.
+
+high standards of scholarship
+
+stay current in the field
+
+STANDARD 40 Human service educators recognize and acknowledge the contributions of students to the work of the educator in such activities as case material, grants, workshops, research, publications, and other related activities.
+
+recognize and acknowledge the contributions of students
+
+STANDARD 41 Human service educators monitor students' field experiences to ensure the quality of the placement site, supervisory experience, and learning experience towards the goals of personal, professional, academic, career, and civic development. When students experience potentially harmful events during field placements, educators provide reasonable investigation and response as necessary to safeguard the student.
+
+monitor stud
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[19][g].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, assignments, rubrics, evaluation forms referenced but not attached)
-- ⚠️ Narrative lacks specific content examples: what exactly is taught about boundary violations, warning signs, or corrective actions
-- ⚠️ No evidence of how students learn to recognize dual/multiple relationships (Standard 5) or how to manage them when unavoidable
-- ⚠️ Narrative does not address how students learn to identify harm/danger situations and break confidentiality appropriately (Standard 4)
-- ⚠️ No demonstration of how students learn to coordinate/collaborate with other professionals (Standard 19)
-- ⚠️ Missing evidence of assessment methods: how is mastery of professional boundaries measured beyond field instructor evaluation?
-- ⚠️ Field Placement Evaluation form referenced but not provided; unclear what specific boundary-related criteria are assessed in Sections III and V
-- ⚠️ No evidence of explicit instruction on power dynamics, transference, countertransference, or boundary violations in intimate/social contexts
+- ⚠️ Narrative lists multiple courses but provides minimal specific detail about *what* is taught regarding boundaries in most courses; only CHS 315/515, 360, 430, and 340 receive brief contextual descriptions
+- ⚠️ No explicit evidence that students learn to *recognize and manage dual/multiple relationships* (STANDARD 5) — narrative mentions the topic exists in Week 7 of one course but provides no syllabus content, assignments, or learning outcomes demonstrating mastery
+- ⚠️ No evidence addressing how students learn to *consult with other professionals* to avoid duplicating helping relationships (STANDARD 19) — this collaborative/coordination aspect is absent from the narrative
+- ⚠️ Field placement evaluation (Evidence 4) shows aggregate supervisor ratings but does not disaggregate data on professional boundaries specifically; no evidence that field instructors assess boundary-setting competency as a distinct skill
+- ⚠️ Evidence 2 (course schedule) shows only a single week devoted to dual relationships and self-disclosure in one course; unclear if this is sufficient depth or if reinforced across the curriculum
+- ⚠️ No student artifacts, case studies, or assessment rubrics provided that demonstrate students can *apply* boundary knowledge to realistic scenarios or ethical dilemmas
 
 ---
 
@@ -5606,8 +10403,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Integration of the ethical standards outlined by the National Organization for Human Services/Council for Standards in Human Service Education (available at 10. Self-Development Context: Human services professionals use their experience and knowledge to understand and help clients. This requires awareness of one’s values, cultural bias, philosophies, personality, and style in the effective use of the professional self. It also requires an understanding of how these personal characteristics affect clients._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.00**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.00, delta=-0.45)_
 
 #### Narrative content
 _Destination: `Submission.narratives[19][h].content`_
@@ -5646,33 +10443,156 @@ STANDARD 43 Human service educators are aware that in their relationships with s
 #### Supporting evidence — text
 _Destination: `Submission.narratives[19][h].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 127 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of how students develop awareness of their own values, cultural bias, philosophies, personality, and style—the core of 'Self-Development Context'
+
+_Source heading:_ **Responsibility to Self — Responsibility to Self**
+
+```text
+STANDARD 34 Human service professionals are aware of their own cultural backgrounds , beliefs, values, and biases. They recognize the potential impact of their backgrounds on their relationships with others and work diligently to provide culturally competent service to all of their clients.
+
+aware of their own cultural backgrounds
+
+STANDARD 35 Human service professionals strive to develop and maintain healthy personal growth to ensure that they are capable of giving optimal services to clients. When they find that they are physically, emotionally, psychologically, or otherwise not able to offer such services, they identify alternative services for clients.
+
+healthy personal growth
+
+STANDARD 36 Human service professionals hold a commitment to lifelong learning and continually advance their knowledge and skills to serve clients more effectively.
+
+commitment to lifelong learning
+```
+
+##### Evidence text 2 — conf 0.72, 631 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing demonstration of how students understand how their personal characteristics affect clients (reflective practice, self-awareness assignments, or evidence of personal development)
+
+_Source heading:_ **What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? — Briefly describe other activities you engaged in this week — What concerns or chal**
+
+```text
+Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences.
+
+Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-evaluation and share it with the field instructor. In addition the field instructor will complete an evaluation of the student. Once both parties sign both forms the evaluation tools must be submitted to the faculty supervisor for review both at midpoint and at the end of the semester. Field Instructor’s Evaluation- Each student will be evaluated by his/her instructor at midpoint and at the completion of the field experience. Students will be evaluated in terms of personal qualities, role expectations within the agency setting, and professional qualiti
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.62, 824 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of structured reflection or self-assessment activities that would demonstrate students' understanding of their own values and biases
+
+_Source heading:_ **The paper should be a minimum of two full pages, double-spaced and a 12-point font. — Syllabi — Syllabi — Hannah Fonti Sample Response Paper — February 3, 2019 — Professor Weiner — CHS 220**
+
+```text
+We live in a modern world, and yet, some of our beliefs and practices regarding race reveal that our world may not be as developed as we would like. Looking at Baltimore City specifically, Freddie Gray is the perfect example that racism still exists in our society today. Racial profiling is common enough in our society that the term “Driving While Black” or DWB is used to address being pulled over by police officers for no apparent reason. Robin DiAngelo, through her presentation “Deconstructing White Privilege,” discusses racism in our society through her “white experience”; while informative about bias, racism and white superiority, she fails to address what we, as a society or as individuals, can do outside of recognition of racism.
+
+DiAngelo opens with how our country was founded on race and unequal power, she uses an example that could be understood by the masses explaining how men gave women the right to vote. She claims that this practice continues through “group prejudice backed by institutional power.” Her claim is easily seen through school and neighborhood segregation, she notes that bad neighborhoods are considered neighborhoods with people of color. What she fails to address about the school and neighborhood segregation is why this occurs; lower class neighborhoods are generally filled with people of color because of the cycle of poverty, statistics reveal that people of color are paid less than their white counterparts as well as the fact that women of color are
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.72, 369 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Standard 43 (educator-student relationship modeling) is cited but not meaningfully connected to how educators model ethical self-awareness for students
+
+_Source heading:_ **Responsibility to Students — Responsibility to Students**
+
+```text
+STANDARD 37 Human service educators develop and implement culturally sensitive knowledge, awareness, and teaching methodologies .
+
+culturally sensitive knowledge, awareness, and teaching methodologies
+
+STANDARD 38 Human service educators are committed to the principles of access and inclusion and take all available and applicable steps to make education available to differently-abled students.
+
+access and inclusion
+
+STANDARD 39 Human service educators demonstrate high standards of scholarship in their scholarship, pedagogy, and professional service and stay current in the field by being members of their professional associations, attending workshops and conferences, and reviewing and/or conducting research.
+
+high standards of scholarship
+
+stay current in the field
+
+STANDARD 40 Human service educators recognize and acknowledge the contributions of students to the work of the educator in such activities as case material, grants, workshops, research, publications, and other related activities.
+
+recognize and acknowledge the contributions of students
+
+STANDARD 41 Human service educators monitor students' field experiences to ensure the quality of the placement site, supervisory experience, and learning experience towards the goals of personal, professional, academic, career, and civic development. When students experience potentially harmful events during field placements, educators provide reasonable investigation and response as necessary to safeguard the student.
+
+monitor stud
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[19][h].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | SU Goal No. 5: Career Readiness (CR) — SU Goal No. 5: Career | `su-goal-no-5-career-readiness-cr-su-goal-no-5-career-readine` | 520 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/su-goal-no-5-career-readiness-cr-su-goal-no-5-career-readine.docx` |
+| 2 | Please be certain that you have indicated a rating for each  | `please-be-certain-that-you-have-indicated-a-rating-for-each-` | 175 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/please-be-certain-that-you-have-indicated-a-rating-for-each-.docx` |
+| 3 | COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE | `course-outcomes-course-outcomes-course-outcomes-course-outco` | 90 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/course-outcomes-course-outcomes-course-outcomes-course-outco.docx` |
+| 4 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+
+_File 1 fills gap_: No supporting evidence documents provided (course syllabi, assignments, evaluation forms, student reflections) to verify claims about integration
+
+```text
+The SU graduate will demonstrate personal direction, professional know-how, and discipline expertise in preparation for entry into the workplace or graduate studies.
+
+Graded Assignments:
+
+Journals (10%): Complete bi-weekly field note summaries. This summary should be between 100-250 words. Each summary is to include the following: What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? Briefly describe other activities you engaged in this week What concerns or challenges are you experiencing? Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences. Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-e
+… (truncated, full DOCX preserves full body)
+```
+
+_File 2 fills gap_: Narrative mentions behavioral indicators (3.D.) as prerequisite but does not explain what those indicators are or how they address self-awareness and personal use of self
+
+```text
+Please remember to rate goals and objectives. self-evaluation field instructor’s evaluation expectations expectations Comments (optional) below meets exceeds below meets exceeds I:  Applies research findings to analyze problems and develop appropriate solutions. Demonstrates basic technological competence. Demonstrates the ability to obtain, evaluate and use information to solve problems. II:  Develops professional goals and objectives. Accepts constructive criticism and attempts to make appropriate adjustments. Analyzes interpersonal strengths and weaknesses through completion of a self-evaluation. Develops personal goals and objectives and shares them with the field instructor. Exhibits attitudes and behaviors related to self-care and wellness. Seeks guidance from the field instructor. III: Exhibits professional attitudes and behaviors. Demonstrates punctuality. B.    Dresses appropriately. C.    Exhibits constructive use of time. Exhibits consistent ethical behavior. E.    Follows the agency's policies and procedures. F.    Performs the duties, responsibilities, and other professional obligations specified by the field instructor. G.    Protects the right to privacy and confidentiality, except when doing so would cause harm to the client or others. H.    Speaks and writes professionally. I.    Uses initiative in interpreting and following instructions.
+```
+
+_File 3 fills gap_: Limited connection between listed courses and the specific competency of using professional self; mostly lists course names without explaining how self-development is taught
+
+```text
+Course Objectives/Learning Outcomes:
+
+1.	Apply connections between classroom learning and field experiences.  (Career Exploration)
+
+2.	Analyze their own natural style of helping and its impact. (Career Development Foundations)
+
+3.	Demonstrate a professional attitude and engage in professional behavior. (Career Preparation)
+
+4.	Demonstrate sensitivity to diversity. (Career Preparation)
+
+5.	Display appropriate interpersonal skills. (Career Development Foundations)
+
+6.	Exhibit continuing self-development. (Self-Discovery)
+
+7.	Present a professional portfolio at a job interview. (Career Preparation)
+
+To determine if this course fulfills additional program or track outcomes, please see the department chair or program coordinator.
+```
+
+_File 4 fills gap_: No evidence of how field instructors evaluate or mentor students on self-awareness, awareness of bias, or professional use of self beyond generic 'ethical behaviors'
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence provided to substantiate claims about NOHS ethical standards integration (narrative only, zero supporting documents)
-- ⚠️ Missing documentation of the CHS Student Handbook itself or the acknowledgment forms students sign
-- ⚠️ No evidence showing how behavioral indicators (3.D.) specifically operationalize NOHS ethical standards
-- ⚠️ Lack of syllabi or course materials demonstrating ethical standards content in the 10 courses listed (CHS 105, 220, 224, 315/515, 360, 430, 340, 380, 440, 441)
-- ⚠️ No demonstration of how 'self-development context' (awareness of personal values, cultural bias, philosophy, personality, style) is explicitly taught or assessed
-- ⚠️ Missing evidence of how students develop understanding of how personal characteristics affect clients
-- ⚠️ No Student Field Placement Evaluation form provided despite citation in narrative
-- ⚠️ Absence of field instructor feedback/evaluation documentation showing ethical behavior assessment
-- ⚠️ STANDARD 26 (culturally diverse populations, best-fit methods) mentioned only tangentially in CHS 220; no evidence of curriculum-wide integration
-- ⚠️ STANDARD 43 (educator awareness of power/status dynamics, fair treatment of students) not addressed at all in narrative or evidence
+- ⚠️ LLM returned non-JSON response
 
 ---
 
 ## Standard 20
 
-### `20.a` 🔴 — Knowledge, Theory, Skills, and Values
+### `20.a` 🟡 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Conscious use of self._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.55**
+_(first-pass: covered=False, score=0.40; second-pass after gap-fill: covered=False, score=0.55, delta=+0.15)_
 
 #### Narrative content
 _Destination: `Submission.narratives[20][a].content`_
@@ -5701,20 +10621,140 @@ DiAngelo is correct in saying we all have our own experience but how can I tell 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[20][a].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 631 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Second section appears to be unrelated student reflection on implicit bias/DiAngelo that does not address conscious use of self as a professional competency or demonstrate program assessment
+
+_Source heading:_ **What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? — Briefly describe other activities you engaged in this week — What concerns or chal**
+
+```text
+Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences.
+
+Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-evaluation and share it with the field instructor. In addition the field instructor will complete an evaluation of the student. Once both parties sign both forms the evaluation tools must be submitted to the faculty supervisor for review both at midpoint and at the end of the semester. Field Instructor’s Evaluation- Each student will be evaluated by his/her instructor at midpoint and at the completion of the field experience. Students will be evaluated in terms of personal qualities, role expectations within the agency setting, and professional qualiti
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.62, 127 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No clear definition or operationalization of 'conscious use of self' provided in the narrative
+
+_Source heading:_ **Responsibility to Self — Responsibility to Self**
+
+```text
+STANDARD 34 Human service professionals are aware of their own cultural backgrounds , beliefs, values, and biases. They recognize the potential impact of their backgrounds on their relationships with others and work diligently to provide culturally competent service to all of their clients.
+
+aware of their own cultural backgrounds
+
+STANDARD 35 Human service professionals strive to develop and maintain healthy personal growth to ensure that they are capable of giving optimal services to clients. When they find that they are physically, emotionally, psychologically, or otherwise not able to offer such services, they identify alternative services for clients.
+
+healthy personal growth
+
+STANDARD 36 Human service professionals hold a commitment to lifelong learning and continually advance their knowledge and skills to serve clients more effectively.
+
+commitment to lifelong learning
+```
+
+##### Evidence text 3 — conf 0.62, 279 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of assessment methods, measurement tools, or data demonstrating student achievement of conscious use of self competency
+
+_Source heading:_ **In 2018, professional portfolios of seniors were analyzed. — In 2018, professional portfolios of seniors were analyzed.**
+
+```text
+Program outcomes assessed:
+
+2.	Based on comprehensive self-evaluation and feedback from faculty and supervisors, develop individualized professional development goals and objectives.
+
+3.	Exhibit consistent professional attitudes and behaviors in applied human services settings.
+
+6.	Synthesize and appropriately apply key concepts, methods and values in human services to professional situations, independently and with minimal supervision.
+
+Methodology:
+
+Professional portfolios were collected from one of the two CHS 441 Seminar in Human Services courses that graduating seniors complete in conjunction with their practicum experience in their last semester. A total of 10 portfolios were examined (59% of graduating students). Each portfolio was rated independently by two faculty members on each of the three outcomes, using the attached rubric and a 3-points scale. Ratings were: Inadequate/No Evidence (0), Adequate/Satisfactory (1), and Excellent (2). Raters gave the same ratings on 83% of the items. When ratings were different, they were averaged together.
+
+Data Summary:
+
+The average scores on each outcome are listed below. On all measures, half or more artifacts were rated as adequate. An addition 30-40% were rated as excellent. Three artifacts were rated as inadequate by at least one rater (one for professional development goals and two for professional attitudes and behaviors).
+
+Criteria/Performance Rating Scoring points Inadequate/ No Evidence 0 Adequate/ Satisfactory 1 Excelle
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.62, 81 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No discussion of how program ensures students develop self-awareness regarding their own values, biases, cultural identity, and impact on helping relationships
+
+_Source heading:_ **The program helped me develop self- understanding. — The program helped me develop self- understanding. — I would recommend this program to other students/professionals. — I would recommend this progr**
+
+```text
+88%
+
+12%
+
+6 I would recommend this program to other students/professionals. 96% 4%
+
+6
+
+96%
+
+4%
+
+Field experiences (internship and practicum) were highlighted in the responses to the first question (over 75% of students mentioned this).  Students appreciated the opportunity to apply their classroom learning. Several students mentioned the support and guidance they received and how much they learned about themselves. Some specific courses/experiences were mentioned by individual students, such as the addiction courses, administration of human services, and student presentations.
+```
+
+##### Evidence text 5 — conf 0.62, 31 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No demonstration of how students integrate self-awareness into ethical decision-making or cross-cultural competence
+
+_Source heading:_ **Demonstrates caring, respect, empathy, and genuineness when interacting with other students and faculty. — Demonstrates sensitivity and non-judgmental attitude. — A. 	Communicates effectively with oth**
+
+```text
+C.   	Demonstrates sensitivity to diversity exemplified by such factors as age, ethnicity, 	culture, race, disability, gender, religion, sexual orientation, or socioeconomic status.
+
+2. Consistently Displays Interpersonal Skills
+
+3.  Consistently Displays Professionalism
+```
+
+##### Evidence text 6 — conf 0.62, 31 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Incomplete—narrative cuts off mid-sentence at 'Section II. S'
+
+_Source heading:_ **Section one: (1 page)**
+
+```text
+www.genopro.com
+
+Section two: (4 to 10 pages) In narrative form, write a complete systemic analysis of your family of origin, referring back to the genogram. Issues you should cover and include:
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[20][a].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | SU Goal No. 5: Career Readiness (CR) — SU Goal No. 5: Career | `su-goal-no-5-career-readiness-cr-su-goal-no-5-career-readine` | 520 | 0.82 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/su-goal-no-5-career-readiness-cr-su-goal-no-5-career-readine.docx` |
+
+_File 1 fills gap_: Missing evidence of reflective practice requirements, self-assessment tools, or feedback mechanisms mentioned in narrative (journaling, portfolios, reflection papers, field evaluations)
+
+```text
+The SU graduate will demonstrate personal direction, professional know-how, and discipline expertise in preparation for entry into the workplace or graduate studies.
+
+Graded Assignments:
+
+Journals (10%): Complete bi-weekly field note summaries. This summary should be between 100-250 words. Each summary is to include the following: What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? Briefly describe other activities you engaged in this week What concerns or challenges are you experiencing? Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences. Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-e
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, assignments, rubrics, student work samples) to verify claims about course content and learning activities
-- ⚠️ Narrative lacks clear definition or explanation of what 'conscious use of self' means within the human services context
-- ⚠️ No demonstration of student learning outcomes—no evidence that students actually achieve competency in conscious use of self (e.g., no student reflections, evaluation results, or assessment data)
-- ⚠️ Second half of narrative (DiAngelo excerpt) appears to be unrelated student work/reflection that does not substantiate program-level instruction in conscious use of self
-- ⚠️ No evidence of how assessment of conscious use of self competency occurs or what benchmarks/standards are used
-- ⚠️ Vague references to assignments (e.g., 'process analysis paper,' 'interview papers,' 'Reflection Paper') without showing actual assignment descriptions, rubrics, or examples of student work
-- ⚠️ No explanation of how conscious use of self is scaffolded across the curriculum or how students progress in this competency
-- ⚠️ Field placement evaluation mentioned but not provided as supporting document
+- ⚠️ Narrative contains a lengthy personal reflection/student essay (DiAngelo paragraph) that is disconnected from the specification and appears to be misplaced content—unclear how this demonstrates program-level teaching of conscious use of self
+- ⚠️ No evidence of explicit learning outcomes or competencies related to 'conscious use of self' as a distinct construct—specifications are embedded in courses but not clearly defined
+- ⚠️ Limited evidence of how students learn to recognize and manage countertransference, projection, and emotional reactivity—core elements of conscious use of self
+- ⚠️ No assessment data directly measuring students' ability to demonstrate conscious use of self; portfolio data (Evidence 3) addresses general outcomes but not this specific competency
+- ⚠️ Narrative claims conscious use of self is taught in 10 courses but provides minimal specific evidence for most (e.g., CHS 340, 315/515 references are vague)
+- ⚠️ No evidence of explicit instruction on the concept itself—no readings, frameworks, or theoretical foundations cited for teaching this skill
+- ⚠️ Field placement evaluation (Evidence 1) mentions 'accepting constructive criticism' and 'interpersonal strengths' but does not explicitly assess conscious use of self as a demonstrated behavior
 
 ---
 
@@ -5722,8 +10762,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Clarification of personal and professional values._
 
-**Final coverage verdict:** covered=**False**, score=**0.65**
-_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.65, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.55**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.55, delta=+0.55)_
 
 #### Narrative content
 _Destination: `Submission.narratives[20][b].content`_
@@ -5742,19 +10782,36 @@ Clarification of personal and professional values.Response:The clarification of 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[20][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 65 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ LLM returned non-JSON response
+
+_Source heading:_ **LAURI A. WEINER, J.D., HS-BCP 7905 Winterset Avenue Baltimore, Maryland 21208 lweiner@stevenson.edu (410) 371-4729 (c) ( — LAURI A. WEINER, J.D., HS-BCP 7905 Winterset Avenue Baltimore, Maryland 21208**
+
+```text
+lweiner@stevenson.edu
+
+(410) 371-4729 (c) (443) 334-2584 (w)
+
+B.A., Dickinson College, Carlisle, Pennsylvania, 1982, cum laude Dual Major: International Studies, Russian and Soviet Studies
+
+Provided career counseling, resume critiques, mock interview for jobs and graduate school, job search strategies, and values clarification for students and alumni
+
+Provided assistance to students and alumni who are considering graduate school including strategies, decision-making process, review of applications and essays
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[20][b].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided despite extensive citations to course syllabi, assignments, objectives, and evaluation tools throughout the narrative
-- ⚠️ Missing actual examples of student work demonstrating values clarification (e.g., samples from Cultural Autobiography, Reflection Papers, process analysis papers, genograms)
-- ⚠️ No evidence of the Student Field Placement Evaluation form referenced in narrative to demonstrate how values clarification is assessed
-- ⚠️ Narrative is incomplete—cuts off mid-sentence ('Students also evaluate themselves using th') suggesting missing information
-- ⚠️ No evidence of how clarification of personal vs. professional values is distinguished or scaffolded across the curriculum
-- ⚠️ Missing documentation of specific self-assessment tools mentioned (referenced but not identified or provided)
-- ⚠️ No evidence demonstrating how students' clarified values are connected to professional practice competencies or ethical decision-making frameworks
+- ⚠️ Evidence provided (faculty bio) does not substantiate the narrative claims; it is a CV excerpt for one staff member and does not document course assignments, syllabi, or student learning outcomes related to values clarification
+- ⚠️ No actual course syllabi, assignment rubrics, or learning objectives are provided to verify that the nine listed courses (CHS 105, 220, 224, 315/515, 360, 430, 380, 440, 441) actually address values clarification
+- ⚠️ No student work samples, reflection papers, journaling excerpts, genograms, cultural autobiographies, or field placement evaluations are provided to demonstrate student engagement with values clarification
+- ⚠️ The narrative references specific assignments (e.g., 'Cultural Autobiography,' 'Family of Origin assignment,' 'Reflection Paper') but these are not attached or evidenced
+- ⚠️ The narrative claims field instructors evaluate students on values-related competencies but the 'Student Field Placement Evaluation, Section II' is referenced but not provided
+- ⚠️ No evidence of how values clarification is explicitly taught, assessed, or integrated across the curriculum; narrative is descriptive but not substantiated
+- ⚠️ The single supporting evidence item (faculty contact information and job duties) does not align with or document the program's systematic approach to values clarification instruction
 
 ---
 
@@ -5762,8 +10819,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Awareness of intercultural fluency as outlined in Standard 19.d._
 
-**Final coverage verdict:** covered=**False**, score=**0.00**
-_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.00, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.00; second-pass after gap-fill: covered=False, score=0.45, delta=+0.45)_
 
 #### Narrative content
 _Destination: `Submission.narratives[20][c].content`_
@@ -5772,28 +10829,131 @@ _(no narrative content auto-applied)_
 #### Supporting evidence — text
 _Destination: `Submission.narratives[20][c].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 332 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No supporting evidence (documents, syllabi, assignments, assessments) demonstrating intercultural fluency content or competency development
+
+_Source heading:_ **Current Events**
+
+```text
+Each student will deliver a short oral summary of a recent (within the past year) news item pertaining to the topics covered in this course and pose 2 open-ended questions to the class for discussion.  Coverage should be succinct but thorough.
+
+2. Class Debates ( 10 %)
+
+10
+
+Each student will be assigned to one of three groups. The groups’ role will rotate during the semester.  Each group will have the opportunity of presenting support for or against a particular topic being considered.  The third group during each of these debates will listen to both sides and determine which side presented the most convincing evidence.
+
+3.  Response Papers (15%)
+
+(15%)
+
+Students will write 3 short (2-3 pages) response papers on topics assigned by the instructor. Papers can be opinion-based but must provide documentation supporting student’s opinion.
+
+4.  Cultural Autobiography (20%)
+
+(20%)
+
+Each student will write her/his own cultural autobiography to become more aware of one’s own background as well as how it impacts on relationships with others.  More details will be provided.
+
+5. Immigrant Interview (20%)
+
+(20%)
+
+Each student will interview someone who is an immigrant or whose parent/parents have immigrated to the U.S. and learn about that person’s experiences and how it affected the family.  Examples of questions will be given to students ahead of time.
+
+6. Group Presentation and Report (25%)
+
+(25%)
+
+Each student will choose a nation to study in-depth.  Students will examine how people f
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.62, 52 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No reference to Standard 19.d definition or framework of intercultural fluency
+
+_Source heading:_ **Demonstrate an awareness of diversity by adapting helping approaches to reflect the needs of clients’ culture. — Exhibit openness and a non-judgmental attitude related to individual, cultural, and glo**
+
+```text
+Explain and appraise the customs, practices, beliefs and values of the cultures and communities within which he or she practices.
+
+Provide services without discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation, or socioeconomic status.
+
+5. Exhibit effective and appropriate interpersonal skills in professional human services settings.
+```
+
+##### Evidence text 3 — conf 0.62, 66 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No demonstration of how curriculum incorporates intercultural awareness
+
+_Source heading:_ **Course Description**
+
+```text
+Instructional Methods Used in this Course: Course objectives will be achieved by a variety of methods which include lecture, class discussions, team projects, papers, videos, and fieldwork
+
+Instructional Methods Used in this Course:
+
+Required and Recommended Texts, Manuals, and Supplies: Lum, D. (Ed).  (2011). Culturally competent, practice: A framework for understanding diverse groups and justice issues .  Belmont:  Brooks/Cole.
+
+Required and Recommended Texts, Manuals, and Supplies:
+```
+
+##### Evidence text 4 — conf 0.72, 122 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of student learning outcomes related to intercultural fluency
+
+_Source heading:_ **Culturally competent, practice: A framework for understanding diverse groups and justice issues — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES — COURSE OUTCOMES**
+
+```text
+Course Objectives/Learning Outcomes: All syllabi must include the approved course learning outcomes.  See department for the approved learning outcomes.
+
+Course Objectives/Learning Outcomes:
+
+1.   	Identify one’s own ethnic heritage, history or cultural background, values and assumptions and how this can affect one’s experience as a practitioner.
+
+Articulate the impact of history and culture on various ethnic minority groups in the United States. Identify demographic trends in the United States and how they will impact on the need to be culturally competent. Describe how one’s culture, race and ethnicity influence seeking help, describing issues and interactions with others. Demonstrate a knowledge of diversity as it relates to other aspects of family including but not limited to religion, sexual orientation, disabilities, age and family structure.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[20][c].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Culturally Responsive Teaching, Keynote, Kappa Delta Pi, Ste | `culturally-responsive-teaching-keynote-kappa-delta-pi-steven` | 43 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/culturally-responsive-teaching-keynote-kappa-delta-pi-steven.docx` |
+| 2 | H.    Speaks and writes professionally. — H.    Speaks and w | `h-speaks-and-writes-professionally-h-speaks-and-writes-profe` | 174 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/h-speaks-and-writes-professionally-h-speaks-and-writes-profe.docx` |
+
+_File 1 fills gap_: No narrative provided addressing intercultural fluency awareness
+
+```text
+Weiner, L. (2014, Fall) Helping Students Understand Immigration. Council for Standards in Human Services Education, pp. 5-6
+
+Franyo, G. & Weiner, L. (2007, Fall) Career Architecture sm : A Tool for Educators and Students. Council for Standards in Human Services Education, pp. 4-5
+```
+
+_File 2 fills gap_: No documentation of pedagogical approaches or assessments measuring intercultural competence
+
+```text
+Please remember to rate goals and objectives. self-evaluation field instructor’s evaluation expectations expectations Comments (optional) below meets exceeds below meets exceeds IV : Exhibits culturally sensitive behavior. Demonstrates an awareness of diversity by adapting helping approaches to the needs of others’ culture. B.   Demonstrates knowledge about the customs, practices, beliefs and values of the cultures and communities within which he or she practices. Exhibits openness and a non-judgmental attitude related to individual, cultural, and global differences. D.   Provides services w/o discrimination or preference based on age, ethnicity, culture, race, disability, gender, religion, sexual orientation or socioeconomic status. V:  Exhibits effective and appropriate interpersonal skills. Communicates effectively with others, both orally and in writing. Demonstrates caring, respect, empathy, and genuineness when interacting with others. Establishes appropriate rapport with others. VI:  Synthesizes and applies key concepts, methods and values in human services to professional situations. Applies key concepts, perspectives, methods, and values related to human services. Displays understanding of how services are delivered to individuals and families. Helps others by using basic counseling/listening skills, as appropriate.
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative provided addressing intercultural fluency awareness
-- ⚠️ No supporting evidence documents, artifacts, or data submitted
-- ⚠️ No demonstration of curriculum content related to intercultural competence
-- ⚠️ No evidence of student learning outcomes or assessments related to intercultural fluency
-- ⚠️ No examples of how Standard 19.d intercultural fluency is operationalized in the program
-- ⚠️ No faculty/staff development or institutional practices related to intercultural awareness documented
-- ⚠️ No student experiences, coursework, or assignments demonstrating intercultural fluency integration
+- ⚠️ No narrative statement provided at all—the self-study offers zero written explanation or context linking activities to intercultural fluency awareness
+- ⚠️ No explicit definition or operationalization of 'intercultural fluency' as outlined in Standard 19.d—the evidence does not reference or align with 19.d language
+- ⚠️ Missing evidence of how students demonstrate *awareness* of intercultural fluency (the core verb in Spec 20.c)—evidence shows activities (cultural autobiography, immigrant interview) but not assessment or reflection proving awareness was developed
+- ⚠️ No assessment data, rubrics, or student artifacts showing students actually achieved intercultural fluency awareness—activities are listed but outcomes are not documented
+- ⚠️ Immigrant Interview assignment lacks clear learning objectives tied to intercultural fluency specifically—the activity description does not explain what intercultural fluency competency it develops
+- ⚠️ Group Presentation assignment is incomplete in Evidence 2—text cuts off mid-sentence, leaving unclear how it addresses intercultural fluency
 
 ---
 
-### `20.d` 🟡 — Knowledge, Theory, Skills, and Values
+### `20.d` 🟢 — Knowledge, Theory, Skills, and Values
 
 **Spec prompt:** _Strategies for self-care._
 
-**Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.75**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=True, score=0.75, delta=+0.30)_
 
 #### Narrative content
 _Destination: `Submission.narratives[20][d].content`_
@@ -5812,20 +10972,99 @@ Strategies for self-care.Response:Strategies for self-care are emphasized throug
 #### Supporting evidence — text
 _Destination: `Submission.narratives[20][d].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 42 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of learning outcomes or competency statements explicitly tied to self-care strategies
+
+_Source heading:_ **Objectives/Outcomes**
+
+```text
+Accept constructive criticism and attempt to make appropriate adjustments. Analyze one’s own interpersonal strengths and weaknesses and their application to therapeutic settings. Develop personal goals and objectives. Exhibit attitudes and behaviors related to self-care and wellness. Seek guidance from faculty and supervisors.
+```
+
+##### Evidence text 2 — conf 0.62, 631 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Claims about 'emphasis' on self-care in CHS 380/440/441 lack concrete evidence (e.g., actual journal prompts, reflection paper assignments, evaluation criteria)
+
+_Source heading:_ **What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? — Briefly describe other activities you engaged in this week — What concerns or chal**
+
+```text
+Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences.
+
+Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-evaluation and share it with the field instructor. In addition the field instructor will complete an evaluation of the student. Once both parties sign both forms the evaluation tools must be submitted to the faculty supervisor for review both at midpoint and at the end of the semester. Field Instructor’s Evaluation- Each student will be evaluated by his/her instructor at midpoint and at the completion of the field experience. Students will be evaluated in terms of personal qualities, role expectations within the agency setting, and professional qualiti
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.62, 263 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that students actually learn or demonstrate self-care strategies (e.g., no student artifacts, assessment data, or competency rubrics)
+
+_Source heading:_ **Applies key concepts, perspectives, methods, and values related to human services 48% 52% — Applies key concepts, perspectives, methods, and values related to human services — Applies key concepts, pe**
+
+```text
+48%
+
+52%
+
+35%
+
+65%
+
+32%
+
+68%
+
+These data indicate that all students in their senior practicum were rated by their supervisors as meeting or exceeding expectations on all of the learning outcomes. Nine of the supervisors gave the student they rated all “exceeds” ratings. In general, about twice as many students were given “exceeds” ratings as “meets”, but there was some variation on individual items. Items II.C., III.B. and III.D. were meant to be yes/no ratings, so the “exceeds” option was crossed out, but raters did not consistently use the “meets” option on these items; those who did respond used the “meets” option, so those items were 100% “meets”. Items III.H. on speaking and writing professionally and VI.A. on applying key concepts were close to 50/50 “meets”/”exceeds”, indicating that students did slightly less well on these skills. A professional writing course was added to the curriculum as a required course in 2014. Still, their performance was strong with no students being rated as below expectations. One student was given a “Below” expectations rating on punctuality, but still met expectations on Goal III. One student was identified as struggling with punctuality.
+
+We will continue to emphasize professionalism in all program courses and settings. In the future, this may not be the best instrument to assess student attainment of goals. We plan to examine student professional portfolios, which are developed in their seminar course, as well as an assignment from the c
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.62, 42 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ One mention of 'Advanced Tools for Staying Engaged' session suggests burnout awareness but does not evidence comprehensive self-care strategy instruction
+
+_Source heading:_ **Week 6 10/2, 10/4 — Week 6 — WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES — WORKING WITH INDIVIDUVAL AND FAMILIES: THEORETICAL PERSPECTIVES — Mehr, Chapter 7 (March 1) 10/4- Review**
+
+```text
+10/2, 10/4
+
+10/4- Review and “catch-up” day
+
+10/9 FALL BREAK NO CLASS
+
+10/9
+
+10/11
+
+Week 8 10/16, 10/18 THE SKILLS OF HELPING- CASEMANAGMENT AND SOFT SKILLS Bogo (2006) pp. 123-130 and 137-140 Burnard (1999) pp. 48-54 OCT 18- Team Role Preference Scale
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[20][d].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | University of Maryland, Baltimore - School of Social Work —  | `university-of-maryland-baltimore---school-of-social-work-loy` | 660 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/university-of-maryland-baltimore---school-of-social-work-loy.docx` |
+
+_File 1 fills gap_: Field Placement Evaluation reference is mentioned but not provided; unclear how 'strategies for self-care' are measured on this tool
+
+```text
+The final Student Field Placement Evaluations in CHS 440 Practicum in Human Services were used to assess student performance on all 6 program outcomes, which were directly rated by the students’ field supervisors. The goals were broken down into specific behaviors that supervisors rated as ‘Below’ ‘Meets’ or ‘Exceeds’ Expectations. Supervisors could make optional comments on each item and gave overall comments at the end of each evaluation. As background, for this course students are working at area agencies for either 410 hours or 540 hours over the semester (about 29 hrs/week or 39 hrs/week). Students work with the Field Placement Coordinator, Dr. Finkenberg, to select theirs sites; they report weekly to University Supervisors who oversee their progress is placements; but it is their supervisors at the agencies who complete the evaluations.
+
+Evaluations for all graduates (35 students combined in fall of 2016 and spring of 2017) were reviewed by both the Department Chair (John Rosicky) and the Field Experience Coordinator (Mayaugust Finkenberg). The percentage of students who meet or exceed each item was calculated. Comments were reviewed and shared with faculty, but were not included in the analysis.
+
+All students either met or exceeded expectations for each of the six goals rated on the Student Field Placement Evaluation /survey.  The field instructors’ comments were positive and supportive.  Students were commended for their professionalism, dedication, enthusiasm and per
+… (truncated, full DOCX preserves full body)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, assignments, rubrics, student work samples) to verify claims about self-care instruction
-- ⚠️ Narrative lacks definition or explicit statement of what 'strategies for self-care' means in the counseling/human services context
-- ⚠️ No evidence that self-care is taught as standalone content with specific competencies or learning outcomes; appears fragmented across courses without clear curricular sequencing
-- ⚠️ Missing documentation of specific self-care strategies actually taught (e.g., stress management, boundary-setting, mindfulness, supervision/consultation, work-life balance, recognizing burnout signs)
-- ⚠️ No evidence of assessment methods beyond course-embedded activities; unclear how mastery of self-care strategies is measured or evaluated
-- ⚠️ Vague references to 'readings,' 'discussions,' and 'media presentations' without titles or specifics that could be verified
-- ⚠️ Family of Origin project and reflection papers mentioned but not provided; cannot assess whether self-care is explicitly addressed in these assignments
-- ⚠️ Field placement evaluation mention lacks detail—cannot verify that self-care competency is systematically assessed during internship/practicum
+- ⚠️ No explicit definition or framework for what 'self-care strategies' means in the context of human services work (e.g., stress management, boundary-setting, mindfulness, physical wellness, supervision/consultation)
+- ⚠️ Limited evidence that students actually learn and demonstrate specific, concrete self-care techniques; narrative emphasizes exposure and reflection more than skill acquisition and application
+- ⚠️ No evidence of assessment specifically measuring students' competency in self-care strategy implementation—data show field supervisors rated students on general professionalism and feedback acceptance, not on demonstrated self-care behaviors or wellness practices
+- ⚠️ Evidence 4 and Evidence 3 note gaps in evaluating professional skills; no mention of how self-care strategy competency will be assessed going forward
+- ⚠️ Minimal detail on the actual content and learning activities in courses (e.g., what specific self-care strategies are taught in CHS 224, 315/515, 360, 430?)
+- ⚠️ No evidence of student learning outcomes or competency data specifically tied to self-care strategies as a distinct learning goal
 
 ---
 
@@ -5976,15 +11215,16 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | (data table) | `data-table` | 388 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
+| 1 | (data table) | `data-table` | 388 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence provided showing actual student work samples or portfolios that demonstrate reflection on professional self; narrative describes portfolio components but no artifacts are attached
-- ⚠️ Assessment data (the '10 portfolios examined' mention) lacks actual results, rubric scores, or outcome percentages—only mentions '83% agreement' between raters but no performance levels achieved
-- ⚠️ Missing evidence of how journaling specifically demonstrates professional self-reflection; narrative mentions journaling occurs but provides no sample journal entries or analysis of their content
-- ⚠️ No documentation of the actual rubric used to evaluate portfolios, despite being referenced as 'attached'
-- ⚠️ Narrative indicates future plans to 'examine student professional portfolios' and assignments from CHS 430, suggesting current assessment is incomplete or under development
-- ⚠️ No evidence demonstrating the Family of Origin Project (CHS 430) or how assignments from CHS 224 or CHS 340 specifically prompt reflection on professional self beyond assignment descriptions
+- ⚠️ Narrative lacks specific assessment data or results from the portfolio rubric evaluation (only mentions 10 portfolios examined and 83% rater agreement, but provides no actual performance outcomes or rubric scores)
+- ⚠️ No evidence provided showing how reflection activities specifically develop professional identity, self-awareness, or competency in the helping relationship beyond course listing
+- ⚠️ Missing longitudinal data or examples demonstrating how reflection evolves across the curriculum from CHS 217 through CHS 441
+- ⚠️ Narrative mentions future plans to examine portfolios and capstone assignments but provides no current evidence of this improved assessment strategy being implemented
+- ⚠️ Supporting evidence includes syllabus excerpts and assignment descriptions but lacks student work samples or actual portfolio examples demonstrating reflection on professional self
+- ⚠️ No clear connection articulated between reflection assignments and the development of specific professional counseling/human services competencies or values
+- ⚠️ Assessment methodology appears incomplete—narrative states portfolios were rated on 'three outcomes' but the actual rubric with outcome descriptors is not fully provided in evidence
 
 ---
 
@@ -5994,8 +11234,8 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 **Spec prompt:** _Provide a brief description of the overall process and structure of the fieldwork learning experience._
 
-**Final coverage verdict:** covered=**True**, score=**0.82**
-_(first-pass: covered=True, score=0.82; second-pass after gap-fill: covered=True, score=0.82, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.85**
+_(first-pass: covered=True, score=0.85; second-pass after gap-fill: covered=True, score=0.85, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[21][a].content`_
@@ -6085,21 +11325,21 @@ _Destination: `CurriculumMatrix.cells[]`_
 - matrix: `(curriculum matrix table)`, col -1, code `(see matrix extractor)`, types [], depth `—`
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No explicit description of how students are selected or admitted into field experiences (prerequisites, GPA requirements, etc.)
-- ⚠️ Limited detail on the role and expectations of faculty supervisors beyond 'journaling with faculty supervisor'
-- ⚠️ No description of how placements are monitored, evaluated, or quality-assured beyond initial Field Placement Coordinator approval
-- ⚠️ Minimal detail on learning outcomes or competencies students are expected to develop through fieldwork
-- ⚠️ No information on how the program ensures diversity, equity, or appropriate population representation across placement sites
-- ⚠️ The sentence about employed students is incomplete/cut off mid-word ('posit')
+- ⚠️ No clear description of how students are prepared/oriented before entering field placements
+- ⚠️ Limited detail on the role and responsibilities of the Field Placement Coordinator in structuring the experience
+- ⚠️ Minimal information on how faculty supervisors oversee/evaluate student progress beyond journaling
+- ⚠️ No explanation of placement criteria or how agencies are selected/vetted beyond 'approval by coordinator'
+- ⚠️ Missing information on learning outcomes or competencies students are expected to achieve through fieldwork
+- ⚠️ No description of the relationship/communication structure between university, student, and agency supervisor
 
 ---
 
-### `21.b` 🟡 — Field Experience
+### `21.b` 🟢 — Field Experience
 
 **Spec prompt:** _Provide evidence that one academic credit is awarded for no less than three hours of field experience per week._
 
-**Final coverage verdict:** covered=**False**, score=**0.65**
-_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.65, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.85**
+_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=True, score=0.85, delta=+0.30)_
 
 #### Narrative content
 _Destination: `Submission.narratives[21][b].content`_
@@ -6137,17 +11377,62 @@ Graduate Survey Results: Feedback from graduating seniors last spring was review
 #### Supporting evidence — text
 _Destination: `Submission.narratives[21][b].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.72, 51 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that the stated credit-to-hours ratio is officially codified in institutional policy or course documentation
+
+_Source heading:_ **Course-Specific Attendance — Course-Specific Attendance**
+
+```text
+In order to successfully complete practicum placement (CHS 440), students registered for the 9 credit practicum must be complete 410 hours in placement and students registered for the 12 credit practicum must complete 540 hours. Students should follow the guidelines for absences during placement as outline in the field placement handbook.
+```
+
+##### Evidence text 2 — conf 0.72, 30 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of the internship experience (90 hours = 2 credits claim) with evidence
+
+_Source heading:_ **Continuance and Progression Policies, if applicable — Students must earn a minimum grade of “C” in courses that fulfill a major requirement.**
+
+```text
+Course Requirements: Students must complete 90 hours of placement hours at the internship site. Students will complete bi-weekly journals, self-evaluation and field instructor evaluations, portfolio and issue presentations.
+
+Course Requirements:
+```
+
+##### Evidence text 3 — conf 0.68, 631 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No clarification on the 1 credit for in-class meeting—unclear if this represents field experience credit or separate course credit
+
+_Source heading:_ **What was the most meaningful experience you had this week? To which program outcome(s) does this experience relate? — Briefly describe other activities you engaged in this week — What concerns or chal**
+
+```text
+Classroom Participation/Assignments (10%). Active participating in seminar discussions and activities are required. Students are expected to show professionalism and respect for each other through arriving punctually for class, actively listening, and demonstrating tolerance for differences.
+
+Field Agency Participation (40%). Regular attendance and active participation at the field agency placement is mandatory. The field site orientation is required. The student must follow all policies and procedures of the field placement site. Professional behavior is expected at all times, which includes punctuality, appropriate dress, and maintaining confidentiality. If the student must be late or absent due to an emergency, it is imperative that the field placement site and the faculty supervisor are notified immediately. Student Self-Evaluation - At midpoint and at the completion of the field experience, the student will complete a self-evaluation and share it with the field instructor. In addition the field instructor will complete an evaluation of the student. Once both parties sign both forms the evaluation tools must be submitted to the faculty supervisor for review both at midpoint and at the end of the semester. Field Instructor’s Evaluation- Each student will be evaluated by his/her instructor at midpoint and at the completion of the field experience. Students will be evaluated in terms of personal qualities, role expectations within the agency setting, and professional qualiti
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.62, 118 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence addressing all field experience options (internship and practicum variants) with corresponding documentation
+
+_Source heading:_ **Field Placement Information — Field Placement Information — OVERVIEW OF FIELD PLACEMENTS — OVERVIEW OF FIELD PLACEMENTS — Internship — Internship**
+
+```text
+During their junior year, students spend 90 hours (two mornings a week or two afternoons a week) participating in a field experience in a non-profit, human services setting (CHS 380).  This placement provides students with the opportunity to apply the knowledge and skills they have learned in the program.  Concurrently, they explore professional issues in a seminar that meets one hour each week.  The internship is an important precursor to the practicum, which is a much more extensive and intensive experience.
+
+In the fall of their junior year, students meet with the Field Placement Coordinator to determine eligibility and to discuss placement interests.  The Field Placement Coordinator then suggests appropriate agencies for students to contact for an interview.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[21][b].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting documentation provided (syllabus, credit hour policy, course catalog, field experience contracts, or student transcripts)
-- ⚠️ No evidence of institutional policy or procedure that formally establishes the 1 credit = 3 hours per week formula
-- ⚠️ No verification that credits are actually being awarded at the stated ratios (claims 2, 9, and 12 credits but provides no transcript examples or registrar confirmation)
-- ⚠️ No documentation of how field hours are tracked, verified, and documented by supervisors or faculty
-- ⚠️ Unclear whether the narrative describes current practice or future intent (mentions 540-hour option 'being eliminated' and repeated survey results suggest aspirational rather than implemented policy)
+- ⚠️ No explicit policy document or catalog language provided that formally states the credit-to-hour conversion ratio (1 credit = 3 hours/week); reliance is on narrative explanation only
+- ⚠️ Evidence 1 mentions 410 and 540 hour requirements but does not clearly map these to specific credit awards or verify the 3-hour-per-week minimum across all field experience options
+- ⚠️ No sample syllabus, course description, or official course documentation (e.g., from course catalog or bulletin) provided to demonstrate institutional policy on credit awarding
+- ⚠️ Evidence of the eliminated 540-hour option is mentioned in narrative but not formally documented in supporting evidence
 
 ---
 
@@ -6155,8 +11440,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Demonstrate that students are exposed to human services agencies and clients (assigned visitation, observation, assisting staff, etc.) early in the program._
 
-**Final coverage verdict:** covered=**True**, score=**0.82**
-_(first-pass: covered=True, score=0.82; second-pass after gap-fill: covered=True, score=0.82, delta=+0.00)_
+**Final coverage verdict:** covered=**True**, score=**0.78**
+_(first-pass: covered=True, score=0.78; second-pass after gap-fill: covered=True, score=0.78, delta=+0.00)_
 
 #### Narrative content
 _Destination: `Submission.narratives[21][c].content`_
@@ -6210,21 +11495,21 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi, student reflections, agency agreements, etc.) to verify claims made in narrative
-- ⚠️ Unclear timing: narrative states field experiences begin 'early in the program' but does not specify which semester(s) or year students first engage with agencies
-- ⚠️ Limited documentation of 'assigned visitation' requirement—narrative describes CHS 217 agency visits but provides no evidence of assignment structure, rubrics, or completion rates
-- ⚠️ No evidence that service learning in 'Counseling Strategies' course is mandatory across the program or represents systemic early exposure (appears to be one course requirement only)
-- ⚠️ Human Services Club participation is explicitly stated as 'not a requirement'—this does not demonstrate mandatory early exposure as Specification requires
-- ⚠️ Missing clarity on whether 'early in program' applies to all students or only those in specific tracks/electives
+- ⚠️ No evidence provided to support claims (e.g., syllabi, course descriptions, student reflections, agency partnership agreements, documentation of visitations)
+- ⚠️ Unclear timing: narrative states field experiences begin 'early in the program' but does not specify which semester/year or clarify whether CHS 217 is a first-semester course
+- ⚠️ Limited detail on 'observation' and 'assisting staff' components—narrative emphasizes interviews and tours but less clarity on direct client assistance early in program
+- ⚠️ Human Services Club involvement is noted as 'not a requirement' which raises questions about consistency and accessibility of early exposure for all students
+- ⚠️ Vague reference to 'most courses' incorporating field experience but only 3 specific courses named; scope of early exposure unclear
+- ⚠️ Second section appears to be meeting notes (Loretta, Lauren, Arthur, etc.) rather than formal documentation; unclear which opportunities are formalized vs. developmental
 
 ---
 
-### `21.d` 🔴 — Field Experience
+### `21.d` 🟡 — Field Experience
 
 **Spec prompt:** _Provide a copy of the current manual and guidelines that are given to students advising them of field placement requirements and policies._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.55**
+_(first-pass: covered=False, score=0.35; second-pass after gap-fill: covered=False, score=0.55, delta=+0.20)_
 
 #### Narrative content
 _Destination: `Submission.narratives[21][d].content`_
@@ -6350,30 +11635,144 @@ _Source heading:_ **Directions:  Please document the hours spent at your field p
 Directions:  Please document the hours spent at your field placement using this sheet or the Agency’s time sheet if requested to do so by the agency. Your field instructor must sign the sheet every other week.  If you are not able to be at the placement during your set time (emergency, illness, etc.), you must notify your field instructor and your university supervisor.
 ```
 
+##### Evidence text 3 — conf 0.72, 392 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No actual copy of the Field Placement Handbook is provided—only a reference that it is 'attached' without verification it was submitted
+
+_Source heading:_ **Handbook TOC — Handbook TOC — RESOLUTION OF FIELD PLACEMENT ISSUES — RESOLUTION OF FIELD PLACEMENT ISSUES**
+
+```text
+A field placement is usually a positive experience both for the student and for the agency.  Occasionally, however, the placement does not fulfill the student’s needs and/or the agency’s needs.  In the event of problems in the field, the following procedure should be followed:
+
+It is important to remember that the field instructor and the student share the responsibility for identifying and dealing with problems as soon as they become evident.  It is crucial for the field instructor and the student to maintain open communication and for the student to see the presenting problem as an opportunity to learn more about his/her learning style and interpersonal skills. The student and the field instructor should attempt to resolve the problem together.  If the attempt is not successful, they should inform each other of their intention to seek additional help. Both the student and the field instructor should notify the university supervisor, who will obtain the assistance of the Field Placement Coordinator.
+
+It is important to remember that the field instructor and the student share the responsibility for identifying and dealing with problems as soon as they become evident.  It is crucial for the field instructor and the student to maintain open communication and for the student to see the presenting problem as an opportunity to learn more about his/her learning style and interpersonal skills.
+
+The student and the field instructor should attempt to resolve the problem together.  If 
+… (truncated, full text imported)
+```
+
+##### Evidence text 4 — conf 0.65, 264 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Missing explicit field placement requirements (e.g., total hours, duration, timing, semester specifics)
+
+_Source heading:_ **Attendance Procedures**
+
+```text
+Excessive lateness will impair the student's ability to meet course objectives. Therefore, students are expected to be on time. Students must notify both the field instructor and university supervisor of any absence prior to the experience.  Students who miss more than one day of their placement must make up the placement time. However, students are not required to make up hours missed if the placement site is closed and the student is not required to report; missed hours may not constitute more than 10% of the overall required hours. Students must document the hours spent at the internship or practicum by completing a time accountability sheet.  Use the SU form unless otherwise required by the site. A student having a major accident, illness or surgery, must submit to the university supervisor a physician’s note. Interns and practicum students are entitled to observe their own religious holidays. Vacation guidelines
+
+Excessive lateness will impair the student's ability to meet course objectives. Therefore, students are expected to be on time.
+
+Students must notify both the field instructor and university supervisor of any absence prior to the experience.  Students who miss more than one day of their placement must make up the placement time. However, students are not required to make up hours missed if the placement site is closed and the student is not required to report; missed hours may not constitute more than 10% of the overall required hours.
+
+Students must document th
+… (truncated, full text imported)
+```
+
+##### Evidence text 5 — conf 0.62, 48 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of grading/evaluation policies and standards
+
+_Source heading:_ **Assess the needs of a specific community or population. — GRADING STANDARDS — GRADING STANDARDS — GRADING STANDARDS — GRADING STANDARDS — GRADING STANDARDS**
+
+```text
+To determine if this course fulfills additional program or track outcomes, please see the department chair or program coordinator.
+
+Grading Scale:
+
+A 93-100 4.0 A- 90-92 3.7 B+ 87-89 3.3 B 83-86 3.0 B- 80-82 2.7 C+ 77-79 2.3 C 70-76 2.0 D 60-69 1.0 F 1-59 0.0
+```
+
+##### Evidence text 6 — conf 0.58, 70 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No explicit policies on student conduct, professional behavior standards, or consequences for non-compliance
+
+_Source heading:_ **Student Policy Manual — Ethics in Field Work — Ethics in Field Work**
+
+```text
+Ethical behavior in the field involves making sound decisions concerning issues such as confidentiality.  Information regarding clients/personnel must be kept confidential and shared only in an appropriate professional context.  Confidentiality is a significant aspect of professionalism and must be maintained at all times.  Standards that address confidentiality and other ethical issues are contained in the code of standards of the National Organization for Human Services (Please see Appendix).
+
+SECTION III:
+```
+
+##### Evidence text 7 — conf 0.65, 32 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No policies on confidentiality, HIPAA, or ethical conduct expectations
+
+_Source heading:_ **Demonstrate punctuality, appropriate dress, and constructive use of time. — Exhibit consistent ethical behavior in applied human services settings. — Follow all policies and procedures of field experi**
+
+```text
+Perform the duties, responsibilities and other professional obligations specified by field experience agency conscientiously.
+
+Protect clients’ right to privacy and confidentiality, except when such confidentiality would cause harm to client or others.
+```
+
+##### Evidence text 8 — conf 0.62, 89 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Evidence items are fragmentary (schedule snippets, timesheet directions, handbook reference) rather than comprehensive manual
+
+_Source heading:_ **ITEM RESPONSE — ITEM — ITEM — ITEM — RESPONSE — RESPONSE — RESPONSE — The university supervisor… Strongly Agree Agree Somewhat No Opinion Disagree Somewhat Strongly Disagree — The university superviso**
+
+```text
+Additional Comments and/or Suggestions:
+
+Directions: Please document the hours spent at your field placement using this sheet or the Agency’s time sheet if requested to do so by the agency . Your field instructor must sign the sheet every other week .  If you are not able to be at the placement during your set time (emergency, illness, etc.), you must notify your field instructor and your university supervisor.
+
+Directions:
+
+using this sheet or the Agency’s time sheet if requested to do so by the agency
+
+every other week
+```
+
+##### Evidence text 9 — conf 0.62, 51 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence of how students access these manuals or confirmation distribution mechanism
+
+_Source heading:_ **E-mail and Blackboard**
+
+```text
+Information about this course will be e-mailed to students at their university e-mail address, and course information will be posted on Blackboard.  Therefore, it is important for students to check their university e-mail and course website regularly. Usage of all electronic devices is prohibited in class.
+
+Submission of Assignments or Projects:
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[21][d].linkedDocuments`_
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | I have attached the Student Field Placement Handbook for you | `i-have-attached-the-student-field-placement-handbook-for-you` | 63 | 0.78 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/i-have-attached-the-student-field-placement-handbook-for-you.docx` |
+| 1 | I have attached the Student Field Placement Handbook for you | `i-have-attached-the-student-field-placement-handbook-for-you` | 63 | 0.78 | primary | `6986239a6612bf17f04a3217/docver-30058f35/i-have-attached-the-student-field-placement-handbook-for-you.docx` |
+| 2 | Student Handbook — Department Mission, Goals and Objectives  | `student-handbook-department-mission-goals-and-objectives-dep` | 81 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/student-handbook-department-mission-goals-and-objectives-dep.docx` |
+
+_File 2 fills gap_: No copy of the CHS Student Handbook section on field placements is provided
+
+```text
+Department Mission, Goals and Objectives Curriculum Course Descriptions Graduate School and Career Opportunities Field Placement Prerequisites and Guidelines Avoiding Plagiarism NOHS Ethical Standards
+
+Field Placement Handbook Overview of Field Placements Prerequisites and Procedures Resolving Issues Agency Evaluation by Student University Supervisor Evaluation by Student Student Field Placement Evaluation New Major Form Department Faculty Meeting Minutes 2018-2019
+
+Field Placement Handbook Overview of Field Placements Prerequisites and Procedures Resolving Issues Agency Evaluation by Student University Supervisor Evaluation by Student Student Field Placement Evaluation
+```
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ The actual Field Placement Handbook document itself is NOT provided; only a reference stating 'I have attached the Student Field Placement Handbook' appears in Evidence 3, but the handbook content is not included in the submitted materials
-- ⚠️ No copy of the CHS Student Handbook is provided, despite the narrative stating field placement information 'can also be found' there
-- ⚠️ The narrative describes policies but does not provide a comprehensive manual or guideline document that students receive; instead, it provides narrative summary of some policies
-- ⚠️ Missing documentation of specific prerequisites for field placements beyond vague 'eligibility criteria' language
-- ⚠️ No evidence of the yearly revised handbook itself—only references to its existence
-- ⚠️ Missing details on student responsibilities, learning outcomes, or competency expectations that would typically appear in a field placement manual
-- ⚠️ No documentation of agency expectations, requirements for field instructors, or evaluation criteria in a manual format
+- ⚠️ No actual copy of the complete Field Placement Handbook is provided—only table of contents, fragments, and references to it being 'attached' (Evidence 3, 5)
+- ⚠️ The CHS Student Handbook is mentioned in narrative but not provided as supporting evidence
+- ⚠️ No complete document showing field placement requirements, prerequisites, and policies in full—only scattered excerpts (Evidences 2, 4, 6, 8, 9)
+- ⚠️ Student responsibilities are fragmentary; a comprehensive list is not clearly presented in one document
+- ⚠️ Agency expectations and roles are not fully documented—only partial reference to 'Field Placement Responsibilities list' without the actual document
+- ⚠️ Grievance procedures referenced in narrative (Evidence from narrative text) but not provided as supporting document
+- ⚠️ Non-discrimination and sexual harassment policies referenced but not provided
+- ⚠️ No evidence of the actual, current year Field Placement Handbook in its entirety—only 2019 dates and incomplete sections
 
 ---
 
-### `21.e` 🔴 — Field Experience
+### `21.e` 🟡 — Field Experience
 
 **Spec prompt:** _Provide documentation of written learning agreements with field agencies that specify the student's role, activities, anticipated learning outcomes, supervision, and field instruction. The agreement must be signed by the appropriate agency representative and/or fieldwork supervisor, seminar instructor, and student._
 
-**Final coverage verdict:** covered=**False**, score=**0.45**
-_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.45, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.55**
+_(first-pass: covered=False, score=0.45; second-pass after gap-fill: covered=False, score=0.55, delta=+0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[21][e].content`_
@@ -6493,21 +11892,74 @@ _Source heading:_ **Field placement instructors are expected to provide the stud
 Field placement instructors are expected to provide the students with an opportunity to demonstrate the application of their course studies to the workplace.  By accepting our student for a Field Placement, you are agreeing to comply with the terms and conditions as set forth in the Field Placement Handbook. If you have any questions as to what types of activities may be appropriate for your student, please do not hesitate to contact me.
 ```
 
+##### Evidence text 5 — conf 0.62, 279 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that field supervision expectations are specified in writing within the placement agreement—only generic reference to fieldwork instructors in handbook
+
+_Source heading:_ **Standard 7b and 9b — Standard 7b — COUNSELING & HUMAN SERVICES DEPARTMENT — COUNSELING & HUMAN SERVICES DEPARTMENT — Responsibilities of University Supervisor for Field Placements — Responsibilities o**
+
+```text
+9b
+
+Attend first class meeting of CHS 441 to orient supervisees. Provide your supervisees your contact info (email, cell phone, etc.) and get this info from them. Discuss journaling to be sure that the weekly process you use is clear. Also discuss Learning Contracts & your Site Visit Agenda. Introduce self to field instructor by e-mail or phone call during first week and schedule a time for your midterm site visit. Respond weekly by e-mail to e-mailed journal entries from supervisees. Responses must be substantive and prompt (within 5 days of receipt of journal entry). Collaborate and sign off on Learning Contracts. Attend CHS 441 class on date Learning Contract is due and on date Mid-Term Evaluation is due to meet with your supervisees individually, review their Learning Contracts or Midterm Evals and discuss their progress. Visit placement site at mid-term to conference with field instructor and student (observation of student and one-on-one time with student if appropriate). Submit a brief report to the Field Placement Coordinator . Conduct additional visit(s) to placement site if needed. Communicate with Field Placement Coordinator about progress of student.
+
+Attend first class meeting of CHS 441 to orient supervisees. Provide your supervisees your contact info (email, cell phone, etc.) and get this info from them. Discuss journaling to be sure that the weekly process you use is clear. Also discuss Learning Contracts & your Site Visit Agenda.
+
+Introduce self to field inst
+… (truncated, full text imported)
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[21][e].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | Stevenson University	Kennedy Krieger Institute — Stevenson U | `stevenson-university-kennedy-krieger-institute-stevenson-uni` | 44 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/stevenson-university-kennedy-krieger-institute-stevenson-uni.docx` |
+| 2 | DATES Hours Field Instructor Signature TOTAL HOURS — DATES H | `dates-hours-field-instructor-signature-total-hours-dates-hou` | 85 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/dates-hours-field-instructor-signature-total-hours-dates-hou.docx` |
+
+_File 1 fills gap_: Specimen agreements mentioned (Kennedy Krieger, Sheppard Pratt) are not included in supporting evidence—only generic thank-you letter and handbook excerpt provided
+
+```text
+(Please Print)
+
+This Agreement, entered into this 1 st day of April, 2016, between Stevenson University (hereinafter referred to as the "SPONSOR" ), and SHEPPARD PRATT HEALTH SYSTEM, INC. , of Baltimore, Maryland 21285-6815 (hereinafter referred to as the "HEALTH SYSTEM" ).
+
+st
+
+"SPONSOR"
+```
+
+_File 2 fills gap_: No evidence that all three required signatures (agency representative, fieldwork supervisor, student) appear on the same document
+
+```text
+14b
+
+8b
+
+Student:
+
+Placement/Agency:
+
+Field Instructor (Please print.):
+
+University Supervisor (Please print.):
+
+Evaluation is a very important phase of the learning process. The student and field instructor should each complete the same copy of the evaluation tool at midpoint and at the end of the semester.  Criteria for achievement of the program goals and objectives are expressed as Below Expectations, Meets Expectations, and Exceeds Expectations. If an objective or category within an objective does not apply, please rate it N.A. (Not Applicable).
+
+student
+
+field instructor
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence of a single, standardized written learning agreement template that is consistently used across all field placements; narrative states 'most agencies do not require a formal contract' and only samples from two agencies are provided
-- ⚠️ No documentation showing that learning agreements specify the student's ROLE in concrete, observable terms
-- ⚠️ No documentation showing that learning agreements specify ACTIVITIES to be performed by the student
-- ⚠️ No documentation showing that learning agreements specify ANTICIPATED LEARNING OUTCOMES for each student
-- ⚠️ No documentation showing that learning agreements specify the nature and frequency of SUPERVISION arrangements
-- ⚠️ No documentation showing that learning agreements specify FIELD INSTRUCTION details (e.g., who provides it, frequency, format)
-- ⚠️ No evidence of a standard signature block or executed agreements signed by all required parties (agency representative/director, fieldwork supervisor, seminar/program instructor, and student) on the same document
-- ⚠️ The narrative references a 'Field Placement Handbook' and informal 'letter of agreement' sent by the Coordinator, but these do not appear to be the legally-binding written learning agreement the specification requires
-- ⚠️ Supporting evidence includes institutional affiliation agreements (with insurance provisions) but not individual student learning agreements
-- ⚠️ No sample of an actual completed/signed student learning agreement is provided in the evidence
+- ⚠️ No evidence of a single, comprehensive written learning agreement template that includes all five required components (role, activities, anticipated learning outcomes, supervision, field instruction) signed by all four parties
+- ⚠️ Learning agreements shown in Evidence 5 appear to be internal supervisor guidelines, not signed agreements between student, agency, and university
+- ⚠️ Missing explicit evidence that learning agreements specify the student's role in the agency
+- ⚠️ Missing explicit evidence that learning agreements specify anticipated learning outcomes (Evidence 5 mentions 'Learning Contracts' but no actual contract document is provided showing this element)
+- ⚠️ No clear documentation that field placement agreements are signed by the seminar/program instructor as required by the specification
+- ⚠️ The narrative mentions 'sample agreements with Kennedy Krieger Institute and Sheppard Pratt' (Evidence 6) but only header/title information is provided, not the full signed agreements with all required signatures and content
+- ⚠️ Evidence 3 (placement confirmation letter) lacks all five required components and is not signed by all parties
+- ⚠️ No evidence of a consistent, formalized learning agreement process used across all field placement sites
 
 ---
 
@@ -6516,7 +11968,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _Provide syllabi for required seminars. Seminars must meet at least every two weeks. Seminar hours must not be included in field experience hours._
 
 **Final coverage verdict:** covered=**True**, score=**0.85**
-_(first-pass: covered=True, score=0.85; second-pass after gap-fill: covered=True, score=0.85, delta=+0.00)_
+_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=True, score=0.85, delta=+0.20)_
 
 #### Narrative content
 _Destination: `Submission.narratives[21][f].content`_
@@ -6554,19 +12006,109 @@ Course Description:  Provides an opportunity for students to discuss and learn m
 #### Supporting evidence — text
 _Destination: `Submission.narratives[21][f].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 54 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ Evidence table appears incomplete (ends at Week 10 in early April) and does not cover a full semester, raising questions about whether the meeting frequency is maintained throughout the entire course
+
+_Source heading:_ **Week 12 Apr 22 — Week 12 — Apr 22 — Conclusions ( Limitations, Implications, Impact Assessment ) References, next Steps — Assignment VI - Conclusion and References Due April 24 — Assignment VI - Concl**
+
+```text
+Conclusions ( Limitations, Implications, Impact Assessment ) References, next Steps Assignment VI - Conclusion and References Due April 24
+
+( Limitations, Implications, Impact Assessment
+
+Week 13 April 29 Current Research COMPLETED PROPOSALS DUE April 29 Reading(s) as assigned COMPLETED PROPOSALS DUE April 29 PRESENTATIONS ATTENDANCE MANDATORY * *Unless arranged in advance with Dr. Lesser
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[21][f].linkedDocuments`_
 
 | # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
 |---|---|---|---|---|---|---|
-| 1 | (data table) | `data-table` | 353 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-cb9174cf/data-table.docx` |
+| 1 | (data table) | `data-table` | 353 | 0.72 | primary | `6986239a6612bf17f04a3217/docver-30058f35/data-table.docx` |
+| 2 | Paper contains obvious writing errors:  spelling and grammat | `paper-contains-obvious-writing-errors-spelling-and-grammatic` | 31 | 0.65 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/paper-contains-obvious-writing-errors-spelling-and-grammatic.docx` |
+| 3 | Office location: Manning Academic Center, N178. — Office hou | `office-location-manning-academic-center-n178-office-hours-tu` | 218 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/office-location-manning-academic-center-n178-office-hours-tu.docx` |
+| 4 | Course-Specific Attendance — Course-Specific Attendance | `course-specific-attendance-course-specific-attendance` | 99 | 0.72 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/course-specific-attendance-course-specific-attendance.docx` |
+
+_File 2 fills gap_: No syllabi documents provided as supporting evidence—only a schedule/calendar table is included; actual course syllabi for CHS 380 and CHS 441 are referenced but not submitted
+
+```text
+40-60
+
+0
+
+Telephone number:
+
+Stevenson email:
+
+Best times for phone contact:
+
+Office location:
+
+Prerequisite(s):
+
+Classroom or Studio Location:
+
+Scheduled Class Days and Time:
+
+Course Description:
+
+material to specific groups is highlighted.
+```
+
+_File 3 fills gap_: CHS 380 meets weekly, which exceeds the 'at least every two weeks' requirement, but the narrative does not explicitly confirm that CHS 441 Seminar meets the minimum frequency; the evidence shows only a 10-week partial schedule and does not demonstrate full semester compliance
+
+```text
+Office location:
+
+Office hours:
+
+Section number:
+
+Credits:
+
+Prerequisite(s):
+
+Classroom or Studio Location:
+
+Scheduled Class Days and Time:
+
+Course Description: CHS 380 is a three-credit course. This field experience provides students with a hands-on, realistic experience in a human services community-based agency. Concurrently, students will participate in a guided seminar once a week.
+
+Course Description:
+
+Instructional Methods Used in this Course: Course objectives will be achieved by a variety of methods which include lecture, class discussions, a reflection paper, journaling, and fieldwork.
+
+Instructional Methods Used in this Course:
+
+Required and Recommended Texts, Manuals, and Supplies:
+
+Sweitzer, H., & King, M. (2019). The successful internship: Personal professional, and civic development in experiential learning (5th ed.).  Belmont, CA:  Brooks/Cole.
+
+*Only sections of four chapters of this book are required for CHS 380. You may use the book on reserve in the library instead of purchasing it. However, you will be required to read the rest of the book for CHS 441.
+
+*Only sections of four chapters of this book are required for CHS 380.
+
+2018-2019 Field Placement Handbook, Human Services, Stevenson University Ethical Standards for Human Services Professionals, National Organization for Human Services (NOHS). Available at http://www.nationalhumanservices.org/ethical-standards-for-hs-professionals
+
+2018-2019 Field Placement Handbook, Human Services, Stevenson University
+
+… (truncated, full DOCX preserves full body)
+```
+
+_File 4 fills gap_: No explicit statement in the narrative or syllabus content confirming that seminar hours are kept separate from and not included in field experience hour calculations
+
+```text
+Attendance at your field placement is critical to the successful completion of this course. You are required to complete 90 hours of field placement. Up to 10% (nine hours) may be forgiven due to unscheduled agency closures such as due to inclement weather or serious illnesses or other emergencies. Approval of missed time for serious illnesses or emergencies will be reviewed on a case-by-case basis and will only be approved with appropriate documentation.
+
+Attendance at internship class meetings is expected. Punctuality and meaningful participation is one means for your instructor to assess your professionalism and fitness for the profession
+```
 
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No explicit syllabi documents provided as supporting evidence—only a weekly schedule/calendar table is shown. The Specification requires 'syllabi for required seminars' (plural), and no formal syllabus document with standard components (course title, number, credits, prerequisites, learning outcomes, grading breakdown, etc.) is attached.
-- ⚠️ CHS 380 seminar frequency is stated as 'weekly' in narrative but the table shows only 10 weeks of content across ~11 calendar weeks (Jan 29–Apr 11), making verification of consistent weekly meetings difficult without a full semester schedule.
-- ⚠️ Distinction between CHS 380 and CHS 441 seminar hour requirements is unclear. Narrative mentions both courses but only CHS 380 schedule is provided; CHS 441 frequency ('at least every other week') is asserted but no schedule is shown.
-- ⚠️ No explicit statement or documentation confirming that seminar hours are not counted toward field experience hours totals, despite narrative acknowledgment of the requirement.
+- ⚠️ CHS 441 Seminar syllabus not provided in evidence; only CHS 380 syllabus is substantially documented. Specification requires syllabi (plural) for required seminars.
+- ⚠️ CHS 441 meeting frequency stated in narrative as 'at least every other week' but no detailed schedule/evidence provided to confirm this meets the 'no less than every two weeks' requirement.
+- ⚠️ No explicit statement in syllabi or narrative clarifying that seminar hours are kept separate from and not counted toward the 90-hour field experience requirement, despite this being a key specification requirement.
+- ⚠️ Evidence 5 appears to be from a different course (research-focused with proposals/presentations), not clearly attributable to CHS 380 or CHS 441.
 
 ---
 
@@ -6659,11 +12201,11 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (syllabi referenced in narrative but not attached)
-- ⚠️ No documentation of how associate-level hours (if any) are tracked or documented in the program
-- ⚠️ No evidence of verification mechanism showing students actually complete required hours (e.g., timesheets, supervisor sign-offs, placement agreements)
-- ⚠️ Redundant narrative text (junior year CHS 380 description repeated twice) suggests possible editing errors and reduces confidence in thoroughness
-- ⚠️ No clarification on whether all students complete both CHS 380 (90 hours) and CHS 440 (410+ hours) or if there are alternative pathways
+- ⚠️ No supporting evidence documents provided (syllabi referenced but not attached)
+- ⚠️ No clarification of whether the 90 junior-year hours are in addition to or separate from any associate-level field experience hours
+- ⚠️ No explicit statement confirming the program does NOT require or does allow up to 250 associate-level hours as an alternative pathway
+- ⚠️ No documentation of actual student completion rates or verification mechanisms for the stated hour requirements
+- ⚠️ Missing field placement handbook referenced in the narrative
 
 ---
 
@@ -6672,7 +12214,7 @@ _(no evidence files auto-applied)_
 **Spec prompt:** _Demonstrate how the field experience provides the student with an opportunity to progress from: 1. Observation to 2. Directly supervised client contacts to 3. Indirectly supervised client contacts to 4. An independent caseload OR assignment of administrative responsibility._
 
 **Final coverage verdict:** covered=**False**, score=**0.55**
-_(first-pass: covered=False, score=0.55; second-pass after gap-fill: covered=False, score=0.55, delta=+0.00)_
+_(first-pass: covered=False, score=0.65; second-pass after gap-fill: covered=False, score=0.55, delta=-0.10)_
 
 #### Narrative content
 _Destination: `Submission.narratives[21][h].content`_
@@ -6711,21 +12253,68 @@ Seniors listed a wide variety of duties at their placements.  They observed and 
 #### Supporting evidence — text
 _Destination: `Submission.narratives[21][h].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 392 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of the Field Placement Coordinator's review process, site removal decisions, or communication with sites regarding caseload/administrative assignments
+
+_Source heading:_ **Handbook TOC — Handbook TOC — RESOLUTION OF FIELD PLACEMENT ISSUES — RESOLUTION OF FIELD PLACEMENT ISSUES**
+
+```text
+A field placement is usually a positive experience both for the student and for the agency.  Occasionally, however, the placement does not fulfill the student’s needs and/or the agency’s needs.  In the event of problems in the field, the following procedure should be followed:
+
+It is important to remember that the field instructor and the student share the responsibility for identifying and dealing with problems as soon as they become evident.  It is crucial for the field instructor and the student to maintain open communication and for the student to see the presenting problem as an opportunity to learn more about his/her learning style and interpersonal skills. The student and the field instructor should attempt to resolve the problem together.  If the attempt is not successful, they should inform each other of their intention to seek additional help. Both the student and the field instructor should notify the university supervisor, who will obtain the assistance of the Field Placement Coordinator.
+
+It is important to remember that the field instructor and the student share the responsibility for identifying and dealing with problems as soon as they become evident.  It is crucial for the field instructor and the student to maintain open communication and for the student to see the presenting problem as an opportunity to learn more about his/her learning style and interpersonal skills.
+
+The student and the field instructor should attempt to resolve the problem together.  If 
+… (truncated, full text imported)
+```
+
+##### Evidence text 2 — conf 0.55, 32 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No timeline specification for when each stage occurs or expected duration of each phase
+
+_Source heading:_ **Week 8 Oct 16 & 18 — Week 8 — Oct 16 & 18 — The Action Arrow & Intro the Three Tasks of Stage I — The Action Arrow & — Intro the Three Tasks of Stage I — Chapter 8 — Chapter 8**
+
+```text
+Week 9 Oct 23 & 25 The Three Tasks of Stage I:  Help Clients Tell the Story, the Real Story, and the Right Story Chapter 9 Due: Interview Project 1- Oct 25
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[21][h].linkedDocuments`_
 
-_(no evidence files auto-applied)_
+| # | File title | Slug | Words | Conf | Source | S3 key (simulated) |
+|---|---|---|---|---|---|---|
+| 1 | What were your duties at the field placement? — What were yo | `what-were-your-duties-at-the-field-placement-what-were-your-` | 135 | 0.62 | 🧩 gap-fill | `6986239a6612bf17f04a3217/docver-30058f35/what-were-your-duties-at-the-field-placement-what-were-your-.docx` |
+
+_File 1 fills gap_: No supporting evidence documents provided (e.g., placement agreements, site evaluation forms, supervisor visit reports, student evaluations) to substantiate the claims made in the narrative
+
+```text
+8b
+
+Directions :  The following tool is to be completed by the student electronically at the end of the field experience using the following link:
+
+https://docs.google.com/forms/d/1jXteXwFeeSrAvMwd2tW1eOl08GSoG1Z2fJoV8m4Davw/viewform
+
+All responses are anonymous . Here is the information that will be included in the online survey:
+
+anonymous
+
+University Supervisor:
+
+Course(s): 							Date:
+
+ITEM RESPONSE The university supervisor… Strongly Agree Agree Somewhat No Opinion Disagree Somewhat Strongly Disagree Provided me with sufficient feedback. Encouraged me to be self-reflective. Responded to journal entries in a timely manner. Encouraged me to do my best. Was interested in my professional development. Was appropriately supportive. Listened to what I had to say. Answered my questions adequately. Was someone I felt free to talk to. Explained things so that I could understand. Was easy to contact. Evaluated me fairly. Visited my placement site (if appropriate)
+```
+
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No supporting evidence documents provided (e.g., field placement agreements, student evaluation forms, supervisor visit reports, placement site catalogs)
-- ⚠️ Narrative relies on single anecdotal example (Baltimore County adoption/foster care student) rather than demonstrating systematic progression across multiple students
-- ⚠️ No evidence that ALL students progress through all four stages; narrative uses language like 'typically provide' and 'opportunity to' rather than demonstrating consistent requirement
-- ⚠️ No documentation showing how the Field Placement Coordinator's monitoring process ensures each student completes all four progression stages
-- ⚠️ No data on what percentage of students achieve independent caseload vs. administrative responsibility assignments
-- ⚠️ Vague description of how 'indirectly supervised client contact' stage is defined and assessed
-- ⚠️ Student feedback quotes mention 'applying classroom learning' and 'support and guidance' but do not specifically address progression through observation to independence
-- ⚠️ Student duty list from seniors (observed/assisted, data entry, intake, communication) does not clearly map to the four progressive stages required
-- ⚠️ No evidence that site removal process (mentioned for inadequate caseload/admin assignments) is actually implemented with documentation
+- ⚠️ No evidence that ALL students progress through all four stages (observation → directly supervised → indirectly supervised → independent caseload/admin responsibility); only one example student provided
+- ⚠️ No documentation showing systematic tracking of student progression through the four-stage model across cohorts
+- ⚠️ No evidence of how 'indirectly supervised client contacts' (stage 3) is distinctly defined, assessed, or documented as separate from stage 2 and stage 4
+- ⚠️ Supporting evidence does not include actual field placement agreements, learning contracts, or supervisor documentation that specify progression expectations
+- ⚠️ No data showing how frequently students reach stage 4 (independent caseload/administrative responsibility) or how this is monitored
+- ⚠️ Evidence 1 (student survey) asks about duties but does not explicitly ask students to identify which progression stage they achieved
+- ⚠️ No evidence of remediation or re-placement when sites cannot support full progression through all four stages (narrative mentions removal but no documentation provided)
 
 ---
 
@@ -6749,12 +12338,12 @@ _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No narrative explanation provided describing the program's approach to field supervisor qualifications
-- ⚠️ No evidence of field supervisor degree verification (transcripts, credentials, or roster with degree information)
-- ⚠️ No documentation of minimum degree requirement alignment with the degree awarded by the program
-- ⚠️ No evidence addressing the strongly recommended requirement that supervisors hold at least one degree level above the program's degree
-- ⚠️ No list or roster of current field supervisors with their educational credentials
-- ⚠️ No policy or procedure documentation showing how the program vets and maintains supervisor qualifications
+- ⚠️ No narrative explanation of field supervisor credential requirements or policies
+- ⚠️ No evidence demonstrating that field supervisors hold degrees at least equivalent to the degree awarded by the program
+- ⚠️ No documentation of field supervisors' educational credentials (transcripts, diplomas, or credential verification records)
+- ⚠️ No evidence addressing the strongly recommended requirement that supervisors hold at least one degree level above the baccalaureate in Human Services or related field
+- ⚠️ No list or roster of current field supervisors with their respective degrees and fields of study
+- ⚠️ No policy or procedure documentation for verifying and maintaining supervisor credentials
 
 ---
 
@@ -6762,8 +12351,8 @@ _(no evidence files auto-applied)_
 
 **Spec prompt:** _Demonstrate that the program continually monitors the progress of each student and performs no less than one site visit to each field placement site per quarter or semester. The visit can be held as a direct site visit or with appropriate technology. The technology used should ensure that both the field placement supervisor and the student can be identified._
 
-**Final coverage verdict:** covered=**False**, score=**0.25**
-_(first-pass: covered=False, score=0.25; second-pass after gap-fill: covered=False, score=0.25, delta=+0.00)_
+**Final coverage verdict:** covered=**False**, score=**0.45**
+_(first-pass: covered=False, score=0.25; second-pass after gap-fill: covered=False, score=0.45, delta=+0.20)_
 
 #### Narrative content
 _Destination: `Submission.narratives[21][j].content`_
@@ -6801,19 +12390,64 @@ STANDARD 41 Human service educators monitor students' field experiences to ensur
 #### Supporting evidence — text
 _Destination: `Submission.narratives[21][j].supportingEvidenceText`_
 
-_(no supporting-evidence text auto-applied)_
+##### Evidence text 1 — conf 0.62, 53 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No documentation of a systematic monitoring schedule demonstrating visits occur 'no less than one site visit to each field placement site per quarter or semester'
+
+_Source heading:_ **Site Visits**
+
+```text
+Your University Supervisor will meet with you and your Field Instructor once before mid-term evaluations are due. Additional visits may be scheduled depending on the needs of the student and placement site.
+
+Weekly Journal Reflections. You will submit your weekly journal reflections to your University Supervisor weekly every week you are in placement.
+```
+
+##### Evidence text 2 — conf 0.68, 279 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No evidence that site visits are actually being conducted; narrative mentions only that 'the CHS chair and the field placement coordinator have examined specific issues and visited one site' (singular), not a comprehensive visitation program
+
+_Source heading:_ **Standard 7b and 9b — Standard 7b — COUNSELING & HUMAN SERVICES DEPARTMENT — COUNSELING & HUMAN SERVICES DEPARTMENT — Responsibilities of University Supervisor for Field Placements — Responsibilities o**
+
+```text
+9b
+
+Attend first class meeting of CHS 441 to orient supervisees. Provide your supervisees your contact info (email, cell phone, etc.) and get this info from them. Discuss journaling to be sure that the weekly process you use is clear. Also discuss Learning Contracts & your Site Visit Agenda. Introduce self to field instructor by e-mail or phone call during first week and schedule a time for your midterm site visit. Respond weekly by e-mail to e-mailed journal entries from supervisees. Responses must be substantive and prompt (within 5 days of receipt of journal entry). Collaborate and sign off on Learning Contracts. Attend CHS 441 class on date Learning Contract is due and on date Mid-Term Evaluation is due to meet with your supervisees individually, review their Learning Contracts or Midterm Evals and discuss their progress. Visit placement site at mid-term to conference with field instructor and student (observation of student and one-on-one time with student if appropriate). Submit a brief report to the Field Placement Coordinator . Conduct additional visit(s) to placement site if needed. Communicate with Field Placement Coordinator about progress of student.
+
+Attend first class meeting of CHS 441 to orient supervisees. Provide your supervisees your contact info (email, cell phone, etc.) and get this info from them. Discuss journaling to be sure that the weekly process you use is clear. Also discuss Learning Contracts & your Site Visit Agenda.
+
+Introduce self to field inst
+… (truncated, full text imported)
+```
+
+##### Evidence text 3 — conf 0.68, 196 words, `auto_accept` 🧩 _gap-fill_
+
+_Fills gap:_ No clarification whether weekly reports from University Supervisors constitute adequate monitoring or if separate site visits occur
+
+_Source heading:_ **Mid-Term Evaluations Due — Mid-Term Evaluations Due — Preview of Time Sheets with University Supervisor — Preview of Time Sheets with University Supervisor — Meet with your University Supervisor durin**
+
+```text
+5-7pm location TBD
+
+Other Scheduling Notes: Holiday Closings. You will follow the holiday schedule of your placement site rather than Stevenson University’s calendar.  This is particularly important for the Spring Break. Site Visits . Your University Supervisor will meet with you and your Field Instructor once before mid-term evaluations are due. Additional visits may be scheduled depending on the needs of the student and placement site. Weekly Journal Reflections. You will submit your weekly journal reflections to your University Supervisor weekly every week you are in placement.
+
+Other Scheduling Notes:
+
+Holiday Closings. You will follow the holiday schedule of your placement site rather than Stevenson University’s calendar.  This is particularly important for the Spring Break. Site Visits . Your University Supervisor will meet with you and your Field Instructor once before mid-term evaluations are due. Additional visits may be scheduled depending on the needs of the student and placement site. Weekly Journal Reflections. You will submit your weekly journal reflections to your University Supervisor weekly every week you are in placement.
+
+Holiday Closings. You will follow the holiday schedule of your placement site rather than Stevenson University’s calendar.  This is particularly important for the Spring Break.
+```
+
 #### Supporting evidence — files
 _Destination: `SupportingEvidence` collection in Mongo + S3 upload + `narratives[21][j].linkedDocuments`_
 
 _(no evidence files auto-applied)_
 #### Gaps still remaining (user must address manually after import)
-- ⚠️ No evidence that site visits occur 'no less than one site visit to each field placement site per quarter or semester' — narrative mentions only that 'the CHS chair and the field placement coordinator have examined specific issues and visited one site' (singular), not systematic visits to all sites
-- ⚠️ No documentation of a monitoring system or schedule for conducting required site visits
-- ⚠️ No evidence of direct site visits or technology-enabled visits with identification of both field supervisor and student
-- ⚠️ No supporting documentation provided (visit logs, schedules, sign-in sheets, video conference records, or other evidence of actual site visits)
-- ⚠️ Narrative focuses on student satisfaction survey results and supervisor evaluations rather than evidence of required site monitoring visits
-- ⚠️ No clarification of what 'appropriate technology' is being used, if any, or how identification is verified
-- ⚠️ No systematic process described for monitoring 'each' student's progress through site visits
+- ⚠️ No evidence that site visits occur 'no less than one per quarter or semester' at EACH placement site—documentation shows only midterm visits are required, with additional visits 'as needed,' which is discretionary rather than mandatory
+- ⚠️ No data or documentation demonstrating that visits actually occur at every site each term—narrative mentions 'visited one site' (singular) without systematic evidence of comprehensive site visit completion across all placements
+- ⚠️ No evidence addressing the technology-based visit requirement, specifically that technology 'should ensure that both the field placement supervisor and the student can be identified'—no mention of platforms, protocols, or verification mechanisms
+- ⚠️ No evidence that the program has a continuous monitoring system in place; references to weekly journals and university supervisor communication exist, but these are student-centered, not site-visit-centered monitoring as specified
+- ⚠️ Narrative focuses on student satisfaction surveys and field supervisor evaluations rather than demonstrating the program's own proactive site visit practices and documentation
+- ⚠️ No evidence of a formal tracking or documentation system showing completion of required site visits per placement per term
 
 ---
 
@@ -6825,53 +12459,53 @@ These 47 items did not auto-apply. They become rows in the wizard's **Tag List**
 
 | Tag ID | Suggested | Conf | Source heading | Excerpt |
 |---|---|---|---|---|
-| `tag-ee8b4236` | `0.x` | 0.00 | During the third republic, Park Chung Hee (Major general of the military in Sout | During the third republic, Park Chung Hee (Major general of the military in South Korea during the second republic) ran again and won 51.4% … |
-| `tag-b38b8bc5` | `—` | 0.00 | During the fourth republic, Park developed a new constitution which gave him con | During the fourth republic, Park developed a new constitution which gave him control over parliament (History of South Korea). This journey … |
-| `tag-f9b1a28e` | `—` | 0.00 | This paper will be graded based on the appropriate use of the selected sociology | This paper will be graded based on the appropriate use of the selected sociology concepts, appropriate title for the paper, organization of … |
-| `tag-87a4971a` | `—` | 0.02 | During the second republic, It was the first and only time that South Korea util | During the second republic, It was the first and only time that South Korea utilized a cabinet system  instead of a presidential system (His… |
-| `tag-2ee20d6e` | `—` | 0.05 | Weekly In-Class Quizzes (10% of your total grade)  In order to ensure that you a | Weekly In-Class Quizzes (10% of your total grade)  In order to ensure that you are keeping up with the readings, understanding the course ma… |
-| `tag-e15a95d1` | `—` | 0.15 | Two extra-credit assignments are provided in this syllabus: the video review and | Two extra-credit assignments are provided in this syllabus: the video review and the group discussion papers.  Students who are interested m… |
-| `tag-8b8b66f6` | `17.a` | 0.38 | 1.  Course Participation (20%)  You should arrive at each class prepared to offe | 1.  Course Participation (20%)  You should arrive at each class prepared to offer analysis, questions, and critique of the assigned readings… |
-| `tag-91e9d22a` | `2.c` | 0.42 | (data table) | PSY 101 Introduction to Psychology Fall, 2018 DATE LECTURE TOPIC MODULE INTRO VIDEO Week 1: 1-28 Introduction to course/ Why Science Why Sci… |
-| `tag-9a02627d` | `21.c` | 0.42 | Provides students with an opportunity to explore career directions within the co | Provides students with an opportunity to explore career directions within the counseling and human services field and to develop appropriate… |
-| `tag-87c8ac37` | `5.a` | 0.42 | E.  Notice of Student Cancellation.  In the event of cancellation by a student h | E.  Notice of Student Cancellation.  In the event of cancellation by a student holding a reserved space in an Education Program at HEALTH SY… |
-| `tag-d3bc4921` | `21.e` | 0.42 | K.         Assignment.  No assignment of this Agreement or the rights and obliga | K.         Assignment.  No assignment of this Agreement or the rights and obligations hereunder shall be valid without the specific written … |
-| `tag-10f5a603` | `6.a` | 0.42 | H.         Termination.  This Agreement may be terminated by either party upon g | H.         Termination.  This Agreement may be terminated by either party upon giving written notice of such intent to the other party as de… |
-| `tag-0e11bd23` | `21.e` | 0.42 | N.         Execution.  This Agreement and amendments thereto shall be executed i | N.         Execution.  This Agreement and amendments thereto shall be executed in duplicate copies:  (1) on behalf of the SPONSOR by an appr… |
-| `tag-5aa3375b` | `1.c` | 0.42 | Attendance is required and expected. Students are responsible for the material p | Attendance is required and expected. Students are responsible for the material presented in class which includes lectures and guest speakers… |
-| `tag-a8494952` | `5.b` | 0.42 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for students with disabilities. The Office of Disability Servic… |
-| `tag-225aa0d7` | `14.b` | 0.42 | The SU graduate will use inquiry and analysis, critical and creative thinking, s | The SU graduate will use inquiry and analysis, critical and creative thinking, scientific reasoning, and quantitative skills to gather and e… |
-| `tag-fdb2be59` | `8.b` | 0.42 | All students who selected a related nation will conduct a seminar presentation f | All students who selected a related nation will conduct a seminar presentation for the entire class.  Presentations should be 30 minutes.  S… |
-| `tag-e4b42454` | `19.d` | 0.42 | The purpose of this paper is for you to learn about the immigrant experience fro | The purpose of this paper is for you to learn about the immigrant experience from a specific individual’s perspective.  The individual can b… |
-| `tag-ff58a6c5` | `14.a` | 0.42 | Each student will write a research proposal that has potential for contributing  | Each student will write a research proposal that has potential for contributing to current knowledge in the student’s chosen topic/interest.… |
-| `tag-aab6b371` | `5.b` | 0.42 | Each student is responsible for his or her own class attendance and regular atte | Each student is responsible for his or her own class attendance and regular attendance is expected. Every student is responsible for the mat… |
-| `tag-6f0dc8ff` | `5.d` | 0.42 | Regular class attendance and participation are necessary to pass and/or do well  | Regular class attendance and participation are necessary to pass and/or do well in this and indeed all courses.  Students are encouraged to … |
-| `tag-94c03274` | `12.c` | 0.42 | Although progression, industrialization and democratization has revolutionized a | Although progression, industrialization and democratization has revolutionized a woman’s role in South Korean society, traditional gender ro… |
-| `tag-88db7773` | `5.b` | 0.42 | Each student is responsible for his or her own class attendance and regular atte | Each student is responsible for his or her own class attendance and regular attendance is expected. Every student is responsible for the mat… |
-| `tag-32173a6d` | `14.b` | 0.42 | The SU graduate will use inquiry and analysis, critical and creative thinking, s | The SU graduate will use inquiry and analysis, critical and creative thinking, scientific reasoning, and quantitative skills to gather and e… |
-| `tag-cf28e7b5` | `1.d` | 0.42 | Submission of Assignments or Projects: All assignments or presentations are due  | Submission of Assignments or Projects: All assignments or presentations are due at the beginning of the class period on the day they are due… |
-| `tag-3ed47b6b` | `5.b` | 0.42 | Disability Services  - Stevenson University will make reasonable accommodations  | Disability Services  - Stevenson University will make reasonable accommodations for students with documented disabilities. The Office of Dis… |
-| `tag-e3963cd3` | `21.d` | 0.42 | For your issue presentation, choose an issue or challenge that you have been fac | For your issue presentation, choose an issue or challenge that you have been facing at your site this semester. It doesn't necessarily have … |
-| `tag-710b77fd` | `5.b` | 0.42 | Each student is responsible for his or her own class attendance and regular atte | Each student is responsible for his or her own class attendance and regular attendance is expected. Every student is responsible for the mat… |
-| `tag-712782b0` | `1.c` | 0.42 | If there is an unscheduled university closing on the day that an assignment is d | If there is an unscheduled university closing on the day that an assignment is due, the assignment deadline will remain unchanged if it was … |
-| `tag-2dc7bd81` | `5.b` | 0.42 | I prefer to talk to you in person about any ideas or issues you may have, so ple | I prefer to talk to you in person about any ideas or issues you may have, so please schedule an appointment to meet with me!  If you miss cl… |
-| `tag-9093bb7a` | `9.e` | 0.42 | This class works best when you are here.  The Lab component in particular is acc | This class works best when you are here.  The Lab component in particular is accomplished in real time and much of the activity can be compl… |
-| `tag-70f78851` | `5.b` | 0.42 | I will monitor your attendance in accordance with mandates from the Stevenson Un | I will monitor your attendance in accordance with mandates from the Stevenson University Registrar.  While you will not earn a grade for att… |
-| `tag-f2c545ca` | `5.d` | 0.42 | Policies: Late policy: All late assignments will lose 10% of its worth for each  | Policies: Late policy: All late assignments will lose 10% of its worth for each 24-hour period. Please note: No Computer Device Allowed in C… |
-| `tag-381db192` | `9.e` | 0.42 | Classroom Policies: I prefer to talk to you in person about any ideas or issues  | Classroom Policies: I prefer to talk to you in person about any ideas or issues you may have, so please visit my office hours or schedule an… |
-| `tag-761790c0` | `11.d` | 0.42 | We understand something the most when we either experience it or are able to rel | We understand something the most when we either experience it or are able to relate to it, one way or another.  This assignment requires stu… |
-| `tag-f4045c35` | `11.d` | 0.42 | There are more than 15 sociology concepts in this text, used either explicitly,  | There are more than 15 sociology concepts in this text, used either explicitly, described but not directly mentioned or as underlying ideas … |
-| `tag-c3868d6b` | `12.b` | 0.42 | Groups will research their chosen topics and present their findings in class.  A | Groups will research their chosen topics and present their findings in class.  All members of the group must participate in the research, co… |
-| `tag-32b53baa` | `12.b` | 0.42 | The class will be split into small groups.  Each group will be assigned one or m | The class will be split into small groups.  Each group will be assigned one or more class topics.  The group reads the assigned materials fo… |
-| `tag-45688fc7` | `11.d` | 0.42 | In this assignment, students will read an assigned material and identify the soc | In this assignment, students will read an assigned material and identify the sociology concepts (not theories) in the text they read.  These… |
-| `tag-0b09e171` | `8.b` | 0.42 | Students who so desire may write a 2-3 page review of the documentary Generation | Students who so desire may write a 2-3 page review of the documentary Generation M: Misogyny in Media and Culture.  Your opening paragraph s… |
-| `tag-4330562b` | `1.f` | 0.42 | Regular and punctual attendance of classes is required because class discussions | Regular and punctual attendance of classes is required because class discussions typically draw on materials and sources outside of the assi… |
-| `tag-1ddaf9ef` | `12.c` | 0.42 | When it comes to family structure, family background and educational level are i | When it comes to family structure, family background and educational level are important considerations when in search of a partner (South K… |
-| `tag-b3d293e5` | `16.a` | 0.44 | General instructions: This assignment requires you to apply the concept and theo | General instructions: This assignment requires you to apply the concept and theories we will study to your family of origin. In order to com… |
-| `tag-a76f4b68` | `5.b` | 0.48 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for qualified students with documented disabilities. The Office… |
-| `tag-909ab3d3` | `5.b` | 0.48 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for students with documented disabilities. The Office of Disabi… |
-| `tag-0f724b19` | `5.b` | 0.48 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for qualified students with documented disabilities. The Office… |
-| `tag-15635b1a` | `5.b` | 0.48 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for qualified students with documented disabilities. The Office… |
+| `tag-f3cc8e72` | `0.x` | 0.00 | During the third republic, Park Chung Hee (Major general of the military in Sout | During the third republic, Park Chung Hee (Major general of the military in South Korea during the second republic) ran again and won 51.4% … |
+| `tag-7252f165` | `—` | 0.00 | During the fourth republic, Park developed a new constitution which gave him con | During the fourth republic, Park developed a new constitution which gave him control over parliament (History of South Korea). This journey … |
+| `tag-1f1a6123` | `—` | 0.00 | This paper will be graded based on the appropriate use of the selected sociology | This paper will be graded based on the appropriate use of the selected sociology concepts, appropriate title for the paper, organization of … |
+| `tag-97e81401` | `—` | 0.02 | During the second republic, It was the first and only time that South Korea util | During the second republic, It was the first and only time that South Korea utilized a cabinet system  instead of a presidential system (His… |
+| `tag-b799fcd4` | `—` | 0.05 | Weekly In-Class Quizzes (10% of your total grade)  In order to ensure that you a | Weekly In-Class Quizzes (10% of your total grade)  In order to ensure that you are keeping up with the readings, understanding the course ma… |
+| `tag-06eac13b` | `—` | 0.15 | Two extra-credit assignments are provided in this syllabus: the video review and | Two extra-credit assignments are provided in this syllabus: the video review and the group discussion papers.  Students who are interested m… |
+| `tag-350b6383` | `17.a` | 0.38 | 1.  Course Participation (20%)  You should arrive at each class prepared to offe | 1.  Course Participation (20%)  You should arrive at each class prepared to offer analysis, questions, and critique of the assigned readings… |
+| `tag-a872c70e` | `2.c` | 0.42 | (data table) | PSY 101 Introduction to Psychology Fall, 2018 DATE LECTURE TOPIC MODULE INTRO VIDEO Week 1: 1-28 Introduction to course/ Why Science Why Sci… |
+| `tag-c2e0308d` | `21.c` | 0.42 | Provides students with an opportunity to explore career directions within the co | Provides students with an opportunity to explore career directions within the counseling and human services field and to develop appropriate… |
+| `tag-2249cccc` | `5.a` | 0.42 | E.  Notice of Student Cancellation.  In the event of cancellation by a student h | E.  Notice of Student Cancellation.  In the event of cancellation by a student holding a reserved space in an Education Program at HEALTH SY… |
+| `tag-f784f464` | `21.e` | 0.42 | K.         Assignment.  No assignment of this Agreement or the rights and obliga | K.         Assignment.  No assignment of this Agreement or the rights and obligations hereunder shall be valid without the specific written … |
+| `tag-6de34b7c` | `6.a` | 0.42 | H.         Termination.  This Agreement may be terminated by either party upon g | H.         Termination.  This Agreement may be terminated by either party upon giving written notice of such intent to the other party as de… |
+| `tag-b4c52f0d` | `21.e` | 0.42 | N.         Execution.  This Agreement and amendments thereto shall be executed i | N.         Execution.  This Agreement and amendments thereto shall be executed in duplicate copies:  (1) on behalf of the SPONSOR by an appr… |
+| `tag-c5e9874e` | `1.c` | 0.42 | Attendance is required and expected. Students are responsible for the material p | Attendance is required and expected. Students are responsible for the material presented in class which includes lectures and guest speakers… |
+| `tag-157cf325` | `5.b` | 0.42 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for students with disabilities. The Office of Disability Servic… |
+| `tag-605021e2` | `14.b` | 0.42 | The SU graduate will use inquiry and analysis, critical and creative thinking, s | The SU graduate will use inquiry and analysis, critical and creative thinking, scientific reasoning, and quantitative skills to gather and e… |
+| `tag-a8e18a0b` | `8.b` | 0.42 | All students who selected a related nation will conduct a seminar presentation f | All students who selected a related nation will conduct a seminar presentation for the entire class.  Presentations should be 30 minutes.  S… |
+| `tag-162c96cb` | `19.d` | 0.42 | The purpose of this paper is for you to learn about the immigrant experience fro | The purpose of this paper is for you to learn about the immigrant experience from a specific individual’s perspective.  The individual can b… |
+| `tag-1fe8d995` | `14.a` | 0.42 | Each student will write a research proposal that has potential for contributing  | Each student will write a research proposal that has potential for contributing to current knowledge in the student’s chosen topic/interest.… |
+| `tag-17b04f04` | `5.b` | 0.42 | Each student is responsible for his or her own class attendance and regular atte | Each student is responsible for his or her own class attendance and regular attendance is expected. Every student is responsible for the mat… |
+| `tag-69160cb3` | `5.d` | 0.42 | Regular class attendance and participation are necessary to pass and/or do well  | Regular class attendance and participation are necessary to pass and/or do well in this and indeed all courses.  Students are encouraged to … |
+| `tag-75495483` | `12.c` | 0.42 | Although progression, industrialization and democratization has revolutionized a | Although progression, industrialization and democratization has revolutionized a woman’s role in South Korean society, traditional gender ro… |
+| `tag-0775fe1a` | `5.b` | 0.42 | Each student is responsible for his or her own class attendance and regular atte | Each student is responsible for his or her own class attendance and regular attendance is expected. Every student is responsible for the mat… |
+| `tag-9d72dc9a` | `14.b` | 0.42 | The SU graduate will use inquiry and analysis, critical and creative thinking, s | The SU graduate will use inquiry and analysis, critical and creative thinking, scientific reasoning, and quantitative skills to gather and e… |
+| `tag-6283c303` | `1.d` | 0.42 | Submission of Assignments or Projects: All assignments or presentations are due  | Submission of Assignments or Projects: All assignments or presentations are due at the beginning of the class period on the day they are due… |
+| `tag-8eac837b` | `5.b` | 0.42 | Disability Services  - Stevenson University will make reasonable accommodations  | Disability Services  - Stevenson University will make reasonable accommodations for students with documented disabilities. The Office of Dis… |
+| `tag-955caedc` | `21.d` | 0.42 | For your issue presentation, choose an issue or challenge that you have been fac | For your issue presentation, choose an issue or challenge that you have been facing at your site this semester. It doesn't necessarily have … |
+| `tag-3252c70a` | `5.b` | 0.42 | Each student is responsible for his or her own class attendance and regular atte | Each student is responsible for his or her own class attendance and regular attendance is expected. Every student is responsible for the mat… |
+| `tag-f277435d` | `1.c` | 0.42 | If there is an unscheduled university closing on the day that an assignment is d | If there is an unscheduled university closing on the day that an assignment is due, the assignment deadline will remain unchanged if it was … |
+| `tag-fd492c57` | `5.b` | 0.42 | I prefer to talk to you in person about any ideas or issues you may have, so ple | I prefer to talk to you in person about any ideas or issues you may have, so please schedule an appointment to meet with me!  If you miss cl… |
+| `tag-8048cf4b` | `9.e` | 0.42 | This class works best when you are here.  The Lab component in particular is acc | This class works best when you are here.  The Lab component in particular is accomplished in real time and much of the activity can be compl… |
+| `tag-51e402ef` | `5.b` | 0.42 | I will monitor your attendance in accordance with mandates from the Stevenson Un | I will monitor your attendance in accordance with mandates from the Stevenson University Registrar.  While you will not earn a grade for att… |
+| `tag-04bc157b` | `5.d` | 0.42 | Policies: Late policy: All late assignments will lose 10% of its worth for each  | Policies: Late policy: All late assignments will lose 10% of its worth for each 24-hour period. Please note: No Computer Device Allowed in C… |
+| `tag-35ae671c` | `9.e` | 0.42 | Classroom Policies: I prefer to talk to you in person about any ideas or issues  | Classroom Policies: I prefer to talk to you in person about any ideas or issues you may have, so please visit my office hours or schedule an… |
+| `tag-639eb461` | `11.d` | 0.42 | We understand something the most when we either experience it or are able to rel | We understand something the most when we either experience it or are able to relate to it, one way or another.  This assignment requires stu… |
+| `tag-66879c52` | `11.d` | 0.42 | There are more than 15 sociology concepts in this text, used either explicitly,  | There are more than 15 sociology concepts in this text, used either explicitly, described but not directly mentioned or as underlying ideas … |
+| `tag-1aa4e12a` | `12.b` | 0.42 | Groups will research their chosen topics and present their findings in class.  A | Groups will research their chosen topics and present their findings in class.  All members of the group must participate in the research, co… |
+| `tag-7a1bd7b5` | `12.b` | 0.42 | The class will be split into small groups.  Each group will be assigned one or m | The class will be split into small groups.  Each group will be assigned one or more class topics.  The group reads the assigned materials fo… |
+| `tag-a8dd7b98` | `11.d` | 0.42 | In this assignment, students will read an assigned material and identify the soc | In this assignment, students will read an assigned material and identify the sociology concepts (not theories) in the text they read.  These… |
+| `tag-89f76123` | `8.b` | 0.42 | Students who so desire may write a 2-3 page review of the documentary Generation | Students who so desire may write a 2-3 page review of the documentary Generation M: Misogyny in Media and Culture.  Your opening paragraph s… |
+| `tag-c5dd3ff1` | `1.f` | 0.42 | Regular and punctual attendance of classes is required because class discussions | Regular and punctual attendance of classes is required because class discussions typically draw on materials and sources outside of the assi… |
+| `tag-044c0b6e` | `12.c` | 0.42 | When it comes to family structure, family background and educational level are i | When it comes to family structure, family background and educational level are important considerations when in search of a partner (South K… |
+| `tag-1a60e41c` | `16.a` | 0.44 | General instructions: This assignment requires you to apply the concept and theo | General instructions: This assignment requires you to apply the concept and theories we will study to your family of origin. In order to com… |
+| `tag-94c44b1f` | `5.b` | 0.48 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for qualified students with documented disabilities. The Office… |
+| `tag-75ebf6af` | `5.b` | 0.48 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for students with documented disabilities. The Office of Disabi… |
+| `tag-0910c46a` | `5.b` | 0.48 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for qualified students with documented disabilities. The Office… |
+| `tag-70a47c3c` | `5.b` | 0.48 | Disability Services Stevenson University will make reasonable accommodations for | Disability Services Stevenson University will make reasonable accommodations for qualified students with documented disabilities. The Office… |
 
 ---
 

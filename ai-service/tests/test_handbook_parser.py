@@ -97,3 +97,42 @@ def test_strips_leading_marker_from_text():
 def test_program_level_propagates():
     specs = parse_handbook_text(SAMPLE, program_level="bachelors")
     assert all(s.program_level == "bachelors" for s in specs)
+
+
+# ---------------------------------------------------------------- registry integrity
+
+
+def test_baccalaureate_2025_registry_has_no_duplicate_keys():
+    """Regression guard for the Std 16 duplicate-letter bug.
+
+    The Handbook PDF originally had two independent letter-lists under
+    Standard 16 ("Theory & Knowledge" a/b/c plus "Skills" a/b/c) and the
+    parser collapsed both onto the same letter codes, dropping the spec
+    count from 99 to 96 in any dict-keyed lookup. The fix disambiguates
+    the Skills trio to d/e/f. This test fails if any future parser
+    change reintroduces a (standard_code, spec_code) collision.
+    """
+    from app.standards.baccalaureate_2025 import BACCALAUREATE_2025
+
+    keys = [(s.standard_code, s.spec_code) for s in BACCALAUREATE_2025]
+    duplicates = [k for k in set(keys) if keys.count(k) > 1]
+    assert not duplicates, f"Duplicate (std, spec) keys in registry: {duplicates}"
+
+
+def test_baccalaureate_2025_registry_has_expected_count():
+    """The Handbook has 99 specs across 21 Standards — make sure the
+    registry exposes all of them. Drops from 99 indicate a regression."""
+    from app.standards.baccalaureate_2025 import BACCALAUREATE_2025
+    assert len(BACCALAUREATE_2025) == 99
+
+
+def test_load_specifications_dedupe_via_dict_is_lossless():
+    """A common downstream pattern is ``{(s.standard_code, s.spec_code): s for s in specs}``.
+
+    With the registry fix, that dedupe should produce 99 entries — same
+    as the list length. Before the fix it produced 96.
+    """
+    from app.standards.loader import load_specifications
+    specs = load_specifications("bachelors")
+    spec_index = {(s.standard_code, s.spec_code): s for s in specs}
+    assert len(spec_index) == len(specs) == 99

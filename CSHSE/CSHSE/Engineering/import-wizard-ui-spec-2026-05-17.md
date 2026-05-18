@@ -1,12 +1,15 @@
 ---
-name: AI Import Wizard — UI Spec (Sprint 1)
-description: Step-by-step UI flow for the AI-Assisted Import Wizard. Lives in its own tab under the Self-Study Editor. Auto-applies high-confidence sections directly into narratives, supporting evidence, and the curriculum matrix; surfaces the rest in a tag list with click-to-popup spec assignment.
+name: AI Import Wizard — UI Spec (Sprint 1, sketch — SUPERSEDED)
+description: SUPERSEDED by [[import-wizard-ui-spec-2026-05-18]] — the complete, code-ready version. This page is kept as the original sketch for historical reference. Do not build against this version.
 type: concept
-tags: [import, ai-tagging, wizard, sprint-1, ui-spec]
+tags: [import, ai-tagging, wizard, sprint-1, ui-spec, superseded]
 last_reviewed: 2026-05-17
+superseded_by: import-wizard-ui-spec-2026-05-18
 ---
 
-# AI Import Wizard — UI Spec (Sprint 1)
+# AI Import Wizard — UI Spec (Sprint 1, sketch — SUPERSEDED)
+
+> ⚠️ **This page is the original sketch and is superseded.** The complete, code-ready specification is at [[import-wizard-ui-spec-2026-05-18]]. Build against that page, not this one. This file remains in the vault for historical reference only.
 
 This page is the **complete UI specification** for the AI Import Wizard. It is what we will build in the developer UI after sign-off. No React code lands until this spec is approved.
 
