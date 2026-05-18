@@ -17,13 +17,12 @@ COPY requirements.txt ./
 RUN pip install -r requirements.txt
 
 COPY app/ ./app/
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
 
 EXPOSE 8080
 
-# Shell-form CMD so ${PORT} expands at runtime via the shell.
-# (Railway sets PORT=8080 in env; Docker exec-form + sh -c did not expand
-# reliably under Railway's runtime, see deploy log 2026-05-18.)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${PORT:-8080}/health" || exit 1
+    CMD curl -fsS "http://127.0.0.1:8080/health" || exit 1
 
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}
+CMD ["/app/start.sh"]

@@ -69,8 +69,13 @@ class MatrixTemplate:
 
 
 def _matrix_file(program_level: ProgramLevel) -> Path:
-    """Resolve the absolute path of the template DOCX for a program level."""
-    docs = Path(__file__).resolve().parents[3] / "CSHSE" / "docs"
+    """Resolve the absolute path of the template DOCX for a program level.
+
+    ai-service now lives at ``CSHSE/ai-service/``; the matrix templates live
+    at ``CSHSE/docs/``. parents[2] is the ai-service/ root; its parent is
+    the CSHSE/ folder, which contains docs/.
+    """
+    docs = Path(__file__).resolve().parents[2].parent / "docs"
     candidates = {
         "associate": "MatrixAssociateDegree_July_2025 .docx",  # note the space — actual filename
         "bachelors": "MatrixBaccalaureateDegree_July_2025.docx",
