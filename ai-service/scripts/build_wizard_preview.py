@@ -51,11 +51,13 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import mammoth
 from anthropic import Anthropic
 from pymongo import MongoClient
 
 from app.coverage.spec_coverage import CoverageReview, CoverageReviewer
 from app.embeddings.openai_client import EmbeddingClient
+from app.embeddings.spec_cache import bootstrap_spec_cache
 from app.gap_filling import (
     drop_appendix_collection,
     gapfill_collection_name,
@@ -64,7 +66,9 @@ from app.gap_filling import (
     SpecGapFillResult,
 )
 from app.gap_filling.gap_searcher import GapFill
+from app.matcher.spec_matcher import Recommendation, SpecMatcher
 from app.splitter.appendix_walker import AppendixItem, walk_appendix
+from app.splitter.deep_walker import deep_walk_with_fallback
 from app.standards.loader import Specification, load_specifications
 from app.vector.qdrant_ops import VectorStore
 
@@ -848,6 +852,306 @@ def _render_spec_block(out, bucket: SpecBucket) -> None:
     out("")
 
 
+# --------------------------------------------------------------------- DOCX-direct entry point
+
+
+def _classify_rows_from_sections(
+    sections: list,
+    recommendations: dict[str, Recommendation],
+) -> list[dict]:
+    """Merge Section + Recommendation into the classify_rows dict shape that
+    ``_allocate_to_buckets`` consumes — same fields as the cached
+    ``stevenson-full-classify.json`` produced by
+    ``scripts/classify_from_original_docx.py``.
+    """
+    rows: list[dict] = []
+    for sec in sections:
+        rec = recommendations.get(sec.id)
+        if rec is None:
+            continue
+        rows.append({
+            "section_id": sec.id,
+            "heading": sec.heading,
+            "wordCount": sec.word_count,
+            "containsTable": sec.contains_table,
+            "splitterTier": sec.splitter_tier,
+            "humanTaggedStandard": None,
+            "humanTaggedSpec": None,
+            "primary_standard": rec.primary_standard,
+            "primary_spec": rec.primary_spec,
+            "primary_confidence": rec.primary_confidence,
+            "section_type": rec.section_type,
+            "accept_state": rec.accept_state,
+            "doc_letter": rec.doc_letter,
+            "doc_standard_hint": rec.doc_standard_hint,
+            "rationale": rec.rationale,
+            "alternates": rec.alternates,
+            "snippet": sec.markdown,
+            "snippet_truncated": False,
+            "byteOffsetStart": sec.byte_offset_start,
+            "byteOffsetEnd": sec.byte_offset_end,
+        })
+    return rows
+
+
+def run_self_study_preview_from_docx(
+    *,
+    docx: str,
+    program_level: str = "bachelors",
+    date: str = "2026-05-18",
+    concurrency: int = 8,
+    output_suffix: str | None = None,
+    skip_gap_fill: bool = False,
+    gap_fill_confidence: float = 0.50,
+    min_section_words: int = 30,
+    base_id: str | None = None,
+    openai_key: str | None = None,
+    anthropic_key: str | None = None,
+    qdrant_url: str | None = None,
+    qdrant_key: str | None = None,
+) -> Path:
+    """Run the full self-study wizard preview directly from a raw DOCX.
+
+    Parallel to ``main()`` (which loads pre-converted HTML from Mongo +
+    cached classify_rows JSON) but loads the source from disk and runs
+    the matcher LIVE on every detected section. Reuses the same
+    bucket / coverage / gap-fill / render helpers so the output shape
+    is identical to a Mongo-backed Stevenson run.
+
+    Pipeline:
+      1. Read DOCX bytes → mammoth → HTML.
+      2. ``deep_walk_with_fallback`` on the HTML → Section list.
+      3. Min-words filter (default 30 words) drops fragments.
+      4. ``SpecMatcher.recommend`` per section → Recommendation list.
+      5. Merge into ``classify_rows`` matching the cached-JSON shape.
+      6. ``walk_appendix`` from the same HTML → AppendixItem list.
+      7. ``_allocate_to_buckets`` (shared helper) → per-spec buckets,
+         tag list, context, unknown.
+      8. First-pass coverage review (one Haiku call per spec).
+      9. Gap-fill: if appendix has items and ``skip_gap_fill`` is False,
+         index, search per gap, verify, augment, re-review. If no
+         appendix (template-shaped or empty), skip with a clean message.
+      10. ``_render_obsidian`` → Obsidian preview file.
+
+    Returns the ``Path`` of the written preview file.
+
+    The matcher requires the shared ``cshse_specs`` Qdrant collection to
+    be populated. This function calls ``bootstrap_spec_cache`` first;
+    the call is idempotent (existing points are upserted by stable UUID),
+    so it's safe to invoke every run.
+    """
+    openai_key = openai_key or os.environ["OPENAI_API_KEY"]
+    anthropic_key = anthropic_key or os.environ["ANTHROPIC_API_KEY"]
+    qdrant_url = qdrant_url or os.environ["QDRANT_URL"]
+    qdrant_key = qdrant_key if qdrant_key is not None else os.environ.get("QDRANT_API_KEY", "")
+
+    docx_path = docx
+    docx_filename = os.path.basename(docx_path)
+    submission_id = f"self-study-preview-{uuid.uuid4().hex[:8]}"
+    doc_version_id = f"docver-{uuid.uuid4().hex[:8]}"
+    suffix = output_suffix or "self-study"
+    walker_base_id = base_id or suffix
+
+    # 1. DOCX → HTML
+    print(f"📄 reading DOCX: {docx_filename}")
+    with open(docx_path, "rb") as f:
+        docx_bytes = f.read()
+    print(f"   {len(docx_bytes)/1024/1024:.1f} MB DOCX")
+    t0 = time.time()
+    print("🔄 mammoth: DOCX → HTML…")
+    html_str = mammoth.convert_to_html(io.BytesIO(docx_bytes)).value
+    html_bytes = html_str.encode("utf-8")
+    print(f"   {len(html_bytes)/1024/1024:.2f} MB HTML in {time.time()-t0:.1f}s")
+
+    # 2-3. Deep walk + min-words filter
+    print("✂️  deep walk…")
+    t0 = time.time()
+    raw_sections = deep_walk_with_fallback(html_bytes, base_id=walker_base_id)
+    sections = [s for s in raw_sections if s.word_count >= min_section_words]
+    print(
+        f"   {len(raw_sections)} raw, {len(sections)} after min-words "
+        f"({min_section_words}) filter in {time.time()-t0:.1f}s"
+    )
+
+    # Bootstrap shared spec cache (idempotent — UUID5 deterministic upserts).
+    print(f"🧠 ensuring cshse_specs cache ({program_level})…")
+    store = VectorStore(qdrant_url, qdrant_key or None)
+    embedder = EmbeddingClient(openai_key)
+    bootstrap_spec_cache(store, embedder, program_levels=(program_level,))
+
+    # 4. Matcher: live per section.
+    print(f"🤖 matcher live on {len(sections)} sections (concurrency={concurrency})…")
+    matcher = SpecMatcher(store=store, embedder=embedder, anthropic_key=anthropic_key)
+    recommendations: dict[str, Recommendation] = {}
+    t0 = time.time()
+    with ThreadPoolExecutor(max_workers=concurrency) as ex:
+        futures = {ex.submit(matcher.recommend, s, program_level): s for s in sections}
+        done = 0
+        for fut in as_completed(futures):
+            sec = futures[fut]
+            try:
+                recommendations[sec.id] = fut.result()
+            except Exception as exc:
+                print(f"   ✗ {sec.heading[:60]}: {type(exc).__name__}: {exc}")
+            done += 1
+            if done % 25 == 0 or done == len(sections):
+                print(f"   {done}/{len(sections)} ({time.time()-t0:.0f}s)")
+    print(f"   ✓ {len(recommendations)} matched in {time.time()-t0:.0f}s")
+
+    # 5. classify_rows in the cached-JSON shape.
+    classify_rows = _classify_rows_from_sections(sections, recommendations)
+
+    # 6. Appendix walk.
+    print("📜 walking appendix…")
+    t0 = time.time()
+    appendix_sections = walk_appendix(html_bytes, base_id=walker_base_id)
+    appendix_items: list[AppendixItem] = []
+    for i, sec in enumerate(appendix_sections):
+        appendix_items.append(
+            AppendixItem(
+                item_title=sec.heading,
+                body_text=sec.markdown,
+                standard_code=(sec.flags or {}).get("appendixStandard") or "",
+                appendix_anchor=(sec.flags or {}).get("appendixAnchor") or None,
+                item_index=i,
+            )
+        )
+    appendix_items_by_index = {it.item_index: it for it in appendix_items}
+    print(f"   {len(appendix_items)} appendix items in {time.time()-t0:.1f}s")
+
+    # 7. Bucket allocation (shared helper).
+    specs = load_specifications(program_level)
+    spec_index = {(s.standard_code, s.spec_code): s for s in specs}
+    print("🧮 allocating sections to wizard buckets…")
+    buckets, tags, context_sections, unknown_sections = _allocate_to_buckets(
+        classify_rows=classify_rows,
+        spec_index=spec_index,
+        appendix_items=appendix_items,
+        submission_id=submission_id,
+        doc_version_id=doc_version_id,
+    )
+    n_initial_narratives = sum(len(b.narratives) for b in buckets.values())
+    n_initial_evtext = sum(len(b.evidence_text) for b in buckets.values())
+    n_initial_files = sum(len(b.evidence_files) for b in buckets.values())
+    print(
+        f"   narratives={n_initial_narratives}, evidence_text={n_initial_evtext}, "
+        f"files={n_initial_files}, tags={len(tags)}, context={len(context_sections)}, "
+        f"unknown={len(unknown_sections)}"
+    )
+
+    # 8. First-pass coverage review.
+    print("🧠 first-pass coverage review (Haiku × specs)…")
+    reviewer = CoverageReviewer(anthropic_key)
+    initial_reviews: list[CoverageReview] = []
+    t0 = time.time()
+
+    def _review_one(spec: Specification) -> CoverageReview:
+        bucket = buckets[(spec.standard_code, spec.spec_code)]
+        narrative_text = "\n\n".join(
+            n.snippet[:3000] for n in bucket.narratives
+        ).strip()
+        evidence_items = [
+            (e.heading[:80], e.snippet[:1500])
+            for e in bucket.evidence_text
+        ] + [
+            (f.file_title[:80], f.body[:1500])
+            for f in bucket.evidence_files
+        ]
+        return reviewer.review(spec, narrative_text, evidence_items)
+
+    target_specs = [spec_index[k] for k in spec_index]
+    with ThreadPoolExecutor(max_workers=concurrency) as ex:
+        futures = {ex.submit(_review_one, s): s for s in target_specs}
+        done = 0
+        for fut in as_completed(futures):
+            sp = futures[fut]
+            try:
+                rv = fut.result()
+                initial_reviews.append(rv)
+                buckets[(sp.standard_code, sp.spec_code)].initial_review = rv
+            except Exception as exc:
+                print(f"   ✗ {sp.standard_code}.{sp.spec_code}: {exc}")
+            done += 1
+            if done % 10 == 0 or done == len(target_specs):
+                print(f"   {done}/{len(target_specs)} ({time.time()-t0:.0f}s)")
+    print(f"   ✓ {len(initial_reviews)} reviews in {time.time()-t0:.0f}s")
+
+    # 9. Gap-fill (skipped when no appendix or when caller asks).
+    if skip_gap_fill or not appendix_items:
+        reason = "skip_gap_fill=True" if skip_gap_fill else "no appendix items detected"
+        print(f"⏩ skipping gap-fill ({reason})")
+        for b in buckets.values():
+            b.final_review = b.initial_review
+    else:
+        print("🗂️  indexing appendix into per-import Qdrant collection…")
+        import_id = f"self-study-preview-{uuid.uuid4().hex[:8]}"
+        coll_name, entries = index_appendix(store, embedder, import_id, appendix_items)
+        print(f"   {coll_name}, {len(entries)} entries")
+
+        narrative_lookup = {
+            (sp.standard_code, sp.spec_code): "\n\n".join(
+                n.snippet[:3000] for n in buckets[(sp.standard_code, sp.spec_code)].narratives
+            ).strip()
+            for sp in target_specs
+        }
+        evidence_lookup = {
+            (sp.standard_code, sp.spec_code): [
+                (e.heading[:80], e.snippet[:1500])
+                for e in buckets[(sp.standard_code, sp.spec_code)].evidence_text
+            ] + [
+                (f.file_title[:80], f.body[:1500])
+                for f in buckets[(sp.standard_code, sp.spec_code)].evidence_files
+            ]
+            for sp in target_specs
+        }
+
+        anthropic_client = Anthropic(api_key=anthropic_key)
+        try:
+            print("🔎 running gap-fill pipeline…")
+            t0 = time.time()
+            gap_results = run_gap_filling(
+                store=store,
+                embedder=embedder,
+                anthropic_client=anthropic_client,
+                collection=coll_name,
+                initial_reviews=initial_reviews,
+                spec_lookup=spec_index,
+                narrative_lookup=narrative_lookup,
+                evidence_lookup=evidence_lookup,
+                reviewer=reviewer,
+                confidence_threshold=gap_fill_confidence,
+                concurrency=concurrency,
+            )
+            print(f"   ✓ {len(gap_results)} specs in {time.time()-t0:.0f}s")
+            _apply_gap_fills(
+                buckets, gap_results, appendix_items_by_index,
+                submission_id, doc_version_id,
+            )
+        finally:
+            print("🗑️  dropping per-import Qdrant collection…")
+            ok = drop_appendix_collection(store, import_id)
+            print(f"   drop ok: {ok}")
+
+    # 10. Render.
+    print("📝 rendering Obsidian preview…")
+    rendered = _render_obsidian(
+        buckets=buckets,
+        tags=tags,
+        appendix_items=appendix_items,
+        context_sections=context_sections,
+        unknown_sections=unknown_sections,
+        classify_rows=classify_rows,
+        date_str=date,
+        submission_id=submission_id,
+        doc_version_id=doc_version_id,
+    )
+    out_path = VAULT_DIR / f"ai-import-wizard-preview-{suffix}-{date}.md"
+    out_path.write_text(rendered)
+    print(f"✅ wrote {out_path}")
+    print(f"   {out_path.stat().st_size/1024:.0f} KB, {len(rendered.splitlines())} lines")
+    return out_path
+
+
 # --------------------------------------------------------------------- main
 
 
@@ -870,7 +1174,7 @@ def main():
     ap.add_argument(
         "--gap-fill-confidence",
         type=float,
-        default=0.65,
+        default=0.50,
         help="Haiku verification threshold for accepting a gap-fill candidate.",
     )
     args = ap.parse_args()
