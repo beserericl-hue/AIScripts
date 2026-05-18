@@ -20,10 +20,12 @@ per full import — about $2 at current pricing. Worth it.
 from __future__ import annotations
 
 import json
+import random
+import time
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
-from anthropic import Anthropic
+from anthropic import Anthropic, APIStatusError, InternalServerError, RateLimitError
 
 from app.standards.loader import Specification
 from app.vector.qdrant_ops import SearchHit, VectorStore
@@ -31,6 +33,11 @@ from app.vector.qdrant_ops import SearchHit, VectorStore
 DEFAULT_MODEL = "claude-haiku-4-5"
 DEFAULT_TOP_K = 5
 DEFAULT_CONFIDENCE_THRESHOLD = 0.65
+
+# Anthropic's 529 "overloaded" responses are transient — back off and retry
+# rather than letting one bad minute kill a long batch.
+_RETRYABLE_STATUSES = {429, 500, 502, 503, 504, 529}
+_MAX_RETRIES = 5
 
 # Cap the candidate snippet we send to Haiku — appendix items can be CV-
 # sized (3000+ words). 6000 chars keeps the prompt under the model's
@@ -160,6 +167,31 @@ def _fallback_classification(body: str) -> Classification:
 # ---------------------------------------------------------------- public API
 
 
+def _call_with_retry(client: Anthropic, model: str, prompt: str, max_tokens: int):
+    """Wrap messages.create with backoff so transient 529/429/503 don't kill a long batch."""
+    delay = 1.0
+    last_exc: Exception | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            return client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except (InternalServerError, RateLimitError) as exc:
+            last_exc = exc
+        except APIStatusError as exc:
+            if exc.status_code not in _RETRYABLE_STATUSES:
+                raise
+            last_exc = exc
+        sleep_for = delay + random.uniform(0, 0.5)
+        time.sleep(sleep_for)
+        delay = min(delay * 2, 30.0)
+    # Out of retries — re-raise the last exception so the caller can record a failure.
+    assert last_exc is not None
+    raise last_exc
+
+
 def verify_candidate(
     client: Anthropic,
     spec: Specification,
@@ -169,11 +201,16 @@ def verify_candidate(
 ) -> GapVerification:
     """Ask Haiku whether ``candidate_body`` addresses ``gap_text`` for ``spec``."""
     prompt = _build_verify_prompt(spec, gap_text, candidate_body)
-    msg = client.messages.create(
-        model=model,
-        max_tokens=300,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        msg = _call_with_retry(client, model, prompt, max_tokens=300)
+    except Exception as exc:
+        # Persistent failure — degrade gracefully so the batch keeps moving.
+        return GapVerification(
+            addresses_gap=False,
+            confidence=0.0,
+            classification=_fallback_classification(candidate_body),
+            rationale=f"verifier API error: {type(exc).__name__}",
+        )
     raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
     try:
         parsed = _parse_json(raw)

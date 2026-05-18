@@ -16,6 +16,7 @@ explicit at the wizard layer.
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -90,6 +91,8 @@ def run_gap_filling(
     anthropic_key: str | None = None,
     top_k: int = DEFAULT_TOP_K,
     confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD,
+    concurrency: int = 1,
+    progress_callback=None,
 ) -> list[SpecGapFillResult]:
     """For every spec with gaps, search the appendix and re-review.
 
@@ -114,35 +117,26 @@ def run_gap_filling(
             raise ValueError("Either reviewer or anthropic_key must be provided")
         reviewer = CoverageReviewer(anthropic_key=anthropic_key)
 
-    results: list[SpecGapFillResult] = []
-    for review in initial_reviews:
+    def _process_one(review: CoverageReview) -> SpecGapFillResult:
         key = (review.standard_code, review.spec_code)
         spec = spec_lookup.get(key)
         if spec is None:
-            # Unknown spec — pass through; we cannot run the search prompt
-            # without the spec text.
-            results.append(
-                SpecGapFillResult(
-                    standard_code=review.standard_code,
-                    spec_code=review.spec_code,
-                    initial_review=review,
-                    final_review=review,
-                )
+            return SpecGapFillResult(
+                standard_code=review.standard_code,
+                spec_code=review.spec_code,
+                initial_review=review,
+                final_review=review,
             )
-            continue
 
         # Skip when there's nothing to fill — keeps cost down on the 7%
         # of specs Claude already accepts.
         if review.is_covered or not review.gaps:
-            results.append(
-                SpecGapFillResult(
-                    standard_code=review.standard_code,
-                    spec_code=review.spec_code,
-                    initial_review=review,
-                    final_review=review,
-                )
+            return SpecGapFillResult(
+                standard_code=review.standard_code,
+                spec_code=review.spec_code,
+                initial_review=review,
+                final_review=review,
             )
-            continue
 
         outcomes: list[GapSearchOutcome] = []
         seen: set[int] = set()
@@ -161,33 +155,45 @@ def run_gap_filling(
             outcomes.append(outcome)
 
         fills = [o.accepted for o in outcomes if o.accepted is not None]
-
         if not fills:
             # Nothing useful in the appendix — second pass would just
             # repeat the first pass. Save the cost.
-            results.append(
-                SpecGapFillResult(
-                    standard_code=review.standard_code,
-                    spec_code=review.spec_code,
-                    initial_review=review,
-                    outcomes=outcomes,
-                    final_review=review,
-                )
+            return SpecGapFillResult(
+                standard_code=review.standard_code,
+                spec_code=review.spec_code,
+                initial_review=review,
+                outcomes=outcomes,
+                final_review=review,
             )
-            continue
 
         base_evidence = evidence_lookup.get(key, [])
         augmented = _augmented_evidence_for(base_evidence, fills)
         narrative_text = narrative_lookup.get(key, "")
         final = reviewer.review(spec, narrative_text, augmented)
-        results.append(
-            SpecGapFillResult(
-                standard_code=review.standard_code,
-                spec_code=review.spec_code,
-                initial_review=review,
-                outcomes=outcomes,
-                final_review=final,
-            )
+        return SpecGapFillResult(
+            standard_code=review.standard_code,
+            spec_code=review.spec_code,
+            initial_review=review,
+            outcomes=outcomes,
+            final_review=final,
         )
 
+    if concurrency <= 1:
+        results: list[SpecGapFillResult] = []
+        for i, review in enumerate(initial_reviews):
+            result = _process_one(review)
+            results.append(result)
+            if progress_callback is not None:
+                progress_callback(i + 1, len(initial_reviews))
+        return results
+
+    results = []
+    with ThreadPoolExecutor(max_workers=concurrency) as ex:
+        futures = {ex.submit(_process_one, r): r for r in initial_reviews}
+        done = 0
+        for fut in as_completed(futures):
+            results.append(fut.result())
+            done += 1
+            if progress_callback is not None:
+                progress_callback(done, len(initial_reviews))
     return results

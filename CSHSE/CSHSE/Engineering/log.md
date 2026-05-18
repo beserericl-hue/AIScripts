@@ -538,3 +538,15 @@ New concept page: [[railway-deployment-topology]]. Index updated.
 Closed out the AI side of Sprint 1 with `ai-service/app/matrix/data_extractor.py`: anchor-driven walk of `#MatrixHSR` / `#Matrix2`, template-row matching (substring + Jaccard), and ITKS/LMH cell decoding. On Stevenson: 150/191 rows matched, 370 cells extracted. 6 unit tests pass.
 
 Wrote [[import-wizard-ui-spec-2026-05-17]] — the full UI spec for the wizard. Lives in its own tab under the Self-Study Editor. Five linear steps (Upload → Parse → Review → Matrix → Apply). Defines the auto-apply rules per item shape (narrative / supportingEvidenceText / SupportingEvidence file / matrix cell), the click-to-popup tag list for questionable items, and the end-state contract for the apply call. This is a **sign-off gate** before any React code lands.
+
+## [2026-05-18] update | gap-filling pipeline + live wizard preview on Stevenson
+
+New AI service module `app/gap_filling/` (committed 2827b89): per-import Qdrant collection lifecycle (`index_appendix`/`drop_appendix_collection`), per-gap vector search with Standard-filtered + unfiltered fallback, Haiku verification of each appendix candidate against the specific shortcoming the coverage reviewer flagged, classification as narrative_text or evidence_file, and a second-pass coverage review on augmented evidence. 28 offline tests, 79 total green.
+
+Live end-to-end run against Stevenson produced [[ai-import-wizard-preview-stevenson-2026-05-18]] — the exact artifacts the wizard would write today on Stevenson: 269 narrative auto-applies, 53 supporting-evidence text snippets, 14 evidence files with simulated S3 keys, 47 tag-list items needing user triage, 178 context sections skipped, 6 unknown sections routed to tags. First-pass review flagged 653 gaps across the 96 unique Baccalaureate specs; gap-fill verifier accepted only **2** appendix candidates (3798 rejected). Signals threshold/strictness needs calibration in the verifier prompt or the 0.65 confidence floor before this pass is worth its API cost.
+
+Pipeline wall time: HTML stream 14s, appendix walk 6s, first-pass review 70s, appendix index 28s, gap-fill (concurrency=8) 150s, render 1s — ~5 min total for 99 specs.
+
+Handbook parser bug surfaced: Standard 16 has three duplicate (std, spec) keys (`16.a`, `16.b`, `16.c` each duplicated). Dict-keyed lookup collapses these to one each, so the preview ran on 96 unique specs instead of 99. Tracked for the `baccalaureate_2025` parser fix.
+
+New `ai-service/scripts/build_wizard_preview.py` driver and helper `tmp/run_wizard_preview.sh` (env composer across CSHSE / WritersWorkbench / Qdrant Railway services).

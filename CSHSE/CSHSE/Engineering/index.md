@@ -43,6 +43,7 @@ The catalog. One line per page. When answering a question, scan this first to fi
 - [[ai-import-stevenson-2026-05-17]] — by-section record of running the AI import pipeline against Stevenson University's 2024 CSHSE Self-Study DOCX. 564 sections classified end-to-end (snippet read + AI pick + Claude rationale per section).
 - [[ai-import-stevenson-by-spec-2026-05-17]] — by-spec coverage view: for each of the 99 Baccalaureate specs, the **exact text** that will be written to `narratives[std][spec].content` and `supportingEvidenceText`. Includes the 8 spec gaps (no matched content) so the user knows where to triage manually.
 - [[import-wizard-ui-spec-2026-05-17]] — full UI spec for the AI Import Wizard: its own tab under the Self-Study Editor, five linear steps (Upload → Parse → Review → Matrix → Apply), auto-apply rules for narratives / evidence text / evidence files / matrix cells, and a click-to-popup tag list for questionable items. **Sign-off gate before any React code lands.**
+- [[ai-import-wizard-preview-stevenson-2026-05-18]] — end-to-end live run of the full wizard pipeline (walkers + matcher + first-pass coverage + appendix gap-fill + second-pass coverage + auto-apply rules) on Stevenson. For every spec: the exact narratives, supporting-evidence text and files (with simulated S3 keys), matrix detections, remaining gaps, tag-list entries, and unmatched sections — i.e. the wizard's full output before the Apply click.
 
 ## Plans (dated, forward-looking)
 

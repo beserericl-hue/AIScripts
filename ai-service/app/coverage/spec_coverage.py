@@ -14,17 +14,22 @@ Output per spec:
 from __future__ import annotations
 
 import json
+import random
 import re
+import time
 from dataclasses import dataclass
 from typing import Optional
 
-from anthropic import Anthropic
+from anthropic import Anthropic, APIStatusError, InternalServerError, RateLimitError
 
 from app.standards.loader import Specification
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 CONTENT_CHAR_LIMIT = 8000  # cap total content sent per spec to control cost
 MAX_TOKENS = 600
+
+_RETRYABLE_STATUSES = {429, 500, 502, 503, 504, 529}
+_MAX_RETRIES = 5
 
 
 @dataclass
@@ -104,6 +109,28 @@ class CoverageReviewer:
         self._client = Anthropic(api_key=anthropic_key)
         self._model = model
 
+    def _call_with_retry(self, prompt: str):
+        """Backoff wrapper so transient 529/429/503 don't kill long batches."""
+        delay = 1.0
+        last_exc: Exception | None = None
+        for _ in range(_MAX_RETRIES):
+            try:
+                return self._client.messages.create(
+                    model=self._model,
+                    max_tokens=MAX_TOKENS,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+            except (InternalServerError, RateLimitError) as exc:
+                last_exc = exc
+            except APIStatusError as exc:
+                if exc.status_code not in _RETRYABLE_STATUSES:
+                    raise
+                last_exc = exc
+            time.sleep(delay + random.uniform(0, 0.5))
+            delay = min(delay * 2, 30.0)
+        assert last_exc is not None
+        raise last_exc
+
     def review(
         self,
         spec: Specification,
@@ -112,11 +139,21 @@ class CoverageReviewer:
     ) -> CoverageReview:
         evidence_items = evidence_items or []
         prompt = _build_prompt(spec, narrative_text, evidence_items)
-        msg = self._client.messages.create(
-            model=self._model,
-            max_tokens=MAX_TOKENS,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        try:
+            msg = self._call_with_retry(prompt)
+        except Exception as exc:
+            # Persistent failure — surface a non-empty CoverageReview so the
+            # caller doesn't crash on a long batch and the user sees the error.
+            return CoverageReview(
+                standard_code=spec.standard_code,
+                spec_code=spec.spec_code,
+                is_covered=False,
+                coverage_score=0.0,
+                gaps=[f"coverage reviewer API error: {type(exc).__name__}"],
+                strengths=[],
+                suggestion="",
+                raw_response="",
+            )
         raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
         try:
             parsed = _parse(raw)
