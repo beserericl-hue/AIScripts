@@ -532,3 +532,9 @@ Stood up a parallel `develop` environment in the `bubbly-solace` Railway project
 **Open items:** decide whether `develop` auto-deploys on every push or needs manual promotion. (Re: the supposed orphan bucket — Railway has one Bucket entity per project, so there's no separate tile to delete; the physical `cshse-filestorage-nvffngd` bucket on Tigris is empty and costs nothing. Leave in place.)
 
 New concept page: [[railway-deployment-topology]]. Index updated.
+
+## [2026-05-17] update | matrix data extractor + AI Import Wizard UI spec
+
+Closed out the AI side of Sprint 1 with `ai-service/app/matrix/data_extractor.py`: anchor-driven walk of `#MatrixHSR` / `#Matrix2`, template-row matching (substring + Jaccard), and ITKS/LMH cell decoding. On Stevenson: 150/191 rows matched, 370 cells extracted. 6 unit tests pass.
+
+Wrote [[import-wizard-ui-spec-2026-05-17]] — the full UI spec for the wizard. Lives in its own tab under the Self-Study Editor. Five linear steps (Upload → Parse → Review → Matrix → Apply). Defines the auto-apply rules per item shape (narrative / supportingEvidenceText / SupportingEvidence file / matrix cell), the click-to-popup tag list for questionable items, and the end-state contract for the apply call. This is a **sign-off gate** before any React code lands.
