@@ -862,3 +862,34 @@ New plan page [[ai-import-deploy-runbook-2026-05-18]] documents the develop-env 
 - Telemetry events (UI spec §16) — store events are defined in the spec, but the actual PostHog wiring is parked behind the analytics-stack rollout.
 
 All Sprint 1 code remains uncommitted in `feature/ai-import-wizard`. Ready for commit + push when Coordinator gives go-ahead. Per [[ai-import-deploy-runbook-2026-05-18]], pushing executes §2 → §4 → §5 in order.
+
+## [2026-05-18] setup | cshse-ai live on Railway develop
+
+Sub-sprint 1.e §2 + §4 executed. `cshse-ai` service created in `bubbly-solace/develop`, GitHub-linked to `beserericl-hue/AIScripts`, branch `developer`, rootDirectory `/CSHSE/ai-service`.
+
+Deployment URL: `https://cshse-ai-develop.up.railway.app`.
+
+Health probes all green:
+- `/health` → 200, version 0.1.0, env dev
+- `/health/qdrant` → reachable, sees 15 spec collections
+- `/health/openai` → reachable
+- `/health/anthropic` → reachable, model claude-haiku-4-5
+- `/ai/import/start` and `/ai/import/:jobId` enforce `X-Service-Signature` HMAC per spec
+
+Path moved: `ai-service/` → `CSHSE/ai-service/` (commit `d8eb619`) to keep all CSHSE product code in one folder and to match the `/CSHSE` rootDirectory pattern the Node service already uses. `app/matrix/template_loader.py` adjusted from `parents[3]/CSHSE/docs` → `parents[2].parent/docs`.
+
+Bugs hit and fixed during the deploy:
+1. `railway.toml` had literal `--port $PORT` in its `deploy.startCommand`; the file was being preferred over `railway.json`. Deleted (`f50b5fc`). Without this, every previous attempt failed with `'$PORT' is not a valid integer`.
+2. `railwayConfigFile` on the serviceInstance must be the **full repo-relative path** (`/CSHSE/ai-service/railway.json`), not relative to rootDirectory.
+3. The GraphQL `Builder` enum has no `DOCKERFILE` value, but setting `dockerfilePath: Dockerfile` on the serviceInstance is the documented way to force Dockerfile-based builds.
+4. `requirements.txt` was missing `boto3` and `python-docx` (used at runtime by `app/import_jobs.py` and `app/export/s3_writer.py`). Added (`599c0e0`).
+5. `Dockerfile` HEALTHCHECK removed — Railway probes externally on `/health` per `railway.json`'s `deploy.healthcheckPath`.
+6. `QDRANT_URL` switched from `http://qdrant.railway.internal:6333` (only resolves same-env) to `http://turntable.proxy.rlwy.net:17813` (public TCP proxy) because Qdrant lives in `production` env and Railway's default DNS doesn't cross envs. Slight latency cost; cross-env private networking is a future swap.
+
+Env vars now set:
+- **cshse-ai (develop)**: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `QDRANT_URL`, `QDRANT_API_KEY`, `MONGO_URL`, `NODE_SERVICE_HMAC_SECRET`, `CSHSE_S3_BUCKET`, `CSHSE_ENV=dev`, `PORT=8080`, `RAILWAY_DOCKERFILE_PATH=Dockerfile`
+- **CSHSE (develop)**: added `AI_SERVICE_URL=http://cshse-ai.railway.internal:8080`, `NODE_SERVICE_HMAC_SECRET=<same 64-hex>`, `SERVER_PUBLIC_URL=https://cshse-develop.up.railway.app`
+
+HMAC pair verified equal length 64 across both services.
+
+**Pending**: post-deploy smoke (run-book §5.2, KSU template happy path through the deployed Wizard UI) — the AI side is up; needs an actual browser run against `cshse-develop.up.railway.app/submissions/<id>/editor/ai-import`. Updated run-book status table accordingly.
