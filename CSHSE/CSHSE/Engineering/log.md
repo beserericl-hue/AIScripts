@@ -550,3 +550,315 @@ Pipeline wall time: HTML stream 14s, appendix walk 6s, first-pass review 70s, ap
 Handbook parser bug surfaced: Standard 16 has three duplicate (std, spec) keys (`16.a`, `16.b`, `16.c` each duplicated). Dict-keyed lookup collapses these to one each, so the preview ran on 96 unique specs instead of 99. Tracked for the `baccalaureate_2025` parser fix.
 
 New `ai-service/scripts/build_wizard_preview.py` driver and helper `tmp/run_wizard_preview.sh` (env composer across CSHSE / WritersWorkbench / Qdrant Railway services).
+
+## [2026-05-18] update | gap-fill verifier calibration — 250× acceptance, +99 evidence files
+
+Re-ran [[ai-import-wizard-preview-stevenson-2026-05-18]] after tuning the gap-fill verifier. Root cause of the 2/3800 acceptance rate was the verifier prompt's strictness directive (_"the snippet must actually provide the missing content the reviewer asked for"_) — Haiku was correctly following it, but accreditation evidence is rarely a 1:1 gap closure; it's typically partial supporting material a reviewer assembles. Two coordinated changes in `ai-service/app/gap_filling/gap_searcher.py`:
+
+1. **Verifier prompt reframed** as _"is this relevant evidence a reviewer would cite for this shortcoming?"_ with an explicit confidence band: 0.80–1.00 direct documentation, 0.50–0.79 partial/contextual support, <0.50 tangential.
+2. **Default confidence threshold** `0.65 → 0.50` (also in `--gap-fill-confidence` flag on `build_wizard_preview.py`), so the partial-support band counts.
+
+Headline before → after:
+
+- Candidate acceptance rate: **2/3800 (0.05%) → 333/2647 (12.6%)** — 250×
+- Verified gap fills: **2 → 333**
+- Specs with at least one wizard write: 84 → **95** (of 96)
+- Specs with supporting-evidence text: 27 → **87**
+- Specs with supporting-evidence files: 11 → **66**
+- Total evidence files (with simulated S3 keys): 14 → **113**
+- Gaps still remaining after gap-fill: 638 → **541**
+- Tag list: 47 (unchanged — gated on matcher confidence, not the verifier)
+
+Spot-checks on the new fills look right: for Std 1.a's "institutional context" gap the verifier pulled the Stevenson/CCBC articulation WHEREAS clause; for 1.b's "teaching methodology" gap it pulled a course description listing "lecture, class discussions, team projects, papers, videos, and fieldwork" — exactly the partial/contextual band the prompt now targets (0.62–0.72).
+
+Diagnostic improvement bundled in (cost-free): both the coverage reviewer (`app/coverage/spec_coverage.py`) and the verifier carry the actual `str(exc)` into the `suggestion` / `rationale` field on persistent API failure, so credit-balance / model-id / quota issues surface in the preview itself instead of needing a separate diagnostic call. Caught a real exhausted-credits state during smoke-testing this calibration via that path.
+
+Preview file rewritten in place (1.07 MB / 12,550 lines, was 630 KB / 6,916). Calibration changes are **uncommitted** — left in the worktree so we can iterate further on the prompt or threshold once you've reviewed the new numbers.
+
+## [2026-05-18] update | template-format walker + Kennesaw State preview (spec-as-outline import path)
+
+Second self-study input format wired in: the **CSHSE Self-Study Template** — the spec-as-outline DOCX that institutions just starting accreditation use as their writing framework, re-imported repeatedly as more sections get filled. Different from Stevenson's free-form self-study: each section heading IS a Handbook prompt, the institution writes a `Response:` underneath, and there's typically no appendix until late drafts.
+
+**Additive, not a rewrite.** The Stevenson parsing rules are untouched — `toc_anchor_walker.py`, `deep_walker.py`, `appendix_walker.py`, and `sections.py` are unchanged, and `build_wizard_preview.py` (the Stevenson driver) still works exactly as before. The template walker is a *new* rule that coexists with the existing ones. The driver picks one based on which input you point it at; future work can add format auto-detection so a single entry point routes to the right walker.
+
+**New AI service module: `ai-service/app/splitter/template_walker.py`**
+
+- Reads DOCX paragraphs directly (no HTML conversion — template format is small, ~400 KB).
+- Cuts on template heading patterns: `1.` / `2a.` / `11.b` / `Standard 1, Specification a.` / `Standard 12b.` — patterns ordered most-specific first, std + spec hints captured per match.
+- Strips `Response:` markers inline (they're visual cues, not section boundaries).
+- Detects placeholder responses (empty body, `Not applicable`, `TBD`, bare `See Appendix` pointer) so the matcher doesn't waste API calls and the preview can show "started-but-unwritten" sections distinctly.
+- Skips front matter (TOC, Introduction & Instructions, template title) so title-page lines don't bleed into pseudo-sections.
+- 20 offline tests; full suite 99 passing, 4 skipped (live-only).
+
+**New driver: `ai-service/scripts/build_template_preview.py`**
+
+Parallel to `build_wizard_preview.py` but adapted for the spec-as-outline format:
+
+- Walks the DOCX → matcher only on authored sections (placeholders skipped).
+- First-pass coverage review only on specs with bucket entries; empty specs get a synthesized "no content yet" verdict so the preview is full coverage without 87 redundant Haiku calls saying "no content".
+- **No gap-fill pass** — template format has no appendix to search. Once the institution adds an appendix in a later draft, the Stevenson-style preview applies.
+- Output filename `ai-import-wizard-preview-<suffix>-<date>.md` (configurable via `--output-suffix`, default `ksu`).
+
+**End-to-end run on `docs/Sample to Council from KSU.docx` (Kennesaw State, partial fill):**
+
+- Source document: Kennesaw State baccalaureate template, 354 paragraphs, ~407 KB DOCX.
+- 27 raw template sections detected → 14 authored / 13 placeholder (`Not applicable` multi-site + hybrid-online, plus the unfilled per-spec stubs at Std 12b / 14c / 16b / 16c / 17b / 17c).
+- 6,417 authored words total across all responses.
+- 14 matcher calls → 0 failures. 8 specs received narrative auto-applies: 1.a, 1.b, 1.f, 3.a, 4.a, 4.b, 9.e, 21.a.
+- 2 evidence files (with simulated S3 keys): VPA letter reference under 1.c, glossary under 1.a.
+- 2 tag-list items needing triage (one curriculum-matrix-classified 17d response at conf 0.92, one low-confidence multi-site placeholder at 0.42).
+- 9 Haiku coverage reviews on populated specs, 90 synthesized; the 8 narrative-bearing specs all came back 🔴 — partial content doesn't fully address any Handbook prompt yet, which is correct for a template at this fill stage. The synthesized empty-spec verdicts give the institution a clean list of "prompts you haven't responded to yet."
+- Cost: ~$0.30. Wall time: ~25s.
+
+**Bootstrap note:** the Qdrant `cshse_specs` collection wasn't populated for this account (Stevenson driver used a cached classify JSON). Bootstrapped via `app.embeddings.spec_cache.bootstrap_spec_cache(store, embedder, program_levels=('bachelors',))` → 99 spec definitions upserted. This is a one-time step per env; subsequent template-format imports re-use the same collection.
+
+**Why the template preview matters for the wizard:** institutions in the writing phase will run this on every re-import to see (a) which prompts still need a response (placeholder table at the top of the preview), (b) where their current text would land in `Submission.narratives[std][spec]`, and (c) which placed sections need manual triage. The Stevenson-style full pipeline (with appendix gap-fill) becomes relevant once the institution finishes a draft with an appendix.
+
+New preview page: [[ai-import-wizard-preview-kennesaw-state-2026-05-18]]. Index updated.
+
+## [2026-05-18] update | single-entry-point dispatcher with format auto-detect
+
+Wired both walkers behind one CLI: `ai-service/scripts/build_preview.py`. Takes `--docx <path>`, sniffs the format, and dispatches to the right pipeline. Still additive — Stevenson walkers, template walker, and the Stevenson driver are all untouched.
+
+**New: `ai-service/app/splitter/format_detector.py`** — pure-function sniff with explicit signals + reasoning. Decision rules:
+
+- Template title (`Self-Study Template`, `Self-Study Reader Report`, etc.) matched in the first 20 paragraphs → **template** @ 0.95.
+- ≥3 `Response:` markers AND ≥5 template-style headings → **template** @ 0.85 (catches templates with stripped front matter).
+- Otherwise → **self_study** @ 0.70 (bumped up to 0.90 cap by Curriculum Matrix / Appendix / Faculty CVs / Faculty Handbook heading hits).
+
+9 offline tests covering both formats, mixed signals, edge cases. Live sniff on `Sample to Council from KSU.docx`: `template @ 0.95` ✓. Suite is now **108 passed, 4 skipped**.
+
+**New: `ai-service/scripts/build_preview.py`** — single entry point. Behavior:
+
+- `--format auto` (default): sniffs, prints verdict + signals + reasoning, dispatches.
+- `--format template|self_study`: forces, skips sniff.
+- `--output-suffix <slug>` (default: slug from DOCX basename — `--output-suffix kennesaw-state` recommended for production).
+- Template branch: invokes the refactored `run_template_preview()` in-process (no subprocess overhead, shares env).
+- Self-study branch: prints "DOCX-direct self-study not yet wired" with the recommended next step (legacy import flow → Mongo → existing `build_wizard_preview.py`). Exits non-zero so automation knows the input wasn't fully processed.
+
+**Refactor (small):** `ai-service/scripts/build_template_preview.py` — moved the body of `main()` into a callable `run_template_preview(docx, program_level, date, concurrency, output_suffix, base_id, ...)` that returns the written `Path`. The CLI is now a thin arg-parser shim. No behaviour change for direct invocation.
+
+End-to-end smoke through the dispatcher on the Kennesaw State sample: auto-detected `template @ 0.95`, ran the full pipeline (14 matcher calls, 9 coverage reviews on populated specs + 90 synthesized empty-spec verdicts), wrote `ai-import-wizard-preview-kennesaw-state-2026-05-18.md` (128 KB / 2,657 lines). Wall time ~30s, cost ~$0.30.
+
+**Follow-up sized but not built:** DOCX-direct self-study branch — mammoth (already in deps) converts DOCX → HTML, then the existing Stevenson walkers run on the converted HTML, matcher runs live (no cached classify JSON), then coverage + gap-fill + render. Estimated ~10-12 min wall time on a Stevenson-sized DOCX. That makes this dispatcher the production wizard's full entry point for both formats; today it's the entry point for template format and a clear pointer for self-study.
+
+## [2026-05-18] update | DOCX-direct self-study branch + Std 16 dup-key fix
+
+Two more pieces landed:
+
+**1. DOCX-direct self-study (dispatcher's other branch is now live).**
+
+Added `run_self_study_preview_from_docx(...)` to `ai-service/scripts/build_wizard_preview.py` as a sibling to the existing Mongo-backed `main()`. New flow takes a DOCX off disk and runs the full self-study pipeline without touching Mongo:
+
+1. `mammoth.convert_to_html(io.BytesIO(docx_bytes))` → fresh HTML
+2. `deep_walk_with_fallback(html_bytes)` → Section list (existing walker, unchanged)
+3. Min-words filter (default 30) drops fragments
+4. `bootstrap_spec_cache(store, embedder, program_levels=(...))` — idempotent so it's safe to call every run
+5. `SpecMatcher.recommend(section, program_level)` LIVE per section, concurrency-fanned (no cached classify_rows JSON required)
+6. Merge sections + recommendations into the existing classify_rows dict shape via new `_classify_rows_from_sections(...)` helper
+7. `walk_appendix(html_bytes)` (existing walker, unchanged)
+8. Existing shared helpers `_allocate_to_buckets`, `_apply_gap_fills`, `_render_obsidian` produce the preview
+9. Gap-fill auto-skips when no appendix is detected (template-shaped DOCX) — same behaviour as `--skip-gap-fill` so the call is safe across formats
+
+Dispatcher (`scripts/build_preview.py`) self-study branch now invokes this in-process. New flags pass through: `--skip-gap-fill`, `--gap-fill-confidence`, `--min-section-words`.
+
+Smoke (forced `--format self_study` on the Kennesaw State DOCX to exercise every line):
+
+- mammoth: 0.4 MB DOCX → 0.50 MB HTML in 1.4s
+- deep_walk: 21 raw → 20 sections (min-words filter)
+- matcher live: 20/20 matched in 17s
+- appendix walk: 0 items (KSU has no Stevenson-shape appendix) → gap-fill auto-skipped
+- bucket allocation: 7 narratives, 1 file, 12 context, 0 unknown
+- coverage review: 96 specs in 49s
+- rendered preview: 171 KB, 3169 lines
+
+Total wall time ~70s, cost ~$0.50. Every line of the new code path ran cleanly. Smoke artifact deleted after validation. Estimated Stevenson-sized run: ~10–12 min, ~$3–5.
+
+This makes `scripts/build_preview.py --docx <path>` the production wizard's single entry point for both formats. No parsing rule changes anywhere (`toc_anchor_walker.py`, `deep_walker.py`, `appendix_walker.py`, `sections.py` all 0 lines changed).
+
+**2. Std 16 duplicate-key fix (96 → 99 unique specs).**
+
+The Handbook PDF has two independent letter-lists under Standard 16 — "Theory & Knowledge" (a/b/c) and "Skills" (a/b/c again). The parser originally emitted both sets under the same letter codes, so any `{(s.standard_code, s.spec_code): s for s in specs}` dedupe (used in every preview driver) collapsed 99 specs to 96 — and Qdrant's UUID5 point IDs collided too, so only the *second* "Skills" entry survived per cell. Net effect: the Theory & Knowledge prompts for 16.a/b/c were silently dropped from the matcher's candidate space.
+
+Fix in `ai-service/app/standards/baccalaureate_2025.py`: disambiguate the Skills trio to 16.d / 16.e / 16.f. Theory & Knowledge keeps the original 16.a / 16.b / 16.c. Comment added inline explaining the historical bug so future parser changes don't re-collapse the lists.
+
+Three new regression tests in `tests/test_handbook_parser.py`:
+
+- `test_baccalaureate_2025_registry_has_no_duplicate_keys` — fails fast on any future (std, spec) collision
+- `test_baccalaureate_2025_registry_has_expected_count` — asserts exactly 99
+- `test_load_specifications_dedupe_via_dict_is_lossless` — guards the downstream pattern
+
+Qdrant `cshse_specs` re-bootstrapped via `app.embeddings.spec_cache.bootstrap_spec_cache(store, embedder, program_levels=('bachelors',))` — now holds 99 distinct points (was effectively 96 because of the UUID5 collision). Next Stevenson re-run will use the corrected candidate space, and the previously-missing Theory & Knowledge prompts for 16.a/b/c will appear as legitimate matcher candidates.
+
+**Tests:** 111 passed / 4 skipped / 0 failed (was 108; +3 registry-integrity tests).
+
+## [2026-05-18] update | complete UI spec — supersedes the 2026-05-17 sketch
+
+Promoted the UI spec from sketch to code-ready. New page [[import-wizard-ui-spec-2026-05-18]] supersedes [[import-wizard-ui-spec-2026-05-17]] (latter retained with a SUPERSEDED banner per the vault's convention for concept pages whose underlying scope changes substantially).
+
+What's new vs. the sketch:
+
+- **Two input formats** explicitly acknowledged and contrasted (template vs free-form self-study). Behaviour differences per step. Format detection UX in Step 2 with override path.
+- **Re-import flow** for the template format — first import vs. second-and-subsequent, merge-default with diff modal, delta strip in Parse, isReimport server-side detection.
+- **Client state shape** — full Zustand store typed (`AIImportState`, `SpecBucket`, `Recommendation`, `Tag`, `PlaceholderSection`, `FormatVerdict`) with explicit persistence rules (what survives a tab close, what rehydrates from server).
+- **API contracts** — exact JSON request / response for every new endpoint (`start-ai`, `ai-status`, `apply-ai`, `restart-ai`, `ai-callback`, plus the cshse-ai side). Idempotency key for safe Apply retry. Mongo session + S3 ordering for atomicity.
+- **Component contracts** — file paths under `client/src/features/selfStudy/Editor/AIImport/`, prop signatures for the 13 key components.
+- **Loading / error / empty states** for every async component (catalog table).
+- **Accessibility** — WCAG 2.1 AA pass plan: keyboard nav per component, screen-reader labels, focus management, colour contrast verification, live regions on Parse, reduced-motion handling, VoiceOver + NVDA tested.
+- **Telemetry** — 10 PostHog events with payloads, no PII.
+- **Performance budgets** — initial render < 200 ms, item-table virtualization at > 100 rows, AI Import code-split chunk ≤ 80 KB gzipped, poll-pause on tab blur.
+- **E2E test plan** — 8 Playwright flows + 2 server unit tests.
+- **Phased build plan** — 5 sub-sprints summing to ~11 working days from sign-off to develop-deployed.
+- **Open questions** — the 5 from the sketch are now resolved (§20); 5 new questions surface (§21) that can be answered during sub-sprint 1.a without blocking start.
+
+Calibrated thresholds locked into §10 (TEXT_AUTO_APPLY_CONF=0.85, FILE_AUTO_APPLY_CONF=0.70, TAG_LIST_CONF=0.50, GAP_FILL_CONFIDENCE=0.50, MIN_SECTION_WORDS=30) — these are the values validated by the 2026-05-18 calibration on Stevenson and reused on the Kennesaw State preview.
+
+Spec is the **gate for Sprint 1 React code**. Index updated.
+
+## [2026-05-18] update | UI spec — five §21 follow-ups resolved by Coordinator
+
+Coordinator answered the five remaining open questions in [[import-wizard-ui-spec-2026-05-18]]; spec updated in place with all decisions integrated. Summary of resolutions:
+
+1. **SSE in v1, polling fallback only.** Server pushes incremental events on `GET /api/imports/:importId/ai-events`; client opens an `EventSource` immediately after Upload. Carries queue-position events, format-detection, per-stage progress, and terminal payload. Polling on `/ai-status` is the fallback when SSE reconnect fails three times consecutively. Addresses "is the UI hung?" perception risk for the long Stevenson parse.
+2. **Long-wall-clock parse acceptable** in v1 because of (1) — no background-email mode needed.
+3. **TagPopup deep-linking — in v1.** `/ai-import/tags/:tagId` opens the popup directly. Sharable URL.
+4. **Show-in-source uses CURRENT document version** (not the version when the tag was created). Anchor lookup with fuzzy-text fallback when the source has changed; amber banner when match is best-effort; "no longer present" message when content has been removed.
+5. **Multi-Coordinator concurrency — FIFO queue with live SSE-driven position display.** v1 ships with one cshse-ai worker; Coordinators see "4th in line → 3rd in line → starting now…" with no ambiguity. Cancelling from `queued` releases the slot. v2 adds horizontal scaling + queue routing. Apply still 409s on same-Submission Mongo races (independent concern — queue is service-level, 409 is data-level).
+
+Spec edits made to integrate these:
+
+- §3: tab badge gains `(queued: 3rd in line)` + `(parsing)` + `(ready to review)` states.
+- §5: state machine adds `queued` between `new` and `parsing`; cancel-from-queued releases the slot.
+- §6.2: full rewrite with **queued state UI** ("Your import is 3rd in line… Estimated start: ~8 minutes") and **running state UI** plus SSE transport explanation and Railway proxy config notes.
+- §9 (store): new fields `queuePosition`, `queueDepth`, `etaSeconds`, `eventsTransport`, `eventsReconnectAttempt`; new actions `openEventStream` / `closeEventStream` plus the polling fallback.
+- §11.2: `start-ai` response shape now carries `queuePosition`/`queueDepth`/`etaSeconds` when the worker is busy.
+- §11.3: `/ai-status` (polling fallback) extended with queue fields + per-stage `etaSeconds`.
+- §11.4 NEW: `/ai-events` SSE endpoint with full event protocol, including `auth-expired` close event, 30 s keepalive pings, `X-Accel-Buffering: no` proxy config.
+- §11.5–§11.9: renumbered (apply-ai → 11.5, restart-ai → 11.6, cancel → 11.7, cshse-ai → 11.8, get-import → 11.9).
+- §11.8: cshse-ai service gains `/ai-event` incremental webhook (signed via `X-CSHSE-Signature`) that the server fans out to SSE subscribers.
+- §16 (telemetry): four new events — `ai_import_queued`, `ai_import_queue_advanced`, `ai_import_events_fallback`, plus `totalWaitMs` / `totalParseMs` on `ai_import_parsed`.
+- §17 (performance): SSE-aware transport rules — close on `visibilitychange → hidden`, reopen on `visible`, 30 s keepalive pings, fallback after three reconnect failures.
+- §20: five new resolved decisions appended (numbered 6–10).
+- §21: replaced with five non-blocking technical follow-ups — Railway proxy verification, queue starvation, stalled-stage detection, queue-decrement debouncing, 409 banner copy review.
+
+Net effect: spec is now sign-off-ready with zero blocking questions. Sub-sprint 1.a (plumbing) starts immediately after sign-off.
+
+## [2026-05-18] update | sub-sprint 1.a complete — wizard plumbing landed end-to-end
+
+Spec signed off; built the full plumbing layer per UI spec §19 sub-sprint 1.a. End-to-end skeleton now functional: a Coordinator can open the AI Import tab, upload a DOCX, watch the cshse-ai job process via live SSE updates (with FIFO queue position if a worker is busy), and click through Review → Apply (stub) without any non-functional placeholders in the critical path.
+
+**cshse-ai service (Python):**
+
+- New module `ai-service/app/import_jobs.py` — FIFO single-worker queue with full job lifecycle (enqueue → queued → parsing → parsed/failed/canceled). Emits HMAC-signed webhooks at every state transition. Dispatches to the existing template walker or DOCX-direct self-study runner based on format detection (template format gap-fill is auto-skipped; self-study gap-fill is deferred to sub-sprint 1.b).
+- New FastAPI endpoints in `ai-service/app/main.py`: `POST /ai/import/start`, `GET /ai/import/{jobId}`, `POST /ai/import/{jobId}/cancel`. All HMAC-verified via the existing `app/auth.py` shared secret.
+- 11 new offline tests in `tests/test_import_jobs.py`. Python suite: 122 passed / 4 skipped (was 111; +11).
+
+**CSHSE server (TypeScript):**
+
+- `SelfStudyImport` model extended with the wizard's AI fields: `aiStatus`, `aiJobId`, `aiQueuePosition`, `aiQueueDepth`, `aiEtaSeconds`, `aiFormat`, `aiStages`, `aiBuckets` (Mixed type — Pydantic on cshse-ai is the source of truth for the bucket shape), `aiTags`, `aiPlaceholderSections`, `aiMatrices`, `aiErrors`, `aiAppliedCounts`. Sub-document schemas (`AIBucketItemSchema`, `AITagSchema`, `AIPlaceholderSchema`, `AIStageSchema`, `AIFormatVerdictSchema`) typed end-to-end; legacy `status` field unchanged.
+- New controller `server/src/controllers/aiImportController.ts` with all seven new routes from UI spec §11 — `start-ai` / `ai-status` / `ai-events` (SSE) / `apply-ai` (stub) / `restart-ai` / `ai-event` (webhook) / `ai-callback` (webhook). HMAC signature format (`t=<unix>,v1=<hex>`) matches the cshse-ai `app/auth.py` verify path so the two services can trust each other without sharing a secret with users.
+- SSE fan-out: in-memory map from `importId` to connected client streams. 30-second keepalive pings prevent Railway-proxy idle timeouts. Response headers `X-Accel-Buffering: no` + chunked encoding to defeat upstream buffering.
+- Global `express.json` gained a `verify` callback that captures `req.rawBody` for HMAC verification (used by the two webhook routes; ignored by every other route).
+- Mounted in `server/src/routes/imports.ts`: webhook routes BEFORE `router.use(authenticate)` since they auth via HMAC; coordinator-facing routes after.
+- 11 new integration tests in `server/tests/integration/ai-import.test.ts` — covers status snapshot, apply-ai stub, HMAC verification on both webhooks (missing / malformed / expired / valid signature), terminal-state callback persistence. Integration tests: 28 passed (was 17; +11).
+
+**CSHSE client (TypeScript + React):**
+
+- New Zustand store `client/src/store/aiImportStore.ts` — full type contract from UI spec §9: `WizardState`, `WizardStep`, `WizardStatus`, `FormatVerdict`, `Recommendation`, `SpecBucket`, `BucketItem`, `Tag`, `PlaceholderSection`, `StageProgress`, `AIStatusSnapshot`. Actions: `startUpload`, `openEventStream`, `closeEventStream`, `pollAIStatus`, `cancelImport`, `apply`, `loadExisting`, `reset`, plus all setters. Persists resumable fields (importId / step / status / programLevel / selection state) via Zustand's `persist` middleware; heavy bucket data rehydrates from `/api/imports/:importId` on tab open.
+- SSE-first transport: opens an `EventSource` immediately after upload, falls back to 2-second polling after three consecutive reconnect failures (UI spec §6.2). Reconnects with exponential backoff (1s → 2s → 4s → max 30s). Closes on tab blur (`visibilitychange → hidden`).
+- New components under `client/src/features/selfStudy/Editor/AIImport/`: `Wizard.tsx` (top-level router), `Stepper.tsx` (left rail with WCAG-compliant role=tablist + aria-current), `steps/UploadStep.tsx` (functional — file dropzone + 100 MB cap + MIME check + program-level radio + re-import + force-template checkboxes + upload-progress bar), `steps/ParseStep.tsx` (functional — queued state with ordinal position + ETA, running state with live pipeline strip + format-verdict banner, polling fallback warning), `steps/ReviewStep.tsx` (display-only summary; full SpecRail / ItemTable / ItemPreview lands in sub-sprint 1.b), `steps/MatrixStep.tsx` (placeholder; lands 1.d), `steps/ApplyStep.tsx` (functional — merge mode radio + Apply button that calls the stubbed apply-ai endpoint).
+- `SelfStudyEditor.tsx`: added `'ai-import'` to the `activeView` union, new tab button visible only to Program Coordinators, rendered `<Wizard submissionId={submissionId} />` when active.
+- 9 new client-side store unit tests in `aiImportStore.test.ts`. Client suite: 29 passed / 2 skipped (was 20; +9).
+
+**Test totals across all three layers:**
+
+- Python (ai-service): **122 passed / 4 skipped** (was 111)
+- Server integration: **28 passed** including the 11 new AI Import integration tests (was 17)
+- Client unit: **29 passed / 2 skipped** (was 20)
+- Pre-existing flake in `server/tests/unit/documentVersionService.test.ts` — fails only under full-suite ordering, passes when run in isolation; unrelated to wizard work.
+
+**What's working end-to-end now:**
+
+1. Coordinator clicks "AI Import" tab → wizard mounts at Upload step.
+2. Picks a DOCX, hits Next → server uploads to S3 via the existing `/upload` route, then `POST /start-ai` enqueues a cshse-ai job.
+3. Browser opens an SSE stream to `/ai-events` and shows queue position / format verdict / live pipeline progress as the cshse-ai worker advances.
+4. On parse completion the terminal `/ai-callback` webhook lands the buckets / tags / placeholders into the SelfStudyImport doc, then SSE pushes the final status.
+5. Coordinator clicks Next → Review step shows the summary; if any matrices were detected, Matrix step appears; otherwise Apply is next.
+6. Coordinator picks merge mode, clicks Apply → `POST /apply-ai` (stub) returns OK with the counts that would have been applied. Real writes land in sub-sprint 1.c.
+
+**What's stubbed / deferred to subsequent sub-sprints (per UI spec §19):**
+
+- 1.b: Full Review surface — SpecRail / ItemTable / ItemPreview with bulk-action toolbar, ShowInSourceModal, reassign popup. E2E tests 1 + 2.
+- 1.c: Real `apply-ai` — Mongo session, S3 uploads with daily orphan janitor, idempotency-key dedup. ApplyStep diff modal. E2E tests 3 + 6, server tests 9 + 10.
+- 1.d: MatrixStep course-column confirmation + create-course modal, TagListView + TagPopup, persistence, full a11y audit + fixes. E2E tests 4 / 5 / 7 / 8.
+- 1.e: Develop deploy via Railway + Stevenson re-preview smoke + Coordinator UAT handoff.
+
+All uncommitted in the worktree. Ready for sub-sprint 1.b on your green light.
+
+## [2026-05-18] update | Sprint 1 sub-sprints 1.b / 1.c / 1.d / 1.e — wizard feature-complete, deploy paused
+
+Built out the remaining sub-sprints in one push. End state: the wizard is end-to-end functional for both formats, real apply-ai is wired, full Review surface + MatrixStep + TagListView landed, accessibility hooks are in. Sub-sprint 1.e produced the deploy run-book; actual Railway push paused awaiting explicit go-ahead (shared infrastructure).
+
+### 1.b — Review surface (UI spec §6.3)
+
+Replaced the 1.a flat-summary `ReviewStep` with the full three-column workspace:
+
+- `review/SpecRail.tsx` — left rail with 99 specs grouped by Standard, search filter, coverage badges (🟢/🟡/🔴), `Unplaced` + `Unwritten` synthetic buckets. Role=tablist + aria-current.
+- `review/ItemTable.tsx` — middle column with checkbox column + sortable headers (confidence / source / words). Confidence colour bands per UI spec §6.3 (`text-cshse-600` ≥ 0.85, `text-amber-700` 0.50–0.84, `text-slate-500` < 0.50). Keyboard navigation per UI spec §14: ↑/↓ + j/k move rows, Enter selects, Space toggles checkbox, screen-reader labels for "high/medium/low" confidence.
+- `review/ItemPreview.tsx` — right column with rationale + body + kind dropdown + reassign button + "Show in source" button. Focus auto-moves into the preview on selection.
+- `review/ReassignPopup.tsx` — bulk reassign modal with Standard → Spec cascading dropdowns. Esc closes, click-outside closes, focus trapped.
+- `review/ShowInSourceModal.tsx` — side modal (60vw, Esc closes) that fetches the CURRENT DocumentVersion via `/api/imports/:importId/content`, tries to scroll to the section's anchor, falls back to fuzzy text search of the first 200 chars (UI spec §20.9). Three states: `anchor` (clean match, green outline), `fuzzy` (best-effort, amber outline + banner), `missing` (no longer in current doc, amber banner).
+- Bulk-action toolbar wired: Send-to-tags, Apply-as-file, Reassign. All operations are client-side until Apply.
+
+### 1.c — Real apply-ai (UI spec §11.5)
+
+Replaced the 1.a stub with a real implementation that writes to `Submission.narratives[std][spec]` + `Submission.narratives[std][spec].supportingEvidenceText` + `linkedDocuments`:
+
+- Three merge modes: **merge** (appends with `<hr class="ai-import-merge"/>` separator), **replace** (overwrites), **per_spec** (per-spec radio resolution via the new DiffModal).
+- **Idempotency-key dedup**: `aiLastIdempotencyKey` field on `SelfStudyImport`; replay returns the cached `aiAppliedCounts` without re-applying. The client generates the key in localStorage so refresh-then-retry is safe.
+- **Mongo session conditional**: gated by `MONGO_SUPPORTS_TRANSACTIONS=true`. Production (Mongo replica set) gets atomic writes; develop and tests (standalone Mongo) get sequential saves + idempotency-key retry safety.
+- **DiffModal** (`apply/DiffModal.tsx`) — fetches current `Submission.narratives` via `/api/submissions/:id`, renders per-spec before/after panes, per-row Keep / Take / Merge radios. Confirm-button gated on every touched spec having a choice.
+
+4 new server integration tests (apply-ai writes / idempotency replay / merge appends / replace overwrites). Total server integration: **38 passed** (was 28; +10 net across 1.c + 1.d).
+
+### 1.d — Matrix + Tags + a11y (UI spec §6.4, §7, §14, §20.4)
+
+- **ProgramCourses Mongo collection** (`server/src/models/ProgramCourse.ts`) — per-institution course catalog with `(institutionId, courseCode, submissionId)` unique index. Source flag captures whether the entry came from manual user input / the deep walker's regex hits / matrix inference.
+- **Routes** `GET /api/program-courses/:submissionId/courses` + `POST /api/program-courses/:submissionId/courses` (`programCoursesController.ts` + `routes/programCourses.ts`). 7 integration tests covering scoping by institution, upsert semantics, validation, auth.
+- **MatrixStep.tsx** — replaced 1.a placeholder with a real matrix-block UI: each detected matrix renders its column-course assignment row + a read-only cell preview table. `Skip this matrix` checkbox per block. Forward-nav gated on every column being assigned or the matrix being skipped.
+- **CourseCatalogCombo.tsx** — searchable combobox with type-to-search, inline `Create "<code>"` flow (creates the row via POST then auto-selects). ARIA combobox role, keyboard nav (↑/↓/Enter/Esc).
+- **TagListView.tsx** — filter (Standard / confidence band) + sort (conf asc/desc/std order) + search. Clickable rows open TagPopup; row keyboard-activatable with Enter. Empty / filter-empty states distinguished.
+- **TagPopup.tsx** — full popup from UI spec §7: source / confidence / AI suggestion / rationale / full text + kind radio + std/spec dropdowns + Previous/Next nav + Apply/Skip/Discard. Apply hits `/apply-ai` as a single-item write with a unique idempotency key per tag. Esc closes, ← / → navigate between filtered tags, focus trapped on open.
+- **Wizard.tsx** routing extended for `step === 'tags'` (no Stepper rail in this mode; the tag list view takes the full pane). Auto-route into Tags after Apply if tags remain.
+- **Reduced-motion CSS** (`styles/globals.css`) — `@media (prefers-reduced-motion: reduce)` suppresses `.animate-*` and `.transition-*` classes the wizard uses. Implements UI spec §14 reduced-motion requirement.
+
+### 1.e — Deploy run-book (paused before pushing)
+
+New plan page [[ai-import-deploy-runbook-2026-05-18]] documents the develop-env promote:
+
+- §1 Pre-flight: branch hygiene + test gates (Python 122 / server 38 / client 29)
+- §2 Env-var changes: `AI_SERVICE_URL`, `NODE_SERVICE_HMAC_SECRET` (shared between CSHSE + cshse-ai), `SERVER_PUBLIC_URL`, `MONGO_SUPPORTS_TRANSACTIONS` (off in develop until replica-set is in place), `CSHSE_S3_BUCKET`. Generation via `openssl rand -hex 32` + Railway CLI.
+- §3 Migrations: none — `SelfStudyImport.aiStatus` and the new `ProgramCourse` collection are non-breaking.
+- §4 Deploy: push + deploy-trigger update per [[railway-deployment-topology]].
+- §5 Post-deploy smoke: Kennesaw State template (~30 s, ~$0.30); Stevenson self-study (~10–12 min, ~$3–5); queue behaviour (start a second import while the first is parsing → verify "2nd in line" UI); apply failure path.
+- §6 Rollback plan: feature-flag soft-disable (5-line change to add), hard rollback via deployment-trigger revert, half-rollback (cshse-ai only).
+- §7 UAT handoff note for the Coordinator team.
+- §8 Production promote — explicit go-ahead only after UAT week in develop.
+
+**Paused at §2/§4.** Pushing to Railway is shared-infra; needs Coordinator green light.
+
+### Test totals end of Sprint 1 (all green in worktree)
+
+- Python (`ai-service/tests`): **122 passed / 4 skipped**
+- Server integration (`server/tests/integration`): **38 passed** across 4 files
+- Client unit (`client/src`): **29 passed / 2 skipped** across 4 files
+
+### What's still deferred to Sprint 2
+
+- Evidence files split-out → `SupportingEvidence` Mongo rows + S3 DOCX upload via [[evidence-document-review-pipeline]]. Today the wizard stores file references as `linkedDocuments` strings on the narrative; Sprint 2 promotes them to real SupportingEvidence rows with their own metadata.
+- Full WCAG 2.1 AA audit + fixes (UI spec §14). Sprint 1 lands the structural pieces — ARIA roles, keyboard nav, reduced-motion, focus management, contrast tokens — but a screen-reader pass with VoiceOver + NVDA hasn't run.
+- Feature flag (`FEATURE_AI_IMPORT`) for soft disable on prod. UI spec §17 phasing put this in 1.e but it's been parked — implementation is 5 lines in `SelfStudyEditor.tsx`, do it on the prod-promote pass.
+- Cross-institution semantic search (UI spec §20.3) — feature-flagged off in v1, re-evaluate after CSHSE board approval.
+- Telemetry events (UI spec §16) — store events are defined in the spec, but the actual PostHog wiring is parked behind the analytics-stack rollout.
+
+All Sprint 1 code remains uncommitted in `feature/ai-import-wizard`. Ready for commit + push when Coordinator gives go-ahead. Per [[ai-import-deploy-runbook-2026-05-18]], pushing executes §2 → §4 → §5 in order.
