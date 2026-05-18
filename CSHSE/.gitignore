@@ -1,3 +1,6 @@
+# Per-session handoff notes (local only — never commit)
+session_context.md
+
 # Dependencies
 node_modules/
 
