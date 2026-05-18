@@ -5,6 +5,20 @@
 /* Import Inter font */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
+/* AI Import Wizard — respect reduced-motion preference (UI spec §14). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .animate-pulse,
+  .animate-bounce,
+  .transition-all,
+  .transition-colors,
+  .transition-opacity,
+  .transition-transform {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 98%;

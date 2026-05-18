@@ -32,6 +32,7 @@ import { CurriculumMatrixEditor } from '../MatrixEditor';
 import { FileLibrary } from '../FileLibrary';
 import { CommentSidebar } from '../../comments';
 import { DocumentViewer, SectionTagger, TaggedSectionsList, SubExtractionViewerModal, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
+import { Wizard as AIImportWizard } from './AIImport';
 
 // Use consistent API paths without relying on environment variable
 
@@ -245,7 +246,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [selectedStandard, setSelectedStandard] = useState('1');
   const [selectedSpec, setSelectedSpec] = useState<string | null>('a');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files'>('standards');
+  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'ai-import'>('standards');
 
   // Reviewer comment state
   const [highlightedComment, setHighlightedComment] = useState<{ id: string; selectedText: string } | null>(null);
@@ -1911,6 +1912,20 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 <FolderOpen className="w-4 h-4 flex-shrink-0" />
                 Supporting File Library
               </button>
+              {isProgramCoordinator && (
+                <button
+                  onClick={() => setActiveView('ai-import')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    activeView === 'ai-import'
+                      ? 'bg-teal-100 text-teal-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                  title="AI-assisted import wizard (Sprint 1)"
+                >
+                  <Upload className="w-4 h-4 flex-shrink-0" />
+                  AI Import
+                </button>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-4 flex-shrink-0">
@@ -2219,6 +2234,13 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 submissionId={submissionId}
                 readOnly={isReadOnly}
               />
+            </main>
+          )}
+
+          {/* AI Import Wizard View (Sprint 1) */}
+          {activeView === 'ai-import' && isProgramCoordinator && submissionId && (
+            <main className="flex-1 overflow-hidden p-2">
+              <AIImportWizard submissionId={submissionId} />
             </main>
           )}
         </div>
