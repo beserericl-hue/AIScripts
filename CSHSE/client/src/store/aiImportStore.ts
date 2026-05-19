@@ -315,34 +315,55 @@ export const useAIImportStore = create<AIImportState>()(
         form.append('file', uploadFile);
         form.append('submissionId', submissionId);
 
-        const uploadRes = await api.post('/api/imports/upload', form, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-          onUploadProgress: (event) => {
-            if (event.total) {
-              set({ uploadProgress: event.loaded / event.total });
+        let importId: string;
+        try {
+          const uploadRes = await api.post('/api/imports/upload', form, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            onUploadProgress: (event) => {
+              if (event.total) {
+                set({ uploadProgress: event.loaded / event.total });
+              }
             }
-          }
-        });
-        const { importId } = uploadRes.data;
-        set({ importId, uploadProgress: 1 });
+          });
+          importId = uploadRes.data.importId;
+          set({ importId, uploadProgress: 1 });
+        } catch (err: any) {
+          const detail = err?.response?.data?.error || err?.response?.data?.detail || err?.message || String(err);
+          set({ status: 'failed', errors: [`Upload failed: ${detail}`] });
+          throw new Error(`Upload failed: ${detail}`);
+        }
 
-        const startRes = await api.post(`/api/imports/${importId}/start-ai`, {
-          programLevel,
-          forceFormat,
-          isReimport
-        });
-        const { jobId, status, queuePosition, queueDepth, etaSeconds } = startRes.data;
-        set({
-          jobId,
-          status,
-          queuePosition: queuePosition ?? null,
-          queueDepth: queueDepth ?? null,
-          etaSeconds: etaSeconds ?? null,
-          step: 'parse'
-        });
+        try {
+          const startRes = await api.post(`/api/imports/${importId}/start-ai`, {
+            programLevel,
+            forceFormat,
+            isReimport
+          });
+          const { jobId, status, queuePosition, queueDepth, etaSeconds } = startRes.data;
+          set({
+            jobId,
+            status,
+            queuePosition: queuePosition ?? null,
+            queueDepth: queueDepth ?? null,
+            etaSeconds: etaSeconds ?? null,
+            step: 'parse'
+          });
 
-        // Open the SSE stream so the user sees live progress.
-        get().openEventStream();
+          // Open the SSE stream so the user sees live progress.
+          get().openEventStream();
+        } catch (err: any) {
+          // Server returned non-2xx (e.g. 502 'AI service unreachable',
+          // 409 race, 500 internal). Land on the Parse step in a 'failed'
+          // state so ParseStep renders the error surface instead of an
+          // optimistic "Starting AI service…" forever.
+          const detail = err?.response?.data?.error || err?.response?.data?.detail || err?.message || String(err);
+          set({
+            status: 'failed',
+            step: 'parse',
+            errors: [`Could not start AI service: ${detail}`]
+          });
+          throw new Error(`Could not start AI service: ${detail}`);
+        }
       },
 
       openEventStream: () => {

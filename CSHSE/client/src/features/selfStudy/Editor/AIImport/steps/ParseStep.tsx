@@ -50,6 +50,80 @@ export function ParseStep(): JSX.Element {
   const isQueued = status === 'queued';
   const isParsing = status === 'parsing';
   const isReady = status === 'parsed';
+  const isFailed = status === 'failed';
+  const isCanceled = status === 'canceled';
+
+  // When the import has failed or been cancelled, render a terminal-error
+  // surface instead of the optimistic "Waiting for a worker…" UI so the
+  // coordinator sees what went wrong immediately and can take action.
+  if (isFailed || isCanceled) {
+    const failedStage = stages.find((s) => s.state === 'failed') || stages[stages.length - 1];
+    return (
+      <div className="max-w-3xl space-y-6 p-8">
+        <h2 className="text-2xl font-semibold text-red-700">
+          {isFailed ? 'Import failed' : 'Import canceled'}
+        </h2>
+        <div className="rounded-md border border-red-200 bg-red-50 p-4">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5 text-red-600" />
+            <div className="space-y-2 text-sm text-red-700">
+              {errors.length > 0 ? (
+                errors.map((e, i) => <div key={i} className="font-mono text-xs">{e}</div>)
+              ) : (
+                <div>The import did not complete. See pipeline stages below.</div>
+              )}
+              {failedStage && (
+                <div className="text-xs text-red-600">
+                  Last stage: <span className="font-medium">{failedStage.name}</span>
+                  {failedStage.detail && <> — {failedStage.detail}</>}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {stages.length > 0 && (
+          <section aria-live="polite">
+            <h3 className="text-sm font-medium text-gray-700 mb-2">Pipeline (last state)</h3>
+            <ul className="space-y-2 text-sm">
+              {stages.map((stage, idx) => {
+                const Icon =
+                  stage.state === 'done' ? CheckCircle2 :
+                  stage.state === 'running' ? Loader2 :
+                  stage.state === 'failed' ? X : Circle;
+                const colour =
+                  stage.state === 'done' ? 'text-cshse-600' :
+                  stage.state === 'running' ? 'text-cshse-500' :
+                  stage.state === 'failed' ? 'text-red-600' : 'text-gray-400';
+                return (
+                  <li key={`${stage.name}-${idx}`} className="flex items-center gap-3">
+                    <Icon className={`h-4 w-4 ${colour}`} aria-hidden />
+                    <span className="font-medium text-gray-700">{stage.name}</span>
+                    <span className="text-gray-500">{stage.detail || ''}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        <div className="flex justify-between border-t pt-6">
+          <button
+            onClick={() => setStep('upload')}
+            className="rounded-md bg-cshse-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-cshse-700"
+          >
+            ◂ Start over
+          </button>
+          <button
+            onClick={cancelImport}
+            className="rounded-md px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl space-y-6 p-8">

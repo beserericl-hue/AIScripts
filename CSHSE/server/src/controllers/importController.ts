@@ -242,6 +242,18 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
         version: docVersion.version,
         s3Key: docVersion.s3Key,
       });
+      // Atomically record the real s3Key on the import record so the AI
+      // wizard's startAIImport controller can pass it to the cshse-ai
+      // service. Without this, startAIImport falls back to a synthetic
+      // 'imports/{importId}/source.docx' path that doesn't exist in S3
+      // and the download_s3 stage 404s. findByIdAndUpdate avoids the
+      // VersionError race with the parallel-running legacy pipeline.
+      await SelfStudyImport.findByIdAndUpdate(importRecord._id, {
+        $set: {
+          aiS3Key: docVersion.s3Key,
+          aiDocumentVersionId: docVersion._id,
+        },
+      });
     } catch (versionErr) {
       // Non-fatal: preserve-original failure should NOT block the import.
       // Legacy imports worked without this; we log and continue.

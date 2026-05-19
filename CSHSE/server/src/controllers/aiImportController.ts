@@ -244,12 +244,24 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
       format: null
     });
   } catch (err: any) {
+    const errMsg = `start-ai failed: ${err?.message || String(err)}`;
     await SelfStudyImport.findByIdAndUpdate(importId, {
       $set: {
         aiStatus: 'failed',
-        aiErrors: [`start-ai failed: ${err?.message || String(err)}`]
+        aiErrors: [errMsg]
       }
     });
+    // Broadcast on the SSE channel so any open EventSource (e.g. a tab
+    // already on the Parse step) sees the failure immediately rather
+    // than sitting on a 'queued' snapshot until a manual reload.
+    try {
+      const updated = await SelfStudyImport.findById(importId);
+      if (updated) {
+        broadcastSSE(importId, buildSnapshotFromImport(updated));
+      }
+    } catch (_broadcastErr) {
+      // Broadcast is best-effort.
+    }
     res.status(502).json({ error: 'AI service unreachable', detail: err?.message || String(err) });
   }
 }
