@@ -12,7 +12,7 @@
 import React, { useCallback, useState } from 'react';
 import { useAIImportStore, type Tag, type BucketItem } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY } from '../review/SpecRail';
-import { ItemTable, type ItemKind } from '../review/ItemTable';
+import { ItemCardList, type ItemKind } from '../review/ItemCardList';
 import { ItemPreview } from '../review/ItemPreview';
 import { ReassignPopup } from '../review/ReassignPopup';
 import { ShowInSourceModal } from '../review/ShowInSourceModal';
@@ -232,7 +232,7 @@ export function ReviewStep(): JSX.Element {
           onSelect={selectSpec}
         />
         <main className="flex flex-1 flex-col overflow-hidden">
-          <ItemTable
+          <ItemCardList
             selectedKey={selectedSpecKey}
             bucket={activeBucket}
             unplacedTags={unplacedTags}

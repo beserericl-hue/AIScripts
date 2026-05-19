@@ -238,6 +238,10 @@ const initialState = {
 };
 
 function deriveStepFromStatus(status: WizardStatus, currentStep: WizardStep): WizardStep {
+  // Terminal failure ALWAYS forces back to the Parse step regardless of where
+  // the user (or persisted state) thought they were — ParseStep renders the
+  // red error surface for failed/canceled and gives a Start Over action.
+  if (status === 'failed' || status === 'canceled') return 'parse';
   // Don't bounce the user back to an earlier step if they've already navigated.
   // The status drives the FURTHEST reached step; the user can navigate back.
   if (currentStep === 'tags') return 'tags';

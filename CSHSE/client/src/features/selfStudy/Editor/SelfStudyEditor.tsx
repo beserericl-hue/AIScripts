@@ -33,6 +33,7 @@ import { FileLibrary } from '../FileLibrary';
 import { CommentSidebar } from '../../comments';
 import { DocumentViewer, SectionTagger, TaggedSectionsList, SubExtractionViewerModal, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
 import { Wizard as AIImportWizard } from './AIImport';
+import { useAIImportStore } from '../../../store/aiImportStore';
 
 // Use consistent API paths without relying on environment variable
 
@@ -232,6 +233,58 @@ function SectionSelectionItem({
         />
       ))}
     </>
+  );
+}
+
+/**
+ * AI Import tab button — reads the wizard store's status + tag count so the
+ * tab badge tells the Coordinator whether anything needs attention without
+ * having to open the wizard. Wired post-2026-05-18 smoke-test feedback.
+ */
+function AIImportTabButton({
+  activeView,
+  setActiveView
+}: {
+  activeView: 'standards' | 'curriculum' | 'files' | 'ai-import';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'ai-import') => void;
+}) {
+  const status = useAIImportStore((s) => s.status);
+  const queuePosition = useAIImportStore((s) => s.queuePosition);
+  const tagCount = useAIImportStore((s) => s.tags.length);
+  const placeholderCount = useAIImportStore((s) => s.placeholderSections.length);
+
+  let badge: { text: string; cls: string } | null = null;
+  if (status === 'queued') {
+    const pos = queuePosition ?? 1;
+    badge = { text: `queued: ${pos}`, cls: 'bg-amber-100 text-amber-800' };
+  } else if (status === 'parsing') {
+    badge = { text: 'parsing', cls: 'bg-cshse-100 text-cshse-800 animate-pulse' };
+  } else if (status === 'parsed') {
+    badge = { text: 'ready to review', cls: 'bg-cshse-100 text-cshse-800' };
+  } else if (status === 'failed' || status === 'canceled') {
+    badge = { text: status, cls: 'bg-red-100 text-red-800' };
+  } else if (tagCount > 0) {
+    badge = { text: `${tagCount} tag${tagCount === 1 ? '' : 's'}`, cls: 'bg-amber-100 text-amber-800' };
+  } else if (placeholderCount > 0) {
+    badge = { text: `${placeholderCount} unwritten`, cls: 'bg-yellow-100 text-yellow-800' };
+  }
+
+  return (
+    <button
+      onClick={() => setActiveView('ai-import')}
+      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+        activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
+      }`}
+      title="AI-assisted import wizard (Sprint 1)"
+    >
+      <Upload className="w-4 h-4 flex-shrink-0" />
+      AI Import
+      {badge && (
+        <span className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${badge.cls}`}>
+          {badge.text}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -1912,20 +1965,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 <FolderOpen className="w-4 h-4 flex-shrink-0" />
                 Supporting File Library
               </button>
-              {isProgramCoordinator && (
-                <button
-                  onClick={() => setActiveView('ai-import')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                    activeView === 'ai-import'
-                      ? 'bg-teal-100 text-teal-700'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                  title="AI-assisted import wizard (Sprint 1)"
-                >
-                  <Upload className="w-4 h-4 flex-shrink-0" />
-                  AI Import
-                </button>
-              )}
+              {isProgramCoordinator && <AIImportTabButton activeView={activeView} setActiveView={setActiveView} />}
             </div>
           </div>
           <div className="flex items-center gap-4 flex-shrink-0">
