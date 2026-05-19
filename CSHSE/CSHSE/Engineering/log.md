@@ -908,3 +908,49 @@ Action items for next iteration (pre-UAT):
 5. The wizard's "tab badge" UX (queued: 3rd in line / parsing / ready to review) needs to actually surface from the Wizard.tsx — confirmed not currently wired.
 
 Coordinator quote: *"I thought we were hung."* — perception fix is the highest priority UI item before UAT.
+
+## [2026-05-19] update | matrices as first-class entities + html-snippet preservation (commit 5ad2efb)
+
+Smoke testing surfaced two related defects in the wizard review pane: data tables flattened to monospace text (no row/column structure) and curriculum matrix rows polluting individual spec cards. This commit fixes both — see [[ai-import-stevenson-matrices-2026-05-19]] for the full smoke-test report.
+
+**End-to-end matrix slice landed:**
+- Python pipeline un-defers the `matrix_extract` stage; `matrix/wire_format.py` walks both CSHSE anchors (`MatrixHSR` + `Matrix2`), preserves the full `<table>` HTML, injects `id="matrix-{slug}-row-{std}-{spec}"` on every matched row.
+- `deep_walker.deep_walk(skip_matrices=True)` default — curriculum matrices no longer leak into spec cards.
+- Wizard SpecRail: new `Matrices (N)` synthetic entry above Standard 1.
+- Wizard middle pane: full HTML table view with column-header chips per matrix.
+- Per-spec card list: `View in Matrix X (N cells)` buttons that scroll-and-flash the row.
+- `applyAIImport`: creates one `CurriculumMatrix` doc per matrix (standards[] grouped by std/spec with courseAssessments[]; rawContent[] seeded with row-anchored HTML).
+- SelfStudyEditor: `View in matrix` button on Standards 11-21 spec breadcrumbs.
+- CurriculumMatrixEditor: new `scrollToSpec` prop with 2.2s flash highlight.
+
+**Verified end-to-end against the real 353 MB Stevenson HTML** (offline smoke):
+- 2 matrices extracted in 10.1s — MatrixHSR (395 cells, 10 stds) + Matrix2 (42 cells, 8 stds) = **437 total cells**
+- 0 `table_curriculum_matrix` sections leaked through deep_walker
+- 182 non-matrix sections still flow normally
+- All row anchors verified present in `htmlSnippet`
+
+**Gates:** Python 135 passed / 4 skipped (+9 new tests) · server vitest 38 passed · client vitest 29 passed / 2 skipped · client tsc clean.
+
+**Known follow-ups:**
+- `matrix-hsr` reports empty `columnHeaders` — Stevenson's first row in mammoth's conversion has merged/empty header cells; the per-cell `columnIndex` still works for the click-to-row UX, just the chip strip above the matrix is empty for HSR.
+- Template-format docs (Kennesaw State) still skip matrix_extract — template_walker reads from DOCX path, doesn't keep HTML in scope. Small follow-up to surface HTML.
+- `CurriculumMatrix.rawContent[]` is one entry per matrix (no `standardCode`) — they surface under the editor's "Other Imported Sections" group. Per-standard fragmentation is a polish item.
+
+## [2026-05-19] update | matrix templates bundled into cshse-ai Docker image (commit e6c51a8)
+
+Follow-up to 5ad2efb. `matrix_extract` calls `load_matrix_template(program_level)` which reads `MatrixAssociateDegree / MatrixBaccalaureateDegree / MatrixMasterDegree` DOCX files. Those used to live at `CSHSE/docs/` — outside the `ai-service/` Docker build context, so the deployed image had no templates and the stage would have raised `FileNotFoundError` and silently dropped to `skipped: no template for bachelors`.
+
+Fix: copies into `ai-service/app/matrix/templates/`. `template_loader._matrix_file()` searches the packaged location first, falls back to `CSHSE/docs/` for local dev.
+
+## [2026-05-19] smoke-test | live wizard end-to-end on Stevenson confirms matrices flow (commit e6c51a8)
+
+Triggered a synthetic `/ai/import/start` job against `cshse-ai-develop.up.railway.app` with the same Stevenson S3 source the user's UAT uses (no impact on their existing review state).
+
+**Result: ✅ PASSED.**
+
+- `queued → parsed`: 4 min 16 sec total wall time
+- Stages: download_s3 (0.8s) → format_detect (1.00) → mammoth (15s, 353 MB HTML) → deep_walker (~15s, 557 sections vs. 564 pre-fix) → matcher (~2.5 min, 557/557) → coverage_review (~1 min, 86 specs) → **matrix_extract (15s, 2 matrices, 437 cells)** → gap_fill (skipped)
+- Snapshot `matrices.length: 2`: `matrix-hsr` (395 cells, rowsMatched 75) + `matrix-non-hsr` (42 cells, rowsMatched 76, 11 column headers)
+- No errors. JSON survives HMAC-signed snapshot endpoint.
+
+The 564→557 section drop confirms `deep_walker(skip_matrices=True)` is suppressing the same `<table>` tags `build_wire_matrices` claimed — no double-counting, no leakage into spec cards.
