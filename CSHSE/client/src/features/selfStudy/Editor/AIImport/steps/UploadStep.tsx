@@ -100,6 +100,9 @@ export function UploadStep(): JSX.Element {
   }, [startUpload]);
 
   const isUploading = status === 'uploading';
+  // After upload hits 100% the client makes a follow-up POST /start-ai;
+  // surface that distinct phase so the user doesn't think "100% uploading" is hung.
+  const isStartingAi = status === 'uploading' && uploadProgress >= 0.999;
   const canProceed = !!uploadFile && !isUploading;
 
   return (
@@ -193,15 +196,20 @@ export function UploadStep(): JSX.Element {
       {isUploading && (
         <div>
           <div className="flex justify-between text-xs text-gray-600">
-            <span>Uploading…</span>
+            <span>{isStartingAi ? 'Starting AI service…' : 'Uploading…'}</span>
             <span>{Math.round(uploadProgress * 100)}%</span>
           </div>
           <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-gray-200">
             <div
-              className="h-full bg-cshse-500 transition-all"
+              className={`h-full bg-cshse-500 transition-all ${isStartingAi ? 'animate-pulse' : ''}`}
               style={{ width: `${uploadProgress * 100}%` }}
             />
           </div>
+          {isStartingAi && (
+            <p className="mt-2 text-xs text-gray-500">
+              File uploaded. Asking the AI service to begin parsing… (this can take 5–10 seconds)
+            </p>
+          )}
         </div>
       )}
 
@@ -211,7 +219,7 @@ export function UploadStep(): JSX.Element {
           disabled={!canProceed}
           className="rounded-md bg-cshse-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-cshse-700 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          {isUploading ? 'Uploading…' : 'Next ▸'}
+          {isStartingAi ? 'Starting AI…' : isUploading ? 'Uploading…' : 'Next ▸'}
         </button>
       </div>
     </div>

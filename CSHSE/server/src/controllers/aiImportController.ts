@@ -184,43 +184,56 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
     return;
   }
 
-  const importRecord = await SelfStudyImport.findById(importId);
-  if (!importRecord) {
+  // Use atomic findOneAndUpdate so we don't conflict with the legacy
+  // manual-tagging pipeline that runs concurrently from the same /upload
+  // request. A direct .save() on a doc loaded earlier hit a VersionError
+  // when the legacy pipeline saved between our load and our save.
+  const initial = await SelfStudyImport.findById(importId).lean();
+  if (!initial) {
     res.status(404).json({ error: 'Import not found' });
     return;
   }
+  const s3Key = initial.aiS3Key || `imports/${importId}/source.docx`;
+  const submissionIdStr = String(initial.submissionId);
 
-  // Pull S3 key from the existing upload metadata. The /upload route already
-  // recorded the DocumentVersion; we reuse its s3Key.
-  const s3Key = importRecord.aiS3Key || `imports/${importRecord._id}/source.docx`;
-  importRecord.aiStatus = 'queued';
-  importRecord.aiProgramLevel = programLevel;
-  importRecord.aiForceFormat = forceFormat;
-  importRecord.aiIsReimport = !!isReimport;
-  importRecord.aiS3Key = s3Key;
-  importRecord.aiStartedAt = new Date();
-  importRecord.aiStages = [];
-  importRecord.aiErrors = [];
+  // Mark queued atomically before dispatching to the AI service.
+  await SelfStudyImport.findByIdAndUpdate(importId, {
+    $set: {
+      aiStatus: 'queued',
+      aiProgramLevel: programLevel,
+      aiForceFormat: forceFormat,
+      aiIsReimport: !!isReimport,
+      aiS3Key: s3Key,
+      aiStartedAt: new Date(),
+      aiStages: [],
+      aiErrors: []
+    }
+  });
 
-  // Kick off the AI service job — the response carries the initial queue position.
+  // Kick off the AI service job — response carries the initial queue position.
   try {
     const callbackUrl = `${getServerPublicUrl()}/api/imports/${importId}/ai-callback`;
     const eventCallbackUrl = `${getServerPublicUrl()}/api/imports/${importId}/ai-event`;
     const snapshot = await postToAIService('/ai/import/start', {
       s3Key,
-      submissionId: String(importRecord.submissionId),
+      submissionId: submissionIdStr,
       importId: String(importId),
       programLevel,
       forceFormat,
       callbackUrl,
       eventCallbackUrl
     });
-    importRecord.aiJobId = snapshot.jobId;
-    importRecord.aiStatus = snapshot.status;
-    importRecord.aiQueuePosition = snapshot.queuePosition ?? null;
-    importRecord.aiQueueDepth = snapshot.queueDepth ?? null;
-    importRecord.aiEtaSeconds = snapshot.etaSeconds ?? null;
-    await importRecord.save();
+    // Atomic save of the cshse-ai snapshot — again no .save() to avoid version
+    // races with the legacy pipeline.
+    await SelfStudyImport.findByIdAndUpdate(importId, {
+      $set: {
+        aiJobId: snapshot.jobId,
+        aiStatus: snapshot.status,
+        aiQueuePosition: snapshot.queuePosition ?? null,
+        aiQueueDepth: snapshot.queueDepth ?? null,
+        aiEtaSeconds: snapshot.etaSeconds ?? null
+      }
+    });
     res.status(202).json({
       importId: String(importId),
       jobId: snapshot.jobId,
@@ -231,9 +244,12 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
       format: null
     });
   } catch (err: any) {
-    importRecord.aiStatus = 'failed';
-    importRecord.aiErrors = [`start-ai failed: ${err?.message || String(err)}`];
-    await importRecord.save();
+    await SelfStudyImport.findByIdAndUpdate(importId, {
+      $set: {
+        aiStatus: 'failed',
+        aiErrors: [`start-ai failed: ${err?.message || String(err)}`]
+      }
+    });
     res.status(502).json({ error: 'AI service unreachable', detail: err?.message || String(err) });
   }
 }
