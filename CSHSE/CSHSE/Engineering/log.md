@@ -893,3 +893,18 @@ Env vars now set:
 HMAC pair verified equal length 64 across both services.
 
 **Pending**: post-deploy smoke (run-book §5.2, KSU template happy path through the deployed Wizard UI) — the AI side is up; needs an actual browser run against `cshse-develop.up.railway.app/submissions/<id>/editor/ai-import`. Updated run-book status table accordingly.
+
+## [2026-05-18] update | wizard smoke-test feedback — progress visibility gap
+
+First end-to-end run of the deployed wizard against Stevenson hit three real bugs (fixed: s3Key plumbing, VersionError race, container missing AWS creds) and surfaced **one open UX issue** to address before UAT:
+
+- **Long-running stages (matcher, coverage_review, gap_fill) look hung to the coordinator.** The `matcher` stage takes 5-7 min on a Stevenson-sized doc — it makes one Anthropic call per section (563 sections in this run). Even though the underlying pipeline is healthy and the stage's `detail` field updates from `150 / 563` → `425 / 563`, the visual presentation in `ParseStep.tsx` does not convey active progress (no per-stage progress bar, no per-spec animation, no elapsed timer). Coordinators staring at the screen reasonably assume it's hung.
+
+Action items for next iteration (pre-UAT):
+1. Add per-stage progress bar (uses `detail` string's `N / M` → numeric ratio when matchable).
+2. Add overall elapsed-time counter so coordinator sees forward motion even when a stage is slow.
+3. Verify cshse-ai actually fires the 25/50/75% milestone events the UI spec §6.2 promised (server-side workers may only emit `start` and `done` today).
+4. Consider an "estimated ~N min remaining" line on the active stage using the rolling-window p50 from prior imports (the queue ETA already uses this; just expose to running stages too).
+5. The wizard's "tab badge" UX (queued: 3rd in line / parsing / ready to review) needs to actually surface from the Wizard.tsx — confirmed not currently wired.
+
+Coordinator quote: *"I thought we were hung."* — perception fix is the highest priority UI item before UAT.
