@@ -275,10 +275,10 @@ function AIImportTabButton({
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
         activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
       }`}
-      title="AI-assisted import wizard (Sprint 1)"
+      title="Import File Wizard — AI-assisted import from DOCX (replaces the legacy Import Document button)"
     >
       <Upload className="w-4 h-4 flex-shrink-0" />
-      AI Import
+      Import File Wizard
       {badge && (
         <span className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${badge.cls}`}>
           {badge.text}
@@ -1974,20 +1974,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
             {isProgramCoordinator && (
               <>
-                {/* Import Document Button */}
-                <button
-                  onClick={handleImportButtonClick}
-                  disabled={isCheckingExistingImport}
-                  className="flex items-center gap-2 px-4 py-2 border border-gray-300 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50 whitespace-nowrap"
-                  title="Import content from a PDF, Word, or PowerPoint document"
-                >
-                  {isCheckingExistingImport ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Upload className="w-4 h-4 flex-shrink-0" />
-                  )}
-                  Import Document
-                </button>
+                {/* Legacy "Import Document" button removed 2026-05-19 —
+                    superseded by the Import File Wizard tab. The
+                    importController endpoints are still mounted for the
+                    transition period (run-book §6 rollback path). */}
 
                 {/* Validation Progress */}
                 <span className="text-sm text-gray-500">

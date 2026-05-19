@@ -31,7 +31,8 @@ function coverageIcon(b: SpecBucket): string {
 }
 
 function bucketCount(b: SpecBucket): number {
-  return b.narratives.length + b.evidenceText.length + b.evidenceFiles.length;
+  const mc = (b as any).matrixCells?.length || 0;
+  return b.narratives.length + b.evidenceText.length + b.evidenceFiles.length + mc;
 }
 
 export function SpecRail({ buckets, tags, placeholders, selectedKey, onSelect }: SpecRailProps): JSX.Element {
@@ -98,12 +99,18 @@ export function SpecRail({ buckets, tags, placeholders, selectedKey, onSelect }:
                   const count = bucketCount(b);
                   const icon = coverageIcon(b);
                   const isActive = selectedKey === key;
+                  // Truncated titles in the rail; native title attribute provides
+                  // a hover tooltip showing the full standard title + spec prompt.
+                  const fullTitle = b.specPrompt
+                    ? `${b.standardCode}.${b.specCode} — ${b.standardTitle}\n\n${b.specPrompt}`
+                    : `${b.standardCode}.${b.specCode} — ${b.standardTitle}`;
                   return (
                     <li key={key}>
                       <button
                         role="tab"
                         aria-selected={isActive}
                         onClick={() => onSelect(key)}
+                        title={fullTitle}
                         className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left ${
                           isActive
                             ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'

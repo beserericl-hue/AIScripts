@@ -64,7 +64,13 @@ export function ShowInSourceModal({
     api
       .get(`/api/imports/${importId}/content`)
       .then((res) => {
-        const html = typeof res.data === 'string' ? res.data : res.data?.html || res.data?.content || '';
+        // Server returns { htmlContent, taggedSectionsCount } — see
+        // importController.getDocumentContent. Older endpoints may use
+        // 'html' / 'content' / a raw string; check all of them.
+        const html =
+          typeof res.data === 'string'
+            ? res.data
+            : res.data?.htmlContent || res.data?.html || res.data?.content || '';
         if (!html) {
           setState({ kind: 'error', message: 'No document content returned by the server.' });
           return;

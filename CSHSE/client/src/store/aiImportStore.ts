@@ -487,14 +487,47 @@ export const useAIImportStore = create<AIImportState>()(
         const evidenceTextPayload: Record<string, Record<string, { text: string; mode: string }>> = {};
         const evidenceFilesPayload: any[] = [];
 
+        // Helper: render a per-item AI analysis card as HTML. Goes inside
+        // the narrative content so the Standards-tab editor surfaces what
+        // the wizard's matcher decided alongside the imported text.
+        const renderAIBlock = (heading: string, conf: number, kind: string, accept: string, rationale: string) => {
+          const safe = (s: string) => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          const band = conf >= 0.85 ? '#dcfce7' : conf >= 0.5 ? '#fef3c7' : '#f1f5f9';
+          const bandText = conf >= 0.85 ? '#166534' : conf >= 0.5 ? '#b45309' : '#475569';
+          return [
+            `<div class="ai-analysis" data-ai-confidence="${conf.toFixed(2)}" data-ai-accept-state="${safe(accept)}" data-ai-kind="${safe(kind)}" style="background:${band};border-left:3px solid ${bandText};padding:8px 12px;margin:8px 0;border-radius:4px;font-size:13px;color:#1f2937">`,
+            `  <div style="font-weight:600;color:${bandText};font-size:11px;text-transform:uppercase;letter-spacing:0.05em">AI analysis · ${kind} · conf ${conf.toFixed(2)} · ${safe(accept)}</div>`,
+            heading ? `  <div style="margin-top:4px;font-style:italic">Source: ${safe(heading)}</div>` : '',
+            rationale ? `  <div style="margin-top:4px">${safe(rationale)}</div>` : '',
+            `</div>`
+          ].filter(Boolean).join('\n');
+        };
+
         for (const [key, bucket] of Object.entries(buckets)) {
           if (bucket.narratives.length > 0) {
-            const html = bucket.narratives.map((n) => `<p>${n.snippet}</p>`).join('<hr/>');
+            const html = bucket.narratives
+              .map((n) =>
+                [
+                  renderAIBlock(n.heading, n.confidence, 'Narrative', n.acceptState, n.rationale),
+                  `<p>${(n.snippet || '').replace(/\n/g, '<br/>')}</p>`
+                ].join('\n')
+              )
+              .join('<hr/>');
             narrativesPayload[bucket.standardCode] = narrativesPayload[bucket.standardCode] || {};
             narrativesPayload[bucket.standardCode][bucket.specCode] = { content: html, mode: mergeMode };
           }
           if (bucket.evidenceText.length > 0) {
-            const text = bucket.evidenceText.map((e) => e.snippet).join('\n\n---\n\n');
+            // Same approach for evidence text: render each item's AI block
+            // followed by its snippet, separated by markdown horizontal
+            // rules so the editor can present them sequentially.
+            const text = bucket.evidenceText
+              .map((e) =>
+                [
+                  renderAIBlock(e.heading, e.confidence, 'Evidence text', e.acceptState, e.rationale),
+                  e.snippet
+                ].join('\n\n')
+              )
+              .join('\n\n---\n\n');
             evidenceTextPayload[bucket.standardCode] = evidenceTextPayload[bucket.standardCode] || {};
             evidenceTextPayload[bucket.standardCode][bucket.specCode] = { text, mode: mergeMode };
           }
@@ -504,7 +537,12 @@ export const useAIImportStore = create<AIImportState>()(
               spec: bucket.specCode,
               sectionId: f.sectionId,
               title: f.heading,
-              snippet: f.snippet
+              snippet: f.snippet,
+              // Surface the AI metadata so the server can store it on the
+              // SupportingEvidence row (linkedDocuments) for traceability.
+              aiConfidence: f.confidence,
+              aiAcceptState: f.acceptState,
+              aiRationale: f.rationale
             });
           }
         }

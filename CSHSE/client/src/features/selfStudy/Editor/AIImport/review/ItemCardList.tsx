@@ -69,12 +69,53 @@ function deriveDisplayLabel(heading: string, snippet: string): string {
   return h.length > 100 ? h.slice(0, 100) + '…' : h;
 }
 
+interface BucketGroups {
+  narratives: CardItem[];
+  evidenceText: CardItem[];
+  evidenceFiles: CardItem[];
+  matrixCells: CardItem[];
+}
+
 function flattenBucket(bucket: SpecBucket): CardItem[] {
+  // Preserves original kind order: narratives first, then evidence text,
+  // then evidence files, then matrix cells.
   const rows: CardItem[] = [];
   for (const n of bucket.narratives) rows.push(toCard(n, 'text'));
   for (const e of bucket.evidenceText) rows.push(toCard(e, 'evidenceText'));
   for (const f of bucket.evidenceFiles) rows.push(toCard(f, 'file'));
+  for (const m of (bucket as any).matrixCells || []) {
+    rows.push({
+      rowId: `matrix-${m.matrix || 'mx'}-${m.column_index ?? 0}-${m.code_raw || ''}`,
+      sectionId: `matrix-${m.matrix || 'mx'}-${m.column_index ?? 0}-${m.code_raw || ''}`,
+      rawHeading: `Matrix ${m.matrix || ''} · col ${m.column_index ?? 0}`,
+      displayLabel: `Matrix cell: ${m.code_raw || ''} (col ${m.column_index ?? '?'})`,
+      confidence: m.confidence ?? 1.0,
+      kind: 'matrix' as ItemKind,
+      wordCount: 0,
+      snippet: `Code: ${m.code_raw || ''}\nContent types: ${(m.content_types || []).join(', ')}\nDepth: ${m.depth || '—'}`,
+      rationale: m.spec_prompt || ''
+    });
+  }
   return rows;
+}
+
+function groupBucketByKind(bucket: SpecBucket): BucketGroups {
+  return {
+    narratives: bucket.narratives.map((n) => toCard(n, 'text')),
+    evidenceText: bucket.evidenceText.map((e) => toCard(e, 'evidenceText')),
+    evidenceFiles: bucket.evidenceFiles.map((f) => toCard(f, 'file')),
+    matrixCells: ((bucket as any).matrixCells || []).map((m: any) => ({
+      rowId: `matrix-${m.matrix || 'mx'}-${m.column_index ?? 0}-${m.code_raw || ''}`,
+      sectionId: `matrix-${m.matrix || 'mx'}-${m.column_index ?? 0}-${m.code_raw || ''}`,
+      rawHeading: `Matrix ${m.matrix || ''} · col ${m.column_index ?? 0}`,
+      displayLabel: `Matrix cell: ${m.code_raw || ''} (col ${m.column_index ?? '?'})`,
+      confidence: m.confidence ?? 1.0,
+      kind: 'matrix' as ItemKind,
+      wordCount: 0,
+      snippet: `Code: ${m.code_raw || ''}\nContent types: ${(m.content_types || []).join(', ')}\nDepth: ${m.depth || '—'}`,
+      rationale: m.spec_prompt || ''
+    }))
+  };
 }
 
 function toCard(item: BucketItem, kind: ItemKind): CardItem {
@@ -153,6 +194,13 @@ export function ItemCardList({
     if (!bucket) return [];
     return flattenBucket(bucket);
   }, [selectedKey, bucket, unplacedTags, placeholders]);
+
+  // Grouped view for real spec buckets (synthetic Unplaced/Unwritten stay flat).
+  const groups: BucketGroups | null = useMemo(() => {
+    if (selectedKey === UNPLACED_KEY || selectedKey === UNWRITTEN_KEY) return null;
+    if (!bucket) return null;
+    return groupBucketByKind(bucket);
+  }, [selectedKey, bucket]);
 
   // Reset selection state when the active spec changes.
   useEffect(() => {
@@ -263,79 +311,252 @@ export function ItemCardList({
         </div>
       </div>
 
-      {/* Card list */}
+      {/* Card list — grouped by kind for spec buckets, flat for Unplaced/Unwritten */}
       <div ref={listRef} className="flex-1 overflow-auto p-4" aria-label="Items for selected spec">
         {items.length === 0 ? (
           <div className="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
             No items in this spec. Pick another from the left rail or check the Unplaced / Unwritten rows.
           </div>
+        ) : groups ? (
+          <div className="space-y-6">
+            <KindSection
+              title="Narratives"
+              subtitle="Auto-applied as Submission.narratives[std][spec].content"
+              icon="📝"
+              items={groups.narratives}
+              startIdx={1}
+              selectedSectionId={selectedSectionId}
+              checked={checked}
+              isPlaceholder={isPlaceholder}
+              onSelect={onSelect}
+              onToggleCheck={toggleCheck}
+              onKeyDown={handleKeyDown}
+            />
+            <KindSection
+              title="Supporting evidence — text"
+              subtitle="Inline supportingEvidenceText"
+              icon="📄"
+              items={groups.evidenceText}
+              startIdx={groups.narratives.length + 1}
+              selectedSectionId={selectedSectionId}
+              checked={checked}
+              isPlaceholder={isPlaceholder}
+              onSelect={onSelect}
+              onToggleCheck={toggleCheck}
+              onKeyDown={handleKeyDown}
+            />
+            <KindSection
+              title="Supporting evidence — files"
+              subtitle="Will be uploaded as separate DOCX → SupportingEvidence rows"
+              icon="📎"
+              items={groups.evidenceFiles}
+              startIdx={groups.narratives.length + groups.evidenceText.length + 1}
+              selectedSectionId={selectedSectionId}
+              checked={checked}
+              isPlaceholder={isPlaceholder}
+              onSelect={onSelect}
+              onToggleCheck={toggleCheck}
+              onKeyDown={handleKeyDown}
+            />
+            <KindSection
+              title="Matrix cells"
+              subtitle="Will be applied to CurriculumMatrix.cells[]"
+              icon="🔢"
+              items={groups.matrixCells}
+              startIdx={
+                groups.narratives.length +
+                groups.evidenceText.length +
+                groups.evidenceFiles.length +
+                1
+              }
+              selectedSectionId={selectedSectionId}
+              checked={checked}
+              isPlaceholder={isPlaceholder}
+              onSelect={onSelect}
+              onToggleCheck={toggleCheck}
+              onKeyDown={handleKeyDown}
+            />
+          </div>
         ) : (
           <ul className="space-y-3">
-            {items.map((item, idx) => {
-              const band = confBand(item.confidence);
-              const isSelected = item.sectionId === selectedSectionId;
-              return (
-                <li
-                  key={item.rowId}
-                  data-section-id={item.sectionId}
-                  tabIndex={0}
-                  role="button"
-                  aria-pressed={isSelected}
-                  aria-label={`Item ${idx + 1}, ${KIND_LABEL[item.kind]}, ${item.wordCount} words`}
-                  onClick={() => onSelect(item.sectionId)}
-                  onKeyDown={(e) => handleKeyDown(e, item, idx)}
-                  className={`group cursor-pointer rounded-lg border bg-white p-4 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cshse-500 ${
-                    isSelected ? 'border-cshse-500 ring-2 ring-cshse-300' : 'border-gray-200 hover:border-cshse-300 hover:shadow-md'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      checked={checked.has(item.rowId)}
-                      onChange={(e) => {
-                        e.stopPropagation();
-                        toggleCheck(item.rowId);
-                      }}
-                      onClick={(e) => e.stopPropagation()}
-                      disabled={isPlaceholder}
-                      className="mt-1 rounded text-cshse-600 focus:ring-cshse-500 disabled:opacity-40"
-                      aria-label="Select item"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
-                          #{idx + 1}
-                        </span>
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-xs font-medium ${band.bgCls} ${band.textCls}`}
-                          title={`Confidence ${item.confidence.toFixed(2)} — ${band.label}`}
-                        >
-                          {item.confidence.toFixed(2)}
-                        </span>
-                        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">
-                          {KIND_LABEL[item.kind]}
-                        </span>
-                        <span className="text-xs text-gray-500">{item.wordCount} words</span>
-                      </div>
-                      <div className="mt-2 text-sm font-semibold text-gray-900">
-                        {item.displayLabel}
-                      </div>
-                      {item.rawHeading && item.rawHeading !== item.displayLabel && (
-                        <div className="mt-0.5 text-xs italic text-gray-500">
-                          Source heading: {item.rawHeading}
-                        </div>
-                      )}
-                      <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
-                        {item.snippet}
-                      </div>
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
+            {items.map((item, idx) => (
+              <ItemCard
+                key={item.rowId}
+                item={item}
+                index={idx + 1}
+                isSelected={item.sectionId === selectedSectionId}
+                checked={checked.has(item.rowId)}
+                disabled={isPlaceholder}
+                onSelect={() => onSelect(item.sectionId)}
+                onToggleCheck={() => toggleCheck(item.rowId)}
+                onKeyDown={(e) => handleKeyDown(e, item, idx)}
+              />
+            ))}
           </ul>
         )}
       </div>
     </div>
+  );
+}
+
+// ----------------------------------------------------------- helpers + cards
+
+/**
+ * Detect runs of short consecutive lines that look like flattened table cells.
+ * Mammoth's DOCX → HTML conversion turns each table cell into its own
+ * paragraph; the result reads as "Course code\nDescription\nCredits\n…"
+ * which is unreadable as flow prose. When detected, render in monospace
+ * so visual alignment helps the reader.
+ */
+function looksTabular(text: string): boolean {
+  if (!text) return false;
+  if (text.includes('<table')) return true;
+  const lines = text.trim().split(/\n+/);
+  if (lines.length < 6) return false;
+  let shortCount = 0;
+  for (const l of lines) {
+    if (l.length <= 30) shortCount++;
+  }
+  return shortCount / lines.length >= 0.7;
+}
+
+interface KindSectionProps {
+  title: string;
+  subtitle: string;
+  icon: string;
+  items: CardItem[];
+  startIdx: number;
+  selectedSectionId: string | null;
+  checked: Set<string>;
+  isPlaceholder: boolean;
+  onSelect: (sectionId: string) => void;
+  onToggleCheck: (rowId: string) => void;
+  onKeyDown: (e: React.KeyboardEvent, item: CardItem, idx: number) => void;
+}
+
+function KindSection({
+  title,
+  subtitle,
+  icon,
+  items,
+  startIdx,
+  selectedSectionId,
+  checked,
+  isPlaceholder,
+  onSelect,
+  onToggleCheck,
+  onKeyDown
+}: KindSectionProps): JSX.Element | null {
+  if (items.length === 0) return null;
+  return (
+    <section>
+      <header className="mb-2 flex items-center gap-2 border-b border-gray-200 pb-1">
+        <span aria-hidden>{icon}</span>
+        <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{items.length}</span>
+        <span className="text-xs text-gray-500">{subtitle}</span>
+      </header>
+      <ul className="space-y-3">
+        {items.map((item, idx) => (
+          <ItemCard
+            key={item.rowId}
+            item={item}
+            index={startIdx + idx}
+            isSelected={item.sectionId === selectedSectionId}
+            checked={checked.has(item.rowId)}
+            disabled={isPlaceholder}
+            onSelect={() => onSelect(item.sectionId)}
+            onToggleCheck={() => onToggleCheck(item.rowId)}
+            onKeyDown={(e) => onKeyDown(e, item, idx)}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+interface ItemCardProps {
+  item: CardItem;
+  index: number;
+  isSelected: boolean;
+  checked: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+  onToggleCheck: () => void;
+  onKeyDown: (e: React.KeyboardEvent) => void;
+}
+
+function ItemCard({
+  item,
+  index,
+  isSelected,
+  checked,
+  disabled,
+  onSelect,
+  onToggleCheck,
+  onKeyDown
+}: ItemCardProps): JSX.Element {
+  const band = confBand(item.confidence);
+  const tabular = looksTabular(item.snippet);
+  return (
+    <li
+      data-section-id={item.sectionId}
+      tabIndex={0}
+      role="button"
+      aria-pressed={isSelected}
+      aria-label={`Item ${index}, ${KIND_LABEL[item.kind]}, ${item.wordCount} words`}
+      onClick={onSelect}
+      onKeyDown={onKeyDown}
+      className={`group cursor-pointer rounded-lg border bg-white p-4 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cshse-500 ${
+        isSelected ? 'border-cshse-500 ring-2 ring-cshse-300' : 'border-gray-200 hover:border-cshse-300 hover:shadow-md'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => {
+            e.stopPropagation();
+            onToggleCheck();
+          }}
+          onClick={(e) => e.stopPropagation()}
+          disabled={disabled}
+          className="mt-1 rounded text-cshse-600 focus:ring-cshse-500 disabled:opacity-40"
+          aria-label="Select item"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-gray-500">#{index}</span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-xs font-medium ${band.bgCls} ${band.textCls}`}
+              title={`Confidence ${item.confidence.toFixed(2)} — ${band.label}`}
+            >
+              {item.confidence.toFixed(2)}
+            </span>
+            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{KIND_LABEL[item.kind]}</span>
+            <span className="text-xs text-gray-500">{item.wordCount} words</span>
+            {tabular && (
+              <span
+                className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700"
+                title="Source content looks tabular — rendered in monospace to preserve alignment"
+              >
+                tabular
+              </span>
+            )}
+          </div>
+          <div className="mt-2 text-sm font-semibold text-gray-900">{item.displayLabel}</div>
+          {item.rawHeading && item.rawHeading !== item.displayLabel && (
+            <div className="mt-0.5 text-xs italic text-gray-500">Source heading: {item.rawHeading}</div>
+          )}
+          {tabular ? (
+            <pre className="mt-3 max-h-96 overflow-auto whitespace-pre rounded bg-gray-50 p-3 font-mono text-xs leading-snug text-gray-800">
+              {item.snippet}
+            </pre>
+          ) : (
+            <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{item.snippet}</div>
+          )}
+        </div>
+      </div>
+    </li>
   );
 }
