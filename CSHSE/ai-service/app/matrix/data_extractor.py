@@ -22,11 +22,22 @@ from bs4 import BeautifulSoup, Tag
 
 from app.matrix.template_loader import MatrixTemplate
 
-# A matrix cell value: any concatenation of I/T/K/S (content) and L/M/H
-# (depth). Reject pure noise.
+# Curriculum-matrix cells are concatenations of I/T/K/S (content) + L/M/H
+# (depth). Some institutions (e.g. Stevenson's Matrix2) author cells with
+# commas, spaces, or periods between the letters — "I,KM" and "KT M" are
+# semantically identical to "IKM"/"KTM". Strip those before matching.
+_CELL_CODE_STRIP_RE = re.compile(r"[\s,.;/]+")
 _CELL_CODE_RE = re.compile(r"^[ITKSLMH]{1,8}$", re.IGNORECASE)
 # A row is a "matrix data row" if its first cell is substantive prose.
 _MIN_PROMPT_WORDS = 3
+# Known matrix anchors used to stop one matrix's scan at the start of the next.
+_MATRIX_ANCHOR_NAMES = ("MatrixHSR", "Matrix2")
+
+
+def _normalize_cell_code(raw: str) -> str:
+    """Strip whitespace, commas, periods, slashes — Stevenson's Matrix2 uses
+    "I,KM" / "KT M" interchangeably with "IKM" / "KTM"."""
+    return _CELL_CODE_STRIP_RE.sub("", raw).upper()
 
 
 @dataclass
@@ -65,16 +76,27 @@ def _decode_code(raw: str) -> tuple[list[str], str | None]:
 
 
 def _matrix_anchor_tables(soup: BeautifulSoup, anchor: str) -> list[Tag]:
-    """Return candidate matrix tables appearing after the anchor.
+    """Return candidate matrix tables appearing after ``anchor`` and BEFORE
+    the next named matrix anchor.
 
-    The coarse size pre-filter is intentionally loose; the real precision
-    comes from anchor-following + template-prompt matching + cell-code regex.
+    Pre-filter is coarse — real precision comes from anchor scoping +
+    template-prompt matching + cell-code regex. We deliberately stop the
+    scan at the next ``_MATRIX_ANCHOR_NAMES`` anchor so MatrixHSR's walk
+    doesn't accidentally pick up tables belonging to Matrix2 (which lives
+    later in the document).
     """
     target = soup.find(attrs={"id": anchor}) or soup.find("a", attrs={"name": anchor})
     if not target:
         return []
+    other_anchors = {a for a in _MATRIX_ANCHOR_NAMES if a != anchor}
     out: list[Tag] = []
     for el in target.find_all_next():
+        # Stop as soon as we hit another matrix's anchor.
+        if other_anchors:
+            el_id = el.get("id") if hasattr(el, "get") else None
+            el_name = el.get("name") if hasattr(el, "get") else None
+            if el_id in other_anchors or el_name in other_anchors:
+                break
         if el.name == "table":
             rows = el.find_all("tr")
             if not rows:
@@ -173,9 +195,14 @@ def extract_matrix(
 
             for ci, c in enumerate(tds[1:], start=1):
                 raw = (c.get_text() or "").strip()
-                if not raw or not _CELL_CODE_RE.match(raw):
+                if not raw:
                     continue
-                ctypes, depth = _decode_code(raw)
+                # Normalise out commas/spaces/periods/slashes that some
+                # institutions use as cell separators ("I,KM" / "KT M").
+                normalised = _normalize_cell_code(raw)
+                if not _CELL_CODE_RE.match(normalised):
+                    continue
+                ctypes, depth = _decode_code(normalised)
                 cells.append(
                     MatrixCellData(
                         standard_code=t_row.standard_code,
