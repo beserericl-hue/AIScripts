@@ -71,11 +71,11 @@ class MatrixTemplate:
 def _matrix_file(program_level: ProgramLevel) -> Path:
     """Resolve the absolute path of the template DOCX for a program level.
 
-    ai-service now lives at ``CSHSE/ai-service/``; the matrix templates live
-    at ``CSHSE/docs/``. parents[2] is the ai-service/ root; its parent is
-    the CSHSE/ folder, which contains docs/.
+    The templates ship inside the ai-service Python package at
+    ``app/matrix/templates/`` so they're available in the Railway-built
+    Docker image. Falls back to ``CSHSE/docs/`` for local development
+    where the canonical copies live alongside the source repo.
     """
-    docs = Path(__file__).resolve().parents[2].parent / "docs"
     candidates = {
         "associate": "MatrixAssociateDegree_July_2025 .docx",  # note the space — actual filename
         "bachelors": "MatrixBaccalaureateDegree_July_2025.docx",
@@ -84,14 +84,24 @@ def _matrix_file(program_level: ProgramLevel) -> Path:
     fn = candidates.get(program_level)
     if not fn:
         raise ValueError(f"unknown program level: {program_level}")
-    p = docs / fn
-    if not p.exists():
-        # try without the trailing space variant
-        alt = docs / fn.replace(" .docx", ".docx")
+    here = Path(__file__).resolve().parent
+    search_dirs = [
+        here / "templates",                  # packaged inside ai-service
+        here.parents[1].parent / "docs",     # CSHSE/docs (local dev fallback)
+    ]
+    tried: list[Path] = []
+    for d in search_dirs:
+        p = d / fn
+        tried.append(p)
+        if p.exists():
+            return p
+        alt = d / fn.replace(" .docx", ".docx")
+        tried.append(alt)
         if alt.exists():
             return alt
-        raise FileNotFoundError(p)
-    return p
+    raise FileNotFoundError(
+        f"matrix template '{fn}' for {program_level} not found. Tried: {tried}"
+    )
 
 
 def _parse_legend(soup_table: BeautifulSoup) -> dict[str, str]:
