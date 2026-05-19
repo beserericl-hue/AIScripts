@@ -170,7 +170,11 @@ def test_deep_walk_handles_rowspan_marker_column():
     assert "56 majors" in sec_b.markdown
 
 
-def test_deep_walk_curriculum_matrix_one_section():
+def test_deep_walk_curriculum_matrix_suppressed_by_default():
+    """By default deep_walk SKIPS curriculum_matrix tables — the matrix
+    extractor / wire_format.py owns them and the wizard surfaces them as
+    first-class entities. Passing ``skip_matrices=False`` restores the
+    legacy behavior for callers that don't run the matrix pipeline."""
     matrix = (
         "<html><body>"
         "<table>"
@@ -183,10 +187,38 @@ def test_deep_walk_curriculum_matrix_one_section():
         "<tr><td>1.f</td><td>I,L</td><td>T,M</td><td>K,H</td><td>S,H</td><td>K,H</td></tr>"
         "</table></body></html>"
     )
-    sections = deep_walk(matrix.encode("utf-8"), base_id="t")
+    # Default — matrix is suppressed (claimed by matrix_extract elsewhere).
+    assert deep_walk(matrix.encode("utf-8"), base_id="t") == []
+    # Opt-in legacy behavior — emits the matrix as a data-table section.
+    sections = deep_walk(matrix.encode("utf-8"), base_id="t", skip_matrices=False)
     assert len(sections) == 1
     assert sections[0].contains_table is True
     assert sections[0].splitter_tier == "table_curriculum_matrix"
+
+
+def test_table_section_preserves_html_snippet():
+    """deep_walker must carry the original <table> HTML so the wizard's review
+    pane can render rows and columns instead of the get_text() flatten."""
+    html = (
+        "<html><body>"
+        "<table>"
+        "<tr><th>Name</th><th>Role</th></tr>"
+        "<tr><td>Ari Blum</td><td>Director, Health Programs</td></tr>"
+        "<tr><td>Lisa Boone</td><td>Faculty Lead</td></tr>"
+        "<tr><td>Pat Lee</td><td>Field Coordinator</td></tr>"
+        "</table>"
+        "</body></html>"
+    )
+    sections = deep_walk(html.encode("utf-8"), base_id="t")
+    assert len(sections) == 1
+    sec = sections[0]
+    # Markdown stays flattened for embedding/matching.
+    assert "Ari Blum" in sec.markdown
+    # But html_snippet holds the structural source for the UI.
+    assert sec.html_snippet is not None
+    assert "<table" in sec.html_snippet
+    assert "<th>Name</th>" in sec.html_snippet
+    assert "<td>Ari Blum</td>" in sec.html_snippet
 
 
 def test_deep_walk_with_fallback_captures_outside_prose():

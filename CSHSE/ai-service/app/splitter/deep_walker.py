@@ -366,6 +366,9 @@ def _table_as_one_section(
         has_syllabus_signals=flags["hasSyllabusSignals"],
         splitter_tier=f"table_{table_type}",
         flags=flags,
+        # Preserve the original <table> so the wizard's review UI can show
+        # rows and columns instead of get_text()'s newline-flattened blob.
+        html_snippet=str(table),
     )
 
 
@@ -386,8 +389,20 @@ def _iter_top_level_tables(soup: BeautifulSoup) -> Iterator[Tag]:
             yield table
 
 
-def deep_walk(html_bytes: bytes, base_id: str = "doc") -> list[Section]:
-    """Extract sections by walking every top-level table."""
+def deep_walk(
+    html_bytes: bytes,
+    base_id: str = "doc",
+    skip_matrices: bool = True,
+) -> list[Section]:
+    """Extract sections by walking every top-level table.
+
+    When ``skip_matrices`` is True (the default), tables classified as
+    ``curriculum_matrix`` are NOT emitted as data-table sections — they
+    are handled by the matrix extractor (see ``matrix/wire_format.py``)
+    and surfaced in the wizard as first-class entities. Without this
+    skip, the same matrix would show up both as "(curriculum matrix
+    table)" cards under random specs AND as a structured matrix entry.
+    """
     soup = BeautifulSoup(html_bytes, "html.parser")
     for tag in soup(["script", "style", "head"]):
         tag.decompose()
@@ -397,6 +412,8 @@ def deep_walk(html_bytes: bytes, base_id: str = "doc") -> list[Section]:
     sections: list[Section] = []
     for table in _iter_top_level_tables(soup):
         table_type = _classify_table(table)
+        if skip_matrices and table_type == "curriculum_matrix":
+            continue
         if table_type == "template_subspec":
             sections.extend(_table_extracts_for_subspec_template(table, base_id))
         else:
@@ -414,10 +431,17 @@ def _is_inside_table(tag: Tag) -> bool:
 
 
 def deep_walk_with_fallback(
-    html_bytes: bytes, base_id: str = "doc", min_prose_words: int = 50
+    html_bytes: bytes,
+    base_id: str = "doc",
+    min_prose_words: int = 50,
+    skip_matrices: bool = True,
 ) -> list[Section]:
-    """Walk tables AND emit sections for substantial non-table prose blocks."""
-    table_sections = deep_walk(html_bytes, base_id)
+    """Walk tables AND emit sections for substantial non-table prose blocks.
+
+    ``skip_matrices`` is forwarded to ``deep_walk``; default True so the
+    wizard pipeline doesn't double-emit curriculum matrices.
+    """
+    table_sections = deep_walk(html_bytes, base_id, skip_matrices=skip_matrices)
 
     soup = BeautifulSoup(html_bytes, "html.parser")
     for tag in soup(["script", "style", "head"]):

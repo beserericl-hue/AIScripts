@@ -449,8 +449,11 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
                     _publish_status(job)
     _stage_done(job, "coverage_review", f"{len(filled)} reviewed, {len(spec_index) - len(filled)} synthesized")
 
-    # Template format: no matrix extraction in-doc, no gap-fill (no appendix).
-    _stage_skipped(job, "matrix_extract", "template format")
+    # Template format: matrix extraction would need the source HTML, but the
+    # template_walker reads from the DOCX path and doesn't keep HTML around.
+    # Defer until the template walker is reworked to also surface raw HTML;
+    # template DOCXs typically ship the matrix as a separate appendix.
+    _stage_skipped(job, "matrix_extract", "template format — needs html capture rework")
     _stage_skipped(job, "gap_fill", "no appendix")
 
     job.buckets = buckets
@@ -592,14 +595,58 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
                     _publish_status(job)
     _stage_done(job, "coverage_review", f"{len(filled)} reviewed, {len(spec_index) - len(filled)} synthesized")
 
-    # Matrix + gap-fill: deferred to v1.b/1.d (need appendix walker output;
-    # MVP wizard happy path doesn't need them, see UI spec §19).
-    _stage_skipped(job, "matrix_extract", "deferred to sub-sprint 1.b")
+    # Matrix extract: parse the two CSHSE matrix anchors (MatrixHSR + Matrix2)
+    # and emit per-matrix wire dicts so the wizard's "Matrices (N)" view can
+    # show the full table and per-spec deep-links rather than fragmenting
+    # matrix rows into individual data-table cards under random specs.
+    matrices = _extract_matrices_safe(job, html_bytes)
     _stage_skipped(job, "gap_fill", "deferred to sub-sprint 1.b")
 
     job.buckets = buckets
     job.tags = tags
-    job.matrices = []
+    job.matrices = matrices
+
+
+def _extract_matrices_safe(job: "JobRecord", html_bytes: bytes) -> list[dict[str, Any]]:
+    """Run the curriculum-matrix extractor against the source HTML; never raise.
+
+    Matrix extraction is a best-effort enrichment: if the program level has
+    no matching template, if the anchors aren't present, or if the extractor
+    fails for any reason, we log to the job stage and return ``[]`` rather
+    than aborting the pipeline.
+    """
+    from app.matrix.template_loader import (
+        align_template_to_handbook,
+        load_matrix_template,
+    )
+    from app.matrix.wire_format import build_wire_matrices
+    from app.standards.loader import load_specifications
+
+    _stage_started(job, "matrix_extract", "")
+    try:
+        template = load_matrix_template(job.program_level)
+        handbook = load_specifications(job.program_level)
+        aligned = align_template_to_handbook(template, handbook)
+        matrices, _consumed = build_wire_matrices(html_bytes, aligned)
+    except FileNotFoundError as exc:
+        _stage_skipped(job, "matrix_extract", f"no template for {job.program_level}: {exc}")
+        return []
+    except Exception as exc:  # noqa: BLE001
+        job.errors.append(f"matrix_extract failed: {type(exc).__name__}: {exc}")
+        _stage_skipped(job, "matrix_extract", f"failed: {type(exc).__name__}")
+        return []
+
+    if not matrices:
+        _stage_done(job, "matrix_extract", "no matrices detected")
+        return []
+
+    total_cells = sum(len(m.get("cells", [])) for m in matrices)
+    _stage_done(
+        job,
+        "matrix_extract",
+        f"{len(matrices)} matrix(es), {total_cells} cells",
+    )
+    return matrices
 
 
 def _section_to_item(sec, rec) -> dict[str, Any]:
@@ -610,6 +657,8 @@ def _section_to_item(sec, rec) -> dict[str, Any]:
         "sectionId": sec.id,
         "heading": sec.heading[:200],
         "snippet": snippet.strip(),
+        # HTML preserved by table-aware walkers; renderer prefers this when present.
+        "htmlSnippet": getattr(sec, "html_snippet", None),
         "wordCount": sec.word_count,
         "confidence": rec.primary_confidence,
         "acceptState": rec.accept_state,
@@ -626,6 +675,7 @@ def _recommendation_to_tag(sec, rec) -> dict[str, Any]:
         "sectionId": sec.id,
         "summary": sec.heading[:120],
         "fullText": snippet[:2000],
+        "htmlSnippet": getattr(sec, "html_snippet", None),
         "suggestedStd": rec.primary_standard if rec else None,
         "suggestedSpec": rec.primary_spec if rec else None,
         "confidence": rec.primary_confidence if rec else 0.0,

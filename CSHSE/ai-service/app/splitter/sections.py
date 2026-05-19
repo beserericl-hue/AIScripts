@@ -33,6 +33,11 @@ class Section:
     has_syllabus_signals: bool
     splitter_tier: str  # "toc" | "headings" | "semantic"
     flags: dict[str, bool] = field(default_factory=dict)
+    # Original HTML for table-bearing sections so the wizard can render the
+    # source `<table>` instead of the get_text() flatten. Set only when the
+    # walker has an authoritative HTML fragment (e.g. deep_walker's table
+    # sections). None means "use markdown".
+    html_snippet: str | None = None
 
 
 # ---------------------------------------------------------- heuristic detectors
@@ -206,6 +211,7 @@ def to_dict(section: Section) -> dict:
         "hasResumeSignals": section.has_resume_signals,
         "hasSyllabusSignals": section.has_syllabus_signals,
         "splitterTier": section.splitter_tier,
+        "htmlSnippet": section.html_snippet,
     }
 
 

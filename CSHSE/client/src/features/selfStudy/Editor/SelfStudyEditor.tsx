@@ -300,6 +300,13 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [selectedSpec, setSelectedSpec] = useState<string | null>('a');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'ai-import'>('standards');
+  // When the user clicks "View in matrix" from a spec, we stash the target
+  // (std, spec) here and switch to the curriculum view. CurriculumMatrixEditor
+  // consumes the target via `scrollToSpec` and clears the state after it has
+  // scrolled+highlighted the row.
+  const [matrixScrollTarget, setMatrixScrollTarget] = useState<
+    { std: string; spec: string } | null
+  >(null);
 
   // Reviewer comment state
   const [highlightedComment, setHighlightedComment] = useState<{ id: string; selectedText: string } | null>(null);
@@ -2166,8 +2173,22 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   )}
                 </div>
 
-                {/* Spec Navigation */}
                 <div className="flex items-center gap-2">
+                  {/* Jump to matrix row — visible for Standards 11–21 which are
+                      the only ones the CSHSE curriculum matrices cover. */}
+                  {selectedSpec && /^(1[1-9]|2[01])$/.test(selectedStandard) && (
+                    <button
+                      onClick={() => {
+                        setMatrixScrollTarget({ std: selectedStandard, spec: selectedSpec });
+                        setActiveView('curriculum');
+                      }}
+                      className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-1 text-xs text-cshse-700 hover:bg-cshse-50"
+                      title={`Jump to ${selectedStandard}.${selectedSpec} in the curriculum matrix`}
+                    >
+                      <Grid3X3 className="w-3.5 h-3.5" aria-hidden /> View in matrix
+                    </button>
+                  )}
+                  {/* Spec Navigation */}
                   <button
                     onClick={() => navigateSpec('prev')}
                     className="p-2 hover:bg-gray-200 rounded transition-colors"
@@ -2253,7 +2274,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           {/* Curriculum Matrix View */}
           {activeView === 'curriculum' && (
             <main className="flex-1 overflow-hidden p-2">
-              <CurriculumMatrixEditor submissionId={submissionId} />
+              <CurriculumMatrixEditor
+                submissionId={submissionId}
+                scrollToSpec={matrixScrollTarget}
+                onScrollConsumed={() => setMatrixScrollTarget(null)}
+              />
             </main>
           )}
 

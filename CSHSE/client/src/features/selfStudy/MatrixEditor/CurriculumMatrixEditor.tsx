@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import {
@@ -36,6 +36,12 @@ interface StandardDefinition {
 interface CurriculumMatrixEditorProps {
   submissionId: string;
   matrixId?: string;
+  // When set, scroll to and briefly flash the row matching this (std, spec).
+  // The row id pattern matches what the AI matrix extractor injects:
+  // `id="matrix-{slug}-row-{std}-{spec}"` on every spec-tagged <tr>.
+  // After the scroll completes the parent should clear via onScrollConsumed.
+  scrollToSpec?: { std: string; spec: string } | null;
+  onScrollConsumed?: () => void;
 }
 
 /**
@@ -45,12 +51,15 @@ interface CurriculumMatrixEditorProps {
 export function CurriculumMatrixEditor({
   submissionId,
   matrixId,
+  scrollToSpec,
+  onScrollConsumed,
 }: CurriculumMatrixEditorProps) {
   const queryClient = useQueryClient();
   const [expandedStandards, setExpandedStandards] = useState<Set<string>>(
     new Set(['11', '12', '13'])
   );
   const [deletingRawId, setDeletingRawId] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   // Fetch matrix data
   const { data: matrix, isLoading: loadingMatrix } = useQuery<CurriculumMatrix>({
@@ -128,6 +137,52 @@ export function CurriculumMatrixEditor({
     }
   };
 
+  // Scroll-into-view + flash highlight when the user clicked "View in matrix"
+  // from a spec. Run AFTER the matrix HTML has rendered (loadingMatrix flips
+  // to false) and after the next paint so the table is in the DOM.
+  useEffect(() => {
+    if (loadingMatrix || !scrollToSpec || !rootRef.current) return;
+    // Try common slug variants: "hsr" first since that's the most populous
+    // CSHSE matrix; fall back to all candidates.
+    const candidates = ['hsr', 'non-hsr'].map(
+      (slug) => `matrix-${slug}-row-${scrollToSpec.std}-${scrollToSpec.spec}`
+    );
+    let row: HTMLElement | null = null;
+    for (const id of candidates) {
+      row = rootRef.current.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+      if (row) break;
+    }
+    if (!row) {
+      // Fall back to a data-attribute lookup for any custom slug.
+      row = rootRef.current.querySelector<HTMLElement>(
+        `tr[data-std="${scrollToSpec.std}"][data-spec="${scrollToSpec.spec}"]`
+      );
+    }
+    if (!row) {
+      onScrollConsumed?.();
+      return;
+    }
+    // Make sure the surrounding accordion is expanded (the row may be inside
+    // a collapsed Standard panel).
+    setExpandedStandards((prev) => {
+      const std = scrollToSpec.std;
+      if (prev.has(std)) return prev;
+      const next = new Set(prev);
+      next.add(std);
+      return next;
+    });
+    // Defer the scroll one paint so the accordion expansion lands first.
+    const handle = requestAnimationFrame(() => {
+      row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row?.classList.add('cshse-matrix-row-flash');
+      setTimeout(() => {
+        row?.classList.remove('cshse-matrix-row-flash');
+        onScrollConsumed?.();
+      }, 2200);
+    });
+    return () => cancelAnimationFrame(handle);
+  }, [loadingMatrix, scrollToSpec, onScrollConsumed]);
+
   if (loadingMatrix) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -175,7 +230,10 @@ export function CurriculumMatrixEditor({
   );
 
   return (
-    <div className="curriculum-matrix-editor flex flex-col h-full overflow-hidden">
+    <div ref={rootRef} className="curriculum-matrix-editor flex flex-col h-full overflow-hidden">
+      <style>{`
+        .cshse-matrix-row-flash { background-color: #fef9c3 !important; transition: background-color 0.4s ease; }
+      `}</style>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white shrink-0">
         <div className="flex items-center gap-4">

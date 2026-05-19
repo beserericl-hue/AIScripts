@@ -19,6 +19,14 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission, INarrativeContent } from '../models/Submission';
+import {
+  CurriculumMatrix,
+  ICourseEntry,
+  ICourseAssessment,
+  IStandardMapping,
+  CoverageType,
+  CoverageDepth
+} from '../models/CurriculumMatrix';
 import { AuthenticatedRequest } from '../middleware/auth';
 
 // Env vars read lazily so tests that set them in beforeEach see the new value.
@@ -381,7 +389,10 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   if (Array.isArray(payload.placeholderSections)) {
     importRecord.aiPlaceholderSections = payload.placeholderSections;
   }
-  if (Array.isArray(payload.matrices)) importRecord.aiMatrices = payload.matrices;
+  if (Array.isArray(payload.matrices)) {
+    importRecord.aiMatrices = payload.matrices;
+    importRecord.markModified('aiMatrices');  // Mixed[] needs explicit mark
+  }
   importRecord.aiCompletedAt = new Date();
   importRecord.aiQueuePosition = null;
   importRecord.aiQueueDepth = null;
@@ -407,11 +418,36 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
 // server stores the last successful key on the SelfStudyImport doc; a retry
 // with the same key short-circuits to a 200 with the cached counts.
 
+type ApplyMatrixCell = {
+  std: string;
+  spec: string | null;
+  specPrompt?: string;
+  columnIndex: number;
+  columnHeader?: string;
+  codeRaw: string;
+  contentTypes: string[];
+  depth: string | null;
+};
+
+type ApplyMatrix = {
+  matrixId: string;
+  name: string;
+  anchorName?: string;
+  programLevel?: string;
+  htmlSnippet?: string;
+  columnHeaders: string[];
+  cells: ApplyMatrixCell[];
+};
+
 type ApplyPayload = {
   narratives?: Record<string, Record<string, { content: string; mode?: 'merge' | 'replace' | 'keep' | 'take' }>>;
   supportingEvidenceText?: Record<string, Record<string, { text: string; mode?: 'merge' | 'replace' | 'keep' | 'take' }>>;
   supportingEvidenceFiles?: Array<{ std: string; spec: string; sectionId?: string; title?: string; snippet?: string }>;
   matrixCells?: any[];
+  // Full per-matrix payloads from the wizard. When present, the apply step
+  // creates one CurriculumMatrix document per entry and pushes the new
+  // ObjectId onto submission.curriculumMatrices.
+  matrices?: ApplyMatrix[];
   importTags?: any[];
   placeholderSections?: any[];
   globalMergeMode?: 'merge' | 'replace' | 'per_spec';
@@ -576,7 +612,119 @@ export async function applyAIImport(req: AuthenticatedRequest, res: Response): P
       counts.evidenceFiles += 1;
     }
 
-    counts.matrixCells = (payload.matrixCells || []).length;
+    // Persist per-matrix payloads as CurriculumMatrix documents. Each matrix
+    // becomes its own document so the existing MatrixEditor (which fetches
+    // by submission.curriculumMatrices[]) sees them. Rows are grouped by
+    // (std, spec); per-row courseAssessments come from the matrix cells.
+    let appliedMatrixCellCount = 0;
+    if (Array.isArray(payload.matrices) && payload.matrices.length > 0) {
+      const userId = req.user!._id;
+      const newMatrixIds: mongoose.Types.ObjectId[] = [];
+
+      for (const m of payload.matrices) {
+        // Build the course list from the matrix's column headers. The
+        // `id` field on ICourseEntry is referenced by ICourseAssessment.courseId.
+        const courses: ICourseEntry[] = m.columnHeaders.map((header, idx) => ({
+          id: `${m.matrixId}-col-${idx + 1}`,
+          coursePrefix: header.replace(/\d+$/, '').trim() || header,
+          courseNumber: header.match(/\d+/)?.[0] || '',
+          courseName: header,
+          order: idx
+        }));
+
+        // Group cells by (std, spec) so each row carries all its
+        // courseAssessments.
+        const rowMap = new Map<string, IStandardMapping>();
+        let rowOrder = 0;
+        for (const cell of m.cells) {
+          const spec = cell.spec || '?';
+          const key = `${cell.std}.${spec}`;
+          let row = rowMap.get(key);
+          if (!row) {
+            row = {
+              standardCode: cell.std,
+              specCode: spec,
+              specText: cell.specPrompt || '',
+              rowIndex: rowOrder++,
+              courseAssessments: []
+            };
+            rowMap.set(key, row);
+          }
+          // Validate cell codes against the enum types before pushing.
+          const validTypes = (cell.contentTypes || []).filter((t): t is CoverageType =>
+            t === 'I' || t === 'T' || t === 'K' || t === 'S'
+          );
+          const validDepth =
+            cell.depth === 'L' || cell.depth === 'M' || cell.depth === 'H'
+              ? (cell.depth as CoverageDepth)
+              : ('M' as CoverageDepth);
+          const courseId = `${m.matrixId}-col-${cell.columnIndex}`;
+          const assess: ICourseAssessment = {
+            courseId,
+            type: validTypes,
+            depth: validDepth,
+            notes: cell.codeRaw && cell.codeRaw !== validTypes.join('') + validDepth ? cell.codeRaw : undefined
+          };
+          row.courseAssessments.push(assess);
+          appliedMatrixCellCount += 1;
+        }
+
+        const matrixType =
+          m.matrixId === 'matrix-hsr'
+            ? 'human_services_courses'
+            : m.matrixId === 'matrix-non-hsr'
+              ? 'non_human_services_courses'
+              : 'custom';
+
+        // Seed rawContent so the existing MatrixEditor (which renders from
+        // rawContent[]) shows the full table with row anchors. Each AI matrix
+        // becomes one rawContent entry; `standardCode` is left undefined so
+        // it surfaces in the editor's "Other Imported Sections" group as a
+        // single full-table view (rather than fragmented per-standard).
+        const rawContent = m.htmlSnippet
+          ? [
+              {
+                id: `${m.matrixId}-ai-${Date.now()}`,
+                content: m.htmlSnippet,
+                title: m.name,
+                sourceImportId: importId,
+                addedAt: new Date(),
+                addedBy: new mongoose.Types.ObjectId(userId),
+                processed: true,
+                processedAt: new Date()
+              }
+            ]
+          : [];
+
+        const matrixDoc = await CurriculumMatrix.create(
+          [
+            {
+              submissionId: submission._id,
+              matrixType,
+              name: m.name,
+              version: 1,
+              lastModified: new Date(),
+              lastModifiedBy: new mongoose.Types.ObjectId(userId),
+              courses,
+              standards: [...rowMap.values()],
+              rawContent
+            }
+          ],
+          session ? { session } : undefined
+        );
+        newMatrixIds.push(matrixDoc[0]._id as mongoose.Types.ObjectId);
+      }
+
+      // Replace any AI-derived matrices from a prior re-import: drop the old
+      // refs (the matrices themselves stay for history but we point the
+      // submission at the new ones) and append the new ones.
+      submission.curriculumMatrices = [
+        ...(submission.curriculumMatrices || []),
+        ...newMatrixIds
+      ];
+    }
+
+    counts.matrixCells = appliedMatrixCellCount || (payload.matrixCells || []).length;
     counts.tags = (payload.importTags || []).length;
     counts.placeholders = (payload.placeholderSections || []).length;
 

@@ -102,6 +102,9 @@ export interface IAIBucketItem {
   sectionId: string;
   heading: string;
   snippet: string;
+  // Original `<table>` HTML for table-derived items; renderer falls back to
+  // the plain-text snippet when null/empty.
+  htmlSnippet?: string | null;
   wordCount: number;
   confidence: number;
   acceptState: string;
@@ -128,6 +131,7 @@ export interface IAITag {
   sectionId: string;
   summary: string;
   fullText: string;
+  htmlSnippet?: string | null;
   suggestedStd: string | null;
   suggestedSpec: string | null;
   confidence: number;
@@ -250,6 +254,7 @@ const AIBucketItemSchema = new Schema<IAIBucketItem>({
   sectionId: { type: String, required: true },
   heading: { type: String, default: '' },
   snippet: { type: String, default: '' },
+  htmlSnippet: { type: String, default: null },
   wordCount: { type: Number, default: 0 },
   confidence: { type: Number, default: 0 },
   acceptState: { type: String, default: 'review_unknown' },
@@ -276,6 +281,7 @@ const AITagSchema = new Schema<IAITag>({
   sectionId: { type: String, required: true },
   summary: { type: String, default: '' },
   fullText: { type: String, default: '' },
+  htmlSnippet: { type: String, default: null },
   suggestedStd: { type: String, default: null },
   suggestedSpec: { type: String, default: null },
   confidence: { type: Number, default: 0 },

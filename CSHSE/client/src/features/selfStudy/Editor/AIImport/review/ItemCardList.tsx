@@ -18,14 +18,16 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move } from 'lucide-react';
-import type {
-  BucketItem,
-  PlaceholderSection,
-  SpecBucket,
-  Tag
+import { FileBox, Tag as TagIcon, Move, Grid3x3 } from 'lucide-react';
+import {
+  useAIImportStore,
+  type BucketItem,
+  type MatrixData,
+  type PlaceholderSection,
+  type SpecBucket,
+  type Tag
 } from '../../../../../store/aiImportStore';
-import { UNPLACED_KEY, UNWRITTEN_KEY } from './SpecRail';
+import { UNPLACED_KEY, UNWRITTEN_KEY, MATRICES_KEY } from './SpecRail';
 
 export type ItemKind = 'text' | 'evidenceText' | 'file' | 'matrix' | 'tag';
 
@@ -38,6 +40,10 @@ export interface CardItem {
   kind: ItemKind;
   wordCount: number;
   snippet: string;
+  // Preserved <table> HTML when the walker had structural HTML to show.
+  // ItemCard renders this verbatim when set; otherwise falls back to the
+  // monospace heuristic over `snippet`.
+  htmlSnippet?: string | null;
   rationale: string;
 }
 
@@ -46,6 +52,7 @@ interface ItemCardListProps {
   bucket: SpecBucket | null;
   unplacedTags: Tag[];
   placeholders: PlaceholderSection[];
+  matrices: MatrixData[];
   selectedSectionId: string | null;
   onSelect: (sectionId: string) => void;
   onBulkAction: (
@@ -128,6 +135,7 @@ function toCard(item: BucketItem, kind: ItemKind): CardItem {
     kind,
     wordCount: item.wordCount,
     snippet: item.snippet,
+    htmlSnippet: item.htmlSnippet ?? null,
     rationale: item.rationale
   };
 }
@@ -142,6 +150,7 @@ function flattenTags(tags: Tag[]): CardItem[] {
     kind: 'tag' as ItemKind,
     wordCount: t.fullText.split(/\s+/).length,
     snippet: t.fullText,
+    htmlSnippet: t.htmlSnippet ?? null,
     rationale: t.rationale
   }));
 }
@@ -181,23 +190,48 @@ export function ItemCardList({
   bucket,
   unplacedTags,
   placeholders,
+  matrices,
   selectedSectionId,
   onSelect,
   onBulkAction
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
+  const selectMatrixRow = useAIImportStore((s) => s.selectMatrixRow);
+  const selectedMatrixRowAnchor = useAIImportStore((s) => s.selectedMatrixRowAnchor);
+  const clearMatrixRowAnchor = useAIImportStore((s) => s.clearMatrixRowAnchor);
+
+  // Per-spec matrix references: which (matrix, row, columnIndex+code) triples
+  // address the currently-selected spec? Used to surface "View in Matrix"
+  // buttons at the top of the spec card list.
+  const specMatrixRefs = useMemo(() => {
+    if (!bucket) return [] as Array<{ matrix: MatrixData; rowAnchor: string; cellCount: number }>;
+    const std = bucket.standardCode;
+    const spec = bucket.specCode;
+    const out: Array<{ matrix: MatrixData; rowAnchor: string; cellCount: number }> = [];
+    for (const m of matrices) {
+      const cells = m.cells.filter((c) => c.std === std && c.spec === spec);
+      if (cells.length === 0) continue;
+      out.push({ matrix: m, rowAnchor: cells[0].rowAnchor, cellCount: cells.length });
+    }
+    return out;
+  }, [bucket, matrices]);
 
   const items = useMemo<CardItem[]>(() => {
     if (selectedKey === UNPLACED_KEY) return flattenTags(unplacedTags);
     if (selectedKey === UNWRITTEN_KEY) return flattenPlaceholders(placeholders);
+    if (selectedKey === MATRICES_KEY) return [];
     if (!bucket) return [];
     return flattenBucket(bucket);
   }, [selectedKey, bucket, unplacedTags, placeholders]);
 
-  // Grouped view for real spec buckets (synthetic Unplaced/Unwritten stay flat).
+  // Grouped view for real spec buckets (synthetic Unplaced/Unwritten/Matrices stay flat).
   const groups: BucketGroups | null = useMemo(() => {
-    if (selectedKey === UNPLACED_KEY || selectedKey === UNWRITTEN_KEY) return null;
+    if (
+      selectedKey === UNPLACED_KEY ||
+      selectedKey === UNWRITTEN_KEY ||
+      selectedKey === MATRICES_KEY
+    ) return null;
     if (!bucket) return null;
     return groupBucketByKind(bucket);
   }, [selectedKey, bucket]);
@@ -267,6 +301,16 @@ export function ItemCardList({
     );
   }
 
+  if (selectedKey === MATRICES_KEY) {
+    return (
+      <MatricesView
+        matrices={matrices}
+        highlightedRowAnchor={selectedMatrixRowAnchor}
+        onAnchorConsumed={clearMatrixRowAnchor}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full flex-1 flex-col bg-gray-50">
       {/* Bulk-action toolbar */}
@@ -310,6 +354,27 @@ export function ItemCardList({
           </button>
         </div>
       </div>
+
+      {/* Per-spec matrix references — visible only when a real spec bucket is
+          selected and at least one matrix has a row addressing this spec. */}
+      {specMatrixRefs.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-cshse-50/40 px-4 py-2 text-xs">
+          <span className="font-medium text-cshse-800">Curriculum matrices:</span>
+          {specMatrixRefs.map((ref) => (
+            <button
+              key={ref.matrix.matrixId}
+              onClick={() => selectMatrixRow(ref.rowAnchor)}
+              title={`Jump to this spec's row in ${ref.matrix.name} (${ref.cellCount} course cell${ref.cellCount === 1 ? '' : 's'})`}
+              className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-0.5 font-medium text-cshse-700 hover:bg-cshse-100"
+            >
+              <Grid3x3 className="h-3 w-3" aria-hidden /> {ref.matrix.name}
+              <span className="ml-1 rounded bg-cshse-100 px-1 text-[10px] text-cshse-800">
+                {ref.cellCount} cell{ref.cellCount === 1 ? '' : 's'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Card list — grouped by kind for spec buckets, flat for Unplaced/Unwritten */}
       <div ref={listRef} className="flex-1 overflow-auto p-4" aria-label="Items for selected spec">
@@ -497,7 +562,8 @@ function ItemCard({
   onKeyDown
 }: ItemCardProps): JSX.Element {
   const band = confBand(item.confidence);
-  const tabular = looksTabular(item.snippet);
+  const hasHtmlTable = !!(item.htmlSnippet && item.htmlSnippet.includes('<table'));
+  const tabular = !hasHtmlTable && looksTabular(item.snippet);
   return (
     <li
       data-section-id={item.sectionId}
@@ -535,12 +601,20 @@ function ItemCard({
             </span>
             <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{KIND_LABEL[item.kind]}</span>
             <span className="text-xs text-gray-500">{item.wordCount} words</span>
-            {tabular && (
+            {hasHtmlTable && (
+              <span
+                className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700"
+                title="Source contained a <table>; rendered with original rows and columns"
+              >
+                table
+              </span>
+            )}
+            {!hasHtmlTable && tabular && (
               <span
                 className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] text-amber-700"
                 title="Source content looks tabular — rendered in monospace to preserve alignment"
               >
-                tabular
+                tabular (monospace)
               </span>
             )}
           </div>
@@ -548,7 +622,19 @@ function ItemCard({
           {item.rawHeading && item.rawHeading !== item.displayLabel && (
             <div className="mt-0.5 text-xs italic text-gray-500">Source heading: {item.rawHeading}</div>
           )}
-          {tabular ? (
+          {hasHtmlTable ? (
+            <div
+              className="ai-html-snippet mt-3 max-h-[28rem] overflow-auto rounded border border-gray-200 bg-white p-3 text-sm leading-relaxed text-gray-800
+                [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs
+                [&_td]:border [&_td]:border-gray-300 [&_td]:p-1.5 [&_td]:align-top
+                [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-50 [&_th]:p-1.5 [&_th]:text-left [&_th]:font-semibold
+                [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+              // Mammoth-converted DOCX HTML produced by our own AI service; matches
+              // the trust model used by DocumentViewer and ShowInSourceModal.
+              // eslint-disable-next-line react/no-danger
+              dangerouslySetInnerHTML={{ __html: item.htmlSnippet || '' }}
+            />
+          ) : tabular ? (
             <pre className="mt-3 max-h-96 overflow-auto whitespace-pre rounded bg-gray-50 p-3 font-mono text-xs leading-snug text-gray-800">
               {item.snippet}
             </pre>
@@ -558,5 +644,124 @@ function ItemCard({
         </div>
       </div>
     </li>
+  );
+}
+
+// --------------------------------------------------------------- MatricesView
+//
+// Renders every detected curriculum matrix in the middle pane. The matrix
+// extractor's wire format gives us the original `<table>` HTML with row ids
+// already injected (e.g. `id="matrix-hsr-row-11-a"`) — we just sanitize-pass
+// it through `dangerouslySetInnerHTML` (matching the trust model of the rest
+// of the wizard's docx-derived HTML). When `highlightedRowAnchor` is set we
+// scroll that row into view and add a brief flash highlight, then clear the
+// store anchor so a second click on the same button re-triggers.
+
+interface MatricesViewProps {
+  matrices: MatrixData[];
+  highlightedRowAnchor: string | null;
+  onAnchorConsumed: () => void;
+}
+
+function MatricesView({
+  matrices,
+  highlightedRowAnchor,
+  onAnchorConsumed
+}: MatricesViewProps): JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!highlightedRowAnchor || !containerRef.current) return;
+    const row = containerRef.current.querySelector<HTMLElement>(
+      `#${CSS.escape(highlightedRowAnchor)}`
+    );
+    if (!row) {
+      onAnchorConsumed();
+      return;
+    }
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.classList.add('cshse-matrix-row-flash');
+    const t = setTimeout(() => {
+      row.classList.remove('cshse-matrix-row-flash');
+      onAnchorConsumed();
+    }, 2200);
+    return () => clearTimeout(t);
+  }, [highlightedRowAnchor, onAnchorConsumed]);
+
+  if (matrices.length === 0) {
+    return (
+      <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
+        No curriculum matrices were detected in this import.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-1 flex-col bg-gray-50">
+      <div className="border-b border-gray-200 bg-white px-4 py-2 text-sm">
+        <span className="font-medium text-gray-800">
+          {matrices.length} matrix{matrices.length === 1 ? '' : 'es'} detected
+        </span>
+        <span className="ml-2 text-xs text-gray-500">
+          The full <code className="rounded bg-gray-100 px-1">{'<table>'}</code> is shown
+          here once per matrix; spec cards link back to the relevant row.
+        </span>
+      </div>
+      <div ref={containerRef} className="flex-1 overflow-auto p-4">
+        <style>{`
+          .cshse-matrix-row-flash { background-color: #fef9c3 !important; transition: background-color 0.4s ease; }
+          .ai-html-snippet table { border-collapse: collapse; width: 100%; font-size: 12px; }
+          .ai-html-snippet table td, .ai-html-snippet table th {
+            border: 1px solid #d1d5db; padding: 4px 6px; vertical-align: top;
+          }
+          .ai-html-snippet table th { background: #f9fafb; font-weight: 600; text-align: left; }
+          .ai-html-snippet table tr.cshse-matrix-row td:first-child {
+            font-weight: 500;
+          }
+        `}</style>
+        {matrices.map((m) => (
+          <section
+            key={m.matrixId}
+            className="mb-6 rounded-lg border border-gray-200 bg-white"
+            aria-labelledby={`matrix-h-${m.matrixId}`}
+          >
+            <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-gray-200 px-4 py-2">
+              <div>
+                <h3
+                  id={`matrix-h-${m.matrixId}`}
+                  className="text-sm font-semibold text-gray-900"
+                >
+                  <Grid3x3 className="mr-1 inline h-4 w-4 align-text-bottom text-cshse-700" aria-hidden />
+                  {m.name}
+                </h3>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Program level: {m.programLevel} · {m.rowsMatched} of {m.rowsTotal} rows matched · {m.cells.length} filled cells
+                </p>
+              </div>
+              {m.columnHeaders.length > 0 && (
+                <div className="flex flex-wrap gap-1 text-[10px]">
+                  {m.columnHeaders.map((h, i) => (
+                    <span
+                      key={`${m.matrixId}-col-${i}`}
+                      className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-gray-700"
+                    >
+                      {h}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </header>
+            <div
+              className="ai-html-snippet max-h-[36rem] overflow-auto p-3 text-sm leading-relaxed text-gray-800"
+              // Matrix HTML originates from our own Python extractor (which
+              // copies the mammoth-converted DOCX table and adds row ids).
+              // Same trust model as DocumentViewer and ShowInSourceModal.
+              // eslint-disable-next-line react/no-danger
+              dangerouslySetInnerHTML={{ __html: m.htmlSnippet }}
+            />
+          </section>
+        ))}
+      </div>
+    </div>
   );
 }

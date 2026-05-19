@@ -9,16 +9,23 @@
  *   - "Unwritten": placeholder template sections (template format only)
  */
 import React, { useMemo, useState } from 'react';
-import { Search, AlertTriangle, FileText } from 'lucide-react';
-import type { SpecBucket, PlaceholderSection, Tag } from '../../../../../store/aiImportStore';
+import { Search, AlertTriangle, FileText, Grid3x3 } from 'lucide-react';
+import type {
+  SpecBucket,
+  PlaceholderSection,
+  Tag,
+  MatrixData
+} from '../../../../../store/aiImportStore';
 
 export const UNPLACED_KEY = '_unplaced';
 export const UNWRITTEN_KEY = '_unwritten';
+export const MATRICES_KEY = '_matrices';
 
 interface SpecRailProps {
   buckets: Record<string, SpecBucket>;
   tags: Tag[];
   placeholders: PlaceholderSection[];
+  matrices: MatrixData[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
 }
@@ -35,7 +42,7 @@ function bucketCount(b: SpecBucket): number {
   return b.narratives.length + b.evidenceText.length + b.evidenceFiles.length + mc;
 }
 
-export function SpecRail({ buckets, tags, placeholders, selectedKey, onSelect }: SpecRailProps): JSX.Element {
+export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, onSelect }: SpecRailProps): JSX.Element {
   const [filter, setFilter] = useState('');
 
   // Group buckets by standard for the rail's accordion structure.
@@ -83,6 +90,29 @@ export function SpecRail({ buckets, tags, placeholders, selectedKey, onSelect }:
       </div>
 
       <nav role="tablist" aria-orientation="vertical" className="flex-1 overflow-auto p-2 text-sm">
+        {matrices.length > 0 && (
+          <div className="mb-3 border-b border-gray-200 pb-3">
+            <button
+              role="tab"
+              aria-selected={selectedKey === MATRICES_KEY}
+              onClick={() => onSelect(MATRICES_KEY)}
+              title={`${matrices.length} curriculum matrix(es): ${matrices.map((m) => m.name).join(', ')}`}
+              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+                selectedKey === MATRICES_KEY
+                  ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <Grid3x3 className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
+                <span className="font-medium">Matrices</span>
+              </span>
+              <span className="rounded bg-cshse-200 px-1.5 text-xs text-cshse-800">
+                {matrices.length}
+              </span>
+            </button>
+          </div>
+        )}
         {byStandard.map(([std, list]) => {
           const visible = list.filter((b) =>
             filterMatches(`${std}.${b.specCode} ${b.standardTitle} ${b.specPrompt}`)

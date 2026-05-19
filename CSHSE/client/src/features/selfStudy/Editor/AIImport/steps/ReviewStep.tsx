@@ -228,6 +228,7 @@ export function ReviewStep(): JSX.Element {
           buckets={buckets}
           tags={tags}
           placeholders={placeholderSections}
+          matrices={matrices}
           selectedKey={selectedSpecKey}
           onSelect={selectSpec}
         />
@@ -237,6 +238,7 @@ export function ReviewStep(): JSX.Element {
             bucket={activeBucket}
             unplacedTags={unplacedTags}
             placeholders={placeholderSections}
+            matrices={matrices}
             selectedSectionId={selectedSectionId}
             onSelect={selectSection}
             onBulkAction={handleBulkAction}
