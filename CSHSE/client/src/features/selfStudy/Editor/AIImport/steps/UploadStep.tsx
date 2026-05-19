@@ -35,6 +35,7 @@ export function UploadStep(): JSX.Element {
   const startUpload = useAIImportStore((s) => s.startUpload);
 
   const [localError, setLocalError] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const handleFile = useCallback(
     (file: File | null) => {
@@ -47,14 +48,47 @@ export function UploadStep(): JSX.Element {
         setLocalError(`File is ${(file.size / 1024 / 1024).toFixed(1)} MB; the limit is ${MAX_FILE_SIZE / 1024 / 1024} MB.`);
         return;
       }
-      if (!ACCEPTED_MIMES.has(file.type)) {
-        setLocalError(`We accept .docx (preferred) or .pdf. Got: ${file.type || 'unknown'}.`);
+      // Some browsers report empty file.type for .docx — fall back to extension check.
+      const looksDocx = file.name.toLowerCase().endsWith('.docx');
+      const looksPdf = file.name.toLowerCase().endsWith('.pdf');
+      if (!ACCEPTED_MIMES.has(file.type) && !looksDocx && !looksPdf) {
+        setLocalError(`We accept .docx (preferred) or .pdf. Got: ${file.type || file.name}.`);
         return;
       }
       setUploadFile(file);
     },
     [setUploadFile]
   );
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+    if (!isDragOver) setIsDragOver(true);
+  }, [isDragOver]);
+
+  const handleDragEnter = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Only clear when leaving the label itself, not entering a child element.
+    if (e.currentTarget === e.target) setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      handleFile(files[0]);
+    }
+  }, [handleFile]);
 
   const handleNext = useCallback(async () => {
     setLocalError(null);
@@ -77,8 +111,12 @@ export function UploadStep(): JSX.Element {
       </p>
 
       <label
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={`flex h-48 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed transition-colors ${
-          uploadFile
+          uploadFile || isDragOver
             ? 'border-cshse-500 bg-cshse-50'
             : 'border-gray-300 bg-gray-50 hover:border-cshse-400 hover:bg-cshse-50'
         }`}
