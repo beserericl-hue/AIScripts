@@ -954,3 +954,32 @@ Triggered a synthetic `/ai/import/start` job against `cshse-ai-develop.up.railwa
 - No errors. JSON survives HMAC-signed snapshot endpoint.
 
 The 564→557 section drop confirms `deep_walker(skip_matrices=True)` is suppressing the same `<table>` tags `build_wire_matrices` claimed — no double-counting, no leakage into spec cards.
+
+## [2026-05-20] update | wizard UX batch — three coordinator-feedback fixes + corrections feedback loop (commits af81f7f, dc93689, 8ea57e6)
+
+Coordinator review of the wizard surfaced six independent issues. All landed across three commits:
+
+**af81f7f — three UX fixes + corrections loop.**
+1. Spec 1.a was empty in the rail even though the document plainly addressed it. Root cause: the import_jobs pipeline's `word_count >= 30` filter dropped letter-tagged subspec rows. Fix: preserve every `table_subspec_row` regardless of word count — the walker's structural classification already signaled "this is a spec response." No per-doc hardcoding; pattern-driven.
+2. MatrixStep rendered a single `"?.?"` row with `Col 1..13` placeholders. Root cause: field-name mismatch (`standardCode`/`specCode` vs new wire format's `std`/`spec`). Fix: read the new shape; preserve document-row order; populate column inputs from `columnHeaders[]`.
+3. "Start over" on the Parse failure panel left the red error visible until the user dropped a new file. Fix: new `startOver()` store action clears errors/stages/buckets/matrices/importId.
+4. NEW: corrections feedback loop. Empty spec card → "+ Add from source" → highlight passage → confirm. Writes an `ImportCorrection` Mongo row + embeds via OpenAI + stores in Qdrant (`cshse_corrections_{env}`). Per-institution scope. Matcher retrieves top-3 similar examples as soft few-shot hints in the Haiku prompt on future runs.
+
+**dc93689 — matrix step UX rebuild.** Coordinator: "I am not sure what this screen is still? Why is there an unidentified row." Rebuilt the screen to explain itself:
+- Header rewritten to "Curriculum matrix — map columns to your courses".
+- Blue info banner explaining what the AI extracted, what the codes mean, what the coordinator does here.
+- Amber warning when columnHeaders arrives empty (Stevenson case): tells the coordinator why columns show as "Col 1..N" and points at Skip.
+- Prominent labeled "Skip this matrix" toggle.
+- Cell-code legend (I/T/K/S + L/M/H translated to English).
+- Sticky matrix-name banner inside the scrolling cell-table region so the matrix-name stays visible while the coordinator scrolls 75 spec rows.
+- Collapsible "Show original source-document table" reveals the row-anchored `<table>` from the DOCX inline.
+
+**8ea57e6 — Review step UX batch.** Coordinator: "How do I send everything reviewed over to the self study editor? This should be a single button push." Four landings:
+- One-click apply: prominent emerald "Apply to editor" button on Review's top toolbar. Confirm dialog shows exact counts (narratives / evidence text / files / matrix cells / tags). Confirm fires `apply()` and lands the coordinator on the success summary. Bypasses Matrix + Apply guided steps when they're not needed.
+- Inline kind chips on every card (Narrative · Evidence · File). Click any to re-bucket. Surfaces the previously-buried `<select>` from the right-pane preview.
+- Per-card Approve button + bulk Approve selected / Approve all toolbar buttons. Approved cards get an emerald border. Workflow tracker (does NOT gate Apply).
+- Matrix step row context: sticky matrix-name banner + dual-line column headers ("Col 1" + assigned/source label below) + per-row + per-cell hover tooltips: "Matrix for HSR · 11.a · HS101 = I,KM".
+
+**User guide ships alongside the code.** See [[wizard-user-guide-2026-05-20]] for the top-down walkthrough + 12-step QA checklist + troubleshooting table. Companion PowerPoint deck at `wizard-user-guide-2026-05-20.pptx`.
+
+Gates: Python 136 / 4 skip · server vitest 38 · client vitest 29 / 2 skip · client tsc clean · server tsc clean for the touched files.
