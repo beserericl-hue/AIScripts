@@ -64,11 +64,21 @@ async function fetchOrUseCachedHtml(importId: string): Promise<string> {
   if (cached) return cached;
   const existing = HTML_INFLIGHT.get(importId);
   if (existing) return existing;
-  const p = api.get(`/api/imports/${importId}/content`).then((res) => {
-    const html =
-      typeof res.data === 'string'
-        ? res.data
-        : res.data?.htmlContent || res.data?.html || res.data?.content || '';
+  // Ask for raw HTML so the server streams chunks straight to the wire
+  // instead of buffering the full 353 MB string in memory + JSON-stringifying
+  // it (which is what was causing the "timeout exceeded" first-load errors).
+  // The server's content negotiation falls back to JSON for legacy callers
+  // that don't send Accept: text/html.
+  const p = api.get(`/api/imports/${importId}/content`, {
+    headers: { Accept: 'text/html' },
+    responseType: 'text',
+    // Skip JSON parsing on a 353 MB string — saves several seconds of CPU.
+    transformResponse: [(data) => data],
+    // No artificial timeout — let the server stream finish. The browser's
+    // own network timeout still applies but is generous (~5 min).
+    timeout: 0,
+  }).then((res) => {
+    const html: string = typeof res.data === 'string' ? res.data : '';
     if (!html) throw new Error('No document content returned by the server.');
     HTML_CACHE.set(importId, html);
     HTML_INFLIGHT.delete(importId);

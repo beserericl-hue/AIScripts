@@ -2327,20 +2327,55 @@ export const getDocumentContent = async (req: Request, res: Response) => {
     const { importId } = req.params;
     debugLog('getDocumentContent called', { importId });
 
+    // Content negotiation: when the caller asks for `text/html` we stream
+    // the raw HTML straight from GridFS without buffering the whole 353 MB
+    // Stevenson doc in memory first and without JSON-stringifying it.
+    // Legacy callers (DocumentViewer + SectionTagger) don't send Accept:
+    // text/html, so they get the existing JSON path untouched.
+    const wantsHtml = req.accepts(['html', 'json']) === 'html';
+
     // Get import record to check if HTML is in GridFS
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       debugLog('Import not found', { importId });
+      if (wantsHtml) return res.status(404).type('text/plain').send('Import not found');
       return res.status(404).json({ error: 'Import not found' });
     }
-
-    let htmlContent: string;
 
     // Check if HTML is stored in GridFS (new approach) or inline (legacy)
     const isGridFS = importRecord.extractedContent?.metadata?.htmlStoredInGridFS === true;
 
+    // FAST PATH: stream raw HTML to the wire. The browser starts parsing
+    // chunks as they arrive instead of waiting for the full ~353 MB JSON
+    // string. Cuts perceived latency dramatically and eliminates the
+    // server-side JSON.stringify cost (which doubles memory for the 353
+    // MB string while escaping characters).
+    if (wantsHtml) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      if (isGridFS) {
+        try {
+          const stream = await gridFsService.getHtmlContentStream(importId);
+          stream.on('error', (err: any) => {
+            console.error('[getDocumentContent] GridFS stream error:', err);
+            if (!res.headersSent) res.status(500).end();
+            else res.end();
+          });
+          stream.pipe(res);
+          return;
+        } catch (gridError: any) {
+          debugLog('GridFS stream failed', { importId, error: gridError.message });
+          return res.status(404).type('text/plain').send('Document content not found in storage. Please re-upload the document.');
+        }
+      }
+      // Legacy non-GridFS — small enough to send in one go.
+      return res.send(importRecord.extractedContent?.rawText || '');
+    }
+
+    // SLOW (LEGACY) PATH: buffer + JSON. Kept for SectionTagger / DocumentViewer
+    // which expect `{ htmlContent, taggedSectionsCount }`.
+    let htmlContent: string;
     if (isGridFS) {
-      // Retrieve from GridFS
       debugLog('Retrieving HTML from GridFS', { importId });
       try {
         htmlContent = await gridFsService.getHtmlContent(importId);
@@ -2350,7 +2385,6 @@ export const getDocumentContent = async (req: Request, res: Response) => {
         return res.status(404).json({ error: 'Document content not found in storage. Please re-upload the document.' });
       }
     } else {
-      // Legacy: HTML is stored in extractedContent.rawText
       htmlContent = importRecord.extractedContent?.rawText || '';
       debugLog('HTML retrieved from MongoDB (legacy)', { importId, contentLength: htmlContent.length });
     }
@@ -2359,11 +2393,7 @@ export const getDocumentContent = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Document content not found. Please re-upload the document.' });
     }
 
-    // Placeholder re-insertion is now done client-side in DocumentViewer using DOM text matching
-    // Server-side HTML matching was unreliable because browser Range API normalizes HTML differently
     const taggedSectionsCount = (importRecord.detectedSections || []).length;
-
-    // Return HTML content as JSON (placeholders will be inserted client-side)
     return res.json({ htmlContent, taggedSectionsCount });
   } catch (error: any) {
     console.error('Get document content error:', error);
