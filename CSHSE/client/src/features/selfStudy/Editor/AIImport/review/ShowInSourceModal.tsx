@@ -222,14 +222,24 @@ export function ShowInSourceModal({
     setSelectedPassage('');
   };
 
-  if (!open) return null;
+  // IMPORTANT: don't `return null` when closed — that would unmount the
+  // <div dangerouslySetInnerHTML={{__html: state.html}} />, throwing away
+  // the browser's parsed-and-laid-out 353 MB Stevenson DOM. Reopening
+  // would force the browser to re-parse the same HTML — every modal
+  // open felt hung for 10-15 seconds even after the network cache was
+  // populated. Instead, keep the modal mounted always (once `importId`
+  // is known) and toggle visibility with CSS `display`. Children stay
+  // in the DOM; the second open is instant.
+  if (!importId) return null;
 
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label="Source document"
+      aria-hidden={!open}
       className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40"
+      style={{ display: open ? 'flex' : 'none' }}
       onClick={onClose}
     >
       <div
