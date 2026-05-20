@@ -91,7 +91,11 @@ export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, o
 
       <nav role="tablist" aria-orientation="vertical" className="flex-1 overflow-auto p-2 text-sm">
         {matrices.length > 0 && (
-          <div className="mb-3 border-b border-gray-200 pb-3">
+          // Sticky so it stays visible no matter how far the coordinator
+          // scrolls into the 21-standard rail. Without this, the entry
+          // disappears off the top as soon as the user reaches Standard 3
+          // and they reasonably think we removed the feature.
+          <div className="sticky top-0 z-10 -mx-2 mb-3 border-b border-gray-200 bg-gray-50 px-2 pb-3 pt-1 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
             <button
               role="tab"
               aria-selected={selectedKey === MATRICES_KEY}
@@ -100,7 +104,7 @@ export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, o
               className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
                 selectedKey === MATRICES_KEY
                   ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
-                  : 'hover:bg-gray-100 text-gray-700'
+                  : 'bg-white text-gray-700 hover:bg-gray-100 ring-1 ring-gray-200'
               }`}
             >
               <span className="flex items-center gap-1.5">
