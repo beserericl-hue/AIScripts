@@ -10,12 +10,13 @@
  * Step 5 commit lands.
  */
 import React, { useCallback, useState } from 'react';
-import { useAIImportStore, type Tag, type BucketItem } from '../../../../../store/aiImportStore';
+import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY } from '../review/SpecRail';
 import { ItemCardList, type ItemKind } from '../review/ItemCardList';
 import { ItemPreview } from '../review/ItemPreview';
 import { ReassignPopup } from '../review/ReassignPopup';
 import { ShowInSourceModal } from '../review/ShowInSourceModal';
+import { api } from '../../../../../services/api';
 
 export function ReviewStep(): JSX.Element {
   const buckets = useAIImportStore((s) => s.buckets);
@@ -34,6 +35,14 @@ export function ReviewStep(): JSX.Element {
   const [sourceOpen, setSourceOpen] = useState(false);
   const [sourceSectionId, setSourceSectionId] = useState<string | null>(null);
   const [sourceMatchText, setSourceMatchText] = useState('');
+  // Correction-flow state — when set, the source modal opens in selection
+  // mode targeting this (std, spec). Confirming the passage fires the
+  // corrections API + adds a local bucket item so the spec card fills
+  // immediately.
+  const [correctionTarget, setCorrectionTarget] = useState<{
+    std: string;
+    spec: string;
+  } | null>(null);
 
   const activeBucket =
     selectedSpecKey && selectedSpecKey !== UNPLACED_KEY && selectedSpecKey !== UNWRITTEN_KEY
@@ -203,6 +212,68 @@ export function ReviewStep(): JSX.Element {
     [activeBucket, tags]
   );
 
+  // Coordinator clicked "+ Add from source" on an empty spec card. Open the
+  // source modal in selection mode targeting that (std, spec).
+  const handleCorrectMissingSpec = useCallback((std: string, spec: string) => {
+    setCorrectionTarget({ std, spec });
+    setSourceOpen(true);
+  }, []);
+
+  // User picked a passage in the source modal. Fire the corrections API +
+  // append a synthetic BucketItem so the spec card fills immediately.
+  const handleCorrectionConfirmed = useCallback(
+    async (text: string, _location: { paragraphIndex?: number }) => {
+      if (!correctionTarget || !importId) return;
+      const { std, spec } = correctionTarget;
+      const key = `${std}.${spec}`;
+      const existing = buckets[key];
+      // Local optimistic update — the spec card fills with the new item.
+      const localItem: BucketItem = {
+        sectionId: `correction-${Date.now().toString(36)}`,
+        heading: `${std}.${spec} · coordinator correction`,
+        snippet: text,
+        wordCount: text.split(/\s+/).filter(Boolean).length,
+        confidence: 1.0,
+        acceptState: 'auto_accept',
+        rationale: 'Manually corrected by the coordinator from the source document.'
+      };
+      const nextBucket: SpecBucket = existing
+        ? { ...existing, narratives: [...existing.narratives, localItem] }
+        : {
+            standardCode: std,
+            specCode: spec,
+            standardTitle: '',
+            specPrompt: '',
+            narratives: [localItem],
+            evidenceText: [],
+            evidenceFiles: [],
+            matrixCells: [],
+            coverageScore: null,
+            coverageCovered: null,
+            coverageGaps: [],
+            coverageStrengths: []
+          };
+      useAIImportStore.setState({ buckets: { ...buckets, [key]: nextBucket } });
+      setSourceOpen(false);
+      setCorrectionTarget(null);
+      try {
+        await api.post(`/api/imports/${importId}/corrections`, {
+          expectedStd: std,
+          expectedSpec: spec,
+          expectedSectionType: 'narrative_response',
+          sourceText: text,
+          sourceHeading: `${std}.${spec}`,
+          correctionType: 'missed-by-matcher'
+        });
+      } catch (err) {
+        // The local card stays filled — coordinator workflow isn't blocked
+        // on the correction API. A reconciler can re-fire on next session.
+        console.warn('correction POST failed:', err);
+      }
+    },
+    [buckets, correctionTarget, importId]
+  );
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
@@ -242,6 +313,7 @@ export function ReviewStep(): JSX.Element {
             selectedSectionId={selectedSectionId}
             onSelect={selectSection}
             onBulkAction={handleBulkAction}
+            onCorrectMissingSpec={handleCorrectMissingSpec}
           />
         </main>
         <ItemPreview
@@ -266,7 +338,12 @@ export function ReviewStep(): JSX.Element {
         importId={importId}
         sectionId={sourceSectionId}
         matchText={sourceMatchText}
-        onClose={() => setSourceOpen(false)}
+        onClose={() => {
+          setSourceOpen(false);
+          setCorrectionTarget(null);
+        }}
+        selectionTarget={correctionTarget}
+        onSelectionConfirmed={correctionTarget ? handleCorrectionConfirmed : undefined}
       />
     </div>
   );

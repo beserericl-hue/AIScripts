@@ -74,6 +74,10 @@ class JobRecord:
     callback_url: str
     event_callback_url: str
     created_at: float
+    # Per-institution scope key for the corrections RAG (matcher few-shot).
+    # Optional — pre-correction-feedback callers (older Node servers) won't
+    # send it; the matcher just skips few-shot retrieval in that case.
+    institution_id: str | None = None
     status: JobStatus = "queued"
     queue_position: int | None = None
     queue_depth: int | None = None
@@ -350,7 +354,7 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     recommendations: dict[str, Any] = {}
     done_count = 0
     with ThreadPoolExecutor(max_workers=6) as ex:
-        futures = {ex.submit(matcher.recommend, s, job.program_level): s for s in sections}
+        futures = {ex.submit(matcher.recommend, s, job.program_level, institution_id=job.institution_id): s for s in sections}
         for fut in as_completed(futures):
             sec = futures[fut]
             try:
@@ -490,8 +494,26 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
 
     _stage_started(job, "deep_walker", "")
     raw_sections = deep_walk_with_fallback(html_bytes, base_id=job.job_id)
-    sections = [s for s in raw_sections if s.word_count >= 30]
-    _stage_done(job, "deep_walker", f"{len(raw_sections)} raw, {len(sections)} after filter")
+    # Two-tier filter:
+    #   - Letter-tagged subspec rows (splitter_tier="table_subspec_row") are
+    #     ALWAYS kept: the walker already classified them as direct responses
+    #     to a Handbook letter-prefix prompt. Their content may be a single
+    #     short sentence (e.g. "Regionally accredited by Middle States.") but
+    #     dropping them by word count means the matching spec card stays empty
+    #     even though the document clearly addresses it.
+    #   - Other sections (prose, generic data tables) keep the 30-word floor.
+    sections = [
+        s for s in raw_sections
+        if s.splitter_tier == "table_subspec_row" or s.word_count >= 30
+    ]
+    preserved = sum(
+        1 for s in raw_sections
+        if s.splitter_tier == "table_subspec_row" and s.word_count < 30
+    )
+    detail = f"{len(raw_sections)} raw, {len(sections)} after filter"
+    if preserved:
+        detail += f" (preserved {preserved} short letter-tagged responses)"
+    _stage_done(job, "deep_walker", detail)
 
     store = VectorStore(settings.qdrant_url, settings.qdrant_api_key or None)
     embedder = EmbeddingClient(settings.openai_api_key)
@@ -502,7 +524,7 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     recommendations: dict[str, Any] = {}
     done_count = 0
     with ThreadPoolExecutor(max_workers=8) as ex:
-        futures = {ex.submit(matcher.recommend, s, job.program_level): s for s in sections}
+        futures = {ex.submit(matcher.recommend, s, job.program_level, institution_id=job.institution_id): s for s in sections}
         for fut in as_completed(futures):
             sec = futures[fut]
             try:
@@ -746,6 +768,7 @@ def enqueue_job(
     force_format: str | None,
     callback_url: str,
     event_callback_url: str,
+    institution_id: str | None = None,
 ) -> dict[str, Any]:
     """Create + enqueue a new import job. Returns the initial snapshot."""
     job_id = f"job-{uuid.uuid4().hex[:12]}"
@@ -759,6 +782,7 @@ def enqueue_job(
         callback_url=callback_url,
         event_callback_url=event_callback_url,
         created_at=_now(),
+        institution_id=institution_id,
     )
     with _LOCK:
         _JOBS[job_id] = job

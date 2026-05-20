@@ -71,6 +71,7 @@ export function ParseStep(): JSX.Element {
   const errors = useAIImportStore((s) => s.errors);
   const eventsTransport = useAIImportStore((s) => s.eventsTransport);
   const setStep = useAIImportStore((s) => s.setStep);
+  const startOver = useAIImportStore((s) => s.startOver);
   const cancelImport = useAIImportStore((s) => s.cancelImport);
   const closeEventStream = useAIImportStore((s) => s.closeEventStream);
   const openEventStream = useAIImportStore((s) => s.openEventStream);
@@ -174,7 +175,7 @@ export function ParseStep(): JSX.Element {
         )}
         <div className="flex justify-between border-t pt-6">
           <button
-            onClick={() => setStep('upload')}
+            onClick={startOver}
             className="rounded-md bg-cshse-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-cshse-700"
           >
             ◂ Start over

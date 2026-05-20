@@ -85,6 +85,27 @@ class StartImportRequest(BaseModel):
     forceFormat: str | None = Field(default=None, description="'template' | 'self_study' to skip auto-detect.")
     callbackUrl: str = Field(..., description="Terminal-state webhook on the CSHSE server.")
     eventCallbackUrl: str = Field(..., description="Per-stage progress webhook on the CSHSE server.")
+    institutionId: str | None = Field(
+        default=None,
+        description=(
+            "Per-institution scope key. Used by the corrections RAG so a "
+            "school's accumulated corrections shape ONLY its own future "
+            "matcher runs. Omitting it disables few-shot retrieval for "
+            "the job (safer than leaking cross-school examples)."
+        ),
+    )
+
+
+class CorrectionIngestRequest(BaseModel):
+    correctionId: str
+    institutionId: str
+    programLevel: str
+    expectedStd: str
+    expectedSpec: str
+    expectedSectionType: str = "narrative_response"
+    sourceHeading: str = ""
+    sourceText: str
+    correctionType: str = "missed-by-matcher"
 
 
 @app.post("/ai/import/start", status_code=status.HTTP_202_ACCEPTED)
@@ -111,6 +132,7 @@ async def start_import(req: StartImportRequest, request: Request) -> dict:
         force_format=req.forceFormat,
         callback_url=req.callbackUrl,
         event_callback_url=req.eventCallbackUrl,
+        institution_id=req.institutionId,
     )
     return snapshot
 
@@ -129,6 +151,34 @@ async def get_import(job_id: str, request: Request) -> dict:
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"job {job_id} not found")
     return snapshot
+
+
+@app.post("/ai/corrections/ingest", status_code=status.HTTP_201_CREATED)
+async def ingest_correction_endpoint(req: CorrectionIngestRequest, request: Request) -> dict:
+    """Embed a coordinator correction and store it in Qdrant.
+
+    Called by the CSHSE Node server immediately after the coordinator
+    saves a correction via /api/imports/:importId/corrections. The point
+    is upserted into ``cshse_corrections_{env}`` keyed by correctionId,
+    payload-filtered by institutionId + programLevel.
+
+    On future imports the matcher will retrieve similar examples from
+    this collection and inject them as few-shot hints in the Haiku
+    prompt. Best-effort: failure here doesn't lose the correction (Mongo
+    is the source of truth); a future reconciler can replay.
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    from app.corrections.store import ingest_correction
+    try:
+        return ingest_correction(req.model_dump())
+    except Exception as exc:  # noqa: BLE001
+        # Surface the error so the Node server logs it, but don't 500 if
+        # the rest of the system is healthy — the row is already in Mongo.
+        raise HTTPException(
+            status_code=502,
+            detail=f"correction ingest failed: {type(exc).__name__}: {exc}",
+        )
 
 
 @app.post("/ai/import/{job_id}/cancel")

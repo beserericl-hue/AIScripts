@@ -84,7 +84,11 @@ class Recommendation:
 # ---------------------------------------------------------------- prompt build
 
 
-def _build_prompt(section: Section, candidates: list[Candidate]) -> str:
+def _build_prompt(
+    section: Section,
+    candidates: list[Candidate],
+    correction_examples_block: str = "",
+) -> str:
     excerpt = section.markdown[:SECTION_TEXT_CHAR_LIMIT].strip()
     lines = [
         "You are an accreditation reviewer at the Council for Standards in Human Service Education (CSHSE).",
@@ -122,6 +126,9 @@ def _build_prompt(section: Section, candidates: list[Candidate]) -> str:
         )
         lines.append(f"     spec_text: {c.spec_text}")
         lines.append(f"     similarity: {c.similarity:.3f}")
+    if correction_examples_block:
+        lines.append("")
+        lines.append(correction_examples_block)
     lines.extend([
         "",
         "Respond with STRICT JSON only (no prose, no markdown fences).",
@@ -280,9 +287,34 @@ class SpecMatcher:
         section: Section,
         program_level: ProgramLevel,
         top_k: int = DEFAULT_TOP_K,
+        institution_id: str | None = None,
     ) -> Recommendation:
         candidates = self._candidates_for(section, program_level, top_k)
         doc_std_hint, doc_letter_hint = _extract_doc_hints(section)
+        # Per-institution correction few-shot (soft hint).
+        correction_examples: list = []
+        correction_block = ""
+        if institution_id and self._anthropic is not None:
+            try:
+                from app.corrections.store import (
+                    format_examples_for_prompt,
+                    retrieve_for_section,
+                )
+
+                correction_examples = retrieve_for_section(
+                    section_text=section.markdown[:SECTION_TEXT_CHAR_LIMIT],
+                    institution_id=institution_id,
+                    program_level=program_level,
+                    embedder=self._embedder,
+                    store=self._store,
+                )
+                correction_block = format_examples_for_prompt(correction_examples)
+            except Exception:  # noqa: BLE001
+                # Few-shot retrieval is a soft enhancement — never break a
+                # matcher run because the corrections collection is missing
+                # or Qdrant is briefly unavailable.
+                correction_examples = []
+                correction_block = ""
 
         if not candidates:
             return Recommendation(
@@ -339,7 +371,7 @@ class SpecMatcher:
             )
 
         # LLM adjudication
-        prompt = _build_prompt(section, candidates)
+        prompt = _build_prompt(section, candidates, correction_block)
         msg = self._anthropic.messages.create(
             model=self._model,
             max_tokens=512,

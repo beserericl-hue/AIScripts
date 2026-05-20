@@ -15,7 +15,7 @@
  * Modal width 60vw; Esc closes; clicking outside closes.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { X, AlertTriangle, Loader2 } from 'lucide-react';
+import { X, AlertTriangle, Loader2, Check } from 'lucide-react';
 import { api } from '../../../../../services/api';
 
 interface ShowInSourceModalProps {
@@ -25,6 +25,17 @@ interface ShowInSourceModalProps {
   /** Body text used as the fuzzy-match fallback when the anchor is missing. */
   matchText: string;
   onClose: () => void;
+  /**
+   * Selection-mode target: when set, the modal renders as a passage picker
+   * for the named spec (no scroll-to-anchor). The user highlights text and
+   * clicks "Use this passage" — we call `onSelectionConfirmed` with the
+   * highlighted text + a best-effort location anchor.
+   */
+  selectionTarget?: { std: string; spec: string } | null;
+  onSelectionConfirmed?: (
+    text: string,
+    location: { paragraphIndex?: number }
+  ) => void;
 }
 
 type LoadState =
@@ -42,10 +53,14 @@ export function ShowInSourceModal({
   importId,
   sectionId,
   matchText,
-  onClose
+  onClose,
+  selectionTarget,
+  onSelectionConfirmed
 }: ShowInSourceModalProps): JSX.Element | null {
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const contentRef = useRef<HTMLDivElement>(null);
+  const inSelectionMode = !!selectionTarget && !!onSelectionConfirmed;
+  const [selectedPassage, setSelectedPassage] = useState<string>('');
 
   // Esc closes.
   useEffect(() => {
@@ -86,8 +101,11 @@ export function ShowInSourceModal({
   }, [open, importId]);
 
   // After HTML mounts, try to locate the anchor (or fuzzy fallback).
+  // Skipped in selection mode — the coordinator is picking a passage by hand,
+  // not looking at a known anchor.
   useEffect(() => {
     if (state.kind !== 'ready' || !contentRef.current) return;
+    if (inSelectionMode) return;
     const root = contentRef.current;
 
     // Strategy 1: direct anchor match via the section_id (matcher emits
@@ -127,7 +145,39 @@ export function ShowInSourceModal({
       }
     }
     setState((s) => (s.kind === 'ready' ? { ...s, matchKind: 'missing' } : s));
-  }, [state.kind, sectionId, matchText]);
+  }, [state.kind, sectionId, matchText, inSelectionMode]);
+
+  // In selection mode, watch the document selection so the confirm button
+  // can flip enabled the moment the user highlights something.
+  useEffect(() => {
+    if (!inSelectionMode) return;
+    const onSelChange = () => {
+      const sel = window.getSelection?.();
+      const text = sel?.toString().trim() || '';
+      // Only count selections that are inside our modal's content viewport.
+      if (text && contentRef.current && sel && sel.anchorNode) {
+        const anchorIn = contentRef.current.contains(sel.anchorNode);
+        if (anchorIn) {
+          setSelectedPassage(text);
+          return;
+        }
+      }
+      setSelectedPassage('');
+    };
+    document.addEventListener('selectionchange', onSelChange);
+    return () => document.removeEventListener('selectionchange', onSelChange);
+  }, [inSelectionMode]);
+
+  // Reset captured selection whenever the target changes.
+  useEffect(() => {
+    setSelectedPassage('');
+  }, [selectionTarget?.std, selectionTarget?.spec]);
+
+  const handleConfirmSelection = () => {
+    if (!inSelectionMode || !selectedPassage) return;
+    onSelectionConfirmed?.(selectedPassage, {});
+    setSelectedPassage('');
+  };
 
   if (!open) return null;
 
@@ -144,7 +194,11 @@ export function ShowInSourceModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <h2 className="text-base font-semibold text-gray-900">Show in source</h2>
+          <h2 className="text-base font-semibold text-gray-900">
+            {inSelectionMode
+              ? `Pick the source passage for ${selectionTarget!.std}.${selectionTarget!.spec}`
+              : 'Show in source'}
+          </h2>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -153,6 +207,15 @@ export function ShowInSourceModal({
             <X className="h-4 w-4" aria-hidden />
           </button>
         </div>
+
+        {inSelectionMode && (
+          <div className="border-b border-cshse-200 bg-cshse-50/60 px-4 py-2 text-xs text-cshse-800">
+            Highlight the passage in the document that addresses this spec, then
+            click <strong>Use this passage</strong>. The selection becomes the
+            new card content AND is sent to the matcher as a labeled example
+            so future imports pick it up automatically (per-institution scope).
+          </div>
+        )}
 
         {state.kind === 'ready' && state.matchKind === 'fuzzy' && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
@@ -188,6 +251,31 @@ export function ShowInSourceModal({
             />
           )}
         </div>
+
+        {inSelectionMode && (
+          <div className="border-t border-gray-200 bg-white px-4 py-3">
+            <div className="mb-2 max-h-20 overflow-auto rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-700">
+              {selectedPassage
+                ? <><span className="font-semibold">Selected:</span> {selectedPassage.slice(0, 320)}{selectedPassage.length > 320 ? '…' : ''}</>
+                : <span className="italic text-gray-500">No passage selected yet. Highlight text in the document above.</span>}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={onClose}
+                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmSelection}
+                disabled={!selectedPassage}
+                className="inline-flex items-center gap-1 rounded bg-cshse-600 px-3 py-1.5 text-sm text-white hover:bg-cshse-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                <Check className="h-3.5 w-3.5" aria-hidden /> Use this passage
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     def xinst_collection(self) -> str:
         return f"cshse_narratives_xinst_{self.cshse_env}"
 
+    @property
+    def corrections_collection(self) -> str:
+        """Per-institution coordinator-supplied corrections (few-shot pool)."""
+        return f"cshse_corrections_{self.cshse_env}"
+
 
 @lru_cache
 def get_settings() -> Settings:

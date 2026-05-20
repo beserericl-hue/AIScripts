@@ -60,6 +60,12 @@ interface ItemCardListProps {
     sectionIds: string[],
     target?: { std: string; spec: string }
   ) => void;
+  /**
+   * Coordinator clicked "+ Add from source" on an empty spec. ReviewStep
+   * opens ShowInSourceModal in selection mode and forwards the captured
+   * passage to the corrections API + local bucket.
+   */
+  onCorrectMissingSpec?: (std: string, spec: string) => void;
 }
 
 // Headings like "b.", "c.", "1)", "(a)", "i.", or "x." are non-descriptive —
@@ -193,7 +199,8 @@ export function ItemCardList({
   matrices,
   selectedSectionId,
   onSelect,
-  onBulkAction
+  onBulkAction,
+  onCorrectMissingSpec
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
@@ -380,7 +387,29 @@ export function ItemCardList({
       <div ref={listRef} className="flex-1 overflow-auto p-4" aria-label="Items for selected spec">
         {items.length === 0 ? (
           <div className="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
-            No items in this spec. Pick another from the left rail or check the Unplaced / Unwritten rows.
+            <div>
+              No items in this spec.
+              {' '}
+              {bucket
+                ? `The matcher didn't route anything to ${bucket.standardCode}.${bucket.specCode}.`
+                : 'Pick another from the left rail or check the Unplaced / Unwritten rows.'}
+            </div>
+            {bucket && onCorrectMissingSpec && (
+              <div className="mt-4 flex flex-col items-center gap-2">
+                <p className="max-w-md text-xs text-gray-600">
+                  If the source document plainly addresses this spec, point at
+                  the passage and we'll record a correction. The matcher
+                  remembers it for this institution's future imports — no
+                  per-document hardcoding.
+                </p>
+                <button
+                  onClick={() => onCorrectMissingSpec(bucket.standardCode, bucket.specCode)}
+                  className="inline-flex items-center gap-1 rounded bg-cshse-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cshse-700"
+                >
+                  + Add from source
+                </button>
+              </div>
+            )}
           </div>
         ) : groups ? (
           <div className="space-y-6">

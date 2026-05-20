@@ -27,6 +27,11 @@ import {
   CoverageType,
   CoverageDepth
 } from '../models/CurriculumMatrix';
+import {
+  ImportCorrection,
+  CorrectionType,
+  ExpectedSectionType
+} from '../models/ImportCorrection';
 import { AuthenticatedRequest } from '../middleware/auth';
 
 // Env vars read lazily so tests that set them in beforeEach see the new value.
@@ -203,6 +208,12 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
   }
   const s3Key = initial.aiS3Key || `imports/${importId}/source.docx`;
   const submissionIdStr = String(initial.submissionId);
+  // Look up the owning institution so cshse-ai can scope the corrections
+  // RAG to this school's history only (per-institution policy).
+  const submissionDoc = await Submission.findById(initial.submissionId)
+    .select('institutionId')
+    .lean();
+  const institutionIdStr = submissionDoc?.institutionId ? String(submissionDoc.institutionId) : null;
 
   // Mark queued atomically before dispatching to the AI service.
   await SelfStudyImport.findByIdAndUpdate(importId, {
@@ -229,7 +240,8 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
       programLevel,
       forceFormat,
       callbackUrl,
-      eventCallbackUrl
+      eventCallbackUrl,
+      institutionId: institutionIdStr
     });
     // Atomic save of the cshse-ai snapshot — again no .save() to avoid version
     // races with the legacy pipeline.
@@ -821,6 +833,12 @@ export async function restartAIImport(req: AuthenticatedRequest, res: Response):
   try {
     const callbackUrl = `${getServerPublicUrl()}/api/imports/${importId}/ai-callback`;
     const eventCallbackUrl = `${getServerPublicUrl()}/api/imports/${importId}/ai-event`;
+    const submissionDoc2 = await Submission.findById(importRecord.submissionId)
+      .select('institutionId')
+      .lean();
+    const institutionIdStr = submissionDoc2?.institutionId
+      ? String(submissionDoc2.institutionId)
+      : null;
     const snapshot = await postToAIService('/ai/import/start', {
       s3Key: importRecord.aiS3Key,
       submissionId: String(importRecord.submissionId),
@@ -828,7 +846,8 @@ export async function restartAIImport(req: AuthenticatedRequest, res: Response):
       programLevel: importRecord.aiProgramLevel || 'bachelors',
       forceFormat,
       callbackUrl,
-      eventCallbackUrl
+      eventCallbackUrl,
+      institutionId: institutionIdStr
     });
     importRecord.aiJobId = snapshot.jobId;
     importRecord.aiStatus = snapshot.status;
@@ -849,4 +868,133 @@ export async function restartAIImport(req: AuthenticatedRequest, res: Response):
     await importRecord.save();
     res.status(502).json({ error: 'AI service unreachable', detail: err?.message || String(err) });
   }
+}
+
+// ============================================================================
+// POST /api/imports/:importId/corrections — coordinator-supplied corrections
+// ============================================================================
+//
+// When the wizard's matcher misses a spec, the coordinator highlights the
+// source passage in the wizard's source viewer and posts a correction here.
+// The row is persisted AND forwarded to cshse-ai which embeds `sourceText`
+// and stores it in Qdrant for use as a few-shot example in future runs.
+//
+// Forward is best-effort: if cshse-ai is down the Mongo row still lands,
+// and a background reconciler (sub-sprint 2.x) can replay un-ingested
+// rows later. The wizard's local bucket update happens independently —
+// this route just records the truth.
+
+type CorrectionPayload = {
+  expectedStd: string;
+  expectedSpec: string;
+  expectedSectionType?: ExpectedSectionType;
+  sourceHeading?: string;
+  sourceText: string;
+  sourceLocation?: {
+    paragraphIndex?: number;
+    byteOffsetStart?: number;
+    byteOffsetEnd?: number;
+  };
+  correctionType?: CorrectionType;
+};
+
+export async function createImportCorrection(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  const { importId } = req.params;
+  const payload = (req.body || {}) as CorrectionPayload;
+
+  if (!payload.sourceText || !payload.expectedStd || !payload.expectedSpec) {
+    res.status(400).json({
+      error: 'expectedStd, expectedSpec, and sourceText are required'
+    });
+    return;
+  }
+
+  const importRecord = await SelfStudyImport.findById(importId);
+  if (!importRecord) {
+    res.status(404).json({ error: 'Import not found' });
+    return;
+  }
+  const submission = await Submission.findById(importRecord.submissionId);
+  if (!submission || !submission.institutionId) {
+    res.status(404).json({ error: 'Submission or institution not found' });
+    return;
+  }
+
+  const correction = await ImportCorrection.create({
+    submissionId: importRecord.submissionId,
+    importId: importRecord._id,
+    institutionId: submission.institutionId,
+    programLevel: importRecord.aiProgramLevel || 'bachelors',
+    documentFormat: importRecord.aiFormat?.format || 'self_study',
+    expectedStd: payload.expectedStd,
+    expectedSpec: payload.expectedSpec,
+    expectedSectionType: payload.expectedSectionType || 'narrative_response',
+    sourceHeading: payload.sourceHeading || '',
+    sourceText: payload.sourceText,
+    sourceLocation: payload.sourceLocation,
+    correctionType: payload.correctionType || 'missed-by-matcher',
+    correctedBy: new mongoose.Types.ObjectId(req.user!._id)
+  });
+
+  // Forward to cshse-ai best-effort. Don't block the response — the wizard
+  // already shows the spec card filled locally; the embedding is just for
+  // future few-shot retrieval.
+  postToAIService('/ai/corrections/ingest', {
+    correctionId: String(correction._id),
+    institutionId: String(submission.institutionId),
+    programLevel: correction.programLevel,
+    expectedStd: correction.expectedStd,
+    expectedSpec: correction.expectedSpec,
+    expectedSectionType: correction.expectedSectionType,
+    sourceHeading: correction.sourceHeading,
+    sourceText: correction.sourceText,
+    correctionType: correction.correctionType
+  }).catch((err) => {
+    // Log + leave the row; reconciler can replay.
+    console.warn(
+      `[corrections] ai-service ingest failed for ${correction._id}:`,
+      err?.message || err
+    );
+  });
+
+  res.status(201).json({
+    ok: true,
+    correctionId: String(correction._id),
+    expectedStd: correction.expectedStd,
+    expectedSpec: correction.expectedSpec
+  });
+}
+
+export async function listImportCorrections(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  const { importId } = req.params;
+  const importRecord = await SelfStudyImport.findById(importId);
+  if (!importRecord) {
+    res.status(404).json({ error: 'Import not found' });
+    return;
+  }
+  // Same-submission corrections (the wizard's "you've filed N corrections"
+  // banner). Older Stevenson runs share a submissionId so the count rolls
+  // forward across re-imports of the same self-study.
+  const rows = await ImportCorrection.find({ submissionId: importRecord.submissionId })
+    .sort({ correctedAt: -1 })
+    .lean();
+  res.json({
+    importId,
+    count: rows.length,
+    corrections: rows.map((r) => ({
+      _id: String(r._id),
+      expectedStd: r.expectedStd,
+      expectedSpec: r.expectedSpec,
+      sourceHeading: r.sourceHeading,
+      sourceText: r.sourceText.slice(0, 200),
+      correctionType: r.correctionType,
+      correctedAt: r.correctedAt
+    }))
+  });
 }

@@ -240,6 +240,11 @@ interface AIImportState {
   apply: () => Promise<void>;
   loadExisting: (importId: string) => Promise<void>;
   reset: () => void;
+  // Clear the transient state from a finished or failed run (errors, stages,
+  // buckets, matrices, importId) and return the wizard to the Upload step.
+  // Used by the Parse step's "Start over" button so the user doesn't see
+  // stale red error panels until they drop a new file.
+  startOver: () => void;
 
   // Internal helpers (exposed for testing)
   _applySnapshot: (snap: AIStatusSnapshot) => void;
@@ -644,6 +649,20 @@ export const useAIImportStore = create<AIImportState>()(
       reset: () => {
         _clearTransport();
         set({ ...initialState });
+      },
+
+      // Clear the transient state from a finished or failed run, drop any
+      // open SSE/polling, and land back on the Upload step. Keeps
+      // `submissionId` + `programLevel` + `isReimport` so the coordinator
+      // doesn't have to re-pick those after a failed attempt.
+      startOver: () => {
+        _clearTransport();
+        const keep = {
+          submissionId: get().submissionId,
+          programLevel: get().programLevel,
+          isReimport: get().isReimport,
+        };
+        set({ ...initialState, ...keep, step: 'upload' });
       }
     }),
     {

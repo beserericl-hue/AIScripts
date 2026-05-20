@@ -40,7 +40,9 @@ import {
   receiveAIEventWebhook,
   receiveAICallback,
   applyAIImport,
-  restartAIImport
+  restartAIImport,
+  createImportCorrection,
+  listImportCorrections
 } from '../controllers/aiImportController';
 import { authenticate } from '../middleware/auth';
 
@@ -175,6 +177,9 @@ router.get('/:importId/ai-status', getAIImportStatus);
 router.get('/:importId/ai-events', streamAIImportEvents);
 router.post('/:importId/apply-ai', applyAIImport);
 router.post('/:importId/restart-ai', restartAIImport);
+// Coordinator-supplied corrections — see ImportCorrection model.
+router.post('/:importId/corrections', createImportCorrection);
+router.get('/:importId/corrections', listImportCorrections);
 
 // ============================================
 // PART 6: Section Selection Before AI Processing

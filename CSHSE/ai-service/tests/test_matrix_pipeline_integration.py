@@ -215,3 +215,57 @@ def test_pipeline_faculty_roster_still_emerges_as_normal_section():
     sections = deep_walk(_stevenson_shaped_html())
     roster = [s for s in sections if "Ari Blum" in s.markdown]
     assert len(roster) == 1, [s.heading for s in sections]
+
+
+def test_pipeline_short_letter_tagged_sections_survive_word_filter():
+    """The wizard pipeline's word-count filter must NOT drop letter-tagged
+    subspec rows even when their full text is under 30 words.
+
+    Stevenson's spec 1.a — "The program is part of a degree granting college
+    or university that is regionally accredited. Response: Stevenson
+    University is accredited by the Middle States Commission on Higher
+    Education." — is ~26 words. deep_walker emits it as
+    ``splitter_tier="table_subspec_row"`` (its own internal 8-word floor on
+    the response body is met, but the SECTION's total word_count is just
+    shy of 30 because the prompt is short). The pipeline filter must keep
+    those by tier, not by length, otherwise spec 1.a shows empty in the
+    rail even though the document plainly addresses it.
+    """
+    from app.splitter.deep_walker import deep_walk_with_fallback
+
+    # Reproduces the Stevenson template shape: a letter-marker prompt row +
+    # a "Response:" body row. Each response is ≥8 words (walker's internal
+    # floor) but the SECTION's total word_count lands just under 30 — which
+    # is what the import_jobs filter used to drop pre-fix.
+    html = (
+        "<html><body>"
+        "<table>"
+        "<tr><td>a. The program is part of a degree granting college "
+        "or university that is regionally accredited.</td></tr>"
+        "<tr><td>Response: Stevenson University is accredited by the Middle "
+        "States Commission on Higher Education.</td></tr>"
+        "<tr><td>b. Describe the institutional commitment to the program.</td></tr>"
+        "<tr><td>Response: The institution has provided dedicated faculty, "
+        "facilities, and operating budget since the program's inception.</td></tr>"
+        "</table>"
+        "</body></html>"
+    ).encode("utf-8")
+
+    raw = deep_walk_with_fallback(html, base_id="t")
+    subspec_rows = [s for s in raw if s.splitter_tier == "table_subspec_row"]
+    assert len(subspec_rows) == 2, [s.heading for s in raw]
+
+    short_subspec = [s for s in subspec_rows if s.word_count < 30]
+    assert short_subspec, (
+        "fixture should produce table_subspec_row sections under 30 words; "
+        f"got word counts {[s.word_count for s in subspec_rows]}"
+    )
+
+    # The filter the import_jobs pipeline uses must keep them all.
+    filtered = [
+        s for s in raw
+        if s.splitter_tier == "table_subspec_row" or s.word_count >= 30
+    ]
+    headings = " | ".join(s.heading for s in filtered)
+    assert "a." in headings, headings
+    assert "b." in headings, headings
