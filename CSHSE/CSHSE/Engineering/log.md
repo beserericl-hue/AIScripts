@@ -983,3 +983,28 @@ Coordinator review of the wizard surfaced six independent issues. All landed acr
 **User guide ships alongside the code.** See [[wizard-user-guide-2026-05-20]] for the top-down walkthrough + 12-step QA checklist + troubleshooting table. Companion PowerPoint deck at `wizard-user-guide-2026-05-20.pptx`.
 
 Gates: Python 136 / 4 skip · server vitest 38 · client vitest 29 / 2 skip · client tsc clean · server tsc clean for the touched files.
+
+## [2026-05-20] review | Beta Group Training webinar — 23 change requests catalogued
+
+Reviewed the 1h 42m Otter.ai transcript of the 2026-05-20 Beta Group Training webinar with the four-institution beta cohort. Wrote [[webinar-action-items-2026-05-20]] capturing every decision against a transcript timestamp.
+
+The webinar materially changed the sprint plan. New `Engineering/change-requests/` folder added to the vault, with [[change-requests/index|catalog]] and 23 individual CR pages (`cr-001` through `cr-023`). Each CR scopes one shippable behavior — Summary, Source quotes, Decision, Acceptance, Files affected, Dependencies, Open questions.
+
+**P0 CRs (must ship before next reader cycle):**
+- [[cr-001-both-importers-required]] — keep AI wizard + legacy per-standard importer side by side
+- [[cr-003-zero-to-three-compliance-rubric]] — Non / Partial / Largely / Fully rubric (not pass/fail)
+- [[cr-004-comment-threading-identity-redaction]] — readers' names hidden from PC; Julia relays
+- [[cr-005-pc-lockout-on-final-submit]] — PC is read-only + print after final submit
+- [[cr-006-two-stage-submission]] — per-section submit vs final submit
+- [[cr-007-reader-access-after-submit]] — readers can't see drafts
+- [[cr-017-cross-institution-isolation-audit]] — documented data-flow audit (Paul Datti's security concerns)
+
+**P1 CRs:** CR-002, CR-008-CR-013, CR-014, CR-015, CR-018, CR-023.
+
+**P2 backlog:** CR-016, CR-019, CR-020, CR-021, CR-022.
+
+**Supersedes flagged on existing CRs.** [[sprint-plan-2026-05-16]] stories S4.1/S4.2/S4.3/S4.5 (n8n evidence review) → [[change-requests/cr-018-ai-evidence-review-via-cshse-ai]]. S2.1 (identity redaction narrower than CR-004), S5.10 (uses pass/fail), and S7.3 (site visit) all need rewrite next sprint plan.
+
+Schema update: added `change-request` page type to [[CLAUDE]]. Index page [[index]] now lists the change-requests folder.
+
+No code changed in this entry; documentation and planning only.

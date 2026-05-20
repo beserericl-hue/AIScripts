@@ -28,6 +28,7 @@ When adding a top-level folder, add it to this list and update `Engineering/inde
 - `entity` — a named external system or service we depend on (n8n, Supabase, Railway, S3).
 - `glossary` — domain terms.
 - `schema` — this file.
+- `change-request` — a single requirement scoped down to one shippable behavior. Lives in `Engineering/change-requests/`. Filename is `cr-NNN-kebab-slug.md`. Frontmatter adds `cr_id`, `status` (proposed | accepted | in-progress | shipped | rejected | superseded), `source` (one or more wiki links or commit/PR refs justifying the CR), `priority` (P0 | P1 | P2), `sprint_target` (optional). Body has: Summary, Source quotes, Decision, Acceptance, Files affected, Dependencies, Open questions. Never edit history — supersede instead.
 
 ## Frontmatter
 

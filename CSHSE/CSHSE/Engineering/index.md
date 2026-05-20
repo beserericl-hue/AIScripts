@@ -48,6 +48,11 @@ The catalog. One line per page. When answering a question, scan this first to fi
 - [[ai-import-wizard-preview-kennesaw-state-2026-05-18]] — sibling preview against the **CSHSE Self-Study Template format** (Kennesaw State partial-fill sample). Spec-as-outline input: each section heading IS a Handbook prompt. **Additive** parsing rule — the Stevenson walkers (TOC anchor / deep table / appendix) are untouched; the new `template_walker` is an additional rule that cuts on template heading patterns (`1.`, `2a.`, `Standard 1, Specification a`), strips `Response:` markers, and detects unwritten / `Not applicable` placeholders so the institution can see which prompts still need a response. No gap-fill (no appendix yet). Generated via the new dispatcher `scripts/build_preview.py` which auto-detects format.
 - [[ai-import-stevenson-matrices-2026-05-19]] — smoke test for the matrix-as-first-class-entity slice (commit `5ad2efb`). Against the real 353 MB Stevenson HTML: 2 matrices, 437 cells, 0 leaks into spec cards. Pipeline + UI + apply flow + Standards-editor link all wired.
 - [[wizard-user-guide-2026-05-20]] — top-down user guide + test plan for the wizard as of commit `8ea57e6`. Walks every screen from the .docx drop to the Standards editor; includes a 12-step QA checklist and a troubleshooting table. Companion PowerPoint deck ships alongside.
+- [[webinar-action-items-2026-05-20]] — full discussion log + 23 timestamped action items from the 1h 42m Beta Group Training webinar (Julia, Yvonne, Paul, Monica, Nicole, Sara, AACC, Tracee). Every decision is anchored to a transcript timestamp. Source of the change-requests catalog.
+
+## Change requests
+
+- [[change-requests/index|Change Requests catalog]] — master index of every shippable behavior change request (CR-001 through CR-023), organized by priority. New folder `Engineering/change-requests/`. Driven primarily by [[webinar-action-items-2026-05-20]].
 
 ## Plans (dated, forward-looking)
 
