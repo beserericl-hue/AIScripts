@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move, Grid3x3 } from 'lucide-react';
+import { FileBox, Tag as TagIcon, Move, Grid3x3, Check } from 'lucide-react';
 import {
   useAIImportStore,
   type BucketItem,
@@ -66,6 +66,13 @@ interface ItemCardListProps {
    * passage to the corrections API + local bucket.
    */
   onCorrectMissingSpec?: (std: string, spec: string) => void;
+  /** Flip an item between narrative / evidence text / evidence file / tag / discard. */
+  onChangeKind?: (sectionId: string, kind: ItemKind | 'discard') => void;
+  /** Coordinator workflow tracker — set of rowIds explicitly marked as reviewed. */
+  approvedIds?: Set<string>;
+  onToggleApproval?: (rowId: string) => void;
+  onApproveAll?: (rowIds: string[]) => void;
+  onClearApprovals?: () => void;
 }
 
 // Headings like "b.", "c.", "1)", "(a)", "i.", or "x." are non-descriptive —
@@ -200,7 +207,12 @@ export function ItemCardList({
   selectedSectionId,
   onSelect,
   onBulkAction,
-  onCorrectMissingSpec
+  onCorrectMissingSpec,
+  onChangeKind,
+  approvedIds,
+  onToggleApproval,
+  onApproveAll,
+  onClearApprovals
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
@@ -334,10 +346,43 @@ export function ItemCardList({
             <span>
               {items.length} item{items.length === 1 ? '' : 's'}
               {checkedCount > 0 && <span className="ml-1 text-cshse-700">· {checkedCount} selected</span>}
+              {approvedIds && approvedIds.size > 0 && (
+                <span className="ml-1 text-emerald-700">· {items.filter((r) => approvedIds.has(r.rowId)).length} approved</span>
+              )}
             </span>
           </label>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {onApproveAll && (
+            <>
+              <button
+                onClick={() => onApproveAll([...checked])}
+                disabled={checkedCount === 0 || isPlaceholder}
+                className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Mark all currently-checked items as reviewed"
+              >
+                <Check className="h-3 w-3" aria-hidden /> Approve selected
+              </button>
+              <button
+                onClick={() => onApproveAll(items.map((r) => r.rowId))}
+                disabled={items.length === 0 || isPlaceholder}
+                className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                title="Mark every item on this spec page as reviewed"
+              >
+                <Check className="h-3 w-3" aria-hidden /> Approve all
+              </button>
+              {approvedIds && approvedIds.size > 0 && onClearApprovals && (
+                <button
+                  onClick={onClearApprovals}
+                  className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                  title="Clear the reviewed flag across all specs"
+                >
+                  Clear approvals
+                </button>
+              )}
+              <span className="text-gray-300">|</span>
+            </>
+          )}
           <button
             onClick={() => bulk('to-tags')}
             disabled={checkedCount === 0 || isPlaceholder}
@@ -425,6 +470,9 @@ export function ItemCardList({
               onSelect={onSelect}
               onToggleCheck={toggleCheck}
               onKeyDown={handleKeyDown}
+              approvedIds={approvedIds}
+              onToggleApproval={onToggleApproval}
+              onChangeKind={onChangeKind}
             />
             <KindSection
               title="Supporting evidence — text"
@@ -438,6 +486,9 @@ export function ItemCardList({
               onSelect={onSelect}
               onToggleCheck={toggleCheck}
               onKeyDown={handleKeyDown}
+              approvedIds={approvedIds}
+              onToggleApproval={onToggleApproval}
+              onChangeKind={onChangeKind}
             />
             <KindSection
               title="Supporting evidence — files"
@@ -451,6 +502,9 @@ export function ItemCardList({
               onSelect={onSelect}
               onToggleCheck={toggleCheck}
               onKeyDown={handleKeyDown}
+              approvedIds={approvedIds}
+              onToggleApproval={onToggleApproval}
+              onChangeKind={onChangeKind}
             />
             <KindSection
               title="Matrix cells"
@@ -469,6 +523,9 @@ export function ItemCardList({
               onSelect={onSelect}
               onToggleCheck={toggleCheck}
               onKeyDown={handleKeyDown}
+              approvedIds={approvedIds}
+              onToggleApproval={onToggleApproval}
+              onChangeKind={onChangeKind}
             />
           </div>
         ) : (
@@ -481,8 +538,11 @@ export function ItemCardList({
                 isSelected={item.sectionId === selectedSectionId}
                 checked={checked.has(item.rowId)}
                 disabled={isPlaceholder}
+                approved={!!approvedIds?.has(item.rowId)}
                 onSelect={() => onSelect(item.sectionId)}
                 onToggleCheck={() => toggleCheck(item.rowId)}
+                onToggleApproval={onToggleApproval ? () => onToggleApproval(item.rowId) : undefined}
+                onChangeKind={onChangeKind}
                 onKeyDown={(e) => handleKeyDown(e, item, idx)}
               />
             ))}
@@ -526,6 +586,9 @@ interface KindSectionProps {
   onSelect: (sectionId: string) => void;
   onToggleCheck: (rowId: string) => void;
   onKeyDown: (e: React.KeyboardEvent, item: CardItem, idx: number) => void;
+  approvedIds?: Set<string>;
+  onToggleApproval?: (rowId: string) => void;
+  onChangeKind?: (sectionId: string, kind: ItemKind | 'discard') => void;
 }
 
 function KindSection({
@@ -539,7 +602,10 @@ function KindSection({
   isPlaceholder,
   onSelect,
   onToggleCheck,
-  onKeyDown
+  onKeyDown,
+  approvedIds,
+  onToggleApproval,
+  onChangeKind
 }: KindSectionProps): JSX.Element | null {
   if (items.length === 0) return null;
   return (
@@ -559,8 +625,11 @@ function KindSection({
             isSelected={item.sectionId === selectedSectionId}
             checked={checked.has(item.rowId)}
             disabled={isPlaceholder}
+            approved={!!approvedIds?.has(item.rowId)}
             onSelect={() => onSelect(item.sectionId)}
             onToggleCheck={() => onToggleCheck(item.rowId)}
+            onToggleApproval={onToggleApproval ? () => onToggleApproval(item.rowId) : undefined}
+            onChangeKind={onChangeKind}
             onKeyDown={(e) => onKeyDown(e, item, idx)}
           />
         ))}
@@ -575,8 +644,11 @@ interface ItemCardProps {
   isSelected: boolean;
   checked: boolean;
   disabled: boolean;
+  approved?: boolean;
   onSelect: () => void;
   onToggleCheck: () => void;
+  onToggleApproval?: () => void;
+  onChangeKind?: (sectionId: string, kind: ItemKind | 'discard') => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
 }
 
@@ -586,24 +658,35 @@ function ItemCard({
   isSelected,
   checked,
   disabled,
+  approved,
   onSelect,
   onToggleCheck,
+  onToggleApproval,
+  onChangeKind,
   onKeyDown
 }: ItemCardProps): JSX.Element {
   const band = confBand(item.confidence);
   const hasHtmlTable = !!(item.htmlSnippet && item.htmlSnippet.includes('<table'));
   const tabular = !hasHtmlTable && looksTabular(item.snippet);
+  // The kind chips only make sense for items that live in a real spec bucket
+  // (text / evidenceText / file). Tag-list items + matrix cells can't be
+  // re-typed in place.
+  const canSwitchKind = onChangeKind && (item.kind === 'text' || item.kind === 'evidenceText' || item.kind === 'file');
   return (
     <li
       data-section-id={item.sectionId}
       tabIndex={0}
       role="button"
       aria-pressed={isSelected}
-      aria-label={`Item ${index}, ${KIND_LABEL[item.kind]}, ${item.wordCount} words`}
+      aria-label={`Item ${index}, ${KIND_LABEL[item.kind]}, ${item.wordCount} words${approved ? ', approved' : ''}`}
       onClick={onSelect}
       onKeyDown={onKeyDown}
       className={`group cursor-pointer rounded-lg border bg-white p-4 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cshse-500 ${
-        isSelected ? 'border-cshse-500 ring-2 ring-cshse-300' : 'border-gray-200 hover:border-cshse-300 hover:shadow-md'
+        approved
+          ? 'border-emerald-400 bg-emerald-50/30 ring-1 ring-emerald-200'
+          : isSelected
+          ? 'border-cshse-500 ring-2 ring-cshse-300'
+          : 'border-gray-200 hover:border-cshse-300 hover:shadow-md'
       }`}
     >
       <div className="flex items-start gap-3">
@@ -628,7 +711,34 @@ function ItemCard({
             >
               {item.confidence.toFixed(2)}
             </span>
-            <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{KIND_LABEL[item.kind]}</span>
+            {/* Kind chips — click any to flip this item between Narrative /
+                Evidence text / Evidence file. Coordinator workflow: an AI
+                routed something as a narrative but the coordinator wants
+                it as supporting evidence. One click here re-buckets. */}
+            {canSwitchKind ? (
+              <div className="inline-flex overflow-hidden rounded border border-gray-300 text-[10px] font-medium" onClick={(e) => e.stopPropagation()}>
+                {([
+                  { k: 'text', label: 'Narrative' },
+                  { k: 'evidenceText', label: 'Evidence' },
+                  { k: 'file', label: 'File' }
+                ] as Array<{ k: ItemKind; label: string }>).map((opt, i) => (
+                  <button
+                    key={opt.k}
+                    onClick={() => onChangeKind?.(item.sectionId, opt.k)}
+                    title={`Mark this item as ${opt.label}`}
+                    className={`${i > 0 ? 'border-l border-gray-300' : ''} px-2 py-0.5 ${
+                      item.kind === opt.k
+                        ? 'bg-cshse-600 text-white'
+                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{KIND_LABEL[item.kind]}</span>
+            )}
             <span className="text-xs text-gray-500">{item.wordCount} words</span>
             {hasHtmlTable && (
               <span
@@ -645,6 +755,22 @@ function ItemCard({
               >
                 tabular (monospace)
               </span>
+            )}
+            {onToggleApproval && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleApproval();
+                }}
+                title={approved ? 'Mark this item as not-yet-reviewed' : 'Mark this item as reviewed'}
+                className={`ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
+                  approved
+                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                    : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <Check className="h-3 w-3" aria-hidden /> {approved ? 'Reviewed' : 'Approve'}
+              </button>
             )}
           </div>
           <div className="mt-2 text-sm font-semibold text-gray-900">{item.displayLabel}</div>

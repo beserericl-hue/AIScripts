@@ -9,7 +9,8 @@
  * stay client-side until Apply — the server doesn't see them until the
  * Step 5 commit lands.
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Rocket, Loader2 } from 'lucide-react';
 import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY } from '../review/SpecRail';
 import { ItemCardList, type ItemKind } from '../review/ItemCardList';
@@ -43,6 +44,59 @@ export function ReviewStep(): JSX.Element {
     std: string;
     spec: string;
   } | null>(null);
+
+  // Per-card "approved" tracker — coordinator workflow signal. Items are
+  // already applied as a set by Apply Step regardless of this flag; this
+  // is here so the coordinator can see at a glance which items they've
+  // explicitly reviewed. The card border + a green check badge update
+  // off this set.
+  const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set());
+  const toggleApproval = useCallback((rowId: string) => {
+    setApprovedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+  }, []);
+  const approveAll = useCallback((rowIds: string[]) => {
+    setApprovedIds((prev) => {
+      const next = new Set(prev);
+      for (const id of rowIds) next.add(id);
+      return next;
+    });
+  }, []);
+  const clearApprovals = useCallback(() => {
+    setApprovedIds(new Set());
+  }, []);
+
+  // One-click apply — counts the items waiting to be applied so the
+  // confirm dialog tells the coordinator exactly what's going to land in
+  // the editor.
+  const applyTotals = useMemo(() => {
+    const t = { narratives: 0, evidenceText: 0, evidenceFiles: 0, matrixCells: 0 };
+    for (const b of Object.values(buckets)) {
+      t.narratives += b.narratives.length;
+      t.evidenceText += b.evidenceText.length;
+      t.evidenceFiles += b.evidenceFiles.length;
+    }
+    for (const m of matrices) t.matrixCells += (m.cells || []).length;
+    return t;
+  }, [buckets, matrices]);
+
+  const apply = useAIImportStore((s) => s.apply);
+  const status = useAIImportStore((s) => s.status);
+  const isApplying = status === 'applying';
+  const isApplied = status === 'applied' || status === 'finished';
+  const [confirmApplyOpen, setConfirmApplyOpen] = useState(false);
+
+  const handleOneClickApply = useCallback(async () => {
+    setConfirmApplyOpen(false);
+    await apply();
+    // After apply lands, swing to the Apply step so the user sees the
+    // success summary + counts. (Apply Step is now read-only post-finish.)
+    setStep('apply');
+  }, [apply, setStep]);
 
   const activeBucket =
     selectedSpecKey && selectedSpecKey !== UNPLACED_KEY && selectedSpecKey !== UNWRITTEN_KEY
@@ -277,8 +331,16 @@ export function ReviewStep(): JSX.Element {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
-        <h2 className="text-lg font-semibold text-gray-900">Review recommendations</h2>
-        <div className="flex gap-2">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Review recommendations</h2>
+          <p className="text-xs text-gray-500">
+            {applyTotals.narratives} narratives · {applyTotals.evidenceText} evidence text ·
+            {' '}{applyTotals.evidenceFiles} evidence files
+            {applyTotals.matrixCells > 0 && <> · {applyTotals.matrixCells} matrix cells</>}
+            {approvedIds.size > 0 && <> · {approvedIds.size} reviewed</>}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setStep('parse')}
             className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
@@ -287,12 +349,75 @@ export function ReviewStep(): JSX.Element {
           </button>
           <button
             onClick={() => setStep(matrices.length > 0 ? 'matrix' : 'apply')}
-            className="rounded bg-cshse-600 px-3 py-1.5 text-sm text-white hover:bg-cshse-700"
+            className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+            title="Walk through the matrix-column mapping and merge settings before applying"
           >
-            {matrices.length > 0 ? 'Next: Matrix ▸' : 'Next: Apply ▸'}
+            Next: {matrices.length > 0 ? 'Matrix' : 'Apply'} ▸
+          </button>
+          <button
+            onClick={() => setConfirmApplyOpen(true)}
+            disabled={isApplying || isApplied}
+            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            title="Send all reviewed narratives, evidence, files, tags, and matrices straight to the standards editor"
+          >
+            {isApplying ? (
+              <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Applying…</>
+            ) : isApplied ? (
+              <>✓ Applied</>
+            ) : (
+              <><Rocket className="h-4 w-4" aria-hidden /> Apply to editor</>
+            )}
           </button>
         </div>
       </div>
+
+      {/* One-click apply confirm dialog */}
+      {confirmApplyOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setConfirmApplyOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-gray-900">Send everything to the editor?</h3>
+            <p className="mt-2 text-sm text-gray-700">
+              The following items will be written to the standards editor
+              (Submission.narratives + SupportingEvidence + CurriculumMatrix).
+              Existing content stays — new content is merged in.
+            </p>
+            <ul className="mt-3 space-y-1 rounded bg-gray-50 px-3 py-2 text-sm text-gray-700">
+              <li>📝 {applyTotals.narratives} narratives</li>
+              <li>📄 {applyTotals.evidenceText} supporting evidence text</li>
+              <li>📎 {applyTotals.evidenceFiles} evidence files</li>
+              {applyTotals.matrixCells > 0 && (
+                <li>🔢 {applyTotals.matrixCells} matrix cells across {matrices.length} matrix{matrices.length === 1 ? '' : 'es'}</li>
+              )}
+              <li>🏷 {tags.length} unplaced items → Tag list</li>
+            </ul>
+            <p className="mt-3 text-xs text-gray-500">
+              You can still review and edit everything inside the standards editor afterwards.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmApplyOpen(false)}
+                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleOneClickApply}
+                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
+              >
+                <Rocket className="h-3.5 w-3.5" aria-hidden /> Confirm — send to editor
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         <SpecRail
@@ -314,6 +439,11 @@ export function ReviewStep(): JSX.Element {
             onSelect={selectSection}
             onBulkAction={handleBulkAction}
             onCorrectMissingSpec={handleCorrectMissingSpec}
+            onChangeKind={handleChangeKind}
+            approvedIds={approvedIds}
+            onToggleApproval={toggleApproval}
+            onApproveAll={approveAll}
+            onClearApprovals={clearApprovals}
           />
         </main>
         <ItemPreview

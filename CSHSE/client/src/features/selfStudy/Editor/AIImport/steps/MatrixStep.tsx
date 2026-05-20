@@ -261,20 +261,39 @@ export function MatrixStep(): JSX.Element {
                         all you do here is name the column-headers above.
                       </p>
                       <div className="mt-2 max-h-[28rem] overflow-auto rounded border border-gray-200">
+                        {/* Sticky matrix-name banner — stays visible as the
+                            coordinator scrolls through the 75 spec rows so
+                            they never lose track of which matrix they're
+                            looking at. Sits above the sticky thead. */}
+                        <div className="sticky top-0 z-20 border-b border-gray-200 bg-cshse-50 px-3 py-1.5 text-xs font-semibold text-cshse-800">
+                          {m.name || m.title || m.matrixId}
+                          {' '}
+                          <span className="font-normal text-cshse-700">
+                            · {rowKeys.length} specs · {colCount} columns
+                          </span>
+                        </div>
                         <table className="w-full text-xs">
-                          <thead className="sticky top-0 bg-gray-50">
+                          <thead className="sticky top-[28px] z-10 bg-gray-50">
                             <tr>
                               <th className="border-b border-gray-200 px-2 py-1.5 text-left">Spec</th>
                               {Array.from({ length: colCount }, (_, idx) => {
                                 const assigned = (columnAssignments[m.matrixId] || {})[idx];
-                                const label = assigned || headers[idx] || `Col ${idx + 1}`;
+                                const sourceHeader = headers[idx] || '';
+                                const colNum = `Col ${idx + 1}`;
+                                const label = assigned || sourceHeader || colNum;
+                                const tooltip = assigned
+                                  ? `Column ${idx + 1} → ${assigned}${sourceHeader ? ` (source: ${sourceHeader})` : ''}`
+                                  : sourceHeader
+                                  ? `Column ${idx + 1} — source header "${sourceHeader}" — not yet mapped to a catalog course`
+                                  : `Column ${idx + 1} — no source header captured; please map a course above`;
                                 return (
                                   <th
                                     key={idx}
-                                    className="border-b border-gray-200 px-2 py-1.5 text-left"
-                                    title={assigned ? `Mapped to ${assigned}` : 'Not mapped yet'}
+                                    className="border-b border-gray-200 px-2 py-1.5 text-left align-bottom"
+                                    title={tooltip}
                                   >
-                                    {label}
+                                    <div className="text-[10px] font-normal text-gray-400">{colNum}</div>
+                                    <div>{label}</div>
                                   </th>
                                 );
                               })}
@@ -282,7 +301,11 @@ export function MatrixStep(): JSX.Element {
                           </thead>
                           <tbody>
                             {rowKeys.map((rk) => (
-                              <tr key={rk as string} className="border-t border-gray-100 even:bg-gray-50/50">
+                              <tr
+                                key={rk as string}
+                                className="border-t border-gray-100 even:bg-gray-50/50"
+                                title={`${m.name || m.matrixId} · spec ${rk}`}
+                              >
                                 <td className="whitespace-nowrap px-2 py-1 font-mono font-medium text-gray-800">
                                   {rk as string}
                                 </td>
@@ -293,8 +316,14 @@ export function MatrixStep(): JSX.Element {
                                   const cell =
                                     cellsByPos.get(`${rk}|${idx + 1}`) ||
                                     cellsByPos.get(`${rk}|${idx}`);
+                                  const assigned = (columnAssignments[m.matrixId] || {})[idx];
+                                  const colLabel = assigned || headers[idx] || `Col ${idx + 1}`;
                                   return (
-                                    <td key={idx} className="px-2 py-1 font-mono text-gray-700">
+                                    <td
+                                      key={idx}
+                                      className="px-2 py-1 font-mono text-gray-700"
+                                      title={`${m.name || m.matrixId} · ${rk} · ${colLabel}${cell?.codeRaw ? ` = ${cell.codeRaw}` : ''}`}
+                                    >
                                       {cell?.codeRaw || cell?.value || ''}
                                     </td>
                                   );
