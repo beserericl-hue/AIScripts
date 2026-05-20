@@ -1,13 +1,18 @@
 /**
  * Step 4 — Matrix (sub-sprint 1.d).
  *
- * Confirms the course-name-per-column mapping for each detected matrix
- * block. Cells are read-only (locked in at Step 3); this step is solely
- * for picking which course each column represents. Course dropdowns
- * are seeded from the per-institution programCourses catalog and the
- * Coordinator can create new ones inline.
+ * Purpose: the AI matrix extractor knows the cell codes per
+ * ``(spec, columnIndex)`` but doesn't always know which COURSE each
+ * column represents — mammoth's DOCX→HTML conversion strips header
+ * formatting in many institutional self-studies, so ``columnHeaders``
+ * arrives empty. This step asks the coordinator to map every "Col N"
+ * to a row in the institution's ProgramCourses catalog (or to skip
+ * the matrix entirely). When confirmed, the cells are persisted to
+ * ``Submission.curriculumMatrices[]`` with real ``courseId`` references
+ * and the Curriculum Matrix tab renders them with course names.
  */
 import React, { useState, useMemo } from 'react';
+import { Info, Grid3X3, Check, SkipForward } from 'lucide-react';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 import { CourseCatalogCombo, type ProgramCourse } from '../matrix/CourseCatalogCombo';
 
@@ -22,6 +27,8 @@ interface MatrixBlock {
   columnCount?: number;
   columnHeaders?: string[];
   cells?: any[];
+  htmlSnippet?: string;
+  rowsMatched?: number;
 }
 
 export function MatrixStep(): JSX.Element {
@@ -53,16 +60,29 @@ export function MatrixStep(): JSX.Element {
     return `${std}.${spec}`;
   };
 
-  const allReady = useMemo(() => {
-    return matrices.every((m) => {
-      if (skipped[m.matrixId]) return true;
+  // Counts for the Apply CTA — coordinator can always move forward; we just
+  // surface how many columns they've named vs. how many are still placeholders.
+  const totalsByMatrix = useMemo(() => {
+    return matrices.map((m) => {
       const colCount = columnsFor(m);
-      if (colCount === 0) return true;
       const assignments = columnAssignments[m.matrixId] || {};
-      return Array.from({ length: colCount }, (_, i) => i).every((idx) => !!assignments[idx]);
+      const namedCount = Array.from({ length: colCount }, (_, i) => i).filter(
+        (idx) => !!assignments[idx]
+      ).length;
+      return {
+        matrixId: m.matrixId,
+        colCount,
+        namedCount,
+        skipped: !!skipped[m.matrixId],
+      };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matrices, columnAssignments, skipped]);
+
+  const totalNamed = totalsByMatrix.reduce((s, t) => s + t.namedCount, 0);
+  const totalColumns = totalsByMatrix
+    .filter((t) => !t.skipped)
+    .reduce((s, t) => s + t.colCount, 0);
 
   const handleAssign = (matrixId: string, columnIdx: number, course: ProgramCourse | null) => {
     setColumnAssignments((prev) => ({
@@ -77,7 +97,14 @@ export function MatrixStep(): JSX.Element {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
-        <h2 className="text-lg font-semibold text-gray-900">Matrix review</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Curriculum matrix — map columns to your courses</h2>
+          {matrices.length > 0 && (
+            <div className="text-xs text-gray-500">
+              {matrices.length} matrix{matrices.length === 1 ? '' : 'es'} detected · {totalNamed} of {totalColumns} columns named
+            </div>
+          )}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => setStep('review')}
@@ -87,13 +114,33 @@ export function MatrixStep(): JSX.Element {
           </button>
           <button
             onClick={() => setStep('apply')}
-            disabled={!allReady}
-            className="rounded bg-cshse-600 px-3 py-1.5 text-sm text-white hover:bg-cshse-700 disabled:cursor-not-allowed disabled:bg-gray-300"
+            className="rounded bg-cshse-600 px-3 py-1.5 text-sm text-white hover:bg-cshse-700"
           >
             Next: Apply ▸
           </button>
         </div>
       </div>
+
+      {matrices.length > 0 && (
+        <div className="border-b border-blue-100 bg-blue-50 px-6 py-3 text-sm text-blue-900">
+          <div className="flex items-start gap-2">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <div>
+              <p className="font-medium">What you're seeing</p>
+              <p className="mt-1 text-xs leading-relaxed">
+                The AI extracted every filled cell of the curriculum matrices from your document but
+                couldn't always read the <em>course name</em> in each column header (mammoth strips merged-cell
+                formatting). The table below shows the raw extraction — each row is one spec, each column is
+                position 1, 2, 3 …, cells hold the coverage code (I/T/K/S = content, L/M/H = depth).
+                <br />
+                <strong>Your job here:</strong> pick which course your catalog calls "Col 1", "Col 2" … in the
+                dropdowns above each column. Skip the whole matrix if you'd rather fix it later in the
+                Curriculum Matrix tab.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto p-6">
         {matrices.length === 0 && (
@@ -128,22 +175,34 @@ export function MatrixStep(): JSX.Element {
 
           return (
             <section key={m.matrixId} className="mb-6 rounded-lg border border-gray-200 bg-white p-4">
-              <div className="mb-3 flex items-start justify-between">
-                <div>
-                  <h3 className="text-base font-semibold text-gray-900">
+              <div className="mb-3 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h3 className="flex items-center gap-2 text-base font-semibold text-gray-900">
+                    <Grid3X3 className="h-4 w-4 text-cshse-700" aria-hidden />
                     {m.name || m.title || `Matrix block ${m.matrixId}`}
                   </h3>
-                  <div className="text-xs text-gray-500">
-                    {colCount} columns, {(m.cells || []).length} cells, {rowKeys.length} specs
+                  <div className="mt-0.5 text-xs text-gray-500">
+                    {colCount} columns · {(m.cells || []).length} filled cells · {rowKeys.length} specs
+                    {typeof m.rowsMatched === 'number' && ` · ${m.rowsMatched} rows matched the template`}
                   </div>
+                  {headers.length === 0 && !isSkipped && (
+                    <p className="mt-2 max-w-2xl rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                      The source DOCX's column headers couldn't be read (Stevenson's matrix has merged
+                      header cells that mammoth can't decode as text). The form below shows "Col 1, Col 2 …"
+                      — open your source DOCX in Word side-by-side to see which course belongs in each
+                      position, or click <strong>Skip</strong> and fill the matrix manually from the
+                      Curriculum Matrix tab.
+                    </p>
+                  )}
                 </div>
-                <label className="flex cursor-pointer items-center gap-1 text-xs text-gray-700">
+                <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100">
                   <input
                     type="checkbox"
                     checked={isSkipped}
                     onChange={(e) => setSkipped((s) => ({ ...s, [m.matrixId]: e.target.checked }))}
                     className="rounded text-cshse-600 focus:ring-cshse-500"
                   />
+                  <SkipForward className="h-3.5 w-3.5 text-gray-500" aria-hidden />
                   Skip this matrix
                 </label>
               </div>
@@ -187,42 +246,89 @@ export function MatrixStep(): JSX.Element {
                   </div>
 
                   {rowKeys.length > 0 && (
-                    <div className="mt-4 max-h-[28rem] overflow-auto rounded border border-gray-100">
-                      <table className="w-full text-xs">
-                        <thead className="sticky top-0 bg-gray-50">
-                          <tr>
-                            <th className="px-2 py-1.5 text-left">Spec</th>
-                            {Array.from({ length: colCount }, (_, idx) => (
-                              <th key={idx} className="px-2 py-1.5 text-left">
-                                {headers[idx] || `Col ${idx + 1}`}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rowKeys.map((rk) => (
-                            <tr key={rk as string} className="border-t border-gray-100">
-                              <td className="whitespace-nowrap px-2 py-1 font-mono text-gray-700">{rk as string}</td>
+                    <>
+                      <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-gray-600">
+                        <span className="font-medium text-gray-700">Cell-code legend:</span>
+                        <span><span className="font-mono">I</span> Introduction</span>
+                        <span><span className="font-mono">T</span> Theory</span>
+                        <span><span className="font-mono">K</span> Knowledge</span>
+                        <span><span className="font-mono">S</span> Skills</span>
+                        <span className="text-gray-400">·</span>
+                        <span><span className="font-mono">L</span> Low / <span className="font-mono">M</span> Medium / <span className="font-mono">H</span> High depth</span>
+                      </div>
+                      <p className="mt-2 text-xs italic text-gray-500">
+                        Extracted cells — read only. The text/codes below come straight from your DOCX;
+                        all you do here is name the column-headers above.
+                      </p>
+                      <div className="mt-2 max-h-[28rem] overflow-auto rounded border border-gray-200">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-gray-50">
+                            <tr>
+                              <th className="border-b border-gray-200 px-2 py-1.5 text-left">Spec</th>
                               {Array.from({ length: colCount }, (_, idx) => {
-                                // The wire format uses 1-based columnIndex
-                                // (column 0 is the prompt cell). Try both
-                                // (legacy 0-based) for safety.
-                                const cell =
-                                  cellsByPos.get(`${rk}|${idx + 1}`) ||
-                                  cellsByPos.get(`${rk}|${idx}`);
+                                const assigned = (columnAssignments[m.matrixId] || {})[idx];
+                                const label = assigned || headers[idx] || `Col ${idx + 1}`;
                                 return (
-                                  <td key={idx} className="px-2 py-1 text-gray-600">
-                                    {cell?.codeRaw || cell?.value || ''}
-                                  </td>
+                                  <th
+                                    key={idx}
+                                    className="border-b border-gray-200 px-2 py-1.5 text-left"
+                                    title={assigned ? `Mapped to ${assigned}` : 'Not mapped yet'}
+                                  >
+                                    {label}
+                                  </th>
                                 );
                               })}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {rowKeys.map((rk) => (
+                              <tr key={rk as string} className="border-t border-gray-100 even:bg-gray-50/50">
+                                <td className="whitespace-nowrap px-2 py-1 font-mono font-medium text-gray-800">
+                                  {rk as string}
+                                </td>
+                                {Array.from({ length: colCount }, (_, idx) => {
+                                  // The wire format uses 1-based columnIndex
+                                  // (column 0 is the prompt cell). Try both
+                                  // (legacy 0-based) for safety.
+                                  const cell =
+                                    cellsByPos.get(`${rk}|${idx + 1}`) ||
+                                    cellsByPos.get(`${rk}|${idx}`);
+                                  return (
+                                    <td key={idx} className="px-2 py-1 font-mono text-gray-700">
+                                      {cell?.codeRaw || cell?.value || ''}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                  {m.htmlSnippet && (
+                    <details className="mt-4 rounded border border-gray-200">
+                      <summary className="cursor-pointer bg-gray-50 px-3 py-2 text-xs font-medium text-gray-700">
+                        Show original source-document table (for visual reference)
+                      </summary>
+                      <div
+                        className="ai-html-snippet max-h-[24rem] overflow-auto p-3 text-xs leading-relaxed text-gray-800"
+                        // Source HTML originated from our own Python extractor with
+                        // row anchors baked in — same trust model as DocumentViewer.
+                        // eslint-disable-next-line react/no-danger
+                        dangerouslySetInnerHTML={{ __html: m.htmlSnippet }}
+                      />
+                    </details>
                   )}
                 </>
+              )}
+
+              {isSkipped && (
+                <p className="rounded border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                  This matrix will be left un-applied. You can populate it later from the Curriculum
+                  Matrix tab in the standards editor.
+                </p>
               )}
             </section>
           );
