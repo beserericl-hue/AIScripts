@@ -648,6 +648,14 @@ export const useAIImportStore = create<AIImportState>()(
 
       reset: () => {
         _clearTransport();
+        // Drop the cached ShowInSourceModal HTML for this import — a brand
+        // new import means the next modal open should re-fetch.
+        const oldImportId = get().importId;
+        if (oldImportId) {
+          import('../features/selfStudy/Editor/AIImport/review/ShowInSourceModal')
+            .then((m) => m.invalidateShowInSourceCache(oldImportId))
+            .catch(() => undefined);
+        }
         set({ ...initialState });
       },
 
@@ -657,6 +665,12 @@ export const useAIImportStore = create<AIImportState>()(
       // doesn't have to re-pick those after a failed attempt.
       startOver: () => {
         _clearTransport();
+        const oldImportId = get().importId;
+        if (oldImportId) {
+          import('../features/selfStudy/Editor/AIImport/review/ShowInSourceModal')
+            .then((m) => m.invalidateShowInSourceCache(oldImportId))
+            .catch(() => undefined);
+        }
         const keep = {
           submissionId: get().submissionId,
           programLevel: get().programLevel,

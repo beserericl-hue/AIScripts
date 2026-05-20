@@ -48,6 +48,46 @@ function normalizeForSearch(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// Module-scoped cache: keyed by importId, value = the fetched HTML string.
+// Live for the lifetime of the tab. Stevenson's HTML is ~353 MB so this
+// matters — re-fetching on every modal open made selecting a second source
+// passage feel broken. The HTML for a given importId is immutable (the
+// SelfStudyImport snapshot is set at parse time and never changes), so
+// caching is safe.
+const HTML_CACHE = new Map<string, string>();
+// Track in-flight fetches so concurrent opens for the same importId share
+// one network request instead of triggering N parallel downloads.
+const HTML_INFLIGHT = new Map<string, Promise<string>>();
+
+async function fetchOrUseCachedHtml(importId: string): Promise<string> {
+  const cached = HTML_CACHE.get(importId);
+  if (cached) return cached;
+  const existing = HTML_INFLIGHT.get(importId);
+  if (existing) return existing;
+  const p = api.get(`/api/imports/${importId}/content`).then((res) => {
+    const html =
+      typeof res.data === 'string'
+        ? res.data
+        : res.data?.htmlContent || res.data?.html || res.data?.content || '';
+    if (!html) throw new Error('No document content returned by the server.');
+    HTML_CACHE.set(importId, html);
+    HTML_INFLIGHT.delete(importId);
+    return html;
+  }).catch((err) => {
+    HTML_INFLIGHT.delete(importId);
+    throw err;
+  });
+  HTML_INFLIGHT.set(importId, p);
+  return p;
+}
+
+/** Drop the cached document HTML for an importId. Call after a re-import
+ *  fires so a new modal-open doesn't show the stale prior-version HTML. */
+export function invalidateShowInSourceCache(importId: string): void {
+  HTML_CACHE.delete(importId);
+  HTML_INFLIGHT.delete(importId);
+}
+
 export function ShowInSourceModal({
   open,
   importId,
@@ -72,32 +112,35 @@ export function ShowInSourceModal({
     return () => window.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  // Fetch the document HTML on open.
+  // Fetch the document HTML on open — use the module-level cache so the
+  // second + third "Pick the source passage…" open is instant. The 353 MB
+  // Stevenson HTML re-downloads + re-renders made every open feel hung.
   useEffect(() => {
     if (!open || !importId) return;
+    let cancelled = false;
+
+    // Synchronous cache hit — flip straight to 'ready' without ever
+    // showing the loading spinner.
+    const cached = HTML_CACHE.get(importId);
+    if (cached) {
+      setState({ kind: 'ready', html: cached, matchKind: 'missing' });
+      return () => { cancelled = true; };
+    }
+
     setState({ kind: 'loading' });
-    api
-      .get(`/api/imports/${importId}/content`)
-      .then((res) => {
-        // Server returns { htmlContent, taggedSectionsCount } — see
-        // importController.getDocumentContent. Older endpoints may use
-        // 'html' / 'content' / a raw string; check all of them.
-        const html =
-          typeof res.data === 'string'
-            ? res.data
-            : res.data?.htmlContent || res.data?.html || res.data?.content || '';
-        if (!html) {
-          setState({ kind: 'error', message: 'No document content returned by the server.' });
-          return;
-        }
+    fetchOrUseCachedHtml(importId)
+      .then((html) => {
+        if (cancelled) return;
         setState({ kind: 'ready', html, matchKind: 'missing' });
       })
       .catch((err: any) => {
+        if (cancelled) return;
         setState({
           kind: 'error',
           message: err?.response?.data?.error || err?.message || String(err)
         });
       });
+    return () => { cancelled = true; };
   }, [open, importId]);
 
   // After HTML mounts, try to locate the anchor (or fuzzy fallback).
