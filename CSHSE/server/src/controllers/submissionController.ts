@@ -4,6 +4,7 @@ import { Institution } from '../models/Institution';
 import { ValidationResult } from '../models/ValidationResult';
 import { ValidationService } from '../services/validationService';
 import { emailService } from '../services/emailService';
+import { recordAuditEvent } from '../services/auditLog';
 import { User } from '../models/User';
 import { Spec } from '../models/Spec';
 import mongoose from 'mongoose';
@@ -13,6 +14,8 @@ interface AuthenticatedRequest extends Request {
     id: string;
     role: string;
     email: string;
+    name?: string;
+    isSuperuser?: boolean;
   };
 }
 
@@ -57,6 +60,19 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
     const submission = await Submission.findById(submissionId);
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // CR-007: readers + lead readers can only see a submission once the PC
+    // has clicked final submit. Direct URL access to a draft returns 403.
+    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
+    if (!isElevated && (req.user?.role === 'reader' || req.user?.role === 'lead_reader')) {
+      const draftStates = ['draft', 'in_progress'];
+      if (draftStates.includes(submission.status)) {
+        return res.status(403).json({
+          error: 'This self-study has not yet been submitted for review',
+          status: submission.status
+        });
+      }
     }
 
     // Convert nested Map to array format for client
@@ -346,6 +362,19 @@ export const submitStandard = async (req: AuthenticatedRequest, res: Response) =
         }}
       );
 
+      void recordAuditEvent({
+        action: 'submission.submit_standard',
+        actor: {
+          id: req.user!.id,
+          role: req.user!.role,
+          name: req.user!.name || req.user!.email
+        },
+        targetType: 'standard',
+        targetId: `${submissionId}:${standardCode}`,
+        submissionId,
+        payload: { standardCode, passed: true, specCount: standardNarratives.length }
+      });
+
       return res.json({
         success: true,
         message: `Standard ${standardCode} submitted successfully`,
@@ -372,6 +401,76 @@ export const submitStandard = async (req: AuthenticatedRequest, res: Response) =
   } catch (error) {
     console.error('Submit standard error:', error);
     return res.status(500).json({ error: 'Failed to submit standard' });
+  }
+};
+
+/**
+ * Revert a standard from `submitted` back to `in_progress` so the PC can
+ * keep editing. Per CR-006 the per-standard submit must be reversible —
+ * only the final-submit on the whole self-study triggers the lockout.
+ */
+export const revertStandard = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId, standardCode } = req.params;
+
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // Ownership check — only the PC submitter or admin may revert.
+    if (
+      submission.submitterId.toString() !== req.user!.id &&
+      req.user!.role !== 'admin' &&
+      !req.user!.isSuperuser
+    ) {
+      return res.status(403).json({ error: 'Not authorized to revert this standard' });
+    }
+
+    // The submissionLockout middleware already refuses if the whole self-study
+    // has been final-submitted; we still defend against the per-standard
+    // 'validated' state (means a reader has signed off) — that's not revertable
+    // from this endpoint.
+    const existing = submission.standardsStatus?.get(standardCode);
+    if (existing?.status === 'validated') {
+      return res.status(409).json({
+        error: 'Standard has been validated by a reader and cannot be reverted by the PC'
+      });
+    }
+
+    await Submission.updateOne(
+      { _id: submission._id },
+      {
+        $set: {
+          [`standardsStatus.${standardCode}.status`]: 'in_progress',
+          [`standardsStatus.${standardCode}.lastModified`]: new Date()
+        },
+        $unset: {
+          [`standardsStatus.${standardCode}.submittedAt`]: ''
+        }
+      }
+    );
+
+    void recordAuditEvent({
+      action: 'submission.revert_standard',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: req.user!.name || req.user!.email
+      },
+      targetType: 'standard',
+      targetId: `${submissionId}:${standardCode}`,
+      submissionId,
+      payload: { standardCode, previousStatus: existing?.status }
+    });
+
+    return res.json({
+      success: true,
+      message: `Standard ${standardCode} reverted to in_progress`
+    });
+  } catch (error) {
+    console.error('Revert standard error:', error);
+    return res.status(500).json({ error: 'Failed to revert standard' });
   }
 };
 
@@ -567,7 +666,17 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
       }
     }
 
-    // Filter by status
+    // CR-007: readers + lead readers only see submissions whose status has
+    // progressed beyond draft. Draft submissions are PC-only.
+    // Admin + superuser are exempt.
+    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
+    if (!isElevated && (req.user?.role === 'reader' || req.user?.role === 'lead_reader')) {
+      filter.status = {
+        $in: ['submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant']
+      };
+    }
+
+    // Filter by status (explicit query param overrides the role-based default)
     if (status) {
       filter.status = status;
     }
@@ -736,6 +845,29 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
     };
 
     await submission.save();
+
+    // CR-006 audit trail — record the final-submit event with the optional
+    // submission note the PC enters in the confirm modal.
+    const submissionNote = typeof req.body?.submissionNote === 'string'
+      ? String(req.body.submissionNote).trim().slice(0, 2000)
+      : undefined;
+    void recordAuditEvent({
+      action: 'submission.final_submit',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: req.user!.name || req.user!.email
+      },
+      targetType: 'submission',
+      targetId: submissionId,
+      submissionId,
+      payload: {
+        institutionName: submission.institutionName,
+        programLevel: submission.programLevel,
+        submittedAt: submission.submittedAt
+      },
+      reason: submissionNote
+    });
 
     // Notify lead reader if assigned
     if (submission.leadReader) {

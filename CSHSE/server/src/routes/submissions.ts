@@ -4,6 +4,7 @@ import {
   getSubmissionProgress,
   saveNarrative,
   submitStandard,
+  revertStandard,
   submitSelfStudy,
   revalidateFailed,
   getFailedValidations,
@@ -12,6 +13,7 @@ import {
   createSubmission
 } from '../controllers/submissionController';
 import { authenticate } from '../middleware/auth';
+import { submissionLockout } from '../middleware/submissionLockout';
 
 const router = Router();
 
@@ -59,7 +61,7 @@ router.get('/:submissionId/progress', getSubmissionProgress);
  * @desc    Save narrative content for a standard/specification
  * @access  Private (Program Coordinator, Admin)
  */
-router.patch('/:submissionId/narrative', saveNarrative);
+router.patch('/:submissionId/narrative', submissionLockout, saveNarrative);
 
 /**
  * @route   POST /api/submissions/:submissionId/submit
@@ -73,7 +75,14 @@ router.post('/:submissionId/submit', submitSelfStudy);
  * @desc    Submit a standard for validation
  * @access  Private (Program Coordinator, Admin)
  */
-router.post('/:submissionId/standards/:standardCode/submit', submitStandard);
+router.post('/:submissionId/standards/:standardCode/submit', submissionLockout, submitStandard);
+
+/**
+ * @route   POST /api/submissions/:submissionId/standards/:standardCode/revert
+ * @desc    Revert a standard from `submitted` back to `in_progress` (PC may continue editing)
+ * @access  Private (Program Coordinator owner, Admin)
+ */
+router.post('/:submissionId/standards/:standardCode/revert', submissionLockout, revertStandard);
 
 /**
  * @route   POST /api/submissions/:submissionId/revalidate
@@ -81,7 +90,7 @@ router.post('/:submissionId/standards/:standardCode/submit', submitStandard);
  * @access  Private (Program Coordinator, Admin)
  * @body    standardCode - Optional: limit to specific standard
  */
-router.post('/:submissionId/revalidate', revalidateFailed);
+router.post('/:submissionId/revalidate', submissionLockout, revalidateFailed);
 
 /**
  * @route   GET /api/submissions/:submissionId/failed
@@ -96,6 +105,6 @@ router.get('/:submissionId/failed', getFailedValidations);
  * @desc    Mark a standard as complete (manual)
  * @access  Private (Program Coordinator, Admin)
  */
-router.post('/:submissionId/standards/:standardCode/complete', markStandardComplete);
+router.post('/:submissionId/standards/:standardCode/complete', submissionLockout, markStandardComplete);
 
 export default router;
