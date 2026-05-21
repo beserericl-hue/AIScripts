@@ -1958,10 +1958,13 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           </div>
         </div>
       )}
-      {/* Header */}
-      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 overflow-x-auto">
-        <div className="flex items-center justify-between whitespace-nowrap min-w-0">
-          <div className="flex items-center gap-4 min-w-0">
+      {/* Header — wraps cleanly to multiple rows at narrow widths so the
+          tab row, progress, and Submit button never overlap. At ≥1400px
+          they sit on one line; below that the right cluster (progress +
+          Submit) wraps below the tabs without losing any controls. */}
+      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-y-2 gap-x-4">
+          <div className="flex items-center gap-3 flex-shrink-0">
             <button
               onClick={() => navigate('/self-study')}
               className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
@@ -1969,17 +1972,20 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             >
               <Home className="w-5 h-5 text-gray-600" />
             </button>
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold text-gray-900 truncate">
                 Self-Study Editor
               </h1>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 truncate max-w-[24rem]">
                 {submission?.institutionName} - {submission?.programName}
               </p>
             </div>
+          </div>
 
-            {/* View Tabs */}
-            <div className="flex items-center ml-6 border-l pl-6 border-gray-200 whitespace-nowrap">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {/* View Tabs — wraps onto its own line when the header is too
+                narrow. flex-wrap + gap-y so each button keeps full padding. */}
+            <div className="flex flex-wrap items-center gap-1 border-l pl-3 border-gray-200">
               <button
                 onClick={() => setActiveView('standards')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
@@ -2033,7 +2039,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
               {isProgramCoordinator && <AIImportTabButton activeView={activeView} setActiveView={setActiveView} />}
             </div>
           </div>
-          <div className="flex items-center gap-4 flex-shrink-0">
+          {/* Right cluster: progress + submit. ml-auto pushes it right when
+              there's room on the line; wraps to its own row when not. */}
+          <div className="flex flex-wrap items-center gap-3 ml-auto">
             {/* Overall Progress */}
             <ProgressIndicator submission={submission} />
 
