@@ -30,6 +30,60 @@ export function ReviewStep(): JSX.Element {
   const setStep = useAIImportStore((s) => s.setStep);
   const selectSpec = useAIImportStore((s) => s.selectSpec);
   const selectSection = useAIImportStore((s) => s.selectSection);
+  const setMatrixRowAnchor = useAIImportStore((s) => s.setMatrixRowAnchor);
+  const selectMatrixRow = useAIImportStore((s) => s.selectMatrixRow);
+
+  // CR-024 / S2B.6 — when the coordinator picks a spec in the rail we
+  // pre-position every matrix to that spec's row so it's already scrolled
+  // into view if they later click "Matrices". This is intentionally a soft
+  // pre-positioning (setMatrixRowAnchor) — not a view-switch (selectMatrixRow)
+  // — because the spec rail click means "I want to look at this spec",
+  // not "I want to look at the matrix".
+  const findMatrixRowAnchorForSpec = useCallback(
+    (specKey: string): string | null => {
+      // specKey shape from SpecRail is "<std>.<spec>" (e.g. "13.a"). Matrix
+      // row anchors are "matrix-{slug}-row-{std}-{spec}". Iterate matrices
+      // until we find a matching cell; return the first hit (anchors are
+      // matrix-scoped so two matrices' rows for the same spec are
+      // independent — both will scroll because both consume the same
+      // selectedMatrixRowAnchor, the MatricesView matches by suffix).
+      const dot = specKey.indexOf('.');
+      if (dot === -1) return null;
+      const std = specKey.slice(0, dot);
+      const spec = specKey.slice(dot + 1);
+      for (const m of matrices) {
+        const hit = m.cells.find((c) => c.std === std && c.spec === spec);
+        if (hit?.rowAnchor) return hit.rowAnchor;
+      }
+      return null;
+    },
+    [matrices]
+  );
+
+  const handleSelectSpec = useCallback(
+    (key: string) => {
+      // For spec keys (not _matrices, _unplaced, _unwritten), pre-position
+      // the matrices view if coverage exists. For the synthetic buckets we
+      // leave the anchor alone.
+      selectSpec(key);
+      if (!key.startsWith('_')) {
+        const anchor = findMatrixRowAnchorForSpec(key);
+        if (anchor) setMatrixRowAnchor(anchor);
+      }
+    },
+    [selectSpec, setMatrixRowAnchor, findMatrixRowAnchorForSpec]
+  );
+
+  // Spec cards offer a "Matrix" button that switches the center pane to
+  // the Matrices view scrolled to the row. Different from the soft
+  // pre-positioning above — this is an explicit "show me the matrix" action.
+  const handleJumpToMatrix = useCallback(
+    (specKey: string) => {
+      const anchor = findMatrixRowAnchorForSpec(specKey);
+      if (anchor) selectMatrixRow(anchor);
+    },
+    [findMatrixRowAnchorForSpec, selectMatrixRow]
+  );
 
   const [reassignOpen, setReassignOpen] = useState(false);
   const [reassignTargets, setReassignTargets] = useState<string[]>([]);
@@ -426,7 +480,7 @@ export function ReviewStep(): JSX.Element {
           placeholders={placeholderSections}
           matrices={matrices}
           selectedKey={selectedSpecKey}
-          onSelect={selectSpec}
+          onSelect={handleSelectSpec}
         />
         <main className="flex flex-1 flex-col overflow-hidden">
           <ItemCardList
@@ -444,6 +498,7 @@ export function ReviewStep(): JSX.Element {
             onToggleApproval={toggleApproval}
             onApproveAll={approveAll}
             onClearApprovals={clearApprovals}
+            onJumpToMatrix={handleJumpToMatrix}
           />
         </main>
         <ItemPreview

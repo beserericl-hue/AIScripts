@@ -229,6 +229,12 @@ interface AIImportState {
   // row id (e.g. "matrix-hsr-row-11-a"). Used by per-spec "View in Matrix"
   // buttons and by the Standards-editor "Jump to matrix row" link.
   selectMatrixRow: (rowAnchor: string) => void;
+  // Set the matrix row anchor WITHOUT switching the center pane to the
+  // Matrices view. Used when the user clicks a spec in the rail — we want
+  // the matrix view to pre-position itself silently so when the user
+  // eventually clicks the "Matrices" entry the right row is already
+  // scrolled into view.
+  setMatrixRowAnchor: (rowAnchor: string | null) => void;
   clearMatrixRowAnchor: () => void;
   setMergeMode: (m: 'merge' | 'replace' | 'per_spec') => void;
 
@@ -336,6 +342,7 @@ export const useAIImportStore = create<AIImportState>()(
       selectSection: (id) => set({ selectedSectionId: id }),
       selectMatrixRow: (rowAnchor) =>
         set({ selectedSpecKey: '_matrices', selectedMatrixRowAnchor: rowAnchor }),
+      setMatrixRowAnchor: (rowAnchor) => set({ selectedMatrixRowAnchor: rowAnchor }),
       clearMatrixRowAnchor: () => set({ selectedMatrixRowAnchor: null }),
       setMergeMode: (m) => set({ mergeMode: m }),
 

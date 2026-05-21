@@ -73,6 +73,9 @@ interface ItemCardListProps {
   onToggleApproval?: (rowId: string) => void;
   onApproveAll?: (rowIds: string[]) => void;
   onClearApprovals?: () => void;
+  /** CR-024: jump to the matrix view scrolled to this spec's row. ReviewStep
+   *  resolves the row anchor and dispatches selectMatrixRow. */
+  onJumpToMatrix?: (specKey: string) => void;
 }
 
 // Headings like "b.", "c.", "1)", "(a)", "i.", or "x." are non-descriptive —
@@ -212,7 +215,8 @@ export function ItemCardList({
   approvedIds,
   onToggleApproval,
   onApproveAll,
-  onClearApprovals
+  onClearApprovals,
+  onJumpToMatrix
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
