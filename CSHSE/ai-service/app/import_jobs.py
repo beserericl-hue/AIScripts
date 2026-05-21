@@ -365,7 +365,7 @@ def _run_pipeline(job: JobRecord) -> None:
 def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     """Template-format path. Mirrors scripts/build_template_preview.run_template_preview
     but builds in-memory result instead of writing an Obsidian file."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
     from app.coverage.spec_coverage import CoverageReviewer
     from app.embeddings.openai_client import EmbeddingClient
     from app.embeddings.spec_cache import bootstrap_spec_cache
@@ -402,12 +402,27 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
 
     recommendations: dict[str, Any] = {}
     done_count = 0
+    # CR-028 — outer safety net on each future. The per-call timeouts
+    # on Anthropic/OpenAI/Qdrant should already prevent any single section
+    # from blocking longer than ~60s, but if those slip we still need
+    # the threadpool to drain. 180s is generous (3 minutes); after that
+    # we treat the section as soft-failed and continue, so as_completed
+    # can never deadlock the whole stage.
+    PER_SECTION_TIMEOUT_S = 180
     with ThreadPoolExecutor(max_workers=6) as ex:
         futures = {ex.submit(matcher.recommend, s, job.program_level, institution_id=job.institution_id): s for s in sections}
         for fut in as_completed(futures):
             sec = futures[fut]
             try:
-                recommendations[sec.id] = fut.result()
+                recommendations[sec.id] = fut.result(timeout=PER_SECTION_TIMEOUT_S)
+            except FuturesTimeoutError:
+                # Worker hasn't returned in PER_SECTION_TIMEOUT_S - mark the
+                # future cancelled (best-effort; if it's wedged in a C
+                # extension it ignores cancel but the loop continues).
+                fut.cancel()
+                job.warnings.append(
+                    f"matcher {sec.id}: outer timeout after {PER_SECTION_TIMEOUT_S}s - section soft-failed"
+                )
             except Exception as exc:  # noqa: BLE001
                 # The matcher itself wraps the Anthropic call in a retry +
                 # embedding fallback path, so a real exception escaping out
@@ -534,7 +549,7 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     """
     import io
     import mammoth
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
     from app.coverage.spec_coverage import CoverageReviewer
     from app.embeddings.openai_client import EmbeddingClient
     from app.embeddings.spec_cache import bootstrap_spec_cache
@@ -582,12 +597,20 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     matcher = SpecMatcher(store=store, embedder=embedder, anthropic_key=settings.anthropic_api_key)
     recommendations: dict[str, Any] = {}
     done_count = 0
+    # CR-028 — see _run_self_study_pipeline for the rationale on the outer
+    # safety-net timeout.
+    PER_SECTION_TIMEOUT_S = 180
     with ThreadPoolExecutor(max_workers=8) as ex:
         futures = {ex.submit(matcher.recommend, s, job.program_level, institution_id=job.institution_id): s for s in sections}
         for fut in as_completed(futures):
             sec = futures[fut]
             try:
-                recommendations[sec.id] = fut.result()
+                recommendations[sec.id] = fut.result(timeout=PER_SECTION_TIMEOUT_S)
+            except FuturesTimeoutError:
+                fut.cancel()
+                job.warnings.append(
+                    f"matcher {sec.id}: outer timeout after {PER_SECTION_TIMEOUT_S}s - section soft-failed"
+                )
             except Exception as exc:  # noqa: BLE001
                 # See the same comment on the first matcher loop earlier in
                 # the file: transient API errors are already retried + fallen

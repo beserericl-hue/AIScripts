@@ -302,7 +302,21 @@ class SpecMatcher:
     ):
         self._store = store
         self._embedder = embedder
-        self._anthropic = Anthropic(api_key=anthropic_key) if anthropic_key else None
+        # CR-028 — explicit per-request timeout on the Anthropic client.
+        # Without this the SDK's 10-minute default lets a single section
+        # block a worker thread for tens of minutes; stacked with the
+        # ad88514 retry loop this can wedge the matcher's ThreadPoolExecutor
+        # to the point that as_completed() blocks forever. 30s is well
+        # above the 99th percentile of normal Haiku response latency for
+        # a 512-token completion (~3s p50, ~10s p99).
+        # The SDK also performs its own internal retries on 5xx; we
+        # disable those (`max_retries=0`) so our outer retry loop is the
+        # single source of truth and doesn't get multiplicatively stacked.
+        self._anthropic = (
+            Anthropic(api_key=anthropic_key, timeout=30.0, max_retries=0)
+            if anthropic_key
+            else None
+        )
         self._specs_collection = specs_collection
         self._model = model
 

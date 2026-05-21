@@ -30,7 +30,15 @@ class SearchHit:
 
 class VectorStore:
     def __init__(self, url: str, api_key: str | None):
-        self._client = QdrantClient(url=url, api_key=api_key or None)
+        # CR-028 — explicit timeout on Qdrant operations. qdrant-client
+        # talks HTTP by default with no client-side timeout; a single
+        # wedged TCP connection can hold a matcher worker indefinitely.
+        # 10s is generous for a single search/upsert (typical p99 <500ms).
+        self._client = QdrantClient(
+            url=url,
+            api_key=api_key or None,
+            timeout=10,
+        )
 
     # ------------------------------------------------------------------ schema
 

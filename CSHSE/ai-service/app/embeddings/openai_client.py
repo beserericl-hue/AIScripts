@@ -17,7 +17,11 @@ class EmbeddingClient:
     def __init__(self, api_key: str):
         if not api_key:
             raise ValueError("OPENAI_API_KEY required")
-        self._client = OpenAI(api_key=api_key)
+        # CR-028 — explicit timeout. Embeddings calls are fast (typically
+        # <1s); a 15s budget catches genuine network wedges without
+        # tripping on normal latency. Disable internal retries so the
+        # matcher's outer retry is authoritative.
+        self._client = OpenAI(api_key=api_key, timeout=15.0, max_retries=0)
 
     def embed_batch(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed a batch of texts. OpenAI accepts up to 2048 items per call.
