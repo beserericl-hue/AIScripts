@@ -214,7 +214,13 @@ export function ReviewStep(): JSX.Element {
         return;
       }
 
-      const toBucket = buckets[toKey];
+      // BUG FIX 2026-05-21: when from === to (same spec, kind-flip),
+      // we MUST start from newFromBucket — the version with the item
+      // already removed from its old list. Reading buckets[toKey] here
+      // would re-introduce the item under both lists, since the final
+      // setState overwrites newFromBucket. That's why clicking the
+      // "Evidence" chip on an item already in 1.a appeared to do nothing.
+      const toBucket = (toKey === fromKey) ? newFromBucket : buckets[toKey];
       if (!toBucket) {
         // Reassign target doesn't exist (unexpected) — fall back to tag list.
         useAIImportStore.setState({ buckets: newBuckets });
