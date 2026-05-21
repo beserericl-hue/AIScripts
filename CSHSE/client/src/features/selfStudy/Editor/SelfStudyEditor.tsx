@@ -23,11 +23,13 @@ import {
   ArrowRight,
   PlayCircle,
   MessageSquarePlus,
+  Lock,
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
+import { FinalSubmitModal } from './FinalSubmitModal';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
 import { FileLibrary } from '../FileLibrary';
 import { CommentSidebar } from '../../comments';
@@ -67,6 +69,7 @@ interface SubmissionData {
     isLocked: boolean;
     lockReason?: string;
   };
+  submittedAt?: string;
 }
 
 interface StandardDefinition {
@@ -275,10 +278,15 @@ function AIImportTabButton({
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
         activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
       }`}
-      title="Import File Wizard — AI-assisted import from DOCX (replaces the legacy Import Document button)"
+      title="AI Import Wizard — upload a DOCX (or a partial section) and let the AI parse, tag, and place content. Use this when you have one document to import."
     >
       <Upload className="w-4 h-4 flex-shrink-0" />
-      Import File Wizard
+      AI Import
+      {/* CR-001 / S2A.4 — both paths coexist; the badge tells coordinators
+          which import surface is the AI-driven one at a glance. */}
+      <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
+        AI
+      </span>
       {badge && (
         <span className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${badge.cls}`}>
           {badge.text}
@@ -589,10 +597,14 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     },
   });
 
-  // Submit entire self-study mutation (locks submission for review)
+  // Submit entire self-study mutation (locks submission for review).
+  // Accepts an optional submissionNote — the PC's confirm-modal message.
+  // Persisted on the final-submit audit-log entry.
   const submitSelfStudyMutation = useMutation({
-    mutationFn: async () => {
-      const response = await api.post(`/api/submissions/${submissionId}/submit`);
+    mutationFn: async (args?: { submissionNote?: string }) => {
+      const response = await api.post(`/api/submissions/${submissionId}/submit`, {
+        submissionNote: args?.submissionNote ?? ''
+      });
       return response.data;
     },
     onSuccess: () => {
@@ -1760,13 +1772,24 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     [saveSupportingEvidenceMutation, selectedStandard, selectedSpec]
   );
 
-  // Handle submit entire self-study for review (locks submission)
-  const handleSubmitSelfStudy = useCallback(async () => {
-    const confirmMessage = `Submit Self-Study for Review?\n\nThis will lock the self-study for review by the lead reader. You will not be able to make edits until the review is complete.\n\nMake sure you have saved all your changes first.`;
-    if (window.confirm(confirmMessage)) {
-      await submitSelfStudyMutation.mutateAsync();
-    }
-  }, [submitSelfStudyMutation]);
+  // CR-006 / S2A.5: final-submit gate. The actual mutation runs from
+  // the FinalSubmitModal's onConfirm; the button just opens the modal.
+  const [finalSubmitOpen, setFinalSubmitOpen] = useState(false);
+  const handleSubmitSelfStudy = useCallback(() => {
+    setFinalSubmitOpen(true);
+  }, []);
+  const handleFinalSubmitConfirm = useCallback(
+    async (submissionNote: string) => {
+      try {
+        await submitSelfStudyMutation.mutateAsync({ submissionNote });
+        setFinalSubmitOpen(false);
+      } catch (err) {
+        // Leave the modal open so the PC can read the error + retry.
+        console.error('[handleFinalSubmitConfirm] submission failed', err);
+      }
+    },
+    [submitSelfStudyMutation]
+  );
 
   // Calculate validated specs count for progress display
   const validationProgress = React.useMemo(() => {
@@ -1917,6 +1940,24 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
   return (
     <div className="self-study-editor flex flex-col bg-gray-50 h-[calc(100vh-64px)]">
+      {/* CR-005 / S2A.2 — read-only lockout banner. Shown when the PC's
+          submission has progressed past draft (final-submitted, under
+          review, etc.) so they understand why the editor is read-only
+          rather than hitting blocked-write errors per save.            */}
+      {isProgramCoordinator && isSubmissionLocked && (
+        <div className="flex-shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+          <div className="mx-auto flex max-w-7xl items-center gap-2">
+            <Lock className="h-4 w-4 flex-shrink-0 text-amber-700" aria-hidden />
+            <span>
+              <strong>Submitted for review</strong>
+              {submission?.submittedAt && (
+                <> on {new Date(submission.submittedAt).toLocaleDateString()}</>
+              )}
+              {' — '}this self-study is now read-only. You can view + print, but cannot edit. Contact the administrator to make changes.
+            </span>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3 overflow-x-auto">
         <div className="flex items-center justify-between whitespace-nowrap min-w-0">
@@ -1972,6 +2013,23 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 <FolderOpen className="w-4 h-4 flex-shrink-0" />
                 Supporting File Library
               </button>
+              {isProgramCoordinator && (
+                <button
+                  onClick={() => setShowImportModal(true)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    showImportModal
+                      ? 'bg-teal-100 text-teal-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                  title="Import Document — paste a single section at a time into a chosen standard. Use this when multiple co-authors each contribute pieces of the self-study at different times."
+                >
+                  <FileUp className="w-4 h-4 flex-shrink-0" />
+                  Import Document
+                  <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-700">
+                    Legacy
+                  </span>
+                </button>
+              )}
               {isProgramCoordinator && <AIImportTabButton activeView={activeView} setActiveView={setActiveView} />}
             </div>
           </div>
@@ -1981,10 +2039,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
             {isProgramCoordinator && (
               <>
-                {/* Legacy "Import Document" button removed 2026-05-19 —
-                    superseded by the Import File Wizard tab. The
-                    importController endpoints are still mounted for the
-                    transition period (run-book §6 rollback path). */}
+                {/* CR-001 / S2A.4 — Both importers ship side-by-side.
+                    "Import Document" tab above triggers the legacy
+                    per-standard paste-and-tag modal (showImportModal).
+                    "AI Import" tab opens the full wizard. Both write to
+                    the same Submission record; PCs can mix and match. */}
 
                 {/* Validation Progress */}
                 <span className="text-sm text-gray-500">
@@ -3521,6 +3580,16 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           </div>
         </div>
       )}
+
+      {/* CR-006 / S2A.5 — final-submit confirm modal */}
+      <FinalSubmitModal
+        open={finalSubmitOpen}
+        onClose={() => setFinalSubmitOpen(false)}
+        onConfirm={handleFinalSubmitConfirm}
+        validated={validationProgress.validated}
+        total={validationProgress.total}
+        busy={submitSelfStudyMutation.isPending}
+      />
 
           </div>
   );
