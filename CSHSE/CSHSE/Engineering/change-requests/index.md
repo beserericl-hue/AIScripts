@@ -34,6 +34,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | [[cr-017-cross-institution-isolation-audit]] | Documented data-flow audit for cross-institution isolation | proposed | [[webinar-action-items-2026-05-20#24-07]] |
 | [[cr-025-ai-matrix-column-inference]] | AI infers matrix column → course mapping; dropdown replaces free-text | proposed | User observation 2026-05-21 |
 | [[cr-026-matrix-correction-verify-in-context]] | Verify-in-context preview + per-row move/remove for AI matrix corrections | proposed | User observation 2026-05-21 |
+| [[cr-027-stale-error-on-wizard-step-back]] | Stale error persists when navigating back to wizard Upload step | proposed | User observation 2026-05-21 |
 
 ## P1 — required for general beta
 
