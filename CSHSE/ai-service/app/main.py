@@ -108,6 +108,27 @@ class CorrectionIngestRequest(BaseModel):
     correctionType: str = "missed-by-matcher"
 
 
+class MatrixInferColumnsRequest(BaseModel):
+    """CR-025 — coordinator-facing column inference for the wizard's matrix step."""
+    matrixSlug: str
+    institutionId: str | None = None
+    programLevel: str = "bachelors"
+    rawTableHtml: str = ""
+    columnCount: int
+    surroundingContext: str = ""
+    knownCourses: list[str] | None = None
+
+
+class MatrixConfirmColumnRequest(BaseModel):
+    """CR-025 — one row of confirmed column → course mapping."""
+    institutionId: str
+    programLevel: str = "bachelors"
+    matrixSlug: str
+    columnIndex: int
+    course: str
+    priorConfidence: float = 1.0
+
+
 @app.post("/ai/import/start", status_code=status.HTTP_202_ACCEPTED)
 async def start_import(req: StartImportRequest, request: Request) -> dict:
     """Accept an import job from the CSHSE server and enqueue it.
@@ -178,6 +199,85 @@ async def ingest_correction_endpoint(req: CorrectionIngestRequest, request: Requ
         raise HTTPException(
             status_code=502,
             detail=f"correction ingest failed: {type(exc).__name__}: {exc}",
+        )
+
+
+@app.post("/ai/matrix/infer-columns", status_code=status.HTTP_200_OK)
+async def infer_matrix_columns_endpoint(req: MatrixInferColumnsRequest, request: Request) -> dict:
+    """CR-025 — infer column → course mappings for one curriculum matrix.
+
+    Server posts this for each matrix on the wizard's Matrix step. We
+    read the raw `<table>` HTML (which still carries merged-cell course
+    headers in the bytes even if mammoth's DOM walker missed them),
+    consult the per-institution `cshse_matrix_columns_{env}` Qdrant
+    collection for prior confirmations, and ask Haiku for confidence-
+    ranked suggestions.
+
+    Returns suggestions for every column from 0..columnCount-1, padded
+    with "no signal" entries for columns the model couldn't guess.
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    from app.matrix.column_inference import infer_columns
+    from app.vector.qdrant_ops import VectorStore
+    from app.embeddings.openai_client import EmbeddingClient
+    from app.config import get_settings as _gs
+
+    settings = _gs()
+    try:
+        result = infer_columns(
+            matrix_slug=req.matrixSlug,
+            raw_table_html=req.rawTableHtml,
+            column_count=req.columnCount,
+            institution_id=req.institutionId,
+            program_level=req.programLevel,
+            surrounding_context=req.surroundingContext,
+            known_courses=req.knownCourses or [],
+            embedder=EmbeddingClient(settings.openai_api_key) if settings.openai_api_key else None,
+            store=VectorStore(settings.qdrant_url, settings.qdrant_api_key or None) if settings.qdrant_url else None,
+            settings=settings,
+        )
+        return result.to_dict()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=f"matrix column inference failed: {type(exc).__name__}: {exc}",
+        )
+
+
+@app.post("/ai/matrix/confirm-column", status_code=status.HTTP_201_CREATED)
+async def confirm_matrix_column_endpoint(req: MatrixConfirmColumnRequest, request: Request) -> dict:
+    """CR-025 — persist a coordinator-confirmed column → course mapping.
+
+    Called when the coordinator clicks "Accept" on an AI suggestion or
+    types in their own override. Idempotent: keyed by
+    (institution, matrix_slug, column_index). Subsequent imports for
+    this institution surface this mapping as a RAG hint to the matcher.
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    from app.matrix.column_inference import record_confirmed_mapping
+    from app.vector.qdrant_ops import VectorStore
+    from app.embeddings.openai_client import EmbeddingClient
+    from app.config import get_settings as _gs
+
+    settings = _gs()
+    try:
+        return record_confirmed_mapping(
+            institution_id=req.institutionId,
+            program_level=req.programLevel,
+            matrix_slug=req.matrixSlug,
+            column_index=req.columnIndex,
+            course=req.course,
+            prior_confidence=req.priorConfidence,
+            embedder=EmbeddingClient(settings.openai_api_key) if settings.openai_api_key else None,
+            store=VectorStore(settings.qdrant_url, settings.qdrant_api_key or None) if settings.qdrant_url else None,
+            settings=settings,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=f"matrix column confirm failed: {type(exc).__name__}: {exc}",
         )
 
 

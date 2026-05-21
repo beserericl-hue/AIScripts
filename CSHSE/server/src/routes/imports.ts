@@ -42,7 +42,9 @@ import {
   applyAIImport,
   restartAIImport,
   createImportCorrection,
-  listImportCorrections
+  listImportCorrections,
+  inferMatrixColumns,
+  confirmMatrixColumn
 } from '../controllers/aiImportController';
 import { authenticate } from '../middleware/auth';
 
@@ -180,6 +182,12 @@ router.post('/:importId/restart-ai', restartAIImport);
 // Coordinator-supplied corrections — see ImportCorrection model.
 router.post('/:importId/corrections', createImportCorrection);
 router.get('/:importId/corrections', listImportCorrections);
+
+// CR-025 — matrix column inference + confirm. The wizard's Matrix step
+// posts here per matrix to get AI-suggested column → course mappings,
+// then again per confirmed override.
+router.post('/:importId/matrix/infer-columns', inferMatrixColumns);
+router.post('/:importId/matrix/confirm-column', confirmMatrixColumn);
 
 // ============================================
 // PART 6: Section Selection Before AI Processing

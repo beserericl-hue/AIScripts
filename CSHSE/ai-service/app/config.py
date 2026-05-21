@@ -39,6 +39,26 @@ class Settings(BaseSettings):
         """Per-institution coordinator-supplied corrections (few-shot pool)."""
         return f"cshse_corrections_{self.cshse_env}"
 
+    @property
+    def matrix_columns_collection(self) -> str:
+        """Per-institution confirmed matrix column → course mappings.
+
+        Built up over time as the coordinator confirms (or overrides) the
+        AI's inferred mappings on the wizard's Matrix step. Filtered at
+        retrieval by institutionId so one institution's catalog never
+        leaks into another's inference prompt.
+        """
+        return f"cshse_matrix_columns_{self.cshse_env}"
+
+    @property
+    def matrix_context_collection(self) -> str:
+        """Per-institution surrounding-narrative paragraphs that name course
+        codes near the curriculum matrix anchors. Drives the RAG side of
+        the column-inference endpoint when mammoth has stripped merged-cell
+        headers from the raw `<table>`.
+        """
+        return f"cshse_matrix_context_{self.cshse_env}"
+
 
 @lru_cache
 def get_settings() -> Settings:

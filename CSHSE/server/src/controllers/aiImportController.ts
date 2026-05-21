@@ -998,3 +998,143 @@ export async function listImportCorrections(
     }))
   });
 }
+
+/**
+ * CR-025 — Infer column → course mappings for one curriculum matrix.
+ *
+ * The wizard's Matrix step posts to this endpoint per matrix when the
+ * coordinator lands on the step (or clicks "Run AI column inference").
+ * We pull the institutionId off the user/submission, grab the raw
+ * `<table>` HTML + the surrounding-narrative context from the import
+ * record, then call cshse-ai's /ai/matrix/infer-columns.
+ *
+ * Returns suggestions for every column 0..N-1 in the same shape as
+ * cshse-ai returns; never throws — falls back to empty suggestions on
+ * upstream failure so the wizard reverts to the legacy free-text inputs.
+ */
+export async function inferMatrixColumns(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { importId } = req.params;
+  const { matrixSlug } = req.body || {};
+  if (!matrixSlug) {
+    res.status(400).json({ error: 'matrixSlug is required' });
+    return;
+  }
+
+  const importRecord = await SelfStudyImport.findById(importId);
+  if (!importRecord) {
+    res.status(404).json({ error: 'Import not found' });
+    return;
+  }
+
+  const submission = importRecord.submissionId
+    ? await Submission.findById(importRecord.submissionId)
+    : null;
+
+  const aiMatrices: any[] = (importRecord as any).aiMatrices || [];
+  const matrix = aiMatrices.find((m: any) => m.matrixId === matrixSlug || m.matrixSlug === matrixSlug);
+  if (!matrix) {
+    res.status(404).json({ error: `Matrix ${matrixSlug} not found on this import` });
+    return;
+  }
+
+  const columnCount = matrix.columnCount || (matrix.columnHeaders || []).length || 0;
+  if (columnCount === 0) {
+    res.json({ matrixSlug, suggestions: [] });
+    return;
+  }
+
+  // Pull surrounding context from any narrative buckets the matcher
+  // already linked to the matrix's standards. Best-effort — cshse-ai
+  // still has the raw HTML from its own ingest run as well.
+  let surroundingContext = '';
+  const buckets: Record<string, any> = (importRecord as any).aiBuckets || {};
+  for (const k of Object.keys(buckets)) {
+    if (k.startsWith('11.') || k.startsWith('12.') || k.startsWith('13.')) {
+      const b = buckets[k];
+      for (const n of [...(b?.narratives || []), ...(b?.evidenceText || [])]) {
+        if (typeof n?.snippet === 'string') surroundingContext += '\n' + n.snippet;
+        if (surroundingContext.length > 4000) break;
+      }
+    }
+    if (surroundingContext.length > 4000) break;
+  }
+
+  try {
+    const result = await postToAIService('/ai/matrix/infer-columns', {
+      matrixSlug,
+      institutionId: submission?.institutionId ? String(submission.institutionId) : null,
+      programLevel: submission?.programLevel || (importRecord as any).aiProgramLevel || 'bachelors',
+      rawTableHtml: matrix.htmlSnippet || '',
+      columnCount,
+      surroundingContext: surroundingContext.slice(0, 4000),
+      knownCourses: matrix.columnHeaders || []
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.warn(
+      `[matrix-infer] cshse-ai inference failed for ${importId}/${matrixSlug}:`,
+      err?.message || err
+    );
+    // Soft-fail: pad an empty-suggestion array so the client UI can render
+    // the dropdown empty and let the PC type free-text.
+    const empty = Array.from({ length: columnCount }, (_, i) => ({
+      columnIndex: i,
+      suggestedCourse: null,
+      confidence: 0.0,
+      rationale: 'ai-service unavailable; please type the course code'
+    }));
+    res.json({ matrixSlug, suggestions: empty });
+  }
+}
+
+/**
+ * CR-025 — Persist a coordinator-confirmed column → course mapping.
+ *
+ * Called when the coordinator clicks Accept on an AI suggestion or
+ * types in a free-text override. We forward to cshse-ai which upserts
+ * into the per-institution Qdrant collection. Best-effort: a failure
+ * here is logged but does not block the wizard.
+ */
+export async function confirmMatrixColumn(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { importId } = req.params;
+  const { matrixSlug, columnIndex, course, priorConfidence } = req.body || {};
+
+  if (!matrixSlug || typeof columnIndex !== 'number' || !course) {
+    res.status(400).json({ error: 'matrixSlug, columnIndex, course required' });
+    return;
+  }
+
+  const importRecord = await SelfStudyImport.findById(importId);
+  if (!importRecord) {
+    res.status(404).json({ error: 'Import not found' });
+    return;
+  }
+  const submission = importRecord.submissionId
+    ? await Submission.findById(importRecord.submissionId)
+    : null;
+  if (!submission?.institutionId) {
+    res.status(400).json({ error: 'Submission has no institutionId — cannot scope mapping' });
+    return;
+  }
+
+  postToAIService('/ai/matrix/confirm-column', {
+    institutionId: String(submission.institutionId),
+    programLevel: submission.programLevel || 'bachelors',
+    matrixSlug,
+    columnIndex,
+    course: String(course).trim(),
+    priorConfidence: typeof priorConfidence === 'number' ? priorConfidence : 1.0
+  }).catch((err) => {
+    console.warn(
+      `[matrix-confirm] cshse-ai persist failed for ${importId}/${matrixSlug}/${columnIndex}:`,
+      err?.message || err
+    );
+  });
+
+  res.status(201).json({
+    ok: true,
+    matrixSlug,
+    columnIndex,
+    course: String(course).trim()
+  });
+}

@@ -11,10 +11,30 @@
  * ``Submission.curriculumMatrices[]`` with real ``courseId`` references
  * and the Curriculum Matrix tab renders them with course names.
  */
-import React, { useState, useMemo } from 'react';
-import { Info, Grid3X3, Check, SkipForward } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Info, Grid3X3, Check, SkipForward, Sparkles, Loader2 } from 'lucide-react';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
+import { api } from '../../../../../services/api';
 import { CourseCatalogCombo, type ProgramCourse } from '../matrix/CourseCatalogCombo';
+
+interface ColumnSuggestion {
+  columnIndex: number;
+  suggestedCourse: string | null;
+  confidence: number;
+  rationale: string;
+}
+
+interface InferenceResponse {
+  matrixSlug: string;
+  suggestions: ColumnSuggestion[];
+}
+
+function confidenceBand(c: number): { dot: string; label: string; cls: string } {
+  if (c >= 0.85) return { dot: '🟢', label: 'high', cls: 'bg-green-100 text-green-800' };
+  if (c >= 0.5) return { dot: '🟡', label: 'medium', cls: 'bg-amber-100 text-amber-800' };
+  if (c > 0) return { dot: '🔴', label: 'low', cls: 'bg-red-100 text-red-800' };
+  return { dot: '·', label: 'no signal', cls: 'bg-gray-100 text-gray-600' };
+}
 
 interface MatrixBlock {
   matrixId: string;
@@ -34,10 +54,93 @@ interface MatrixBlock {
 export function MatrixStep(): JSX.Element {
   const matrices = useAIImportStore((s) => s.matrices) as MatrixBlock[];
   const submissionId = useAIImportStore((s) => s.submissionId);
+  const importId = useAIImportStore((s) => s.importId);
   const setStep = useAIImportStore((s) => s.setStep);
 
   const [columnAssignments, setColumnAssignments] = useState<Record<string, Record<number, string>>>({});
   const [skipped, setSkipped] = useState<Record<string, boolean>>({});
+
+  // CR-025 — AI suggestions per matrix: { [matrixSlug]: { [colIdx]: ColumnSuggestion } }
+  const [suggestionsByMatrix, setSuggestionsByMatrix] = useState<
+    Record<string, Record<number, ColumnSuggestion>>
+  >({});
+  const [inferring, setInferring] = useState<Record<string, boolean>>({});
+  const [inferenceError, setInferenceError] = useState<string | null>(null);
+
+  const runInferenceForMatrix = useCallback(
+    async (matrixSlug: string) => {
+      if (!importId) return;
+      setInferring((s) => ({ ...s, [matrixSlug]: true }));
+      setInferenceError(null);
+      try {
+        const { data } = await api.post<InferenceResponse>(
+          `/api/imports/${importId}/matrix/infer-columns`,
+          { matrixSlug }
+        );
+        const byIdx: Record<number, ColumnSuggestion> = {};
+        for (const s of data.suggestions || []) byIdx[s.columnIndex] = s;
+        setSuggestionsByMatrix((prev) => ({ ...prev, [matrixSlug]: byIdx }));
+      } catch (err: any) {
+        setInferenceError(err?.response?.data?.error || err?.message || 'AI inference failed');
+      } finally {
+        setInferring((s) => ({ ...s, [matrixSlug]: false }));
+      }
+    },
+    [importId]
+  );
+
+  // Auto-run inference for every matrix on first mount so the dropdowns
+  // arrive pre-filled. The coordinator can re-run per matrix via the
+  // toolbar button.
+  useEffect(() => {
+    if (!importId) return;
+    for (const m of matrices) {
+      const slug = m.matrixId;
+      // skip already-inferred matrices (in case of a remount)
+      if (suggestionsByMatrix[slug] || inferring[slug]) continue;
+      void runInferenceForMatrix(slug);
+    }
+    // We intentionally only depend on importId + matrices length — running
+    // inference once per matrix per session is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importId, matrices.length]);
+
+  // Forward a coordinator confirmation back to the server so it persists in
+  // the per-institution Qdrant collection. Fire-and-forget — UI continues
+  // regardless of the server response.
+  const recordConfirmation = useCallback(
+    (matrixSlug: string, columnIndex: number, course: string, priorConfidence: number) => {
+      if (!importId || !course) return;
+      api
+        .post(`/api/imports/${importId}/matrix/confirm-column`, {
+          matrixSlug,
+          columnIndex,
+          course,
+          priorConfidence
+        })
+        .catch((err) => {
+          // Don't surface — the local assignment already worked.
+          console.warn('[matrix-confirm] persist failed', err?.message || err);
+        });
+    },
+    [importId]
+  );
+
+  const acceptAllGreenForMatrix = useCallback(
+    (matrixSlug: string) => {
+      const suggestions = suggestionsByMatrix[matrixSlug] || {};
+      const next: Record<number, string> = { ...(columnAssignments[matrixSlug] || {}) };
+      for (const [idxStr, s] of Object.entries(suggestions)) {
+        const idx = Number(idxStr);
+        if (s.suggestedCourse && s.confidence >= 0.85) {
+          next[idx] = s.suggestedCourse;
+          recordConfirmation(matrixSlug, idx, s.suggestedCourse, s.confidence);
+        }
+      }
+      setColumnAssignments((prev) => ({ ...prev, [matrixSlug]: next }));
+    },
+    [suggestionsByMatrix, columnAssignments, recordConfirmation]
+  );
 
   // Derive column counts even if the matrix payload doesn't include
   // explicit column metadata (use max column index across cells).
@@ -92,6 +195,22 @@ export function MatrixStep(): JSX.Element {
         [columnIdx]: course?.courseCode || ''
       }
     }));
+    // CR-025 — persist confirmation back to the per-institution Qdrant
+    // collection so the next import for this institution gets it right.
+    // Treat AI accept (course matches an AI suggestion) and manual override
+    // identically; the only differentiator is priorConfidence.
+    if (course?.courseCode) {
+      const suggestion = suggestionsByMatrix[matrixId]?.[columnIdx];
+      const isAccept =
+        suggestion?.suggestedCourse?.toLowerCase().trim() ===
+        course.courseCode.toLowerCase().trim();
+      recordConfirmation(
+        matrixId,
+        columnIdx,
+        course.courseCode,
+        isAccept ? suggestion!.confidence : 1.0 // manual override = explicit high-confidence
+      );
+    }
   };
 
   return (
@@ -209,12 +328,51 @@ export function MatrixStep(): JSX.Element {
 
               {!isSkipped && colCount > 0 && submissionId && (
                 <>
-                  <p className="mb-3 text-xs text-gray-600">
-                    Map each matrix column to a course in your program catalog.
-                    {headers.length > 0 && (
-                      <> The original source-DOCX headers are shown below each input as a hint.</>
-                    )}
-                  </p>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-gray-600">
+                      Map each matrix column to a course in your program catalog.
+                      {headers.length > 0 && (
+                        <> Source-DOCX headers shown below each input as a hint.</>
+                      )}
+                      {' '}AI suggestions pre-fill with a confidence indicator;
+                      <strong> click <em>Accept all green</em></strong> to take every ≥0.85
+                      suggestion in one click, then review yellow/red individually.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => runInferenceForMatrix(m.matrixId)}
+                        disabled={!!inferring[m.matrixId]}
+                        title="Re-ask the AI to suggest courses for these columns"
+                        className="inline-flex items-center gap-1 rounded border border-purple-300 bg-purple-50 px-2 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+                      >
+                        {inferring[m.matrixId] ? (
+                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                        ) : (
+                          <Sparkles className="h-3 w-3" aria-hidden />
+                        )}
+                        {inferring[m.matrixId] ? 'Inferring…' : 'Run AI column inference'}
+                      </button>
+                      <button
+                        onClick={() => acceptAllGreenForMatrix(m.matrixId)}
+                        disabled={
+                          !suggestionsByMatrix[m.matrixId] ||
+                          !Object.values(suggestionsByMatrix[m.matrixId] || {}).some(
+                            (s) => s.suggestedCourse && s.confidence >= 0.85
+                          )
+                        }
+                        title="Accept every column suggestion with confidence ≥ 0.85"
+                        className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                      >
+                        <Check className="h-3 w-3" aria-hidden />
+                        Accept all green
+                      </button>
+                    </div>
+                  </div>
+                  {inferenceError && (
+                    <div className="mb-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-800">
+                      AI inference: {inferenceError} — falls back to manual entry.
+                    </div>
+                  )}
                   <div
                     className="mb-2 grid gap-2"
                     style={{ gridTemplateColumns: `100px repeat(${colCount}, minmax(160px, 1fr))` }}
@@ -222,16 +380,36 @@ export function MatrixStep(): JSX.Element {
                     <div className="text-xs uppercase tracking-wide text-gray-500">Course</div>
                     {Array.from({ length: colCount }, (_, idx) => {
                       const sourceHeader = headers[idx] || '';
+                      const suggestion = suggestionsByMatrix[m.matrixId]?.[idx];
+                      const assigned = (columnAssignments[m.matrixId] || {})[idx];
+                      // CR-025 — pre-fill the dropdown's `value` with the AI
+                      // suggestion when the coordinator hasn't already
+                      // assigned. This is the "AI auto-pre-fill" the
+                      // verify-in-context CR-026 flow gates on.
+                      const effectiveValue =
+                        assigned || (suggestion?.suggestedCourse ?? null);
+                      const band = suggestion ? confidenceBand(suggestion.confidence) : null;
                       // Cells use 1-based columnIndex (Python wire format); the
                       // form uses 0-based indices internally.
                       return (
                         <div key={idx} className="flex flex-col gap-0.5">
                           <CourseCatalogCombo
                             submissionId={submissionId}
-                            value={(columnAssignments[m.matrixId] || {})[idx] || null}
+                            value={effectiveValue}
                             onChange={(course) => handleAssign(m.matrixId, idx, course)}
-                            placeholder={sourceHeader || `Col ${idx + 1}`}
+                            placeholder={suggestion?.suggestedCourse || sourceHeader || `Col ${idx + 1}`}
                           />
+                          {suggestion && (
+                            <span
+                              className={`flex items-center gap-1 truncate rounded px-1 text-[10px] font-medium ${band?.cls || ''}`}
+                              title={suggestion.rationale || 'no rationale'}
+                            >
+                              <span aria-hidden>{band?.dot}</span>
+                              {suggestion.suggestedCourse
+                                ? `AI: ${suggestion.suggestedCourse} (${Math.round(suggestion.confidence * 100)}%)`
+                                : `AI: ${band?.label || 'no signal'}`}
+                            </span>
+                          )}
                           {sourceHeader && (
                             <span
                               className="truncate font-mono text-[10px] text-gray-400"
