@@ -14,7 +14,9 @@ Cost budget per section: 1 embedding call (~0.001¢) + 1 Haiku call (~0.06¢) �
 from __future__ import annotations
 
 import json
+import logging
 import re
+import time
 from dataclasses import asdict, dataclass
 from typing import Literal
 
@@ -27,6 +29,50 @@ from app.vector.qdrant_ops import VectorStore
 DEFAULT_MODEL = "claude-haiku-4-5"
 DEFAULT_TOP_K = 5
 SECTION_TEXT_CHAR_LIMIT = 4000
+
+_logger = logging.getLogger(__name__)
+
+
+def _is_transient_anthropic_error(exc: BaseException) -> bool:
+    """Heuristic for retryable Anthropic API errors.
+
+    We retry the obvious network-flake patterns the Anthropic SDK surfaces:
+      - ``APIConnectionError`` / ``APITimeoutError`` (network drop, timeout)
+      - HTTP 5xx (``InternalServerError``, ``APIStatusError`` with 5xx code)
+      - Rate-limit ``429`` (the SDK throws ``RateLimitError``)
+      - Stream/disconnect strings ("Server disconnected", "Connection reset"...)
+    We do NOT retry auth errors (401/403) or 4xx validation - those need a
+    code fix, not another attempt.
+    """
+    name = type(exc).__name__
+    if name in {
+        "APIConnectionError",
+        "APITimeoutError",
+        "InternalServerError",
+        "RateLimitError",
+        "APIError",
+    }:
+        return True
+    # Anthropic SDK puts HTTP status on ``status_code`` for APIStatusError.
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int) and status >= 500:
+        return True
+    text = (str(exc) or "").lower()
+    if any(
+        snippet in text
+        for snippet in (
+            "server disconnected",
+            "connection reset",
+            "connection aborted",
+            "remote end closed",
+            "timeout",
+            "temporarily unavailable",
+            "bad gateway",
+            "service unavailable",
+        )
+    ):
+        return True
+    return False
 
 ProgramLevel = Literal["associate", "bachelors", "masters"]
 
@@ -370,14 +416,65 @@ class SpecMatcher:
                 ),
             )
 
-        # LLM adjudication
+        # LLM adjudication. Wrap in a small retry loop for transient
+        # network/disconnect/5xx errors so one flaky section doesn't
+        # surface as a top-level wizard error. Backoff: 0.5s, 1.5s, 3s.
+        # On exhaustion we fall back to the embedding-only candidate
+        # rather than re-raising — the section still gets a placement,
+        # just with low confidence.
         prompt = _build_prompt(section, candidates, correction_block)
-        msg = self._anthropic.messages.create(
-            model=self._model,
-            max_tokens=512,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+        text = ""
+        last_err: Exception | None = None
+        for attempt, backoff_s in enumerate((0.5, 1.5, 3.0, 0.0)):
+            try:
+                msg = self._anthropic.messages.create(
+                    model=self._model,
+                    max_tokens=512,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+                last_err = None
+                break
+            except Exception as exc:  # noqa: BLE001
+                last_err = exc
+                if _is_transient_anthropic_error(exc) and backoff_s > 0:
+                    _logger.warning(
+                        "anthropic transient error on section %s attempt %d/%d: %s; retrying in %.1fs",
+                        section.id, attempt + 1, 4, type(exc).__name__, backoff_s,
+                    )
+                    time.sleep(backoff_s)
+                    continue
+                break
+
+        if last_err is not None:
+            # All retries failed (or non-transient). Embedding fallback —
+            # do NOT raise, do NOT surface as a job error. The retry chain
+            # is the right place to give up gracefully; the caller's
+            # per-section try/except is reserved for hard runtime failures
+            # (parser, qdrant client init, etc.) that the retry can't fix.
+            best = candidates[0]
+            return Recommendation(
+                section_id=section.id,
+                section_heading=section.heading,
+                primary_standard=best.standard_code,
+                primary_spec=best.spec_code,
+                primary_confidence=max(0.0, best.similarity - 0.05),
+                alternates=[
+                    {"standardCode": c.standard_code, "specCode": c.spec_code, "confidence": c.similarity}
+                    for c in candidates[1:3]
+                ],
+                rationale=(
+                    f"Embedding-only fallback after {4} Anthropic retries — last error: "
+                    f"{type(last_err).__name__}. The section was placed by similarity but the "
+                    "matcher couldn't adjudicate. Coordinator should review."
+                ),
+                section_type="unknown",
+                candidates=[asdict(c) for c in candidates],
+                doc_letter=doc_letter_hint,
+                doc_standard_hint=doc_std_hint,
+                accept_state="review_low_confidence",
+            )
+
         try:
             parsed = _parse_claude_response(text)
         except json.JSONDecodeError:

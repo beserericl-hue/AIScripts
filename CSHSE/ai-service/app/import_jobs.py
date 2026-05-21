@@ -38,6 +38,48 @@ from botocore.config import Config as BotoConfig
 
 from app.config import get_settings
 
+
+def _is_transient_runtime_error(exc: BaseException) -> bool:
+    """Same classifier the spec_matcher uses, lifted to the module level so
+    the per-section error handlers can route transient hiccups to
+    ``job.warnings`` rather than ``job.errors``.
+
+    The matcher itself already retries Anthropic API failures and falls
+    back to embedding-only placement, so anything reaching the outer
+    try/except here is rare. We still treat network/timeout/5xx patterns
+    as warnings (the section IS placed, just with a low-confidence
+    embedding fallback) to keep the wizard's error banner reserved for
+    genuine pipeline failures.
+    """
+    name = type(exc).__name__
+    if name in {
+        "APIConnectionError",
+        "APITimeoutError",
+        "InternalServerError",
+        "RateLimitError",
+        "TimeoutError",
+        "ConnectionError",
+        "ConnectionResetError",
+    }:
+        return True
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int) and status >= 500:
+        return True
+    text = (str(exc) or "").lower()
+    return any(
+        snippet in text
+        for snippet in (
+            "server disconnected",
+            "connection reset",
+            "connection aborted",
+            "remote end closed",
+            "timeout",
+            "temporarily unavailable",
+            "bad gateway",
+            "service unavailable",
+        )
+    )
+
 JobStatus = Literal["queued", "parsing", "parsed", "failed", "canceled"]
 
 
@@ -85,6 +127,12 @@ class JobRecord:
     format: FormatVerdict | None = None
     stages: list[StageProgress] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # Warnings: per-section issues the pipeline recovered from automatically
+    # (e.g., matcher transient API errors that retried successfully, or that
+    # fell through to the embedding-only fallback). Kept for diagnostics but
+    # NOT surfaced as the top-level wizard error banner — the user only sees
+    # `errors` in the red error panel; warnings live in the JSON for support.
+    warnings: list[str] = field(default_factory=list)
     # Terminal payload (filled when status flips to "parsed")
     buckets: dict[str, Any] | None = None
     tags: list[Any] | None = None
@@ -105,6 +153,7 @@ class JobRecord:
             "format": asdict(self.format) if self.format else None,
             "stages": [asdict(s) for s in self.stages],
             "errors": list(self.errors),
+            "warnings": list(self.warnings),
             "buckets": self.buckets,
             "tags": self.tags,
             "placeholderSections": self.placeholder_sections,
@@ -360,7 +409,17 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
             try:
                 recommendations[sec.id] = fut.result()
             except Exception as exc:  # noqa: BLE001
-                job.errors.append(f"matcher {sec.id}: {exc}")
+                # The matcher itself wraps the Anthropic call in a retry +
+                # embedding fallback path, so a real exception escaping out
+                # to here means a hard runtime error (qdrant init, parser
+                # crash, etc.) - not a transient API hiccup. We classify
+                # by reading the exception name + message; transient
+                # patterns become warnings (background diagnostic), hard
+                # failures become errors (red banner).
+                if _is_transient_runtime_error(exc):
+                    job.warnings.append(f"matcher {sec.id}: {type(exc).__name__}: {exc}")
+                else:
+                    job.errors.append(f"matcher {sec.id}: {type(exc).__name__}: {exc}")
             done_count += 1
             # Update detail every few rows so the UI sees movement
             if done_count % 2 == 0 or done_count == len(sections):
@@ -530,7 +589,14 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
             try:
                 recommendations[sec.id] = fut.result()
             except Exception as exc:  # noqa: BLE001
-                job.errors.append(f"matcher {sec.id}: {exc}")
+                # See the same comment on the first matcher loop earlier in
+                # the file: transient API errors are already retried + fallen
+                # back inside matcher.recommend; exceptions reaching here are
+                # hard runtime failures unless the message reads transient.
+                if _is_transient_runtime_error(exc):
+                    job.warnings.append(f"matcher {sec.id}: {type(exc).__name__}: {exc}")
+                else:
+                    job.errors.append(f"matcher {sec.id}: {type(exc).__name__}: {exc}")
             done_count += 1
             if done_count % 25 == 0 or done_count == len(sections):
                 for s in reversed(job.stages):
