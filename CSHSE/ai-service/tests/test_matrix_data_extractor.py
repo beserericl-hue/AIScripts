@@ -93,7 +93,17 @@ def test_best_template_match_no_match():
 
 
 def test_extract_matrix_end_to_end():
-    """Synthesize a small matrix HTML + template + verify extraction."""
+    """Synthesize a small matrix HTML + template + verify extraction.
+
+    CR-029 — updated to use full source prompts that match the template
+    via substring containment. The previous fixture had an abbreviated
+    second row ("Historical and current legislation") matched against a
+    full template prompt ("Historical and current legislation affecting
+    services delivery.") at low Jaccard score (~0.33); that's exactly
+    the loose-match behaviour that polluted the wizard with bad rows.
+    rows_total now counts header rows as seen-but-skipped which is more
+    honest for the user-facing "X of Y rows matched" stat.
+    """
     html = """
     <html><body>
     <a id="MatrixHSR"></a>
@@ -106,7 +116,7 @@ def test_extract_matrix_end_to_end():
       <tr><td colspan="6">Knowledge, Theory, Skills</td></tr>
       <tr><td>Specifications for Standard 11</td><td></td><td></td><td></td><td></td><td></td></tr>
       <tr><td>The historical roots of human services.</td><td>KM</td><td></td><td>ITKSH</td><td></td><td>IL</td></tr>
-      <tr><td>Historical and current legislation</td><td></td><td>ITM</td><td></td><td>KSH</td><td></td></tr>
+      <tr><td>Historical and current legislation affecting services delivery.</td><td></td><td>ITM</td><td></td><td>KSH</td><td></td></tr>
     </table>
     </body></html>"""
 
@@ -124,8 +134,11 @@ def test_extract_matrix_end_to_end():
 
     result = extract_matrix(html.encode("utf-8"), template, anchor="MatrixHSR")
 
-    # Should find 2 rows, both matched to template
-    assert result.rows_total == 2
+    # 2 real data rows + 1 header row (Specifications for Standard 11)
+    # which is correctly skipped but still counted in rows_total. The
+    # 2 cross-row headers ("Standards and Specifications" / "Knowledge,
+    # Theory, Skills") don't count because they only have one cell.
+    assert result.rows_total == 3
     assert result.rows_matched == 2
 
     # Should have multiple cells extracted

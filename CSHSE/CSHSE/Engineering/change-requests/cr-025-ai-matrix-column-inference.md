@@ -3,7 +3,8 @@ name: CR-025 — AI matrix column inference + course catalog dropdown
 description: The Matrix step's free-text column inputs are unusable. Replace with an AI-driven course-name inference step (RAG against the curriculum-matrix section in Qdrant) + a course-catalog dropdown that the coordinator confirms rather than types from scratch.
 type: change-request
 cr_id: CR-025
-status: proposed
+status: superseded
+superseded_by: CR-029
 priority: P0
 source: User observation 2026-05-21 — Matrix step Col 1..N is unfixable by hand; no catalog, no instructions, no algorithm
 sprint_target: Sprint 2B

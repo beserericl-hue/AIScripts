@@ -3,7 +3,8 @@ name: CR-026 — Matrix correction: verify-in-context preview + per-row move/rem
 description: When the AI suggests a matrix correction (CR-025 column inference, or future row inference), the PC must see the suggested change in the context of the full matrix with the affected row highlighted, and have controls to re-tag the row to a different spec, move it up/down, or remove it. Verification is mandatory before the correction is persisted.
 type: change-request
 cr_id: CR-026
-status: proposed
+status: superseded
+superseded_by: CR-029
 priority: P0
 source: User observation 2026-05-21 — CR-025 suggestions must be verified in context; PC needs row-level manipulation
 sprint_target: Sprint 2B

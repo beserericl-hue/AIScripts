@@ -3,7 +3,7 @@ name: CR-029 — Matrix step redesign — one row at a time, verify-against-sour
 description: Replace the current Matrix step's column-dropdowns + per-row-edit table with a single "verify this row in the original document" form. PC sees one matrix row at a time with the source document open beside it; click Keep or Remove. No editing, no jargon, no cell tables. The current screen is a blocker for non-technical coordinators.
 type: change-request
 cr_id: CR-029
-status: proposed
+status: shipped
 priority: P0
 source: User feedback 2026-05-21 — "this is one of the most confusing screens I have seen, and I have 40 years of software engineering"
 supersedes: CR-025 (column inference UX), CR-026 (per-row controls UX)
