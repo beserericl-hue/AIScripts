@@ -16,6 +16,7 @@ import { Info, Grid3X3, Check, SkipForward, Sparkles, Loader2 } from 'lucide-rea
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 import { api } from '../../../../../services/api';
 import { CourseCatalogCombo, type ProgramCourse } from '../matrix/CourseCatalogCombo';
+import { MatrixPreviewDrawer, type PreviewSuggestion } from './MatrixPreviewDrawer';
 
 interface ColumnSuggestion {
   columnIndex: number;
@@ -141,6 +142,90 @@ export function MatrixStep(): JSX.Element {
     },
     [suggestionsByMatrix, columnAssignments, recordConfirmation]
   );
+
+  // CR-026 — verify-in-context preview drawer. Opens when the coordinator
+  // clicks a confidence pill on a suggestion. Accept persists, Reject
+  // discards (clears the suggestion locally), Edit manually closes + opens
+  // the dropdown for free-text entry.
+  const [previewSuggestion, setPreviewSuggestion] = useState<PreviewSuggestion | null>(null);
+
+  const openPreviewFor = useCallback(
+    (matrix: MatrixBlock, columnIdx: number) => {
+      const suggestion = suggestionsByMatrix[matrix.matrixId]?.[columnIdx];
+      if (!suggestion) return;
+      const cells = matrix.cells || [];
+      const cellsByPos = new Map<string, { codeRaw?: string }>();
+      const seen = new Set<string>();
+      const rowOrder: string[] = [];
+      for (const c of cells) {
+        const std = c?.std ?? c?.standardCode ?? '?';
+        const spec = c?.spec ?? c?.specCode ?? '?';
+        const rk = `${std}.${spec}`;
+        const col = c?.columnIndex ?? c?.col ?? 0;
+        cellsByPos.set(`${rk}|${col}`, c);
+        if (!seen.has(rk)) {
+          seen.add(rk);
+          rowOrder.push(rk);
+        }
+      }
+      const colCount =
+        matrix.columnCount ||
+        (matrix.columnHeaders ? matrix.columnHeaders.length : 0) ||
+        cells.reduce(
+          (max: number, c: any) => Math.max(max, ((c?.columnIndex ?? c?.col ?? 0)) + 1),
+          0
+        );
+      setPreviewSuggestion({
+        matrixSlug: matrix.matrixId,
+        matrixName: matrix.name || matrix.title || matrix.matrixId,
+        columnIndex: columnIdx,
+        columnCount: colCount,
+        suggestedCourse: suggestion.suggestedCourse,
+        confidence: suggestion.confidence,
+        rationale: suggestion.rationale,
+        sourceHeader: matrix.columnHeaders?.[columnIdx] ?? null,
+        columnHeaders: matrix.columnHeaders || [],
+        assignments: columnAssignments[matrix.matrixId] || {},
+        cellsByPos,
+        rowKeys: rowOrder
+      });
+    },
+    [suggestionsByMatrix, columnAssignments]
+  );
+
+  const handlePreviewAccept = useCallback(() => {
+    if (!previewSuggestion?.suggestedCourse) return;
+    const matrixSlug = previewSuggestion.matrixSlug;
+    const idx = previewSuggestion.columnIndex;
+    const code = previewSuggestion.suggestedCourse;
+    setColumnAssignments((prev) => ({
+      ...prev,
+      [matrixSlug]: {
+        ...prev[matrixSlug],
+        [idx]: code
+      }
+    }));
+    recordConfirmation(matrixSlug, idx, code, previewSuggestion.confidence);
+    setPreviewSuggestion(null);
+  }, [previewSuggestion, recordConfirmation]);
+
+  const handlePreviewReject = useCallback(() => {
+    if (!previewSuggestion) return;
+    const matrixSlug = previewSuggestion.matrixSlug;
+    const idx = previewSuggestion.columnIndex;
+    // Drop the suggestion locally so the dropdown falls back to free-text.
+    setSuggestionsByMatrix((prev) => {
+      const m = { ...(prev[matrixSlug] || {}) };
+      delete m[idx];
+      return { ...prev, [matrixSlug]: m };
+    });
+    setPreviewSuggestion(null);
+  }, [previewSuggestion]);
+
+  const handlePreviewEditManually = useCallback(() => {
+    // Close the drawer; the dropdown stays focused so the PC can type.
+    setPreviewSuggestion(null);
+  }, []);
 
   // Derive column counts even if the matrix payload doesn't include
   // explicit column metadata (use max column index across cells).
@@ -400,15 +485,17 @@ export function MatrixStep(): JSX.Element {
                             placeholder={suggestion?.suggestedCourse || sourceHeader || `Col ${idx + 1}`}
                           />
                           {suggestion && (
-                            <span
-                              className={`flex items-center gap-1 truncate rounded px-1 text-[10px] font-medium ${band?.cls || ''}`}
-                              title={suggestion.rationale || 'no rationale'}
+                            <button
+                              type="button"
+                              onClick={() => openPreviewFor(m, idx)}
+                              className={`flex items-center gap-1 truncate rounded px-1 text-left text-[10px] font-medium hover:ring-1 hover:ring-purple-300 ${band?.cls || ''}`}
+                              title="Click to verify in matrix context"
                             >
                               <span aria-hidden>{band?.dot}</span>
                               {suggestion.suggestedCourse
-                                ? `AI: ${suggestion.suggestedCourse} (${Math.round(suggestion.confidence * 100)}%)`
+                                ? `AI: ${suggestion.suggestedCourse} (${Math.round(suggestion.confidence * 100)}%) — click to verify`
                                 : `AI: ${band?.label || 'no signal'}`}
-                            </span>
+                            </button>
                           )}
                           {sourceHeader && (
                             <span
@@ -541,6 +628,16 @@ export function MatrixStep(): JSX.Element {
           );
         })}
       </div>
+
+      {/* CR-026 / S2B.8 — verify-in-context preview drawer */}
+      <MatrixPreviewDrawer
+        open={!!previewSuggestion}
+        suggestion={previewSuggestion}
+        onClose={() => setPreviewSuggestion(null)}
+        onAccept={handlePreviewAccept}
+        onReject={handlePreviewReject}
+        onEditManually={handlePreviewEditManually}
+      />
     </div>
   );
 }
