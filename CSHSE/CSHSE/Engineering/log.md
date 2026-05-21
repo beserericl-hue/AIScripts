@@ -1032,3 +1032,14 @@ Decisions I made on my own (per user instruction "Make the best decision"):
 1. Sprint 2 split A/B — CR-005/006/007/001 form the sequencing vertical; CR-008/014/015/017 are independent UX + audit.
 2. CR-019 (JV) rejected — no beta surfaced a need.
 3. e9a63f8 pushed now — user confirmed no wizard active on developer.
+
+## [2026-05-21] update | CR-024 — matrix ↔ spec bidirectional link
+
+Captured a missing-from-sprint-list observation: clicking a spec in the wizard's review rail does not auto-scroll the matrices to the corresponding row. Coordinator has to hunt through 79+ rows manually, twice (once per matrix). Adjacent: post-apply the matrix is not consistently hotlinked from every covered spec, and AI evaluation does not include matrix row content as a signal alongside narrative + evidence.
+
+Created [[change-requests/cr-024-matrix-spec-bidirectional-link]]. Split across two sprints:
+
+- **Sprint 2B (UI half — S2B.6):** Spec-rail click scrolls every matrix to the row, flash-highlights for 1.5s. Sticky standard headings inside the matrix view. "Matrix" button on spec cards with coverage. ~1.5 days. Reuses already-shipped `selectedMatrixRowAnchor` store action.
+- **Sprint 4 (eval half — S4.7):** Persistent matrix hotlink on every covered spec post-apply (extending the existing Standards 11-21 button to all matrix-tagged specs). "Source document" link opens ShowInSourceModal at the source `<table>` anchor. AI scoring payload includes matrix rows; Haiku rationale must reference matrix evidence when it informed the score. ~2.5 days. Depends on CR-018 evidence-scoring endpoint.
+
+Sprint roster table + sprint-plan-2026-05-20 updated. Index page + change-requests index updated.

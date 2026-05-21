@@ -48,6 +48,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | [[cr-015-narrative-hyperlink-preservation]] | URLs in pasted narrative remain clickable | proposed | [[webinar-action-items-2026-05-20#56-14]] |
 | [[cr-018-ai-evidence-review-via-cshse-ai]] | Move evidence review off n8n into cshse-ai | proposed | [[sprint-plan-2026-05-11#sprint-3]] |
 | [[cr-023-julia-relay-workflow]] | Julia-as-relay model for comments + clarifications | proposed | [[webinar-action-items-2026-05-20#1-11-35]] |
+| [[cr-024-matrix-spec-bidirectional-link]] | Matrix ↔ spec bidirectional link + AI eval reads matrix rows | proposed | User observation 2026-05-21 |
 
 ## P2 — backlog
 

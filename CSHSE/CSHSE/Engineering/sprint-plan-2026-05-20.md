@@ -34,9 +34,9 @@ Stories within a sprint are ordered by dependency: earlier stories block later o
 |---|---|---|---|
 | 1 | AI Import Wizard | — | SHIPPED |
 | **2A** | **Lockout + submission core** | CR-001, CR-005, CR-006, CR-007 | S2.2-S2.10 critical security |
-| **2B** | **Isolation audit + UX** | CR-008, CR-014, CR-015, CR-017 | S2.11 document versioning |
+| **2B** | **Isolation audit + UX** | CR-008, CR-014, CR-015, CR-017, CR-024 (UI half) | S2.11 document versioning |
 | **3** | **Auth + assignment lockout** | CR-020, CR-022 | S3.1-S3.x auth + multi-PC |
-| **4** | **Evidence AI + rubric + relay** | CR-003, CR-004, CR-018, CR-023 | S4.4 email host, S3.9 reader deadline |
+| **4** | **Evidence AI + rubric + relay** | CR-003, CR-004, CR-018, CR-023, CR-024 (eval half) | S4.4 email host, S3.9 reader deadline |
 | **5** | **Reader workflow** | CR-009, CR-010, CR-011, CR-021 | S5.10 reader DOCX (revised) |
 | **6** | **Site visit + completion checks** | CR-012, CR-013 | S6.x error checks, S7.3 (merged) |
 | **7** | **Board decisions + bug reporter + E2E** | CR-016 | S7.1, S7.2 board flow |
@@ -306,6 +306,34 @@ Stories within a sprint are ordered by dependency: earlier stories block later o
 
 ---
 
+## S2B.6 — Wizard matrix ↔ spec sync (UI half of CR-024)
+
+**Source:** [[cr-024-matrix-spec-bidirectional-link]]
+
+**User story:**
+> As a program coordinator using the wizard, when I click a spec in the rail I want every visible matrix to scroll to that spec's row automatically — so I can see at a glance which courses cover that spec without hunting through a 79-row table twice.
+
+**Files affected:**
+- `client/src/features/selfStudy/Editor/AIImport/review/MatrixView.tsx` — accept `selectedSpecKey`; scroll both matrices in parallel + flash-highlight rows
+- `client/src/store/aiImportStore.ts` — spec-rail clicks dispatch `selectMatrixRow` alongside `setSelectedKey`
+- `client/src/features/selfStudy/Editor/AIImport/review/SpecRail.tsx` — dispatch the matrix anchor on click
+- `client/src/features/selfStudy/Editor/AIImport/review/ItemCardList.tsx` — render a "Matrix" button on spec cards with matrix coverage
+- `client/src/features/selfStudy/Editor/AIImport/review/MatrixHeading.tsx` — sticky standard heading inside the scrolling matrix region
+
+**Acceptance:**
+- [ ] Clicking 11.a in the rail scrolls every matrix to row 11.a + flashes for 1.5s
+- [ ] Specs with no matrix coverage do not trigger a scroll
+- [ ] "Matrix" button shown on spec cards that have matrix coverage; click jumps to the matrix view at the row
+- [ ] Standard headings ("Standard 11", …) stay pinned as the matrix scrolls
+
+**Test plan:**
+- Client unit tests for `MatrixView` scroll behavior
+- E2E: click 11.a → both matrices scroll → click 13.a → both scroll → click 9.c (no coverage) → no scroll, no error
+
+**Estimate:** 1.5 days
+
+---
+
 ## S2B.5 — Pre-submission validation popup
 
 **Source:** [[cr-008-pre-submission-validation-popup]]
@@ -519,6 +547,35 @@ Allow multiple PCs per institution. See [[sprint-plan-2026-05-11#sprint-2]].
 - [ ] Audit log entry per action
 
 **Estimate:** 4 days
+
+---
+
+## S4.7 — Persistent matrix hotlinks + AI evaluation includes matrix rows (Sprint 4 half of CR-024)
+
+**Source:** [[cr-024-matrix-spec-bidirectional-link]]
+
+**User story:**
+> As a reader (and program coordinator after the apply), I want every spec with matrix coverage to show "Matrix" + "Source document" links right in its header, and when the AI scores the spec it must include the matrix row content alongside narrative + evidence — so the curriculum matrix is treated as first-class evaluation evidence, not a side artifact.
+
+**Files affected:**
+- `client/src/features/selfStudy/Editor/SelfStudyEditor.tsx` — extend the existing "View in matrix" affordance from the hardcoded Standards 11-21 range to every spec with `aiMatrices` coverage; add "Source document" link next to it
+- `ai-service/app/evidence/score.py` (new in S4.3 / [[cr-018]]) — accept `matrix_rows: list[MatrixRow]`; include verbatim in the Haiku prompt under a `<matrix>` block
+- `server/src/services/cshseAiClient.ts` — `scoreEvidenceAgainstSpec(specId)` resolves `aiMatrices` rows tagged to the spec and passes them through
+- Regression-verify `applyAIImport` still persists `aiMatrices` row anchors into `CurriculumMatrix.rawContent[]` (already shipped per `4c37e68`)
+
+**Acceptance:**
+- [ ] "Matrix" link on every spec header where matrix coverage exists (not just Standards 11-21)
+- [ ] "Source document" link opens [[ShowInSourceModal]] at the matrix `<table>` anchor in the source DOCX
+- [ ] AI scoring payload for a spec includes the matrix row(s) when coverage exists
+- [ ] Haiku rationale references the matrix row when it informed the score
+- [ ] Existing in-editor "View in matrix" flash + scroll behavior preserved
+
+**Test plan:**
+- Integration: apply wizard output → reload editor → "Matrix" link on every covered spec
+- ai-service unit: prompt builder includes a `<matrix>` block when `matrix_rows` is non-empty
+- E2E: reader drills into 13.a → clicks "Matrix" → matrix editor scrolls to row + flashes → clicks "Source document" → modal opens at original table
+
+**Estimate:** 2.5 days
 
 ---
 
