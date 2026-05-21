@@ -34,7 +34,7 @@ Stories within a sprint are ordered by dependency: earlier stories block later o
 |---|---|---|---|
 | 1 | AI Import Wizard | — | SHIPPED |
 | **2A** | **Lockout + submission core** | CR-001, CR-005, CR-006, CR-007 | S2.2-S2.10 critical security |
-| **2B** | **Isolation audit + UX** | CR-008, CR-014, CR-015, CR-017, CR-024 (UI half), CR-025 | S2.11 document versioning |
+| **2B** | **Isolation audit + UX** | CR-008, CR-014, CR-015, CR-017, CR-024 (UI half), CR-025, CR-026 | S2.11 document versioning |
 | **3** | **Auth + assignment lockout** | CR-020, CR-022 | S3.1-S3.x auth + multi-PC |
 | **4** | **Evidence AI + rubric + relay** | CR-003, CR-004, CR-018, CR-023, CR-024 (eval half) | S4.4 email host, S3.9 reader deadline |
 | **5** | **Reader workflow** | CR-009, CR-010, CR-011, CR-021 | S5.10 reader DOCX (revised) |
@@ -373,6 +373,54 @@ client:
 - E2E: wizard Matrix step → AI inference auto-runs → 13/13 pre-filled → confirm 11, override 2 → apply → re-import same institution → all 13 at >0.95
 
 **Estimate:** 3 days
+
+---
+
+## S2B.8 — Matrix correction verify-in-context + per-row move/remove
+
+**Source:** [[cr-026-matrix-correction-verify-in-context]]
+
+**User story:**
+> As a program coordinator, when the AI suggests a matrix correction I want to see the entire matrix for that standard with the corrected row highlighted in context — so I can verify the suggestion against neighboring rows before accepting it. I also need per-row controls to re-tag a row to a different spec or remove it if the AI got the placement wrong.
+
+**Files affected:**
+
+client:
+- `client/src/features/selfStudy/Editor/AIImport/steps/MatrixStep.tsx` — drawer mount + row-control wiring
+- `client/src/features/selfStudy/Editor/AIImport/steps/MatrixPreviewDrawer.tsx` (new) — side panel showing full matrix with affected row highlighted; "Why this?" rationale; Accept / Reject / Edit manually buttons
+- `client/src/features/selfStudy/Editor/AIImport/steps/MatrixRowControls.tsx` (new) — "Move to different spec" dropdown + "Remove from matrix" + "Restore"
+- `client/src/store/aiImportStore.ts` — `retagRow`, `removeRow`, `restoreRow`, `acceptColumnSuggestion`, `rejectColumnSuggestion`. Every action writes a correction event.
+
+server:
+- `server/src/controllers/aiImportController.ts` — handle row-level corrections in applyAIImport; persist into `aiMatrices` row anchors + spec-bucket assignments
+- `server/src/services/cshseAiClient.ts` — extend `recordCorrection` payload schema for row-level events (column corrections already shipped in `af81f7f`)
+
+ai-service:
+- `ai-service/app/corrections/store.py` — accept new `correction_type` values (`row_retag`, `row_remove`, `row_restore`); surface row-level corrections in future-import RAG
+
+**Acceptance:**
+- [ ] Clicking any AI column suggestion opens preview drawer with full matrix; affected row amber-highlighted + 1.5s flash on open
+- [ ] Neighboring rows above + below visible; sticky standard headings (reuses S2B.6 work)
+- [ ] "Why this?" expandable rationale shows merged-cell source / narrative source / RAG hits / Haiku confidence
+- [ ] Accept persists; Reject discards; Edit manually drops to free-text fallback
+- [ ] Every row has "Move to different spec" dropdown + "Remove" + "Restore" controls
+- [ ] Row re-tag updates anchor `id` + spec-bucket assignment without corrupting other rows
+- [ ] Remove requires confirmation; restorable within same wizard session
+- [ ] "Accept all green" bulk button accepts all >0.85-confidence column suggestions at once
+- [ ] Every action recorded as correction event into `cshse_corrections_{env}` keyed by institution
+- [ ] Second import for same institution surfaces prior row-level corrections as RAG hints
+
+**Test plan:**
+- Client unit: drawer open/close, row-control state machine, restore-after-remove logic
+- Client integration: accept column suggestion → row anchor + dropdown updated + store action fired
+- E2E: PC reaches Matrix step → AI suggests Col 4 = CHS 105 at 0.92 confidence → PC clicks → preview drawer opens → reads "Why this?" rationale (merged-cell header excerpt) → accepts → matrix shows CHS 105 → PC re-tags row 13.a to 13.b → row moves → PC removes row 13.b → confirms → row hidden → PC restores → row reappears → apply → matrix persisted with all PC adjustments
+- ai-service unit: corrections store accepts new event types and surfaces them in next-import RAG
+
+**Estimate:** 2.5 days
+
+**Dependencies:**
+- S2B.7 (CR-025) — provides the AI suggestions being verified
+- S2B.6 (CR-024 UI half) — provides the sticky-standard-heading + row-anchor scrolling
 
 ---
 

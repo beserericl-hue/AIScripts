@@ -1059,3 +1059,25 @@ Three deliverables:
 Estimate: 3 days. Depends on existing matrix extraction pipeline + Qdrant per-env collections + corrections-store infrastructure (all shipped Sprint 1).
 
 Sprint 2B story count is now 7: S2B.1 audit doc, S2B.2 isolation tests, S2B.3 drag-drop, S2B.4 hyperlinks, S2B.5 pre-submit popup, S2B.6 matrix-spec sync (CR-024 UI half), S2B.7 matrix column inference (CR-025). Workload bumped from ~9 days to ~12 days — still fits a two-week sprint with one engineer + occasional ai-service paired work.
+
+## [2026-05-21] update | CR-026 — matrix correction verify-in-context
+
+User raised the right next question: CR-025 suggestions must be PC-verifiable, and the PC needs row-level fix-up tools when the AI gets a row wrong.
+
+Captured as [[change-requests/cr-026-matrix-correction-verify-in-context]] and slotted into Sprint 2B as S2B.8. P0 — gate on CR-025 (the AI can't be allowed to silently persist a wrong column mapping that distorts every row using that column).
+
+Three pieces:
+
+1. **Verify-in-context preview drawer** — side panel showing the full matrix for the affected standard + sub-spec, with the AI's suggested correction applied locally and the affected row amber-highlighted + flashed. PC reads the row in context of neighbors (sticky standard headings from S2B.6 already give us this). Footer: Accept / Reject / Edit manually.
+2. **Per-row controls** — "Move to different spec" dropdown (semantically "move up/down" the matrix), "Remove from matrix" button (with confirmation + restore-in-session), all surfaced on every row. The user said "move up/down" — the actual semantics is re-tag to a different spec, since matrix row order follows spec order; tooltip clarifies.
+3. **Audit trail + learning loop** — every accept/reject/retag/remove/restore writes a correction event into `cshse_corrections_{env}` per institution. Row-level events join the existing column-level corrections shipped in `af81f7f` and feed future-import RAG.
+
+Also added "Accept all green" bulk button for >0.85-confidence columns, so PC isn't clicking through 10 individual verifications when the AI is clearly right.
+
+Decisions made within CR-026:
+- Side panel (not modal) so PC keeps the column-input pane visible
+- Dropdown only for row re-tag (no drag-and-drop in v1)
+- Removed rows drop from the post-apply CurriculumMatrix; source DOCX still has them
+- Bulk accept for green confidence ≥0.85
+
+Estimate: 2.5 days. Sprint 2B story count now 8: S2B.1-S2B.8. Workload ~14.5 days. Still fits a two-week sprint if focused; tighter than ideal. If S2B.8 slips, defer to Sprint 3 — CR-025 (S2B.7) ships without verification UI initially, with column inputs as the fallback while we land the preview drawer. That's acceptable for an internal beta; we'd disable the AI auto-pre-fill until verification ships.
