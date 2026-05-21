@@ -278,10 +278,10 @@ function AIImportTabButton({
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
         activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
       }`}
-      title="AI Import Wizard — upload a DOCX (or a partial section) and let the AI parse, tag, and place content. Use this when you have one document to import."
+      title="Importer Wizard — upload a DOCX (or a partial section) and let the AI parse, tag, and place content. Use this when you have one document to import."
     >
       <Upload className="w-4 h-4 flex-shrink-0" />
-      AI Import
+      Importer Wizard
       {/* CR-001 / S2A.4 — both paths coexist; the badge tells coordinators
           which import surface is the AI-driven one at a glance. */}
       <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
