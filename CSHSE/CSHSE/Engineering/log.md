@@ -1043,3 +1043,19 @@ Created [[change-requests/cr-024-matrix-spec-bidirectional-link]]. Split across 
 - **Sprint 4 (eval half — S4.7):** Persistent matrix hotlink on every covered spec post-apply (extending the existing Standards 11-21 button to all matrix-tagged specs). "Source document" link opens ShowInSourceModal at the source `<table>` anchor. AI scoring payload includes matrix rows; Haiku rationale must reference matrix evidence when it informed the score. ~2.5 days. Depends on CR-018 evidence-scoring endpoint.
 
 Sprint roster table + sprint-plan-2026-05-20 updated. Index page + change-requests index updated.
+
+## [2026-05-21] update | CR-025 — AI matrix column inference
+
+User flagged the Matrix step as unusable: free-text "type a code and press Enter" inputs with no catalog dropdown, no instructions, no algorithm for figuring out which course a column represents. Mammoth strips merged-cell headers, so the original column-to-course mapping in the DOCX is invisible to the coordinator.
+
+Captured as [[change-requests/cr-025-ai-matrix-column-inference]] and slotted into Sprint 2B as S2B.7. P0 priority — currently the most broken screen in the wizard.
+
+Three deliverables:
+
+1. **ai-service endpoint** `POST /ai/matrix/infer-columns` — Haiku reads the raw `<table>` HTML (where merged-cell course headers are still recoverable from the bytes mammoth ignored), the surrounding 4-6 paragraphs of narrative, plus RAG hits from a new per-institution `cshse_matrix_columns_{env}` Qdrant collection. Returns confidence-ranked column → course suggestions.
+2. **Curriculum-matrix context ingestion** — `import_jobs.py` embeds the paragraphs surrounding each matrix anchor into a new `cshse_matrix_context_{env}` Qdrant collection, private to the institution.
+3. **Client UX** — replace free-text inputs with a course-catalog dropdown (free-text fallback for net-new courses). AI suggestions pre-fill on first render with a confidence indicator (🟢/🟡/🔴). Coordinator confirms + overrides; every confirmation stores the mapping back into Qdrant so the next import for the same institution gets it right automatically.
+
+Estimate: 3 days. Depends on existing matrix extraction pipeline + Qdrant per-env collections + corrections-store infrastructure (all shipped Sprint 1).
+
+Sprint 2B story count is now 7: S2B.1 audit doc, S2B.2 isolation tests, S2B.3 drag-drop, S2B.4 hyperlinks, S2B.5 pre-submit popup, S2B.6 matrix-spec sync (CR-024 UI half), S2B.7 matrix column inference (CR-025). Workload bumped from ~9 days to ~12 days — still fits a two-week sprint with one engineer + occasional ai-service paired work.

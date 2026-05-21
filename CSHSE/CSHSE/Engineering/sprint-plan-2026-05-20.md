@@ -34,7 +34,7 @@ Stories within a sprint are ordered by dependency: earlier stories block later o
 |---|---|---|---|
 | 1 | AI Import Wizard | — | SHIPPED |
 | **2A** | **Lockout + submission core** | CR-001, CR-005, CR-006, CR-007 | S2.2-S2.10 critical security |
-| **2B** | **Isolation audit + UX** | CR-008, CR-014, CR-015, CR-017, CR-024 (UI half) | S2.11 document versioning |
+| **2B** | **Isolation audit + UX** | CR-008, CR-014, CR-015, CR-017, CR-024 (UI half), CR-025 | S2.11 document versioning |
 | **3** | **Auth + assignment lockout** | CR-020, CR-022 | S3.1-S3.x auth + multi-PC |
 | **4** | **Evidence AI + rubric + relay** | CR-003, CR-004, CR-018, CR-023, CR-024 (eval half) | S4.4 email host, S3.9 reader deadline |
 | **5** | **Reader workflow** | CR-009, CR-010, CR-011, CR-021 | S5.10 reader DOCX (revised) |
@@ -331,6 +331,48 @@ Stories within a sprint are ordered by dependency: earlier stories block later o
 - E2E: click 11.a → both matrices scroll → click 13.a → both scroll → click 9.c (no coverage) → no scroll, no error
 
 **Estimate:** 1.5 days
+
+---
+
+## S2B.7 — AI matrix column inference + course catalog dropdown
+
+**Source:** [[cr-025-ai-matrix-column-inference]]
+
+**User story:**
+> As a program coordinator, when I reach the Matrix step I want the AI to have already suggested which course each column represents — with a confidence indicator — so I'm confirming + correcting rather than typing 26 course codes from memory with no idea what each column actually was.
+
+**Files affected:**
+
+ai-service:
+- `ai-service/app/matrix/column_inference.py` (new) — Haiku-driven inference reading the raw matrix `<table>` HTML (merged cells intact), surrounding 4-6 paragraphs of narrative, RAG hits from `cshse_matrix_columns_{env}` for the institution
+- `ai-service/app/main.py` — `POST /ai/matrix/infer-columns` endpoint
+- `ai-service/app/import_jobs.py` — ingest curriculum-matrix surrounding paragraphs into a new `cshse_matrix_context_{env}` Qdrant collection
+- `ai-service/tests/test_matrix_column_inference.py` (new)
+
+server:
+- `server/src/services/cshseAiClient.ts` — `inferMatrixColumns(importId, matrixSlug)`
+- `server/src/controllers/aiImportController.ts` — pass institutionId + matrix raw HTML; persist confirmed mappings back into Qdrant
+
+client:
+- `client/src/features/selfStudy/Editor/AIImport/steps/MatrixStep.tsx` — replace free-text inputs with dropdown + AI suggestions + confidence indicator (🟢🟡🔴) + "Run AI column inference" button
+- `client/src/features/selfStudy/Editor/AIImport/steps/MatrixColumnDropdown.tsx` (new)
+- `client/src/store/aiImportStore.ts` — `setColumnSuggestions`, `confirmColumnMapping`, `overrideColumnMapping`
+
+**Acceptance:**
+- [ ] Endpoint returns column → course suggestions for Stevenson Baccalaureate matrix at ≥8/13 columns with >0.85 confidence (ground truth verified manually)
+- [ ] Kennesaw State template (no matrix data) returns 0 suggestions cleanly, no error
+- [ ] Dropdown replaces free-text inputs; AI suggestions pre-fill on first render
+- [ ] Confidence indicator visible per column
+- [ ] Coordinator override is recorded as a correction event in `cshse_matrix_columns_{env}` keyed by institution
+- [ ] Second import for the same institution returns confirmed mappings at >0.95 confidence
+- [ ] No regression: "Skip this matrix" toggle, sticky matrix-name banner, original-source-document collapsible all still work
+
+**Test plan:**
+- ai-service unit: prompt structure with/without RAG hits, with/without `knownCourses`
+- ai-service integration: Stevenson DOCX → expected column→course mappings; Kennesaw State → 0 suggestions
+- E2E: wizard Matrix step → AI inference auto-runs → 13/13 pre-filled → confirm 11, override 2 → apply → re-import same institution → all 13 at >0.95
+
+**Estimate:** 3 days
 
 ---
 
