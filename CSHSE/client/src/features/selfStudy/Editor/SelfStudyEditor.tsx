@@ -2233,18 +2233,36 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* Jump to matrix row — visible for Standards 11–21 which are
-                      the only ones the CSHSE curriculum matrices cover. */}
-                  {selectedSpec && /^(1[1-9]|2[01])$/.test(selectedStandard) && (
+                  {/* CR-024 (post-apply) — Jump to matrix row from the spec
+                      breadcrumb. Visible for Standards 11–21 which are the
+                      only ones the CSHSE curriculum matrices cover. Now
+                      ALSO appears at the standard level (no spec selected)
+                      so the coordinator can jump to the matrix from a
+                      standard header rather than having to pick a spec
+                      first. Without-spec → scrolls to the first spec row
+                      of that standard in the matrix. */}
+                  {/^(1[1-9]|2[01])$/.test(selectedStandard) && (
                     <button
                       onClick={() => {
-                        setMatrixScrollTarget({ std: selectedStandard, spec: selectedSpec });
+                        setMatrixScrollTarget({
+                          std: selectedStandard,
+                          // Without a spec we anchor to "a" — the first sub-spec
+                          // is always row 1 of that standard in the matrix.
+                          spec: selectedSpec || 'a'
+                        });
                         setActiveView('curriculum');
                       }}
-                      className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-1 text-xs text-cshse-700 hover:bg-cshse-50"
-                      title={`Jump to ${selectedStandard}.${selectedSpec} in the curriculum matrix`}
+                      className="inline-flex items-center gap-1 rounded border border-cshse-400 bg-cshse-50 px-2.5 py-1 text-xs font-medium text-cshse-800 hover:bg-cshse-100"
+                      title={
+                        selectedSpec
+                          ? `Jump to ${selectedStandard}.${selectedSpec} in the curriculum matrix`
+                          : `Jump to Standard ${selectedStandard} in the curriculum matrix`
+                      }
                     >
-                      <Grid3X3 className="w-3.5 h-3.5" aria-hidden /> View in matrix
+                      <Grid3X3 className="w-3.5 h-3.5" aria-hidden />
+                      {selectedSpec
+                        ? `Matrix · ${selectedStandard}.${selectedSpec}`
+                        : `Matrix · Standard ${selectedStandard}`}
                     </button>
                   )}
                   {/* Spec Navigation */}

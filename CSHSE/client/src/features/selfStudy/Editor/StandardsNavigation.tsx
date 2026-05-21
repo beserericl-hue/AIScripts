@@ -160,6 +160,19 @@ function StandardItem({
             <span className="font-medium truncate">
               Standard {standard.standardCode}
             </span>
+            {/* CR-024 — visible affordance for the curriculum-matrix-bearing
+                standards (11-21). The actual jump is handled by the editor
+                breadcrumb's "Matrix" button — this is just a quiet "this
+                standard has matrix coverage" indicator so the coordinator
+                knows where to look without hunting. */}
+            {/^(1[1-9]|2[01])$/.test(standard.standardCode) && (
+              <span
+                className="inline-flex items-center gap-0.5 rounded bg-cshse-100 px-1 py-0.5 text-[10px] font-medium text-cshse-800"
+                title="This standard appears in the curriculum matrix"
+              >
+                ⊞ matrix
+              </span>
+            )}
             {totalSpecs > 0 && (
               <span className="text-xs text-gray-500">
                 {completedSpecs}/{totalSpecs}
