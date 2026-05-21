@@ -12,7 +12,7 @@
  * and the Curriculum Matrix tab renders them with course names.
  */
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Info, Grid3X3, Check, SkipForward, Sparkles, Loader2 } from 'lucide-react';
+import { Info, Grid3X3, Check, SkipForward, Sparkles, Loader2, Trash2, Undo2 } from 'lucide-react';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 import { api } from '../../../../../services/api';
 import { CourseCatalogCombo, type ProgramCourse } from '../matrix/CourseCatalogCombo';
@@ -226,6 +226,48 @@ export function MatrixStep(): JSX.Element {
     // Close the drawer; the dropdown stays focused so the PC can type.
     setPreviewSuggestion(null);
   }, []);
+
+  // CR-026 per-row controls. Store-level actions; the UI just dispatches.
+  const matrixRowEdits = useAIImportStore((s) => s.matrixRowEdits);
+  const retagMatrixRow = useAIImportStore((s) => s.retagMatrixRow);
+  const removeMatrixRow = useAIImportStore((s) => s.removeMatrixRow);
+  const restoreMatrixRow = useAIImportStore((s) => s.restoreMatrixRow);
+
+  const rowEditFor = useCallback(
+    (matrixSlug: string, rowAnchor: string) =>
+      matrixRowEdits[`${matrixSlug}|${rowAnchor}`] || null,
+    [matrixRowEdits]
+  );
+
+  // Build a list of "valid retag targets" for a given matrix — every spec
+  // key that has at least one row in this matrix, plus the program's full
+  // spec catalog (matrices cover specific standards; we let the coordinator
+  // pick any spec in 1-21 since they know the curriculum better than the AI).
+  const retagTargetsFor = useCallback(
+    (m: MatrixBlock): string[] => {
+      const set = new Set<string>();
+      for (const c of m.cells || []) {
+        const std = c?.std ?? c?.standardCode ?? '';
+        const spec = c?.spec ?? c?.specCode ?? '';
+        if (std && spec) set.add(`${std}.${spec}`);
+      }
+      // Add a small synthetic catalogue covering common CSHSE standards/
+      // sub-specs so PCs can move a row to a spec the matrix doesn't yet
+      // have a row for. Letters a-h cover the deepest CSHSE substandards.
+      for (const std of ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']) {
+        for (const letter of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
+          set.add(`${std}.${letter}`);
+        }
+      }
+      return [...set].sort((a, b) => {
+        const [as, asp] = a.split('.');
+        const [bs, bsp] = b.split('.');
+        const sd = parseInt(as) - parseInt(bs);
+        return sd !== 0 ? sd : asp.localeCompare(bsp);
+      });
+    },
+    []
+  );
 
   // Derive column counts even if the matrix payload doesn't include
   // explicit column metadata (use max column index across cells).
@@ -562,39 +604,127 @@ export function MatrixStep(): JSX.Element {
                                   </th>
                                 );
                               })}
+                              {/* CR-026 — per-row controls column */}
+                              <th className="border-b border-gray-200 px-2 py-1.5 text-left align-bottom">
+                                <div className="text-[10px] font-normal text-gray-400">Edit</div>
+                                <div title="Move to a different spec or remove this row from the matrix">Row</div>
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
-                            {rowKeys.map((rk) => (
-                              <tr
-                                key={rk as string}
-                                className="border-t border-gray-100 even:bg-gray-50/50"
-                                title={`${m.name || m.matrixId} · spec ${rk}`}
-                              >
-                                <td className="whitespace-nowrap px-2 py-1 font-mono font-medium text-gray-800">
-                                  {rk as string}
-                                </td>
-                                {Array.from({ length: colCount }, (_, idx) => {
-                                  // The wire format uses 1-based columnIndex
-                                  // (column 0 is the prompt cell). Try both
-                                  // (legacy 0-based) for safety.
-                                  const cell =
-                                    cellsByPos.get(`${rk}|${idx + 1}`) ||
-                                    cellsByPos.get(`${rk}|${idx}`);
-                                  const assigned = (columnAssignments[m.matrixId] || {})[idx];
-                                  const colLabel = assigned || headers[idx] || `Col ${idx + 1}`;
-                                  return (
-                                    <td
-                                      key={idx}
-                                      className="px-2 py-1 font-mono text-gray-700"
-                                      title={`${m.name || m.matrixId} · ${rk} · ${colLabel}${cell?.codeRaw ? ` = ${cell.codeRaw}` : ''}`}
-                                    >
-                                      {cell?.codeRaw || cell?.value || ''}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
+                            {rowKeys.map((rk) => {
+                              // Find the rowAnchor for the first cell on this
+                              // row (every cell in a given row shares the same
+                              // rowAnchor); fall back to a synthetic anchor for
+                              // legacy payloads that lack one.
+                              const firstCellOnRow = (m.cells || []).find(
+                                (c: any) => {
+                                  const std = c?.std ?? c?.standardCode ?? '?';
+                                  const spec = c?.spec ?? c?.specCode ?? '?';
+                                  return `${std}.${spec}` === rk;
+                                }
+                              );
+                              const rowAnchor =
+                                (firstCellOnRow as any)?.rowAnchor ||
+                                `matrix-${m.matrixId}-row-${rk.replace('.', '-')}`;
+                              const edit = rowEditFor(m.matrixId, rowAnchor);
+                              const isRemoved = edit?.kind === 'remove';
+                              const isRetagged = edit?.kind === 'retag';
+                              const effectiveKey = isRetagged
+                                ? `${edit.newStd}.${edit.newSpec}`
+                                : (rk as string);
+                              return (
+                                <tr
+                                  key={rk as string}
+                                  className={`border-t border-gray-100 even:bg-gray-50/50 ${
+                                    isRemoved ? 'line-through opacity-40' : ''
+                                  } ${isRetagged ? 'bg-purple-50' : ''}`}
+                                  title={`${m.name || m.matrixId} · spec ${effectiveKey}${
+                                    isRetagged ? ` (was ${rk})` : ''
+                                  }${isRemoved ? ' — removed from this matrix' : ''}`}
+                                >
+                                  <td className="whitespace-nowrap px-2 py-1 font-mono font-medium text-gray-800">
+                                    {effectiveKey}
+                                    {isRetagged && (
+                                      <span className="ml-1 text-[10px] font-normal text-purple-600">
+                                        ← {rk as string}
+                                      </span>
+                                    )}
+                                  </td>
+                                  {Array.from({ length: colCount }, (_, idx) => {
+                                    const cell =
+                                      cellsByPos.get(`${rk}|${idx + 1}`) ||
+                                      cellsByPos.get(`${rk}|${idx}`);
+                                    const assigned = (columnAssignments[m.matrixId] || {})[idx];
+                                    const colLabel = assigned || headers[idx] || `Col ${idx + 1}`;
+                                    return (
+                                      <td
+                                        key={idx}
+                                        className="px-2 py-1 font-mono text-gray-700"
+                                        title={`${m.name || m.matrixId} · ${effectiveKey} · ${colLabel}${cell?.codeRaw ? ` = ${cell.codeRaw}` : ''}`}
+                                      >
+                                        {cell?.codeRaw || cell?.value || ''}
+                                      </td>
+                                    );
+                                  })}
+                                  {/* Actions cell */}
+                                  <td className="whitespace-nowrap px-2 py-1">
+                                    <div className="flex items-center gap-1">
+                                      {isRemoved ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => restoreMatrixRow(m.matrixId, rowAnchor)}
+                                          className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] text-gray-700 hover:bg-gray-50"
+                                          title="Restore this row to the matrix"
+                                        >
+                                          <Undo2 className="h-3 w-3" aria-hidden /> Restore
+                                        </button>
+                                      ) : (
+                                        <>
+                                          <select
+                                            value={isRetagged ? `${edit.newStd}.${edit.newSpec}` : (rk as string)}
+                                            onChange={(e) => {
+                                              const v = e.target.value;
+                                              if (v === (rk as string)) {
+                                                // Selecting the original spec clears any retag
+                                                restoreMatrixRow(m.matrixId, rowAnchor);
+                                                return;
+                                              }
+                                              const [newStd, newSpec] = v.split('.');
+                                              retagMatrixRow(m.matrixId, rowAnchor, newStd, newSpec);
+                                            }}
+                                            className="rounded border border-gray-300 bg-white px-1 py-0.5 text-[10px] font-mono text-gray-700"
+                                            title="Move this row to a different spec (matrix row order follows spec order, so this is the 'move up/down' affordance)"
+                                          >
+                                            {retagTargetsFor(m).map((t) => (
+                                              <option key={t} value={t}>
+                                                {t === rk ? `${t} (current)` : t}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (
+                                                window.confirm(
+                                                  `Remove row ${rk} from "${m.name || m.matrixId}"? The source DOCX still has it; you can restore it later from the Curriculum Matrix tab.`
+                                                )
+                                              ) {
+                                                removeMatrixRow(m.matrixId, rowAnchor);
+                                              }
+                                            }}
+                                            className="inline-flex items-center rounded border border-red-200 bg-white px-1 py-0.5 text-[10px] text-red-700 hover:bg-red-50"
+                                            title="Remove this row from the matrix"
+                                          >
+                                            <Trash2 className="h-3 w-3" aria-hidden />
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>

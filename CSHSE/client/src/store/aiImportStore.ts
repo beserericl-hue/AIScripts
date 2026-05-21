@@ -200,6 +200,17 @@ interface AIImportState {
   // (e.g. "matrix-hsr-row-11-a"). Cleared after the scroll completes.
   selectedMatrixRowAnchor: string | null;
 
+  // CR-026 per-row controls: coordinator-applied edits to matrix rows.
+  // Local state — applied to the wire-format matrices at apply() time so
+  // the server-side persistence in applyAIImport sees the corrected layout.
+  // Keyed by `${matrixSlug}|${rowAnchor}` so the same row in two matrices
+  // can be edited independently.
+  matrixRowEdits: Record<
+    string,
+    | { kind: 'retag'; newStd: string; newSpec: string }
+    | { kind: 'remove' }
+  >;
+
   // From Apply stage
   mergeMode: 'merge' | 'replace' | 'per_spec';
   perSpecResolution: Record<string, 'keep' | 'take' | 'merge'>;
@@ -229,6 +240,11 @@ interface AIImportState {
   // row id (e.g. "matrix-hsr-row-11-a"). Used by per-spec "View in Matrix"
   // buttons and by the Standards-editor "Jump to matrix row" link.
   selectMatrixRow: (rowAnchor: string) => void;
+  // CR-026 row controls. Per-row coordinator edits applied locally; they
+  // ride along into apply() so applyAIImport persists the corrected layout.
+  retagMatrixRow: (matrixSlug: string, rowAnchor: string, newStd: string, newSpec: string) => void;
+  removeMatrixRow: (matrixSlug: string, rowAnchor: string) => void;
+  restoreMatrixRow: (matrixSlug: string, rowAnchor: string) => void;
   // Set the matrix row anchor WITHOUT switching the center pane to the
   // Matrices view. Used when the user clicks a spec in the rail — we want
   // the matrix view to pre-position itself silently so when the user
@@ -283,6 +299,11 @@ const initialState = {
   selectedSpecKey: null,
   selectedSectionId: null,
   selectedMatrixRowAnchor: null as string | null,
+  matrixRowEdits: {} as Record<
+    string,
+    | { kind: 'retag'; newStd: string; newSpec: string }
+    | { kind: 'remove' }
+  >,
   mergeMode: 'merge' as const,
   perSpecResolution: {},
   applyError: null,
@@ -344,6 +365,30 @@ export const useAIImportStore = create<AIImportState>()(
         set({ selectedSpecKey: '_matrices', selectedMatrixRowAnchor: rowAnchor }),
       setMatrixRowAnchor: (rowAnchor) => set({ selectedMatrixRowAnchor: rowAnchor }),
       clearMatrixRowAnchor: () => set({ selectedMatrixRowAnchor: null }),
+
+      // CR-026 row controls — store local-only edits keyed by matrix+row.
+      // The apply() action reads matrixRowEdits and forwards the edited
+      // layout to applyAIImport (S2B.8 follow-on).
+      retagMatrixRow: (matrixSlug, rowAnchor, newStd, newSpec) =>
+        set((s) => ({
+          matrixRowEdits: {
+            ...s.matrixRowEdits,
+            [`${matrixSlug}|${rowAnchor}`]: { kind: 'retag', newStd, newSpec }
+          }
+        })),
+      removeMatrixRow: (matrixSlug, rowAnchor) =>
+        set((s) => ({
+          matrixRowEdits: {
+            ...s.matrixRowEdits,
+            [`${matrixSlug}|${rowAnchor}`]: { kind: 'remove' }
+          }
+        })),
+      restoreMatrixRow: (matrixSlug, rowAnchor) =>
+        set((s) => {
+          const next = { ...s.matrixRowEdits };
+          delete next[`${matrixSlug}|${rowAnchor}`];
+          return { matrixRowEdits: next };
+        }),
       setMergeMode: (m) => set({ mergeMode: m }),
 
       _applySnapshot: (snap) => {
@@ -526,9 +571,39 @@ export const useAIImportStore = create<AIImportState>()(
       },
 
       apply: async () => {
-        const { importId, buckets, tags, placeholderSections, matrices, mergeMode, perSpecResolution } = get();
+        const { importId, buckets, tags, placeholderSections, matrices, mergeMode, perSpecResolution, matrixRowEdits } = get();
         if (!importId) return;
         set({ status: 'applying', applyError: null });
+
+        // CR-026 — apply the coordinator's per-row edits to the matrices
+        // payload BEFORE we POST. Removed rows are dropped; retagged rows
+        // get their std/spec updated on every cell of the affected row.
+        // The rowAnchor stays as-is for traceability; the server's
+        // applyAIImport reads std/spec to drive CurriculumMatrix.standards
+        // and tagged-spec lookups, so updating those fields is enough.
+        const editedMatrices = matrices.map((m) => {
+          const cells = (m.cells || []).filter((c: any) => {
+            const std = c?.std ?? c?.standardCode ?? '?';
+            const spec = c?.spec ?? c?.specCode ?? '?';
+            const rk = `${std}.${spec}`;
+            // Find the rowAnchor for this cell — same logic as the UI.
+            const anchor =
+              c?.rowAnchor ||
+              `matrix-${m.matrixId}-row-${rk.replace('.', '-')}`;
+            const edit = matrixRowEdits[`${m.matrixId}|${anchor}`];
+            if (edit?.kind === 'remove') return false;
+            if (edit?.kind === 'retag') {
+              // Mutate in-place via the map below — keep the cell here.
+              c.std = edit.newStd;
+              c.spec = edit.newSpec;
+              // Some legacy payloads also carry standardCode/specCode
+              if (c.standardCode !== undefined) c.standardCode = edit.newStd;
+              if (c.specCode !== undefined) c.specCode = edit.newSpec;
+            }
+            return true;
+          });
+          return { ...m, cells };
+        });
 
         // Idempotency key — stored in localStorage so a retry after a
         // refresh hits the same key (server dedupes).
@@ -621,9 +696,10 @@ export const useAIImportStore = create<AIImportState>()(
             supportingEvidenceText: evidenceTextPayload,
             supportingEvidenceFiles: evidenceFilesPayload,
             // Legacy flat-cell payload retained for back-compat; new server
-            // code reads `matrices` (per-matrix object) instead.
-            matrixCells: matrices.flatMap((m) => m.cells || []),
-            matrices,
+            // code reads `matrices` (per-matrix object) instead. CR-026:
+            // editedMatrices reflects the coordinator's per-row retag/remove.
+            matrixCells: editedMatrices.flatMap((m: any) => m.cells || []),
+            matrices: editedMatrices,
             importTags: tags,
             placeholderSections,
             globalMergeMode: mergeMode,
