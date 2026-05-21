@@ -54,7 +54,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | CR | Title | Status | Source |
 |---|---|---|---|
 | [[cr-016-in-app-bug-reporter]] | Screenshot + paragraph in-app bug report | proposed | [[webinar-action-items-2026-05-20#37-56]] |
-| [[cr-019-joint-venture-pull-forward]] | Consider pulling Joint Venture work earlier | proposed | [[sprint-plan-2026-05-11#sprint-7]] |
+| [[cr-019-joint-venture-pull-forward]] | Consider pulling Joint Venture work earlier | rejected | [[sprint-plan-2026-05-11#sprint-7]] |
 | [[cr-020-account-lock-unlock-audit-trail]] | Admin lock/unlock audit-trail UI | proposed | [[webinar-action-items-2026-05-20#1-11-35]] |
 | [[cr-021-reader-uploaded-files]] | Readers can attach files to comments (partial relevant evidence) | proposed | new — implied by relay flow |
 | [[cr-022-reader-assignment-lockout]] | Only Admin can reassign readers post-lockout | proposed | new — implied by lockout flow |

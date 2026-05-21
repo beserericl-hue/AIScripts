@@ -58,7 +58,8 @@ The catalog. One line per page. When answering a question, scan this first to fi
 
 - [[sprint-plan-2026-05-10]] — eight-sprint roadmap. **Superseded by [[sprint-plan-2026-05-11]].**
 - [[sprint-plan-2026-05-11]] — seven-sprint roadmap. **Superseded by [[sprint-plan-2026-05-16]].**
-- [[sprint-plan-2026-05-16]] — eight-sprint roadmap. **NEW Sprint 1 = AI-Assisted Import Wizard** (Python FastAPI + Qdrant + Claude Haiku, linear-wizard UI). Original 7 sprints shift to Sprints 2-8. Detailed per-story spec for Sprint 1; cross-references prior plan for Sprints 2-8.
+- [[sprint-plan-2026-05-16]] — eight-sprint roadmap. **Superseded by [[sprint-plan-2026-05-20]].** Sprint 1 shipped. Stories S2.1, S4.1-S4.3+S4.5, S5.10, S7.3 are superseded by post-webinar CRs.
+- [[sprint-plan-2026-05-20]] — eight-sprint roadmap post-webinar. Sprint 1 done; Sprint 2 split into 2A (lockout + submission core: CR-001/005/006/007) and 2B (isolation audit + UX: CR-008/014/015/017). Full user stories for every sprint through 8. Includes start-tomorrow track plan + risk register.
 - [[ai-import-deploy-runbook-2026-05-18]] — **sub-sprint 1.e deploy run-book.** Step-by-step Railway-develop promote, env-var setup, post-deploy smoke (Kennesaw State template + Stevenson self-study), rollback plan, UAT handoff. **Paused** before actual deploy — requires explicit go-ahead.
 - [[legacy-self-study-import]] — complete analysis of the current import flow + AI-augmented redesign that drives Sprint 1 of [[sprint-plan-2026-05-16]].
 

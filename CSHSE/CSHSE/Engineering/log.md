@@ -1008,3 +1008,27 @@ The webinar materially changed the sprint plan. New `Engineering/change-requests
 Schema update: added `change-request` page type to [[CLAUDE]]. Index page [[index]] now lists the change-requests folder.
 
 No code changed in this entry; documentation and planning only.
+
+## [2026-05-20] update | sprint plan rewrite + held-commits push
+
+Pushed local `developer` (commits `e9a63f8` streaming HTML + `4c37e68` vault CRs) to `origin/developer`. Railway will redeploy cshse-ai. Confirmed no wizard runs in flight per the new rule (user only runs wizards when I clear it).
+
+Wrote [[sprint-plan-2026-05-20]] — supersedes [[sprint-plan-2026-05-16]]. Key changes:
+
+- Sprint 1 marked SHIPPED (AI Import Wizard live, demoed at webinar).
+- Sprint 2 split into **2A (lockout + submission core, 5 stories, ~9 days)** and **2B (isolation audit + UX, 5 stories, ~9 days)**.
+- Sprint 3 absorbs CR-020 (audit-trail UI) + CR-022 (reader-assignment lockout).
+- Sprint 4 absorbs CR-003 (rubric), CR-004 (identity redaction), CR-018 (evidence on cshse-ai, supersedes S4.1/S4.2/S4.3/S4.5), CR-023 (Julia relay console).
+- Sprint 5 absorbs CR-009 (compilation tab), CR-010 (portal DMs), CR-011 (suggestions doc), CR-021 (reader file uploads).
+- Sprint 6 absorbs CR-012 (partial-compliance checklist), CR-013 (site-visit itinerary), merged with S7.3.
+- Sprint 7 absorbs CR-016 (in-app bug reporter) + E2E expansion.
+- Sprint 8 unchanged (Joint Ventures); **CR-019 (JV pull-forward) marked rejected** — no beta institution surfaced a JV need.
+
+Every user story includes role-based user story sentence, acceptance criteria, files affected (best guess), test plan, and estimate.
+
+**Start-tomorrow plan (2026-05-21):** 4 parallel tracks for Sprint 2A — backend status machine, lockout middleware + client read-only, both-importers UX, planning/comms. Each track has a day-1 deliverable.
+
+Decisions I made on my own (per user instruction "Make the best decision"):
+1. Sprint 2 split A/B — CR-005/006/007/001 form the sequencing vertical; CR-008/014/015/017 are independent UX + audit.
+2. CR-019 (JV) rejected — no beta surfaced a need.
+3. e9a63f8 pushed now — user confirmed no wizard active on developer.
