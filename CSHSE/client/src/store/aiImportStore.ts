@@ -224,6 +224,14 @@ interface AIImportState {
     placeholders?: number;
   } | null;
 
+  // True after the coordinator has made any local edit to buckets/tags/
+  // matrices (Reassign, kind-flip, matrix row Keep/Remove, etc). When set,
+  // _applySnapshot keeps local state instead of replaying the server's
+  // original AI placement — so a hard refresh doesn't wipe the edits.
+  // Cleared on startOver/reset, on a successful Apply, and at the start
+  // of a new upload.
+  dirty: boolean;
+
   // Errors surfaced from any stage
   errors: string[];
 
@@ -308,6 +316,7 @@ const initialState = {
   perSpecResolution: {},
   applyError: null,
   appliedCounts: null,
+  dirty: false,
   errors: []
 };
 
@@ -368,31 +377,46 @@ export const useAIImportStore = create<AIImportState>()(
 
       // CR-026 row controls — store local-only edits keyed by matrix+row.
       // The apply() action reads matrixRowEdits and forwards the edited
-      // layout to applyAIImport (S2B.8 follow-on).
+      // layout to applyAIImport (S2B.8 follow-on). dirty=true so a hard
+      // refresh + _applySnapshot preserves the row decisions.
       retagMatrixRow: (matrixSlug, rowAnchor, newStd, newSpec) =>
         set((s) => ({
           matrixRowEdits: {
             ...s.matrixRowEdits,
             [`${matrixSlug}|${rowAnchor}`]: { kind: 'retag', newStd, newSpec }
-          }
+          },
+          dirty: true
         })),
       removeMatrixRow: (matrixSlug, rowAnchor) =>
         set((s) => ({
           matrixRowEdits: {
             ...s.matrixRowEdits,
             [`${matrixSlug}|${rowAnchor}`]: { kind: 'remove' }
-          }
+          },
+          dirty: true
         })),
       restoreMatrixRow: (matrixSlug, rowAnchor) =>
         set((s) => {
           const next = { ...s.matrixRowEdits };
           delete next[`${matrixSlug}|${rowAnchor}`];
-          return { matrixRowEdits: next };
+          return { matrixRowEdits: next, dirty: true };
         }),
       setMergeMode: (m) => set({ mergeMode: m }),
 
       _applySnapshot: (snap) => {
         const current = get();
+        // BUG FIX 2026-05-21: keep local edits across hard-refresh and
+        // across mid-session SSE redeliveries. When the coordinator has
+        // already made at least one local mutation (Reassign / kind-flip
+        // / matrix row Keep-or-Remove), `dirty` is true and any
+        // subsequent snapshot from cshse-ai (which carries the AI's
+        // original placement) must NOT overwrite the user's work.
+        //
+        // The server-side Submission is only written on Apply, so all
+        // pre-Apply edits live client-side. localStorage carries them
+        // through a hard refresh via the partialize block above.
+        const keepLocalBuckets = current.dirty === true;
+
         set({
           status: snap.status,
           queuePosition: snap.queuePosition ?? null,
@@ -400,10 +424,12 @@ export const useAIImportStore = create<AIImportState>()(
           etaSeconds: snap.etaSeconds ?? null,
           format: snap.format ?? current.format,
           pipelineStages: snap.stages ?? current.pipelineStages,
-          buckets: snap.buckets ?? current.buckets,
-          tags: snap.tags ?? current.tags,
-          matrices: snap.matrices ?? current.matrices,
-          placeholderSections: snap.placeholderSections ?? current.placeholderSections,
+          buckets: keepLocalBuckets ? current.buckets : (snap.buckets ?? current.buckets),
+          tags: keepLocalBuckets ? current.tags : (snap.tags ?? current.tags),
+          matrices: keepLocalBuckets ? current.matrices : (snap.matrices ?? current.matrices),
+          placeholderSections: keepLocalBuckets
+            ? current.placeholderSections
+            : (snap.placeholderSections ?? current.placeholderSections),
           errors: snap.errors ?? current.errors,
           step: deriveStepFromStatus(snap.status, current.step)
         });
@@ -415,7 +441,20 @@ export const useAIImportStore = create<AIImportState>()(
           throw new Error('uploadFile and submissionId are required to start an import');
         }
 
-        set({ status: 'uploading', uploadProgress: 0, errors: [] });
+        // Clear stale edit state + leftover buckets from a prior import.
+        // Otherwise the dirty=true guard on _applySnapshot would block
+        // the new run's snapshots from populating buckets.
+        set({
+          status: 'uploading',
+          uploadProgress: 0,
+          errors: [],
+          dirty: false,
+          buckets: {},
+          tags: [],
+          matrices: [],
+          placeholderSections: [],
+          matrixRowEdits: {}
+        });
 
         const form = new FormData();
         form.append('file', uploadFile);
@@ -709,7 +748,10 @@ export const useAIImportStore = create<AIImportState>()(
           set({
             status: 'applied',
             appliedCounts: res.data.appliedCounts || null,
-            applyError: null
+            applyError: null,
+            // Clear dirty — server now reflects the edits. Future
+            // snapshots from cshse-ai can safely overwrite buckets.
+            dirty: false
           });
           // Clear the idempotency key once the apply succeeds.
           localStorage.removeItem(`ai-apply-${importId}`);
@@ -764,9 +806,20 @@ export const useAIImportStore = create<AIImportState>()(
     }),
     {
       name: 'ai-import-storage',
-      // Persist only the resumable identity + step so a tab reload lands
-      // on the right step. Heavy state (buckets/tags) is rehydrated from
-      // /api/imports/:importId on load.
+      // Persist resumable identity + step + ALL bucket/tag/matrix state
+      // so coordinator edits made before clicking Apply survive a tab
+      // reload. Without this, hitting Reassign / kind-flip / Keep-or-
+      // Remove and then refreshing reverts every edit to the AI's
+      // original placement (bug reported 2026-05-21).
+      //
+      // The server-side Submission is only written on Apply, so all
+      // pre-Apply state has to live client-side. localStorage caps out
+      // around 5 MB per origin; a Stevenson run with 274 narratives is
+      // ~150-400 KB, well within the budget.
+      //
+      // On rehydrate + initial /ai-status fetch, _applySnapshot keeps
+      // the local buckets when they belong to the same importId — see
+      // its implementation for the keep-local-when-edited guard.
       partialize: (s) => ({
         importId: s.importId,
         submissionId: s.submissionId,
@@ -776,7 +829,12 @@ export const useAIImportStore = create<AIImportState>()(
         programLevel: s.programLevel,
         isReimport: s.isReimport,
         selectedSpecKey: s.selectedSpecKey,
-        selectedSectionId: s.selectedSectionId
+        selectedSectionId: s.selectedSectionId,
+        buckets: s.buckets,
+        tags: s.tags,
+        placeholderSections: s.placeholderSections,
+        matrices: s.matrices,
+        matrixRowEdits: s.matrixRowEdits
       })
     }
   )

@@ -190,7 +190,7 @@ export function ReviewStep(): JSX.Element {
       const newBuckets = { ...buckets, [fromKey]: newFromBucket };
 
       if (to.kind === 'discard') {
-        useAIImportStore.setState({ buckets: newBuckets });
+        useAIImportStore.setState({ buckets: newBuckets, dirty: true });
         return;
       }
 
@@ -209,7 +209,8 @@ export function ReviewStep(): JSX.Element {
         };
         useAIImportStore.setState({
           buckets: newBuckets,
-          tags: [...tags, newTag]
+          tags: [...tags, newTag],
+          dirty: true
         });
         return;
       }
@@ -223,7 +224,7 @@ export function ReviewStep(): JSX.Element {
       const toBucket = (toKey === fromKey) ? newFromBucket : buckets[toKey];
       if (!toBucket) {
         // Reassign target doesn't exist (unexpected) — fall back to tag list.
-        useAIImportStore.setState({ buckets: newBuckets });
+        useAIImportStore.setState({ buckets: newBuckets, dirty: true });
         return;
       }
       const targetList =
@@ -239,7 +240,8 @@ export function ReviewStep(): JSX.Element {
         [targetList]: [...toBucket[targetList], payload]
       };
       useAIImportStore.setState({
-        buckets: { ...newBuckets, [toKey]: updatedToBucket }
+        buckets: { ...newBuckets, [toKey]: updatedToBucket },
+        dirty: true
       });
     },
     [buckets, tags]
@@ -367,7 +369,7 @@ export function ReviewStep(): JSX.Element {
             coverageGaps: [],
             coverageStrengths: []
           };
-      useAIImportStore.setState({ buckets: { ...buckets, [key]: nextBucket } });
+      useAIImportStore.setState({ buckets: { ...buckets, [key]: nextBucket }, dirty: true });
       setSourceOpen(false);
       setCorrectionTarget(null);
       try {
