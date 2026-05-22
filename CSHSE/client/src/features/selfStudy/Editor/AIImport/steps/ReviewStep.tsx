@@ -20,27 +20,34 @@ import { ShowInSourceModal } from '../review/ShowInSourceModal';
 import { api } from '../../../../../services/api';
 
 /**
- * Strip the leading heading line from a snippet before using it as
+ * Strip the leading heading BLOCK from a snippet before using it as
  * Show-in-source search text.
  *
- * The card's bold title ("displayLabel") is derived from the first line of
- * the snippet when the source heading is terse (matches `_TERSE_HEADING_RE`
- * in ItemCardList.tsx — "2", "a.", "(1)", etc). That first line is in
- * effect a heading the AI extracted to label the card; it is NOT necessarily
- * a literal substring of the source document, and including it in the
- * search needle was the root cause of the "showing the document from the
- * top" bug observed 2026-05-22.
+ * Per user direction 2026-05-22:
+ *   "AI generated headlines should never be featured in the search.
+ *    These are headlines. the body of the text is what is imported
+ *    from the document."
+ *   "every tile has a headline that is not part of the text"
  *
- * Rule: take everything AFTER the first newline. If the rest is too short
- * to be useful for matching (<60 chars), fall back to the full snippet so
- * we don't accidentally search on nothing.
+ * The ai-service emits snippet text where the leading lines are spec-prompt
+ * titles from the CSHSE template ("Describe the institution.", "Table of
+ * Contents", etc) — these are headings, not the coordinator's response
+ * body. The body — the part that should drive search — starts AFTER the
+ * first paragraph break. Stripping just the first line (the previous fix)
+ * left multi-line heading blocks partly intact.
+ *
+ * Rule: drop everything up to and including the first paragraph break
+ * (a blank line / double newline). If no paragraph break exists (rare;
+ * single-paragraph snippet), use as-is. If the body after stripping is
+ * too short to be useful for matching (<60 chars), fall back to the full
+ * snippet so we don't accidentally search on nothing.
  */
 function stripCardHeading(snippet: string): string {
   const trimmed = (snippet || '').trim();
   if (!trimmed) return '';
-  const firstNewline = trimmed.indexOf('\n');
-  if (firstNewline < 0) return trimmed; // single-line; nothing to strip
-  const body = trimmed.slice(firstNewline + 1).trim();
+  const para = trimmed.match(/\n\s*\n/);
+  if (!para || para.index === undefined) return trimmed; // no paragraph break
+  const body = trimmed.slice(para.index + para[0].length).trim();
   return body.length >= 60 ? body : trimmed;
 }
 
