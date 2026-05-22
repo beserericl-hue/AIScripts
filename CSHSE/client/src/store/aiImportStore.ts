@@ -834,7 +834,13 @@ export const useAIImportStore = create<AIImportState>()(
         tags: s.tags,
         placeholderSections: s.placeholderSections,
         matrices: s.matrices,
-        matrixRowEdits: s.matrixRowEdits
+        matrixRowEdits: s.matrixRowEdits,
+        // MUST persist — without this, hard refresh defaults dirty to
+        // false. _applySnapshot then sees dirty=false on the next
+        // /ai-status fetch and overwrites buckets with the AI's
+        // original placement. That's exactly the regression reported
+        // 2026-05-22 (rail badge correct, middle pane empty).
+        dirty: s.dirty
       })
     }
   )
