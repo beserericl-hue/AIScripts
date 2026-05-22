@@ -28,6 +28,26 @@ import { useAIImportStore } from '../../../../../store/aiImportStore';
 const POLL_INTERVAL_MS = 3000;
 const STALL_AFTER_MS = 30000;
 
+// User-facing labels for the pipeline stages. The technical names come
+// from the Python ai-service (import_jobs.py); coordinators don't know
+// what 'mammoth' or 'deep_walker' are. User direction 2026-05-22:
+// rename mammoth → 'Document Reader'. While we're here, humanize the
+// other stage names too so the parse step reads in plain English.
+const STAGE_LABELS: Record<string, string> = {
+  download_s3: 'Downloading document',
+  format_detect: 'Detecting format',
+  mammoth: 'Document Reader',
+  deep_walker: 'Reading structure',
+  matcher: 'Matching to specifications',
+  coverage_review: 'Reviewing coverage',
+  gap_fill: 'Filling coverage gaps',
+  matrix_extract: 'Extracting matrices',
+};
+
+function stageLabel(name: string): string {
+  return STAGE_LABELS[name] ?? name;
+}
+
 function fmtMinutes(seconds: number | null): string {
   if (!seconds || seconds < 60) return seconds ? `${seconds}s` : '—';
   const min = Math.round(seconds / 60);
@@ -160,7 +180,7 @@ export function ParseStep(): JSX.Element {
               )}
               {failedStage && (
                 <div className="text-xs text-red-600">
-                  Last stage: <span className="font-medium">{failedStage.name}</span>
+                  Last stage: <span className="font-medium">{stageLabel(failedStage.name)}</span>
                   {failedStage.detail && <> — {failedStage.detail}</>}
                 </div>
               )}
@@ -360,7 +380,12 @@ function StageList({ stages, placeholderQueued }: StageListProps): JSX.Element {
           <li key={`${stage.name}-${idx}`} className="">
             <div className="flex items-center gap-3">
               <Icon className={`h-4 w-4 ${colour}`} aria-hidden />
-              <span className="min-w-[7rem] font-medium text-gray-700">{stage.name}</span>
+              <span
+                className="min-w-[9rem] font-medium text-gray-700"
+                title={`Pipeline stage: ${stage.name}`}
+              >
+                {stageLabel(stage.name)}
+              </span>
               <span className="flex-1 text-gray-500">{stage.detail || (stage.state === 'running' ? 'working…' : '')}</span>
               {stage.etaSeconds != null && (
                 <span className="text-xs text-gray-400">~{stage.etaSeconds}s</span>
