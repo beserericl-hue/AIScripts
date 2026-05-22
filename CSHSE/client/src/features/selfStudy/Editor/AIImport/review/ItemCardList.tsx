@@ -100,30 +100,6 @@ function deriveDisplayLabel(heading: string, snippet: string): string {
   return h.length > 100 ? h.slice(0, 100) + '…' : h;
 }
 
-/**
- * Strip the heading block from a snippet for display in the card body.
- *
- * Per user direction 2026-05-22 — "every tile has a headline that is not
- * part of the text" — the leading lines of the snippet are spec prompts /
- * headings (e.g. "Describe the institution. Table of Contents") which we
- * already surface as the bold `displayLabel`. Repeating them at the top of
- * the body is a confusing duplication. The body should show ONLY the text
- * imported from the document — i.e. the coordinator's response.
- *
- * Rule: drop everything up to and including the first paragraph break
- * (a blank line). If there's no paragraph break (single-paragraph
- * snippet), leave it alone — there's no heading block to strip. If the
- * remaining body is empty or too short to be useful (<40 chars), fall
- * back to the full snippet so we never render an empty body.
- */
-function bodyForDisplay(snippet: string): string {
-  const trimmed = (snippet || '').trim();
-  if (!trimmed) return '';
-  const para = trimmed.match(/\n\s*\n/);
-  if (!para || para.index === undefined) return trimmed;
-  const body = trimmed.slice(para.index + para[0].length).trim();
-  return body.length >= 40 ? body : trimmed;
-}
 
 interface BucketGroups {
   narratives: CardItem[];
@@ -1176,10 +1152,10 @@ function ItemCard({
             />
           ) : tabular ? (
             <pre className="mt-3 max-h-96 overflow-auto whitespace-pre rounded bg-gray-50 p-3 font-mono text-xs leading-snug text-gray-800">
-              {bodyForDisplay(item.snippet)}
+              {item.snippet}
             </pre>
           ) : (
-            <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{bodyForDisplay(item.snippet)}</div>
+            <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{item.snippet}</div>
           )}
         </div>
       </div>
