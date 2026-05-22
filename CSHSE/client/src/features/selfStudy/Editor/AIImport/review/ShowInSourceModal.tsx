@@ -175,58 +175,96 @@ export function ShowInSourceModal({
       }
     }
 
-    // Strategy 2: longest-prefix fuzzy text match.
+    // Strategy 2: longest-substring fuzzy text match across several start
+    // offsets in the needle.
     //
-    // Walk the DOM and score every text node by how much of the snippet
-    // it contains (its longest matching prefix of the needle, in chars).
-    // Pick the highest-scoring node. This fixes a bug observed 2026-05-22:
-    // a 285-word narrative starting with "The worth and uniqueness of
-    // individuals..." also appears as a 27-word matrix-row prompt earlier
-    // in the document. The old "first text node that contains the first
-    // 80 chars" logic always highlighted the matrix row. Longest-prefix
-    // scoring picks the narrative (matches ~100+ chars of the needle)
-    // over the matrix row (matches only ~27 chars).
-    const needle = normalizeForSearch(matchText.slice(0, 600));
-    if (needle.length < 20) {
+    // The original "longest-prefix from offset 0" version (still kept as
+    // the FIRST pass below) fails when the AI prepends a synthesized
+    // heading to the snippet — observed 2026-05-22 on Stevenson card
+    // "Describe the institution. Table of Contents". The heading is NOT
+    // a literal substring of the source document, so no node matched
+    // even 60 chars of the needle's prefix → match-kind 'missing' → modal
+    // scrolled to the top of the doc, useless to the coordinator.
+    //
+    // Fix: when prefix matching fails, slide the needle window. Try
+    // offsets 50 / 100 / 200 / 300 / 500 — the document text starts
+    // SOMEWHERE in the snippet; we just don't know exactly where. Pick
+    // whichever offset's longest-match is largest.
+    //
+    // Also defeats a separate failure mode where the AI's snippet has
+    // formatting differences from the source (line breaks turned into
+    // spaces, smart quotes vs straight quotes, etc.) that happen to
+    // disagree in the first 60 chars but agree in the body.
+    const fullNeedle = normalizeForSearch(matchText.slice(0, 600));
+    if (fullNeedle.length < 20) {
       setState((s) => (s.kind === 'ready' ? { ...s, matchKind: 'missing' } : s));
       return;
     }
+
     const minPrefix = 60; // require at least this many matching chars to score
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const offsetsToTry = [0, 50, 100, 200, 300, 500].filter(
+      (o) => o + minPrefix < fullNeedle.length
+    );
+    // Always include offset 0 (the original behavior is the most likely to win).
+    if (!offsetsToTry.includes(0)) offsetsToTry.unshift(0);
+
     let bestNode: Node | null = null;
     let bestScore = 0;
-    let node: Node | null;
-    while ((node = walker.nextNode())) {
-      const t = (node.textContent || '').trim();
-      if (t.length < minPrefix) continue;
-      const nt = normalizeForSearch(t);
-      // Find the longest prefix of `needle` contained anywhere in nt.
-      // Binary-search the prefix length so we don't pay O(N*L) on long
-      // narratives.
-      let lo = minPrefix;
-      let hi = Math.min(needle.length, nt.length);
-      let candidate = 0;
-      while (lo <= hi) {
-        const mid = (lo + hi) >> 1;
-        if (nt.includes(needle.slice(0, mid))) {
-          candidate = mid;
-          lo = mid + 1;
-        } else {
-          hi = mid - 1;
+    let bestOffset = 0;
+
+    for (const offset of offsetsToTry) {
+      const needle = fullNeedle.slice(offset);
+      if (needle.length < minPrefix) continue;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        const t = (node.textContent || '').trim();
+        if (t.length < minPrefix) continue;
+        const nt = normalizeForSearch(t);
+        // Find the longest prefix of `needle` contained anywhere in nt.
+        // Binary-search the prefix length so we don't pay O(N*L) on long
+        // narratives.
+        let lo = minPrefix;
+        let hi = Math.min(needle.length, nt.length);
+        let candidate = 0;
+        while (lo <= hi) {
+          const mid = (lo + hi) >> 1;
+          if (nt.includes(needle.slice(0, mid))) {
+            candidate = mid;
+            lo = mid + 1;
+          } else {
+            hi = mid - 1;
+          }
+        }
+        if (candidate > bestScore) {
+          bestScore = candidate;
+          bestNode = node;
+          bestOffset = offset;
+          // Short-circuit if we've matched (almost) the entire needle.
+          if (candidate >= Math.min(needle.length, 400)) break;
         }
       }
-      if (candidate > bestScore) {
-        bestScore = candidate;
-        bestNode = node;
-        // Short-circuit if we've matched (almost) the entire needle.
-        if (candidate >= Math.min(needle.length, 400)) break;
-      }
+      // If we found a strong match (>= 200 chars) at this offset, stop
+      // trying further offsets. Earlier offsets are preferred — they're
+      // more likely to be the right paragraph.
+      if (bestScore >= 200) break;
     }
+
     if (bestNode) {
       const parent = (bestNode as Node).parentElement;
       if (parent) {
         parent.scrollIntoView({ behavior: 'smooth', block: 'center' });
         parent.style.outline = '2px solid #d97706'; // amber
+      }
+      // Diagnostic: log the offset + score so we can see in dev tools how
+      // often the slid-window strategy is rescuing matches that would
+      // otherwise have been 'missing'.
+      if (bestOffset !== 0) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          `[show-in-source] fuzzy match via offset=${bestOffset} score=${bestScore} ` +
+            `(prefix-from-0 had insufficient match; AI-prepended heading likely)`
+        );
       }
       setState((s) => (s.kind === 'ready' ? { ...s, matchKind: 'fuzzy' } : s));
       return;
