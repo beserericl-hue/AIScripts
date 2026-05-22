@@ -223,22 +223,57 @@ export function ItemCardList({
   const selectMatrixRow = useAIImportStore((s) => s.selectMatrixRow);
   const selectedMatrixRowAnchor = useAIImportStore((s) => s.selectedMatrixRowAnchor);
   const clearMatrixRowAnchor = useAIImportStore((s) => s.clearMatrixRowAnchor);
+  const matrixRowEdits = useAIImportStore((s) => s.matrixRowEdits);
 
   // Per-spec matrix references: which (matrix, row, columnIndex+code) triples
   // address the currently-selected spec? Used to surface "View in Matrix"
-  // buttons at the top of the spec card list.
+  // buttons + inline matrix-coverage breakdown at the top of the spec card.
+  //
+  // Honours matrixRowEdits so a row the coordinator Removed in the Matrix
+  // step disappears from this Review-page view (instead of misleadingly
+  // showing as still associated with the spec). Retags appear under the
+  // NEW (std, spec) as the coordinator intended.
   const specMatrixRefs = useMemo(() => {
-    if (!bucket) return [] as Array<{ matrix: MatrixData; rowAnchor: string; cellCount: number }>;
+    if (!bucket) {
+      return [] as Array<{
+        matrix: MatrixData;
+        rowAnchor: string;
+        cellCount: number;
+        cells: MatrixData['cells'];
+      }>;
+    }
     const std = bucket.standardCode;
     const spec = bucket.specCode;
-    const out: Array<{ matrix: MatrixData; rowAnchor: string; cellCount: number }> = [];
+    const out: Array<{
+      matrix: MatrixData;
+      rowAnchor: string;
+      cellCount: number;
+      cells: MatrixData['cells'];
+    }> = [];
     for (const m of matrices) {
-      const cells = m.cells.filter((c) => c.std === std && c.spec === spec);
-      if (cells.length === 0) continue;
-      out.push({ matrix: m, rowAnchor: cells[0].rowAnchor, cellCount: cells.length });
+      // Build the effective (std, spec) for each cell, applying any retag.
+      // Then keep only cells whose effective placement matches this spec AND
+      // whose row was NOT removed.
+      const matching = m.cells.filter((c) => {
+        const rowAnchor =
+          c.rowAnchor ||
+          `matrix-${m.matrixId}-row-${c.std}-${c.spec ?? 'x'}`;
+        const edit = matrixRowEdits[`${m.matrixId}|${rowAnchor}`];
+        if (edit?.kind === 'remove') return false;
+        const effStd = edit?.kind === 'retag' ? edit.newStd : c.std;
+        const effSpec = edit?.kind === 'retag' ? edit.newSpec : c.spec;
+        return effStd === std && effSpec === spec;
+      });
+      if (matching.length === 0) continue;
+      out.push({
+        matrix: m,
+        rowAnchor: matching[0].rowAnchor,
+        cellCount: matching.length,
+        cells: matching,
+      });
     }
     return out;
-  }, [bucket, matrices]);
+  }, [bucket, matrices, matrixRowEdits]);
 
   const items = useMemo<CardItem[]>(() => {
     if (selectedKey === UNPLACED_KEY) return flattenTags(unplacedTags);
@@ -412,23 +447,60 @@ export function ItemCardList({
       </div>
 
       {/* Per-spec matrix references — visible only when a real spec bucket is
-          selected and at least one matrix has a row addressing this spec. */}
+          selected and at least one matrix has a row addressing this spec.
+          Shows the matrix name + click-to-jump button AND the actual
+          column-by-column coverage codes inline, so the coordinator can see
+          what the matrix says about this spec without leaving the page.
+          Filters out rows the coordinator Removed in the Matrix step and
+          honors retags. */}
       {specMatrixRefs.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-cshse-50/40 px-4 py-2 text-xs">
-          <span className="font-medium text-cshse-800">Curriculum matrices:</span>
-          {specMatrixRefs.map((ref) => (
-            <button
-              key={ref.matrix.matrixId}
-              onClick={() => selectMatrixRow(ref.rowAnchor)}
-              title={`Jump to this spec's row in ${ref.matrix.name} (${ref.cellCount} course cell${ref.cellCount === 1 ? '' : 's'})`}
-              className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-0.5 font-medium text-cshse-700 hover:bg-cshse-100"
-            >
-              <Grid3x3 className="h-3 w-3" aria-hidden /> {ref.matrix.name}
-              <span className="ml-1 rounded bg-cshse-100 px-1 text-[10px] text-cshse-800">
-                {ref.cellCount} cell{ref.cellCount === 1 ? '' : 's'}
-              </span>
-            </button>
-          ))}
+        <div className="border-b border-gray-200 bg-cshse-50/40 px-4 py-2 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium text-cshse-800">Curriculum matrices for {bucket?.standardCode}.{bucket?.specCode}:</span>
+            {specMatrixRefs.map((ref) => (
+              <button
+                key={ref.matrix.matrixId}
+                onClick={() => selectMatrixRow(ref.rowAnchor)}
+                title={`Jump to this spec's row in ${ref.matrix.name} (${ref.cellCount} course cell${ref.cellCount === 1 ? '' : 's'})`}
+                className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-0.5 font-medium text-cshse-700 hover:bg-cshse-100"
+              >
+                <Grid3x3 className="h-3 w-3" aria-hidden /> {ref.matrix.name}
+                <span className="ml-1 rounded bg-cshse-100 px-1 text-[10px] text-cshse-800">
+                  {ref.cellCount} cell{ref.cellCount === 1 ? '' : 's'}
+                </span>
+              </button>
+            ))}
+          </div>
+          {/* Inline coverage breakdown per matrix */}
+          <div className="mt-2 space-y-2">
+            {specMatrixRefs.map((ref) => (
+              <div key={`${ref.matrix.matrixId}-cells`} className="rounded border border-cshse-200 bg-white p-2">
+                <div className="mb-1 font-medium text-cshse-800">
+                  {ref.matrix.name}
+                </div>
+                <div className="grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {ref.cells.map((c, i) => {
+                    const colHeader =
+                      c.columnHeader ||
+                      ref.matrix.columnHeaders?.[(c.columnIndex ?? 1) - 1] ||
+                      `Col ${c.columnIndex ?? i + 1}`;
+                    return (
+                      <div
+                        key={`${ref.matrix.matrixId}-${c.columnIndex}-${i}`}
+                        className="flex items-baseline gap-1.5 truncate"
+                      >
+                        <span className="truncate text-gray-600" title={colHeader}>{colHeader}:</span>
+                        <span className="font-mono font-semibold text-gray-900">{c.codeRaw}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-1 text-[10px] italic text-gray-500">
+                  Codes: I=Introduction · T=Theory · K=Knowledge · S=Skills · L/M/H=low/medium/high depth.
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
