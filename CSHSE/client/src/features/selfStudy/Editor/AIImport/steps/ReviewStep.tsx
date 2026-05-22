@@ -450,16 +450,24 @@ export function ReviewStep(): JSX.Element {
   // User picked a passage in the source modal. Fire the corrections API +
   // append a synthetic BucketItem so the spec card fills immediately.
   const handleCorrectionConfirmed = useCallback(
-    async (text: string, _location: { paragraphIndex?: number }) => {
+    async (
+      text: string,
+      location: { paragraphIndex?: number; html?: string }
+    ) => {
       if (!correctionTarget || !importId) return;
       const { std, spec } = correctionTarget;
       const key = `${std}.${spec}`;
       const existing = buckets[key];
       // Local optimistic update — the spec card fills with the new item.
+      // Fix 2026-05-22: capture HTML when the selection crossed a <table>
+      // or similar structure so the table doesn't flatten to one-line-
+      // per-cell text on the spec card. ItemCard renders htmlSnippet
+      // verbatim when present.
       const localItem: BucketItem = {
         sectionId: `correction-${Date.now().toString(36)}`,
         heading: `${std}.${spec} · coordinator correction`,
         snippet: text,
+        htmlSnippet: location.html || null,
         wordCount: text.split(/\s+/).filter(Boolean).length,
         confidence: 1.0,
         acceptState: 'auto_accept',

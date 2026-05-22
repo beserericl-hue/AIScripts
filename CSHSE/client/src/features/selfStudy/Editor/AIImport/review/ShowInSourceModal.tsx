@@ -34,7 +34,7 @@ interface ShowInSourceModalProps {
   selectionTarget?: { std: string; spec: string } | null;
   onSelectionConfirmed?: (
     text: string,
-    location: { paragraphIndex?: number }
+    location: { paragraphIndex?: number; html?: string }
   ) => void;
 }
 
@@ -233,6 +233,12 @@ export function ShowInSourceModal({
     setState((s) => (s.kind === 'ready' ? { ...s, matchKind: 'missing' } : s));
   }, [state.kind, sectionId, matchText, inSelectionMode]);
 
+  // CR-031-style fix 2026-05-22 — also capture the selection's HTML so
+  // tables / formatted lists survive the round-trip into a bucket item.
+  // Previously only the plain text was captured, which flattened tables
+  // into one-line-per-cell text that was unreadable.
+  const [selectedHtml, setSelectedHtml] = useState<string>('');
+
   // In selection mode, watch the document selection so the confirm button
   // can flip enabled the moment the user highlights something.
   useEffect(() => {
@@ -245,10 +251,32 @@ export function ShowInSourceModal({
         const anchorIn = contentRef.current.contains(sel.anchorNode);
         if (anchorIn) {
           setSelectedPassage(text);
+          // Capture HTML from the first range. cloneContents preserves
+          // <table>, <tr>, <td>, <ul>, etc structure.
+          try {
+            const range = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+            if (range) {
+              const fragment = range.cloneContents();
+              const container = document.createElement('div');
+              container.appendChild(fragment);
+              const html = container.innerHTML.trim();
+              // Only store when the selection actually crosses tag
+              // boundaries (otherwise the html is just text wrapped in a
+              // single tag — no point); detect by presence of any
+              // structure-bearing tag.
+              const hasStructure = /<(table|tr|td|th|ul|ol|li|p|br)\b/i.test(html);
+              setSelectedHtml(hasStructure ? html : '');
+            } else {
+              setSelectedHtml('');
+            }
+          } catch {
+            setSelectedHtml('');
+          }
           return;
         }
       }
       setSelectedPassage('');
+      setSelectedHtml('');
     };
     document.addEventListener('selectionchange', onSelChange);
     return () => document.removeEventListener('selectionchange', onSelChange);
@@ -257,12 +285,14 @@ export function ShowInSourceModal({
   // Reset captured selection whenever the target changes.
   useEffect(() => {
     setSelectedPassage('');
+    setSelectedHtml('');
   }, [selectionTarget?.std, selectionTarget?.spec]);
 
   const handleConfirmSelection = () => {
     if (!inSelectionMode || !selectedPassage) return;
-    onSelectionConfirmed?.(selectedPassage, {});
+    onSelectionConfirmed?.(selectedPassage, { html: selectedHtml || undefined });
     setSelectedPassage('');
+    setSelectedHtml('');
   };
 
   // IMPORTANT: don't `return null` when closed — that would unmount the
