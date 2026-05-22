@@ -28,6 +28,7 @@ import {
   type Tag
 } from '../../../../../store/aiImportStore';
 import { UNPLACED_KEY, UNWRITTEN_KEY, MATRICES_KEY } from './SpecRail';
+import { nearestPlacedNeighborFor } from './nearestPlacedNeighbor';
 
 export type ItemKind = 'text' | 'evidenceText' | 'file' | 'matrix' | 'tag';
 
@@ -76,6 +77,9 @@ interface ItemCardListProps {
   /** CR-024: jump to the matrix view scrolled to this spec's row. ReviewStep
    *  resolves the row anchor and dispatches selectMatrixRow. */
   onJumpToMatrix?: (specKey: string) => void;
+  /** CR-031: coordinator clicked "Append to neighbor's spec" on an Unplaced
+   *  fragment. ReviewStep dispatches the move from Tag → Bucket(narrative). */
+  onAppendUnplacedToSpec?: (tagId: string, std: string, spec: string) => void;
 }
 
 // Headings like "b.", "c.", "1)", "(a)", "i.", or "x." are non-descriptive —
@@ -216,7 +220,8 @@ export function ItemCardList({
   onToggleApproval,
   onApproveAll,
   onClearApprovals,
-  onJumpToMatrix
+  onJumpToMatrix,
+  onAppendUnplacedToSpec
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
@@ -224,6 +229,20 @@ export function ItemCardList({
   const selectedMatrixRowAnchor = useAIImportStore((s) => s.selectedMatrixRowAnchor);
   const clearMatrixRowAnchor = useAIImportStore((s) => s.clearMatrixRowAnchor);
   const matrixRowEdits = useAIImportStore((s) => s.matrixRowEdits);
+  // CR-031 — full buckets state for the nearest-placed-neighbor computation
+  // on the Unplaced view. Subscribe via selector so the panel updates when
+  // the coordinator places items elsewhere.
+  const allBuckets = useAIImportStore((s) => s.buckets);
+
+  // CR-031 — when the coordinator selects a tag in the Unplaced view,
+  // find the nearest placed item above it in the source document.
+  const unplacedNeighbor = useMemo(() => {
+    if (selectedKey !== UNPLACED_KEY || !selectedSectionId) return null;
+    const tag = unplacedTags.find((t) => t.sectionId === selectedSectionId);
+    if (!tag) return null;
+    const neighbor = nearestPlacedNeighborFor(tag, allBuckets);
+    return neighbor ? { tag, neighbor } : { tag, neighbor: null };
+  }, [selectedKey, selectedSectionId, unplacedTags, allBuckets]);
 
   // Per-spec matrix references: which (matrix, row, columnIndex+code) triples
   // address the currently-selected spec? Used to surface "View in Matrix"
@@ -501,6 +520,67 @@ export function ItemCardList({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* CR-031 — nearest placed neighbor panel for Unplaced selection.
+          Shows where the unplaced fragment sits in the source document and
+          which placed item sits just above it. One-click "Append to that
+          spec" reuses the existing moveItem (kind: Tag → narrative).      */}
+      {unplacedNeighbor && (
+        <div className="border-b border-amber-200 bg-amber-50/50 px-4 py-3 text-sm">
+          {unplacedNeighbor.neighbor ? (
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span aria-hidden>📍</span>
+                <span className="font-medium text-amber-900">
+                  Nearest placed neighbor (just above in your document)
+                </span>
+              </div>
+              <div className="text-sm text-amber-900">
+                Placed under spec{' '}
+                <strong className="font-mono">
+                  {unplacedNeighbor.neighbor.std}.{unplacedNeighbor.neighbor.spec}
+                </strong>
+              </div>
+              <div className="rounded border border-amber-200 bg-white p-2 text-xs text-gray-700">
+                <div className="font-medium text-gray-800">
+                  {unplacedNeighbor.neighbor.item.heading || '(no heading)'}
+                </div>
+                <div className="mt-1 line-clamp-3 text-gray-600">
+                  {(unplacedNeighbor.neighbor.item.snippet || '').slice(0, 280)}
+                  {(unplacedNeighbor.neighbor.item.snippet || '').length > 280 && '…'}
+                </div>
+                <div className="mt-1 text-[10px] italic text-gray-500">
+                  {unplacedNeighbor.neighbor.distance} sections earlier in the document
+                </div>
+              </div>
+              {onAppendUnplacedToSpec && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onAppendUnplacedToSpec(
+                        unplacedNeighbor.tag.tagId,
+                        unplacedNeighbor.neighbor!.std,
+                        unplacedNeighbor.neighbor!.spec
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                  >
+                    Append this fragment to {unplacedNeighbor.neighbor.std}.{unplacedNeighbor.neighbor.spec}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <span aria-hidden>📍</span>
+              <span>
+                No nearby placed content above this fragment in the source document. Pick a spec manually from the list below or use Reassign.
+              </span>
+            </div>
+          )}
         </div>
       )}
 

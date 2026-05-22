@@ -299,6 +299,41 @@ export function ReviewStep(): JSX.Element {
     [activeBucket, moveItem, reassignTargets]
   );
 
+  // CR-031 — promote an Unplaced tag into a spec bucket as a narrative.
+  // Reads tags + buckets, builds a BucketItem from the tag fields,
+  // appends to the target bucket's narratives, removes from tags,
+  // marks dirty so the placement survives hard refresh.
+  const handleAppendUnplacedToSpec = useCallback(
+    (tagId: string, std: string, spec: string) => {
+      const tag = tags.find((t) => t.tagId === tagId);
+      if (!tag) return;
+      const toKey = `${std}.${spec}`;
+      const targetBucket = buckets[toKey];
+      if (!targetBucket) return;
+      const newItem: BucketItem = {
+        sectionId: tag.sectionId,
+        heading: tag.sourceHeading || tag.summary,
+        snippet: tag.fullText,
+        htmlSnippet: tag.htmlSnippet ?? null,
+        wordCount: tag.fullText ? tag.fullText.split(/\s+/).length : 0,
+        confidence: tag.confidence,
+        acceptState: tag.acceptState,
+        rationale: tag.rationale,
+        byteOffsetStart: tag.byteOffsetStart
+      };
+      const updatedBucket = {
+        ...targetBucket,
+        narratives: [...targetBucket.narratives, newItem]
+      };
+      useAIImportStore.setState({
+        buckets: { ...buckets, [toKey]: updatedBucket },
+        tags: tags.filter((t) => t.tagId !== tagId),
+        dirty: true
+      });
+    },
+    [tags, buckets]
+  );
+
   const handleSinglePreviewReassign = useCallback(
     (sectionId: string) => {
       setReassignTargets([sectionId]);
@@ -507,6 +542,7 @@ export function ReviewStep(): JSX.Element {
             onApproveAll={approveAll}
             onClearApprovals={clearApprovals}
             onJumpToMatrix={handleJumpToMatrix}
+            onAppendUnplacedToSpec={handleAppendUnplacedToSpec}
           />
         </main>
         <ItemPreview

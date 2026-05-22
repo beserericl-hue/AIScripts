@@ -249,7 +249,7 @@ def _row_body_text(row_grid: list[_VirtualCell], skip_first: bool = False) -> st
     return " ".join(parts).strip()
 
 
-def _table_extracts_for_subspec_template(table: Tag, base_id: str) -> list[Section]:
+def _table_extracts_for_subspec_template(table: Tag, base_id: str, order_start: int = 0) -> list[Section]:
     """Emit one Section per (rowspan-aware) marker group.
 
     Groups consecutive rows that share the same active marker. Useful when the
@@ -264,6 +264,16 @@ def _table_extracts_for_subspec_template(table: Tag, base_id: str) -> list[Secti
     current_heading: Optional[str] = None
     current_body: list[str] = []
 
+    # CR-031 — assign a monotonic document-order index to each emitted
+    # Section. Stored in byte_offset_start; semantic is "earlier sections
+    # have lower numbers." Used by the wizard's nearestPlacedNeighbor
+    # helper to figure out which placed item sits just above an unplaced
+    # one in the source document.
+    order_counter = [order_start]
+    def _next_order() -> int:
+        order_counter[0] += 1
+        return order_counter[0]
+
     def flush():
         if not current_marker_key or len(" ".join(current_body).split()) < 8:
             return
@@ -271,14 +281,15 @@ def _table_extracts_for_subspec_template(table: Tag, base_id: str) -> list[Secti
         body = _RESPONSE_PREFIX_RE.sub("", body, count=1)
         flags = _heuristic_flags(body)
         heading = current_heading or current_marker_key
+        order = _next_order()
         sections.append(
             Section(
                 id=f"{base_id}:tbl:{uuid.uuid4().hex[:8]}",
                 heading=heading[:200],
                 heading_level=3,
                 markdown=body,
-                byte_offset_start=0,
-                byte_offset_end=0,
+                byte_offset_start=order,
+                byte_offset_end=order,
                 word_count=len(body.split()),
                 contains_table=False,
                 contains_image=False,
@@ -340,7 +351,7 @@ def _table_extracts_for_subspec_template(table: Tag, base_id: str) -> list[Secti
 
 
 def _table_as_one_section(
-    table: Tag, base_id: str, table_type: str, heading_text: str = ""
+    table: Tag, base_id: str, table_type: str, heading_text: str = "", order: int = 0
 ) -> Section | None:
     text = table.get_text("\n", strip=True)
     words = text.split()
@@ -357,8 +368,9 @@ def _table_as_one_section(
         heading=heading[:200],
         heading_level=2,
         markdown=text,
-        byte_offset_start=0,
-        byte_offset_end=0,
+        # CR-031 — document-order index passed in by the caller.
+        byte_offset_start=order,
+        byte_offset_end=order,
         word_count=len(words),
         contains_table=True,
         contains_image=False,
@@ -410,14 +422,28 @@ def deep_walk(
         tag.decompose()
 
     sections: list[Section] = []
+    # CR-031 — monotonic document-order index across all emitted sections.
+    # Threaded through the table-bounded helpers so per-row sections inside
+    # a single table still get unique increasing indices.
+    order_cursor = 0
     for table in _iter_top_level_tables(soup):
         table_type = _classify_table(table)
         if skip_matrices and table_type == "curriculum_matrix":
             continue
         if table_type == "template_subspec":
-            sections.extend(_table_extracts_for_subspec_template(table, base_id))
+            new_secs = _table_extracts_for_subspec_template(
+                table, base_id, order_start=order_cursor
+            )
+            sections.extend(new_secs)
+            if new_secs:
+                # Each sub-row sec already used _next_order(); the cursor
+                # advances by that many sections.
+                order_cursor = new_secs[-1].byte_offset_start
         else:
-            sec = _table_as_one_section(table, base_id, table_type)
+            order_cursor += 1
+            sec = _table_as_one_section(
+                table, base_id, table_type, order=order_cursor
+            )
             if sec:
                 sections.append(sec)
     return sections
@@ -447,6 +473,14 @@ def deep_walk_with_fallback(
     for tag in soup(["script", "style", "head"]):
         tag.decompose()
 
+    # CR-031 — assign source-order indices to prose sections too.
+    # Continue numbering after the table sections so the combined list,
+    # when sorted by byte_offset_start, reflects approximate document order.
+    # Tables walk before prose in this function, but the per-section order
+    # values still let nearestPlacedNeighbor compute a usable "above me"
+    # relation as long as values are unique + monotonic per-pass.
+    prose_order = max((s.byte_offset_start for s in table_sections), default=0)
+
     prose_sections: list[Section] = []
     for p in soup.find_all("p"):
         if _is_inside_table(p):
@@ -455,14 +489,15 @@ def deep_walk_with_fallback(
         if len(text.split()) < min_prose_words:
             continue
         flags = _heuristic_flags(text)
+        prose_order += 1
         prose_sections.append(
             Section(
                 id=f"{base_id}:prose:{uuid.uuid4().hex[:8]}",
                 heading=text[:120],
                 heading_level=2,
                 markdown=text,
-                byte_offset_start=0,
-                byte_offset_end=0,
+                byte_offset_start=prose_order,
+                byte_offset_end=prose_order,
                 word_count=len(text.split()),
                 contains_table=False,
                 contains_image=False,

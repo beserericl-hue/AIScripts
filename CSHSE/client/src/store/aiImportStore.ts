@@ -72,6 +72,10 @@ export type BucketItem = {
   confidence: number;
   acceptState: string;
   rationale: string;
+  // CR-031 — monotonic document-order index. Lower = earlier in source.
+  // Used by nearestPlacedNeighbor.ts to compute "which placed item sits
+  // just above an unplaced fragment" for the Review-Unplaced UX.
+  byteOffsetStart?: number;
 };
 
 export type SpecBucket = {
@@ -101,6 +105,8 @@ export type Tag = {
   sourceHeading: string;
   acceptState: string;
   rationale: string;
+  // CR-031 — monotonic document-order index from the Python splitter.
+  byteOffsetStart?: number;
 };
 
 export type PlaceholderSection = {

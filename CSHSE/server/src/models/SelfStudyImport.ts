@@ -109,6 +109,11 @@ export interface IAIBucketItem {
   confidence: number;
   acceptState: string;
   rationale: string;
+  // CR-031 — monotonic document-order index from the Python splitter.
+  // Lower number = earlier in the source document. Used by the wizard's
+  // nearestPlacedNeighbor helper to figure out which placed item sits just
+  // above an unplaced fragment. Optional so legacy records remain valid.
+  byteOffsetStart?: number;
 }
 
 export interface IAIBucket {
@@ -138,6 +143,8 @@ export interface IAITag {
   sourceHeading: string;
   acceptState: string;
   rationale: string;
+  // CR-031 — same monotonic document-order index as IAIBucketItem.
+  byteOffsetStart?: number;
 }
 
 export interface IAIPlaceholderSection {
@@ -258,7 +265,8 @@ const AIBucketItemSchema = new Schema<IAIBucketItem>({
   wordCount: { type: Number, default: 0 },
   confidence: { type: Number, default: 0 },
   acceptState: { type: String, default: 'review_unknown' },
-  rationale: { type: String, default: '' }
+  rationale: { type: String, default: '' },
+  byteOffsetStart: { type: Number, default: 0 }
 }, { _id: false });
 
 const AIBucketSchema = new Schema<IAIBucket>({
@@ -287,7 +295,8 @@ const AITagSchema = new Schema<IAITag>({
   confidence: { type: Number, default: 0 },
   sourceHeading: { type: String, default: '' },
   acceptState: { type: String, default: 'review_unknown' },
-  rationale: { type: String, default: '' }
+  rationale: { type: String, default: '' },
+  byteOffsetStart: { type: Number, default: 0 }
 }, { _id: false });
 
 const AIPlaceholderSchema = new Schema<IAIPlaceholderSection>({

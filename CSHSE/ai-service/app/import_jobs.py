@@ -774,6 +774,10 @@ def _section_to_item(sec, rec) -> dict[str, Any]:
         "confidence": rec.primary_confidence,
         "acceptState": rec.accept_state,
         "rationale": rec.rationale,
+        # CR-031 — document-order index; used by the wizard's
+        # nearestPlacedNeighbor helper to figure out which placed item
+        # sits just above an unplaced one.
+        "byteOffsetStart": getattr(sec, "byte_offset_start", 0),
     }
 
 
@@ -793,6 +797,9 @@ def _recommendation_to_tag(sec, rec) -> dict[str, Any]:
         "sourceHeading": sec.heading[:120],
         "acceptState": rec.accept_state if rec else "review_unknown",
         "rationale": rec.rationale if rec else "Matcher returned no recommendation.",
+        # CR-031 — same document-order index, also on unplaced tags so
+        # the wizard can join them against placed buckets.
+        "byteOffsetStart": getattr(sec, "byte_offset_start", 0),
     }
 
 
