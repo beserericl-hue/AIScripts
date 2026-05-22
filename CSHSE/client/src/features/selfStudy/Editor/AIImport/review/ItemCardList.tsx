@@ -238,15 +238,77 @@ export function ItemCardList({
   // the coordinator places items elsewhere.
   const allBuckets = useAIImportStore((s) => s.buckets);
 
-  // CR-031 — when the coordinator selects a tag in the Unplaced view,
-  // find the nearest placed item above it in the source document.
-  const unplacedNeighbor = useMemo(() => {
-    if (selectedKey !== UNPLACED_KEY || !selectedSectionId) return null;
-    const tag = unplacedTags.find((t) => t.sectionId === selectedSectionId);
-    if (!tag) return null;
-    const neighbor = nearestPlacedNeighborFor(tag, allBuckets);
-    return neighbor ? { tag, neighbor } : { tag, neighbor: null };
-  }, [selectedKey, selectedSectionId, unplacedTags, allBuckets]);
+  // CR-031 + extension — neighbor-context panel fires for:
+  //   1. Selected tag in the Unplaced view (original CR-031)
+  //   2. Selected LOW-CONFIDENCE item in any spec bucket (extension):
+  //      placed items with confidence < LOW_CONF_THRESHOLD get the
+  //      same nearest-above lookup, with a Move-to-neighbor's-spec
+  //      action instead of Append.
+  //
+  // The neighbor lookup uses byteOffsetStart from the section, so it's a
+  // no-op on legacy imports where that field wasn't populated by the
+  // Python splitter. Fresh imports after a702aaa have the field set.
+  const LOW_CONF_THRESHOLD = 0.30;
+  const neighborSuggestion = useMemo(() => {
+    if (!selectedSectionId) return null;
+
+    // Case 1 — unplaced tag.
+    if (selectedKey === UNPLACED_KEY) {
+      const tag = unplacedTags.find((t) => t.sectionId === selectedSectionId);
+      if (!tag) return null;
+      const neighbor = nearestPlacedNeighborFor(tag, allBuckets);
+      // Return even when neighbor is null so the panel shows a "no signal"
+      // soft message rather than disappearing silently.
+      return {
+        action: 'append' as const,
+        sourceSectionId: tag.sectionId,
+        sourceTagId: tag.tagId,
+        sourceKind: 'tag' as const,
+        sourceSpecKey: null as string | null,
+        neighbor,
+      };
+    }
+
+    // Case 2 — low-confidence bucket item. Only on real spec keys, not
+    // synthetic _matrices/_unwritten.
+    if (selectedKey && !selectedKey.startsWith('_') && bucket) {
+      const inNarr = bucket.narratives.find((i) => i.sectionId === selectedSectionId);
+      const inEv = bucket.evidenceText.find((i) => i.sectionId === selectedSectionId);
+      const item = inNarr || inEv;
+      if (!item) return null;
+      if (item.confidence >= LOW_CONF_THRESHOLD) return null;
+      // Build a tag-shaped object for the neighbor lookup (the helper
+      // just reads byteOffsetStart from a Tag, doesn't care about the
+      // other fields).
+      const proxy = {
+        ...item,
+        tagId: item.sectionId,
+        summary: item.heading,
+        fullText: item.snippet,
+        suggestedStd: null,
+        suggestedSpec: null,
+        sourceHeading: item.heading,
+      } as unknown as Tag;
+      const neighbor = nearestPlacedNeighborFor(proxy, allBuckets);
+      // Skip the neighbor if it's THIS same item placed in another bucket
+      // (theoretically impossible because each section is in at most one
+      // bucket, but be defensive).
+      const filteredNeighbor =
+        neighbor && neighbor.item.sectionId === item.sectionId ? null : neighbor;
+      return {
+        action: 'move' as const,
+        sourceSectionId: item.sectionId,
+        sourceTagId: null,
+        sourceKind: (inNarr ? 'narratives' : 'evidenceText') as
+          | 'narratives'
+          | 'evidenceText',
+        sourceSpecKey: selectedKey,
+        neighbor: filteredNeighbor,
+      };
+    }
+
+    return null;
+  }, [selectedKey, selectedSectionId, unplacedTags, bucket, allBuckets]);
 
   // Per-spec matrix references: which (matrix, row, columnIndex+code) triples
   // address the currently-selected spec? Used to surface "View in Matrix"
@@ -546,61 +608,95 @@ export function ItemCardList({
         </div>
       )}
 
-      {/* CR-031 — nearest placed neighbor panel for Unplaced selection.
-          Shows where the unplaced fragment sits in the source document and
-          which placed item sits just above it. One-click "Append to that
-          spec" reuses the existing moveItem (kind: Tag → narrative).      */}
-      {unplacedNeighbor && (
+      {/* CR-031 — neighbor-context panel. Fires for:
+            1. Unplaced tag selection (one-click "Append to neighbor's spec")
+            2. Low-confidence item selection in any spec bucket (one-click
+               "Move to neighbor's spec" — the matcher placed it but with
+               low confidence, the spec just above is usually the right home)
+          Both flows reuse existing move/append handlers so the dirty flag
+          carries persistence through hard refresh.                          */}
+      {neighborSuggestion && (
         <div className="border-b border-amber-200 bg-amber-50/50 px-4 py-3 text-sm">
-          {unplacedNeighbor.neighbor ? (
+          {neighborSuggestion.neighbor ? (
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span aria-hidden>📍</span>
                 <span className="font-medium text-amber-900">
-                  Nearest placed neighbor (just above in your document)
+                  {neighborSuggestion.action === 'append'
+                    ? 'Nearest placed neighbor (just above in your document)'
+                    : 'Likely-better home (low-confidence placement)'}
                 </span>
               </div>
               <div className="text-sm text-amber-900">
-                Placed under spec{' '}
+                {neighborSuggestion.action === 'move' && bucket && (
+                  <>
+                    Currently placed under{' '}
+                    <strong className="font-mono">
+                      {bucket.standardCode}.{bucket.specCode}
+                    </strong>
+                    {' '}with low confidence.{' '}
+                  </>
+                )}
+                The item just above in the source document was placed under spec{' '}
                 <strong className="font-mono">
-                  {unplacedNeighbor.neighbor.std}.{unplacedNeighbor.neighbor.spec}
+                  {neighborSuggestion.neighbor.std}.{neighborSuggestion.neighbor.spec}
                 </strong>
               </div>
               <div className="rounded border border-amber-200 bg-white p-2 text-xs text-gray-700">
                 <div className="font-medium text-gray-800">
-                  {unplacedNeighbor.neighbor.item.heading || '(no heading)'}
+                  {neighborSuggestion.neighbor.item.heading || '(no heading)'}
                 </div>
                 <div className="mt-1 line-clamp-3 text-gray-600">
-                  {(unplacedNeighbor.neighbor.item.snippet || '').slice(0, 280)}
-                  {(unplacedNeighbor.neighbor.item.snippet || '').length > 280 && '…'}
+                  {(neighborSuggestion.neighbor.item.snippet || '').slice(0, 280)}
+                  {(neighborSuggestion.neighbor.item.snippet || '').length > 280 && '…'}
                 </div>
                 <div className="mt-1 text-[10px] italic text-gray-500">
-                  {unplacedNeighbor.neighbor.distance} sections earlier in the document
+                  {neighborSuggestion.neighbor.distance} sections earlier in the document
                 </div>
               </div>
-              {onAppendUnplacedToSpec && (
-                <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2">
+                {neighborSuggestion.action === 'append' && onAppendUnplacedToSpec && neighborSuggestion.sourceTagId && (
                   <button
                     type="button"
                     onClick={() =>
                       onAppendUnplacedToSpec(
-                        unplacedNeighbor.tag.tagId,
-                        unplacedNeighbor.neighbor!.std,
-                        unplacedNeighbor.neighbor!.spec
+                        neighborSuggestion.sourceTagId!,
+                        neighborSuggestion.neighbor!.std,
+                        neighborSuggestion.neighbor!.spec
                       )
                     }
                     className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
                   >
-                    Append this fragment to {unplacedNeighbor.neighbor.std}.{unplacedNeighbor.neighbor.spec}
+                    Append this fragment to {neighborSuggestion.neighbor.std}.{neighborSuggestion.neighbor.spec}
                   </button>
-                </div>
-              )}
+                )}
+                {neighborSuggestion.action === 'move' && onBulkAction && neighborSuggestion.sourceSectionId && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onBulkAction(
+                        'reassign',
+                        [neighborSuggestion.sourceSectionId!],
+                        {
+                          std: neighborSuggestion.neighbor!.std,
+                          spec: neighborSuggestion.neighbor!.spec,
+                        }
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                  >
+                    Move this item to {neighborSuggestion.neighbor.std}.{neighborSuggestion.neighbor.spec}
+                  </button>
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex items-center gap-2 text-xs text-gray-600">
               <span aria-hidden>📍</span>
               <span>
-                No nearby placed content above this fragment in the source document. Pick a spec manually from the list below or use Reassign.
+                {neighborSuggestion.action === 'append'
+                  ? 'No nearby placed content above this fragment in the source document. Pick a spec manually from the list below or use Reassign.'
+                  : 'No higher-confidence placed neighbor above this item. Use Reassign to move it manually if the placement looks wrong.'}
               </span>
             </div>
           )}

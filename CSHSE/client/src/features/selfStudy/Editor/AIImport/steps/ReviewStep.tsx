@@ -265,7 +265,25 @@ export function ReviewStep(): JSX.Element {
   );
 
   const handleBulkAction = useCallback(
-    (action: 'to-tags' | 'to-file' | 'reassign', sectionIds: string[]) => {
+    (
+      action: 'to-tags' | 'to-file' | 'reassign',
+      sectionIds: string[],
+      target?: { std: string; spec: string }
+    ) => {
+      // CR-031 extension — when called with an explicit `target`, skip the
+      // popup and perform the reassign directly. Used by the neighbor-
+      // suggestion panel's "Move this item to X.Y" button.
+      if (action === 'reassign' && target && activeBucket) {
+        const from = { std: activeBucket.standardCode, spec: activeBucket.specCode };
+        for (const sectionId of sectionIds) {
+          // Preserve original kind (narrative vs evidenceText).
+          const wasNarr = activeBucket.narratives.some((i) => i.sectionId === sectionId);
+          const wasEv = activeBucket.evidenceText.some((i) => i.sectionId === sectionId);
+          const kind: ItemKind = wasNarr ? 'text' : wasEv ? 'evidenceText' : 'file';
+          moveItem(sectionId, from, { std: target.std, spec: target.spec, kind });
+        }
+        return;
+      }
       if (action === 'reassign') {
         setReassignTargets(sectionIds);
         setReassignOpen(true);
