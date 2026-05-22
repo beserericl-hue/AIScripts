@@ -76,6 +76,13 @@ export type BucketItem = {
   // Used by nearestPlacedNeighbor.ts to compute "which placed item sits
   // just above an unplaced fragment" for the Review-Unplaced UX.
   byteOffsetStart?: number;
+  // CR-032 — coordinator inline edit. originalSnippet preserves the AI's
+  // text before the first edit so "Revert to AI original" works.
+  // editedAt is the timestamp of the most recent edit; presence drives
+  // the "edited" badge on the card. Both undefined for never-edited
+  // items (the AI's snippet is canonical).
+  originalSnippet?: string;
+  editedAt?: number;
 };
 
 export type SpecBucket = {
@@ -107,6 +114,9 @@ export type Tag = {
   rationale: string;
   // CR-031 — monotonic document-order index from the Python splitter.
   byteOffsetStart?: number;
+  // CR-032 — coordinator inline edit, mirrored from BucketItem.
+  originalSnippet?: string;
+  editedAt?: number;
 };
 
 export type PlaceholderSection = {
@@ -259,6 +269,24 @@ interface AIImportState {
   retagMatrixRow: (matrixSlug: string, rowAnchor: string, newStd: string, newSpec: string) => void;
   removeMatrixRow: (matrixSlug: string, rowAnchor: string) => void;
   restoreMatrixRow: (matrixSlug: string, rowAnchor: string) => void;
+  // CR-032 — inline-edit a bucket item's snippet on the Review step.
+  // Preserves the AI's original snippet (originalSnippet) on first edit.
+  // Sets dirty=true so the edit survives hard refresh via CR-029.
+  editBucketItem: (
+    specKey: string,
+    sectionId: string,
+    kind: 'narratives' | 'evidenceText',
+    newSnippet: string
+  ) => void;
+  // CR-032 — same, for an unplaced Tag's fullText.
+  editTag: (tagId: string, newText: string) => void;
+  // CR-032 — restore from originalSnippet; clears editedAt + originalSnippet.
+  revertBucketItem: (
+    specKey: string,
+    sectionId: string,
+    kind: 'narratives' | 'evidenceText'
+  ) => void;
+  revertTag: (tagId: string) => void;
   // Set the matrix row anchor WITHOUT switching the center pane to the
   // Matrices view. Used when the user clicks a spec in the rail — we want
   // the matrix view to pre-position itself silently so when the user
@@ -407,6 +435,115 @@ export const useAIImportStore = create<AIImportState>()(
           delete next[`${matrixSlug}|${rowAnchor}`];
           return { matrixRowEdits: next, dirty: true };
         }),
+
+      // CR-032 — inline edit bucket item snippet. The first edit copies
+      // the AI's current snippet into originalSnippet so a later
+      // "Revert to AI original" can restore it. editedAt is stamped on
+      // every edit so the UI badge knows the item has been touched.
+      editBucketItem: (specKey, sectionId, kind, newSnippet) =>
+        set((s) => {
+          const bucket = s.buckets[specKey];
+          if (!bucket) return {} as Partial<AIImportState>;
+          const list = bucket[kind] as BucketItem[];
+          const idx = list.findIndex((i) => i.sectionId === sectionId);
+          if (idx < 0) return {} as Partial<AIImportState>;
+          const existing = list[idx];
+          const updated: BucketItem = {
+            ...existing,
+            snippet: newSnippet,
+            wordCount: newSnippet.trim() ? newSnippet.trim().split(/\s+/).length : 0,
+            // Preserve the AI's original snippet ONLY on first edit so a
+            // re-edit doesn't keep overwriting originalSnippet with a
+            // mid-edit value.
+            originalSnippet:
+              existing.originalSnippet !== undefined
+                ? existing.originalSnippet
+                : existing.snippet,
+            editedAt: Date.now(),
+          };
+          const newList = [...list];
+          newList[idx] = updated;
+          return {
+            buckets: {
+              ...s.buckets,
+              [specKey]: { ...bucket, [kind]: newList },
+            },
+            dirty: true,
+          };
+        }),
+
+      // CR-032 — inline edit a Tag's fullText (Unplaced rail).
+      editTag: (tagId, newText) =>
+        set((s) => {
+          const idx = s.tags.findIndex((t) => t.tagId === tagId);
+          if (idx < 0) return {} as Partial<AIImportState>;
+          const existing = s.tags[idx];
+          const updated: Tag = {
+            ...existing,
+            fullText: newText,
+            originalSnippet:
+              existing.originalSnippet !== undefined
+                ? existing.originalSnippet
+                : existing.fullText,
+            editedAt: Date.now(),
+          };
+          const newTags = [...s.tags];
+          newTags[idx] = updated;
+          return { tags: newTags, dirty: true };
+        }),
+
+      // CR-032 — restore originalSnippet on a bucket item. Clears editedAt
+      // + originalSnippet so the card stops showing the "edited" badge.
+      revertBucketItem: (specKey, sectionId, kind) =>
+        set((s) => {
+          const bucket = s.buckets[specKey];
+          if (!bucket) return {} as Partial<AIImportState>;
+          const list = bucket[kind] as BucketItem[];
+          const idx = list.findIndex((i) => i.sectionId === sectionId);
+          if (idx < 0) return {} as Partial<AIImportState>;
+          const existing = list[idx];
+          if (existing.originalSnippet === undefined) {
+            return {} as Partial<AIImportState>; // never edited; no-op
+          }
+          const restored: BucketItem = {
+            ...existing,
+            snippet: existing.originalSnippet,
+            wordCount: existing.originalSnippet.trim()
+              ? existing.originalSnippet.trim().split(/\s+/).length
+              : 0,
+            originalSnippet: undefined,
+            editedAt: undefined,
+          };
+          const newList = [...list];
+          newList[idx] = restored;
+          return {
+            buckets: {
+              ...s.buckets,
+              [specKey]: { ...bucket, [kind]: newList },
+            },
+            dirty: true,
+          };
+        }),
+
+      revertTag: (tagId) =>
+        set((s) => {
+          const idx = s.tags.findIndex((t) => t.tagId === tagId);
+          if (idx < 0) return {} as Partial<AIImportState>;
+          const existing = s.tags[idx];
+          if (existing.originalSnippet === undefined) {
+            return {} as Partial<AIImportState>;
+          }
+          const restored: Tag = {
+            ...existing,
+            fullText: existing.originalSnippet,
+            originalSnippet: undefined,
+            editedAt: undefined,
+          };
+          const newTags = [...s.tags];
+          newTags[idx] = restored;
+          return { tags: newTags, dirty: true };
+        }),
+
       setMergeMode: (m) => set({ mergeMode: m }),
 
       _applySnapshot: (snap) => {

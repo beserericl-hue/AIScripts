@@ -105,6 +105,11 @@ export function ReviewStep(): JSX.Element {
   // explicitly reviewed. The card border + a green check badge update
   // off this set.
   const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set());
+
+  // CR-032 — which item is currently being edited in the right preview pane.
+  // null means read-only. Set by handleEditStart (from a card's pencil),
+  // cleared by handleEditCancel + handleEditSave.
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
   const toggleApproval = useCallback((rowId: string) => {
     setApprovedIds((prev) => {
       const next = new Set(prev);
@@ -334,6 +339,60 @@ export function ReviewStep(): JSX.Element {
     [tags, buckets]
   );
 
+  // CR-032 — wire the store edit actions through the preview pane.
+  const editBucketItem = useAIImportStore((s) => s.editBucketItem);
+  const editTagAction = useAIImportStore((s) => s.editTag);
+  const revertBucketItem = useAIImportStore((s) => s.revertBucketItem);
+  const revertTagAction = useAIImportStore((s) => s.revertTag);
+
+  const handleEditStart = useCallback(
+    (sectionId: string) => {
+      // Selecting + opening edit are two state mutations; do both.
+      selectSection(sectionId);
+      setEditingSectionId(sectionId);
+    },
+    [selectSection]
+  );
+
+  const handleEditCancel = useCallback(() => {
+    setEditingSectionId(null);
+  }, []);
+
+  // The same Save handler covers both narratives/evidenceText in the active
+  // bucket AND unplaced tags. We resolve which one based on whether the
+  // sectionId belongs to a tag (Unplaced) or a bucket item (Review).
+  const handleEditSave = useCallback(
+    (sectionId: string, newText: string) => {
+      const tag = tags.find((t) => t.sectionId === sectionId);
+      if (tag) {
+        editTagAction(tag.tagId, newText);
+      } else if (activeBucket) {
+        const inNarr = activeBucket.narratives.some((i) => i.sectionId === sectionId);
+        const kind: 'narratives' | 'evidenceText' = inNarr ? 'narratives' : 'evidenceText';
+        const specKey = `${activeBucket.standardCode}.${activeBucket.specCode}`;
+        editBucketItem(specKey, sectionId, kind, newText);
+      }
+      setEditingSectionId(null);
+    },
+    [tags, activeBucket, editTagAction, editBucketItem]
+  );
+
+  const handleEditRevert = useCallback(
+    (sectionId: string) => {
+      const tag = tags.find((t) => t.sectionId === sectionId);
+      if (tag) {
+        revertTagAction(tag.tagId);
+        return;
+      }
+      if (!activeBucket) return;
+      const inNarr = activeBucket.narratives.some((i) => i.sectionId === sectionId);
+      const kind: 'narratives' | 'evidenceText' = inNarr ? 'narratives' : 'evidenceText';
+      const specKey = `${activeBucket.standardCode}.${activeBucket.specCode}`;
+      revertBucketItem(specKey, sectionId, kind);
+    },
+    [tags, activeBucket, revertTagAction, revertBucketItem]
+  );
+
   const handleSinglePreviewReassign = useCallback(
     (sectionId: string) => {
       setReassignTargets([sectionId]);
@@ -543,6 +602,7 @@ export function ReviewStep(): JSX.Element {
             onClearApprovals={clearApprovals}
             onJumpToMatrix={handleJumpToMatrix}
             onAppendUnplacedToSpec={handleAppendUnplacedToSpec}
+            onEditStart={handleEditStart}
           />
         </main>
         <ItemPreview
@@ -552,6 +612,11 @@ export function ReviewStep(): JSX.Element {
           onChangeKind={handleChangeKind}
           onReassign={handleSinglePreviewReassign}
           onShowInSource={handleShowInSource}
+          editingSectionId={editingSectionId}
+          onEditStart={handleEditStart}
+          onEditSave={handleEditSave}
+          onEditCancel={handleEditCancel}
+          onEditRevert={handleEditRevert}
         />
       </div>
 

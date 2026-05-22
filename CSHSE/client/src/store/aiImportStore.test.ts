@@ -167,3 +167,108 @@ describe('aiImportStore — reset', () => {
     expect(after.buckets).toEqual({});
   });
 });
+
+describe('aiImportStore — CR-032 inline edit', () => {
+  beforeEach(() => {
+    reset();
+    useAIImportStore.setState({
+      buckets: {
+        '1.a': {
+          standardCode: '1',
+          specCode: 'a',
+          standardTitle: 'Program Context',
+          specPrompt: 'name + accreditation',
+          narratives: [
+            {
+              sectionId: 'sec-n1',
+              heading: 'h',
+              snippet: 'AI original text for narrative.',
+              wordCount: 5,
+              confidence: 0.9,
+              acceptState: 'auto_accept',
+              rationale: '',
+            },
+          ],
+          evidenceText: [],
+          evidenceFiles: [],
+          matrixCells: [],
+          coverageScore: null,
+          coverageCovered: null,
+          coverageGaps: [],
+          coverageStrengths: [],
+        },
+      },
+      tags: [
+        {
+          tagId: 'tag-1',
+          sectionId: 'sec-t1',
+          summary: 's',
+          fullText: 'AI original tag text.',
+          suggestedStd: null,
+          suggestedSpec: null,
+          confidence: 0.2,
+          sourceHeading: '',
+          acceptState: 'review_unknown',
+          rationale: '',
+        },
+      ],
+    });
+  });
+
+  it('editBucketItem mutates snippet, preserves originalSnippet, sets dirty', () => {
+    const s = useAIImportStore.getState();
+    s.editBucketItem('1.a', 'sec-n1', 'narratives', 'Coordinator edit.');
+    const after = useAIImportStore.getState();
+    const item = after.buckets['1.a'].narratives[0];
+    expect(item.snippet).toBe('Coordinator edit.');
+    expect(item.originalSnippet).toBe('AI original text for narrative.');
+    expect(item.editedAt).toBeTypeOf('number');
+    expect(item.wordCount).toBe(2);
+    expect(after.dirty).toBe(true);
+  });
+
+  it('editBucketItem does NOT overwrite originalSnippet on a second edit', () => {
+    const s = useAIImportStore.getState();
+    s.editBucketItem('1.a', 'sec-n1', 'narratives', 'First edit.');
+    s.editBucketItem('1.a', 'sec-n1', 'narratives', 'Second edit.');
+    const after = useAIImportStore.getState();
+    const item = after.buckets['1.a'].narratives[0];
+    expect(item.snippet).toBe('Second edit.');
+    expect(item.originalSnippet).toBe('AI original text for narrative.');
+  });
+
+  it('revertBucketItem restores from originalSnippet + clears editedAt', () => {
+    const s = useAIImportStore.getState();
+    s.editBucketItem('1.a', 'sec-n1', 'narratives', 'Coordinator edit.');
+    s.revertBucketItem('1.a', 'sec-n1', 'narratives');
+    const after = useAIImportStore.getState();
+    const item = after.buckets['1.a'].narratives[0];
+    expect(item.snippet).toBe('AI original text for narrative.');
+    expect(item.originalSnippet).toBeUndefined();
+    expect(item.editedAt).toBeUndefined();
+  });
+
+  it('editTag + revertTag follow the same shape on Unplaced tags', () => {
+    const s = useAIImportStore.getState();
+    s.editTag('tag-1', 'Coordinator tag edit.');
+    let after = useAIImportStore.getState();
+    expect(after.tags[0].fullText).toBe('Coordinator tag edit.');
+    expect(after.tags[0].originalSnippet).toBe('AI original tag text.');
+    expect(after.tags[0].editedAt).toBeTypeOf('number');
+    expect(after.dirty).toBe(true);
+
+    s.revertTag('tag-1');
+    after = useAIImportStore.getState();
+    expect(after.tags[0].fullText).toBe('AI original tag text.');
+    expect(after.tags[0].originalSnippet).toBeUndefined();
+    expect(after.tags[0].editedAt).toBeUndefined();
+  });
+
+  it('revertBucketItem is a no-op for never-edited items', () => {
+    const s = useAIImportStore.getState();
+    const before = useAIImportStore.getState().buckets['1.a'].narratives[0];
+    s.revertBucketItem('1.a', 'sec-n1', 'narratives');
+    const after = useAIImportStore.getState().buckets['1.a'].narratives[0];
+    expect(after).toEqual(before);
+  });
+});

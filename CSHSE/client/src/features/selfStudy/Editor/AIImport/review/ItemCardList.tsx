@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move, Grid3x3, Check } from 'lucide-react';
+import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil } from 'lucide-react';
 import {
   useAIImportStore,
   type BucketItem,
@@ -80,6 +80,9 @@ interface ItemCardListProps {
   /** CR-031: coordinator clicked "Append to neighbor's spec" on an Unplaced
    *  fragment. ReviewStep dispatches the move from Tag → Bucket(narrative). */
   onAppendUnplacedToSpec?: (tagId: string, std: string, spec: string) => void;
+  /** CR-032: pencil click on a card. ReviewStep sets editingSectionId so the
+   *  preview pane flips into edit mode for that item. */
+  onEditStart?: (sectionId: string) => void;
 }
 
 // Headings like "b.", "c.", "1)", "(a)", "i.", or "x." are non-descriptive —
@@ -221,7 +224,8 @@ export function ItemCardList({
   onApproveAll,
   onClearApprovals,
   onJumpToMatrix,
-  onAppendUnplacedToSpec
+  onAppendUnplacedToSpec,
+  onEditStart
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
@@ -301,6 +305,25 @@ export function ItemCardList({
     if (!bucket) return [];
     return flattenBucket(bucket);
   }, [selectedKey, bucket, unplacedTags, placeholders]);
+
+  // CR-032 — set of sectionIds whose underlying BucketItem / Tag has been
+  // edited (editedAt !== undefined). Used by KindSection to render the
+  // "edited" badge on cards.
+  const editedSectionIds = useMemo<Set<string>>(() => {
+    const out = new Set<string>();
+    if (bucket) {
+      for (const i of bucket.narratives) {
+        if (i.editedAt !== undefined) out.add(i.sectionId);
+      }
+      for (const i of bucket.evidenceText) {
+        if (i.editedAt !== undefined) out.add(i.sectionId);
+      }
+    }
+    for (const t of unplacedTags) {
+      if (t.editedAt !== undefined) out.add(t.sectionId);
+    }
+    return out;
+  }, [bucket, unplacedTags]);
 
   // Grouped view for real spec buckets (synthetic Unplaced/Unwritten/Matrices stay flat).
   const groups: BucketGroups | null = useMemo(() => {
@@ -629,6 +652,8 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
+              onEditStart={onEditStart}
+              editedSectionIds={editedSectionIds}
             />
             <KindSection
               title="Supporting evidence — text"
@@ -645,6 +670,8 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
+              onEditStart={onEditStart}
+              editedSectionIds={editedSectionIds}
             />
             <KindSection
               title="Supporting evidence — files"
@@ -661,6 +688,8 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
+              onEditStart={onEditStart}
+              editedSectionIds={editedSectionIds}
             />
             <KindSection
               title="Matrix cells"
@@ -682,6 +711,8 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
+              onEditStart={onEditStart}
+              editedSectionIds={editedSectionIds}
             />
           </div>
         ) : (
@@ -700,6 +731,8 @@ export function ItemCardList({
                 onToggleApproval={onToggleApproval ? () => onToggleApproval(item.rowId) : undefined}
                 onChangeKind={onChangeKind}
                 onKeyDown={(e) => handleKeyDown(e, item, idx)}
+                onEditStart={onEditStart}
+                isEdited={editedSectionIds.has(item.sectionId)}
               />
             ))}
           </ul>
@@ -745,6 +778,12 @@ interface KindSectionProps {
   approvedIds?: Set<string>;
   onToggleApproval?: (rowId: string) => void;
   onChangeKind?: (sectionId: string, kind: ItemKind | 'discard') => void;
+  // CR-032 — pencil click on a card. Threaded through KindSection so it
+  // works on every text-bearing kind section (narratives + evidence-text
+  // + tags).
+  onEditStart?: (sectionId: string) => void;
+  /** Per-item "is this item currently edited?" lookup (by sectionId). */
+  editedSectionIds?: Set<string>;
 }
 
 function KindSection({
@@ -761,7 +800,9 @@ function KindSection({
   onKeyDown,
   approvedIds,
   onToggleApproval,
-  onChangeKind
+  onChangeKind,
+  onEditStart,
+  editedSectionIds
 }: KindSectionProps): JSX.Element | null {
   if (items.length === 0) return null;
   return (
@@ -787,6 +828,8 @@ function KindSection({
             onToggleApproval={onToggleApproval ? () => onToggleApproval(item.rowId) : undefined}
             onChangeKind={onChangeKind}
             onKeyDown={(e) => onKeyDown(e, item, idx)}
+            onEditStart={onEditStart}
+            isEdited={!!editedSectionIds?.has(item.sectionId)}
           />
         ))}
       </ul>
@@ -806,6 +849,11 @@ interface ItemCardProps {
   onToggleApproval?: () => void;
   onChangeKind?: (sectionId: string, kind: ItemKind | 'discard') => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
+  // CR-032 — pencil click on this card. Card-level prop because the
+  // edit mode lives in the right preview pane; clicking pencil both
+  // selects the item and opens edit mode there.
+  onEditStart?: (sectionId: string) => void;
+  isEdited?: boolean;
 }
 
 function ItemCard({
@@ -819,7 +867,9 @@ function ItemCard({
   onToggleCheck,
   onToggleApproval,
   onChangeKind,
-  onKeyDown
+  onKeyDown,
+  onEditStart,
+  isEdited
 }: ItemCardProps): JSX.Element {
   const band = confBand(item.confidence);
   const hasHtmlTable = !!(item.htmlSnippet && item.htmlSnippet.includes('<table'));
@@ -912,6 +962,37 @@ function ItemCard({
                 tabular (monospace)
               </span>
             )}
+            {/* CR-032 — "edited" badge when the coordinator has saved an
+                edit on this card. Tiny + before the action buttons. */}
+            {isEdited && (
+              <span
+                className="ml-auto rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                title="You edited this text. Use the Edit button on the right pane to revert."
+              >
+                edited
+              </span>
+            )}
+            {/* CR-032 — pencil click selects the item + opens edit mode in
+                the preview pane. Disabled for table-bearing items (htmlSnippet)
+                because plain-textarea editing of an HTML table corrupts
+                structure; route those to the Standards editor post-Apply. */}
+            {onEditStart && (item.kind === 'text' || item.kind === 'evidenceText' || item.kind === 'tag') && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEditStart(item.sectionId);
+                }}
+                disabled={hasHtmlTable}
+                title={
+                  hasHtmlTable
+                    ? 'This item contains a table. Edit it in the Standards editor after Apply.'
+                    : 'Edit this text before applying'
+                }
+                className={`${isEdited ? '' : 'ml-auto'} inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40`}
+              >
+                <Pencil className="h-3 w-3" aria-hidden /> Edit
+              </button>
+            )}
             {onToggleApproval && (
               <button
                 onClick={(e) => {
@@ -919,7 +1000,7 @@ function ItemCard({
                   onToggleApproval();
                 }}
                 title={approved ? 'Mark this item as not-yet-reviewed' : 'Mark this item as reviewed'}
-                className={`ml-auto inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
+                className={`${isEdited || onEditStart ? '' : 'ml-auto'} inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
                   approved
                     ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                     : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'

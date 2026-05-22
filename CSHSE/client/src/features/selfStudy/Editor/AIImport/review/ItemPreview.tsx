@@ -17,8 +17,8 @@
  *
  * The body text itself now lives in the middle ItemCardList cards.
  */
-import React, { useEffect, useRef } from 'react';
-import { ExternalLink, Sparkles } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ExternalLink, Sparkles, Pencil, Check, X, Undo2 } from 'lucide-react';
 import type { BucketItem, SpecBucket, Tag } from '../../../../../store/aiImportStore';
 import { ItemKind } from './ItemCardList';
 
@@ -29,6 +29,15 @@ interface ItemPreviewProps {
   onChangeKind: (sectionId: string, kind: ItemKind | 'discard') => void;
   onReassign: (sectionId: string) => void;
   onShowInSource: (sectionId: string) => void;
+  // CR-032 — edit-mode plumbing. When editingSectionId === selectedSectionId
+  // the preview flips into edit mode showing a textarea over the item's
+  // snippet (or the tag's fullText). Save/Cancel/Revert call the store
+  // actions wired in ReviewStep.
+  editingSectionId?: string | null;
+  onEditStart?: (sectionId: string) => void;
+  onEditSave?: (sectionId: string, newText: string) => void;
+  onEditCancel?: () => void;
+  onEditRevert?: (sectionId: string) => void;
 }
 
 function findItem(
@@ -80,17 +89,39 @@ export function ItemPreview({
   tags,
   onChangeKind,
   onReassign,
-  onShowInSource
+  onShowInSource,
+  editingSectionId,
+  onEditStart,
+  onEditSave,
+  onEditCancel,
+  onEditRevert
 }: ItemPreviewProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const found = findItem(bucket, tags, selectedSectionId);
+  const isEditing = !!(selectedSectionId && editingSectionId === selectedSectionId);
+
+  // Local controlled textarea state. Initialized from the item's current
+  // snippet whenever edit mode opens; persists ONLY in this component
+  // until the coordinator clicks Save (which dispatches editBucketItem /
+  // editTag through onEditSave).
+  const [draft, setDraft] = useState<string>('');
+  useEffect(() => {
+    if (isEditing && found) {
+      const initial = isTag(found.item) ? found.item.fullText : found.item.snippet;
+      setDraft(initial || '');
+      // Defer focus to the next paint so the textarea has mounted.
+      const id = window.setTimeout(() => textareaRef.current?.focus(), 0);
+      return () => window.clearTimeout(id);
+    }
+  }, [isEditing, selectedSectionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (found && containerRef.current) {
+    if (found && containerRef.current && !isEditing) {
       containerRef.current.focus({ preventScroll: true });
     }
-  }, [selectedSectionId, found]);
+  }, [selectedSectionId, found, isEditing]);
 
   if (!found) {
     return (
@@ -110,6 +141,10 @@ export function ItemPreview({
   const wordCount = isTag(item) ? item.fullText.split(/\s+/).length : item.wordCount;
   const acceptState = isTag(item) ? item.acceptState : (item as BucketItem).acceptState;
   const band = confBand(confidence);
+  // CR-032 — table-bearing items keep htmlSnippet; their pencil is disabled.
+  const hasHtmlTable = !isTag(item) && !!(item as BucketItem).htmlSnippet;
+  const isEdited = (item as any).editedAt !== undefined && (item as any).originalSnippet !== undefined;
+  const editingDraftWordCount = draft.trim() ? draft.trim().split(/\s+/).length : 0;
 
   return (
     <aside
@@ -120,9 +155,41 @@ export function ItemPreview({
     >
       {/* Header — what the AI saw */}
       <div className="border-b border-gray-200 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-cshse-600" aria-hidden />
-          <h3 className="text-sm font-semibold text-gray-900">AI evaluation</h3>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-cshse-600" aria-hidden />
+            <h3 className="text-sm font-semibold text-gray-900">
+              {isEditing ? 'Editing text' : 'AI evaluation'}
+            </h3>
+            {isEdited && !isEditing && (
+              <span
+                className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800"
+                title="This text has been edited from the AI's original. Use 'Revert' to restore."
+              >
+                edited
+              </span>
+            )}
+          </div>
+          {/* CR-032 — Edit button. Disabled for tables (route to Standards
+              editor after Apply) and during the parsing stage (snapshots
+              would clobber local state — though dirty flag would protect,
+              this is cleaner UX). */}
+          {!isEditing && onEditStart && (
+            <button
+              type="button"
+              onClick={() => onEditStart(selectedSectionId!)}
+              disabled={hasHtmlTable}
+              title={
+                hasHtmlTable
+                  ? 'This item contains a table. Edit it in the Standards editor after Apply.'
+                  : 'Edit this text before applying'
+              }
+              className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Pencil className="h-3 w-3" aria-hidden />
+              Edit
+            </button>
+          )}
         </div>
 
         <div>
@@ -152,29 +219,98 @@ export function ItemPreview({
         )}
       </div>
 
-      {/* Rationale — the meat of the evaluation */}
-      <div className="flex-1 overflow-auto p-4">
-        <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">AI rationale</div>
-        {rationale ? (
-          <div className="rounded border border-cshse-100 bg-cshse-50 px-3 py-3 text-sm leading-relaxed text-cshse-900">
-            {rationale}
+      {/* CR-032 — body switches between AI rationale (read-only) and the
+          edit textarea. Edit mode swallows the whole flex-1 region so the
+          textarea has all available height. */}
+      {isEditing ? (
+        <div className="flex flex-1 flex-col overflow-hidden p-4">
+          <label className="mb-1 text-xs uppercase tracking-wide text-gray-500">
+            Edit the text below — delete sentences, add sentences, reword. Save when you're done.
+          </label>
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="flex-1 resize-none rounded border border-gray-300 bg-white p-3 text-sm leading-relaxed text-gray-900 focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500"
+            spellCheck
+          />
+          <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
+            <span>{editingDraftWordCount} words</span>
+            <span>
+              {(item as any).originalSnippet !== undefined && (
+                <>was {((item as any).originalSnippet as string).trim() ? ((item as any).originalSnippet as string).trim().split(/\s+/).length : 0} words at AI extraction · </>
+              )}
+              edits stay local until Apply
+            </span>
           </div>
-        ) : (
-          <div className="rounded border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm italic text-gray-500">
-            No rationale recorded — the matcher returned this item without a written explanation.
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <div>
+              {isEdited && onEditRevert && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Restore the AI's original extracted text? Your edits since the first save will be lost."
+                      )
+                    ) {
+                      onEditRevert(selectedSectionId!);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                >
+                  <Undo2 className="h-3 w-3" aria-hidden />
+                  Revert to AI original
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => onEditCancel?.()}
+                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                <X className="h-3 w-3" aria-hidden />
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => onEditSave?.(selectedSectionId!, draft)}
+                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+              >
+                <Check className="h-3 w-3" aria-hidden />
+                Save
+              </button>
+            </div>
           </div>
-        )}
+        </div>
+      ) : (
+        /* Rationale — the meat of the evaluation */
+        <div className="flex-1 overflow-auto p-4">
+          <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">AI rationale</div>
+          {rationale ? (
+            <div className="rounded border border-cshse-100 bg-cshse-50 px-3 py-3 text-sm leading-relaxed text-cshse-900">
+              {rationale}
+            </div>
+          ) : (
+            <div className="rounded border border-dashed border-gray-300 bg-gray-50 px-3 py-3 text-sm italic text-gray-500">
+              No rationale recorded — the matcher returned this item without a written explanation.
+            </div>
+          )}
 
-        <button
-          onClick={() => onShowInSource(selectedSectionId!)}
-          className="mt-4 inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-        >
-          <ExternalLink className="h-3 w-3" aria-hidden />
-          Show in source document
-        </button>
-      </div>
+          <button
+            onClick={() => onShowInSource(selectedSectionId!)}
+            className="mt-4 inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+          >
+            <ExternalLink className="h-3 w-3" aria-hidden />
+            Show in source document
+          </button>
+        </div>
+      )}
 
-      {/* Action footer */}
+      {/* Action footer — hidden in edit mode; the textarea's own Save/Cancel
+          are the only actions while editing. */}
+      {!isEditing && (
       <div className="border-t border-gray-200 bg-gray-50 p-4 space-y-2">
         <label className="block text-xs font-medium text-gray-700">Place this item as:</label>
         <select
@@ -195,6 +331,7 @@ export function ItemPreview({
           Reassign to a different (Std, Spec)…
         </button>
       </div>
+      )}
     </aside>
   );
 }
