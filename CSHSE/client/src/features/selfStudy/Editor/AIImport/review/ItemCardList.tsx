@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil } from 'lucide-react';
+import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2 } from 'lucide-react';
 import {
   useAIImportStore,
   type BucketItem,
@@ -1090,6 +1090,29 @@ function ItemCard({
                 <Pencil className="h-3 w-3" aria-hidden /> Edit
               </button>
             )}
+            {/* One-click Discard. The same outcome is available via the
+                right-pane "Place this item as → Discard" dropdown, but
+                coordinators couldn't find it. Visible on every card. */}
+            {onChangeKind && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const label = item.displayLabel || 'this item';
+                  if (window.confirm(
+                    `Discard "${label}"?\n\n` +
+                    'This removes the card from the spec. ' +
+                    'You can re-add content via "+ Add from source" ' +
+                    'or by reassigning a different item.'
+                  )) {
+                    onChangeKind(item.sectionId, 'discard');
+                  }
+                }}
+                title="Discard this card (removes it from this spec)"
+                className={`${isEdited || onEditStart ? '' : 'ml-auto'} inline-flex items-center gap-1 rounded border border-red-300 bg-white px-2 py-0.5 text-xs font-medium text-red-700 hover:bg-red-50`}
+              >
+                <Trash2 className="h-3 w-3" aria-hidden /> Discard
+              </button>
+            )}
             {onToggleApproval && (
               <button
                 onClick={(e) => {
@@ -1097,7 +1120,7 @@ function ItemCard({
                   onToggleApproval();
                 }}
                 title={approved ? 'Mark this item as not-yet-reviewed' : 'Mark this item as reviewed'}
-                className={`${isEdited || onEditStart ? '' : 'ml-auto'} inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
+                className={`${isEdited || onEditStart || onChangeKind ? '' : 'ml-auto'} inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-medium ${
                   approved
                     ? 'bg-emerald-600 text-white hover:bg-emerald-700'
                     : 'border border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
