@@ -129,6 +129,20 @@ class MatrixConfirmColumnRequest(BaseModel):
     priorConfidence: float = 1.0
 
 
+class MatrixInferRowSpecRequest(BaseModel):
+    """CR-030 — infer the subspec for a matrix row when standard is known.
+
+    The wizard's matrix step shows "Spec 12.?" when the extractor matched
+    the row's standard via template heuristics but couldn't pin the
+    subspec letter. This endpoint asks Haiku which subspec from the
+    Handbook best matches the row's prompt.
+    """
+    rowPrompt: str
+    standardCode: str
+    programLevel: str = "bachelors"
+    surroundingContext: str = ""
+
+
 @app.post("/ai/import/start", status_code=status.HTTP_202_ACCEPTED)
 async def start_import(req: StartImportRequest, request: Request) -> dict:
     """Accept an import job from the CSHSE server and enqueue it.
@@ -278,6 +292,37 @@ async def confirm_matrix_column_endpoint(req: MatrixConfirmColumnRequest, reques
         raise HTTPException(
             status_code=502,
             detail=f"matrix column confirm failed: {type(exc).__name__}: {exc}",
+        )
+
+
+@app.post("/ai/matrix/infer-row-spec", status_code=status.HTTP_200_OK)
+async def infer_matrix_row_spec_endpoint(req: MatrixInferRowSpecRequest, request: Request) -> dict:
+    """CR-030 — given a row's prompt + known standard, pick the best subspec.
+
+    The wizard's matrix step shows '?' for rows whose subspec couldn't be
+    inferred from the template prompts. This endpoint reads the Handbook
+    spec list for the standard, asks Haiku which subspec best matches,
+    and returns a suggestion. The client uses the existing retagMatrixRow
+    store action to apply the user's confirmed choice.
+
+    Soft-fails to suggestedSpec=null + confidence=0 if Anthropic is
+    unavailable; the client falls back to manual entry.
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    from app.matrix.row_spec_inference import infer_row_spec
+    try:
+        result = infer_row_spec(
+            row_prompt=req.rowPrompt,
+            standard_code=req.standardCode,
+            program_level=req.programLevel,
+            surrounding_context=req.surroundingContext,
+        )
+        return result.to_dict()
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=f"matrix row spec inference failed: {type(exc).__name__}: {exc}",
         )
 
 

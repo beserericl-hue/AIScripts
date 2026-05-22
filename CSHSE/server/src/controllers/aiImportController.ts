@@ -1138,3 +1138,71 @@ export async function confirmMatrixColumn(req: AuthenticatedRequest, res: Respon
     course: String(course).trim()
   });
 }
+
+/**
+ * CR-030 — Infer the subspec for a matrix row when the standard is known
+ * but the extractor couldn't pin the subspec letter ('?').
+ *
+ * The wizard's matrix step calls this on demand when the coordinator
+ * clicks "Suggest subspec" on a `?`-marked row. We forward to cshse-ai
+ * which loads the Handbook spec list for the standard, builds a Haiku
+ * prompt listing the candidates, and returns a confidence-ranked pick.
+ *
+ * Soft-fails to suggestedSpec=null on upstream failure so the UI can
+ * fall back to manual entry rather than 500.
+ */
+export async function inferMatrixRowSpec(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { importId } = req.params;
+  const { rowPrompt, standardCode } = req.body || {};
+
+  if (!rowPrompt || !standardCode) {
+    res.status(400).json({ error: 'rowPrompt and standardCode are required' });
+    return;
+  }
+
+  const importRecord = await SelfStudyImport.findById(importId);
+  if (!importRecord) {
+    res.status(404).json({ error: 'Import not found' });
+    return;
+  }
+
+  const submission = importRecord.submissionId
+    ? await Submission.findById(importRecord.submissionId)
+    : null;
+
+  // Surrounding-narrative context: grab a few applied buckets for the same
+  // standard to give Haiku additional disambiguating signal.
+  let surroundingContext = '';
+  const buckets: Record<string, any> = (importRecord as any).aiBuckets || {};
+  for (const k of Object.keys(buckets)) {
+    if (k.startsWith(`${standardCode}.`)) {
+      const b = buckets[k];
+      for (const n of [...(b?.narratives || []), ...(b?.evidenceText || [])]) {
+        if (typeof n?.snippet === 'string') surroundingContext += '\n' + n.snippet;
+        if (surroundingContext.length > 3000) break;
+      }
+    }
+    if (surroundingContext.length > 3000) break;
+  }
+
+  try {
+    const result = await postToAIService('/ai/matrix/infer-row-spec', {
+      rowPrompt: String(rowPrompt),
+      standardCode: String(standardCode),
+      programLevel: submission?.programLevel || (importRecord as any).aiProgramLevel || 'bachelors',
+      surroundingContext: surroundingContext.slice(0, 3000)
+    });
+    res.json(result);
+  } catch (err: any) {
+    console.warn(
+      `[matrix-row-spec] cshse-ai inference failed for ${importId}/${standardCode}:`,
+      err?.message || err
+    );
+    res.json({
+      suggestedSpec: null,
+      confidence: 0.0,
+      rationale: 'ai-service unavailable; please pick a subspec manually',
+      candidateSpecs: []
+    });
+  }
+}

@@ -44,7 +44,8 @@ import {
   createImportCorrection,
   listImportCorrections,
   inferMatrixColumns,
-  confirmMatrixColumn
+  confirmMatrixColumn,
+  inferMatrixRowSpec
 } from '../controllers/aiImportController';
 import { authenticate } from '../middleware/auth';
 
@@ -188,6 +189,10 @@ router.get('/:importId/corrections', listImportCorrections);
 // then again per confirmed override.
 router.post('/:importId/matrix/infer-columns', inferMatrixColumns);
 router.post('/:importId/matrix/confirm-column', confirmMatrixColumn);
+
+// CR-030 — infer subspec for a matrix row when standard is known but
+// subspec is unknown (the "Spec 12.?" case in the matrix step).
+router.post('/:importId/matrix/infer-row-spec', inferMatrixRowSpec);
 
 // ============================================
 // PART 6: Section Selection Before AI Processing

@@ -17,8 +17,9 @@
  * That's it. Plus Prev/Next and a single bulk "Keep all" button.
  */
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Check, X, ChevronLeft, ChevronRight, SkipForward, CheckCircle2 } from 'lucide-react';
+import { Check, X, ChevronLeft, ChevronRight, SkipForward, CheckCircle2, Sparkles, Loader2 } from 'lucide-react';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
+import { api } from '../../../../../services/api';
 
 interface MatrixCell {
   std?: string;
@@ -226,6 +227,59 @@ export function MatrixStep(): JSX.Element {
   // as before; we set it on every removed row.
   const removeMatrixRow = useAIImportStore((s) => s.removeMatrixRow);
   const restoreMatrixRow = useAIImportStore((s) => s.restoreMatrixRow);
+  const retagMatrixRow = useAIImportStore((s) => s.retagMatrixRow);
+  const importId = useAIImportStore((s) => s.importId);
+
+  // CR-030 — subspec inference state per row. Keyed by `${matrixId}|${rowAnchor}`
+  // so re-mounting the step doesn't lose suggestions the coordinator has
+  // already requested.
+  type SubspecSuggestion = {
+    suggestedSpec: string | null;
+    confidence: number;
+    rationale: string;
+    candidateSpecs?: Array<{ code: string; text: string }>;
+  };
+  const [subspecSuggestions, setSubspecSuggestions] = useState<
+    Record<string, SubspecSuggestion>
+  >({});
+  const [subspecInferring, setSubspecInferring] = useState<Record<string, boolean>>({});
+  const [subspecError, setSubspecError] = useState<string | null>(null);
+
+  const requestSubspecInference = useCallback(
+    async (row: MatrixRow) => {
+      if (!importId) return;
+      const key = `${row.matrixId}|${row.rowAnchor}`;
+      setSubspecInferring((s) => ({ ...s, [key]: true }));
+      setSubspecError(null);
+      try {
+        const { data } = await api.post<SubspecSuggestion>(
+          `/api/imports/${importId}/matrix/infer-row-spec`,
+          {
+            rowPrompt: row.specPrompt,
+            standardCode: row.std
+          }
+        );
+        setSubspecSuggestions((s) => ({ ...s, [key]: data }));
+      } catch (err: any) {
+        setSubspecError(err?.response?.data?.error || err?.message || 'AI suggestion failed');
+      } finally {
+        setSubspecInferring((s) => ({ ...s, [key]: false }));
+      }
+    },
+    [importId]
+  );
+
+  const acceptSubspecSuggestion = useCallback(
+    (row: MatrixRow, spec: string) => {
+      retagMatrixRow(row.matrixId, row.rowAnchor, row.std, spec);
+      // Refresh the row's spec locally so the UI re-renders without the '?'.
+      // (allRows is derived from store.matrices; the retag store-action sets
+      //  matrixRowEdits, and at apply() time the cells get re-tagged. For
+      //  immediate visual feedback we also mutate the local snapshot here.)
+      row.spec = spec;
+    },
+    [retagMatrixRow]
+  );
 
   const handleNextStep = useCallback(() => {
     for (const r of allRows) {
@@ -410,6 +464,103 @@ export function MatrixStep(): JSX.Element {
                   <span className="ml-2 text-gray-700">— {currentRow.specPrompt}</span>
                 )}
               </h3>
+              {/* CR-030 — when the subspec is unknown ('?'), offer to let
+                  the AI suggest one. The suggestion reads the Handbook
+                  spec definitions for the known standard + the row prompt
+                  via Claude Haiku. The coordinator confirms or rejects. */}
+              {currentRow.spec === '?' && (() => {
+                const key = `${currentRow.matrixId}|${currentRow.rowAnchor}`;
+                const sug = subspecSuggestions[key];
+                const inferring = !!subspecInferring[key];
+                return (
+                  <div className="mt-3 rounded-md border border-purple-200 bg-purple-50 p-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-purple-700" aria-hidden />
+                      <span className="font-medium text-purple-900">
+                        Standard {currentRow.std} is known; subspec is not.
+                      </span>
+                      {!sug && (
+                        <button
+                          type="button"
+                          onClick={() => requestSubspecInference(currentRow)}
+                          disabled={inferring}
+                          className="ml-auto inline-flex items-center gap-1 rounded border border-purple-400 bg-white px-2 py-1 text-xs font-medium text-purple-800 hover:bg-purple-100 disabled:opacity-50"
+                        >
+                          {inferring ? (
+                            <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+                          ) : (
+                            <Sparkles className="h-3 w-3" aria-hidden />
+                          )}
+                          {inferring ? 'Asking AI…' : 'Suggest subspec'}
+                        </button>
+                      )}
+                    </div>
+                    {subspecError && !sug && (
+                      <div className="mt-2 text-xs text-red-700">{subspecError}</div>
+                    )}
+                    {sug && (
+                      <div className="mt-2 space-y-2">
+                        {sug.suggestedSpec ? (
+                          <>
+                            <div className="text-sm text-purple-900">
+                              AI suggests: <strong className="font-mono">{currentRow.std}.{sug.suggestedSpec}</strong>
+                              <span className="ml-2 rounded bg-purple-200 px-1.5 py-0.5 text-[10px] font-semibold text-purple-900">
+                                {Math.round(sug.confidence * 100)}% confident
+                              </span>
+                            </div>
+                            {sug.rationale && (
+                              <div className="text-xs leading-relaxed text-gray-700">{sug.rationale}</div>
+                            )}
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => acceptSubspecSuggestion(currentRow, sug.suggestedSpec!)}
+                                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                              >
+                                <Check className="h-3 w-3" aria-hidden />
+                                Use {currentRow.std}.{sug.suggestedSpec}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => requestSubspecInference(currentRow)}
+                                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                              >
+                                Re-ask
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-xs text-gray-700">
+                            AI couldn't confidently pick a subspec.
+                            {sug.rationale && ` ${sug.rationale}`}
+                          </div>
+                        )}
+                        {sug.candidateSpecs && sug.candidateSpecs.length > 0 && (
+                          <details className="mt-2 text-xs">
+                            <summary className="cursor-pointer text-purple-700">
+                              Show all {sug.candidateSpecs.length} candidate subspecs for Standard {currentRow.std}
+                            </summary>
+                            <ul className="mt-1 ml-4 list-disc space-y-1 text-gray-700">
+                              {sug.candidateSpecs.map((c) => (
+                                <li key={c.code}>
+                                  <button
+                                    type="button"
+                                    onClick={() => acceptSubspecSuggestion(currentRow, c.code)}
+                                    className="font-mono text-purple-700 underline hover:text-purple-900"
+                                  >
+                                    {currentRow.std}.{c.code}
+                                  </button>
+                                  : {c.text}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="mb-4 rounded-md border border-gray-200 bg-gray-50 p-3">
