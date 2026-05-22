@@ -401,6 +401,41 @@ def _iter_top_level_tables(soup: BeautifulSoup) -> Iterator[Tag]:
             yield table
 
 
+# Anchor names the matrix extractor claims. ANY top-level table whose
+# nearest preceding anchor (id or <a name>) is one of these is treated
+# as a matrix table by deep_walker and skipped unconditionally — even
+# if _classify_table would otherwise tag it as template_subspec. Without
+# this guard, rows from a curriculum matrix can leak into the section
+# list as Unplaced narratives (regression observed 2026-05-22).
+_KNOWN_MATRIX_ANCHOR_NAMES = ("MatrixHSR", "Matrix2")
+
+
+def _is_table_under_matrix_anchor(table: Tag) -> bool:
+    """Walk backwards through previous siblings and ancestors looking for
+    a recently-named matrix anchor before any other matrix anchor or a
+    new top-level <h1>/<h2> heading. If the nearest such anchor before
+    this table is one of the known matrix anchor names, treat the table
+    as matrix-owned and skip it.
+
+    Matches the same anchor-resolution logic the matrix extractor uses,
+    so deep_walker and build_wire_matrices stay in lock-step.
+    """
+    # Walk up + back through previous elements in document order. We use
+    # find_all_previous which yields preceding elements in reverse-document
+    # order — perfect for "find the nearest anchor that owns me".
+    for el in table.find_all_previous():
+        if el.name in ("h1",):
+            # Crossed a major-section header without finding a matrix
+            # anchor first — this table is not matrix-owned.
+            return False
+        if hasattr(el, "get"):
+            el_id = el.get("id")
+            el_name = el.get("name") if el.name == "a" else None
+            if el_id in _KNOWN_MATRIX_ANCHOR_NAMES or el_name in _KNOWN_MATRIX_ANCHOR_NAMES:
+                return True
+    return False
+
+
 def deep_walk(
     html_bytes: bytes,
     base_id: str = "doc",
@@ -427,6 +462,14 @@ def deep_walk(
     # a single table still get unique increasing indices.
     order_cursor = 0
     for table in _iter_top_level_tables(soup):
+        # Anchor-first skip: ANY table owned by a known matrix anchor
+        # belongs to the matrix extractor, NOT to deep_walker. This fires
+        # before _classify_table so misclassification (matrix table that
+        # _classify_table tags as template_subspec) can't leak rows into
+        # the section list as Unplaced narratives. (Bug observed
+        # 2026-05-22.)
+        if skip_matrices and _is_table_under_matrix_anchor(table):
+            continue
         table_type = _classify_table(table)
         if skip_matrices and table_type == "curriculum_matrix":
             continue
