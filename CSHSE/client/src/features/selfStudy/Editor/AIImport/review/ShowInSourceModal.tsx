@@ -174,28 +174,61 @@ export function ShowInSourceModal({
       }
     }
 
-    // Strategy 2: fuzzy text match. Walk the DOM looking for the first
-    // text node whose normalized content contains the normalized match
-    // string.
-    const needle = normalizeForSearch(matchText.slice(0, 200));
+    // Strategy 2: longest-prefix fuzzy text match.
+    //
+    // Walk the DOM and score every text node by how much of the snippet
+    // it contains (its longest matching prefix of the needle, in chars).
+    // Pick the highest-scoring node. This fixes a bug observed 2026-05-22:
+    // a 285-word narrative starting with "The worth and uniqueness of
+    // individuals..." also appears as a 27-word matrix-row prompt earlier
+    // in the document. The old "first text node that contains the first
+    // 80 chars" logic always highlighted the matrix row. Longest-prefix
+    // scoring picks the narrative (matches ~100+ chars of the needle)
+    // over the matrix row (matches only ~27 chars).
+    const needle = normalizeForSearch(matchText.slice(0, 600));
     if (needle.length < 20) {
       setState((s) => (s.kind === 'ready' ? { ...s, matchKind: 'missing' } : s));
       return;
     }
+    const minPrefix = 60; // require at least this many matching chars to score
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    let bestNode: Node | null = null;
+    let bestScore = 0;
     let node: Node | null;
     while ((node = walker.nextNode())) {
       const t = (node.textContent || '').trim();
-      if (t.length === 0) continue;
-      if (normalizeForSearch(t).includes(needle.slice(0, 80))) {
-        const parent = node.parentElement;
-        if (parent) {
-          parent.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          parent.style.outline = '2px solid #d97706'; // amber
+      if (t.length < minPrefix) continue;
+      const nt = normalizeForSearch(t);
+      // Find the longest prefix of `needle` contained anywhere in nt.
+      // Binary-search the prefix length so we don't pay O(N*L) on long
+      // narratives.
+      let lo = minPrefix;
+      let hi = Math.min(needle.length, nt.length);
+      let candidate = 0;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (nt.includes(needle.slice(0, mid))) {
+          candidate = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
         }
-        setState((s) => (s.kind === 'ready' ? { ...s, matchKind: 'fuzzy' } : s));
-        return;
       }
+      if (candidate > bestScore) {
+        bestScore = candidate;
+        bestNode = node;
+        // Short-circuit if we've matched (almost) the entire needle.
+        if (candidate >= Math.min(needle.length, 400)) break;
+      }
+    }
+    if (bestNode) {
+      const parent = (bestNode as Node).parentElement;
+      if (parent) {
+        parent.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        parent.style.outline = '2px solid #d97706'; // amber
+      }
+      setState((s) => (s.kind === 'ready' ? { ...s, matchKind: 'fuzzy' } : s));
+      return;
     }
     setState((s) => (s.kind === 'ready' ? { ...s, matchKind: 'missing' } : s));
   }, [state.kind, sectionId, matchText, inSelectionMode]);
