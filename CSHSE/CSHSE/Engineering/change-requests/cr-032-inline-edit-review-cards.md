@@ -3,7 +3,7 @@ name: CR-032 — Inline text editing on Review-step cards
 description: Coordinator can click a pencil on any narrative / evidence-text / tag card in the Review step, edit the text in a plain textarea (delete sentences, add sentences, reword), and save. No formatting — rich formatting belongs in the post-Apply Standards editor.
 type: change-request
 cr_id: CR-032
-status: proposed
+status: shipped
 priority: P1
 source: User observation 2026-05-22 — coordinator wants to trim/expand AI-extracted text before Apply rather than after
 sprint_target: Sprint 3 polish

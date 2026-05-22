@@ -36,7 +36,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | [[cr-026-matrix-correction-verify-in-context]] | Verify-in-context preview + per-row move/remove for AI matrix corrections | proposed | User observation 2026-05-21 |
 | [[cr-027-stale-error-on-wizard-step-back]] | Stale error persists when navigating back to wizard Upload step | proposed | User observation 2026-05-21 |
 | [[cr-031-unplaced-neighbor-context]] | Show nearest placed neighbor + spec for each Unplaced fragment; one-click append | shipped | User observation 2026-05-22 |
-| [[cr-032-inline-edit-review-cards]] | Pencil-icon edit on each Review-step text card; trim/expand/reword before Apply | proposed | User observation 2026-05-22 |
+| [[cr-032-inline-edit-review-cards]] | Pencil-icon edit on each Review-step text card; trim/expand/reword before Apply | shipped | User observation 2026-05-22 |
 | [[cr-028-matcher-worker-timeout]] | Add per-call timeouts to matcher Anthropic/OpenAI/Qdrant + outer safety net | shipped | User observation 2026-05-21 (matcher wedge) |
 | [[cr-029-matrix-step-redesign-simple]] | **BLOCKER** — full redesign of Matrix step: one row at a time, verify against source, no editing | proposed | User feedback 2026-05-21 |
 
