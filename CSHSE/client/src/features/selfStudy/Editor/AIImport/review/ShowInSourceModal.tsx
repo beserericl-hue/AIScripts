@@ -17,6 +17,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, AlertTriangle, Loader2, Check } from 'lucide-react';
 import { api } from '../../../../../services/api';
+import { tableizeIfBareRows } from './tableizeHtml';
 
 interface ShowInSourceModalProps {
   open: boolean;
@@ -252,34 +253,17 @@ export function ShowInSourceModal({
         if (anchorIn) {
           setSelectedPassage(text);
           // Capture HTML from the first range. cloneContents preserves
-          // <table>, <tr>, <td>, <ul>, etc structure.
-          //
-          // Fix 2026-05-22 (user feedback): selecting a PORTION of a
-          // table (a few rows) returns bare <tr>/<td>/<th> elements with
-          // NO wrapping <table>. Browsers render that as plain text. We
-          // detect bare row/cell content and wrap it in a proper table
-          // shell so the spec-card renderer sees a real table.
+          // <table>, <tr>, <td>, <ul>, etc structure. tableizeIfBareRows
+          // handles the partial-table case (bare <tr>/<td> from
+          // selecting rows inside a table) — fix 2026-05-22.
           try {
             const range = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
             if (range) {
               const fragment = range.cloneContents();
               const container = document.createElement('div');
               container.appendChild(fragment);
-              let html = container.innerHTML.trim();
-
-              const hasTable = /<table\b/i.test(html);
-              const hasBareRow = !hasTable && /<tr\b/i.test(html);
-              const hasBareCell = !hasTable && !hasBareRow && /<t[dh]\b/i.test(html);
-
-              if (hasBareRow) {
-                // Wrap loose <tr> in a real table so the row renders.
-                html = `<table><tbody>${html}</tbody></table>`;
-              } else if (hasBareCell) {
-                // A handful of <td>/<th> with no <tr> — wrap as a
-                // single-row table.
-                html = `<table><tbody><tr>${html}</tr></tbody></table>`;
-              }
-
+              const raw = container.innerHTML.trim();
+              const html = tableizeIfBareRows(raw);
               const hasStructure = /<(table|tr|td|th|ul|ol|li|p|br)\b/i.test(html);
               setSelectedHtml(hasStructure ? html : '');
             } else {

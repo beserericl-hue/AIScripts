@@ -29,6 +29,7 @@ import {
 } from '../../../../../store/aiImportStore';
 import { UNPLACED_KEY, UNWRITTEN_KEY, MATRICES_KEY } from './SpecRail';
 import { nearestPlacedNeighborFor } from './nearestPlacedNeighbor';
+import { tableizeIfBareRows } from './tableizeHtml';
 
 export type ItemKind = 'text' | 'evidenceText' | 'file' | 'matrix' | 'tag';
 
@@ -1117,10 +1118,13 @@ function ItemCard({
                 [&_td]:border [&_td]:border-gray-300 [&_td]:p-1.5 [&_td]:align-top
                 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-50 [&_th]:p-1.5 [&_th]:text-left [&_th]:font-semibold
                 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-              // Mammoth-converted DOCX HTML produced by our own AI service; matches
-              // the trust model used by DocumentViewer and ShowInSourceModal.
+              // Document-reader-converted DOCX HTML produced by our own
+              // AI service; matches the trust model used by DocumentViewer
+              // and ShowInSourceModal. tableizeIfBareRows wraps any bare
+              // <tr>/<td> (from a partial-table selection) in <table>
+              // before render — user direction 2026-05-22.
               // eslint-disable-next-line react/no-danger
-              dangerouslySetInnerHTML={{ __html: item.htmlSnippet || '' }}
+              dangerouslySetInnerHTML={{ __html: tableizeIfBareRows(item.htmlSnippet || '') }}
             />
           ) : tabular ? (
             <pre className="mt-3 max-h-96 overflow-auto whitespace-pre rounded bg-gray-50 p-3 font-mono text-xs leading-snug text-gray-800">
