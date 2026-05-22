@@ -3,7 +3,7 @@ name: CR-031 — Unplaced text shows nearest placed neighbor + spec
 description: When the coordinator opens an Unplaced item in the Review step, surface "the placed item just above this in your document was assigned to spec X.Y" plus a one-click "append this fragment to X.Y" action so unplaced fragments inherit their neighbor's placement.
 type: change-request
 cr_id: CR-031
-status: proposed
+status: shipped
 priority: P1
 source: User observation 2026-05-22 during smoke test (screenshot with arrow from rail to source modal)
 sprint_target: Sprint 3 polish
