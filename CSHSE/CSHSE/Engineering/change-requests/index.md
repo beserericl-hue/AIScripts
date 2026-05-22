@@ -37,8 +37,22 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | [[cr-027-stale-error-on-wizard-step-back]] | Stale error persists when navigating back to wizard Upload step | proposed | User observation 2026-05-21 |
 | [[cr-031-unplaced-neighbor-context]] | Show nearest placed neighbor + spec for each Unplaced fragment; one-click append | shipped | User observation 2026-05-22 |
 | [[cr-032-inline-edit-review-cards]] | Pencil-icon edit on each Review-step text card; trim/expand/reword before Apply | shipped | User observation 2026-05-22 |
+| [[cr-033-cv-supporting-evidence]] | Detect faculty CVs in self-study, route to spec/subspec, emit as supporting-evidence file at Apply | proposed | User observation 2026-05-22 (Barry W. Thomas CV under 7.b) |
+| [[cr-034-e2e-seed-endpoint]] | Dev-only POST /api/test/seed for deterministic Playwright fixtures; unblocks the full regression suite | proposed | User direction 2026-05-22 |
+| [[cr-035-matrix-row-keep-populates-curriculum-matrix]] | "Keep this row" writes original-document cell codes to the structured Curriculum Matrix at the resolved spec | proposed | User observation 2026-05-22 (Spec 11.b row in Matrix step) |
+| [[cr-036-ai-service-handshake-retries]] | Exponential-backoff retries on the cshse-server → ai-service initial handshake (closes the "AI service unreachable" demo failure) | proposed | Demo failure 2026-05-22 |
+| [[cr-037-empty-buckets-guard]] | Three-layer guard rejecting empty-bucket imports before the wizard advances to Review (closes the "empty Review screen" demo failure) | proposed | Demo failure 2026-05-22 |
+| [[cr-038-railway-path-based-deploy-filter]] | Config-only: each Railway service watches only its own subdir so docs/e2e pushes don't bounce ai-service | proposed | Demo root-cause 2026-05-22 |
 | [[cr-028-matcher-worker-timeout]] | Add per-call timeouts to matcher Anthropic/OpenAI/Qdrant + outer safety net | shipped | User observation 2026-05-21 (matcher wedge) |
 | [[cr-029-matrix-step-redesign-simple]] | **BLOCKER** — full redesign of Matrix step: one row at a time, verify against source, no editing | proposed | User feedback 2026-05-21 |
+
+## Test plans + reviews
+
+| Doc | Purpose | Status |
+|---|---|---|
+| [[../ai-import-wizard-e2e-regression-plan-2026-05-22]] | Full Playwright regression suite for the AI Import Wizard; depends on CR-034 | draft |
+| [[../ai-import-wizard-e2e-coverage-review-2026-05-22]] | Coverage inventory + gap analysis + per-tier spec list; pre-go-live checklist | draft |
+| [[../critical-error-processing-review-2026-05-22]] | Critical review of error handling across client / server / ai-service; 14 findings ranked by impact | draft |
 
 ## P1 — required for general beta
 
