@@ -37,6 +37,8 @@ import specsRouter from './routes/specs';
 import filesRouter from './routes/files';
 import standardsRouter from './routes/standards';
 import scoresRouter from './routes/scores';
+// CR-034 — E2E seed router; only mounted when E2E_SEED_ENABLED=1 and never in production.
+import { buildTestRouter } from './routes/test';
 
 // Load environment variables
 dotenv.config();
@@ -150,6 +152,15 @@ app.use('/api/admin/error-logs', errorLogsRouter);
 app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
 app.use('/api', scoresRouter);
+
+// CR-034 — E2E seed router. Returns null unless E2E_SEED_ENABLED=1 and
+// NODE_ENV != production, so this is a true no-op in any normal deploy.
+// In dev / staging with the env var set, exposes /api/test/* for Playwright.
+const testRouter = buildTestRouter();
+if (testRouter) {
+  console.warn('[test-router] E2E seed router MOUNTED at /api/test (E2E_SEED_ENABLED=1)');
+  app.use('/api/test', testRouter);
+}
 
 // Serve static files from React app build
 // Hashed assets (JS/CSS) get long cache, index.html always revalidates

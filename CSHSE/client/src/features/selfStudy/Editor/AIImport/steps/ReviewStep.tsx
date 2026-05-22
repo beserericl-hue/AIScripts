@@ -19,6 +19,31 @@ import { ReassignPopup } from '../review/ReassignPopup';
 import { ShowInSourceModal } from '../review/ShowInSourceModal';
 import { api } from '../../../../../services/api';
 
+/**
+ * Strip the leading heading line from a snippet before using it as
+ * Show-in-source search text.
+ *
+ * The card's bold title ("displayLabel") is derived from the first line of
+ * the snippet when the source heading is terse (matches `_TERSE_HEADING_RE`
+ * in ItemCardList.tsx — "2", "a.", "(1)", etc). That first line is in
+ * effect a heading the AI extracted to label the card; it is NOT necessarily
+ * a literal substring of the source document, and including it in the
+ * search needle was the root cause of the "showing the document from the
+ * top" bug observed 2026-05-22.
+ *
+ * Rule: take everything AFTER the first newline. If the rest is too short
+ * to be useful for matching (<60 chars), fall back to the full snippet so
+ * we don't accidentally search on nothing.
+ */
+function stripCardHeading(snippet: string): string {
+  const trimmed = (snippet || '').trim();
+  if (!trimmed) return '';
+  const firstNewline = trimmed.indexOf('\n');
+  if (firstNewline < 0) return trimmed; // single-line; nothing to strip
+  const body = trimmed.slice(firstNewline + 1).trim();
+  return body.length >= 60 ? body : trimmed;
+}
+
 export function ReviewStep(): JSX.Element {
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
@@ -427,11 +452,11 @@ export function ReviewStep(): JSX.Element {
           activeBucket.narratives.find((i) => i.sectionId === sectionId) ||
           activeBucket.evidenceText.find((i) => i.sectionId === sectionId) ||
           activeBucket.evidenceFiles.find((i) => i.sectionId === sectionId);
-        if (inAny) matchText = inAny.snippet;
+        if (inAny) matchText = stripCardHeading(inAny.snippet);
       }
       if (!matchText) {
         const tag = tags.find((t) => t.sectionId === sectionId);
-        if (tag) matchText = tag.fullText;
+        if (tag) matchText = stripCardHeading(tag.fullText);
       }
       setSourceSectionId(sectionId);
       setSourceMatchText(matchText);
