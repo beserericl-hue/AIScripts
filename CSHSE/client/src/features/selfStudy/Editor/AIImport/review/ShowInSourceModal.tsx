@@ -253,17 +253,33 @@ export function ShowInSourceModal({
           setSelectedPassage(text);
           // Capture HTML from the first range. cloneContents preserves
           // <table>, <tr>, <td>, <ul>, etc structure.
+          //
+          // Fix 2026-05-22 (user feedback): selecting a PORTION of a
+          // table (a few rows) returns bare <tr>/<td>/<th> elements with
+          // NO wrapping <table>. Browsers render that as plain text. We
+          // detect bare row/cell content and wrap it in a proper table
+          // shell so the spec-card renderer sees a real table.
           try {
             const range = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
             if (range) {
               const fragment = range.cloneContents();
               const container = document.createElement('div');
               container.appendChild(fragment);
-              const html = container.innerHTML.trim();
-              // Only store when the selection actually crosses tag
-              // boundaries (otherwise the html is just text wrapped in a
-              // single tag — no point); detect by presence of any
-              // structure-bearing tag.
+              let html = container.innerHTML.trim();
+
+              const hasTable = /<table\b/i.test(html);
+              const hasBareRow = !hasTable && /<tr\b/i.test(html);
+              const hasBareCell = !hasTable && !hasBareRow && /<t[dh]\b/i.test(html);
+
+              if (hasBareRow) {
+                // Wrap loose <tr> in a real table so the row renders.
+                html = `<table><tbody>${html}</tbody></table>`;
+              } else if (hasBareCell) {
+                // A handful of <td>/<th> with no <tr> — wrap as a
+                // single-row table.
+                html = `<table><tbody><tr>${html}</tr></tbody></table>`;
+              }
+
               const hasStructure = /<(table|tr|td|th|ul|ol|li|p|br)\b/i.test(html);
               setSelectedHtml(hasStructure ? html : '');
             } else {
