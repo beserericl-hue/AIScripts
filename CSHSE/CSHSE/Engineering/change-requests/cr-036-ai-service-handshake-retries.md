@@ -29,7 +29,7 @@ And later, after services recovered:
 
 Failure modes that trigger this in normal operation:
 
-1. **Routine cshse-ai redeploy.** Railway redeploys cshse-ai on any push to `developer` (until [[cr-038-railway-path-based-deploy-filter]] lands). Container restart window: 60–120s. Any import started in that window fails permanently.
+1. **Routine cshse-ai redeploy.** Railway redeploys cshse-ai on any push to `developer` (and on every PR merge to production). Container restart window: 60–120s. Any import started in that window fails permanently without retries. (Note: [[cr-038-railway-path-based-deploy-filter]] was retired 2026-05-23 — this CR is now the sole defense against redeploy-window failures.)
 2. **Brief network blip between Railway services.** Sub-second packet loss → connection refused → permanent failure.
 3. **ai-service crash + auto-restart.** Container OOM or panic → ~30s before restart → permanent failure.
 
@@ -112,6 +112,6 @@ S. ~80 LOC of server code in `aiImportController.ts` + a `withRetries(fn, opts)`
 
 - [[cr-028-matcher-worker-timeout]] — per-call retries inside the matcher.
 - [[cr-037-empty-buckets-guard]] — sibling CR; together they prevent the two demo-killing failure modes.
-- [[cr-038-railway-path-based-deploy-filter]] — reduces redeploy frequency, but does NOT eliminate the need for retries.
+- ~~[[cr-038-railway-path-based-deploy-filter]]~~ — **RETIRED 2026-05-23.** Redeploy frequency stays as-is; this CR (handshake retries) is the runtime defense.
 - [[../critical-error-processing-review-2026-05-22]] — Finding #3 in that review.
 - [[../ai-import-wizard-e2e-regression-plan-2026-05-22]] — `18_recovery_matcher_disconnect.spec.ts` should exercise this.

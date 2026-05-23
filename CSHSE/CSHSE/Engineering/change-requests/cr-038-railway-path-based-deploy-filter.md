@@ -1,17 +1,44 @@
 ---
 name: CR-038 — Railway path-based deploy filter so pushes to docs/, e2e/, ai-service/ don't bounce unrelated services
-description: Railway today rebuilds and redeploys ALL services in the project on any push to `developer`, regardless of which files changed. A push that only touches `e2e/` or `docs/` still bounces cshse-ai (which kills any in-flight matcher) and cshse-server. Configure each Railway service to watch only its own directory tree. Reduces deploy noise, prevents the user-visible "AI service unreachable" mid-import errors traced to unrelated commits, and makes deploy timelines predictable.
+description: "[RETIRED 2026-05-23] Railway path-filter to prevent unrelated pushes from redeploying cshse-ai during developer testing. Retired because: (1) the dev environment is by definition developers-only, so cross-deploy disruption only affects developers — never production users; (2) production deploys happen only on PR merges, and the runtime resilience from CR-036 (handshake retries) covers any redeploy-window blip that could land during a PR merge."
 type: change-request
 cr_id: CR-038
-status: proposed
-priority: P1
-source: User-visible failure 2026-05-22 — a push that only added a Playwright E2E spec file (`CSHSE/e2e/tests/discard_button.spec.ts`) triggered a redeploy of cshse-ai, which restarted the container mid-demo and caused the coordinator's import to fail. The user has had a standing rule "Never push to developer during a wizard run" for exactly this reason; this CR makes that rule structurally unnecessary by aligning Railway with the repo layout.
-sprint_target: Sprint 4 — runbook task before the P0 code CRs land, since this is config-only and de-risks them.
-tags: [infra, railway, deploy, ci, runbook]
-last_reviewed: 2026-05-22
+status: retired
+priority: n/a
+source: User-visible failure 2026-05-22 — a push that only added a Playwright E2E spec file (`CSHSE/e2e/tests/discard_button.spec.ts`) triggered a redeploy of cshse-ai, which restarted the container mid-demo and caused the coordinator's import to fail. RETIRED 2026-05-23 per user direction — see Retirement note below.
+sprint_target: n/a
+tags: [infra, railway, deploy, ci, runbook, retired]
+last_reviewed: 2026-05-23
 ---
 
-# CR-038 — Railway path-based deploy filter
+# CR-038 — Railway path-based deploy filter — RETIRED
+
+## Retirement note 2026-05-23
+
+User direction:
+
+> "retire CR-038 as this is not needed. Our baseline configuration is that dev code is pushed to dev server which is used only by developers. The production code is used by users and is only pushed during PRs. This cr is affecting developers only and is not needed."
+
+The CR was originally written after a live demo on a dev environment got disrupted by an unrelated push that redeployed cshse-ai mid-matcher. The fix proposed here was a config-level "prevent the problem" approach (per-service watch paths so only relevant code triggers a redeploy).
+
+Why retirement is correct:
+
+1. **Dev environment audience.** `cshse-develop.up.railway.app` is by definition for developers + internal demos. Coordinator-facing production traffic does not live here. Cross-service deploy noise on the dev environment affects developers who can tolerate (and predict) it.
+
+2. **Production deploy cadence.** Production code is pushed only on PR merges — a controlled cadence with awareness of who's reviewing. Coordinators don't sit through PR merges the way demo attendees sat through unrelated dev pushes.
+
+3. **Runtime resilience already planned.** [[cr-036-ai-service-handshake-retries]] adds exponential-backoff retries to the cshse-server → ai-service initial handshake. With CR-036 in place, a 60-90s redeploy window during a routine PR merge is invisible to coordinators — the matcher just retries until the new container comes up. Runtime defense is more robust than config-level deploy filtering because it also handles non-deploy outages (network blips, container restarts on resource limits, scaling events).
+
+The combination of (1) + (2) + (3) means CR-038's config work would solve a non-problem in production and an acceptable annoyance in dev.
+
+**What this means for the related work:**
+
+- [[cr-036-ai-service-handshake-retries]] becomes the sole defense against transient ai-service unavailability. Its priority remains P0.
+- The standing developer rule "Never push to developer during a wizard run" stays in effect for dev demos until CR-036 ships; it has no production analog.
+
+---
+
+# Original CR (kept for historical context — DO NOT IMPLEMENT)
 
 ## Source quote
 

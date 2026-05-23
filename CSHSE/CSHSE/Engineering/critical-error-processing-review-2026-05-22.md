@@ -10,7 +10,6 @@ last_reviewed: 2026-05-22
 related:
   - "[[change-requests/cr-036-ai-service-handshake-retries]]"
   - "[[change-requests/cr-037-empty-buckets-guard]]"
-  - "[[change-requests/cr-038-railway-path-based-deploy-filter]]"
   - "[[change-requests/cr-028-matcher-worker-timeout]]"
 ---
 
@@ -74,15 +73,15 @@ Triangulated against the two real failures of 2026-05-22 and the user's standing
 
 **Verdict:** GAP — invisible quality degradation.
 
-#### Finding 4 — Unrelated pushes redeploy cshse-ai
+#### Finding 4 — Unrelated pushes redeploy cshse-ai — RETIRED
 
 **Where:** Railway project configuration.
 
 **What:** Pushing an E2E spec or a doc redeploys the Python service. 60–90s outage window that triggers Finding 2.
 
-**Defense:** [[change-requests/cr-038-railway-path-based-deploy-filter]] — config-only, half-hour task.
+**Defense:** Originally proposed config-level fix in [[change-requests/cr-038-railway-path-based-deploy-filter]]. **RETIRED 2026-05-23** per user direction — the dev environment audience is developers only, production deploys happen at PR cadence, and Finding 2's defense (handshake retries via CR-036) covers the runtime case regardless of which event caused the brief ai-service unavailability.
 
-**Verdict:** INFRASTRUCTURE GAP — easily closed.
+**Verdict:** RECLASSIFIED as a dev-environment annoyance, not a coordinator-facing gap. Defense is Finding 2's fix (CR-036).
 
 ### 🟠 P1 — visible to coordinators in adverse conditions
 
@@ -217,7 +216,7 @@ P0 (must ship):
 
 - [ ] [[change-requests/cr-036-ai-service-handshake-retries]] — close Finding 2 + part of Finding 5 + Finding 10 + Finding 12.
 - [ ] [[change-requests/cr-037-empty-buckets-guard]] — close Finding 1 + part of Finding 3.
-- [ ] [[change-requests/cr-038-railway-path-based-deploy-filter]] — close Finding 4.
+- ~~[[change-requests/cr-038-railway-path-based-deploy-filter]]~~ — **RETIRED 2026-05-23**; Finding 4 reclassified as dev-environment-only; CR-036 covers the runtime case.
 - [ ] Per-section status panel on the Parse step (Finding 3) — visible quality indicator.
 - [ ] Server-side enforcement: `NODE_ENV=production` requires `MONGO_SUPPORTS_TRANSACTIONS=true` (Finding 9).
 
@@ -250,7 +249,7 @@ Until those five conditions hold, the importer is not ready for general use.
 
 - [[change-requests/cr-036-ai-service-handshake-retries]]
 - [[change-requests/cr-037-empty-buckets-guard]]
-- [[change-requests/cr-038-railway-path-based-deploy-filter]]
 - [[change-requests/cr-028-matcher-worker-timeout]]
+- ~~[[change-requests/cr-038-railway-path-based-deploy-filter]]~~ — RETIRED 2026-05-23
 - [[ai-import-wizard-e2e-regression-plan-2026-05-22]]
 - [[ai-import-wizard-e2e-coverage-review-2026-05-22]]

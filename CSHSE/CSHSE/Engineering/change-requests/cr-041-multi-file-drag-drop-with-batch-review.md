@@ -382,7 +382,7 @@ Two-week sprint (10 working days) is tight but feasible if we drop US-9 (add mid
 - **CR-034 (seed endpoint):** US-10 needs a multi-import seed fixture.
 - **CR-036 (handshake retries):** US-3 needs CR-036 to protect against transient ai-service unavailability when starting each child in serial.
 - **CR-037 (empty-buckets guard):** US-3 should treat an empty-bucket child as `failed`, not silently complete; the batch shouldn't merge zero items as if they were real.
-- **CR-038 (Railway deploy filter):** unrelated but recommended to land first — multi-file processing increases the window where an unrelated push could disrupt a batch.
+- ~~**CR-038 (Railway deploy filter):**~~ **RETIRED 2026-05-23.** The runtime resilience from CR-036 covers any redeploy-window blip during a multi-file batch in production.
 
 ## Out of scope
 
