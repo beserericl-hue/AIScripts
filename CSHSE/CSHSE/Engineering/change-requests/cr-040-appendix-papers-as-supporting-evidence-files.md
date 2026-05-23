@@ -1,13 +1,13 @@
 ---
-name: CR-040 — Appendix research papers / student work samples become standalone supporting-evidence files (with image capture)
-description: Self-study documents typically include an appendix with student work samples (research papers, country reports, immigrant interview papers, syllabi). Today these blocks land in the importer as long, flattened narrative cards that lose their structure, lose their images, and don't attach to the standard the way readers expect (one file = one piece of supporting evidence). This CR teaches the parser to detect appendix-paper blocks, extract them as standalone files (.docx with embedded images), store them in S3, and represent them in the wizard as supporting-evidence file cards — same shape as if the coordinator had uploaded the paper separately. No wizard UI redesign — just a new card kind that shows a summary + view-file affordance.
+name: CR-040 — Appendix research papers, student work samples, and syllabi become standalone supporting-evidence files (with image capture)
+description: Self-study documents typically include an appendix with student work samples (research papers, country reports, immigrant interview papers) AND course syllabi documents. Today these blocks land in the importer as long, flattened narrative cards that lose their structure, lose their images, and don't attach to the standard the way readers expect (one file = one piece of supporting evidence). This CR teaches the parser to detect appendix-paper AND syllabus blocks, extract each as a standalone file (.docx with embedded images), store them in S3, and represent them in the wizard as supporting-evidence file cards — same shape as if the coordinator had uploaded each one separately. Standalone upload supported for both kinds. No wizard UI redesign — just a new card kind that shows a summary + view-file affordance.
 type: change-request
 cr_id: CR-040
 status: proposed
 priority: P0
-source: User observation 2026-05-23 on Stevenson "Sample Country Report" (South Korea) + "Immigrant Interview Paper" embedded in the source-doc appendix. Quote — "The AI importer must see that this is a research paper as the text ahead of the paper flags it as such... NOTE there are images in this paper and these images must be captured. The best option is to create a file during the parsing, store the file in S3 and create a link in supporting evidence tile that there is a file stored. In that way we don't have to change the UI of the import wizard except to show the summary in the tile and allow viewing of that file."
-sprint_target: Sprint 4 — coordinator-blocking; pairs with CR-033 (CVs) and CR-039 (Introductions) as the three "new content kinds" PCs need before next round of imports.
-tags: [wizard, parse, ai-service, server, s3, supporting-evidence, images, p0, appendix, research-paper]
+source: User observation 2026-05-23 on Stevenson "Sample Country Report" (South Korea) + "Immigrant Interview Paper" embedded in the source-doc appendix. Quote — "The AI importer must see that this is a research paper as the text ahead of the paper flags it as such... NOTE there are images in this paper and these images must be captured. The best option is to create a file during the parsing, store the file in S3 and create a link in supporting evidence tile that there is a file stored. In that way we don't have to change the UI of the import wizard except to show the summary in the tile and allow viewing of that file." Addendum 2026-05-23 — "Additional files imported and shown in the document are Syllabi documents. These documents should be treated just like the research papers and stored as files with images and listed in tiles with summary and link to the file. In generation of Supporting evidence files, Syllabi could be imported as standalone documents."
+sprint_target: Sprint 4 — coordinator-blocking; pairs with CR-033 (CVs) and CR-039 (Introductions) as the four "new content kinds" PCs need before next round of imports (papers, syllabi, CVs, intros).
+tags: [wizard, parse, ai-service, server, s3, supporting-evidence, images, p0, appendix, research-paper, syllabus]
 last_reviewed: 2026-05-23
 ---
 
@@ -272,10 +272,110 @@ M-L. Estimated:
 
 Each step ships independently. Image capture alone (step 1) is valuable even without the detector — coordinators stop losing their images entirely.
 
+## Addendum 2026-05-23 — Syllabi as the same kind
+
+User addendum:
+
+> "Additional files imported and shown in the document are Syllabi documents. These documents should be treated just like the research papers and stored as files with images and listed in tiles with summary and link to the file. In generation of Supporting evidence files, Syllabi could be imported as standalone documents."
+
+### Why syllabi belong here
+
+Syllabi sit alongside research papers in the same appendix region of every CSHSE self-study (visible in the screenshots: the "Table of Contents" → "Syllabi" → "Sample Country Report" / "Immigrant Interview Paper" chain). Coordinators bundle 20-50 syllabi per program into the back of their self-study to evidence Standard 19 (knowledge / theory / skills coverage), Standard 21 (field experience preparation), and others. They have the same characteristics as research papers — multi-page, often with embedded course-schedule tables and images, attached as evidence under specific standards.
+
+Treating them as a separate detection / packaging path would duplicate every layer of this CR for no benefit. The fix: **the same `evidenceDoc` kind covers both**, with an additional `docSubKind: 'paper' | 'syllabus'` field on the section payload for telemetry and minor UI differentiation (icon choice).
+
+### Detection — extending the existing heuristic
+
+Add a fourth signal-set to `appendix_paper_detector.py` for syllabus candidates. A section is a **syllabus candidate** when ALL of these are present:
+
+1. **Header marker** — one of (case-insensitive, line-anchored):
+   - A course code line `^[A-Z]{2,5}\s+\d{2,4}[A-Z]?\s*[—–-]?\s*.{0,80}$` — e.g. `"HUSR 101 – Introduction to Human Services"`
+   - Title line containing the word `Syllabus` (any case) — e.g. `"COURSE SYLLABUS: HUSR 220"`
+   - A heading inside an explicit "Syllabi" appendix region (the user's noted appendix marker)
+
+2. **Syllabus-shape markers** — within 30 lines after the header, at least TWO of: `Course Description`, `Learning Outcomes`, `Required Text`, `Grading`, `Assignments`, `Office Hours`, `Course Schedule`, `Prerequisites`, `Attendance Policy`, `Course Calendar`, `Week 1`/`Week 2`/... pattern.
+
+3. **Position context** — same as papers (after appendix marker, or after main TOC, or in the last 25% of the document by byte offset).
+
+4. **Length / structure** — at least 150 words OR contains a course-schedule table (detected by presence of a `<table>` with a week-number column).
+
+Boundary: closes at the next syllabus candidate, next paper candidate, end of "Syllabi" appendix region, end of document.
+
+### Metadata captured per syllabus
+
+```python
+{
+  "kind": "evidenceDoc",
+  "docSubKind": "syllabus",
+  "title": "HUSR 220 — Introduction to Counseling",
+  "course_code": "HUSR 220",
+  "course_title": "Introduction to Counseling",
+  "term": "Spring 2024",          # detected from header, optional
+  "instructor": "Dr. Jane Smith", # detected from header, optional
+  "credits": 3,                    # detected from header, optional
+  "page_count_estimate": 8,
+  "image_count": 0,
+  "byte_offset_start": ...,
+  "summary": "First ~200 chars of body",
+}
+```
+
+### Routing
+
+Syllabi most often evidence Standards 12-19 (curriculum, knowledge, theory, skills). The matcher receives `docSubKind: 'syllabus'` as a soft hint to bias toward those standards but stays free to route elsewhere when the course code clearly maps to a different specialization (e.g., a "Research Methods" syllabus may belong to Standard 17). Same confidence threshold + fallback to Unplaced as for papers.
+
+### UI
+
+The compact card variant gets a different icon for syllabi — `BookOpen` from Lucide vs `FileText` for papers. Otherwise identical:
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ 📚 HUSR 220 — Introduction to Counseling   [Edit][Discard][Approve]│
+│    Dr. Jane Smith · Spring 2024 · 3 credits                  │
+│    8 pp · 0 images                                            │
+│                                                               │
+│    "This course introduces students to foundational          │
+│    counseling theories, the helping relationship, and        │
+│    ethical practice in human services settings..."           │
+│                                                               │
+│    [📂 View file (HUSR-220-syllabus.docx, 142 KB)]           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+If the wizard ends up with 30+ syllabi (realistic for a large program), the ItemCardList stays usable because the cards are compact. A future optional grouping ("Show 30 syllabi as a collapsible list") can land as a small follow-on if coordinators request it.
+
+### Standalone syllabus upload
+
+Same path as standalone CV (CR-033) and standalone paper. A `.docx` upload that the detector classifies as a syllabus skips Parse / Match / Matrix, opens a one-card review screen with a spec dropdown, and confirms into the wizard's Review state. Coordinators routinely receive late-add syllabi from instructors and need a quick path to attach them — this covers it.
+
+### Telemetry additions
+
+- `syllabus_detected_count` per import.
+- `evidence_doc_subkind_breakdown = {paper: N, syllabus: N}`.
+- Routing breakdown for syllabi separately so we can tune the standard-bias hint.
+
+### Acceptance criteria additions
+
+10. A Stevenson reimport produces an `evidenceDoc` card with `docSubKind: 'syllabus'` for each course syllabus found in the appendix — each titled with course code + course title, attributed to instructor + term where detectable.
+11. Syllabus cards use a distinct icon (BookOpen) so they are visually distinguishable from paper cards in the same SpecRail bucket.
+12. A standalone syllabus `.docx` upload classifies correctly and routes through the one-card review path.
+13. A self-study with both papers AND syllabi correctly emits both kinds — no cross-classification (papers detected as syllabi or vice versa) when the header markers are clearly present.
+14. Coordinator can Discard a misclassified syllabus, or Reassign to a different spec, using the existing controls — no new UI.
+
+### Engineering size adjustment
+
+Syllabus support adds ~0.5 day on top of the original ~5.5-day estimate (the detector module gains a parallel rule-set; everything else is shared). **Revised total: ~6 days.**
+
+### Out of scope (syllabi specifically)
+
+- Auto-extraction of structured fields (learning outcomes, grading rubric) — syllabi land as opaque files; coordinators don't need them parsed.
+- Cross-syllabus coverage analysis ("are all standards covered by the curriculum?") — separate feature, separate CR.
+- Per-week schedule visualization — out of scope for v1.
+
 ## Related
 
 - [[cr-033-cv-supporting-evidence]] — sibling detector; same s3 + file-card pattern. Code can share infrastructure.
 - [[cr-039-standard-introduction-buckets]] — sibling new-kind CR; same data-model pattern.
 - [[cr-037-empty-buckets-guard]] — `evidenceDoc` items must count toward the "any data?" check.
 - [[../critical-error-processing-review-2026-05-22]] — Failure 2 (silent image strip) is a new Finding to add to that review under the same Theme A "silent successes are worse than loud failures."
-- [[../ai-import-wizard-e2e-coverage-review-2026-05-22]] — add `24_evidence_doc.spec.ts` to Tier 1.
+- [[../ai-import-wizard-e2e-coverage-review-2026-05-22]] — add `24_evidence_doc.spec.ts` (covers both papers + syllabi) to Tier 1.
