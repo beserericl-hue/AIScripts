@@ -1,6 +1,6 @@
 ---
-name: CR-040 — Appendix research papers, student work samples, and syllabi become standalone supporting-evidence files (with image capture)
-description: Self-study documents typically include an appendix with student work samples (research papers, country reports, immigrant interview papers) AND course syllabi documents. Today these blocks land in the importer as long, flattened narrative cards that lose their structure, lose their images, and don't attach to the standard the way readers expect (one file = one piece of supporting evidence). This CR teaches the parser to detect appendix-paper AND syllabus blocks, extract each as a standalone file (.docx with embedded images), store them in S3, and represent them in the wizard as supporting-evidence file cards — same shape as if the coordinator had uploaded each one separately. Standalone upload supported for both kinds. No wizard UI redesign — just a new card kind that shows a summary + view-file affordance.
+name: CR-040 — Appendix research papers, student work samples, and syllabi become standalone supporting-evidence files (with image capture + post-parse coverage verification)
+description: Self-study documents typically include an appendix with student work samples (research papers, country reports, immigrant interview papers) AND course syllabi documents. Today these blocks land in the importer as long, flattened narrative cards that lose their structure, lose their images, and don't attach to the standard the way readers expect (one file = one piece of supporting evidence). This CR teaches the parser to detect appendix-paper AND syllabus blocks, extract each as a standalone file (.docx with embedded images), store them in S3, and represent them in the wizard as supporting-evidence file cards. A post-parse VERIFICATION stage proves every source byte is accounted for — bucket, intro, paper, syllabus, CV, unplaced, or explicit skip — and surfaces any missing fragments to the coordinator as a new "Missing from import" section on the Review screen. No wizard UI redesign — just a new card kind + a coverage stat + the missing-fragments section.
 type: change-request
 cr_id: CR-040
 status: proposed
@@ -371,6 +371,217 @@ Syllabus support adds ~0.5 day on top of the original ~5.5-day estimate (the det
 - Auto-extraction of structured fields (learning outcomes, grading rubric) — syllabi land as opaque files; coordinators don't need them parsed.
 - Cross-syllabus coverage analysis ("are all standards covered by the curriculum?") — separate feature, separate CR.
 - Per-week schedule visualization — out of scope for v1.
+
+## Addendum 2026-05-23 — Post-parse coverage verification
+
+User direction:
+
+> "Can you design a correction step after parsing to make sure that all of the text from the original doc was imported into the bucket? This should be a check against the entire document and the paper boundaries."
+
+### Why this addendum lives in CR-040 (and not a standalone CR)
+
+CR-040 introduces the highest-risk boundary detector in the whole pipeline — papers + syllabi extracted from an appendix have to be cleanly bounded against (a) surrounding narrative material, (b) each other, and (c) the document tail. A wrong boundary by even one paragraph means either the paper is missing its last page OR the next paper / a chunk of narrative got pulled in by mistake. The verification step described here is the natural counterpart: extract aggressively, then prove the extraction was complete and didn't drop or duplicate any source bytes.
+
+The same check incidentally covers CR-033 (CVs), CR-039 (Introductions), and the existing narrative / evidence / tag pipeline — but those code paths are mature enough that they would not justify the work on their own. CR-040's boundary risk is what makes the verification mandatory; everyone else benefits as a side effect.
+
+If the team later decides this verification is too coupled to CR-040 conceptually, lift it to a standalone CR-043 in the next revision. For now it ships as part of CR-040 so the new detector and the new safety net land together.
+
+### The verification rule, in one sentence
+
+**Every byte of the source document must be accounted for in exactly one destination: a bucket item, an Introduction, an evidenceDoc (paper / syllabus), a CV, an Unplaced item, or an explicit "skip" category (page numbers, footers, TOC entries, blank lines, image-only paragraphs already represented elsewhere).** Unaccounted byte ranges = a coverage gap to surface.
+
+### Design — a new "Verification" stage
+
+Insert a stage after `matcher` in the ai-service pipeline:
+
+```
+Document Reader → Reading structure → Building chunks → Embedding → Indexing →
+Matcher → Verification    ← NEW
+```
+
+The Verification stage runs in three passes:
+
+#### Pass 1 — Byte-range assignment census
+
+After matcher completes, the ai-service has, for every section it emitted, a `byte_offset_start` (already exists per CR-031) and the destination it was routed to (bucket key, kind, sectionId).
+
+Build an interval map covering [0, document_byte_length):
+
+```python
+assignments = {
+  "bucket:1.a:narrative":     [(1000, 1437), (2200, 2890), ...],
+  "bucket:7.b:evidenceText":  [(7100, 7400), ...],
+  "introduction:standard-1":  [(450, 990), ...],
+  "introduction:document":    [(0, 450), ...],
+  "evidenceDoc:paper:abc":    [(50000, 78000)],
+  "evidenceDoc:syllabus:def": [(78001, 92000)],
+  "cv:thomas-barry":          [(45000, 49500)],
+  "tag:abc123":               [(15000, 15280)],
+  "unplaced:xyz":             [(15500, 16000)],
+  "skip:page-numbers":        [(7400, 7410), (15280, 15290), ...],
+  "skip:tot-entries":         [(60, 450)],  # main document Table of Contents
+  "skip:image-only-para":     [(50000, 50050)],
+}
+```
+
+The skip categories are intentionally explicit — we don't silently discard anything; we explicitly classify each discard so the audit log is complete.
+
+#### Pass 2 — Gap detection
+
+Walk the byte axis [0, document_byte_length) and find any range not covered by Pass 1's assignments. Each gap becomes a `MissingFragment` record:
+
+```python
+MissingFragment(
+  byte_offset_start=15290,
+  byte_offset_end=15510,
+  text="During the fourth republic, Park developed Saemaul Undong...",
+  word_count=42,
+  preceding_context_summary="Tag #3 about Korean economic policy",  # whichever assignment ends at 15290
+  following_context_summary="Unplaced fragment xyz",                  # whichever assignment starts at 15510
+)
+```
+
+Gaps below a threshold (e.g. < 20 words AND not adjacent to a boundary-sensitive assignment like an evidenceDoc) are auto-classified as `skip:whitespace-or-noise` and not surfaced. This keeps the coordinator-facing list focused on real misses.
+
+#### Pass 3 — Boundary validation (CR-040-specific)
+
+For each `evidenceDoc` (paper or syllabus) assignment, run a boundary sanity check:
+
+- **Sentence-edge check.** The byte at `byte_offset_start` should be the start of a sentence (not mid-word, not mid-sentence). Same for `byte_offset_end` (should be sentence-end). Detect by looking at the surrounding 100 bytes for `^[A-Z]` / `[.!?]$` patterns. If violated, log a `BoundaryWarning`.
+- **Header-line check.** The first line at `byte_offset_start` should match the paper/syllabus header signal that triggered detection in the first place. If the bytes there don't match the recorded header, the boundary drifted — log a `BoundaryWarning`.
+- **No-orphan-paragraph check.** The byte BEFORE `byte_offset_start` should belong to a different assignment (not just whitespace). If it's an orphan unassigned paragraph, that paragraph likely belonged INSIDE the paper but the boundary detector cut it off. Log a `BoundaryWarning`.
+
+BoundaryWarnings are surfaced on the Parse step as a yellow advisory (not a red error) — they're informational. The coordinator can choose to re-cut the boundary via the Review-step controls.
+
+### Surfacing missing fragments to the coordinator
+
+A new section on the Review screen, sitting alongside Unplaced:
+
+```
+SpecRail (left):
+  ...
+  Unplaced              (12)
+  Missing from import   (3)    ← NEW (only shown if count > 0)
+```
+
+Cards in "Missing from import" look like Unplaced cards but with:
+
+- A distinct icon (warning triangle) so they stand out as "something the system thought was missing" vs. Unplaced ("something the AI didn't know how to place").
+- A `Why is this here?` tooltip explaining the gap (e.g., "Found between an Unplaced tag and the start of the Sample Country Report paper, but not assigned to any destination.").
+- The same controls as Unplaced cards: Reassign to a spec / Append to spec X.Y / Discard explicitly (which adds it to the audit log as `skip:coordinator-discarded`).
+
+Once the coordinator has placed (or explicitly discarded) every Missing fragment, the count drops to zero and the section collapses.
+
+### Telemetry surfaced on the Parse step
+
+The Parse step's stats line (today "212 narratives · 64 evidence text · 9 evidence files · 412 matrix cells") gains coverage metrics:
+
+```
+212 narratives · 64 evidence text · 9 evidence files · 412 matrix cells ·
+4 papers · 12 syllabi · 5 introductions · 2 CVs ·
+COVERAGE: 99.2% (3 fragments missing, 1.4 KB)  [Review →]
+```
+
+Color cues:
+- **Green** ≥ 99.5% — virtually complete; missing fragments are likely noise.
+- **Amber** 95.0% – 99.5% — typical; a handful of fragments to triage.
+- **Red** < 95.0% — investigate; the parser may have lost a section.
+
+Below 90% coverage, the wizard refuses to advance to Review at all — that's a parser failure, not a coordinator-review problem; force a re-run.
+
+### Data model additions
+
+**ai-service section payload** gains the verification output:
+
+```python
+{
+  "coverage_percentage": 99.2,
+  "assigned_bytes": 487_240,
+  "total_bytes": 491_184,
+  "missing_fragments": [MissingFragment(...), ...],
+  "boundary_warnings": [BoundaryWarning(...), ...],
+  "skip_categories": {
+    "page-numbers": 234,
+    "tot-entries": 1820,
+    "image-only-para": 850,
+    "whitespace-or-noise": 540,
+  }
+}
+```
+
+**Server `SelfStudyImport.ts`** gains:
+
+```ts
+aiCoverageReport?: {
+  coveragePercent: number;
+  totalBytes: number;
+  assignedBytes: number;
+  missingFragments: IAIMissingFragment[];
+  boundaryWarnings: IAIBoundaryWarning[];
+  skipBreakdown: Record<string, number>;
+};
+```
+
+**Client store** gains a `missingFragments` array merged into the Review step similarly to how Unplaced is handled today.
+
+### What happens at Apply
+
+Missing fragments must be resolved (placed somewhere or explicitly discarded) before Apply enables — same gate pattern as today's "approve everything" rule. The Apply payload includes the coordinator's resolution of each fragment so the audit log shows what happened to every byte.
+
+### Failure modes the verification catches
+
+| Today's silent failure | Verification catches it as |
+|---|---|
+| deep_walker drops a paragraph between two sections | MissingFragment in Pass 2 |
+| Paper-boundary detector cuts off the last page of a syllabus | BoundaryWarning in Pass 3 (sentence-edge check) + MissingFragment for the cut-off page |
+| Two adjacent papers run together and only one is detected | BoundaryWarning + MissingFragment for the second paper's bytes (which fall outside the first paper's range) |
+| Intro detector misses a glossary section that lives between two standards | MissingFragment in Pass 2 (won't be in any standard's intro bucket) |
+| Mammoth fails to extract a text run from a complex docx element | MissingFragment for the source bytes that contained the text |
+| Image-only paragraph whose alt text was actually critical (e.g., a complex diagram label) | Classified as `skip:image-only-para` BUT a future enhancement could prompt "this was image-only — review the source if alt text matters" |
+
+### Acceptance criteria additions
+
+15. After parsing, the Parse step shows a coverage percentage. Green ≥ 99.5%, amber 95–99.5%, red < 95%.
+16. A Stevenson reimport with the appendix detector running shows coverage > 95% (with the 5% allowance covering legitimate skip categories: page numbers, main TOC, image-only paragraphs).
+17. Manually deleting the boundary-end of a detected paper (forcing it to truncate at, say, byte 70000 instead of 78000) results in: (a) a MissingFragment for bytes 70000-78000, (b) a BoundaryWarning on the paper, (c) the coverage % drops to reflect the lost bytes.
+18. The "Missing from import" section appears on the Review screen iff there are missing fragments to resolve.
+19. Apply is gated until every missing fragment is resolved (placed or explicitly discarded).
+20. Coverage < 90% blocks Review entirely with an actionable error ("Parser produced insufficient coverage; retry or contact support with import id ABC").
+21. Resolution of every fragment is recorded in the import's audit trail with: original byte range, coordinator's decision, timestamp.
+
+### Engineering size
+
+Adds ~2 days to the original CR-040 estimate:
+
+- Verification stage (Pass 1 byte-range census + Pass 2 gap detection + Pass 3 boundary validation): ~1 day
+- Server `aiCoverageReport` schema + Apply gate: ~0.25 day
+- Client `MissingFragments` SpecRail section + card variant + coverage stat on Parse: ~0.75 day
+
+**Revised total for CR-040: ~6 d (original) + ~0.5 d (syllabi) + ~2 d (verification) = ~8.5 days.**
+
+### Out of scope (verification specifically)
+
+- Automatic re-cutting of bad paper boundaries — the verification surfaces problems but doesn't auto-fix them; the coordinator decides via the existing Reassign / Discard controls.
+- Cross-document de-duplication of fragments (if a fragment looks identical to a placed item in another bucket).
+- Predictive coverage modeling ("based on past imports, expect ~96% coverage").
+- OCR of image regions that the verification flagged as `skip:image-only-para`.
+- Editing the source document mid-import to fix something the verification surfaced (the source is treated as immutable; coordinator re-uploads if they need to change it).
+
+### Sequencing within CR-040
+
+Insert two new steps into the original 6-step sequence:
+
+1. Walker + image capture
+2. ai-service detector + S3 packaging + server `aiEvidenceDocs` field
+3. **Verification stage (Pass 1 + Pass 2)** — NEW; produces coverage report + missing fragments
+4. Client card variant
+5. Apply path + post-Apply Supporting File Library wire-up
+6. **Verification UI — coverage stat on Parse + Missing-from-import section on Review** — NEW
+7. **Boundary validation (Pass 3)** — NEW; surfaces BoundaryWarnings
+8. Standalone upload path
+9. E2E coverage (extend `24_evidence_doc.spec.ts` with verification assertions)
+
+Pass 3 ships last because it depends on the boundary metadata that the detector emits — but Pass 1 + 2 are valuable on their own even before boundary validation lands.
 
 ## Related
 
