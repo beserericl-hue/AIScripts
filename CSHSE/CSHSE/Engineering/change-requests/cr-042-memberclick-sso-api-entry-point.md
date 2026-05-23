@@ -129,12 +129,14 @@ The E2E suite stores the `sessionToken` in `localStorage` (or sets the cookie di
 
 ```ts
 scope: 'general-api' | 'sso-login';           // NEW; default 'general-api'
-allowedEmailDomains?: string[];                // NEW; SSO-scope only
 allowedRoles?: ('program_coordinator' | 'reader' | 'lead_reader' | 'admin')[];
                                                // NEW; auto-provision constrained to these roles
 autoProvision: boolean;                        // NEW; default false
 lastUsedAt?: Date;                             // already exists, ensure populated
 revokedAt?: Date;                              // already exists
+// NOTE: NO allowedEmailDomains field — per 2026-05-23 user direction,
+// the allowlist is derived at request time from existing CSHSE users'
+// email domains, not stored on the key. See "Auto-provisioning rules".
 ```
 
 Key invariants:
@@ -152,11 +154,14 @@ Name:        [____________________]  (e.g., "MemberClick prod")
 Scope:       (•) General API  ( ) SSO-Login
                               ↑
                    when SSO-Login selected, show:
-Allowed email domains (one per line):
-  [______________________________]
-  [______________________________]
 Auto-provision new users:  ☐
 Default role for new users: [Program Coordinator ▾]
+
+Allowed email domains: auto-derived from invited CSHSE users.
+   Current allowlist (read-only, auto-updates):
+     stevenson.edu (8 users)
+     kennesaw.edu  (4 users)
+     ... 12 more
 
 [Generate Key]
 ```
@@ -170,17 +175,30 @@ After Generate:
 
 ### Auto-provisioning rules
 
+Per user direction 2026-05-23 — "The list of email domains should be taken from the user table of the login. These users will have been invited into the CSHSE portal and this should be automatic." — there is NO admin-maintained domain allowlist. The allowlist is derived at request time from existing CSHSE users.
+
 When `autoProvision: true` on the key AND the resolved email doesn't match any existing CSHSE user:
 
-1. Email's domain must match one of `allowedEmailDomains` on the key. If not, return 403 + `[sso-domain-rejected]` log line.
-2. Create a `User` record with the email, role = key's `defaultRole` (typically `program_coordinator`), `status = 'active'`, `passwordHash = null` (the user can never log in via password — only via SSO).
-3. Stamp `provisionedBy: { type: 'sso-key', keyId: ... }` for audit.
-4. Continue to session minting.
+1. **Derive the live allowlist:** query the `User` collection for the distinct set of email domains where at least one user has `provisionedBy.type === 'invitation'` OR `provisionedBy.type === 'manual'` (i.e., a real human admin invited them, not another SSO autopop). This is the trusted-domain set.
+   - **Why exclude SSO-provisioned users from the seed:** prevents self-reinforcing trust. If a single rogue SSO autopop accidentally created `user@badactor.com`, that user's mere existence shouldn't make `badactor.com` a trusted domain — the trust must trace back to an explicit admin invitation.
+   - The query is cached per-import (~30s TTL) so high-traffic SSO doesn't hammer Mongo with the same distinct-aggregation.
+2. The incoming email's domain MUST appear in the derived allowlist. If not, return 403 + `[sso-domain-not-yet-trusted]` log line. The error page tells the member: "Your institution has not yet been onboarded to CSHSE. Ask your CSHSE administrator to invite at least one user from your institution; you'll then be able to sign in via MemberClick."
+3. Create a `User` record with the email, role = key's `defaultRole` (typically `program_coordinator`), `status = 'active'`, `passwordHash = null`.
+4. Stamp `provisionedBy: { type: 'sso-key', keyId: ... }` for audit. NOTE this user is NOT added to the seed-domain set for #1 — only the first user at a new institution counts (the one invited via the normal flow).
+5. Continue to session minting.
 
 When `autoProvision: false` and the user doesn't exist:
 
-- Return 404 + `[sso-user-not-found]` log line.
-- MemberClick's job to create the CSHSE user first via a separate admin flow (or the admin pre-provisions).
+- Return 404 + `[sso-user-not-found]` log line. Friendly error page.
+
+**Onboarding workflow this creates:**
+
+1. CSHSE admin invites a first PC at a new institution via the normal **Admin → Users → Invite** flow. Stamped `provisionedBy: { type: 'invitation' }`.
+2. The invited PC accepts the invite + sets a password (the existing invitation flow). Their email domain is now in the trusted-domain set.
+3. Any subsequent member from the same email domain can sign in via MemberClick SSO; CSHSE auto-creates their user with `provisionedBy: { type: 'sso-key' }`.
+4. The admin never has to maintain a list of allowed domains; it grows naturally with the institution count.
+
+**Edge case — admin removes the last invited user from an institution:** the domain falls out of the allowlist. New MemberClick SSO requests from that domain start failing with the "not yet onboarded" error. Existing SSO-provisioned users are unaffected (their session works; only NEW provisioning is blocked). Admin can re-invite to re-trust the domain.
 
 ### Audit logging
 
@@ -411,13 +429,15 @@ The API key (the actual secret) never leaves CSHSE. The MemberClick admin only e
 3. Click **Create Integration Package** (a new wizard button — different from "Create API Key" because it bundles everything an external partner needs).
 4. Fill in:
    - **Integration name:** `MemberClick` (or similar — appears in audit log)
-   - **Allowed email domains** (one per line): the CSHSE-member institution email domains, e.g.
-     ```
-     stevenson.edu
-     kennesaw.edu
-     example-college.edu
-     ```
    - **Auto-provision new users:** ☑ (so first-time MemberClick logins create a CSHSE account automatically with role `program_coordinator`)
+   - ~~Allowed email domains~~ — **NO manual input needed.** Per user direction 2026-05-23, the allowlist is derived automatically from the email domains of CSHSE users who were invited via the normal invitation flow. The admin can review the current auto-derived list in the integration package — it auto-updates as new users are invited. Example of what the admin sees, read-only:
+     ```
+     Currently allowed (auto-derived from 47 invited users):
+       stevenson.edu        (8 invited users)
+       kennesaw.edu         (4 invited users)
+       example-college.edu  (3 invited users)
+       ... 12 more domains
+     ```
    - **MemberClick site domain(s)** (one per line, for Referer-header validation):
      ```
      members.cshse.org
@@ -513,7 +533,7 @@ The relay endpoint is a coordinated check of four independent signals — an att
 | **Verification token on the MemberClick side** | CSHSE issues, MemberClick admin pastes | An attacker who guesses the launch URL but doesn't control the MemberClick site |
 | **Referer header validation** | CSHSE admin lists MemberClick site domains | Off-MemberClick page that copy-pastes the launch URL into a phishing link |
 | **IP allowlist** | CSHSE admin lists MemberClick egress IPs | Anyone not coming from MemberClick's infrastructure |
-| **Email-domain allowlist** | CSHSE admin lists CSHSE-member institution domains | Even a compromised MemberClick can't issue logins for arbitrary email addresses |
+| **Email-domain allowlist (auto-derived)** | Built-in — derived at request time from the email domains of CSHSE users provisioned via the normal invitation flow. No admin maintenance. | Even a compromised MemberClick can't issue logins for emails at institutions CSHSE has never onboarded |
 | **Timestamp freshness** | Built-in (CSHSE rejects `t=` older than 5 min) | Replay of an old launch URL captured from logs or browser history |
 | **One-time relay-token-to-session exchange** | Built-in | A captured launch URL can be used at most once; subsequent uses return "already consumed" |
 | **Audit log** | Built-in | Detection (not prevention) — every relay launch is logged with IP + Referer + email + outcome; admin can spot anomalies |
@@ -542,6 +562,8 @@ If the member's MemberClick session has expired between MemberClick and CSHSE �
 33. The audit log shows every relay launch attempt with: timestamp, integration id, member email (masked except first 3 chars), source IP, Referer, outcome (success / which defense failed), latency.
 34. The plain-English error pages for each rejection mode are tested with a screen reader and have actionable next-step text.
 35. A MemberClick admin with no programming background, given the integration package, can complete Part 2 Steps A-C in under 10 minutes (validated with at least one real MemberClick admin during sandbox testing).
+36. The email-domain allowlist is auto-derived at request time from existing CSHSE users provisioned via `invitation` or `manual` (NOT from users provisioned via `sso-key`). Adding a new invited user from a new institution makes that institution's domain trustable within 30 s. Removing all invited users from a domain causes subsequent SSO provisioning attempts from that domain to fail; existing sessions from the same domain are unaffected.
+37. The CSHSE integration package shows the current auto-derived allowlist as read-only — the admin can SEE what's allowed but cannot manually add or remove domains. (Onboard via invitation; never via the integration package.)
 
 ### Engineering impact
 
