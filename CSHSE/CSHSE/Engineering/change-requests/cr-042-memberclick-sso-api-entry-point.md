@@ -390,6 +390,178 @@ A non-production environment at `https://sandbox.cshse.org/api/v1/...` for partn
 
 Public status page at `https://status.cshse.org/` shows uptime for `auth-sso-v1`. Target SLA: 99.5% per month (matches the underlying Railway uptime). Incidents annotated.
 
+## Appendix — MemberClick administrator integration walkthrough (non-programmer)
+
+Per user direction 2026-05-23 — "show the steps that a memberclick administrator would have to program inside memberclick to build the login to the CSHSE application. Assume the administrator is NOT a programmer."
+
+The MemberClick admin uses only point-and-click UI inside MemberClick. They do NOT write JavaScript, do NOT host a backend, do NOT compute cryptographic signatures by hand. CSHSE provides everything pre-built; the admin pastes URLs and one verification string. Total time: under 15 minutes once both admins are at their keyboards.
+
+### Why this works without the admin writing code
+
+The challenge in the original ticket flow design (Shape 1 in the Endpoint shape section) is that issuing a ticket requires a server-side API call with a secret key — something a MemberClick admin can't do from a templating UI. We solve this by providing a **MemberClick Relay** endpoint owned by CSHSE that accepts a simpler "launch URL" the admin can paste, and validates the request using three layered defenses (Referer header + IP allowlist + email-domain allowlist) instead of an in-URL signature.
+
+The API key (the actual secret) never leaves CSHSE. The MemberClick admin only ever sees a non-secret integration ID + a verification token.
+
+### Setup — who does what, in order
+
+#### Part 1 — CSHSE admin (in the CSHSE Self-Study Portal Settings UI), ~5 min
+
+1. Sign in to CSHSE as an admin.
+2. Go to **Admin → API Keys**.
+3. Click **Create Integration Package** (a new wizard button — different from "Create API Key" because it bundles everything an external partner needs).
+4. Fill in:
+   - **Integration name:** `MemberClick` (or similar — appears in audit log)
+   - **Allowed email domains** (one per line): the CSHSE-member institution email domains, e.g.
+     ```
+     stevenson.edu
+     kennesaw.edu
+     example-college.edu
+     ```
+   - **Auto-provision new users:** ☑ (so first-time MemberClick logins create a CSHSE account automatically with role `program_coordinator`)
+   - **MemberClick site domain(s)** (one per line, for Referer-header validation):
+     ```
+     members.cshse.org
+     www.memberclick-customer-portal.com
+     ```
+   - **MemberClick egress IP allowlist** (provided by MemberClick support; usually 2-4 IPs). Comma-separated.
+     ```
+     203.0.113.10, 203.0.113.11, 198.51.100.5
+     ```
+   - **Tier:** `partner`
+5. Click **Generate**.
+6. CSHSE shows a one-page **Integration Package** with three things the admin needs to share with the MemberClick admin:
+   - **Launch URL template** — a plain HTTPS URL with one merge-field placeholder:
+     ```
+     https://cshse.org/sso/v1/from-memberclick?integration=mc-7f3a2b&email={{MEMBER_EMAIL}}&t={{TIMESTAMP}}
+     ```
+   - **Verification token** — a short text string the MemberClick admin pastes into one field on their side as a one-time proof of ownership:
+     ```
+     cshse-verify-2026-05-23-9XK4mP7t
+     ```
+   - **Test URL** — used in Part 3 below to verify the wiring works:
+     ```
+     https://cshse.org/sso/v1/from-memberclick/test?integration=mc-7f3a2b
+     ```
+7. Click **Send to MemberClick admin** to email the package securely (CSHSE-side email with a one-time-view link, expires in 7 days).
+
+The admin does NOT see the actual API key in this package — CSHSE manages the secret internally. The `integration` ID (`mc-7f3a2b` above) is a public identifier that ties the launch URL back to the key in CSHSE's database.
+
+#### Part 2 — MemberClick admin (in the MemberClick admin UI), ~7 min
+
+The MemberClick admin opens the integration package email from CSHSE and follows three steps inside their own MemberClick admin panel.
+
+**Step A — Paste the verification token to prove site ownership.**
+
+1. Sign in to MemberClick as an admin.
+2. Navigate to **Settings → Organization Profile → Custom Fields** (or **Site Metadata** depending on MemberClick plan).
+3. Find or create a custom field named exactly: `cshse_verification`
+4. Paste the verification token (`cshse-verify-2026-05-23-9XK4mP7t`) as the value.
+5. Save.
+
+This step lets CSHSE confirm (via a public GET on MemberClick's API) that the MemberClick site really is the one CSHSE thinks it is — defeats an attacker who guesses the launch URL and tries to use it from a different MemberClick instance.
+
+**Step B — Add the launch button to the Member Portal.**
+
+1. In MemberClick admin, navigate to **Member Portal → Quick Links** (or **Custom Links** / **Member Resources** depending on plan).
+2. Click **Add Link** and fill in:
+   - **Display name:** `Open Self-Study Portal`
+   - **Icon:** (pick one — e.g., a document icon)
+   - **Link target:** paste the **Launch URL template** from the CSHSE package, but replace the merge-field placeholders with MemberClick's native merge syntax:
+     ```
+     Original: https://cshse.org/sso/v1/from-memberclick?integration=mc-7f3a2b&email={{MEMBER_EMAIL}}&t={{TIMESTAMP}}
+
+     With MemberClick merge syntax:
+     https://cshse.org/sso/v1/from-memberclick?integration=mc-7f3a2b&email=%%MEMBER_EMAIL%%&t=%%NOW%%
+     ```
+     (MemberClick's exact merge syntax varies by plan — the CSHSE integration package includes a one-page cheat sheet covering the three common syntax variants: `%%FIELD%%`, `{{field}}`, `[field]`.)
+   - **Open in:** New window
+   - **Visible to:** Members only (or whichever roles should have access)
+3. Save.
+
+**Step C — Confirm the wiring.**
+
+1. Sign out of MemberClick admin.
+2. Sign back in as a regular MemberClick member (use a test member account if available).
+3. Find the new **Open Self-Study Portal** link in the member portal.
+4. Click it.
+5. A new tab opens to the CSHSE Self-Study Portal, already signed in as the member.
+
+If anything fails, CSHSE returns a plain-English error page like:
+
+> **We couldn't sign you in via MemberClick.**
+>
+> Reason: the request came from a network address we don't recognize for this integration.
+>
+> What to do: ask your MemberClick admin to share the rejected IP address (`203.0.113.42`) with your CSHSE administrator. We'll update the allowlist.
+
+No HTTP status codes, no JSON — written for the member, with a clear "what to do next" line.
+
+#### Part 3 — Verification ping (CSHSE admin), ~2 min
+
+1. CSHSE admin returns to **Admin → API Keys → MemberClick integration** in the CSHSE UI.
+2. Click **Verify Now**.
+3. CSHSE makes a server-to-server GET to MemberClick's public org-metadata endpoint (no MemberClick auth needed for this; it's a public profile field), reads the `cshse_verification` field, confirms it matches the token issued in Part 1 step 6.
+4. Status flips from `Pending Verification` to `Verified`.
+5. The launch button starts accepting real traffic. (Before verification, the relay endpoint returns "integration not verified yet" so a leaked URL can't be used.)
+
+### Security model — what protects each step
+
+The relay endpoint is a coordinated check of four independent signals — an attacker would need to defeat ALL of them simultaneously:
+
+| Defense | Configured by | Defeats |
+|---|---|---|
+| **Verification token on the MemberClick side** | CSHSE issues, MemberClick admin pastes | An attacker who guesses the launch URL but doesn't control the MemberClick site |
+| **Referer header validation** | CSHSE admin lists MemberClick site domains | Off-MemberClick page that copy-pastes the launch URL into a phishing link |
+| **IP allowlist** | CSHSE admin lists MemberClick egress IPs | Anyone not coming from MemberClick's infrastructure |
+| **Email-domain allowlist** | CSHSE admin lists CSHSE-member institution domains | Even a compromised MemberClick can't issue logins for arbitrary email addresses |
+| **Timestamp freshness** | Built-in (CSHSE rejects `t=` older than 5 min) | Replay of an old launch URL captured from logs or browser history |
+| **One-time relay-token-to-session exchange** | Built-in | A captured launch URL can be used at most once; subsequent uses return "already consumed" |
+| **Audit log** | Built-in | Detection (not prevention) — every relay launch is logged with IP + Referer + email + outcome; admin can spot anomalies |
+
+If any one of these signals fails, the request is rejected with the plain-English error page above + a detailed audit log entry on the CSHSE admin side.
+
+The actual API key never crosses the network — it lives in CSHSE's database, signing requests internally when the relay endpoint validates the launch URL. The MemberClick admin's "secret" is just the verification token, which proves site ownership but doesn't grant any other authority.
+
+### What this looks like to a member (the end user)
+
+1. Member signs into MemberClick as they always do.
+2. Member portal home page now shows an **Open Self-Study Portal** button (placed by the admin in Part 2 Step B).
+3. Member clicks it. A new tab opens.
+4. The CSHSE Self-Study Portal appears, already signed in. No second login screen.
+5. (Behind the scenes, in under 200ms: MemberClick rendered the launch URL with the member's email + current timestamp; the browser GET hits the CSHSE relay endpoint; CSHSE validates all four signals + the verification token; CSHSE either looks up the existing user or auto-provisions a new one; CSHSE sets the session cookie + 302-redirects to `/`.)
+
+If the member's MemberClick session has expired between MemberClick and CSHSE — i.e., they were idle for hours and MemberClick logged them out before they clicked the button — MemberClick handles the re-login on its side; CSHSE never sees that case.
+
+### Acceptance criteria additions
+
+28. Generating an integration package in CSHSE Admin → API Keys → Create Integration Package produces: launch URL template, verification token, test URL, and a one-page cheat sheet covering MemberClick's three common merge-syntax variants.
+29. The integration shows `Pending Verification` until the CSHSE admin clicks Verify Now and CSHSE successfully reads the matching token from the MemberClick site's public metadata.
+30. Before verification, requests to the relay endpoint return a friendly "integration not verified" page (status 425).
+31. After verification, the relay endpoint accepts launch requests that pass all four defenses (Referer + IP + email domain + timestamp freshness) and rejects requests that fail any one with a plain-English error page.
+32. A captured launch URL can be replayed at most once within its 5-minute window; the second use returns "already consumed."
+33. The audit log shows every relay launch attempt with: timestamp, integration id, member email (masked except first 3 chars), source IP, Referer, outcome (success / which defense failed), latency.
+34. The plain-English error pages for each rejection mode are tested with a screen reader and have actionable next-step text.
+35. A MemberClick admin with no programming background, given the integration package, can complete Part 2 Steps A-C in under 10 minutes (validated with at least one real MemberClick admin during sandbox testing).
+
+### Engineering impact
+
+Adds ~2 days to the original CR-042 estimate (the relay endpoint, the integration-package generator UI, the verification flow, the friendly error pages):
+
+- Relay endpoint (`GET /sso/v1/from-memberclick`) + four-defense validation: ~0.5 day
+- Integration package generator wizard (extends the API Keys UI): ~0.5 day
+- Verification-token fetch + flip-to-verified flow: ~0.5 day
+- Plain-English error pages + accessibility pass: ~0.5 day
+
+Revised total for CR-042: ~9.25 d (private + public) + ~2 d (MemberClick admin walkthrough) = **~11.25 days**.
+
+### Out of scope for this appendix
+
+- MemberClick-side button styling beyond a name + icon — admin uses MemberClick's normal portal styling.
+- Bi-directional sync (changes in CSHSE pushing back to MemberClick) — only the launch direction is in scope.
+- MemberClick's lower-tier plans that don't support custom fields OR custom links — those plans can't integrate; document the minimum required MemberClick plan in the package cheat sheet.
+- Localization of the error pages (English only for v1).
+- Single sign-OUT — see main "Out of scope" section.
+
 ## Out of scope
 
 - SAML / OIDC federation — MemberClick uses a custom integration, not standard SSO protocols. If a second IdP comes along we'll add OIDC then.
