@@ -158,7 +158,14 @@ function buildSnapshotFromImport(importRecord: any): object {
     tags: importRecord.aiTags || null,
     matrices: importRecord.aiMatrices || null,
     placeholderSections: importRecord.aiPlaceholderSections || null,
-    errors: importRecord.aiErrors || []
+    errors: importRecord.aiErrors || [],
+    // CR-033 / CR-039 / CR-040 Phase 2b/c — surface the detector outputs
+    // so the wizard's Zustand store can rehydrate them on /ai-status
+    // poll + SSE without an extra fetch. cshse-server already persists
+    // these fields when the terminal callback arrives.
+    cvs: importRecord.aiCVs || [],
+    evidenceDocs: importRecord.aiEvidenceDocs || [],
+    introductionHints: importRecord.aiIntroductionHints || {}
   };
 }
 

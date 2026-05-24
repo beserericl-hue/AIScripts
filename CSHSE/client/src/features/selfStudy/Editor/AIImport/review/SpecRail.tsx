@@ -9,18 +9,23 @@
  *   - "Unwritten": placeholder template sections (template format only)
  */
 import React, { useMemo, useState } from 'react';
-import { Search, AlertTriangle, FileText, Grid3x3, BookOpen } from 'lucide-react';
+import { Search, AlertTriangle, FileText, Grid3x3, BookOpen, User, FileBox } from 'lucide-react';
 import type {
   SpecBucket,
   PlaceholderSection,
   Tag,
   MatrixData,
-  IntroductionBucket
+  IntroductionBucket,
+  CVItem,
+  EvidenceDocItem
 } from '../../../../../store/aiImportStore';
 
 export const UNPLACED_KEY = '_unplaced';
 export const UNWRITTEN_KEY = '_unwritten';
 export const MATRICES_KEY = '_matrices';
+// CR-033 / CR-040 — synthetic rail keys for detector outputs.
+export const CVS_KEY = '_cvs';
+export const EVIDENCE_DOCS_KEY = '_evidence-docs';
 // CR-039 — Introduction bucket keys are namespaced so they never collide
 // with synthetic ('_unplaced') or real spec keys ('1.a').
 export const INTRO_DOC_KEY = '_intro:document';
@@ -39,6 +44,9 @@ interface SpecRailProps {
   // CR-039 — Introduction buckets keyed by 'document' / 'standard-{N}'.
   // Pass-through optional; when absent the rail behaves as before.
   introductions?: Record<string, IntroductionBucket>;
+  // CR-033 / CR-040 — detector outputs surfaced as new rail entries.
+  cvs?: CVItem[];
+  evidenceDocs?: EvidenceDocItem[];
 }
 
 function coverageIcon(b: SpecBucket): string {
@@ -53,7 +61,7 @@ function bucketCount(b: SpecBucket): number {
   return b.narratives.length + b.evidenceText.length + b.evidenceFiles.length + mc;
 }
 
-export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, onSelect, introductions }: SpecRailProps): JSX.Element {
+export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, onSelect, introductions, cvs, evidenceDocs }: SpecRailProps): JSX.Element {
   const [filter, setFilter] = useState('');
 
   // Group buckets by standard for the rail's accordion structure.
@@ -154,6 +162,58 @@ export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, o
               </span>
               <span className="rounded bg-cshse-200 px-1.5 text-xs text-cshse-800">
                 {matrices.length}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* CR-033 — CVs detected by cv_detector. Only render when there
+            are any; an empty CVs section adds rail clutter for zero
+            value. */}
+        {cvs && cvs.length > 0 && (
+          <div className="mb-2">
+            <button
+              role="tab"
+              aria-selected={selectedKey === CVS_KEY}
+              onClick={() => onSelect(CVS_KEY)}
+              title={`${cvs.length} faculty CV(s) detected — view + reassign to spec or Discard`}
+              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+                selectedKey === CVS_KEY
+                  ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
+                <span className="font-medium">CVs</span>
+              </span>
+              <span className="rounded bg-cshse-200 px-1.5 text-xs text-cshse-800">
+                {cvs.length}
+              </span>
+            </button>
+          </div>
+        )}
+
+        {/* CR-040 — papers + syllabi detected by appendix_paper_detector. */}
+        {evidenceDocs && evidenceDocs.length > 0 && (
+          <div className="mb-2">
+            <button
+              role="tab"
+              aria-selected={selectedKey === EVIDENCE_DOCS_KEY}
+              onClick={() => onSelect(EVIDENCE_DOCS_KEY)}
+              title={`${evidenceDocs.length} evidence document(s) — papers, syllabi`}
+              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+                selectedKey === EVIDENCE_DOCS_KEY
+                  ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <FileBox className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
+                <span className="font-medium">Evidence files</span>
+              </span>
+              <span className="rounded bg-cshse-200 px-1.5 text-xs text-cshse-800">
+                {evidenceDocs.length}
               </span>
             </button>
           </div>

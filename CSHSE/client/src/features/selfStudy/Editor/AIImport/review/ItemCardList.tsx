@@ -22,6 +22,8 @@ import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2 } from 'l
 import {
   useAIImportStore,
   type BucketItem,
+  type CVItem,
+  type EvidenceDocItem,
   type IntroductionBucket,
   type MatrixData,
   type PlaceholderSection,
@@ -33,6 +35,8 @@ import {
   UNWRITTEN_KEY,
   MATRICES_KEY,
   INTRO_DOC_KEY,
+  CVS_KEY,
+  EVIDENCE_DOCS_KEY,
   isIntroKey,
   introBucketKeyFromSpecKey
 } from './SpecRail';
@@ -104,6 +108,9 @@ interface ItemCardListProps {
    *  intro key is selected AND populate Reassign-to-Introduction targets. */
   introductions?: Record<string, IntroductionBucket>;
   onMoveToIntroduction?: (sectionId: string, targetBucketKey: string) => void;
+  // CR-033 / CR-040 Phase 2c — detector outputs surfaced in the rail.
+  cvs?: CVItem[];
+  evidenceDocs?: EvidenceDocItem[];
 }
 
 // Headings like "b.", "c.", "1)", "(a)", "i.", or "x." are non-descriptive —
@@ -252,7 +259,9 @@ export function ItemCardList({
   onAppendUnplacedToSpec,
   onEditStart,
   introductions,
-  onMoveToIntroduction
+  onMoveToIntroduction,
+  cvs,
+  evidenceDocs
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
@@ -529,6 +538,23 @@ export function ItemCardList({
         broadcastSpecKey={matrixScrollSpec}
         onBroadcastConsumed={clearMatrixScrollSpec}
       />
+    );
+  }
+
+  // CR-033 Phase 2c — CVs view. Compact list with faculty name, snippet
+  // preview, and a routing badge. The "Move to spec" + Discard
+  // affordances ship in a future slice; for now the goal is just to
+  // surface that the detector ran.
+  if (selectedKey === CVS_KEY) {
+    return (
+      <CVsView cvs={cvs || []} />
+    );
+  }
+
+  // CR-040 Phase 2c — Evidence docs view. Same compact list pattern.
+  if (selectedKey === EVIDENCE_DOCS_KEY) {
+    return (
+      <EvidenceDocsView docs={evidenceDocs || []} />
     );
   }
 
@@ -1438,6 +1464,150 @@ function MatricesView({
           </section>
         ))}
       </div>
+    </div>
+  );
+}
+
+// --------------------------------------------------------------- CVsView
+//
+// CR-033 Phase 2c — read-only list of every CV the ai-service detector
+// pulled out of the import. Each card shows the faculty name, snippet
+// preview, routing badge, and a placeholder "View file" button (the
+// file itself ships in CR-033 Phase 3 alongside the .docx generation).
+
+interface CVsViewProps {
+  cvs: CVItem[];
+}
+
+function CVsView({ cvs }: CVsViewProps): JSX.Element {
+  if (cvs.length === 0) {
+    return (
+      <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
+        No faculty CVs were detected in this import.
+      </div>
+    );
+  }
+  return (
+    <div className="flex h-full flex-1 flex-col bg-gray-50">
+      <div className="border-b border-gray-200 bg-white px-4 py-2 text-sm">
+        <span className="font-medium text-gray-800">
+          {cvs.length} faculty CV{cvs.length === 1 ? '' : 's'} detected
+        </span>
+        <span className="ml-2 text-xs text-gray-500">
+          Each card was lifted out of the matcher input so it doesn{"'"}t compete with regular spec routing.
+        </span>
+      </div>
+      <ul className="flex-1 space-y-3 overflow-auto p-4">
+        {cvs.map((cv) => (
+          <li
+            key={cv.sectionId}
+            className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">{cv.facultyName}</h3>
+              <span className="rounded bg-cshse-100 px-1.5 py-0.5 text-[10px] font-medium text-cshse-800">
+                via {cv.routing?.source ?? 'matcher'}
+              </span>
+            </div>
+            {cv.snippet && (
+              <p className="mt-1 text-xs text-gray-700 line-clamp-3">{cv.snippet}</p>
+            )}
+            <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
+              {cv.resolvedStd && cv.resolvedSpec && (
+                <span className="font-mono text-cshse-700">
+                  → Spec {cv.resolvedStd}.{cv.resolvedSpec}
+                </span>
+              )}
+              <button
+                disabled
+                title="The downloadable .docx is generated at Apply time (CR-033 Phase 3)"
+                className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
+              >
+                📂 View file (pending)
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+// ------------------------------------------------------- EvidenceDocsView
+//
+// CR-040 Phase 2c — same shape as CVsView for appendix papers + syllabi.
+
+interface EvidenceDocsViewProps {
+  docs: EvidenceDocItem[];
+}
+
+function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
+  if (docs.length === 0) {
+    return (
+      <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
+        No appendix papers or syllabi were detected in this import.
+      </div>
+    );
+  }
+  const papers = docs.filter((d) => d.docSubKind === 'paper');
+  const syllabi = docs.filter((d) => d.docSubKind === 'syllabus');
+  return (
+    <div className="flex h-full flex-1 flex-col bg-gray-50">
+      <div className="border-b border-gray-200 bg-white px-4 py-2 text-sm">
+        <span className="font-medium text-gray-800">
+          {papers.length} paper{papers.length === 1 ? '' : 's'} ·{' '}
+          {syllabi.length} syllab{syllabi.length === 1 ? 'us' : 'i'}
+        </span>
+        <span className="ml-2 text-xs text-gray-500">
+          Each will be packaged as a standalone .docx at Apply (CR-040 Phase 3).
+        </span>
+      </div>
+      <ul className="flex-1 space-y-3 overflow-auto p-4">
+        {docs.map((d) => (
+          <li
+            key={d.sectionId}
+            className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">{d.title}</h3>
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                  d.docSubKind === 'paper'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                {d.docSubKind === 'paper' ? '📄 paper' : '📚 syllabus'}
+              </span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-600">
+              {d.courseCode && <span className="font-mono">{d.courseCode}</span>}
+              {d.author && <span>· {d.author}</span>}
+              {d.date && <span>· {d.date}</span>}
+              {typeof d.points === 'number' && <span>· {d.points} pts</span>}
+              <span>· {d.pageCountEstimate} pp</span>
+              {d.imageCount > 0 && <span>· {d.imageCount} image{d.imageCount === 1 ? '' : 's'}</span>}
+            </div>
+            {d.summary && (
+              <p className="mt-2 text-xs text-gray-700 line-clamp-3">{d.summary}</p>
+            )}
+            <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
+              {d.resolvedStd && d.resolvedSpec && (
+                <span className="font-mono text-cshse-700">
+                  → Spec {d.resolvedStd}.{d.resolvedSpec}
+                </span>
+              )}
+              <button
+                disabled
+                title="The downloadable .docx is generated at Apply time (CR-040 Phase 3)"
+                className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
+              >
+                📂 View file (pending)
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

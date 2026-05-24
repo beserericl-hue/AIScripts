@@ -110,6 +110,16 @@ class EvidenceDocDetection:
     course_code: str | None = None
     points: int | None = None
     section_ids: list[str] = field(default_factory=list)
+    # Full body text used by Phase 2c .docx generation. Empty string
+    # short-circuits the upload pipeline (a detection whose body the
+    # walker couldn't capture lands as a metadata-only card).
+    body: str = ""
+    # Populated by import_jobs after a successful .docx generation +
+    # S3 upload. The client's "View file" button opens these.
+    s3_key: str | None = None
+    s3_bucket: str | None = None
+    file_size: int | None = None
+    sha256: str | None = None
 
 
 # ----------------------------------------------------------------------
@@ -226,6 +236,7 @@ def detect_evidence_docs(
                     image_count=image_count,
                     points=points,
                     section_ids=[sec.id],
+                    body=text,
                 )
             )
             consumed.add(sec.id)
@@ -248,6 +259,7 @@ def detect_evidence_docs(
                     image_count=image_count,
                     course_code=course_code,
                     section_ids=[sec.id],
+                    body=text,
                 )
             )
             consumed.add(sec.id)
@@ -269,4 +281,11 @@ def evidence_doc_to_dict(doc: EvidenceDocDetection) -> dict:
         "imageCount": doc.image_count,
         "courseCode": doc.course_code,
         "points": doc.points,
+        # Populated post-upload (Phase 2c). When the S3 upload was
+        # skipped (env not configured or skipping intentionally),
+        # these stay None; the client's "View file" button greys out.
+        "s3Key": doc.s3_key,
+        "s3Bucket": doc.s3_bucket,
+        "fileSize": doc.file_size,
+        "sha256": doc.sha256,
     }

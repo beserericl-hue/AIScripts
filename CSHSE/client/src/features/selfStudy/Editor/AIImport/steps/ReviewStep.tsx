@@ -57,6 +57,9 @@ export function ReviewStep(): JSX.Element {
   // CR-039 — Introduction buckets + move-into-introduction action
   const introductions = useAIImportStore((s) => s.introductions);
   const moveItemToIntroduction = useAIImportStore((s) => s.moveItemToIntroduction);
+  // CR-033 / CR-040 Phase 2c — detector outputs surfaced as rail entries.
+  const cvs = useAIImportStore((s) => s.cvs);
+  const evidenceDocs = useAIImportStore((s) => s.evidenceDocs);
   const placeholderSections = useAIImportStore((s) => s.placeholderSections);
   const selectedSpecKey = useAIImportStore((s) => s.selectedSpecKey);
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
@@ -661,6 +664,8 @@ export function ReviewStep(): JSX.Element {
           selectedKey={selectedSpecKey}
           onSelect={handleSelectSpec}
           introductions={introductions}
+          cvs={cvs}
+          evidenceDocs={evidenceDocs}
         />
         <main className="flex flex-1 flex-col overflow-hidden">
           <ItemCardList
@@ -683,6 +688,8 @@ export function ReviewStep(): JSX.Element {
             onEditStart={handleEditStart}
             introductions={introductions}
             onMoveToIntroduction={moveItemToIntroduction}
+            cvs={cvs}
+            evidenceDocs={evidenceDocs}
           />
         </main>
         <ItemPreview

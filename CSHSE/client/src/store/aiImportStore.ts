@@ -235,6 +235,12 @@ export type AIStatusSnapshot = {
   matrices?: MatrixData[] | null;
   placeholderSections?: PlaceholderSection[] | null;
   errors?: string[];
+  // CR-033 / CR-040 / CR-039 Phase 2b/c — detector outputs from
+  // ai-service surfaced via /ai-status + SSE so the wizard's Zustand
+  // store can rehydrate them on poll without an extra fetch.
+  cvs?: CVItem[] | null;
+  evidenceDocs?: EvidenceDocItem[] | null;
+  introductionHints?: Record<string, string> | null;
 };
 
 // ---------------------------------------------------------------- state
@@ -770,6 +776,58 @@ export const useAIImportStore = create<AIImportState>()(
         // through a hard refresh via the partialize block above.
         const keepLocalBuckets = current.dirty === true;
 
+        // CR-033/039/040 Phase 2c — seed Introduction buckets from
+        // aiIntroductionHints (when present and not edited locally). Each
+        // hint maps a section_id → 'introduction:document' |
+        // 'introduction:standard-N'. We resolve each hint against the
+        // matcher's buckets to find the BucketItem matching the section
+        // and lift it into the corresponding IntroductionBucket. Skipped
+        // entirely when the local coordinator has already mutated the
+        // store (dirty=true), to preserve their hand-routing decisions.
+        let nextIntroductions = current.introductions;
+        if (!keepLocalBuckets && snap.introductionHints && Object.keys(snap.introductionHints).length > 0) {
+          const seededIntros: Record<string, IntroductionBucket> = {};
+          for (const [key, ib] of Object.entries(current.introductions)) {
+            // Start with empty-item copies so re-applies don't accumulate.
+            seededIntros[key] = { ...ib, items: [] };
+          }
+          const newBucketsForIntro: Record<string, SpecBucket> = {};
+          const incomingBuckets = (snap.buckets ?? current.buckets) || {};
+          for (const [bk, b] of Object.entries(incomingBuckets)) {
+            newBucketsForIntro[bk] = { ...b, narratives: [...b.narratives] };
+          }
+          for (const [sectionId, hint] of Object.entries(snap.introductionHints)) {
+            const targetKey = hint.startsWith('introduction:')
+              ? hint.slice('introduction:'.length)
+              : null;
+            if (!targetKey || !seededIntros[targetKey]) continue;
+            // Find the BucketItem matching the sectionId across all incoming
+            // buckets. If we find it, move it out (so it doesn't double-show)
+            // and append into the Introduction bucket.
+            let found: BucketItem | null = null;
+            for (const [bk, b] of Object.entries(newBucketsForIntro)) {
+              const idx = b.narratives.findIndex((n) => n.sectionId === sectionId);
+              if (idx >= 0) {
+                found = b.narratives[idx];
+                newBucketsForIntro[bk] = {
+                  ...b,
+                  narratives: [
+                    ...b.narratives.slice(0, idx),
+                    ...b.narratives.slice(idx + 1)
+                  ]
+                };
+                break;
+              }
+            }
+            if (found) {
+              seededIntros[targetKey].items.push(found);
+            }
+          }
+          nextIntroductions = seededIntros;
+          // Reuse the seeded buckets below
+          (snap as AIStatusSnapshot).buckets = newBucketsForIntro;
+        }
+
         set({
           status: snap.status,
           queuePosition: snap.queuePosition ?? null,
@@ -784,7 +842,13 @@ export const useAIImportStore = create<AIImportState>()(
             ? current.placeholderSections
             : (snap.placeholderSections ?? current.placeholderSections),
           errors: snap.errors ?? current.errors,
-          step: deriveStepFromStatus(snap.status, current.step)
+          step: deriveStepFromStatus(snap.status, current.step),
+          // CR-033 / CR-040 / CR-039 Phase 2c — detector outputs.
+          cvs: keepLocalBuckets ? current.cvs : (snap.cvs ?? current.cvs),
+          evidenceDocs: keepLocalBuckets
+            ? current.evidenceDocs
+            : (snap.evidenceDocs ?? current.evidenceDocs),
+          introductions: nextIntroductions
         });
       },
 

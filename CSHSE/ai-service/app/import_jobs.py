@@ -635,15 +635,23 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     )
     evidence_doc_detections, sections = detect_evidence_docs(sections)
     if evidence_doc_detections:
+        # CR-040 Phase 2c — generate one .docx per detection and upload
+        # to import-scoped S3 keys so the wizard's "View file" button
+        # has a real artifact to open. Apply-time copy to
+        # submission-scoped keys + SupportingEvidence row creation
+        # land in Phase 3. Failures here are soft — a section with no
+        # S3 key still ships as a metadata-only card.
+        _persist_evidence_docs_to_s3(job, evidence_doc_detections)
         job.evidence_docs = [
             evidence_doc_to_dict(d) for d in evidence_doc_detections
         ]
         n_paper = sum(1 for d in evidence_doc_detections if d.doc_sub_kind == "paper")
         n_syll = sum(1 for d in evidence_doc_detections if d.doc_sub_kind == "syllabus")
+        n_uploaded = sum(1 for d in evidence_doc_detections if d.s3_key)
         _stage_done(
             job,
             "evidence_doc_detector",
-            f"{n_paper} paper(s) + {n_syll} syllabus(es); removed from matcher input",
+            f"{n_paper} paper(s) + {n_syll} syllabus(es); {n_uploaded}/{len(evidence_doc_detections)} uploaded to S3",
         )
     else:
         _stage_skipped(job, "evidence_doc_detector", "no paper / syllabus headers matched")
@@ -724,8 +732,31 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
         }
 
     tags: list[dict[str, Any]] = []
+    # CR-039 Phase 2c — when the introduction_detector flagged a section
+    # as an intro candidate AND the matcher's confidence in a real spec
+    # is below 0.75, prefer the Introduction routing. Bias per spec:
+    # false-positive intros are easy for the coordinator to move into a
+    # spec; false-negative intros (intro material misplaced into a spec)
+    # are the bug we're closing.
+    INTRO_OVERRIDE_THRESHOLD = 0.75
+    intro_routed_count = 0
     for sec in sections:
         rec = recommendations.get(sec.id)
+        intro_hint = (job.introduction_hints or {}).get(sec.id)
+        # If we have an intro hint AND the matcher isn't very confident
+        # in a real spec, route to tags with an introduction marker on
+        # the rationale. The Zustand store's _applySnapshot picks up
+        # `introductionHints` and seeds the Introduction buckets from
+        # the matched section. We tag-route here (rather than
+        # bucket-route) so the section never appears under a wrong spec.
+        if intro_hint and (rec is None or rec.primary_confidence < INTRO_OVERRIDE_THRESHOLD):
+            intro_routed_count += 1
+            tag = _recommendation_to_tag(sec, rec)
+            # Stamp the intro hint onto the tag's rationale so downstream
+            # tooling can detect it without re-querying job.introduction_hints.
+            tag["rationale"] = (tag.get("rationale") or "") + f" [{intro_hint}]"
+            tags.append(tag)
+            continue
         if rec is None or rec.primary_standard is None or rec.primary_spec is None:
             tags.append(_recommendation_to_tag(sec, rec))
             continue
@@ -749,6 +780,13 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
                 bucket["evidenceText"].append(item)
         else:
             tags.append(_recommendation_to_tag(sec, rec))
+    if intro_routed_count > 0:
+        # Add a soft warning so the audit log shows the matcher override
+        # rate (per CR-039 telemetry requirements).
+        job.warnings.append(
+            f"introduction_detector overrode matcher for {intro_routed_count} section(s) "
+            f"(confidence threshold {INTRO_OVERRIDE_THRESHOLD})"
+        )
 
     filled = [
         s for (std, sp), s in spec_index.items()
@@ -836,6 +874,61 @@ def _extract_matrices_safe(job: "JobRecord", html_bytes: bytes) -> list[dict[str
         f"{len(matrices)} matrix(es), {total_cells} cells",
     )
     return matrices
+
+
+def _persist_evidence_docs_to_s3(job: "JobRecord", detections: list) -> None:
+    """CR-040 Phase 2c — generate one .docx per evidenceDoc detection
+    and upload to import-scoped S3 keys.
+
+    Best-effort: a missing AWS env, a single failed upload, or a missing
+    body (rare — detection requires ≥200 words OR ≥1 image) all soft-fail
+    so detections still surface as metadata-only cards.
+    """
+    if not detections:
+        return
+    if not os.environ.get("AWS_ACCESS_KEY_ID"):
+        job.warnings.append(
+            "evidence_doc_detector: AWS_ACCESS_KEY_ID not set; "
+            "skipping .docx uploads (cards will surface metadata-only)"
+        )
+        return
+    from app.export.docx_writer import build_evidence_docx
+    from app.export.s3_writer import upload_evidence_docx
+
+    # Phase 2c uses placeholder std/spec values for the .docx subtitle
+    # because the matcher hasn't run yet at this stage. Phase 3 reruns
+    # the upload (or copies the existing object) once the coordinator
+    # has reviewed + resolved the spec routing at Apply time.
+    placeholder_std = "?"
+    placeholder_spec = "?"
+
+    for d in detections:
+        if not d.body:
+            continue
+        try:
+            exported = build_evidence_docx(
+                title=d.title,
+                body_text=d.body,
+                standard_code=placeholder_std,
+                spec_code=placeholder_spec,
+                source_filename=f"import-{job.import_id}",
+            )
+            uploaded = upload_evidence_docx(
+                exported,
+                institution_id=job.institution_id or "_unknown",
+                submission_id=job.submission_id,
+                uploaded_by="ai-import-wizard",
+                dry_run=False,
+            )
+            d.s3_key = uploaded.s3_key
+            d.s3_bucket = uploaded.s3_bucket
+            d.file_size = uploaded.docx_size
+            d.sha256 = uploaded.sha256
+        except Exception as exc:  # noqa: BLE001
+            job.warnings.append(
+                f"evidence_doc {d.section_id}: docx/S3 failed — "
+                f"{type(exc).__name__}: {exc}"
+            )
 
 
 def _section_to_item(sec, rec) -> dict[str, Any]:
