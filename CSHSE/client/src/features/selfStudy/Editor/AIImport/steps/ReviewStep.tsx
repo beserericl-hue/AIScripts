@@ -92,6 +92,7 @@ export function ReviewStep(): JSX.Element {
     [matrices]
   );
 
+  const setMatrixScrollSpec = useAIImportStore((s) => s.setMatrixScrollSpec);
   const handleSelectSpec = useCallback(
     (key: string) => {
       // For spec keys (not _matrices, _unplaced, _unwritten), pre-position
@@ -101,9 +102,13 @@ export function ReviewStep(): JSX.Element {
       if (!key.startsWith('_')) {
         const anchor = findMatrixRowAnchorForSpec(key);
         if (anchor) setMatrixRowAnchor(anchor);
+        // CR-024 Sprint 2B — broadcast the spec key so MatricesView can
+        // scroll + flash the matching row in EVERY visible matrix
+        // simultaneously, not just the first one our anchor lookup found.
+        setMatrixScrollSpec(key);
       }
     },
-    [selectSpec, setMatrixRowAnchor, findMatrixRowAnchorForSpec]
+    [selectSpec, setMatrixRowAnchor, setMatrixScrollSpec, findMatrixRowAnchorForSpec]
   );
 
   // Spec cards offer a "Matrix" button that switches the center pane to

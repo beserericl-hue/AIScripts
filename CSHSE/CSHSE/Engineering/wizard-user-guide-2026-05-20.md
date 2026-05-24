@@ -28,6 +28,31 @@ After Apply: open the **Standards** tab to see your narratives + AI rationale bl
 
 ---
 
+## When to use the AI Import Wizard vs the legacy Import Document path
+
+Per [[change-requests/cr-001-both-importers-required]] both paths ship side-by-side on the Self-Study Editor toolbar. Both write to the **same `Submission` record** — pick whichever fits the situation, mix and match within a single self-study.
+
+| Situation | Use | Why |
+|---|---|---|
+| You have **one finished `.docx`** (or PDF fallback) that covers the whole self-study | **AI Import (wizard)** | Mammoth → ai-service routes every section in one ~4-minute pass. Per-card Review lets you fix any misroutes before Apply. |
+| You have **multiple co-authors** each handing you sections at different times | **Import Document (legacy)** | The legacy per-standard paste-and-tag modal lets each contributor's section land on the right spec without waiting for everyone else. |
+| You imported via wizard, found one spec the matcher got wrong, want to **manually fix that one spec** | **Import Document (legacy)** for that one spec | The legacy paste modal targets a single (standard, spec) at a time — surgical edits. |
+| You imported via legacy, want to **bulk-process** a newly arrived large document | **AI Import (wizard)** on the new doc | Wizard reads from the document only; the existing legacy-imported content stays in place and merges at Apply. |
+| You're starting a fresh self-study and **have nothing yet** | **Import Document (legacy)** for the first pass | The AI wizard wants real content to route. Use legacy paste-as-you-write while the document grows; switch to wizard when you have a complete `.docx`. |
+
+**Mixing safety.** A coordinator can run the wizard, then later use the legacy paste flow for an additional section, or vice versa. Both code paths write through the same `Submission.standards` model, so there is no separate state to reconcile. If both paths target the same spec, the merge rules:
+
+- **Legacy paste replaces** the previous content for that spec by default.
+- **Wizard Apply** offers a per-spec resolution dropdown (Replace / Merge / Per-spec choice) on the Apply screen so you don't lose the legacy work.
+
+**UI labels.** The Self-Study Editor toolbar shows:
+- `Import Document` with a grey `Legacy` chip — the per-standard paste flow.
+- `Importer Wizard` with a teal `AI` chip — the 5-step wizard described below.
+
+The two buttons are intentionally adjacent so a coordinator can see both options without scrolling. Tooltips on each button describe the use case in one sentence.
+
+---
+
 ## Before you start
 
 | Need | Why |

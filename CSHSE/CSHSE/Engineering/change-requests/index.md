@@ -25,7 +25,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 
 | CR | Title | Status | Source |
 |---|---|---|---|
-| [[cr-001-both-importers-required]] | Keep both AI wizard + legacy per-standard importer | proposed | [[webinar-action-items-2026-05-20#28-25]] |
+| [[cr-001-both-importers-required]] | Keep both AI wizard + legacy per-standard importer | **shipped** (2026-05-24 — code already in place: both buttons side-by-side on SelfStudyEditor toolbar with Legacy/AI badges; user-guide doc updated with "When to use each" matrix) | [[webinar-action-items-2026-05-20#28-25]] |
 | [[cr-005-pc-lockout-on-final-submit]] | PC locked to read-only + print after final submit | proposed | [[webinar-action-items-2026-05-20#1-17-54]] |
 | [[cr-006-two-stage-submission]] | Per-section submit-for-review vs final-submit | proposed | [[webinar-action-items-2026-05-20#1-13-05]] |
 | [[cr-007-reader-access-after-submit]] | Readers see nothing until PC clicks final submit | proposed | [[webinar-action-items-2026-05-20#1-19-38]] |
@@ -68,11 +68,11 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | [[cr-011-suggestions-consolidation-doc]] | Consolidated suggestions doc per standard for VP for accreditation | proposed | [[webinar-action-items-2026-05-20#1-04-19]] |
 | [[cr-012-site-visit-partial-compliance-tracking]] | Partial-compliance carried into site-visit checklist | proposed | [[webinar-action-items-2026-05-20#1-05-53]] |
 | [[cr-013-site-visit-itinerary-builder]] | Itinerary builder for lead reader + PC | proposed | [[webinar-action-items-2026-05-20#1-26-47]] |
-| [[cr-014-drag-drop-multi-file]] | Drag-and-drop multi-file upload to Supporting Evidence | proposed | [[webinar-action-items-2026-05-20#50-36]] |
+| [[cr-014-drag-drop-multi-file]] | Drag-and-drop multi-file upload to Supporting Evidence | **superseded 2026-05-24** by [[cr-041-multi-file-drag-drop-with-batch-review]] (scope fully absorbed) | [[webinar-action-items-2026-05-20#50-36]] |
 | [[cr-015-narrative-hyperlink-preservation]] | URLs in pasted narrative remain clickable | **shipped** (2026-05-24 — TipTap Link extension explicit autolink/linkOnPaste + apply path auto-linkifies plain-text URLs) | [[webinar-action-items-2026-05-20#56-14]] |
 | [[cr-018-ai-evidence-review-via-cshse-ai]] | Move evidence review off n8n into cshse-ai | proposed | [[sprint-plan-2026-05-11#sprint-3]] |
 | [[cr-023-julia-relay-workflow]] | Julia-as-relay model for comments + clarifications | proposed | [[webinar-action-items-2026-05-20#1-11-35]] |
-| [[cr-024-matrix-spec-bidirectional-link]] | Matrix ↔ spec bidirectional link + AI eval reads matrix rows | proposed | User observation 2026-05-21 |
+| [[cr-024-matrix-spec-bidirectional-link]] | Matrix ↔ spec bidirectional link + AI eval reads matrix rows | **in-progress** (2026-05-24 — Sprint 2B UI half shipped: spec-rail click broadcasts to all matrices simultaneously + sticky standard-headings in matrix view + per-spec "View in matrix" buttons. Sprint 4 half blocked on [[cr-018-ai-evidence-review-via-cshse-ai]]) | User observation 2026-05-21 |
 
 ## P2 — backlog
 

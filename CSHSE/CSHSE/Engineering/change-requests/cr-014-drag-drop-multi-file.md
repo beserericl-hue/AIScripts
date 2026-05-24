@@ -3,13 +3,15 @@ name: CR-014 — Drag-and-drop multi-file upload
 description: Supporting Evidence pickers accept multi-file drag-and-drop, replacing the single-file picker dialog.
 type: change-request
 cr_id: CR-014
-status: proposed
+status: superseded
 priority: P1
 source: [[webinar-action-items-2026-05-20#50-36]]
 sprint_target: Sprint 2 or 3
 tags: [evidence, upload, ux]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
+
+> **SUPERSEDED 2026-05-24** by [[cr-041-multi-file-drag-drop-with-batch-review]] — that CR's 10-user-story scope absorbs everything this CR proposed (drag-drop, multi-file, supporting evidence). Tracking continues there.
 
 # CR-014 — Drag-and-drop multi-file upload
 

@@ -256,9 +256,17 @@ interface AIImportState {
   // meant a hard refresh wiped the coordinator's progress.
   approvedIds: string[];
 
+  // CR-024 — spec-rail click broadcasts the selected spec so EVERY visible
+  // matrix scrolls + flashes its matching row simultaneously. Distinct
+  // from selectedMatrixRowAnchor (which targets one specific row from an
+  // explicit "View in matrix" button) — this is the soft pre-position
+  // signal that applies across all matrices at once.
+  matrixScrollSpec: string | null;
+
   // ---------- actions ----------
   setStep: (s: WizardStep) => void;
   setApprovedIds: (ids: string[]) => void;
+  setMatrixScrollSpec: (specKey: string | null) => void;
   setSubmissionId: (id: string) => void;
   setUploadFile: (f: File | null) => void;
   setProgramLevel: (l: ProgramLevel) => void;
@@ -358,7 +366,8 @@ const initialState = {
   appliedCounts: null,
   dirty: false,
   errors: [],
-  approvedIds: [] as string[]
+  approvedIds: [] as string[],
+  matrixScrollSpec: null as string | null
 };
 
 function deriveStepFromStatus(status: WizardStatus, currentStep: WizardStep): WizardStep {
@@ -421,6 +430,7 @@ export const useAIImportStore = create<AIImportState>()(
         set({ step: s });
       },
       setApprovedIds: (ids) => set({ approvedIds: ids }),
+      setMatrixScrollSpec: (specKey) => set({ matrixScrollSpec: specKey }),
       setSubmissionId: (id) => set({ submissionId: id }),
       setUploadFile: (f) => set({ uploadFile: f, uploadProgress: 0 }),
       setProgramLevel: (l) => set({ programLevel: l }),

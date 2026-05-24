@@ -17,7 +17,7 @@
  *  - Keyboard navigation: ArrowUp/Down + j/k navigate between cards,
  *    Enter selects, Space toggles the card's checkbox.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2 } from 'lucide-react';
 import {
   useAIImportStore,
@@ -234,6 +234,14 @@ export function ItemCardList({
   const selectMatrixRow = useAIImportStore((s) => s.selectMatrixRow);
   const selectedMatrixRowAnchor = useAIImportStore((s) => s.selectedMatrixRowAnchor);
   const clearMatrixRowAnchor = useAIImportStore((s) => s.clearMatrixRowAnchor);
+  // CR-024 — broadcast a spec key so every matrix in the view scrolls
+  // simultaneously when the user picks a spec from the rail.
+  const matrixScrollSpec = useAIImportStore((s) => s.matrixScrollSpec);
+  const setMatrixScrollSpec = useAIImportStore((s) => s.setMatrixScrollSpec);
+  const clearMatrixScrollSpec = useCallback(
+    () => setMatrixScrollSpec(null),
+    [setMatrixScrollSpec]
+  );
   const matrixRowEdits = useAIImportStore((s) => s.matrixRowEdits);
   // CR-031 — full buckets state for the nearest-placed-neighbor computation
   // on the Unplaced view. Subscribe via selector so the panel updates when
@@ -471,6 +479,8 @@ export function ItemCardList({
         matrices={matrices}
         highlightedRowAnchor={selectedMatrixRowAnchor}
         onAnchorConsumed={clearMatrixRowAnchor}
+        broadcastSpecKey={matrixScrollSpec}
+        onBroadcastConsumed={clearMatrixScrollSpec}
       />
     );
   }
@@ -1177,12 +1187,21 @@ interface MatricesViewProps {
   matrices: MatrixData[];
   highlightedRowAnchor: string | null;
   onAnchorConsumed: () => void;
+  // CR-024 Sprint 2B — when the coordinator picks a spec in the rail, the
+  // wizard broadcasts the spec key here. MatricesView resolves it to the
+  // matching row anchor IN EVERY matrix simultaneously and scrolls/flashes
+  // each, so the coordinator sees coverage across both HS and non-HS
+  // matrices without having to scroll twice.
+  broadcastSpecKey?: string | null;
+  onBroadcastConsumed?: () => void;
 }
 
 function MatricesView({
   matrices,
   highlightedRowAnchor,
-  onAnchorConsumed
+  onAnchorConsumed,
+  broadcastSpecKey,
+  onBroadcastConsumed
 }: MatricesViewProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -1203,6 +1222,40 @@ function MatricesView({
     }, 2200);
     return () => clearTimeout(t);
   }, [highlightedRowAnchor, onAnchorConsumed]);
+
+  // CR-024 — when the spec broadcast fires, find the matching row in EVERY
+  // matrix (anchor format: matrix-{slug}-row-{std}-{spec}) and scroll +
+  // flash each. Different matrices may use different row layouts; we hunt
+  // them all at once so the coordinator doesn't have to click twice.
+  useEffect(() => {
+    if (!broadcastSpecKey || !containerRef.current) return;
+    const dot = broadcastSpecKey.indexOf('.');
+    if (dot === -1) {
+      onBroadcastConsumed?.();
+      return;
+    }
+    const std = broadcastSpecKey.slice(0, dot);
+    const spec = broadcastSpecKey.slice(dot + 1);
+    const anchorSuffix = `row-${std}-${spec}`;
+    const rows = Array.from(
+      containerRef.current.querySelectorAll<HTMLElement>(
+        `[id$="${CSS.escape(anchorSuffix)}"]`
+      )
+    );
+    if (rows.length === 0) {
+      onBroadcastConsumed?.();
+      return;
+    }
+    // Scroll the first match into view smoothly; flash all matches so even
+    // matrices that don't auto-scroll into view still visually highlight.
+    rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    for (const r of rows) r.classList.add('cshse-matrix-row-flash');
+    const t = setTimeout(() => {
+      for (const r of rows) r.classList.remove('cshse-matrix-row-flash');
+      onBroadcastConsumed?.();
+    }, 2200);
+    return () => clearTimeout(t);
+  }, [broadcastSpecKey, onBroadcastConsumed]);
 
   if (matrices.length === 0) {
     return (
@@ -1233,6 +1286,15 @@ function MatricesView({
           .ai-html-snippet table th { background: #f9fafb; font-weight: 600; text-align: left; }
           .ai-html-snippet table tr.cshse-matrix-row td:first-child {
             font-weight: 500;
+          }
+          /* CR-024 — sticky column headers AND sticky standard-group
+             heading rows so the coordinator always knows which standard
+             they're scrolled to inside a 70+ row matrix. */
+          .ai-html-snippet table thead th { position: sticky; top: 0; z-index: 2; }
+          .ai-html-snippet table tr.cshse-matrix-standard-header td,
+          .ai-html-snippet table tr.cshse-matrix-standard-header th {
+            position: sticky; top: 24px; z-index: 1;
+            background: #eef2ff; font-weight: 700; color: #312e81;
           }
         `}</style>
         {matrices.map((m) => (

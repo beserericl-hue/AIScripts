@@ -3,12 +3,12 @@ name: CR-028 — Add per-call timeouts to matcher Anthropic / OpenAI / Qdrant ca
 description: Matcher worker threads can wedge indefinitely on slow external API calls because no per-call timeout is set; combined with the CR-024 retry loop a single section can hold a worker for 40+ minutes. Wedged workers freeze the `as_completed` iterator and stall the entire matcher stage.
 type: change-request
 cr_id: CR-028
-status: proposed
+status: shipped
 priority: P0
 source: User observation 2026-05-21 — matcher stuck at 100/573 for 45 minutes during Stevenson smoke test (no error surfaced)
 sprint_target: Immediate hotfix when user clears smoke test
 tags: [ai-service, matcher, timeouts, reliability, hotfix]
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-24
 ---
 
 # CR-028 — Add per-call timeouts to matcher Anthropic / OpenAI / Qdrant calls

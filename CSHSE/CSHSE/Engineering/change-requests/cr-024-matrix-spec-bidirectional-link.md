@@ -3,12 +3,12 @@ name: CR-024 — Matrix ↔ spec bidirectional link (wizard + self-study + AI ev
 description: Clicking a spec auto-scrolls every matrix to that spec's row, both in the wizard review step and the self-study editor. A "Matrix" button appears under any spec that has matrix coverage. AI evaluation reads matrix rows alongside narrative + evidence.
 type: change-request
 cr_id: CR-024
-status: proposed
+status: in-progress
 priority: P1
 source: User observation 2026-05-21 — wizard matrix step does not sync to spec selection; post-apply matrix linkage missing
 sprint_target: Sprint 2B + Sprint 4
 tags: [matrix, ui, wizard, self-study, ai-evaluation, hotlink]
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-24
 ---
 
 # CR-024 — Matrix ↔ spec bidirectional link

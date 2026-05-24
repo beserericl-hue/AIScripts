@@ -3,12 +3,12 @@ name: CR-001 — Keep both AI wizard and legacy per-standard importer
 description: Both import paths must coexist. AI wizard for finished docs; legacy per-standard cut-and-paste for multi-author piecewise entry.
 type: change-request
 cr_id: CR-001
-status: proposed
+status: shipped
 priority: P0
 source: [[webinar-action-items-2026-05-20#28-25]], [[webinar-action-items-2026-05-20#44-07]]
 sprint_target: Sprint 2
 tags: [import, wizard, legacy-importer, ui]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
 
 # CR-001 — Keep both AI wizard and legacy per-standard importer
