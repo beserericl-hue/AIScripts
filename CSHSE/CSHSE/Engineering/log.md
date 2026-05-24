@@ -1081,3 +1081,18 @@ Decisions made within CR-026:
 - Bulk accept for green confidence ≥0.85
 
 Estimate: 2.5 days. Sprint 2B story count now 8: S2B.1-S2B.8. Workload ~14.5 days. Still fits a two-week sprint if focused; tighter than ideal. If S2B.8 slips, defer to Sprint 3 — CR-025 (S2B.7) ships without verification UI initially, with column inputs as the fallback while we land the preview drawer. That's acceptable for an internal beta; we'd disable the AI auto-pre-fill until verification ships.
+
+## [2026-05-24] update | change-requests
+
+CR-042 Phase A shipped to `developer` (deployed live on `cshse-develop`).
+
+Commits on `developer`:
+- `f682f13` — Slice 1: `APIKey.scope/autoProvision/allowedRoles` + `User.provisionedBy` + idempotent migrations (stamps `scope='general-api'` on every legacy key; `provisionedBy.type='manual'` on every legacy user so their domains seed the auto-derived SSO allowlist).
+- `117f5a4` — Slice 2: `POST /api/v1/auth/sso-login` controller + `/api/v1/auth` router + admin `createAPIKey` accepting SSO fields + `POST /api/test/bootstrap-sso-key` for one-shot key minting. Auto-derived domain allowlist cached 30s. RFC 7807 errors on every failure path. Audit log on every attempt.
+- `9dc20ec` — Slice 3: `e2e/helpers/sso.ts` (`loginViaSso(page, email)`) + `loginAsSeededViaSso` in `e2e/helpers/seed.ts` + `wizard_review_minimal.json` password drop + 6 specs migrated (13 call sites). Server-side: seed user-create now uses firstName/lastName + `provisionedBy:'manual'`; `User.email` regex widened to allow `+` subaddressing + long TLDs.
+
+Phase A acceptance criteria 6, 9, 10, 11 (key revoke via admin), 13, 14, 15 satisfied. Verified `POST /api/v1/auth/sso-login` returns RFC 7807 `[key-revoked]` 401 on a bogus key.
+
+Pending operator action: set `E2E_SEED_ENABLED=1` and `E2E_SEED_TOKEN=<random>` on Railway `cshse-develop`, then `curl POST /api/test/bootstrap-sso-key` to mint the first SSO key. Set returned plaintext as `E2E_SSO_KEY` locally + on CI. Then `npx playwright test 14_review_discard` should pass end-to-end with no password ever leaving the database.
+
+Phase B (Slices 4-6) remains proposed: ticket/redirect flow (`/sso/v1/start?ticket=...`), Settings UI for SSO key management with the integration-package wizard, MemberClick relay endpoint with four-defense validation, OpenAPI 3.1 spec + redoc docs page, per-key dashboard, tier-based rate limiting, sandbox env, status page.
