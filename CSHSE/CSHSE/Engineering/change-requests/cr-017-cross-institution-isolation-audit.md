@@ -3,7 +3,7 @@ name: CR-017 — Cross-institution data isolation audit + documentation
 description: Documented data-flow audit confirming no inter-program access, including the AI service path. Required for board confidence.
 type: change-request
 cr_id: CR-017
-status: proposed
+status: shipped
 priority: P0
 source: [[webinar-action-items-2026-05-20#24-07]], [[webinar-action-items-2026-05-20#25-09]], [[webinar-action-items-2026-05-20#26-04]]
 sprint_target: Sprint 2

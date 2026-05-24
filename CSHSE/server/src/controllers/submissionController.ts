@@ -62,9 +62,23 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Submission not found' });
     }
 
+    // CR-017 Gap 1 — Program coordinators may only read submissions from
+    // their own institution. Without this, any logged-in PC could fetch
+    // any submission by id (regression caught by the new
+    // tests/integration/isolation.test.ts negative-case suite).
+    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
+    if (
+      !isElevated &&
+      req.user?.role === 'program_coordinator' &&
+      (req.user as any).institutionId &&
+      submission.institutionId &&
+      submission.institutionId.toString() !== (req.user as any).institutionId
+    ) {
+      return res.status(403).json({ error: 'Forbidden: cross-institution access' });
+    }
+
     // CR-007: readers + lead readers can only see a submission once the PC
     // has clicked final submit. Direct URL access to a draft returns 403.
-    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
     if (!isElevated && (req.user?.role === 'reader' || req.user?.role === 'lead_reader')) {
       const draftStates = ['draft', 'in_progress'];
       if (draftStates.includes(submission.status)) {
@@ -654,16 +668,16 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
 
     const filter: any = {};
 
-    // Filter by institution ID if provided
-    if (institutionId) {
+    // CR-017 Gap 1 — Force program coordinators to their own institution,
+    // regardless of what `?institutionId=` they pass. The earlier logic
+    // honored the query-string value first, which let PC-A enumerate
+    // PC-B's submissions by spoofing the parameter. Admin + superuser
+    // remain free to filter by any institution they own.
+    const isElevated_ = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
+    if (req.user?.role === 'program_coordinator' && (req.user as any).institutionId) {
+      filter.institutionId = (req.user as any).institutionId;
+    } else if (institutionId && isElevated_) {
       filter.institutionId = institutionId;
-    }
-
-    // Filter by role — scope program coordinators to their own institution
-    if (req.user?.role === 'program_coordinator') {
-      if (!filter.institutionId && (req.user as any).institutionId) {
-        filter.institutionId = (req.user as any).institutionId;
-      }
     }
 
     // CR-007: readers + lead readers only see submissions whose status has

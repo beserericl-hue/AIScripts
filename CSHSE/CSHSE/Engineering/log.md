@@ -1135,3 +1135,18 @@ Afternoon CR batch 3 — three more progressed on the AI Importer track.
 | CR-024 (matrix bidirectional link) | proposed -> in-progress | Sprint 2B UI half shipped: aiImportStore gains `matrixScrollSpec` + `setMatrixScrollSpec`; ReviewStep.handleSelectSpec broadcasts the spec key on every rail click; MatricesView consumes the broadcast and finds ALL matching `[id$="row-{std}-{spec}"]` anchors across all matrices, scrolling + flash-highlighting each simultaneously (per source quote "Both the matrices (human services and non-human services) should be displayed at the correct label"). Added sticky standard-heading + sticky column-header CSS so the standard label stays visible while scrolling. Sprint 4 half (post-apply matrix hotlink + AI evaluation prompt enrichment) blocked on [[cr-018-ai-evidence-review-via-cshse-ai]] shipping first.
 
 Test sweep: client vitest 42/44 still green; no E2E run yet for this batch (changes are wizard-internal and don't affect the seeded SSO/Review specs).
+
+## [2026-05-24] update | change-requests
+
+CR-017 fully shipped — audit + both regression gaps + two real leaks fixed.
+
+| Surface | What landed |
+|---|---|
+| `server/tests/integration/isolation.test.ts` (NEW, 5 tests, all green) | Negative-case suite per Gap 1. Caught two real isolation bugs the audit missed. |
+| `server/src/controllers/submissionController.ts` listSubmissions | **Bug fix.** Was honoring `?institutionId=B` from a PC at institution A. Now force-scopes PCs to their own institutionId; admins/superusers can still filter by any institution. |
+| `server/src/controllers/submissionController.ts` getSubmission | **Bug fix.** Was not checking institutionId at all — any logged-in PC could fetch any submission by id. Now explicit `submission.institutionId.toString() !== req.user.institutionId` guard for PCs. |
+| `ai-service/tests/test_isolation_qdrant.py` (NEW, 4 tests, all green) | Gap 2 — spy VectorStore captures search/upsert calls; asserts every retrieve has institutionId in payload_filter; asserts missing institution_id short-circuits to [] rather than firing an unfiltered query; asserts two consecutive different-institution retrievals don't cross-contaminate. |
+
+Server vitest: 52/62 pass (up from 47/57). The 10 remaining fails are unchanged pre-existing `documentVersionService` tests needing S3 creds in the local env.
+
+Gap 3 (PR-review checklist) and Gap 4 (external pen-test) are ongoing process items, not open code work. CR-017 closed.

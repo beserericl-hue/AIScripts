@@ -31,7 +31,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | [[cr-007-reader-access-after-submit]] | Readers see nothing until PC clicks final submit | proposed | [[webinar-action-items-2026-05-20#1-19-38]] |
 | [[cr-004-comment-threading-identity-redaction]] | Reader names hidden from PC + Julia relays | proposed | [[webinar-action-items-2026-05-20#1-18-28]] |
 | [[cr-003-zero-to-three-compliance-rubric]] | Non / Partial / Largely / Fully compliant rubric | proposed | [[webinar-action-items-2026-05-20#1-05-23]] |
-| [[cr-017-cross-institution-isolation-audit]] | Documented data-flow audit for cross-institution isolation | proposed (audit deliverable [[../cross-institution-isolation-audit-2026-05-24]] **shipped 2026-05-24**; CR stays open until Gap 1 + Gap 2 automated regression tests ship) | [[webinar-action-items-2026-05-20#24-07]] |
+| [[cr-017-cross-institution-isolation-audit]] | Documented data-flow audit for cross-institution isolation | **shipped** (2026-05-24 — audit + Gap 1 negative-test suite + Gap 2 Qdrant payload-filter test; fixed two real leaks the tests exposed in listSubmissions/getSubmission) | [[webinar-action-items-2026-05-20#24-07]] |
 | [[cr-025-ai-matrix-column-inference]] | AI infers matrix column → course mapping; dropdown replaces free-text | proposed | User observation 2026-05-21 |
 | [[cr-026-matrix-correction-verify-in-context]] | Verify-in-context preview + per-row move/remove for AI matrix corrections | proposed | User observation 2026-05-21 |
 | [[cr-027-stale-error-on-wizard-step-back]] | Stale error persists when navigating back to wizard Upload step | **shipped** (2026-05-24 — setStep clears errors[] on backward nav to Upload when no run in flight) | User observation 2026-05-21 |
