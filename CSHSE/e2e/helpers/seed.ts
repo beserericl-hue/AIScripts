@@ -190,9 +190,14 @@ export async function gotoReviewStep(page: Page, seed: SeedResult): Promise<void
   // buttons (the badges flip from "2 covered" → final values). Wait for
   // network-idle first so the click hits a stable DOM.
   await page.waitForLoadState('networkidle');
+  // CR-039 added Introduction tabs to the rail (Document Introduction at
+  // the very top + per-Standard Introduction siblings). Those have no
+  // narrative cards by default, so naively picking .first() lands on an
+  // empty pane. Pick a tab whose accessible name starts with a real
+  // spec id ("1.a", "2.a", etc.) instead.
   const specsTabList = page
     .getByRole('complementary', { name: /specifications/i })
-    .getByRole('tab')
+    .getByRole('tab', { name: /^\d+\.[a-z]/i })
     .first();
   await expect(specsTabList).toBeVisible({ timeout: 15_000 });
   // force: true skips Playwright's element-stability check, which
