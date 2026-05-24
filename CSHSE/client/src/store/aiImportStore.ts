@@ -251,8 +251,14 @@ interface AIImportState {
   // Errors surfaced from any stage
   errors: string[];
 
+  // CR-034 — per-card "Reviewed" tracker. Stored as a string[] (Set is not
+  // JSON-serializable). Previously local React state in ReviewStep, which
+  // meant a hard refresh wiped the coordinator's progress.
+  approvedIds: string[];
+
   // ---------- actions ----------
   setStep: (s: WizardStep) => void;
+  setApprovedIds: (ids: string[]) => void;
   setSubmissionId: (id: string) => void;
   setUploadFile: (f: File | null) => void;
   setProgramLevel: (l: ProgramLevel) => void;
@@ -351,7 +357,8 @@ const initialState = {
   applyError: null,
   appliedCounts: null,
   dirty: false,
-  errors: []
+  errors: [],
+  approvedIds: [] as string[]
 };
 
 function deriveStepFromStatus(status: WizardStatus, currentStep: WizardStep): WizardStep {
@@ -397,6 +404,7 @@ export const useAIImportStore = create<AIImportState>()(
       ...initialState,
 
       setStep: (s) => set({ step: s }),
+      setApprovedIds: (ids) => set({ approvedIds: ids }),
       setSubmissionId: (id) => set({ submissionId: id }),
       setUploadFile: (f) => set({ uploadFile: f, uploadProgress: 0 }),
       setProgramLevel: (l) => set({ programLevel: l }),
@@ -596,7 +604,8 @@ export const useAIImportStore = create<AIImportState>()(
           tags: [],
           matrices: [],
           placeholderSections: [],
-          matrixRowEdits: {}
+          matrixRowEdits: {},
+          approvedIds: []
         });
 
         const form = new FormData();
@@ -983,7 +992,9 @@ export const useAIImportStore = create<AIImportState>()(
         // /ai-status fetch and overwrites buckets with the AI's
         // original placement. That's exactly the regression reported
         // 2026-05-22 (rail badge correct, middle pane empty).
-        dirty: s.dirty
+        dirty: s.dirty,
+        // CR-034 — per-card review checkmarks survive hard refresh.
+        approvedIds: s.approvedIds
       })
     }
   )

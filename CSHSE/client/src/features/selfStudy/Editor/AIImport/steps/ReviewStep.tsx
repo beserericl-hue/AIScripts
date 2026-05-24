@@ -136,30 +136,41 @@ export function ReviewStep(): JSX.Element {
   // is here so the coordinator can see at a glance which items they've
   // explicitly reviewed. The card border + a green check badge update
   // off this set.
-  const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set());
+  //
+  // CR-034 — persisted to Zustand `ai-import-storage` so a hard refresh
+  // preserves the coordinator's review progress. Stored as an array of
+  // ids (Set is not JSON-serializable); rehydrated into a Set for use.
+  const approvedIdsArr = useAIImportStore((s) => s.approvedIds);
+  const setApprovedIdsArr = useAIImportStore((s) => s.setApprovedIds);
+  const approvedIds = useMemo(
+    () => new Set(approvedIdsArr ?? []),
+    [approvedIdsArr]
+  );
 
   // CR-032 — which item is currently being edited in the right preview pane.
   // null means read-only. Set by handleEditStart (from a card's pencil),
   // cleared by handleEditCancel + handleEditSave.
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
-  const toggleApproval = useCallback((rowId: string) => {
-    setApprovedIds((prev) => {
-      const next = new Set(prev);
+  const toggleApproval = useCallback(
+    (rowId: string) => {
+      const next = new Set(approvedIds);
       if (next.has(rowId)) next.delete(rowId);
       else next.add(rowId);
-      return next;
-    });
-  }, []);
-  const approveAll = useCallback((rowIds: string[]) => {
-    setApprovedIds((prev) => {
-      const next = new Set(prev);
+      setApprovedIdsArr(Array.from(next));
+    },
+    [approvedIds, setApprovedIdsArr]
+  );
+  const approveAll = useCallback(
+    (rowIds: string[]) => {
+      const next = new Set(approvedIds);
       for (const id of rowIds) next.add(id);
-      return next;
-    });
-  }, []);
+      setApprovedIdsArr(Array.from(next));
+    },
+    [approvedIds, setApprovedIdsArr]
+  );
   const clearApprovals = useCallback(() => {
-    setApprovedIds(new Set());
-  }, []);
+    setApprovedIdsArr([]);
+  }, [setApprovedIdsArr]);
 
   // One-click apply — counts the items waiting to be applied so the
   // confirm dialog tells the coordinator exactly what's going to land in

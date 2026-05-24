@@ -126,9 +126,16 @@ export async function loginAsSeededViaSso(page: Page, seed: SeedResult): Promise
   if (seed.localStorageValue) {
     const key = seed.localStorageKey;
     const value = JSON.stringify(seed.localStorageValue);
+    // IMPORTANT: addInitScript runs on EVERY page load (including post-
+    // page.reload()). If we unconditionally setItem, a refresh would
+    // overwrite the user's edits with the original seeded state. Plant
+    // only when the key is absent — covers the first load, preserves
+    // local edits across subsequent refreshes within the same test.
     await page.context().addInitScript(
       ({ key, value }) => {
-        window.localStorage.setItem(key, value);
+        if (!window.localStorage.getItem(key)) {
+          window.localStorage.setItem(key, value);
+        }
       },
       { key, value }
     );
@@ -136,7 +143,9 @@ export async function loginAsSeededViaSso(page: Page, seed: SeedResult): Promise
     try {
       await page.evaluate(
         ({ key, value }) => {
-          window.localStorage.setItem(key, value);
+          if (!window.localStorage.getItem(key)) {
+            window.localStorage.setItem(key, value);
+          }
         },
         { key, value }
       );
@@ -174,9 +183,22 @@ export async function gotoReviewStep(page: Page, seed: SeedResult): Promise<void
   // middle pane says "Select a spec from the left." — click the first
   // spec tab so the cards render and downstream spec-agnostic assertions
   // (Discard/Edit/etc.) have something to bind against.
-  const specsTabList = page.getByRole('complementary', { name: /specifications/i }).getByRole('tab').first();
+  //
+  // The Review step mounts in two waves: first the rail renders from the
+  // hydrated Zustand buckets, then `pollAIStatus` returns and the
+  // resulting setState triggers a re-render that detaches the rail
+  // buttons (the badges flip from "2 covered" → final values). Wait for
+  // network-idle first so the click hits a stable DOM.
+  await page.waitForLoadState('networkidle');
+  const specsTabList = page
+    .getByRole('complementary', { name: /specifications/i })
+    .getByRole('tab')
+    .first();
   await expect(specsTabList).toBeVisible({ timeout: 15_000 });
-  await specsTabList.click();
+  // force: true skips Playwright's element-stability check, which
+  // mis-fires when React re-renders the rail mid-click. Safe here
+  // because we've already asserted visibility.
+  await specsTabList.click({ force: true });
 
   // Wait for at least one Review card to render
   await expect(
