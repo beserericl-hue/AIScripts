@@ -133,6 +133,17 @@ app.use('/api/v1/auth', authV1Router);
 app.use('/api/invitations', invitationsRouter);
 app.use('/api/standards', standardsRouter); // Public endpoint - standard definitions
 
+// CR-034 — E2E seed router. MUST mount BEFORE the bare-`/api` catch-alls
+// (matrix/evidence/comments/readerLock/scores) which all run authenticate
+// middleware and would 401 any /api/test/* request that fell through.
+// buildTestRouter returns null unless E2E_SEED_ENABLED=1; this block is a
+// true no-op in any normal deploy.
+const testRouter = buildTestRouter();
+if (testRouter) {
+  console.warn('[test-router] E2E seed router MOUNTED at /api/test (E2E_SEED_ENABLED=1)');
+  app.use('/api/test', testRouter);
+}
+
 // All other routes (protected)
 app.use('/api/imports', importsRouter);
 app.use('/api/webhooks', webhooksRouter);
@@ -155,15 +166,8 @@ app.use('/api/admin/error-logs', errorLogsRouter);
 app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
 app.use('/api', scoresRouter);
-
-// CR-034 — E2E seed router. Returns null unless E2E_SEED_ENABLED=1 and
-// NODE_ENV != production, so this is a true no-op in any normal deploy.
-// In dev / staging with the env var set, exposes /api/test/* for Playwright.
-const testRouter = buildTestRouter();
-if (testRouter) {
-  console.warn('[test-router] E2E seed router MOUNTED at /api/test (E2E_SEED_ENABLED=1)');
-  app.use('/api/test', testRouter);
-}
+// (test router moved up above the bare-`/api` catch-alls so /api/test/*
+// isn't swallowed by another router's authenticate middleware first.)
 
 // Serve static files from React app build
 // Hashed assets (JS/CSS) get long cache, index.html always revalidates
