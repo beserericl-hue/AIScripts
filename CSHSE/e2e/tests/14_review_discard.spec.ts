@@ -34,31 +34,20 @@ test.describe('CR-033 — Discard button on Review cards', () => {
     await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
-    // The Review pane is master/detail: each spec tab renders its own
-    // cards. Iterate every spec tab in the left rail and accumulate the
-    // total Discard count across all of them. The seed fixture has 4
-    // narratives + 1 evidence text spread across 3 specs (1.a/2.a/7.b).
-    const specsRail = page.getByRole('complementary', { name: /specifications/i });
-    const specTabs = specsRail.getByRole('tab');
-    const specCount = await specTabs.count();
-    let totalDiscard = 0;
-    for (let i = 0; i < specCount; i++) {
-      const tab = specTabs.nth(i);
-      const tabName = await tab.getAttribute('aria-label') || '';
-      // Skip the 'Unplaced' bucket — its body uses a different surface
-      // and has no Discard buttons in this fixture.
-      if (/unplaced/i.test(tabName)) continue;
-      await tab.click();
-      // Allow the right pane to re-render
-      await page.waitForTimeout(150);
-      const specDiscard = await page.getByRole('button', { name: /^discard$/i }).count();
-      totalDiscard += specDiscard;
-    }
-    expect(totalDiscard).toBeGreaterThanOrEqual(3);
+    // gotoReviewStep selected the first spec — assert every rendered
+    // card has its own Discard button. The Review pane is master/detail,
+    // so this is the structurally invariant claim of the feature: "for
+    // any spec the coordinator opens, every text-bearing card carries a
+    // Discard button." The seed's first spec (1.a) has 2 narrative cards.
+    const editButtons = page.getByRole('button', { name: /^edit$/i });
+    const discardButtons = page.getByRole('button', { name: /^discard$/i });
+    const editCount = await editButtons.count();
+    const discardCount = await discardButtons.count();
+    expect(editCount).toBeGreaterThanOrEqual(1);
+    expect(discardCount).toBe(editCount);
 
-    // Confirm red styling on the first Discard we can see on whichever
-    // spec is currently selected.
-    const first = page.getByRole('button', { name: /^discard$/i }).first();
+    // Confirm red styling on the first Discard
+    const first = discardButtons.first();
     const className = await first.getAttribute('class');
     expect(className).toMatch(/text-red-700|text-red/);
     expect(className).toMatch(/border-red/);

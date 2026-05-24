@@ -110,6 +110,27 @@ export function ParseStep(): JSX.Element {
   const isCanceled = status === 'canceled';
   const isActive = isQueued || isParsing;
 
+  // CR-037 Defense 3 — client-side empty-buckets guard. Even if server-side
+  // Defense 2 missed a case, the wizard refuses to advance the coordinator
+  // to Review when ai-service returned literally nothing. Renders a
+  // "no items detected — retry or contact support" message in place of
+  // the Next button.
+  const buckets = useAIImportStore((s) => s.buckets);
+  const tags = useAIImportStore((s) => s.tags);
+  const matrices = useAIImportStore((s) => s.matrices);
+  const totalReviewableItems =
+    Object.values(buckets ?? {}).reduce(
+      (n, b) =>
+        n +
+        (b?.narratives?.length ?? 0) +
+        (b?.evidenceText?.length ?? 0) +
+        (b?.evidenceFiles?.length ?? 0),
+      0
+    ) +
+    (tags?.length ?? 0) +
+    (matrices?.length ?? 0);
+  const isEmptyParse = isReady && totalReviewableItems === 0;
+
   // Re-open SSE on mount if active; close on unmount.
   useEffect(() => {
     if (isActive) openEventStream();
@@ -321,11 +342,20 @@ export function ParseStep(): JSX.Element {
         </button>
         <button
           onClick={() => setStep('review')}
-          disabled={!isReady}
+          disabled={!isReady || isEmptyParse}
+          title={isEmptyParse ? 'AI returned zero items — re-upload or contact support' : undefined}
           className="rounded-md bg-cshse-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-cshse-700 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
           Next ▸
         </button>
+        {isEmptyParse && (
+          <div
+            data-testid="cr-037-empty-buckets-banner"
+            className="ml-auto text-xs text-red-700"
+          >
+            AI returned zero items. Try re-uploading or contact support if this persists.
+          </div>
+        )}
       </div>
     </div>
   );

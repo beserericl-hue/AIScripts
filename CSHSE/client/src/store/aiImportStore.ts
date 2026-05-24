@@ -403,7 +403,23 @@ export const useAIImportStore = create<AIImportState>()(
     (set, get) => ({
       ...initialState,
 
-      setStep: (s) => set({ step: s }),
+      setStep: (s) => {
+        // CR-027 — clear stale errors when the coordinator navigates BACK
+        // to Upload (the canonical "fresh start" surface). Only fires when
+        // there's no active job in flight — mid-run errors stay so the
+        // user sees what just broke.
+        const current = get();
+        const inFlight =
+          current.status === 'uploading' ||
+          current.status === 'queued' ||
+          current.status === 'parsing' ||
+          current.status === 'applying';
+        if (s === 'upload' && !inFlight && (current.errors?.length ?? 0) > 0) {
+          set({ step: s, errors: [] });
+          return;
+        }
+        set({ step: s });
+      },
       setApprovedIds: (ids) => set({ approvedIds: ids }),
       setSubmissionId: (id) => set({ submissionId: id }),
       setUploadFile: (f) => set({ uploadFile: f, uploadProgress: 0 }),

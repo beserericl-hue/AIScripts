@@ -162,22 +162,80 @@ function buildSnapshotFromImport(importRecord: any): object {
   };
 }
 
+/**
+ * CR-036 — exponential-backoff retries on the cshse-server → ai-service
+ * handshake. ai-service runs on Railway's free-tier sleep schedule and can
+ * take 5-15 seconds to wake up; without retries, the first /ai/import/start
+ * after a sleep returns a connection-refused or 502 and the wizard surfaces
+ * a fatal red banner. Retries are constrained to the connection / 5xx
+ * failure classes — 4xx responses are real errors and surface immediately.
+ *
+ * Retry policy:
+ *   - up to 5 attempts (initial + 4 retries)
+ *   - delays 500 / 1000 / 2000 / 4000 ms with ±25% jitter
+ *   - any 4xx aborts immediately (legitimate caller error, never transient)
+ *   - any 5xx, network error, or AbortError is retried
+ */
+const AI_SERVICE_MAX_ATTEMPTS = 5;
+const AI_SERVICE_BASE_DELAY_MS = 500;
+const AI_SERVICE_PER_ATTEMPT_TIMEOUT_MS = 30_000;
+
+function jitter(ms: number): number {
+  return Math.round(ms * (0.75 + Math.random() * 0.5));
+}
+
 async function postToAIService(path: string, payload: object): Promise<any> {
   const body = JSON.stringify(payload);
   const { signature } = signOutgoing(body);
-  const res = await fetch(`${getAIServiceUrl()}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Service-Signature': signature
-    },
-    body
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`AI service ${path} returned ${res.status}: ${text.slice(0, 300)}`);
+  let lastError: Error | undefined;
+  for (let attempt = 1; attempt <= AI_SERVICE_MAX_ATTEMPTS; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), AI_SERVICE_PER_ATTEMPT_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${getAIServiceUrl()}${path}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Service-Signature': signature
+        },
+        body,
+        signal: controller.signal
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        return await res.json();
+      }
+      const text = await res.text();
+      // 4xx = caller error, never transient. Surface immediately.
+      if (res.status >= 400 && res.status < 500) {
+        throw new Error(
+          `AI service ${path} returned ${res.status}: ${text.slice(0, 300)}`
+        );
+      }
+      // 5xx is retryable.
+      lastError = new Error(
+        `AI service ${path} returned ${res.status}: ${text.slice(0, 300)}`
+      );
+    } catch (err: any) {
+      clearTimeout(timer);
+      // Re-throw 4xx errors as-is (those came from the inner throw above).
+      if (
+        err?.message &&
+        /^AI service .+ returned 4\d\d:/.test(err.message)
+      ) {
+        throw err;
+      }
+      lastError = err instanceof Error ? err : new Error(String(err));
+    }
+    if (attempt < AI_SERVICE_MAX_ATTEMPTS) {
+      const delay = jitter(AI_SERVICE_BASE_DELAY_MS * 2 ** (attempt - 1));
+      console.warn(
+        `[ai-service-retry] ${path} attempt ${attempt} failed (${lastError?.message?.slice(0, 120)}); retrying in ${delay}ms`
+      );
+      await new Promise((r) => setTimeout(r, delay));
+    }
   }
-  return res.json();
+  throw lastError ?? new Error(`AI service ${path} failed without an error`);
 }
 
 // ============================================================================
@@ -373,6 +431,23 @@ export async function receiveAIEventWebhook(req: AuthenticatedRequest, res: Resp
 // POST /api/imports/:importId/ai-callback  (terminal-state webhook)
 // ============================================================================
 
+/**
+ * CR-037 — total bucket items (narratives + evidenceText + evidenceFiles)
+ * across every spec, used by the empty-buckets guard in receiveAICallback.
+ */
+function sumBucketItems(buckets: any): number {
+  if (!buckets || typeof buckets !== 'object') return 0;
+  let total = 0;
+  for (const b of Object.values(buckets as Record<string, any>)) {
+    if (!b || typeof b !== 'object') continue;
+    total +=
+      (Array.isArray(b.narratives) ? b.narratives.length : 0) +
+      (Array.isArray(b.evidenceText) ? b.evidenceText.length : 0) +
+      (Array.isArray(b.evidenceFiles) ? b.evidenceFiles.length : 0);
+  }
+  return total;
+}
+
 export async function receiveAICallback(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
   const rawBody = (req as any).rawBody as Buffer | undefined;
@@ -385,6 +460,40 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   if (!importRecord) {
     res.status(404).json({ error: 'Import not found' });
     return;
+  }
+
+  // CR-037 Defense 2 — empty-buckets server-side guard. If ai-service
+  // emitted a terminal "completed/parsed" callback with zero items across
+  // every bucket AND no errors of its own, refuse to mark this import as
+  // successfully parsed. Convert the silent-zero-success into an explicit
+  // failure with an actionable diagnostic so the wizard surfaces a real
+  // error instead of an empty Review screen.
+  const isTerminalSuccess =
+    payload.status === 'parsed' ||
+    payload.status === 'completed' ||
+    payload.status === 'finished';
+  if (isTerminalSuccess) {
+    const totalItems = sumBucketItems(payload.buckets);
+    const totalTags = Array.isArray(payload.tags) ? payload.tags.length : 0;
+    const totalMatrices = Array.isArray(payload.matrices) ? payload.matrices.length : 0;
+    const totalAll = totalItems + totalTags + totalMatrices;
+    const hasReportedErrors =
+      Array.isArray(payload.errors) && payload.errors.length > 0;
+    if (totalAll === 0 && !hasReportedErrors) {
+      console.warn(
+        `[cr-037] empty-buckets terminal callback for import=${importId}; rewriting to failed`
+      );
+      payload.status = 'failed';
+      payload.errors = [
+        ...(Array.isArray(payload.errors) ? payload.errors : []),
+        {
+          stage: 'matcher',
+          severity: 'error',
+          message:
+            'AI matcher returned zero items. The document may be malformed or all sections may have failed individually. Try re-uploading; contact support if this persists.'
+        }
+      ];
+    }
   }
 
   // Terminal payload: persist buckets / tags / placeholders / matrices
