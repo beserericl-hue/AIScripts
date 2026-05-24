@@ -173,10 +173,19 @@ export function NarrativeEditor({
         multicolor: true,
       }),
       // Links
+      // CR-015 — explicit hyperlink preservation across all paste/type
+      // paths: <a href> from Word/Docs HTML, bare URLs in plain-text
+      // paste, and URLs typed inline. defendOnNavigate stops the editor
+      // from following the link inside the edit surface.
       Link.configure({
         openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+        protocols: ['http', 'https', 'mailto', 'tel'],
         HTMLAttributes: {
           class: 'text-teal-600 underline hover:text-teal-800',
+          target: '_blank',
+          rel: 'noopener noreferrer'
         },
       }),
       // Subscript and superscript
@@ -251,10 +260,19 @@ export function NarrativeEditor({
       Highlight.configure({
         multicolor: true,
       }),
+      // CR-015 — explicit hyperlink preservation across all paste/type
+      // paths: <a href> from Word/Docs HTML, bare URLs in plain-text
+      // paste, and URLs typed inline. defendOnNavigate stops the editor
+      // from following the link inside the edit surface.
       Link.configure({
         openOnClick: false,
+        autolink: true,
+        linkOnPaste: true,
+        protocols: ['http', 'https', 'mailto', 'tel'],
         HTMLAttributes: {
           class: 'text-teal-600 underline hover:text-teal-800',
+          target: '_blank',
+          rel: 'noopener noreferrer'
         },
       }),
       Subscript,

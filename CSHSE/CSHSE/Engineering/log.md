@@ -1112,3 +1112,13 @@ Test sweep against `cshse-develop` post-deploy:
 - E2E (Playwright, full suite): **16 passed, 0 failed**, 25 skipped (specs that drive real upload/parse/match — not on the CR-034 seed path).
 - Client unit (vitest): 42 passed, 2 skipped.
 - Server unit (vitest): 47 passed, 10 failed (all pre-existing `documentVersionService` S3-creds-not-set in local env; no regression from any of today's work).
+
+## [2026-05-24] update | change-requests
+
+Three more CRs progressed in the afternoon batch.
+
+| CR | Status change | What |
+|---|---|---|
+| CR-015 (narrative hyperlink preservation) | proposed -> shipped | client/src/features/selfStudy/Editor/NarrativeEditor.tsx Link.configure made explicit (autolink: true, linkOnPaste: true, protocols including mailto/tel, target=_blank rel=noopener). client/src/store/aiImportStore.ts apply path `renderBody` now linkifies bare URLs in the plain-text snippet fallback so wizard-applied narratives keep clickable anchors even when ai-service couldn't preserve the htmlSnippet.
+| CR-035 ("Keep this row" populates Curriculum Matrix) | proposed -> shipped | **Investigation outcome A** (apply path already writes structured cells). server/src/controllers/aiImportController.ts lines 736-836 iterate `m.cells`, group by (std,spec), build IStandardMapping rows with full courseAssessments, and CurriculumMatrix.create() per matrix. Shipped the user-facing confirmation banner on MatrixStep ("Keeping this row will populate Curriculum Matrix -> Spec X.Y with the cells above"). UI confirms the existing behaviour rather than changing it.
+| CR-017 (cross-institution isolation audit) | stays proposed; audit shipped | The code-level audit landed at [[cross-institution-isolation-audit-2026-05-24]]. Enumerates: identity model (JWT + SSO Phase A), Submissions / Evidence / AI wizard cshse-server orchestrator / cshse-ai matcher / Qdrant payload filter / corrections store / S3 key prefix / GridFS / Invitations / Reviewer assignments / Error logs. Three named gaps remain (negative-test suite, Qdrant payload-filter test, external pen-test); CR stays proposed until Gaps 1+2 ship.

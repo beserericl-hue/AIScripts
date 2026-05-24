@@ -614,6 +614,19 @@ export function MatrixStep(): JSX.Element {
               )}
             </div>
 
+            {/* CR-035 — passive coordinator confirmation: Keep writes this
+                row's cells into the Curriculum Matrix at the row's
+                resolved (std.spec). Only shown when we have a real spec
+                (not '?'), so the unresolved-subspec case still drives the
+                coordinator through the AI suggestion flow above. */}
+            {currentRow && currentRow.spec !== '?' && verdictForCurrent === 'pending' && (
+              <div className="rounded border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-900">
+                <Check className="mr-1 inline h-3 w-3" aria-hidden /> Keeping this row will populate
+                <strong className="ml-1 font-mono">Curriculum Matrix → Spec {currentRow.std}.{currentRow.spec}</strong>
+                {' '}with the cells above. View it on the <strong>Curriculum Matrix</strong> tab after Apply.
+              </div>
+            )}
+
             {/* Verdict buttons */}
             <div className="flex items-center justify-center gap-3 py-2">
               {verdictForCurrent === 'pending' ? (

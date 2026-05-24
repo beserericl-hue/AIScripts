@@ -3,12 +3,12 @@ name: CR-035 — "Keep this row" populates the structured Curriculum Matrix at t
 description: When the coordinator clicks "Keep this row" on the wizard's Matrix step, the row's full structured cell data from the original document (course codes per column — I, T, K, S, L/M/H combinations) must land in the Self-Study's Curriculum Matrix at the spec the row belongs to. Today "Keep" appears to be a no-op that just accepts AI routing; the structured cells may not be written through to the CurriculumMatrix MongoDB collection. This CR closes that gap so what the coordinator sees in the wizard's "row in your original document" preview is byte-for-byte what shows up on the Curriculum Matrix tab post-Apply.
 type: change-request
 cr_id: CR-035
-status: proposed
+status: shipped
 priority: P0
 source: User observation 2026-05-22 on the Spec 11.b row in the Matrix step. User expected "Keep this row" to write the original document row (e.g. course codes "I,KM" in col 2, "KM" in col 4, "ITKSH" in cols 8/9/10, "KM" in col 11, "I,KM" in col 12) into the Curriculum Matrix viewable on the Self-Study editor's "Curriculum Matrix" tab. User is not certain this happens today and wants the fidelity guaranteed.
 sprint_target: Sprint 4 (post-demo) — schedule immediately, do NOT touch during demo
 tags: [wizard, matrix, apply, curriculum-matrix, fidelity, p0]
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-24
 ---
 
 # CR-035 — "Keep this row" populates the Curriculum Matrix

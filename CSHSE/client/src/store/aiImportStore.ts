@@ -846,10 +846,21 @@ export const useAIImportStore = create<AIImportState>()(
         // walker captured one) or the plain-text snippet wrapped in <p>.
         // Table-bearing items would otherwise round-trip as the get_text()
         // flattened blob, losing rows/columns in the editor.
+        //
+        // CR-015 — when only the plain-text snippet is available
+        // (htmlSnippet was lost to a PDF source or simplified DOCX run),
+        // auto-linkify bare URLs so the Reader/PC view still surfaces them
+        // as clickable anchors. The htmlSnippet path is unchanged — if the
+        // walker already preserved <a href>, we keep that as-is.
+        const linkifyPlainText = (s: string): string =>
+          s.replace(
+            /\bhttps?:\/\/[^\s<>"')]+/g,
+            (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`
+          );
         const renderBody = (item: { snippet: string; htmlSnippet?: string | null }): string => {
           const h = (item.htmlSnippet || '').trim();
           if (h) return h;
-          return `<p>${(item.snippet || '').replace(/\n/g, '<br/>')}</p>`;
+          return `<p>${linkifyPlainText(item.snippet || '').replace(/\n/g, '<br/>')}</p>`;
         };
 
         for (const [key, bucket] of Object.entries(buckets)) {

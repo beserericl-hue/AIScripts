@@ -8,10 +8,21 @@ priority: P0
 source: [[webinar-action-items-2026-05-20#24-07]], [[webinar-action-items-2026-05-20#25-09]], [[webinar-action-items-2026-05-20#26-04]]
 sprint_target: Sprint 2
 tags: [security, isolation, audit, ai-service, board]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
 
 # CR-017 — Cross-institution data isolation audit + documentation
+
+## Audit deliverable shipped 2026-05-24
+
+The code-level isolation audit landed at [[../cross-institution-isolation-audit-2026-05-24]]. It enumerates every data surface, the scoping mechanism per surface, and three named gaps that close the remaining acceptance criteria:
+
+- **Gap 1** — automated negative-test suite (~1 day; recommended file: server/tests/integration/isolation.test.ts).
+- **Gap 2** — Qdrant payload-filter assertion test in ai-service (~0.5 day).
+- **Gap 3** — PR-review checklist line so any new query path explicitly scopes to institutionId.
+- **Gap 4** — external pen-test (after Gaps 1+2 ship).
+
+This CR stays \ until Gaps 1 + 2 ship; the audit page itself does NOT supersede this CR.
 
 ## Summary
 

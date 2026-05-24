@@ -3,12 +3,12 @@ name: CR-015 — Narrative hyperlink preservation
 description: Embedded URLs in narrative paste survive the import and remain clickable in the rendered self-study.
 type: change-request
 cr_id: CR-015
-status: proposed
+status: shipped
 priority: P1
 source: [[webinar-action-items-2026-05-20#56-14]], [[webinar-action-items-2026-05-20#56-57]]
 sprint_target: Sprint 2
 tags: [narrative, hyperlinks, paste, editor]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
 
 # CR-015 — Narrative hyperlink preservation
