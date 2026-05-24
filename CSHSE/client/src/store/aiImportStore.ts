@@ -1103,12 +1103,19 @@ export const useAIImportStore = create<AIImportState>()(
       // Each item carries sourceImportId + sourceFilename for chip
       // rendering.
       loadBatchChildren: async () => {
-        const { batchId, dirty } = get();
+        const { batchId, dirty, buckets } = get();
         if (!batchId) return;
-        // Skip the merge when the coordinator has made local edits —
-        // we would overwrite their work. They can refresh manually if
-        // they want to re-pull from the server.
-        if (dirty) return;
+        // Skip the merge when the coordinator has made local edits AND
+        // buckets are already populated. Without the populated check
+        // we'd never merge for a seeded fixture (CR-034 sets dirty=true
+        // to prevent /ai-status from overwriting seeded buckets) or for
+        // a hard-refresh-mid-batch (dirty flag persists). When buckets
+        // are empty, the merge is REQUIRED to render any content.
+        const hasContent =
+          Object.values(buckets).some(
+            (b) => b.narratives.length || b.evidenceText.length || b.evidenceFiles.length
+          );
+        if (dirty && hasContent) return;
         // CR-041 US-6 — ensure we have the batch snapshot first; the
         // Review step may mount before BatchProgress's polling tick.
         let { batchSnapshot } = get();
