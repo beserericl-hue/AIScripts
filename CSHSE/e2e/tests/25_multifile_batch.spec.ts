@@ -88,41 +88,36 @@ test.describe('CR-041 US-10 — multi-file batch wizard surface', () => {
     await expect(wizardBtn).toBeVisible({ timeout: 20_000 });
     await wizardBtn.click();
 
-    // Debug: dump store state.
-    const storeState = await page.evaluate(() => {
-      const raw = window.localStorage.getItem('ai-import-storage');
-      return raw ? JSON.parse(raw).state : null;
-    });
-    console.log(
-      '[test debug] store batchId:',
-      storeState?.batchId,
-      'step:',
-      storeState?.step,
-      'importId:',
-      storeState?.importId
-    );
-
-    // 3. Wait for loadBatchChildren to pull both files' data + render
-    //    spec entries on the rail. With 2 children contributing items
-    //    to specs 1.a and 7.b, those rail entries should populate
-    //    once the merge completes.
-    //    Click into the 1.a spec rail entry once it shows up; that
-    //    surfaces the merged narrative card with its source-file chip.
+    // 3. Wait for loadBatchChildren to pull both files' data and the
+    //    Review header to update from "0 narratives" to "2 narratives"
+    //    (one from each child). This proves the merge ran.
     await expect(
-      page.getByRole('tab', { name: /1\.a/i })
+      page.getByText(/2 narratives/)
     ).toBeVisible({ timeout: 30_000 });
-    await page.getByRole('tab', { name: /1\.a/i }).click();
 
-    // 4. Source-file chip is visible on the merged card from child 1.
+    // 4. The SpecRail tab for 1.a (the first populated spec) auto-
+    //    selects when a single populated spec exists; if not, click
+    //    the first tab whose accessible name contains the spec code.
+    //    Test the assertion: the merged narrative card from child 1
+    //    shows its source-file chip.
+    //    Use page.locator('[role="tab"]') and filter by text fragment;
+    //    Playwright's getByRole + name regex is finicky with the
+    //    nested-generic structure the SpecRail renders.
+    const spec1a = page.locator('[role="tab"]', { hasText: '1.a' }).first();
+    await expect(spec1a).toBeVisible({ timeout: 15_000 });
+    await spec1a.click({ trial: false });
+
+    // 5. Source-file chip for the child 1 narrative.
     await expect(
-      page.getByText(/📄\s*Standards-1-5-DepartmentChair\.docx/)
+      page.locator('text=Standards-1-5-DepartmentChair.docx')
     ).toBeVisible({ timeout: 20_000 });
 
-    // 5. The other child also contributed to a different spec (7.b).
-    //    Click into it + verify its chip is visible too.
-    await page.getByRole('tab', { name: /7\.b/i }).click();
+    // 6. Open spec 7.b for child 2's narrative.
+    const spec7b = page.locator('[role="tab"]', { hasText: '7.b' }).first();
+    await expect(spec7b).toBeVisible({ timeout: 15_000 });
+    await spec7b.click({ trial: false });
     await expect(
-      page.getByText(/📄\s*Standards-6-9-CurriculumLead\.docx/)
+      page.locator('text=Standards-6-9-CurriculumLead.docx')
     ).toBeVisible({ timeout: 20_000 });
   });
 });
