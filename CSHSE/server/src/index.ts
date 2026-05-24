@@ -26,6 +26,7 @@ import adminRouter from './routes/admin';
 import commentsRouter from './routes/comments';
 import readerLockRouter from './routes/readerLock';
 import authRouter from './routes/auth';
+import authV1Router from './routes/authV1';
 import usersRouter from './routes/users';
 import institutionsRouter from './routes/institutions';
 import apiKeysRouter from './routes/apiKeys';
@@ -127,6 +128,8 @@ app.get('/ready', (_req, res) => {
 // API Routes
 // Auth routes MUST be first - they're public and other /api routers have authenticate middleware
 app.use('/api/auth', authRouter);
+// CR-042 — versioned public SSO endpoints (server-to-server, no browser CORS)
+app.use('/api/v1/auth', authV1Router);
 app.use('/api/invitations', invitationsRouter);
 app.use('/api/standards', standardsRouter); // Public endpoint - standard definitions
 

@@ -70,11 +70,26 @@ export const createAPIKey = async (req: AuthenticatedRequest, res: Response) => 
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    const { name, purpose, permissions, expiresInDays, description, ipWhitelist, rateLimit } = req.body;
+    const {
+      name,
+      purpose,
+      permissions,
+      expiresInDays,
+      description,
+      ipWhitelist,
+      rateLimit,
+      // CR-042
+      scope,
+      autoProvision,
+      allowedRoles
+    } = req.body;
 
-    // Generate the key
+    // CR-042: SSO keys get a discriminating prefix so humans + tooling can
+    // tell them apart at a glance. Other keys keep the legacy 'cshse_' prefix.
+    const isSso = scope === 'sso-login';
+    const keyPrefix = isSso ? 'cshse_sso_v1_' : 'cshse_';
     const randomPart = crypto.randomBytes(24).toString('base64url');
-    const key = `cshse_${randomPart}`;
+    const key = `${keyPrefix}${randomPart}`;
     const keyHash = crypto.createHash('sha256').update(key).digest('hex');
     const keySuffix = key.slice(-4);
 
@@ -86,11 +101,16 @@ export const createAPIKey = async (req: AuthenticatedRequest, res: Response) => 
 
     const apiKey = new APIKey({
       name,
-      keyPrefix: 'cshse_',
+      keyPrefix,
       keyHash,
       keySuffix,
-      purpose,
-      permissions: permissions || ['webhook:callback'],
+      // SSO keys land under purpose='integration' for the legacy report screens;
+      // the real gate is the new `scope` field.
+      purpose: purpose ?? (isSso ? 'integration' : undefined),
+      permissions: permissions || (isSso ? [] : ['webhook:callback']),
+      scope: scope ?? 'general-api',
+      autoProvision: !!autoProvision,
+      allowedRoles: Array.isArray(allowedRoles) ? allowedRoles : undefined,
       isActive: true,
       expiresAt,
       createdBy: req.user!.id,
@@ -110,9 +130,12 @@ export const createAPIKey = async (req: AuthenticatedRequest, res: Response) => 
         id: apiKey._id,
         name: apiKey.name,
         key, // Return full key only once
-        keyMasked: `cshse_****************************${keySuffix}`,
+        keyMasked: `${keyPrefix}****************************${keySuffix}`,
         purpose: apiKey.purpose,
         permissions: apiKey.permissions,
+        scope: apiKey.scope,
+        autoProvision: apiKey.autoProvision,
+        allowedRoles: apiKey.allowedRoles,
         expiresAt: apiKey.expiresAt
       },
       warning: 'Store this API key securely. It will not be shown again.'

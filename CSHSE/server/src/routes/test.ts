@@ -34,6 +34,7 @@ import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { Submission } from '../models/Submission';
 import { SelfStudyImport } from '../models/SelfStudyImport';
+import { APIKey } from '../models/APIKey';
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'test', 'fixtures');
 
@@ -264,6 +265,87 @@ export function buildTestRouter(): Router | null {
       localStorageKey: 'ai-import-storage',
       localStorageValue: importSpec.zustandState ?? null
     });
+  });
+
+  /**
+   * CR-042 Slice 2 — bootstrap a single SSO API key for the E2E suite.
+   *
+   * Idempotent on the *name* "E2E SSO Login Key": if a key with that name
+   * is already active, refuses to mint a second (the plaintext of the first
+   * has already left the building — revoke it via the admin UI first).
+   *
+   * Only mounted alongside the rest of the test router (NODE_ENV != production
+   * AND E2E_SEED_ENABLED=1). Token-gated by x-e2e-seed-token.
+   *
+   * Returns the plaintext key ONCE. Operator copies it into the local +
+   * Railway `E2E_SSO_KEY` env var so Playwright's loginViaSso can use it.
+   */
+  router.post('/bootstrap-sso-key', async (req: Request, res: Response) => {
+    if (!requireSeedToken(req, res)) return;
+
+    const name = (req.body?.name as string) ?? 'E2E SSO Login Key';
+    const autoProvision = req.body?.autoProvision !== false; // default true
+    const allowedRoles = Array.isArray(req.body?.allowedRoles)
+      ? req.body.allowedRoles
+      : ['program_coordinator'];
+
+    const existing = await APIKey.findOne({ name, isActive: true });
+    if (existing) {
+      return res.status(409).json({
+        error: 'sso-key-already-exists',
+        detail: `An active SSO key named "${name}" already exists (id=${existing._id}). Revoke it first via the admin UI or POST /api/admin/api-keys/${existing._id} DELETE.`
+      });
+    }
+
+    const keyPrefix = 'cshse_sso_v1_';
+    const randomPart = crypto.randomBytes(24).toString('base64url');
+    const key = `${keyPrefix}${randomPart}`;
+    const keyHash = crypto.createHash('sha256').update(key).digest('hex');
+    const keySuffix = key.slice(-4);
+
+    try {
+      // Use the test-seed bootstrap caller identity for createdBy fields.
+      // The schema requires an ObjectId — use a sentinel ObjectId (24 zeros)
+      // so it's obviously a bootstrap record.
+      const bootstrapId = new mongoose.Types.ObjectId('000000000000000000000000');
+
+      const apiKey = await APIKey.create({
+        name,
+        keyPrefix,
+        keyHash,
+        keySuffix,
+        purpose: 'integration',
+        permissions: [],
+        scope: 'sso-login',
+        autoProvision,
+        allowedRoles,
+        isActive: true,
+        createdBy: bootstrapId,
+        createdByName: 'e2e-bootstrap'
+      });
+
+      console.warn(
+        `[test-bootstrap-sso] minted SSO key id=${apiKey._id} name="${name}" autoProvision=${autoProvision} allowedRoles=${JSON.stringify(allowedRoles)}`
+      );
+
+      return res.json({
+        keyId: String(apiKey._id),
+        name: apiKey.name,
+        key, // plaintext — shown once
+        keyMasked: `${keyPrefix}****************************${keySuffix}`,
+        scope: apiKey.scope,
+        autoProvision: apiKey.autoProvision,
+        allowedRoles: apiKey.allowedRoles,
+        warning:
+          'This is the only time the plaintext will be shown. Copy it into the E2E_SSO_KEY env var.'
+      });
+    } catch (err: any) {
+      console.error('[test-bootstrap-sso] failed', err);
+      return res.status(500).json({
+        error: 'bootstrap failed',
+        detail: err?.message ?? String(err)
+      });
+    }
   });
 
   router.delete('/seed', async (req: Request, res: Response) => {
