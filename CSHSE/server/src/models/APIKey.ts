@@ -10,6 +10,12 @@ export type APIKeyPermission =
   | 'validations:read'
   | 'validations:write';
 
+// CR-042: Phase A. `general-api` keys are everything legacy (webhooks, n8n, etc.);
+// `sso-login` keys are only valid against /api/v1/auth/sso-* routes.
+export type APIKeyScope = 'general-api' | 'sso-login';
+
+export type APIKeyAllowedRole = 'program_coordinator' | 'reader' | 'lead_reader' | 'admin';
+
 export interface IAPIKey extends Document {
   name: string;
   keyPrefix: string;
@@ -18,6 +24,11 @@ export interface IAPIKey extends Document {
 
   purpose: APIKeyPurpose;
   permissions: APIKeyPermission[];
+
+  // CR-042
+  scope: APIKeyScope;
+  autoProvision: boolean;
+  allowedRoles?: APIKeyAllowedRole[];
 
   isActive: boolean;
   expiresAt?: Date;
@@ -82,6 +93,23 @@ const APIKeySchema = new Schema<IAPIKey>({
       'validations:read',
       'validations:write'
     ]
+  }],
+
+  // CR-042
+  scope: {
+    type: String,
+    enum: ['general-api', 'sso-login'],
+    default: 'general-api',
+    required: true,
+    index: true
+  },
+  autoProvision: {
+    type: Boolean,
+    default: false
+  },
+  allowedRoles: [{
+    type: String,
+    enum: ['program_coordinator', 'reader', 'lead_reader', 'admin']
   }],
 
   isActive: {

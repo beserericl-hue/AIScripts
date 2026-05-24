@@ -1,6 +1,8 @@
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { ValidationResult } from '../models/ValidationResult';
+import { User } from '../models/User';
+import { APIKey } from '../models/APIKey';
 
 /**
  * Backfill institutionId on submissions that were created before the field existed.
@@ -121,6 +123,37 @@ async function backfillValidationStatus(): Promise<void> {
 }
 
 /**
+ * CR-042 Slice 1 — stamp every pre-existing User with provisionedBy.type='manual'
+ * so they contribute their email domain to the auto-derived SSO allowlist.
+ * Anyone created before the field existed is, by definition, a real human
+ * an admin already onboarded.
+ */
+async function backfillUserProvisionedBy(): Promise<void> {
+  const result = await User.updateMany(
+    { 'provisionedBy.type': { $exists: false } },
+    { $set: { provisionedBy: { type: 'manual' } } }
+  );
+  if (result.modifiedCount > 0) {
+    console.log(`[Migration] Stamped provisionedBy.type='manual' on ${result.modifiedCount} legacy users`);
+  }
+}
+
+/**
+ * CR-042 Slice 1 — stamp every pre-existing APIKey with scope='general-api'.
+ * SSO-scoped keys are created explicitly via the new SSO flow; everything
+ * legacy stays in the general bucket.
+ */
+async function backfillAPIKeyScope(): Promise<void> {
+  const result = await APIKey.updateMany(
+    { scope: { $exists: false } },
+    { $set: { scope: 'general-api' } }
+  );
+  if (result.modifiedCount > 0) {
+    console.log(`[Migration] Stamped scope='general-api' on ${result.modifiedCount} legacy API keys`);
+  }
+}
+
+/**
  * Run all data migrations on startup.
  * Each migration is idempotent — safe to run multiple times.
  */
@@ -128,6 +161,8 @@ export async function runMigrations(): Promise<void> {
   try {
     await backfillSubmissionInstitutionIds();
     await backfillValidationStatus();
+    await backfillUserProvisionedBy();
+    await backfillAPIKeyScope();
   } catch (error) {
     console.error('[Migration] Error running migrations:', error);
   }

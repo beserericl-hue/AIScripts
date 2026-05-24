@@ -3,6 +3,16 @@ import bcrypt from 'bcrypt';
 
 export type UserRole = 'program_coordinator' | 'reader' | 'lead_reader' | 'admin';
 export type UserStatus = 'pending' | 'active' | 'disabled';
+
+// CR-042: how the user came to exist. Drives the auto-derived SSO domain
+// allowlist — only `invitation` and `manual` users contribute trusted domains.
+export type ProvisionedByType = 'invitation' | 'manual' | 'sso-key';
+
+export interface ProvisionedBy {
+  type: ProvisionedByType;
+  keyId?: mongoose.Types.ObjectId;
+  at?: Date;
+}
 export type Permission =
   | 'edit_self_study'
   | 'view_comments'
@@ -30,6 +40,8 @@ export interface IUser extends Document {
   invitedAt?: Date;
   invitedBy?: mongoose.Types.ObjectId;
   accountCreatedAt?: Date;
+  // CR-042
+  provisionedBy?: ProvisionedBy;
   createdAt: Date;
   updatedAt: Date;
 
@@ -114,10 +126,22 @@ const UserSchema = new Schema<IUser>({
     type: Schema.Types.ObjectId,
     ref: 'User'
   },
-  accountCreatedAt: Date
+  accountCreatedAt: Date,
+  // CR-042
+  provisionedBy: {
+    type: {
+      type: String,
+      enum: ['invitation', 'manual', 'sso-key']
+    },
+    keyId: { type: Schema.Types.ObjectId, ref: 'APIKey' },
+    at: Date
+  }
 }, {
   timestamps: true
 });
+
+// CR-042: the auto-derived SSO domain allowlist query filters on this.
+UserSchema.index({ 'provisionedBy.type': 1 });
 
 // Indexes
 UserSchema.index({ email: 1 });
