@@ -6,7 +6,7 @@
  * checked into e2e/fixtures/sample.docx (does not exist yet).
  */
 import { test, expect } from '@playwright/test';
-import { seedFixture, cleanupSeed, loginAsSeeded, type SeedResult } from '../helpers/seed';
+import { seedFixture, cleanupSeed, loginAsSeededViaSso, type SeedResult } from '../helpers/seed';
 
 test.describe.skip('Upload step', () => {
   let seed: SeedResult | undefined;

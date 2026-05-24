@@ -58,8 +58,12 @@ const UserSchema = new Schema<IUser>({
     lowercase: true,
     trim: true,
     validate: {
+      // Allow '+' subaddressing (e.g., user+tag@institution.edu) — widely
+      // used by SaaS subscribers and required by the E2E seed endpoint to
+      // stamp a unique per-run suffix on the same base email. Also allow
+      // TLDs longer than 4 chars (.museum, .academy, .education, etc.).
       validator: function(v: string) {
-        return /^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$/.test(v);
+        return /^[\w.+\-]+@([\w-]+\.)+[\w-]{2,}$/.test(v);
       },
       message: 'Please enter a valid email address'
     }

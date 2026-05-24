@@ -5,7 +5,7 @@
  * make sense; the empty-buckets fixture exists to drive the test.
  */
 import { test, expect } from '@playwright/test';
-import { seedFixture, cleanupSeed, loginAsSeeded, type SeedResult } from '../helpers/seed';
+import { seedFixture, cleanupSeed, loginAsSeededViaSso, type SeedResult } from '../helpers/seed';
 
 test.describe.skip('CR-037 — Empty buckets guard', () => {
   test('Empty-bucket import shows actionable error, NOT empty Review', async ({ page }) => {

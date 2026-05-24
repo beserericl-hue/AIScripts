@@ -4,7 +4,7 @@
  * Status: SCAFFOLDED.
  */
 import { test, expect } from '@playwright/test';
-import { seedFixture, cleanupSeed, loginAsSeeded, type SeedResult } from '../helpers/seed';
+import { seedFixture, cleanupSeed, loginAsSeededViaSso, type SeedResult } from '../helpers/seed';
 
 test.describe.skip('Parse step', () => {
   let seed: SeedResult | undefined;

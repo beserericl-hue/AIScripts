@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
 import {
   seedFixture,
   cleanupSeed,
-  loginAsSeeded,
+  loginAsSeededViaSso,
   gotoReviewStep,
   type SeedResult
 } from '../helpers/seed';
@@ -25,7 +25,7 @@ test.describe('CR-032 — Edit pencil on Review cards', () => {
 
   test('Edit pencil opens textarea, Save persists across reload', async ({ page }) => {
     test.setTimeout(60_000);
-    await loginAsSeeded(page, seed!);
+    await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
     // Click the first Edit pencil

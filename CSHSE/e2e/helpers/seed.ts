@@ -26,6 +26,7 @@
  */
 import { Page, test, expect } from '@playwright/test';
 import { loginViaUI } from './auth';
+import { loginViaSso } from './sso';
 
 export type SeedResult = {
   cleanupToken: string;
@@ -101,9 +102,22 @@ export async function cleanupSeed(seed: SeedResult | undefined): Promise<void> {
 
 /**
  * Log a Playwright page in as a seeded user using the standard login UI.
+ *
+ * NOTE: prefer `loginAsSeededViaSso` (CR-042) for any new spec — it's ~30x
+ * faster and doesn't depend on the login-form DOM. This helper stays for
+ * the few specs that explicitly exercise the password login flow.
  */
 export async function loginAsSeeded(page: Page, seed: SeedResult): Promise<void> {
   await loginViaUI(page, seed.userEmail, seed.userPassword);
+}
+
+/**
+ * CR-042 Slice 3 — log in as a seeded user via the SSO API instead of the
+ * password form. The seeded user must already exist in the DB (created
+ * during `seedFixture`); no auto-provision is involved.
+ */
+export async function loginAsSeededViaSso(page: Page, seed: SeedResult): Promise<void> {
+  await loginViaSso(page, seed.userEmail);
 }
 
 /**

@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test';
 import {
   seedFixture,
   cleanupSeed,
-  loginAsSeeded,
+  loginAsSeededViaSso,
   gotoReviewStep,
   type SeedResult
 } from '../helpers/seed';
@@ -30,7 +30,7 @@ test.describe('Recovery — hard refresh', () => {
 
   test('Approve survives hard refresh', async ({ page }) => {
     test.setTimeout(60_000);
-    await loginAsSeeded(page, seed!);
+    await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
     await page.getByRole('button', { name: /^approve$/i }).first().click();
@@ -47,7 +47,7 @@ test.describe('Recovery — hard refresh', () => {
 
   test('Discard survives hard refresh', async ({ page }) => {
     test.setTimeout(60_000);
-    await loginAsSeeded(page, seed!);
+    await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
     const cardsBefore = await page

@@ -12,7 +12,7 @@ import { test, expect } from '@playwright/test';
 import {
   seedFixture,
   cleanupSeed,
-  loginAsSeeded,
+  loginAsSeededViaSso,
   gotoReviewStep,
   type SeedResult
 } from '../helpers/seed';
@@ -31,7 +31,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
 
   test('Discard button is visible on every text-bearing card', async ({ page }) => {
     test.setTimeout(60_000);
-    await loginAsSeeded(page, seed!);
+    await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
     const discardButtons = page.getByRole('button', { name: /^discard$/i });
@@ -47,7 +47,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
 
   test('clicking Discard + confirming removes the card from the spec', async ({ page }) => {
     test.setTimeout(60_000);
-    await loginAsSeeded(page, seed!);
+    await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
     // Count cards before discard
@@ -71,7 +71,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
 
   test('cancelling the confirm dialog keeps the card', async ({ page }) => {
     test.setTimeout(60_000);
-    await loginAsSeeded(page, seed!);
+    await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
     const cardsBefore = await page
@@ -90,7 +90,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
 
   test('discarded card stays discarded after a hard refresh', async ({ page }) => {
     test.setTimeout(60_000);
-    await loginAsSeeded(page, seed!);
+    await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
     const cardsBefore = await page

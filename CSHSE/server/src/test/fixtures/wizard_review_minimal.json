@@ -2,8 +2,8 @@
   "_fixture_name": "wizard_review_minimal",
   "_purpose": "Land Playwright on the Review step of the AI Import Wizard with a small but realistic set of cards across multiple kinds. Used by 14_review_discard.spec.ts, 13_review_edit_pencil.spec.ts, 17_recovery_hard_refresh.spec.ts.",
   "user": {
+    "_comment_password": "CR-042 — password field intentionally absent. Seeded users are SSO-only; specs authenticate via loginAsSeededViaSso (e2e/helpers/seed.ts).",
     "email": "coordinator@example.test",
-    "password": "SeedTestPw-1",
     "name": "E2E Test Coordinator",
     "role": "program_coordinator",
     "institutionName": "E2E Test University"

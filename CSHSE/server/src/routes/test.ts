@@ -180,7 +180,10 @@ export function buildTestRouter(): Router | null {
     const stamp = crypto.randomBytes(4).toString('hex');
     const email = ((userSpec.email as string) ?? 'seed@example.test')
       .replace(/@/, `+${stamp}@`);
-    const password = (userSpec.password as string) ?? 'SeedTestPw-1';
+    // CR-042 — fixtures no longer ship a password. If one is present (legacy)
+    // it's honored so loginViaUI specs keep working; otherwise the seeded
+    // user has no passwordHash and can only be logged in via the SSO API.
+    const password = (userSpec.password as string) ?? null;
 
     console.log(
       `[test-seed] fixture=${fixture} email=${email} ip=${req.ip}`
@@ -190,14 +193,34 @@ export function buildTestRouter(): Router | null {
     let submissionDoc: any;
     let importDoc: any;
     try {
-      userDoc = await User.create({
+      // Fixture authors can pass either {name: "First Last"} or
+      // {firstName, lastName}. The User model requires both first + last.
+      const nameRaw = (userSpec.name as string) ?? 'E2E Seed User';
+      const nameParts = nameRaw.trim().split(/\s+/);
+      const firstName =
+        (userSpec.firstName as string) ?? nameParts[0] ?? 'E2E';
+      const lastName =
+        (userSpec.lastName as string) ??
+        (nameParts.slice(1).join(' ') || 'Seed');
+
+      const userPayload: Record<string, unknown> = {
         email,
-        passwordHash: password, // pre-save hook hashes it
-        name: (userSpec.name as string) ?? 'E2E Seed User',
+        firstName,
+        lastName,
         role: (userSpec.role as string) ?? 'program_coordinator',
+        status: 'active',
         institutionName: (userSpec.institutionName as string) ?? 'E2E Test University',
-        isActive: true
-      });
+        isActive: true,
+        // CR-042: seeded users land in the trusted-domain allowlist (so any
+        // future autoProvision request from the same domain is accepted).
+        // The 'manual' provisioner stands in for "an admin created this
+        // user out-of-band" — which is exactly what the seed endpoint does.
+        provisionedBy: { type: 'manual', at: new Date() }
+      };
+      if (password) {
+        userPayload.passwordHash = password; // pre-save hook hashes it
+      }
+      userDoc = await User.create(userPayload);
 
       submissionDoc = await Submission.create({
         institutionName: (submissionSpec.institutionName as string) ?? 'E2E Test University',
@@ -256,7 +279,10 @@ export function buildTestRouter(): Router | null {
       cleanupToken,
       userId: String(userDoc._id),
       userEmail: email,
-      userPassword: password,
+      // CR-042: empty string when the fixture has no password (the user
+      // is SSO-only). Kept in the payload shape for backwards compat with
+      // any caller that still reads .userPassword.
+      userPassword: password ?? '',
       submissionId: String(submissionDoc._id),
       submissionDocumentId: submissionDoc.submissionId, // human-readable id like 2026-001
       importId: String(importDoc._id),
