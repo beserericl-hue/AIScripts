@@ -345,6 +345,15 @@ interface AIImportState {
   // standalone-CV upload + UI card variant land in Phase 2/3.
   cvs: CVItem[];
 
+  // CR-041 user story 1 — pending file queue when the coordinator
+  // drops multiple files on the Upload step. The first file is
+  // promoted into `uploadFile` for the existing single-file pipeline;
+  // remaining files queue here. User stories 2-10 (parallel imports,
+  // batched Review merge, hold-for-review) ride on top of this in a
+  // follow-on. Stored as File[] (not persisted via partialize — files
+  // can't be serialized to JSON).
+  pendingFiles: File[];
+
   // ---------- actions ----------
   setStep: (s: WizardStep) => void;
   setApprovedIds: (ids: string[]) => void;
@@ -359,6 +368,10 @@ interface AIImportState {
   setEvidenceDocs: (docs: EvidenceDocItem[]) => void;
   // CR-033 Phase 1
   setCVs: (cvs: CVItem[]) => void;
+  // CR-041 user story 1
+  enqueueFiles: (files: File[]) => void;
+  popNextPendingFile: () => File | null;
+  clearPendingFiles: () => void;
   setSubmissionId: (id: string) => void;
   setUploadFile: (f: File | null) => void;
   setProgramLevel: (l: ProgramLevel) => void;
@@ -481,7 +494,9 @@ const initialState = {
   // CR-040 Phase 1
   evidenceDocs: [] as EvidenceDocItem[],
   // CR-033 Phase 1
-  cvs: [] as CVItem[]
+  cvs: [] as CVItem[],
+  // CR-041 user story 1
+  pendingFiles: [] as File[]
 };
 
 function deriveStepFromStatus(status: WizardStatus, currentStep: WizardStep): WizardStep {
@@ -548,6 +563,31 @@ export const useAIImportStore = create<AIImportState>()(
       setIntroductions: (introductions) => set({ introductions, dirty: true }),
       setEvidenceDocs: (docs) => set({ evidenceDocs: docs, dirty: true }),
       setCVs: (cvs) => set({ cvs, dirty: true }),
+      // CR-041 user story 1 — multi-file queue. First file in `files`
+      // promotes into `uploadFile` (the single-file pipeline's input);
+      // the rest queue. If `uploadFile` is already set the entire batch
+      // queues without disturbing the in-flight run.
+      enqueueFiles: (files) =>
+        set((s) => {
+          if (!files || files.length === 0) return s;
+          if (!s.uploadFile) {
+            const [first, ...rest] = files;
+            return {
+              uploadFile: first,
+              uploadProgress: 0,
+              pendingFiles: [...s.pendingFiles, ...rest]
+            };
+          }
+          return { pendingFiles: [...s.pendingFiles, ...files] };
+        }),
+      popNextPendingFile: () => {
+        const { pendingFiles } = get();
+        if (pendingFiles.length === 0) return null;
+        const [next, ...rest] = pendingFiles;
+        set({ pendingFiles: rest });
+        return next;
+      },
+      clearPendingFiles: () => set({ pendingFiles: [] }),
       moveItemToIntroduction: (sectionId, targetKey) =>
         set((s) => {
           // Pull the item out of whichever bucket OR introduction currently

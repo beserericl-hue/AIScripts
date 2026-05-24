@@ -80,15 +80,23 @@ export function UploadStep(): JSX.Element {
     if (e.currentTarget === e.target) setIsDragOver(false);
   }, []);
 
+  // CR-041 user story 1 — accept N files. enqueueFiles promotes the
+  // first into uploadFile + queues the rest. handleFile remains for
+  // single-file callers (input change without multi-select).
+  const enqueueFiles = useAIImportStore((s) => s.enqueueFiles);
+  const pendingFiles = useAIImportStore((s) => s.pendingFiles);
   const handleDrop = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
     const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
+    if (!files || files.length === 0) return;
+    if (files.length === 1) {
       handleFile(files[0]);
+      return;
     }
-  }, [handleFile]);
+    enqueueFiles(Array.from(files));
+  }, [handleFile, enqueueFiles]);
 
   const handleNext = useCallback(async () => {
     setLocalError(null);
@@ -140,8 +148,18 @@ export function UploadStep(): JSX.Element {
         </div>
         <input
           type="file"
+          multiple
           accept=".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
-          onChange={(e) => handleFile(e.target.files?.[0] || null)}
+          onChange={(e) => {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+            if (files.length === 1) {
+              handleFile(files[0]);
+              return;
+            }
+            // CR-041 — multiple selected; enqueue
+            enqueueFiles(Array.from(files));
+          }}
           className="hidden"
         />
       </label>
@@ -150,6 +168,28 @@ export function UploadStep(): JSX.Element {
         <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
           <AlertTriangle className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <div>{localError || errors[errors.length - 1]}</div>
+        </div>
+      )}
+
+      {/* CR-041 user story 1 — show queued files so the coordinator knows
+          what's next. Parallel processing + batched Review merge (stories
+          2-10) ride on top of this in a follow-on. */}
+      {pendingFiles.length > 0 && (
+        <div className="rounded-md border border-cshse-200 bg-cshse-50 p-3 text-sm">
+          <div className="font-medium text-cshse-800">
+            {pendingFiles.length} file{pendingFiles.length === 1 ? '' : 's'} queued after this one:
+          </div>
+          <ul className="mt-1 space-y-0.5 text-xs text-cshse-700">
+            {pendingFiles.map((f, i) => (
+              <li key={`${f.name}-${i}`} className="flex items-center justify-between">
+                <span className="truncate font-mono">{f.name}</span>
+                <span className="text-cshse-500">{(f.size / 1024 / 1024).toFixed(2)} MB</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-2 text-[11px] italic text-cshse-600">
+            Each file processes sequentially. After Apply you{"'"}ll be prompted to start the next one.
+          </div>
         </div>
       )}
 

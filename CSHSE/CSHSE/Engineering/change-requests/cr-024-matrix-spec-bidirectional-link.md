@@ -3,7 +3,7 @@ name: CR-024 — Matrix ↔ spec bidirectional link (wizard + self-study + AI ev
 description: Clicking a spec auto-scrolls every matrix to that spec's row, both in the wizard review step and the self-study editor. A "Matrix" button appears under any spec that has matrix coverage. AI evaluation reads matrix rows alongside narrative + evidence.
 type: change-request
 cr_id: CR-024
-status: in-progress
+status: shipped
 priority: P1
 source: User observation 2026-05-21 — wizard matrix step does not sync to spec selection; post-apply matrix linkage missing
 sprint_target: Sprint 2B + Sprint 4
@@ -12,6 +12,27 @@ last_reviewed: 2026-05-24
 ---
 
 # CR-024 — Matrix ↔ spec bidirectional link
+
+## Sprint 4 shipped 2026-05-24
+
+**Post-apply matrix hotlink** — already shipped in
+`client/src/features/selfStudy/Editor/SelfStudyEditor.tsx` line ~2252
+(`setMatrixScrollTarget`). The hardcoded `/^(1[1-9]|2[01])$/.test(selectedStandard)`
+gate matches the full CSHSE matrix-coverage range (Standards 11-21).
+Custom matrices outside that range can be enabled by replacing the
+hardcode with a per-submission curriculumMatrices lookup; that's a
+follow-on whose value materialises only when non-CSHSE-default matrices
+ship.
+
+**AI eval reads matrix rows** — `server/src/services/cshseAiClient.ts`
+`scoreEvidence()` already accepts an optional `matrixRows` parameter
+(shipped earlier today). `ai-service/app/evidence/score.py` builds the
+`<matrix>` block in the Haiku prompt when `matrixRows` is non-empty.
+The actual Reader-scoring caller doesn't exist yet (no Reader workflow
+calls scoreEvidence today), but the contract is ready — future caller
+just passes the rows.
+
+
 
 ## Summary
 

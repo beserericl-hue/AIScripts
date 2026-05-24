@@ -3,15 +3,42 @@ name: CR-041 — Multi-file drag-drop import with batched "hold-for-review" sema
 description: Today the import wizard accepts exactly one document per session. Coordinators routinely receive self-study material as multiple files — one Standard per faculty author, bulk syllabi from the registrar, a folder of research-paper appendices, a faculty member's CV update. This CR adds multi-file drag-drop on the Upload step, treats the dropped set as a single logical "import batch" with one shared Review screen, processes each file through the existing ai-service pipeline serially, and gates advancement to Review on a per-batch "hold-for-review" flag (default ON — the whole point is batch review, not one-at-a-time). Eight numbered user stories sized for sprint planning.
 type: change-request
 cr_id: CR-041
-status: proposed
+status: in-progress
 priority: P0
 source: User direction 2026-05-23 — "Allow many files to be drag/dropped to the importer. This will allow the PC to take different sections of the document written by different people or take bulk syllabi or papers and drag them to the import wizard. This will queue up multiple import jobs to be run consecutively. However there should be a flag in the wizard UI to hold off review until all documents have been run, so it is not an ordinary job queue. Analyse this requirement and break it down in the CR to specify the user stories in the sprint."
 sprint_target: Sprint 5 — strong dependencies on CR-033 (CV detection), CR-039 (Introductions), CR-040 (papers/syllabi as files) all of which assume the "kind" of content a dropped file can carry; CR-041 makes multi-file workflows real.
 tags: [wizard, upload, batch, drag-drop, multi-file, p0, user-stories, sprint-planning]
-last_reviewed: 2026-05-23
+last_reviewed: 2026-05-24
 ---
 
-# CR-041 — Multi-file drag-drop with batched review
+# CR-041
+
+## User story 1 shipped 2026-05-24 — multi-file drop with visible queue
+
+`client/src/store/aiImportStore.ts`:
+  - `pendingFiles: File[]` field on store (not persisted via partialize
+    — File objects don't survive JSON).
+  - `enqueueFiles(files)` action — first file promotes into `uploadFile`
+    if the slot is empty; rest queue. If `uploadFile` is already set
+    (mid-run), entire batch queues without disturbing the in-flight
+    upload.
+  - `popNextPendingFile()` returns the head of the queue.
+  - `clearPendingFiles()` resets.
+
+`client/src/features/selfStudy/Editor/AIImport/steps/UploadStep.tsx`:
+  - File input gains `multiple`; drop handler accepts N files.
+  - Single-file paths still call `handleFile(file)` unchanged.
+  - Multi-file paths call `enqueueFiles(Array.from(files))`.
+  - New cshse-200 callout under the upload zone listing every queued
+    file (name + size) and a "processed sequentially after Apply" note.
+
+User stories 2-10 (parallel imports, batched Review merge across files,
+hold-for-review flag, add-mid-flight) ride on top of this in a
+follow-on — they require a Zustand redesign to support multiple
+in-flight `importId`s + per-file state machines + cross-file Review
+de-duplication logic. Each is its own day-plus of careful work.
+
+ — Multi-file drag-drop with batched review
 
 ## Source quote
 

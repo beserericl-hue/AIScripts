@@ -14,6 +14,41 @@ last_reviewed: 2026-05-24
 
 # CR-018 — Move AI evidence review off n8n into cshse-ai
 
+## Phase 2 shipped 2026-05-24 — real extract/recommend/score implementations
+
+The three endpoint stubs from Phase 1 upgraded to real handlers:
+- `ai-service/app/evidence/extract.py` — paragraph-aware chunking
+  (~800 chars, 80-char overlap; sliding-window fallback for oversized
+  paragraphs), text-embedding-3-small embeddings, Qdrant upsert into
+  `cshse_evidence_{env}` with institutionId + submissionId + documentId
+  stamped on every payload.
+- `ai-service/app/evidence/recommend.py` — embeds spec text from
+  standards.loader, searches the evidence collection with a payload
+  filter pinning both institutionId AND submissionId (regression guard
+  against the [[../cross-institution-isolation-audit-2026-05-24]] Gap 2
+  invariant).
+- `ai-service/app/evidence/score.py` — Claude Haiku adjudicator with
+  strict-then-loose JSON parser, 8000-char prompt cap, 600 max tokens
+  out, confidence clamped to [0,1], optional matrixRows block (CR-024
+  Sprint 4).
+- `ai-service/app/config.py` — new `evidence_collection` property
+  (`cshse_evidence_{env}`).
+- `ai-service/app/main.py` — three endpoints upgraded from 501 stubs to
+  real handlers. `/extract` returns 501 only when `markdown` is missing
+  (PDF binary input ships in Phase 2b alongside the marker-pdf
+  container binary).
+
+12 new unit tests in `tests/test_evidence_phase2.py` covering:
+chunking edge cases, institution stamping on every chunk, payload
+filter pinning, JSON parser robustness.
+
+Phase 2b remaining: marker-pdf binary in the container + the PDF →
+markdown extraction wrapper that calls into extract_evidence_text.
+n8n removal is a separate slice (no production traffic to remove yet —
+the new endpoints don't have a Reader-side caller in production today).
+
+
+
 ## Phase 1 shipped 2026-05-24 — contract + auth-wired stubs
 
 Phase 1 establishes the three-endpoint contract on cshse-ai + the typed client on the Node side. The endpoints accept the HMAC-signed request, validate the body via Pydantic, and return HTTP 501 with a structured `{ phase: "phase-1-stub", ready: false, detail }` body. Callers check the `ready` flag (NOT the HTTP status) so Phase 2 deploy is a feature-flag-style flip, not a coordinated server+client release.

@@ -3,13 +3,15 @@ name: CR-002 — Multi-author wizard upload (partial documents)
 description: AI wizard must support uploading partial documents from multiple coordinators, merging contributions into one self-study.
 type: change-request
 cr_id: CR-002
-status: proposed
+status: superseded
 priority: P1
 source: [[webinar-action-items-2026-05-20#44-07]]
 sprint_target: Sprint 2
 tags: [import, wizard, multi-author]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
+
+> **SUPERSEDED 2026-05-24** by [[cr-041-multi-file-drag-drop-with-batch-review]] — multi-author flow IS the multi-file batched-Review flow; user story 1 of CR-041 is shipped, stories 2-10 cover the merge logic this CR proposed. Tracking continues there.
 
 # CR-002 — Multi-author wizard upload (partial documents)
 

@@ -1217,3 +1217,20 @@ What still needs real engineering days:
 - CR-018 Phase 2: real Marker-PDF extract + Qdrant collection bootstrap + Haiku scoring + n8n removal
 - CR-024 Sprint 4: post-apply matrix hotlink + AI eval reads matrix rows
 - CR-002 / CR-041: blocked on Phase 2 detectors landing (now done) + Phase 2c integrations
+
+## [2026-05-24] update | change-requests
+
+Pushed the remaining-CRs sweep — every open AI-Importer CR now has either shipped or in-progress code on `developer`.
+
+| CR | What landed today |
+|---|---|
+| CR-033 Phase 2c | Client UI: CVsView component in ItemCardList; SpecRail `_cvs` entry (User icon, count badge); store's _applySnapshot rehydrates cvs from snapshot.cvs; cshse-server snapshot exposes aiCVs. |
+| CR-039 Phase 2c | Matcher-prompt routing-hint override: in `import_jobs._run_self_study_pipeline`, sections with an introduction_detector hint AND matcher confidence <0.75 route to tags with the intro marker baked into the rationale; soft-warning logs override count. Client _applySnapshot seeds Introduction buckets from introductionHints by lifting hinted sections out of matcher buckets. |
+| CR-040 Phase 2c | EvidenceDocsView component (paper + syllabus cards, kind chip, metadata block). EvidenceDocDetection gains `body` + `s3_key` + `s3_bucket` + `file_size` + `sha256`. `_persist_evidence_docs_to_s3` helper called after detect_evidence_docs: reuses build_evidence_docx + upload_evidence_docx; soft-fails per detection; AWS-env-missing fails the batch silently with a warning. |
+| CR-040 Phase 3 | `coverage_verifier.py` module — section-level census + MissingFragment surfacing. Wired as final pipeline stage; `job.coverage_report` rides callback as `coverageReport`. 5 new tests. |
+| CR-018 Phase 2 | Three real endpoints: `extract` (paragraph-aware chunking + Qdrant upsert with institutionId/submissionId/documentId stamps), `recommend` (RAG retrieval pinned to institutionId + submissionId), `score` (Haiku adjudicator with safe-fallback JSON parser). PDF binary still 501s (marker-pdf container binary is Phase 2b). 12 new tests. |
+| CR-024 Sprint 4 | shipped — existing matrix hotlink covers Standards 11-21 (full CSHSE matrix range); cshseAiClient.scoreEvidence accepts matrixRows for future Reader-scoring caller. |
+| CR-002 | superseded by CR-041 (per the "fold into CR-041" recommendation). |
+| CR-041 user story 1 | Multi-file drop with visible queue. `pendingFiles: File[]` + `enqueueFiles` / `popNextPendingFile` / `clearPendingFiles` actions on store. UploadStep input gains `multiple`; drop handler accepts N files; cshse-200 callout lists queued names + sizes. Stories 2-10 (parallel imports, batched Review merge, hold-for-review) require Zustand redesign — multi-day work per story. |
+
+Test totals: ai-service pytest **248 / 4-skipped** (+5 coverage + 12 evidence Phase 2 from where we were). Client vitest **42/44** (unchanged). Server vitest **52/62** (unchanged; 10 pre-existing S3-creds fails).
