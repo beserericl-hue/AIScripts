@@ -149,6 +149,10 @@ class JobRecord:
     # the callback so cshse-server can seed the wizard's Introduction
     # buckets without re-running the heading-based detector client-side.
     introduction_hints: dict[str, str] | None = None
+    # CR-040 Phase 3 — post-parse coverage report. Counts per
+    # destination + a list of unassigned sections so the wizard can
+    # surface a "Missing from import" rail entry.
+    coverage_report: dict | None = None
     started_at: float | None = None
     completed_at: float | None = None
 
@@ -179,6 +183,9 @@ class JobRecord:
             # the wizard's Introduction buckets (Phase 2c will also use
             # it as a matcher-prompt override).
             "introductionHints": self.introduction_hints or {},
+            # CR-040 Phase 3 — coverage report (per-destination counts +
+            # missing fragments).
+            "coverageReport": self.coverage_report or {},
         }
 
 
@@ -832,6 +839,54 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     job.buckets = buckets
     job.tags = tags
     job.matrices = matrices
+
+    # CR-040 Phase 3 — final coverage check. Pulls section ids out of
+    # every destination set and emits a per-section accounting plus a
+    # MissingFragment list the wizard can surface on a new
+    # "Missing from import" rail entry. Soft-fails so a verifier bug
+    # never blocks a successful parse.
+    try:
+        from app.splitter.coverage_verifier import verify_coverage
+
+        bucketed_ids: set[str] = set()
+        for bk, b in buckets.items():
+            for kind in ("narratives", "evidenceText", "evidenceFiles"):
+                for item in b.get(kind, []) or []:
+                    sid = item.get("sectionId") if isinstance(item, dict) else getattr(item, "sectionId", None)
+                    if sid:
+                        bucketed_ids.add(sid)
+        tag_ids = {t.get("sectionId") for t in tags if isinstance(t, dict)}
+        tag_ids.discard(None)
+        intro_ids = set((job.introduction_hints or {}).keys())
+        cv_ids = {d.get("sectionId") for d in (job.cvs or []) if isinstance(d, dict)}
+        cv_ids.discard(None)
+        ed_ids = {d.get("sectionId") for d in (job.evidence_docs or []) if isinstance(d, dict)}
+        ed_ids.discard(None)
+
+        report = verify_coverage(
+            raw_sections=raw_sections,
+            bucketed_section_ids=bucketed_ids,
+            tag_section_ids=tag_ids,
+            intro_section_ids=intro_ids,
+            cv_section_ids=cv_ids,
+            evidence_doc_section_ids=ed_ids,
+        )
+        job.coverage_report = report.to_dict()
+        if report.missing_fragments:
+            job.warnings.append(
+                f"coverage_verifier: {len(report.missing_fragments)} section(s) unaccounted for "
+                f"(coverage {report.coverage_percent}%)"
+            )
+        _stage_done(
+            job,
+            "coverage_verifier",
+            f"{report.coverage_percent}% coverage, "
+            f"{len(report.missing_fragments)} missing fragment(s)",
+        )
+    except Exception as exc:  # noqa: BLE001
+        job.warnings.append(
+            f"coverage_verifier soft-failed: {type(exc).__name__}: {exc}"
+        )
 
 
 def _extract_matrices_safe(job: "JobRecord", html_bytes: bytes) -> list[dict[str, Any]]:

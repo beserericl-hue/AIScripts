@@ -350,18 +350,25 @@ async def cancel_import(job_id: str, request: Request) -> dict:
 # ----------------------------------------------------------------------
 
 from app.evidence import EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY
+from app.evidence.extract import extract_evidence_text
+from app.evidence.recommend import recommend_evidence
+from app.evidence.score import score_evidence
 
 
 class EvidenceExtractRequest(BaseModel):
-    """Marker-pdf + chunking input for the evidence-extract endpoint.
+    """Evidence-extract input.
 
-    Phase 2 will accept the document binary via a separate upload step;
-    Phase 1 just verifies the request body shape is well-formed.
+    Phase 2 accepts already-extracted ``markdown``. PDF binaries
+    (``documentS3Key`` + ``documentMimeType``) ship in Phase 2b when the
+    marker-pdf binary lands in the ai-service container.
     """
     institutionId: str = Field(..., description="MongoDB ObjectId; required for per-institution Qdrant payload filter.")
     submissionId: str
-    documentS3Key: str
-    documentMimeType: str = Field(default="application/pdf")
+    documentId: str = Field(default="", description="Originator's doc id (e.g. SupportingEvidence._id) — stamped on every chunk payload for later retrieval.")
+    markdown: str | None = Field(default=None, description="Already-extracted markdown body. Provide this OR documentS3Key.")
+    documentS3Key: str | None = None
+    documentMimeType: str = Field(default="text/markdown")
+    sourceFilename: str | None = None
 
 
 class EvidenceRecommendRequest(BaseModel):
@@ -370,6 +377,7 @@ class EvidenceRecommendRequest(BaseModel):
     standardCode: str
     specCode: str
     topK: int = Field(default=5, ge=1, le=20)
+    programLevel: str = Field(default="bachelors")
 
 
 class EvidenceScoreRequest(BaseModel):
@@ -381,22 +389,69 @@ class EvidenceScoreRequest(BaseModel):
     matrixRows: list[dict] | None = Field(default=None, description="CR-024 Sprint 4 — matrix rows for the spec, included in the Haiku prompt.")
 
 
-@app.post("/ai/evidence/extract", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@app.post("/ai/evidence/extract")
 async def evidence_extract(req: EvidenceExtractRequest, request: Request) -> dict:
     body = await request.body()
     verify_hmac_signature(request, body)
-    return {**EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY, "endpoint": "evidence.extract"}
+    if not req.markdown:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                **EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY,
+                "endpoint": "evidence.extract",
+                "reason": "markdown body is required in Phase 2; PDF binary path lands in Phase 2b",
+            },
+        )
+    try:
+        return extract_evidence_text(
+            institution_id=req.institutionId,
+            submission_id=req.submissionId,
+            document_id=req.documentId or req.submissionId,
+            markdown=req.markdown,
+            source_filename=req.sourceFilename,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=f"evidence_extract failed: {type(exc).__name__}: {exc}",
+        )
 
 
-@app.post("/ai/evidence/recommend", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@app.post("/ai/evidence/recommend")
 async def evidence_recommend(req: EvidenceRecommendRequest, request: Request) -> dict:
     body = await request.body()
     verify_hmac_signature(request, body)
-    return {**EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY, "endpoint": "evidence.recommend"}
+    try:
+        return recommend_evidence(
+            institution_id=req.institutionId,
+            submission_id=req.submissionId,
+            standard_code=req.standardCode,
+            spec_code=req.specCode,
+            top_k=req.topK,
+            program_level=req.programLevel,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=f"evidence_recommend failed: {type(exc).__name__}: {exc}",
+        )
 
 
-@app.post("/ai/evidence/score", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@app.post("/ai/evidence/score")
 async def evidence_score(req: EvidenceScoreRequest, request: Request) -> dict:
     body = await request.body()
     verify_hmac_signature(request, body)
-    return {**EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY, "endpoint": "evidence.score"}
+    try:
+        return score_evidence(
+            institution_id=req.institutionId,
+            submission_id=req.submissionId,
+            standard_code=req.standardCode,
+            spec_code=req.specCode,
+            candidate_chunks=req.candidateChunks,
+            matrix_rows=req.matrixRows,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=f"evidence_score failed: {type(exc).__name__}: {exc}",
+        )

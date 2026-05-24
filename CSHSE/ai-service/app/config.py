@@ -59,6 +59,15 @@ class Settings(BaseSettings):
         """
         return f"cshse_matrix_context_{self.cshse_env}"
 
+    @property
+    def evidence_collection(self) -> str:
+        """CR-018 — per-institution evidence-document chunks for the RAG
+        side of evidence-spec scoring. Filtered at retrieval time by
+        institutionId so one institution's uploads never surface in
+        another's prompt.
+        """
+        return f"cshse_evidence_{self.cshse_env}"
+
 
 @lru_cache
 def get_settings() -> Settings:
