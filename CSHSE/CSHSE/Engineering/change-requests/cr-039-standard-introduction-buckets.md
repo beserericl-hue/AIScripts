@@ -13,6 +13,35 @@ last_reviewed: 2026-05-24
 
 # CR-039 — Standard-level Introduction sections
 
+## Phase 2a shipped 2026-05-24 — introduction_detector module
+
+`ai-service/app/splitter/introduction_detector.py` implements
+heading-based intro detection (spec case 3). Document-position-based
+detection (spec cases 1 + 2) ships in Phase 2b alongside the matcher
+prompt extension.
+
+- `is_introduction_heading(heading)` — recognises intro keywords
+  (introduction / overview / mission / glossary / preface / foreword)
+  anywhere in the heading, plus "About the program/school/institution"
+  and a standalone "Terms" line. Rejects any heading carrying a spec
+  id (e.g. "1.a") so real specs don't get re-routed.
+- `routing_hint_for_section(section)` returns `introduction:document`
+  by default or `introduction:standard-N` when the heading OR the
+  first 200 chars of body mention "Standard N".
+- `detect_introductions(sections)` returns a `section_id → hint` map
+  the matcher will consume in Phase 2b.
+
+`tests/test_introduction_detector.py` (23 tests) covers all of the
+above plus the "intro keyword in body first line" fallback for
+sections whose heading slot is just a body excerpt (deep_walker's
+prose path).
+
+Phase 2 remaining: wire `detect_introductions` into the matcher prompt
+as a routing-hint default (with confidence threshold 0.75 override per
+the spec); walker audit for silent paragraph drops; Self-Study Editor
+surface to render `documentIntroduction` + `standardIntroductions`
+post-Apply.
+
 ## Phase 1 shipped 2026-05-24 — manual Introduction routing UX
 
 The data model + apply path + coordinator move-into-Introduction UI shipped today. ai-service auto-detection (the matcher/walker work in Sequencing step 2) deferred to Phase 2.

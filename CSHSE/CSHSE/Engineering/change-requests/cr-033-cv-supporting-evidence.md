@@ -13,6 +13,36 @@ last_reviewed: 2026-05-24
 
 # CR-033 — CV supporting evidence detection & routing
 
+## Phase 2 shipped 2026-05-24 — cv_detector module
+
+`ai-service/app/splitter/cv_detector.py` ships the detector heuristic
+from the spec (anchor line + ≥2 CV section markers + CSHSE-boundary
+rejection). Public API:
+
+- `detect_cvs(sections)` → `(list[CVDetection], residual_sections)`.
+  Returns each detected CV plus the section stream with CV-classified
+  entries removed so they never compete with regular specs for matcher
+  routing.
+- `CVDetection` dataclass mirrors the client-side `CVItem` shape.
+- `cv_to_dict(cv)` returns the wire format.
+
+`tests/test_cv_detector.py` (16 tests) covers:
+- Anchor recognition: honorifics stripped, middle initials and
+  particles ("Maria del Carmen"), token-count caps, lowercase rejection,
+  Standard-N rejection.
+- Section-marker counting (unique only — repeated "Education" lines
+  don't double-count).
+- Full-CV detection on a realistic Stevenson-style body.
+- Rejection when section straddles a Standard-N marker (would swallow
+  spec content).
+- Multiple CVs in a single stream.
+- Wire-format serializer.
+
+Phase 2 remaining: integrate `detect_cvs` into `import_jobs` (run
+after `deep_walker`, feed residual to matcher, attach detected CVs to
+the callback payload), client UI card variant, standalone-CV upload
+flow.
+
 ## Phase 1 shipped 2026-05-24 — data shape + apply pass-through
 
 Same pattern as CR-040 Phase 1: lands the contract so Phase 2 (ai-service `cv_detector.py` + standalone-CV upload + UI card variant) can ship in a follow-on without schema churn.

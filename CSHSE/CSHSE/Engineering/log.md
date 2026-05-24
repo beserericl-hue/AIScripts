@@ -1183,3 +1183,15 @@ Two more CRs progressed — both Phase 1 contracts so Phase 2 detector / scoring
 | CR-018 (evidence-review-off-n8n) | proposed -> in-progress | `ai-service/app/evidence/__init__.py` module skeleton + 3 endpoint stubs in main.py (`/ai/evidence/extract`, `/ai/evidence/recommend`, `/ai/evidence/score`) — each HMAC-gated, body-validated via Pydantic, returns HTTP 501 with structured `{phase:"phase-1-stub", ready:false, detail, endpoint}` body. NEW `server/src/services/cshseAiClient.ts` — typed `extractEvidence` / `recommendEvidence` / `scoreEvidence` methods + `_unwrapStubResponse` that turns the 501 into `{ ready:false, phase, detail }` so callers branch on the flag (not the HTTP status); `isEvidencePhase2Ready()` predicate for feature-detection. Phase 2 = real extract/recommend/score logic + Qdrant collection bootstrap + n8n removal. |
 
 Test sweep: client vitest 42/44 (unchanged). Server vitest 52/62 (unchanged). ai-service pytest: isolation + health 5/5 (CR-018 stubs don't have their own tests yet — they're contract-only).
+
+## [2026-05-24] update | change-requests
+
+Three more Phase 2 advances on the AI Importer ai-service track.
+
+| CR | Phase | What shipped |
+|---|---|---|
+| CR-040 | 2a | Image capture in the walker — `ImageRef` dataclass + `extract_images_from_tag` helper in sections.py honoring per-image (5MB) and per-section (10MB) byte caps with truncation flag; both image-bearing deep_walker sites (`_table_as_one_section` + prose `<p>`) call it; `Section.to_dict` serializes `images` + `imageCount` to the wire. Fixes the hardcoded `contains_image=False` constant. 7 new tests. |
+| CR-033 | 2 detector | `cv_detector.py` ships the full detector heuristic from the spec (anchor + ≥2 markers + CSHSE-boundary rejection). `detect_cvs(sections)` returns `(list[CVDetection], residual_sections)`. 16 new tests covering anchors with honorifics/initials/particles, marker uniqueness, full-body detection, multi-CV streams, boundary-straddle rejection, wire format. Integration into `import_jobs` deferred to Phase 2b. |
+| CR-039 | 2a detector | `introduction_detector.py` ships heading-based intro detection (spec case 3). `is_introduction_heading`, `routing_hint_for_section`, `detect_introductions`. 23 new tests. Matcher prompt extension + walker-audit silent-drop fix + post-Apply editor surface still ahead in Phase 2b. |
+
+Test totals: ai-service pytest 222 passed / 4 skipped (was 176; +46 tests across the three new modules). No regressions.

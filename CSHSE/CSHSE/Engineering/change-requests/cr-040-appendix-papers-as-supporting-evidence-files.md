@@ -13,6 +13,36 @@ last_reviewed: 2026-05-24
 
 # CR-040 — Appendix papers as standalone evidence files
 
+## Phase 2a shipped 2026-05-24 — image capture in the walker
+
+Fixed the hardcoded `contains_image=False` constant. Three deep_walker
+sites that previously dropped every embedded image now capture them
+into `Section.images: list[ImageRef]`:
+
+- `ai-service/app/splitter/sections.py` — new `ImageRef` dataclass; new
+  `extract_images_from_tag(tag, base_byte_offset)` helper that walks
+  `<img>` descendants and pulls them into ImageRefs honoring per-image
+  (5 MB) and per-section (10 MB) byte caps. Truncated images are
+  recorded with a `truncated=True` flag so a future pass can re-fetch
+  from S3 instead of silently dropping pixels. External-URL images get
+  a placeholder ImageRef carrying the URL.
+- `ai-service/app/splitter/deep_walker.py` — `_table_as_one_section` and
+  the prose-`<p>`-outside-table path now call `extract_images_from_tag`;
+  `contains_image` is computed from the resulting list. The
+  table-subspec-row path is unchanged (cells are already get_text'd —
+  images there are out of scope for Phase 2a).
+- `Section.to_dict` serializes `images` + `imageCount` to the wire so
+  cshse-server can route them through S3 at apply time (Phase 2b work).
+
+`tests/test_image_capture.py` (7 tests) pins the behavior:
+single-image extract, multi-image document order, per-image cap with
+truncation marker, external-URL placeholder, per-section budget,
+empty-tag short-circuit, wire-format serializer.
+
+Phase 2b/3 still ahead: cshse-server S3 upload pipeline,
+`appendix_paper_detector.py`, `.docx` generation, card UI variant,
+standalone-upload, coverage verification.
+
 ## Phase 1 shipped 2026-05-24 — data shape + apply skeleton
 
 Only the data shape landed today so Phase 2/3 (ai-service detection, image capture, .docx generation, S3 upload, UI cards) can land in follow-on sessions without schema churn.

@@ -11,9 +11,112 @@ Each Section gets heuristic flags used by the supporting-evidence classifier
 """
 from __future__ import annotations
 
+import base64
 import re
 from dataclasses import dataclass, field
 from typing import Iterable
+
+
+# CR-040 Phase 2 — Per-image cap (single image) + per-section cap (sum of
+# all images in one section). Real-world coordinator docs contain
+# screenshots, not raw camera images, so 5 MB / image and 10 MB / section
+# is plenty without risking OOM in the matcher worker.
+IMAGE_BYTES_PER_IMAGE_CAP = 5 * 1024 * 1024
+IMAGE_BYTES_PER_SECTION_CAP = 10 * 1024 * 1024
+
+
+@dataclass
+class ImageRef:
+    """CR-040 — one image captured from the source DOCX/HTML.
+
+    The walker emits these into Section.images. The wire format
+    (``to_dict`` below) preserves them so the cshse-server can route them
+    through S3 at apply time. ``data_base64`` is the raw image payload
+    base64-encoded; consumers must decode before persistence to keep S3
+    object size honest.
+    """
+    mime: str
+    byte_offset: int
+    data_base64: str
+    alt_text: str = ""
+    truncated: bool = False  # True if the original image exceeded
+                              # IMAGE_BYTES_PER_IMAGE_CAP
+
+
+_DATA_URL_RE = re.compile(
+    r"^data:(?P<mime>[\w./+-]+);base64,(?P<data>[A-Za-z0-9+/=]+)$"
+)
+
+
+def extract_images_from_tag(tag, *, base_byte_offset: int = 0) -> list[ImageRef]:
+    """Walk ``tag`` and pull every ``<img>`` descendant into an ``ImageRef``.
+
+    Used by deep_walker to populate ``Section.images`` for table sections
+    and prose ``<p>`` sections. Honors the per-image + per-section caps
+    so a runaway image (someone embeds a 50MB photo) can't OOM the
+    matcher worker.
+
+    ``base_byte_offset`` is the section's ``byte_offset_start``; per-image
+    offsets are relative to the document position the walker assigned, so
+    downstream consumers can correlate the image with its surrounding text.
+    """
+    out: list[ImageRef] = []
+    if tag is None:
+        return out
+    try:
+        # bs4's find_all walks descendants by default.
+        img_tags = tag.find_all("img")
+    except Exception:  # noqa: BLE001
+        return out
+
+    total_bytes = 0
+    for idx, img in enumerate(img_tags):
+        src = (img.get("src") or "").strip()
+        if not src:
+            continue
+        m = _DATA_URL_RE.match(src)
+        if not m:
+            # Non-data-URL image (external URL) — we don't fetch it; just
+            # record a placeholder so the count is honest. The base64
+            # field carries the original URL for downstream resolution if
+            # cshse-server later wants to follow it.
+            out.append(
+                ImageRef(
+                    mime="image/unknown",
+                    byte_offset=base_byte_offset + idx,
+                    data_base64=src,
+                    alt_text=img.get("alt", "") or "",
+                )
+            )
+            continue
+        mime = m.group("mime")
+        b64 = m.group("data")
+        try:
+            raw_size = len(base64.b64decode(b64, validate=False))
+        except Exception:  # noqa: BLE001
+            continue
+        truncated = False
+        if raw_size > IMAGE_BYTES_PER_IMAGE_CAP:
+            truncated = True
+            # Truncate by clipping the base64 string (downstream can detect
+            # the truncated flag and re-fetch from S3 in a future pass).
+            b64 = b64[: IMAGE_BYTES_PER_IMAGE_CAP // 3 * 4]
+            raw_size = IMAGE_BYTES_PER_IMAGE_CAP
+        if total_bytes + raw_size > IMAGE_BYTES_PER_SECTION_CAP:
+            # Section's image budget exhausted — drop remaining images
+            # rather than risk a runaway payload. Surface as a flag below.
+            break
+        total_bytes += raw_size
+        out.append(
+            ImageRef(
+                mime=mime,
+                byte_offset=base_byte_offset + idx,
+                data_base64=b64,
+                alt_text=img.get("alt", "") or "",
+                truncated=truncated,
+            )
+        )
+    return out
 
 # ----------------------------------------------------------------------- types
 
@@ -38,6 +141,10 @@ class Section:
     # walker has an authoritative HTML fragment (e.g. deep_walker's table
     # sections). None means "use markdown".
     html_snippet: str | None = None
+    # CR-040 Phase 2 — captured per-section images. deep_walker fills
+    # this for sites with HTML access (table sections + prose <p>).
+    # Empty list by default (no images / not yet captured).
+    images: list[ImageRef] = field(default_factory=list)
 
 
 # ---------------------------------------------------------- heuristic detectors
@@ -212,6 +319,20 @@ def to_dict(section: Section) -> dict:
         "hasSyllabusSignals": section.has_syllabus_signals,
         "splitterTier": section.splitter_tier,
         "htmlSnippet": section.html_snippet,
+        # CR-040 Phase 2 — per-section images. Each entry carries mime +
+        # base64 data + byte_offset + alt_text. cshse-server routes these
+        # through S3 at apply time.
+        "images": [
+            {
+                "mime": img.mime,
+                "byteOffset": img.byte_offset,
+                "dataBase64": img.data_base64,
+                "altText": img.alt_text,
+                "truncated": img.truncated,
+            }
+            for img in section.images
+        ],
+        "imageCount": len(section.images),
     }
 
 

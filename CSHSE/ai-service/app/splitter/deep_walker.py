@@ -29,7 +29,7 @@ from typing import Iterator, Optional
 
 from bs4 import BeautifulSoup, Tag
 
-from app.splitter.sections import Section, _heuristic_flags
+from app.splitter.sections import Section, _heuristic_flags, extract_images_from_tag
 
 # Marker patterns at the head of a cell:
 #   "a." / "a)" / "a "  → letter-only (subspec)
@@ -363,6 +363,9 @@ def _table_as_one_section(
         "unknown": "(table)",
     }.get(table_type, "(table)")
     flags = _heuristic_flags(text)
+    # CR-040 Phase 2 — capture every <img> inside this table so figures
+    # embedded in source DOCX appendix tables aren't silently dropped.
+    images = extract_images_from_tag(table, base_byte_offset=order)
     return Section(
         id=f"{base_id}:tbl:{uuid.uuid4().hex[:8]}",
         heading=heading[:200],
@@ -373,7 +376,7 @@ def _table_as_one_section(
         byte_offset_end=order,
         word_count=len(words),
         contains_table=True,
-        contains_image=False,
+        contains_image=bool(images),
         has_resume_signals=flags["hasResumeSignals"],
         has_syllabus_signals=flags["hasSyllabusSignals"],
         splitter_tier=f"table_{table_type}",
@@ -381,6 +384,7 @@ def _table_as_one_section(
         # Preserve the original <table> so the wizard's review UI can show
         # rows and columns instead of get_text()'s newline-flattened blob.
         html_snippet=str(table),
+        images=images,
     )
 
 
@@ -533,6 +537,10 @@ def deep_walk_with_fallback(
             continue
         flags = _heuristic_flags(text)
         prose_order += 1
+        # CR-040 Phase 2 — capture inline images in this prose paragraph
+        # (mammoth emits <img src="data:image/png;base64,..."> for embedded
+        # DOCX images; previously hardcoded to contains_image=False).
+        p_images = extract_images_from_tag(p, base_byte_offset=prose_order)
         prose_sections.append(
             Section(
                 id=f"{base_id}:prose:{uuid.uuid4().hex[:8]}",
@@ -543,11 +551,12 @@ def deep_walk_with_fallback(
                 byte_offset_end=prose_order,
                 word_count=len(text.split()),
                 contains_table=False,
-                contains_image=False,
+                contains_image=bool(p_images),
                 has_resume_signals=flags["hasResumeSignals"],
                 has_syllabus_signals=flags["hasSyllabusSignals"],
                 splitter_tier="prose_outside_table",
                 flags=flags,
+                images=p_images,
             )
         )
 
