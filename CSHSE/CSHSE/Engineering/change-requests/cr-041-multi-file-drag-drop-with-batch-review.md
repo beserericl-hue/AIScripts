@@ -69,6 +69,19 @@ Architecture decisions live in
 — Option B (extend existing store with multi-import support) per the
 "backward-compat by construction" rationale.
 
+Post-ship fixes (same session):
+- esbuild compiles with `format=cjs + bundle=false`, which preserves
+  `await import('../models/ImportBatch')` as a literal ESM specifier
+  that Node 20's ESM resolver can't load. Switched all four dynamic
+  import sites (`receiveAICallback`'s advancer hook, `batchAdvancer._startChild`,
+  `importBatchController` reopen kick, test seed router's ImportBatch
+  create) to runtime `require()` so esbuild lowers them to standard
+  CJS resolution (auto-adds `.js`). Fix commit 8db1042.
+- `loadBatchChildren` returned early when `batchSnapshot` was null,
+  leaving the merged Review empty when ReviewStep mounted faster than
+  the 3s BatchProgress poll. Now it auto-calls `pollBatch` first.
+  Fix commit 4572b6c.
+
 What's not in this slice (deferred to follow-ons):
 - Edit-routing for batch mode (mutations apply to the merged view; a
   follow-on routes them back to the source child via `sourceImportId`).
