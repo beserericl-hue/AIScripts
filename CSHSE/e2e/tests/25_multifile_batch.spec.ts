@@ -107,9 +107,12 @@ test.describe('CR-041 US-10 — multi-file batch wizard surface', () => {
     await expect(spec1a).toBeVisible({ timeout: 15_000 });
     await spec1a.click({ trial: false });
 
-    // 5. Source-file chip for the child 1 narrative.
+    // 5. Source-file chip for the child 1 narrative. The chip renders
+    //    as a span containing "📄 <filename>"; scope to that emoji
+    //    prefix so we don't ambiguously match the source-file filter
+    //    dropdown option (CR-041 US-6) that uses the same filename.
     await expect(
-      page.locator('text=Standards-1-5-DepartmentChair.docx')
+      page.locator('text=/📄\\s*Standards-1-5-DepartmentChair\\.docx/')
     ).toBeVisible({ timeout: 20_000 });
 
     // 6. Open spec 7.b for child 2's narrative.
@@ -117,7 +120,7 @@ test.describe('CR-041 US-10 — multi-file batch wizard surface', () => {
     await expect(spec7b).toBeVisible({ timeout: 15_000 });
     await spec7b.click({ trial: false });
     await expect(
-      page.locator('text=Standards-6-9-CurriculumLead.docx')
+      page.locator('text=/📄\\s*Standards-6-9-CurriculumLead\\.docx/')
     ).toBeVisible({ timeout: 20_000 });
   });
 });

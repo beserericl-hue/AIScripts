@@ -41,7 +41,11 @@ test.describe('CR-039 — Standard-level Introduction sections', () => {
 
     // Document Introduction sits at the top of the SpecRail (always
     // rendered — the store initializes a document-level intro bucket).
-    await expect(page.getByText('Document Introduction')).toBeVisible({ timeout: 15_000 });
+    // Scope to the role=tab to avoid matching the per-card intro
+    // combobox options (which carry the same text).
+    await expect(
+      page.getByRole('tab', { name: 'Document Introduction' })
+    ).toBeVisible({ timeout: 15_000 });
 
     // CR-039 Phase 2c part 2 "+ Add" affordance. One button per intro
     // row across the rail (Document + per-Standard). Assert at least
