@@ -3,12 +3,12 @@ name: CR-027 — Stale error persists when navigating back to wizard Upload step
 description: When the coordinator clicks back from Review to the Upload step, the prior session's matcher / pipeline error stays visible on the fresh upload screen. The error should be cleared the moment the user lands on Upload with no active run.
 type: change-request
 cr_id: CR-027
-status: proposed
+status: shipped
 priority: P1
 source: User observation 2026-05-21 (smoke test of `423eaf7` wizard build)
 sprint_target: Sprint 2B / Sprint 3 polish
 tags: [wizard, errors, ux, state-management]
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-24
 ---
 
 # CR-027 — Stale error persists when navigating back to wizard Upload step

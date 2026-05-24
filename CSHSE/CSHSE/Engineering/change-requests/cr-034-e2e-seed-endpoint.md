@@ -3,12 +3,12 @@ name: CR-034 — E2E seed endpoint for wizard regression tests
 description: Add a single dev-only POST /api/test/seed endpoint that lets Playwright (or any test runner) drop a known import-job state into MongoDB + return the Zustand store JSON to inject, so an E2E test can land directly on Parse / Match / Matrix / Review / Apply with deterministic fixtures. Replaces today's only path of driving a full upload-and-parse from Step 1.
 type: change-request
 cr_id: CR-034
-status: proposed
+status: shipped
 priority: P0
 source: User direction 2026-05-22 — "I also want you to plan the entire regression test E2E and add E2E seed endpoints so that you can do what is needed." Follow-on of the Discard-button E2E that could only verify via bundle-string scan because there was no way to reach the Review step deterministically.
 sprint_target: Sprint 4 — must land before the full regression suite (CR-033 verification depends on this)
 tags: [testing, e2e, playwright, dev-only, infra]
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-24
 ---
 
 # CR-034 — E2E seed endpoint

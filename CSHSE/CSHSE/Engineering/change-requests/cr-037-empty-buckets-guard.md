@@ -3,12 +3,12 @@ name: CR-037 — Reject empty-bucket imports before the wizard advances to Revie
 description: Today, if the ai-service finishes a job and writes `{ buckets: {} }` to the server (for any reason — matcher silently failed every section, document was malformed, container restarted mid-run, transient outage cascaded), the wizard advances the coordinator to the Review screen with zero items visible. They can then click Apply and "succeed" with zero content. Add a server-side guard that rejects empty terminal callbacks AND a client-side guard that blocks advancing to Review when the bucket count is zero, replacing the silent failure with an actionable error.
 type: change-request
 cr_id: CR-037
-status: proposed
+status: shipped
 priority: P0
 source: User-visible failure 2026-05-22 during the live demo. After CR-036's redeploy blip, the user retried the import. It "ran" without an error banner but the Review screen was empty. Quote: "the process ran, no data is shown in the UI this was embarrasing."
 sprint_target: Sprint 4 — second only to CR-036. Together they close the two demo-killers.
 tags: [server, ai-service, client, validation, p0, demo-quality]
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-24
 ---
 
 # CR-037 — Empty-buckets guard

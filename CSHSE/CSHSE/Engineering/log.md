@@ -1096,3 +1096,19 @@ Phase A acceptance criteria 6, 9, 10, 11 (key revoke via admin), 13, 14, 15 sati
 Pending operator action: set `E2E_SEED_ENABLED=1` and `E2E_SEED_TOKEN=<random>` on Railway `cshse-develop`, then `curl POST /api/test/bootstrap-sso-key` to mint the first SSO key. Set returned plaintext as `E2E_SSO_KEY` locally + on CI. Then `npx playwright test 14_review_discard` should pass end-to-end with no password ever leaving the database.
 
 Phase B (Slices 4-6) remains proposed: ticket/redirect flow (`/sso/v1/start?ticket=...`), Settings UI for SSO key management with the integration-package wizard, MemberClick relay endpoint with four-defense validation, OpenAPI 3.1 spec + redoc docs page, per-key dashboard, tier-based rate limiting, sandbox env, status page.
+
+## [2026-05-24] update | change-requests
+
+Four more AI Importer CRs shipped to `developer` after the morning CR-042 Phase A push.
+
+| CR | Commit | What |
+|---|---|---|
+| CR-034 (E2E seed endpoint, status `proposed → shipped`) | f59049d + 0f68c99 + 934c1d3 + d8d85db + bc9f407 + e0b8d65 + f3d4fbe | Seed router fully unblocked: NODE_ENV-production guard removed (single E2E_SEED_ENABLED gate, with token-header still required per-request); mounted BEFORE the bare-/api catch-all routers so /api/test/* isn't 401'd by authenticate middleware; build.js copies src/test/fixtures/*.json into dist/; Submission.create stamps an explicit submissionId (Mongoose validates required before pre-save); User email regex widened to allow '+' subaddressing + long TLDs; provisionedBy.type='manual' on seeded users so they join the SSO domain allowlist; aiTags emptied + aiStatus='parsed' so wizard lands on Review (not tag-triage or Apply); per-fixture Zustand `ai-import-storage` snapshot built from the seeded import + dirty=true so the wizard preserves seed state across /ai-status snapshots; addInitScript plant is conditional on key absence so hard-refresh tests don't get re-seeded over user edits; `approvedIds` moved from ReviewStep local useState into the Zustand store + partialize so per-card "Reviewed" survives refresh. **Acceptance: 16 seeded Playwright specs green against cshse-develop in 11s.**
+| CR-027 (stale error on wizard step-back, `proposed → shipped`) | 61abfa1 | setStep clears `errors[]` when navigating BACK to Upload and no run is in flight (status NOT in uploading/queued/parsing/applying). Mid-run errors stay visible.
+| CR-036 (handshake retries, `proposed → shipped`) | 61abfa1 | `postToAIService` wrapped in 5-attempt exponential-backoff (500/1000/2000/4000ms with ±25% jitter). Retries 5xx + network + AbortError; aborts immediately on 4xx (caller error). 30s per-attempt timeout via AbortController. Closes the "AI service unreachable" demo-killer from 2026-05-22.
+| CR-037 (empty-buckets guard Defenses 2 + 3, `proposed → shipped`) | 61abfa1 | Server: `receiveAICallback` rewrites status to 'failed' on terminal callback with zero items + no errors, adds a real diagnostic message. Client: ParseStep recomputes totalReviewableItems from the hydrated store and disables Next + renders an inline red banner when zero, even if status='parsed'. Defense 1 (ai-service self-check) still pending in the Python repo.
+
+Test sweep against `cshse-develop` post-deploy:
+- E2E (Playwright, full suite): **16 passed, 0 failed**, 25 skipped (specs that drive real upload/parse/match — not on the CR-034 seed path).
+- Client unit (vitest): 42 passed, 2 skipped.
+- Server unit (vitest): 47 passed, 10 failed (all pre-existing `documentVersionService` S3-creds-not-set in local env; no regression from any of today's work).

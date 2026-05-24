@@ -3,12 +3,12 @@ name: CR-036 — Exponential-backoff retries on the cshse-server → ai-service 
 description: The "Start AI import" call from cshse-server to cshse-ai is a single fetch with no retry. A 60-90s Railway redeploy window of cshse-ai causes the import to permanently fail with "AI service unreachable" instead of retrying transparently. Add 3–4 retries with exponential backoff (250ms → 500ms → 1s → 2s → fail) so a routine redeploy or transient network blip is invisible to coordinators.
 type: change-request
 cr_id: CR-036
-status: proposed
+status: shipped
 priority: P0
 source: User-visible failure 2026-05-22 during the live demo. Triggered by an unrelated push that caused Railway to redeploy cshse-ai. The "Could not start AI service: AI service unreachable" banner appeared while the container was rolling. CR-028 added per-call retries inside the matcher, but the initial handshake from cshse-server stays as a single attempt.
 sprint_target: Sprint 4 — top of the list. Coordinator-blocking.
 tags: [server, ai-service, retry, resilience, p0, demo-quality]
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-24
 ---
 
 # CR-036 — ai-service handshake retries
