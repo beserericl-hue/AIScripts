@@ -336,3 +336,67 @@ async def cancel_import(job_id: str, request: Request) -> dict:
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"job {job_id} not found")
     return {"cancelled": ok, "snapshot": snapshot}
+
+
+# ----------------------------------------------------------------------
+# CR-018 — Evidence-review endpoints (Phase 1 stubs)
+#
+# Phase 1 wires the three endpoints described in the CR but returns
+# HTTP 501 with a structured `{phase, ready, detail}` body. Callers
+# (server/src/services/cshseAiClient.ts) read `ready=false` as the
+# signal that Phase 2 hasn't landed, NOT as a deploy failure. The HMAC
+# auth gate runs first, so the stubs also prove the auth wiring is
+# correct end-to-end.
+# ----------------------------------------------------------------------
+
+from app.evidence import EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY
+
+
+class EvidenceExtractRequest(BaseModel):
+    """Marker-pdf + chunking input for the evidence-extract endpoint.
+
+    Phase 2 will accept the document binary via a separate upload step;
+    Phase 1 just verifies the request body shape is well-formed.
+    """
+    institutionId: str = Field(..., description="MongoDB ObjectId; required for per-institution Qdrant payload filter.")
+    submissionId: str
+    documentS3Key: str
+    documentMimeType: str = Field(default="application/pdf")
+
+
+class EvidenceRecommendRequest(BaseModel):
+    institutionId: str
+    submissionId: str
+    standardCode: str
+    specCode: str
+    topK: int = Field(default=5, ge=1, le=20)
+
+
+class EvidenceScoreRequest(BaseModel):
+    institutionId: str
+    submissionId: str
+    standardCode: str
+    specCode: str
+    candidateChunks: list[dict]
+    matrixRows: list[dict] | None = Field(default=None, description="CR-024 Sprint 4 — matrix rows for the spec, included in the Haiku prompt.")
+
+
+@app.post("/ai/evidence/extract", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+async def evidence_extract(req: EvidenceExtractRequest, request: Request) -> dict:
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    return {**EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY, "endpoint": "evidence.extract"}
+
+
+@app.post("/ai/evidence/recommend", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+async def evidence_recommend(req: EvidenceRecommendRequest, request: Request) -> dict:
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    return {**EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY, "endpoint": "evidence.recommend"}
+
+
+@app.post("/ai/evidence/score", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+async def evidence_score(req: EvidenceScoreRequest, request: Request) -> dict:
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    return {**EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY, "endpoint": "evidence.score"}

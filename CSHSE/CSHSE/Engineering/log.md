@@ -1172,3 +1172,14 @@ CR-039 + CR-040 Phase 1 shipped — data shape + apply path + a coordinator-faci
 - `applyAIImport` receives and persists `payload.evidenceDocs` so hard-refresh post-apply still surfaces them.
 
 Server vitest: 52/62 (unchanged). Client vitest: 42/44 (unchanged). E2E sweep pending the deploy.
+
+## [2026-05-24] update | change-requests
+
+Two more CRs progressed — both Phase 1 contracts so Phase 2 detector / scoring work can land cleanly in follow-on sessions.
+
+| CR | Status change | What |
+|---|---|---|
+| CR-033 (CV supporting evidence) | proposed -> in-progress | `'cv'` added to `ItemKind`. `CVItem` type with full per-faculty metadata shape (facultyName, htmlSnippet, routing.source = matrix/heading/matcher/unplaced, resolvedStd/resolvedSpec). `cvs: CVItem[]` field on store with `setCVs` action; persisted via partialize. `aiCVs: Mixed[]` on `SelfStudyImport`. `applyAIImport` persists `payload.cvs` through. Phase 2 = ai-service `cv_detector.py` + standalone-CV upload + UI card variant. |
+| CR-018 (evidence-review-off-n8n) | proposed -> in-progress | `ai-service/app/evidence/__init__.py` module skeleton + 3 endpoint stubs in main.py (`/ai/evidence/extract`, `/ai/evidence/recommend`, `/ai/evidence/score`) — each HMAC-gated, body-validated via Pydantic, returns HTTP 501 with structured `{phase:"phase-1-stub", ready:false, detail, endpoint}` body. NEW `server/src/services/cshseAiClient.ts` — typed `extractEvidence` / `recommendEvidence` / `scoreEvidence` methods + `_unwrapStubResponse` that turns the 501 into `{ ready:false, phase, detail }` so callers branch on the flag (not the HTTP status); `isEvidencePhase2Ready()` predicate for feature-detection. Phase 2 = real extract/recommend/score logic + Qdrant collection bootstrap + n8n removal. |
+
+Test sweep: client vitest 42/44 (unchanged). Server vitest 52/62 (unchanged). ai-service pytest: isolation + health 5/5 (CR-018 stubs don't have their own tests yet — they're contract-only).

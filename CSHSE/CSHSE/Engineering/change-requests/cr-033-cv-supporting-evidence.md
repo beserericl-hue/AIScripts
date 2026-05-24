@@ -3,15 +3,37 @@ name: CR-033 — CV (faculty resume) supporting evidence detection & routing
 description: Detect curriculum vitae blocks inside the uploaded self-study, group the entire CV as one supporting-evidence unit per faculty member, route it to the spec/subspec it belongs to, and let coordinators upload a CV standalone too. Each CV lands as a discrete "CV Supporting Evidence" card on the Review step and is written out as a supporting-evidence file at Apply.
 type: change-request
 cr_id: CR-033
-status: proposed
+status: in-progress
 priority: P1
 source: User observation 2026-05-22 — coordinator screenshot shows Barry W. Thomas's full CV being rendered as a generic "Evidence" card under Standard 7.b instead of as a discrete CV supporting-evidence file. Coordinator wants CVs handled as a first-class kind.
 sprint_target: Sprint 4 (post-demo)
 tags: [wizard, parse, matcher, review, apply, supporting-evidence, cv, faculty]
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-24
 ---
 
 # CR-033 — CV supporting evidence detection & routing
+
+## Phase 1 shipped 2026-05-24 — data shape + apply pass-through
+
+Same pattern as CR-040 Phase 1: lands the contract so Phase 2 (ai-service `cv_detector.py` + standalone-CV upload + UI card variant) can ship in a follow-on without schema churn.
+
+What landed:
+- **Client store**: `'cv'` added to `ItemKind`. `CVItem` type with the per-faculty metadata shape from the spec (facultyName, htmlSnippet, routing.source = matrix/heading/matcher/unplaced, resolvedStd/resolvedSpec, fileId/fileName populated post-Phase-2). `cvs: CVItem[]` field defaults to `[]`. `setCVs` action. Persisted via partialize.
+- **Client apply()**: sends `cvs` array (empty until Phase 2 fills it).
+- **Server schema**: `SelfStudyImport.aiCVs: Mixed[]` (defaults to `[]`).
+- **Server apply path**: receives and persists `payload.cvs` through.
+
+What remains for Phase 2 (per the body below):
+- ai-service `cv_detector.py` — anchor + section-marker + end-boundary regex per the spec, runs after deep_walker before matcher
+- ai-service routing: matrix-row → heading → matcher → unplaced precedence
+- Server: spec content-schema `cvs[]` array on Submission; Apply renders each CV to a `.docx`, uploads to GridFS, attaches to spec's `supportingFiles[]` with `kind: 'cv'`
+- Client: new card variant in the kind sections (User icon, faculty-name title, routing badge)
+- Client: ItemPreview right pane for CV cards (no "Place this item as" dropdown)
+- Client: standalone-CV upload flow on Upload step (detect → one-card review → Apply)
+
+CR stays `in-progress` until Phase 2 ships.
+
+
 
 ## Source quote
 

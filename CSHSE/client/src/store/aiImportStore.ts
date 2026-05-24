@@ -111,6 +111,29 @@ export type IntroductionBucket = {
   items: BucketItem[];
 };
 
+// CR-033 Phase 1 — faculty CV extracted from the self-study document.
+// Routing precedence: matrix-row → spec → matcher → unplaced. Phase 2
+// brings the ai-service `cv_detector.py` + the standalone-CV upload
+// path; this Phase 1 lands the data shape so apply() and the renderer
+// can be wired against a stable contract today.
+export type CVRoutingSource = 'matrix' | 'heading' | 'matcher' | 'unplaced';
+export type CVItem = {
+  sectionId: string;
+  facultyName: string;
+  htmlSnippet?: string | null;
+  snippet: string;
+  byteOffsetStart?: number;
+  routing: {
+    source: CVRoutingSource;
+    matrixRowAnchor?: string;
+  };
+  resolvedStd?: string;
+  resolvedSpec?: string;
+  // Populated post-Phase-2 (.docx generation + GridFS upload).
+  fileId?: string;
+  fileName?: string;
+};
+
 // CR-040 Phase 1 — appendix paper / syllabus extracted as a standalone
 // file. The wizard renders these as compact cards with a "View file"
 // button rather than a wall of body text. Detection + .docx generation +
@@ -312,6 +335,10 @@ interface AIImportState {
   // a stable shape today.
   evidenceDocs: EvidenceDocItem[];
 
+  // CR-033 Phase 1 — per-faculty CV extractions. ai-service detector +
+  // standalone-CV upload + UI card variant land in Phase 2/3.
+  cvs: CVItem[];
+
   // ---------- actions ----------
   setStep: (s: WizardStep) => void;
   setApprovedIds: (ids: string[]) => void;
@@ -324,6 +351,8 @@ interface AIImportState {
   ) => void;
   // CR-040 Phase 1
   setEvidenceDocs: (docs: EvidenceDocItem[]) => void;
+  // CR-033 Phase 1
+  setCVs: (cvs: CVItem[]) => void;
   setSubmissionId: (id: string) => void;
   setUploadFile: (f: File | null) => void;
   setProgramLevel: (l: ProgramLevel) => void;
@@ -444,7 +473,9 @@ const initialState = {
     return out;
   })(),
   // CR-040 Phase 1
-  evidenceDocs: [] as EvidenceDocItem[]
+  evidenceDocs: [] as EvidenceDocItem[],
+  // CR-033 Phase 1
+  cvs: [] as CVItem[]
 };
 
 function deriveStepFromStatus(status: WizardStatus, currentStep: WizardStep): WizardStep {
@@ -510,6 +541,7 @@ export const useAIImportStore = create<AIImportState>()(
       setMatrixScrollSpec: (specKey) => set({ matrixScrollSpec: specKey }),
       setIntroductions: (introductions) => set({ introductions, dirty: true }),
       setEvidenceDocs: (docs) => set({ evidenceDocs: docs, dirty: true }),
+      setCVs: (cvs) => set({ cvs, dirty: true }),
       moveItemToIntroduction: (sectionId, targetKey) =>
         set((s) => {
           // Pull the item out of whichever bucket OR introduction currently
@@ -1066,7 +1098,7 @@ export const useAIImportStore = create<AIImportState>()(
         // payload keyed by 'document' / 'standard-N'. Server's apply path
         // unpacks this and writes documentIntroduction +
         // standardIntroductions on the Submission.
-        const { introductions, evidenceDocs } = get();
+        const { introductions, evidenceDocs, cvs } = get();
         const linkify = (s: string) =>
           s.replace(
             /\bhttps?:\/\/[^\s<>"')]+/g,
@@ -1107,13 +1139,14 @@ export const useAIImportStore = create<AIImportState>()(
             globalMergeMode: mergeMode,
             perSpecResolution,
             idempotencyKey,
-            // CR-039 / CR-040 Phase 1 — new content kinds. Server is
-            // forward-compat: when these payloads land before the
-            // server-side handlers are wired (Phase 2 for evidenceDocs),
-            // the extra fields are ignored — no behavior change for
-            // anyone NOT producing them.
+            // CR-039 / CR-040 / CR-033 Phase 1 — new content kinds.
+            // Server is forward-compat: when these payloads land before
+            // the server-side handlers are wired (Phase 2 for
+            // evidenceDocs/cvs), the extra fields are ignored — no
+            // behavior change for anyone NOT producing them.
             introductions: introductionsPayload,
-            evidenceDocs
+            evidenceDocs,
+            cvs
           });
           set({
             status: 'applied',
@@ -1213,11 +1246,12 @@ export const useAIImportStore = create<AIImportState>()(
         dirty: s.dirty,
         // CR-034 — per-card review checkmarks survive hard refresh.
         approvedIds: s.approvedIds,
-        // CR-039 / CR-040 — new content kinds also need to survive
-        // refresh; the same dirty=true guard keeps them in place across
-        // /ai-status reapplies.
+        // CR-039 / CR-040 / CR-033 — new content kinds also need to
+        // survive refresh; the same dirty=true guard keeps them in place
+        // across /ai-status reapplies.
         introductions: s.introductions,
-        evidenceDocs: s.evidenceDocs
+        evidenceDocs: s.evidenceDocs,
+        cvs: s.cvs
       })
     }
   )

@@ -3,16 +3,37 @@ name: CR-018 — Move AI evidence review off n8n into cshse-ai
 description: Sprint 4 evidence-review stories (S4.1/S4.2/S4.3/S4.5) targeted n8n; the cshse-ai Python service is now the canonical AI surface. Re-target evidence review there.
 type: change-request
 cr_id: CR-018
-status: proposed
+status: in-progress
 priority: P1
 source: [[sprint-plan-2026-05-11#sprint-3]], [[sprint-plan-2026-05-16]] (S4.x)
 supersedes: S4.1, S4.2, S4.3, S4.5
 sprint_target: Sprint 4 or 5
 tags: [ai-service, evidence-review, n8n, deprecation]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-24
 ---
 
 # CR-018 — Move AI evidence review off n8n into cshse-ai
+
+## Phase 1 shipped 2026-05-24 — contract + auth-wired stubs
+
+Phase 1 establishes the three-endpoint contract on cshse-ai + the typed client on the Node side. The endpoints accept the HMAC-signed request, validate the body via Pydantic, and return HTTP 501 with a structured `{ phase: "phase-1-stub", ready: false, detail }` body. Callers check the `ready` flag (NOT the HTTP status) so Phase 2 deploy is a feature-flag-style flip, not a coordinated server+client release.
+
+What landed:
+- `ai-service/app/evidence/__init__.py` — module skeleton + `EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY` shared response shape.
+- `ai-service/app/main.py` — three `@app.post` handlers for `/ai/evidence/extract`, `/ai/evidence/recommend`, `/ai/evidence/score`. Each gates on HMAC + parses a `BaseModel` request body (so request-shape regressions surface immediately) before returning the 501-with-body stub. Confirmed via `app.main` import: 3 evidence routes registered.
+- `server/src/services/cshseAiClient.ts` — NEW. Typed `extractEvidence` / `recommendEvidence` / `scoreEvidence` methods. Shared `postSigned` helper that reuses the same HMAC format (`t=<unix>,v1=<hex>`) the existing `aiImportController.postToAIService` uses. `_unwrapStubResponse` short-circuits 501-with-`ready:false` into `{ ready: false, phase, detail }` so callers don't throw. `isEvidencePhase2Ready()` predicate for feature-detection.
+
+What remains for Phase 2:
+- `ai-service/app/evidence/extract.py` — Marker-pdf → markdown → text-embedding-3-small embeddings → upsert into `cshse_evidence_{env}` Qdrant collection.
+- `ai-service/app/evidence/recommend.py` — RAG retrieval with per-institution payload filter.
+- `ai-service/app/evidence/score.py` — Claude Haiku adjudication; accepts the optional `matrixRows` parameter per CR-024 Sprint 4.
+- `cshse_evidence_{env}` Qdrant collection bootstrap.
+- Server callers: replace the n8n calls with `cshseAiClient` methods.
+- Archive old n8n nodes; verify no production traffic.
+
+CR stays `in-progress` until Phase 2 ships.
+
+
 
 ## Summary
 

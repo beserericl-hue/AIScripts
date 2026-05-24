@@ -217,6 +217,10 @@ export interface ISelfStudyImport extends Document {
   // S3 upload + .docx generation land in Phase 2/3; the field is here so
   // apply-time payloads have somewhere to land without schema churn.
   aiEvidenceDocs?: any[];
+  // CR-033 Phase 1 — faculty CV extractions. Detector lives in
+  // ai-service/app/splitter/cv_detector.py (Phase 2). Phase 1 lands the
+  // store / apply pass-through only.
+  aiCVs?: any[];
   aiErrors?: string[];
   aiStartedAt?: Date;
   aiCompletedAt?: Date;
@@ -526,8 +530,12 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   aiMatrices: [{ type: Schema.Types.Mixed }],
   // CR-039
   aiIntroductions: { type: Schema.Types.Mixed, default: undefined },
-  // CR-040 Phase 1
-  aiEvidenceDocs: { type: [Schema.Types.Mixed], default: [] },
+  // CR-040 Phase 1 — Mixed[] matches the aiMatrices pattern (TS won't
+  // accept `[Schema.Types.Mixed]` with a default; use the inline object
+  // form `[{ type: Schema.Types.Mixed }]` instead).
+  aiEvidenceDocs: [{ type: Schema.Types.Mixed }],
+  // CR-033 Phase 1 — same Mixed[] pattern.
+  aiCVs: [{ type: Schema.Types.Mixed }],
   aiErrors: { type: [String], default: [] },
   aiStartedAt: Date,
   aiCompletedAt: Date,

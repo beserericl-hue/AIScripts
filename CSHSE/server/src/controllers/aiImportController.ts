@@ -589,6 +589,9 @@ type ApplyPayload = {
   // .docx generation + S3 upload land in Phase 2/3; until then this
   // field arrives empty and the apply path is a no-op.
   evidenceDocs?: any[];
+  // CR-033 Phase 1 — faculty CV list. Detector lives in ai-service
+  // Phase 2; until then this arrives empty.
+  cvs?: any[];
 };
 
 function resolveMode(
@@ -909,6 +912,10 @@ export async function applyAIImport(req: AuthenticatedRequest, res: Response): P
     if (Array.isArray(payload.evidenceDocs)) {
       (importRecord as any).aiEvidenceDocs = payload.evidenceDocs;
       (importRecord as any).markModified('aiEvidenceDocs');
+    }
+    if (Array.isArray(payload.cvs)) {
+      (importRecord as any).aiCVs = payload.cvs;
+      (importRecord as any).markModified('aiCVs');
     }
     if (idempotencyKey) {
       (importRecord as any).aiLastIdempotencyKey = idempotencyKey;

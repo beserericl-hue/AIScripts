@@ -46,7 +46,8 @@ export type ItemKind =
   | 'matrix'
   | 'tag'
   | 'introduction'   // CR-039 — Standard-level Introduction items
-  | 'evidenceDoc';   // CR-040 Phase 1 — appendix paper / syllabus file
+  | 'evidenceDoc'    // CR-040 Phase 1 — appendix paper / syllabus file
+  | 'cv';            // CR-033 Phase 1 — faculty CV supporting evidence
 
 export interface CardItem {
   rowId: string;
@@ -227,8 +228,9 @@ const KIND_LABEL: Record<ItemKind, string> = {
   file: 'Evidence file',
   matrix: 'Matrix cell',
   tag: 'Tag',
-  introduction: 'Introduction',  // CR-039
-  evidenceDoc: 'Evidence document' // CR-040 Phase 1
+  introduction: 'Introduction',     // CR-039
+  evidenceDoc: 'Evidence document', // CR-040 Phase 1
+  cv: 'CV'                           // CR-033 Phase 1
 };
 
 export function ItemCardList({
