@@ -3,6 +3,7 @@ import {
   getSubmission,
   getSubmissionProgress,
   saveNarrative,
+  saveIntroduction,
   submitStandard,
   revertStandard,
   submitSelfStudy,
@@ -62,6 +63,15 @@ router.get('/:submissionId/progress', getSubmissionProgress);
  * @access  Private (Program Coordinator, Admin)
  */
 router.patch('/:submissionId/narrative', submissionLockout, saveNarrative);
+
+/**
+ * @route   PATCH /api/submissions/:submissionId/introduction
+ * @desc    Save document-level or standard-level Introduction body
+ *          (CR-039 Phase 2c part 2)
+ * @access  Private (Program Coordinator, Admin)
+ * @body    { scope: 'document' | 'standard', standardCode?: string, content: string }
+ */
+router.patch('/:submissionId/introduction', submissionLockout, saveIntroduction);
 
 /**
  * @route   POST /api/submissions/:submissionId/submit

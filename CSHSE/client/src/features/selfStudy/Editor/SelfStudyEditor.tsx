@@ -29,6 +29,7 @@ import { api } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
+import { IntroductionEditor } from './IntroductionEditor';
 import { FinalSubmitModal } from './FinalSubmitModal';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
 import { FileLibrary } from '../FileLibrary';
@@ -2313,9 +2314,35 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     highlightedComment={highlightedComment}
                   />
                 ) : (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                    <FileUp className="w-12 h-12 mb-4" />
-                    <p>Select a specification to begin editing</p>
+                  // CR-039 Phase 2c part 2 — when only a standard is
+                  // selected (no spec yet), surface the document-level +
+                  // standard-level Introductions so coordinators can
+                  // edit the post-Apply intros. Persistence is the
+                  // saveIntroduction endpoint on the server.
+                  <div className="flex flex-col gap-4 h-full">
+                    <IntroductionEditor
+                      key={`doc-intro-${editorRefreshKey}`}
+                      submissionId={submissionId}
+                      scope="document"
+                      initialContent={(submission as any)?.documentIntroduction ?? ''}
+                      readOnly={isReadOnly}
+                    />
+                    <IntroductionEditor
+                      key={`std-intro-${selectedStandard}-${editorRefreshKey}`}
+                      submissionId={submissionId}
+                      scope="standard"
+                      standardCode={selectedStandard}
+                      initialContent={
+                        ((submission as any)?.standardIntroductions instanceof Map
+                          ? ((submission as any).standardIntroductions as Map<string, string>).get(selectedStandard)
+                          : (submission as any)?.standardIntroductions?.[selectedStandard]) ?? ''
+                      }
+                      readOnly={isReadOnly}
+                    />
+                    <div className="mt-2 flex flex-col items-center justify-center text-gray-500">
+                      <FileUp className="w-10 h-10 mb-2" />
+                      <p className="text-sm">Select a specification on the left to edit narrative content.</p>
+                    </div>
                   </div>
                 )}
               </div>

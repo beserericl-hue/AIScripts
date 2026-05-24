@@ -3,7 +3,7 @@ name: CR-039 — Standard-level Introduction sections (capture, route, edit, app
 description: Add an "Introduction" sibling to each Standard in the wizard's SpecRail. Today, introductory paragraphs (school background, terms, mission, list of departments) get either (a) silently swallowed by the parser, or (b) misplaced into a spec like 1.a where they don't belong. Coordinators have no UI to move them somewhere correct because there IS no "somewhere correct" — Introduction isn't a kind of bucket the wizard understands. This CR adds Introduction as a first-class bucket per Standard (and one at the document level), wires up move-into-Introduction, fixes the parser miss, and writes Introductions to a new Self-Study field at Apply.
 type: change-request
 cr_id: CR-039
-status: in-progress
+status: shipped
 priority: P0
 source: User observation 2026-05-23 on the Stevenson card under spec 1.a — the body is the document's school-introduction text + Stevenson history + departmental org chart, NOT a response to "Institutional Requirements." Same pattern observed in Kennesaw State self-study. Coordinators routinely use the area at the top of each Standard for narrative introduction; the wizard has no place for it.
 sprint_target: Sprint 4 — required before next coordinator round of imports because today every import puts intro material in the wrong place
@@ -12,6 +12,39 @@ last_reviewed: 2026-05-24
 ---
 
 # CR-039 — Standard-level Introduction sections
+
+## Phase 2c part 2 shipped 2026-05-24 — walker silent-drop fix + Self-Study Editor surface
+
+What landed:
+- **Walker silent-drop fix** (``deep_walker.deep_walk_with_fallback``):
+  threshold lowered from 50 → 5 words; the scan now includes
+  ``<div>``/``<section>``/``<blockquote>`` and standalone heading
+  tags (``<h1>``–``<h6>`` bypass the word floor entirely so 2-word
+  "Mission" / "About the Program" anchors reach the
+  introduction_detector). Block containers with block-level children
+  are skipped to avoid double-emit. 8 new tests in
+  ``test_deep_walker_no_silent_drops.py`` pin the fix; full
+  ai-service suite 262/4 (was 254/4).
+- **Self-Study Editor surface** (``IntroductionEditor.tsx`` +
+  ``SelfStudyEditor.tsx``): when a coordinator clicks into a Standard
+  but no Spec yet, the right pane now renders two TipTap surfaces —
+  Document Introduction (top, from ``submission.documentIntroduction``)
+  and Standard-N Introduction (from
+  ``submission.standardIntroductions[N]``). Auto-saves on blur via the
+  new ``PATCH /api/submissions/:id/introduction`` endpoint
+  (``scope=document`` or ``scope=standard`` + ``standardCode``).
+- **Server**: new ``saveIntroduction`` controller + route handler with
+  scope validation; behind the existing ``submissionLockout``
+  middleware so the read-only state from CR-005 still gates writes.
+
+What we deferred to a follow-on CR (kept out of this slice to ship
+clean): a wizard-side ``+ Add from source for this Introduction``
+affordance and the ``23_introduction.spec.ts`` Playwright spec. Both
+are mechanical extensions of existing patterns and can land in a
+small follow-on without re-architecting anything. Storage, walker,
+and editor render are all live now — the CR's blocking gap was the
+silent paragraph drop (Problem 3) plus the visible post-Apply
+intro, both shipped.
 
 ## Phase 2b shipped 2026-05-24 — pipeline integration + persistence
 

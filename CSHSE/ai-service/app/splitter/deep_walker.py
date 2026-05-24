@@ -506,13 +506,27 @@ def _is_inside_table(tag: Tag) -> bool:
 def deep_walk_with_fallback(
     html_bytes: bytes,
     base_id: str = "doc",
-    min_prose_words: int = 50,
+    min_prose_words: int = 5,
     skip_matrices: bool = True,
 ) -> list[Section]:
-    """Walk tables AND emit sections for substantial non-table prose blocks.
+    """Walk tables AND emit sections for prose blocks outside tables.
 
     ``skip_matrices`` is forwarded to ``deep_walk``; default True so the
     wizard pipeline doesn't double-emit curriculum matrices.
+
+    CR-039 Phase 2c part 2 — Problem 3: previously this dropped every
+    paragraph below 50 words (mission statements, short intros, terms
+    glossary entries vanished). The threshold is now 5 words and we
+    also capture standalone block-level prose containers that aren't
+    ``<p>`` tags (``<div>``, ``<section>``, ``<blockquote>``) plus
+    standalone heading tags. The matcher / introduction_detector
+    decides what to do with the section — the walker no longer makes
+    the keep/drop call on the wizard's behalf.
+
+    Coordinator-visible behavior: short intro paragraphs that used to
+    vanish entirely now reach the Review-step Unplaced list (or get
+    routed into the Introduction buckets by introduction_detector
+    when the heading matches).
     """
     table_sections = deep_walk(html_bytes, base_id, skip_matrices=skip_matrices)
 
@@ -529,23 +543,56 @@ def deep_walk_with_fallback(
     prose_order = max((s.byte_offset_start for s in table_sections), default=0)
 
     prose_sections: list[Section] = []
-    for p in soup.find_all("p"):
-        if _is_inside_table(p):
+    # CR-039 Phase 2c part 2 — broaden the scan beyond `<p>` so block-level
+    # containers (`<div>`, `<section>`, `<blockquote>`) and standalone
+    # heading tags don't silently slip past the walker. We dedupe by
+    # tracking the byte position of each tag's text so a `<div>` wrapping
+    # a `<p>` doesn't emit twice.
+    PROSE_TAGS = ("p", "div", "section", "blockquote", "h1", "h2", "h3", "h4", "h5", "h6")
+    seen_text_hashes: set[int] = set()
+    for tag in soup.find_all(PROSE_TAGS):
+        if _is_inside_table(tag):
             continue
-        text = p.get_text().strip()
-        if len(text.split()) < min_prose_words:
+        # Skip a container that has block-level children — its text will
+        # be emitted via the child instead. Without this, a `<div>` with
+        # three `<p>` inside would emit one big div-section AND three
+        # paragraph-sections covering the same bytes.
+        if tag.name in ("div", "section", "blockquote") and tag.find(["p", "div", "section", "blockquote"]):
             continue
+        text = tag.get_text().strip()
+        if not text:
+            continue
+        # Heading tags (`<h1>`–`<h6>`) bypass the word floor — a 2-word
+        # "Mission" anchor still matters for introduction_detector.
+        is_heading_tag = tag.name.startswith("h") and tag.name[1:].isdigit()
+        if not is_heading_tag and len(text.split()) < min_prose_words:
+            continue
+        # Dedupe identical-text emissions (rare, but a defensive guard so
+        # the walker can't double-count if a `<div>` slips past the
+        # has-block-child check above).
+        text_hash = hash(text[:200])
+        if text_hash in seen_text_hashes:
+            continue
+        seen_text_hashes.add(text_hash)
+
         flags = _heuristic_flags(text)
         prose_order += 1
         # CR-040 Phase 2 — capture inline images in this prose paragraph
         # (mammoth emits <img src="data:image/png;base64,..."> for embedded
         # DOCX images; previously hardcoded to contains_image=False).
-        p_images = extract_images_from_tag(p, base_byte_offset=prose_order)
+        p_images = extract_images_from_tag(tag, base_byte_offset=prose_order)
+        # Distinguish heading-only sections so introduction_detector can
+        # treat them as candidate intro anchors even when the body is
+        # short. The standalone `<h1>`/`<h2>` case is exactly how
+        # "Introduction", "Mission", "About the Program" lines appear
+        # in coordinator-authored DOCX bodies.
+        is_heading = tag.name.startswith("h") and tag.name[1:].isdigit()
+        tier_label = "prose_outside_table_heading" if is_heading else "prose_outside_table"
         prose_sections.append(
             Section(
                 id=f"{base_id}:prose:{uuid.uuid4().hex[:8]}",
                 heading=text[:120],
-                heading_level=2,
+                heading_level=int(tag.name[1]) if is_heading else 2,
                 markdown=text,
                 byte_offset_start=prose_order,
                 byte_offset_end=prose_order,
@@ -554,7 +601,7 @@ def deep_walk_with_fallback(
                 contains_image=bool(p_images),
                 has_resume_signals=flags["hasResumeSignals"],
                 has_syllabus_signals=flags["hasSyllabusSignals"],
-                splitter_tier="prose_outside_table",
+                splitter_tier=tier_label,
                 flags=flags,
                 images=p_images,
             )

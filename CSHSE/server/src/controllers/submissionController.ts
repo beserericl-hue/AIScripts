@@ -292,6 +292,60 @@ export const saveNarrative = async (req: AuthenticatedRequest, res: Response) =>
 };
 
 /**
+ * CR-039 Phase 2c part 2 — save the document-level or standard-level
+ * Introduction body. Mirrors the saveNarrative shape: PC-only writes,
+ * locked-submission middleware in front of the route. Body:
+ *
+ *   { scope: 'document' }                    → writes documentIntroduction
+ *   { scope: 'standard', standardCode: 'N' } → writes standardIntroductions[N]
+ *
+ * Both modes take `content` (the HTML body from the TipTap editor).
+ * Empty string clears the intro for that scope.
+ */
+export const saveIntroduction = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    const { scope, standardCode, content } = req.body as {
+      scope?: 'document' | 'standard';
+      standardCode?: string;
+      content?: string;
+    };
+    if (scope !== 'document' && scope !== 'standard') {
+      return res.status(400).json({ error: "scope must be 'document' or 'standard'" });
+    }
+    if (scope === 'standard' && !standardCode) {
+      return res.status(400).json({ error: 'standardCode is required for scope=standard' });
+    }
+    if (typeof content !== 'string') {
+      return res.status(400).json({ error: 'content (string) is required' });
+    }
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+    if (scope === 'document') {
+      submission.documentIntroduction = content;
+    } else {
+      if (!submission.standardIntroductions) {
+        submission.standardIntroductions = new Map();
+      }
+      submission.standardIntroductions.set(standardCode!, content);
+      submission.markModified('standardIntroductions');
+    }
+    await submission.save();
+    return res.json({
+      message: 'Introduction saved',
+      scope,
+      standardCode: scope === 'standard' ? standardCode : null,
+      contentLength: content.length
+    });
+  } catch (error) {
+    console.error('Save introduction error:', error);
+    return res.status(500).json({ error: 'Failed to save introduction' });
+  }
+};
+
+/**
  * Submit a standard for validation
  */
 export const submitStandard = async (req: AuthenticatedRequest, res: Response) => {
