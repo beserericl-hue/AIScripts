@@ -47,6 +47,14 @@ import {
   confirmMatrixColumn,
   inferMatrixRowSpec
 } from '../controllers/aiImportController';
+// CR-041 — Multi-file batched import.
+import {
+  createImportBatch,
+  addFileToBatch,
+  getImportBatch,
+  startImportBatch,
+  cancelImportBatch
+} from '../controllers/importBatchController';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
@@ -94,6 +102,19 @@ const upload = multer({
  * @access  Private (Coordinator)
  */
 router.post('/upload', upload.single('file'), uploadDocument);
+
+// ============================================
+// CR-041 — Multi-file batched import (US-2, partial US-3/US-7)
+// ============================================
+//
+// US-3 kick-off endpoint + the merged Apply (US-8) ship in subsequent
+// commits. This slice lands the batch lifecycle: create, add files,
+// query, cancel.
+router.post('/batch', createImportBatch);
+router.post('/batch/:batchId/file', upload.single('file'), addFileToBatch);
+router.post('/batch/:batchId/start', startImportBatch);
+router.get('/batch/:batchId', getImportBatch);
+router.post('/batch/:batchId/cancel', cancelImportBatch);
 
 /**
  * @route   GET /api/imports/check/:submissionId

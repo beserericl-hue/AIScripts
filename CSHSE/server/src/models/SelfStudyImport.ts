@@ -229,6 +229,11 @@ export interface ISelfStudyImport extends Document {
   // Stored as Mixed because the verifier wire shape may grow over
   // future phases; consumers (client + server analytics) read by key.
   aiCoverageReport?: any;
+  // CR-041 US-2 — back-pointers to the parent ImportBatch when this
+  // import is part of a multi-file batch. Absent ↔ single-file legacy.
+  batchId?: mongoose.Types.ObjectId;
+  batchPosition?: number;             // 1-indexed slot
+  batchHoldForReview?: boolean;       // mirror of parent flag for fast reads
   // CR-039 Phase 2b — section_id → routing_hint map from
   // introduction_detector. Persisted on the import so a hard refresh
   // post-parse re-derives the wizard's Introduction-bucket seed.
@@ -552,6 +557,11 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   aiStandaloneCv: { type: Boolean, default: false },
   // CR-040 Phase 3b — coverage report from coverage_verifier.
   aiCoverageReport: { type: Schema.Types.Mixed, default: undefined },
+  // CR-041 US-2 — batch back-pointers (all optional; legacy single-file
+  // imports leave these unset).
+  batchId: { type: Schema.Types.ObjectId, ref: 'ImportBatch', index: true },
+  batchPosition: { type: Number },
+  batchHoldForReview: { type: Boolean },
   // CR-039 Phase 2b — section_id → routing_hint map from
   // introduction_detector.
   aiIntroductionHints: { type: Schema.Types.Mixed, default: undefined },

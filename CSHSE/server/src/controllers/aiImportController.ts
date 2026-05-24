@@ -254,6 +254,59 @@ async function postToAIService(path: string, payload: object): Promise<any> {
 // POST /api/imports/:importId/start-ai
 // ============================================================================
 
+/**
+ * CR-041 US-3 — internal helper that runs the same /start-ai logic the
+ * single-file flow uses, but driven by the batchAdvancer instead of an
+ * incoming request. Returns the cshse-ai snapshot or throws.
+ */
+export async function startAIImportForBatch(
+  importId: string,
+  programLevel: string = 'bachelors',
+  forceFormat: 'template' | 'self_study' | null = null
+): Promise<void> {
+  const initial = await SelfStudyImport.findById(importId).lean();
+  if (!initial) throw new Error(`Import not found: ${importId}`);
+  const s3Key = initial.aiS3Key || `imports/${importId}/source.docx`;
+  const submissionDoc = await Submission.findById(initial.submissionId)
+    .select('institutionId')
+    .lean();
+  const institutionIdStr = submissionDoc?.institutionId
+    ? String(submissionDoc.institutionId)
+    : null;
+  await SelfStudyImport.findByIdAndUpdate(importId, {
+    $set: {
+      aiStatus: 'queued',
+      aiProgramLevel: programLevel,
+      aiForceFormat: forceFormat,
+      aiS3Key: s3Key,
+      aiStartedAt: new Date(),
+      aiStages: [],
+      aiErrors: []
+    }
+  });
+  const callbackUrl = `${getServerPublicUrl()}/api/imports/${importId}/ai-callback`;
+  const eventCallbackUrl = `${getServerPublicUrl()}/api/imports/${importId}/ai-event`;
+  const snapshot = await postToAIService('/ai/import/start', {
+    s3Key,
+    submissionId: String(initial.submissionId),
+    importId,
+    programLevel,
+    forceFormat,
+    callbackUrl,
+    eventCallbackUrl,
+    institutionId: institutionIdStr
+  });
+  await SelfStudyImport.findByIdAndUpdate(importId, {
+    $set: {
+      aiJobId: snapshot.jobId,
+      aiStatus: snapshot.status,
+      aiQueuePosition: snapshot.queuePosition ?? null,
+      aiQueueDepth: snapshot.queueDepth ?? null,
+      aiEtaSeconds: snapshot.etaSeconds ?? null
+    }
+  });
+}
+
 export async function startAIImport(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
   const { programLevel = 'bachelors', forceFormat = null, isReimport = false } = req.body || {};
@@ -565,6 +618,21 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
 
   // Final SSE event, then connected clients drop the EventSource.
   broadcastSSE(importId, buildSnapshotFromImport(importRecord));
+
+  // CR-041 US-3 — if this import is part of a batch, tell the advancer
+  // so it can bump counts + start the next pending child. Best-effort;
+  // a failure here doesn't roll back the callback.
+  const batchId = (importRecord as any).batchId;
+  const terminalStatus = (importRecord as any).aiStatus;
+  if (batchId && ['parsed', 'failed', 'canceled'].includes(terminalStatus)) {
+    try {
+      const { advanceBatch } = await import('../services/batchAdvancer');
+      await advanceBatch(batchId, terminalStatus as 'parsed' | 'failed' | 'canceled');
+    } catch (advErr) {
+      console.error('[ai-callback] batchAdvancer hook failed:', advErr);
+    }
+  }
+
   res.json({ ok: true });
 }
 
