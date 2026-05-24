@@ -246,6 +246,11 @@ export function buildTestRouter(): Router | null {
       userDoc = await User.create(userPayload);
 
       submissionDoc = await Submission.create({
+        // The Submission model auto-generates submissionId via a pre('save')
+        // hook, but Mongoose runs `required` validation BEFORE pre-save —
+        // so we have to stamp it explicitly here. Format mirrors the model
+        // hook (YYYY-NNN) but uses the per-seed stamp for uniqueness.
+        submissionId: `E2E-${stamp}`,
         institutionName: (submissionSpec.institutionName as string) ?? 'E2E Test University',
         programName: (submissionSpec.programName as string) ?? 'E2E Test Program',
         programLevel: (submissionSpec.programLevel as string) ?? 'bachelors',
