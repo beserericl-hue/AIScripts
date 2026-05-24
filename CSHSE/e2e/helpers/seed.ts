@@ -169,6 +169,15 @@ export async function gotoReviewStep(page: Page, seed: SeedResult): Promise<void
   await expect(reviewTab).toBeVisible({ timeout: 30_000 });
   await reviewTab.click();
 
+  // The Review pane is master/detail: left rail lists specs, middle pane
+  // shows cards for the currently-selected spec. With nothing selected the
+  // middle pane says "Select a spec from the left." — click the first
+  // spec tab so the cards render and downstream spec-agnostic assertions
+  // (Discard/Edit/etc.) have something to bind against.
+  const specsTabList = page.getByRole('complementary', { name: /specifications/i }).getByRole('tab').first();
+  await expect(specsTabList).toBeVisible({ timeout: 15_000 });
+  await specsTabList.click();
+
   // Wait for at least one Review card to render
   await expect(
     page.getByRole('button', { name: /^edit$/i }).first()

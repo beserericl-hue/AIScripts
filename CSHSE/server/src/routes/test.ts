@@ -330,7 +330,12 @@ export function buildTestRouter(): Router | null {
       placeholderSections: importSpec.aiPlaceholderSections ?? [],
       matrices: importSpec.aiMatrices ?? [],
       matrixRowEdits: {},
-      dirty: false
+      // CR-034: dirty=true so the wizard's _applySnapshot guard preserves
+      // the seeded buckets (and any subsequent user edits) instead of
+      // overwriting them with whatever /ai-status returns from the server.
+      // Without this, every "edit + hard refresh" spec sees its edit
+      // bounced back to the pre-edit state.
+      dirty: true
     };
     const zustandState =
       (importSpec.zustandState as Record<string, unknown> | undefined) ??

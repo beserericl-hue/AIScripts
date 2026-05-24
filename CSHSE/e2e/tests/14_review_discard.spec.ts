@@ -34,12 +34,31 @@ test.describe('CR-033 — Discard button on Review cards', () => {
     await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
-    const discardButtons = page.getByRole('button', { name: /^discard$/i });
-    const count = await discardButtons.count();
-    expect(count).toBeGreaterThanOrEqual(3); // seed has 3 narratives + 1 evidence + 1 tag
+    // The Review pane is master/detail: each spec tab renders its own
+    // cards. Iterate every spec tab in the left rail and accumulate the
+    // total Discard count across all of them. The seed fixture has 4
+    // narratives + 1 evidence text spread across 3 specs (1.a/2.a/7.b).
+    const specsRail = page.getByRole('complementary', { name: /specifications/i });
+    const specTabs = specsRail.getByRole('tab');
+    const specCount = await specTabs.count();
+    let totalDiscard = 0;
+    for (let i = 0; i < specCount; i++) {
+      const tab = specTabs.nth(i);
+      const tabName = await tab.getAttribute('aria-label') || '';
+      // Skip the 'Unplaced' bucket — its body uses a different surface
+      // and has no Discard buttons in this fixture.
+      if (/unplaced/i.test(tabName)) continue;
+      await tab.click();
+      // Allow the right pane to re-render
+      await page.waitForTimeout(150);
+      const specDiscard = await page.getByRole('button', { name: /^discard$/i }).count();
+      totalDiscard += specDiscard;
+    }
+    expect(totalDiscard).toBeGreaterThanOrEqual(3);
 
-    // Confirm red styling on the first Discard
-    const first = discardButtons.first();
+    // Confirm red styling on the first Discard we can see on whichever
+    // spec is currently selected.
+    const first = page.getByRole('button', { name: /^discard$/i }).first();
     const className = await first.getAttribute('class');
     expect(className).toMatch(/text-red-700|text-red/);
     expect(className).toMatch(/border-red/);
