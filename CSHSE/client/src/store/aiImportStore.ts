@@ -449,6 +449,10 @@ interface AIImportState {
   // every child in the batch finishes. When false, Review opens as
   // soon as the first child completes.
   holdForReview: boolean;
+  // CR-041 US-6 — Source-file filter for the merged Review. null = all
+  // sources visible; an importId scopes SpecRail counts + visible
+  // cards to that single source child.
+  reviewSourceFilter: string | null;
 
   // CR-041 user story 1 — pending file queue when the coordinator
   // drops multiple files on the Upload step. The first file is
@@ -535,6 +539,8 @@ interface AIImportState {
   loadExisting: (importId: string) => Promise<void>;
   // CR-041 US-5
   setHoldForReview: (v: boolean) => void;
+  // CR-041 US-6 — Source-file filter setter. Pass null to clear.
+  setReviewSourceFilter: (importId: string | null) => void;
   // CR-041 US-2/US-3 — initiate a multi-file batch run. Creates a
   // batch, uploads each file as a child, kicks off the advancer.
   startBatchUpload: (files: File[]) => Promise<void>;
@@ -630,6 +636,8 @@ const initialState = {
   // CR-041 US-5 — Hold-for-review flag (default ON per spec).
   // Persisted across refresh so the coordinator's preference survives.
   holdForReview: true,
+  // CR-041 US-6 — Source-file filter. null = show all sources.
+  reviewSourceFilter: null as string | null,
   // CR-041 user story 1
   pendingFiles: [] as File[]
 };
@@ -966,6 +974,8 @@ export const useAIImportStore = create<AIImportState>()(
 
       // CR-041 US-5 — Hold-for-review flag.
       setHoldForReview: (v) => set({ holdForReview: v }),
+      // CR-041 US-6 — Source-file filter.
+      setReviewSourceFilter: (importId) => set({ reviewSourceFilter: importId }),
 
       // CR-041 US-2/US-3 — multi-file batch upload. Coordinator dropped
       // N files; we (1) create a batch, (2) upload each as a child via
@@ -1103,19 +1113,8 @@ export const useAIImportStore = create<AIImportState>()(
       // Each item carries sourceImportId + sourceFilename for chip
       // rendering.
       loadBatchChildren: async () => {
-        const { batchId, dirty, buckets } = get();
+        const { batchId } = get();
         if (!batchId) return;
-        // Skip the merge when the coordinator has made local edits AND
-        // buckets are already populated. Without the populated check
-        // we'd never merge for a seeded fixture (CR-034 sets dirty=true
-        // to prevent /ai-status from overwriting seeded buckets) or for
-        // a hard-refresh-mid-batch (dirty flag persists). When buckets
-        // are empty, the merge is REQUIRED to render any content.
-        const hasContent =
-          Object.values(buckets).some(
-            (b) => b.narratives.length || b.evidenceText.length || b.evidenceFiles.length
-          );
-        if (dirty && hasContent) return;
         // CR-041 US-6 — ensure we have the batch snapshot first; the
         // Review step may mount before BatchProgress's polling tick.
         let { batchSnapshot } = get();
@@ -1146,17 +1145,51 @@ export const useAIImportStore = create<AIImportState>()(
         }
         if (childrenSnapshots.length === 0) return;
 
-        // Build merged buckets.
+        // CR-041 smart merge: start from CURRENT store state, then ADD
+        // items from each child whose sectionId isn't already present.
+        // Pre-existing items (coordinator-edited, discarded, retagged,
+        // etc.) are preserved. Late-completing children's content lands
+        // additively. This replaces the prior `dirty` binary guard
+        // which either blocked all merges or overwrote all edits.
+        const current = get();
         const mergedBuckets: Record<string, SpecBucket> = {};
-        const mergedTags: Tag[] = [];
-        const mergedMatrices: MatrixData[] = [];
-        const mergedCvs: CVItem[] = [];
-        const mergedEvidenceDocs: EvidenceDocItem[] = [];
-        const mergedIntroductions: Record<string, IntroductionBucket> = {};
-        // Seed the intro keys so the UI's empty rails render.
-        for (const [key, ib] of Object.entries(get().introductions)) {
-          mergedIntroductions[key] = { ...ib, items: [] };
+        // Deep-copy the existing buckets so the merge mutations don't
+        // alias the previous render's data structures.
+        for (const [bk, b] of Object.entries(current.buckets)) {
+          mergedBuckets[bk] = {
+            ...b,
+            narratives: [...b.narratives],
+            evidenceText: [...b.evidenceText],
+            evidenceFiles: [...b.evidenceFiles]
+          };
         }
+        const mergedTags: Tag[] = [...current.tags];
+        // Matrices come from the AI service whole; we union by matrixId
+        // (the matrix structure is per-document; merging cells across
+        // documents is the per-cell concat already in matrices' shape).
+        const mergedMatrices: MatrixData[] = [...current.matrices];
+        const mergedCvs: CVItem[] = [...current.cvs];
+        const mergedEvidenceDocs: EvidenceDocItem[] = [...current.evidenceDocs];
+        const mergedIntroductions: Record<string, IntroductionBucket> = {};
+        for (const [key, ib] of Object.entries(current.introductions)) {
+          mergedIntroductions[key] = { ...ib, items: [...ib.items] };
+        }
+
+        // Build sectionId sets so we can dedupe by id across re-merges.
+        const seenBucketIds = new Set<string>();
+        for (const b of Object.values(mergedBuckets)) {
+          for (const it of b.narratives) seenBucketIds.add(it.sectionId);
+          for (const it of b.evidenceText) seenBucketIds.add(it.sectionId);
+          for (const it of b.evidenceFiles) seenBucketIds.add(it.sectionId);
+        }
+        const seenTagIds = new Set(mergedTags.map((t) => t.tagId));
+        const seenCvIds = new Set(mergedCvs.map((c) => c.sectionId));
+        const seenEvidenceDocIds = new Set(mergedEvidenceDocs.map((e) => e.sectionId));
+        const seenIntroIds = new Set<string>();
+        for (const ib of Object.values(mergedIntroductions)) {
+          for (const it of ib.items) seenIntroIds.add(it.sectionId);
+        }
+        const seenMatrixIds = new Set(mergedMatrices.map((m) => m.matrixId));
 
         const stamp = <T extends { sourceImportId?: string; sourceFilename?: string }>(
           item: T,
@@ -1169,64 +1202,81 @@ export const useAIImportStore = create<AIImportState>()(
         });
 
         for (const { importId, filename, snap } of childrenSnapshots) {
-          // Buckets — keyed by std.spec. Concat per kind.
           if (snap.buckets) {
             for (const [bk, b] of Object.entries(snap.buckets)) {
-              const existing = mergedBuckets[bk];
-              if (!existing) {
-                mergedBuckets[bk] = {
-                  ...b,
-                  narratives: b.narratives.map((it) => stamp(it, importId, filename)),
-                  evidenceText: b.evidenceText.map((it) => stamp(it, importId, filename)),
-                  evidenceFiles: b.evidenceFiles.map((it) => stamp(it, importId, filename))
-                };
-              } else {
-                mergedBuckets[bk] = {
-                  ...existing,
-                  narratives: [
-                    ...existing.narratives,
-                    ...b.narratives.map((it) => stamp(it, importId, filename))
-                  ],
-                  evidenceText: [
-                    ...existing.evidenceText,
-                    ...b.evidenceText.map((it) => stamp(it, importId, filename))
-                  ],
-                  evidenceFiles: [
-                    ...existing.evidenceFiles,
-                    ...b.evidenceFiles.map((it) => stamp(it, importId, filename))
-                  ]
-                };
-              }
+              const existing = mergedBuckets[bk] || {
+                ...b,
+                narratives: [],
+                evidenceText: [],
+                evidenceFiles: []
+              };
+              const additions = {
+                narratives: b.narratives
+                  .filter((it) => !seenBucketIds.has(it.sectionId))
+                  .map((it) => stamp(it, importId, filename)),
+                evidenceText: b.evidenceText
+                  .filter((it) => !seenBucketIds.has(it.sectionId))
+                  .map((it) => stamp(it, importId, filename)),
+                evidenceFiles: b.evidenceFiles
+                  .filter((it) => !seenBucketIds.has(it.sectionId))
+                  .map((it) => stamp(it, importId, filename))
+              };
+              for (const it of additions.narratives) seenBucketIds.add(it.sectionId);
+              for (const it of additions.evidenceText) seenBucketIds.add(it.sectionId);
+              for (const it of additions.evidenceFiles) seenBucketIds.add(it.sectionId);
+              mergedBuckets[bk] = {
+                ...existing,
+                // Preserve coverage signals from the most recent merge —
+                // last writer wins for the metadata fields.
+                standardTitle: b.standardTitle || existing.standardTitle,
+                specPrompt: b.specPrompt || existing.specPrompt,
+                coverageScore: b.coverageScore ?? existing.coverageScore,
+                coverageCovered: b.coverageCovered ?? existing.coverageCovered,
+                coverageGaps: b.coverageGaps?.length ? b.coverageGaps : existing.coverageGaps,
+                coverageStrengths: b.coverageStrengths?.length
+                  ? b.coverageStrengths
+                  : existing.coverageStrengths,
+                narratives: [...existing.narratives, ...additions.narratives],
+                evidenceText: [...existing.evidenceText, ...additions.evidenceText],
+                evidenceFiles: [...existing.evidenceFiles, ...additions.evidenceFiles]
+              };
             }
           }
           if (Array.isArray(snap.tags)) {
             for (const t of snap.tags) {
+              if (seenTagIds.has(t.tagId)) continue;
               mergedTags.push(stamp(t, importId, filename));
+              seenTagIds.add(t.tagId);
             }
           }
           if (Array.isArray(snap.matrices)) {
             for (const m of snap.matrices) {
+              if (seenMatrixIds.has(m.matrixId)) continue;
               mergedMatrices.push(m);
+              seenMatrixIds.add(m.matrixId);
             }
           }
           if (Array.isArray(snap.cvs)) {
             for (const c of snap.cvs) {
+              if (seenCvIds.has(c.sectionId)) continue;
               mergedCvs.push(stamp(c, importId, filename));
+              seenCvIds.add(c.sectionId);
             }
           }
           if (Array.isArray(snap.evidenceDocs)) {
             for (const e of snap.evidenceDocs) {
+              if (seenEvidenceDocIds.has(e.sectionId)) continue;
               mergedEvidenceDocs.push(stamp(e, importId, filename));
+              seenEvidenceDocIds.add(e.sectionId);
             }
           }
-          // Introductions — merge per bucket key.
           if (snap.introductionHints && Object.keys(snap.introductionHints).length > 0) {
             for (const [sectionId, hint] of Object.entries(snap.introductionHints)) {
+              if (seenIntroIds.has(sectionId)) continue;
               const targetKey = hint.startsWith('introduction:')
                 ? hint.slice('introduction:'.length)
                 : null;
               if (!targetKey || !mergedIntroductions[targetKey]) continue;
-              // Find the item across this child's buckets.
               if (snap.buckets) {
                 for (const b of Object.values(snap.buckets)) {
                   const found = b.narratives.find((n) => n.sectionId === sectionId);
@@ -1234,6 +1284,7 @@ export const useAIImportStore = create<AIImportState>()(
                     mergedIntroductions[targetKey].items.push(
                       stamp(found, importId, filename)
                     );
+                    seenIntroIds.add(sectionId);
                     break;
                   }
                 }

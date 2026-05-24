@@ -20,7 +20,7 @@ import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { recordVersion } from '../services/documentVersionService';
 import { startBatch } from '../services/batchAdvancer';
-import { applyAIImport } from './aiImportController';
+import { applyAIImportCore } from './aiImportController';
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string; name?: string; role?: string };
@@ -268,17 +268,13 @@ export async function startImportBatch(
 /**
  * POST /api/imports/batch/:batchId/apply — US-8 merged Apply.
  *
- * Walks the batch's children and runs the existing applyAIImport
- * controller against each (which itself wraps Submission writes in a
- * Mongo session). Returns per-child + aggregated counts. Stamps
- * batch.appliedAt on success. On failure, the offending child rolls
- * back via its own session; predecessors stay applied (idempotent
- * re-apply still works via aiLastIdempotencyKey on each child).
- *
- * Wrapping ALL children in ONE outer transaction (the spec's
- * preferred design) requires the existing applyAIImport to accept an
- * external session — refactor punted to a follow-on; this slice gets
- * the batch surface live with per-child transactions.
+ * Wraps every child's Submission + SelfStudyImport writes in ONE outer
+ * Mongo session/transaction (when `MONGO_SUPPORTS_TRANSACTIONS=true`),
+ * via the extracted `applyAIImportCore` helper. If any child fails,
+ * the whole transaction aborts and the wizard reports `ok: false` with
+ * per-child detail. Idempotency is per-child: replays of the same
+ * batch with the same batch-scoped idempotency key short-circuit each
+ * child via `aiLastIdempotencyKey` regardless of the outer session.
  */
 export async function applyImportBatch(
   req: AuthenticatedRequest,
@@ -303,9 +299,9 @@ export async function applyImportBatch(
       });
       return;
     }
-    const children = await SelfStudyImport.find({ batchId: batch._id })
-      .sort({ batchPosition: 1 })
-      .lean();
+    const children = await SelfStudyImport.find({ batchId: batch._id }).sort({
+      batchPosition: 1
+    });
 
     type ChildResult = {
       importId: string;
@@ -315,63 +311,67 @@ export async function applyImportBatch(
     };
     const results: ChildResult[] = [];
 
-    for (const c of children) {
-      const importIdStr = String(c._id);
-      // Re-use the per-import applyAIImport controller by faking a small
-      // request shape. The controller reads req.params.importId +
-      // req.body.idempotencyKey + req.user.
-      const idempotencyKey = `batch-${batchId}-child-${importIdStr}`;
-      const proxyReq = {
-        ...req,
-        params: { importId: importIdStr },
-        body: { ...req.body, idempotencyKey }
-      } as any;
-      const childResult: any = await new Promise((resolve) => {
-        const proxyRes = {
-          status(code: number) {
-            this._status = code;
-            return this;
-          },
-          json(body: any) {
-            resolve({ status: this._status || 200, body });
-            return this;
-          }
-        } as any;
-        applyAIImport(proxyReq, proxyRes).catch((err) =>
-          resolve({ status: 500, body: { error: err?.message || String(err) } })
-        );
-      });
-      if (childResult.status >= 400) {
-        results.push({
-          importId: importIdStr,
-          ok: false,
-          error:
-            childResult.body?.error ||
-            childResult.body?.detail ||
-            `HTTP ${childResult.status}`
+    const useTransaction = process.env.MONGO_SUPPORTS_TRANSACTIONS === 'true';
+    const session = useTransaction ? await mongoose.startSession() : null;
+    if (session) session.startTransaction();
+
+    try {
+      for (const child of children) {
+        const importIdStr = String(child._id);
+        const idempotencyKey = `batch-${batchId}-child-${importIdStr}`;
+        const result = await applyAIImportCore({
+          importRecord: child,
+          payload: { ...(req.body || {}), idempotencyKey },
+          userId: req.user?.id,
+          session,
+          // Pass externalSession=true so the core doesn't pre-flush
+          // aiStatus='applying' outside our outer transaction.
+          externalSession: !!session
         });
-      } else {
+        if (result.ok === false) {
+          results.push({
+            importId: importIdStr,
+            ok: false,
+            error: result.error
+          });
+          // Hard-stop: abort the outer transaction so no child commits
+          // partially. The remaining children stay pending.
+          throw new Error(`child ${importIdStr} apply failed: ${result.error}`);
+        }
         results.push({
           importId: importIdStr,
           ok: true,
-          counts: childResult.body?.aiAppliedCounts || childResult.body?.counts || null
+          counts: result.appliedCounts
         });
       }
-    }
 
-    const allOk = results.every((r) => r.ok);
-    if (allOk) {
       batch.appliedAt = new Date();
       batch.status = 'completed';
-      await batch.save();
+      await batch.save(session ? { session } : {});
+      if (session) await session.commitTransaction();
+      res.json({
+        batchId,
+        ok: true,
+        results,
+        appliedAt: batch.appliedAt
+      });
+    } catch (innerErr: any) {
+      if (session) {
+        try {
+          await session.abortTransaction();
+        } catch {
+          // ignore
+        }
+      }
+      res.status(500).json({
+        batchId,
+        ok: false,
+        results,
+        error: innerErr?.message || String(innerErr)
+      });
+    } finally {
+      if (session) await session.endSession();
     }
-
-    res.json({
-      batchId,
-      ok: allOk,
-      results,
-      appliedAt: batch.appliedAt ?? null
-    });
   } catch (err: any) {
     console.error('applyImportBatch error:', err);
     res.status(500).json({ error: err?.message || 'failed to apply batch' });

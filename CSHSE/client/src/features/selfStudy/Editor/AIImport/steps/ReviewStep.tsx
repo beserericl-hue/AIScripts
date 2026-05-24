@@ -75,19 +75,93 @@ function FullReviewStep(): JSX.Element {
     }
   }, [batchId, batchSnapshotForReview?.completedCount, loadBatchChildren]);
 
-  const buckets = useAIImportStore((s) => s.buckets);
-  const tags = useAIImportStore((s) => s.tags);
+  // CR-041 US-6 — source-file filter on merged Review.
+  const reviewSourceFilter = useAIImportStore((s) => s.reviewSourceFilter);
+  const setReviewSourceFilter = useAIImportStore((s) => s.setReviewSourceFilter);
+  const rawBuckets = useAIImportStore((s) => s.buckets);
+  const rawTags = useAIImportStore((s) => s.tags);
+  const rawCvs = useAIImportStore((s) => s.cvs);
+  const rawEvidenceDocs = useAIImportStore((s) => s.evidenceDocs);
+  const rawIntroductions = useAIImportStore((s) => s.introductions);
+  // Distinct source filenames for the dropdown — derived from any
+  // bucket / tag / cv / evidenceDoc / intro item that carries a
+  // sourceImportId. Empty in single-file mode.
+  const sourceOptions = React.useMemo(() => {
+    const m = new Map<string, string>();
+    const stamp = (it: any) => {
+      if (it?.sourceImportId && it.sourceFilename) {
+        m.set(it.sourceImportId, it.sourceFilename);
+      }
+    };
+    for (const b of Object.values(rawBuckets)) {
+      b.narratives.forEach(stamp);
+      b.evidenceText.forEach(stamp);
+      b.evidenceFiles.forEach(stamp);
+    }
+    rawTags.forEach(stamp);
+    rawCvs.forEach(stamp);
+    rawEvidenceDocs.forEach(stamp);
+    for (const ib of Object.values(rawIntroductions)) ib.items.forEach(stamp);
+    return [...m.entries()].map(([importId, filename]) => ({ importId, filename }));
+  }, [rawBuckets, rawTags, rawCvs, rawEvidenceDocs, rawIntroductions]);
+
+  // CR-041 US-6 — apply the source filter. When set, every item whose
+  // sourceImportId !== filter is hidden from buckets / tags / cvs /
+  // evidenceDocs / introductions. The unfiltered raw fields stay
+  // available via rawBuckets etc for the dropdown population.
+  const buckets = React.useMemo(() => {
+    if (!reviewSourceFilter) return rawBuckets;
+    const out: typeof rawBuckets = {};
+    for (const [k, b] of Object.entries(rawBuckets)) {
+      out[k] = {
+        ...b,
+        narratives: b.narratives.filter((it) => (it as any).sourceImportId === reviewSourceFilter),
+        evidenceText: b.evidenceText.filter((it) => (it as any).sourceImportId === reviewSourceFilter),
+        evidenceFiles: b.evidenceFiles.filter((it) => (it as any).sourceImportId === reviewSourceFilter)
+      };
+    }
+    return out;
+  }, [rawBuckets, reviewSourceFilter]);
+  const tags = React.useMemo(
+    () =>
+      reviewSourceFilter
+        ? rawTags.filter((t) => (t as any).sourceImportId === reviewSourceFilter)
+        : rawTags,
+    [rawTags, reviewSourceFilter]
+  );
   // CR-040 Phase 3b — coverage report drives the "Missing from import"
   // SpecRail entry, the Parse-step stat carried forward into Review, and
   // the soft Apply gate. Defensive `|| null` because older imports may
   // not carry a report.
   const coverageReport = useAIImportStore((s) => s.coverageReport);
   // CR-039 — Introduction buckets + move-into-introduction action
-  const introductions = useAIImportStore((s) => s.introductions);
+  const introductions = React.useMemo(() => {
+    if (!reviewSourceFilter) return rawIntroductions;
+    const out: typeof rawIntroductions = {};
+    for (const [k, ib] of Object.entries(rawIntroductions)) {
+      out[k] = {
+        ...ib,
+        items: ib.items.filter((i) => (i as any).sourceImportId === reviewSourceFilter)
+      };
+    }
+    return out;
+  }, [rawIntroductions, reviewSourceFilter]);
   const moveItemToIntroduction = useAIImportStore((s) => s.moveItemToIntroduction);
   // CR-033 / CR-040 Phase 2c — detector outputs surfaced as rail entries.
-  const cvs = useAIImportStore((s) => s.cvs);
-  const evidenceDocs = useAIImportStore((s) => s.evidenceDocs);
+  const cvs = React.useMemo(
+    () =>
+      reviewSourceFilter
+        ? rawCvs.filter((c) => (c as any).sourceImportId === reviewSourceFilter)
+        : rawCvs,
+    [rawCvs, reviewSourceFilter]
+  );
+  const evidenceDocs = React.useMemo(
+    () =>
+      reviewSourceFilter
+        ? rawEvidenceDocs.filter((e) => (e as any).sourceImportId === reviewSourceFilter)
+        : rawEvidenceDocs,
+    [rawEvidenceDocs, reviewSourceFilter]
+  );
   const placeholderSections = useAIImportStore((s) => s.placeholderSections);
   const selectedSpecKey = useAIImportStore((s) => s.selectedSpecKey);
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
@@ -605,6 +679,28 @@ function FullReviewStep(): JSX.Element {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* CR-041 US-6 — source-file filter. Visible only when in
+              batch mode (sourceOptions populated). Lets the PC scope
+              SpecRail counts + visible cards to one source file. */}
+          {sourceOptions.length > 0 && (
+            <label className="flex items-center gap-1 text-xs text-gray-700">
+              <span>Filter by source:</span>
+              <select
+                value={reviewSourceFilter ?? ''}
+                onChange={(e) =>
+                  setReviewSourceFilter(e.target.value || null)
+                }
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500"
+              >
+                <option value="">All sources ({sourceOptions.length})</option>
+                {sourceOptions.map((opt) => (
+                  <option key={opt.importId} value={opt.importId}>
+                    {opt.filename}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <button
             onClick={() => setStep('parse')}
             className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"

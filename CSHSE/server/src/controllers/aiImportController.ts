@@ -735,6 +735,125 @@ function mergeNarrativeContent(existing: string, incoming: string, mode: 'merge'
   return `${existing}\n<hr class="ai-import-merge"/>\n${incoming}`;
 }
 
+/**
+ * CR-041 US-8 — extracted apply-core. Runs the per-import Submission +
+ * SelfStudyImport writes inside an OPTIONAL outer session, so the batch
+ * Apply controller (importBatchController.applyImportBatch) can wrap
+ * every child in one transaction. When called from the per-import HTTP
+ * handler, the handler still creates its own session as before.
+ *
+ * Returns the same shape the HTTP handler renders; never throws — error
+ * paths return { ok: false, error }. The caller is responsible for HTTP
+ * status + SSE broadcast.
+ */
+export async function applyAIImportCore(args: {
+  importRecord: any;
+  payload: ApplyPayload;
+  userId: any;
+  session: mongoose.ClientSession | null;
+  /** When true, the caller manages session commit/abort. */
+  externalSession?: boolean;
+}): Promise<
+  | { ok: true; status: 'applied'; appliedCounts: typeof emptyCounts; tagsRemaining: number; idempotentReplay?: boolean }
+  | { ok: false; status: string; error: string; httpStatus?: number }
+> {
+  const { importRecord, payload, userId, session } = args;
+  const externalSession = !!args.externalSession;
+
+  if (importRecord.aiStatus !== 'parsed' && importRecord.aiStatus !== 'failed' && importRecord.aiStatus !== 'applied') {
+    return {
+      ok: false,
+      status: importRecord.aiStatus,
+      error: `Cannot apply from status ${importRecord.aiStatus}; must be parsed.`,
+      httpStatus: 409
+    };
+  }
+  const idempotencyKey = typeof payload.idempotencyKey === 'string' ? payload.idempotencyKey : null;
+  if (idempotencyKey && (importRecord as any).aiLastIdempotencyKey === idempotencyKey && importRecord.aiAppliedCounts) {
+    return {
+      ok: true,
+      status: importRecord.aiStatus,
+      appliedCounts: importRecord.aiAppliedCounts,
+      tagsRemaining: (importRecord.aiTags || []).length,
+      idempotentReplay: true
+    };
+  }
+  const submission = await Submission.findById(importRecord.submissionId);
+  if (!submission) {
+    return {
+      ok: false,
+      status: importRecord.aiStatus,
+      error: 'Submission not found for this import',
+      httpStatus: 404
+    };
+  }
+  importRecord.aiStatus = 'applying';
+  // When part of a batch outer transaction we let the outer commit
+  // carry the state flip; otherwise persist eagerly so a mid-apply
+  // snapshot reflects the in-flight state.
+  if (!externalSession) await importRecord.save();
+  return _applyAIImportWrites({
+    importRecord,
+    submission,
+    payload,
+    userId,
+    session,
+    idempotencyKey
+  });
+}
+
+const emptyCounts = {
+  narratives: 0,
+  evidenceText: 0,
+  evidenceFiles: 0,
+  matrixCells: 0,
+  tags: 0,
+  placeholders: 0
+};
+
+async function _applyAIImportWrites(args: {
+  importRecord: any;
+  submission: any;
+  payload: ApplyPayload;
+  userId: any;
+  session: mongoose.ClientSession | null;
+  idempotencyKey: string | null;
+}): Promise<
+  | { ok: true; status: 'applied'; appliedCounts: typeof emptyCounts; tagsRemaining: number }
+  | { ok: false; status: string; error: string; httpStatus?: number }
+> {
+  const { importRecord, submission, payload, userId, session, idempotencyKey } = args;
+  const counts = { ...emptyCounts };
+  try {
+    await _runApplyBody({ importRecord, submission, payload, userId, session, idempotencyKey, counts });
+    return {
+      ok: true,
+      status: 'applied',
+      appliedCounts: counts,
+      tagsRemaining: (importRecord.aiTags || []).length
+    };
+  } catch (err: any) {
+    importRecord.aiStatus = 'parsed';
+    importRecord.aiErrors = [
+      ...(importRecord.aiErrors || []),
+      `apply-ai failed: ${err?.message || String(err)}`
+    ];
+    try {
+      // Best-effort error persistence; if we're inside an outer session
+      // that's about to abort, this save will abort with it.
+      await importRecord.save(session ? { session } : {});
+    } catch {
+      // ignore
+    }
+    return {
+      ok: false,
+      status: 'parsed',
+      error: err?.message || String(err),
+      httpStatus: 500
+    };
+  }
+}
+
 export async function applyAIImport(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
   const payload: ApplyPayload = req.body || {};
@@ -744,58 +863,73 @@ export async function applyAIImport(req: AuthenticatedRequest, res: Response): P
     res.status(404).json({ error: 'Import not found' });
     return;
   }
-  if (importRecord.aiStatus !== 'parsed' && importRecord.aiStatus !== 'failed' && importRecord.aiStatus !== 'applied') {
-    res.status(409).json({
-      error: `Cannot apply from status ${importRecord.aiStatus}; must be parsed.`,
-      status: importRecord.aiStatus
-    });
-    return;
-  }
-
-  // Idempotency short-circuit. We stash the last successful idempotency key
-  // on the record alongside the counts; a retry with the same key returns
-  // the cached response without re-writing anything.
-  const idempotencyKey = typeof payload.idempotencyKey === 'string' ? payload.idempotencyKey : null;
-  if (idempotencyKey && (importRecord as any).aiLastIdempotencyKey === idempotencyKey && importRecord.aiAppliedCounts) {
-    res.json({
-      ok: true,
-      idempotentReplay: true,
-      status: importRecord.aiStatus,
-      appliedCounts: importRecord.aiAppliedCounts,
-      tagsRemaining: (importRecord.aiTags || []).length
-    });
-    return;
-  }
-
-  const submission = await Submission.findById(importRecord.submissionId);
-  if (!submission) {
-    res.status(404).json({ error: 'Submission not found for this import' });
-    return;
-  }
-
-  importRecord.aiStatus = 'applying';
-  await importRecord.save();
-
-  // Atomicity model: we want a Mongo transaction wrapping Submission +
-  // SelfStudyImport saves. mongodb-memory-server runs a standalone mongod
-  // by default and rejects transactions; production runs on Railway with
-  // a replica set that supports them. Use a session iff
-  // MONGO_SUPPORTS_TRANSACTIONS=true (set in production env). Otherwise
-  // save sequentially and lean on the idempotency-key replay for retry
-  // safety.
+  // Atomicity model: see applyAIImportCore comment. mongodb-memory-server
+  // runs a standalone mongod by default and rejects transactions;
+  // production runs on Railway with a replica set that supports them.
   const useTransaction = process.env.MONGO_SUPPORTS_TRANSACTIONS === 'true';
   const session = useTransaction ? await mongoose.startSession() : null;
   if (session) session.startTransaction();
-
-  const counts = {
-    narratives: 0,
-    evidenceText: 0,
-    evidenceFiles: 0,
-    matrixCells: 0,
-    tags: 0,
-    placeholders: 0
-  };
+  const result = await applyAIImportCore({
+    importRecord,
+    payload,
+    userId: req.user!._id,
+    session,
+    externalSession: false
+  });
   try {
+    if (result.ok === false) {
+      if (session) {
+        try {
+          await session.abortTransaction();
+        } catch {
+          // ignore
+        }
+      }
+      res.status(result.httpStatus ?? 500).json({
+        ok: false,
+        status: result.status,
+        error: result.error
+      });
+      return;
+    }
+    if (session) await session.commitTransaction();
+    broadcastSSE(importId, buildSnapshotFromImport(importRecord));
+    res.json({
+      ok: true,
+      status: result.status,
+      appliedCounts: result.appliedCounts,
+      tagsRemaining: result.tagsRemaining,
+      ...(result.idempotentReplay ? { idempotentReplay: true } : {})
+    });
+  } finally {
+    if (session) await session.endSession();
+  }
+}
+
+// CR-041 US-8 — body extracted so the per-import HTTP handler AND the
+// batch Apply handler share the exact same write logic. Throws on
+// failure so _applyAIImportWrites can roll back cleanly via the outer
+// catch.
+async function _runApplyBody(args: {
+  importRecord: any;
+  submission: any;
+  payload: ApplyPayload;
+  userId: any;
+  session: mongoose.ClientSession | null;
+  idempotencyKey: string | null;
+  counts: typeof emptyCounts;
+}): Promise<void> {
+  const { importRecord, submission, payload, userId, session, idempotencyKey, counts } = args;
+  // The original applyAIImport body is reproduced verbatim below — the
+  // refactor is mechanical (extract body, keep behavior).
+  const importId = String(importRecord._id);
+  void importId;
+
+  // CR-041 US-8 refactor: the orig body had an outer try/catch +
+  // session lifecycle here; both moved up to _applyAIImportWrites and
+  // the HTTP handler. The block below is the original write logic with
+  // local `counts` references switched to the passed-in counts.
+  {
     if (!submission.narratives) {
       submission.narratives = new Map() as any;
     }
@@ -873,7 +1007,6 @@ export async function applyAIImport(req: AuthenticatedRequest, res: Response): P
     // (std, spec); per-row courseAssessments come from the matrix cells.
     let appliedMatrixCellCount = 0;
     if (Array.isArray(payload.matrices) && payload.matrices.length > 0) {
-      const userId = req.user!._id;
       const newMatrixIds: mongoose.Types.ObjectId[] = [];
 
       for (const m of payload.matrices) {
@@ -1037,45 +1170,9 @@ export async function applyAIImport(req: AuthenticatedRequest, res: Response): P
       (importRecord as any).aiLastIdempotencyKey = idempotencyKey;
     }
     await importRecord.save(session ? { session } : {});
-
-    if (session) {
-      await session.commitTransaction();
-    }
-  } catch (err: any) {
-    if (session) {
-      try {
-        await session.abortTransaction();
-      } catch {
-        // ignore
-      }
-    }
-    importRecord.aiStatus = 'parsed';
-    importRecord.aiErrors = [
-      ...(importRecord.aiErrors || []),
-      `apply-ai failed: ${err?.message || String(err)}`
-    ];
-    try {
-      await importRecord.save();
-    } catch {
-      // Best-effort error persistence; the 5xx tells the client to retry.
-    }
-    res.status(500).json({
-      ok: false,
-      error: err?.message || String(err),
-      status: 'parsed'
-    });
-    return;
-  } finally {
-    if (session) await session.endSession();
   }
-
-  broadcastSSE(importId, buildSnapshotFromImport(importRecord));
-  res.json({
-    ok: true,
-    status: 'applied',
-    appliedCounts: counts,
-    tagsRemaining: (importRecord.aiTags || []).length
-  });
+  // _runApplyBody returns normally; the caller (applyAIImportCore →
+  // _applyAIImportWrites) catches any throw + handles rollback.
 }
 
 // ============================================================================
