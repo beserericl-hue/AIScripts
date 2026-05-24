@@ -453,6 +453,11 @@ interface AIImportState {
   // sources visible; an importId scopes SpecRail counts + visible
   // cards to that single source child.
   reviewSourceFilter: string | null;
+  // CR-040 Phase 3b — coordinator-resolved missing fragments (the
+  // coordinator clicked Discard / Reassigned a fragment from the
+  // "Missing from import" rail entry). Apply is gated until every
+  // missing fragment is in this set. Persisted across refresh.
+  resolvedMissingFragmentIds: string[];
 
   // CR-041 user story 1 — pending file queue when the coordinator
   // drops multiple files on the Upload step. The first file is
@@ -541,6 +546,10 @@ interface AIImportState {
   setHoldForReview: (v: boolean) => void;
   // CR-041 US-6 — Source-file filter setter. Pass null to clear.
   setReviewSourceFilter: (importId: string | null) => void;
+  // CR-040 Phase 3b — coordinator resolved a missing fragment (Discard
+  // or Reassign action on the "Missing from import" rail entry).
+  resolveMissingFragment: (sectionId: string) => void;
+  clearResolvedMissingFragments: () => void;
   // CR-041 US-2/US-3 — initiate a multi-file batch run. Creates a
   // batch, uploads each file as a child, kicks off the advancer.
   startBatchUpload: (files: File[]) => Promise<void>;
@@ -638,6 +647,8 @@ const initialState = {
   holdForReview: true,
   // CR-041 US-6 — Source-file filter. null = show all sources.
   reviewSourceFilter: null as string | null,
+  // CR-040 Phase 3b — coordinator-resolved missing fragment ids.
+  resolvedMissingFragmentIds: [] as string[],
   // CR-041 user story 1
   pendingFiles: [] as File[]
 };
@@ -976,6 +987,15 @@ export const useAIImportStore = create<AIImportState>()(
       setHoldForReview: (v) => set({ holdForReview: v }),
       // CR-041 US-6 — Source-file filter.
       setReviewSourceFilter: (importId) => set({ reviewSourceFilter: importId }),
+      // CR-040 Phase 3b — fragment resolution.
+      resolveMissingFragment: (sectionId) =>
+        set((s) => ({
+          resolvedMissingFragmentIds: s.resolvedMissingFragmentIds.includes(sectionId)
+            ? s.resolvedMissingFragmentIds
+            : [...s.resolvedMissingFragmentIds, sectionId],
+          dirty: true
+        })),
+      clearResolvedMissingFragments: () => set({ resolvedMissingFragmentIds: [] }),
 
       // CR-041 US-2/US-3 — multi-file batch upload. Coordinator dropped
       // N files; we (1) create a batch, (2) upload each as a child via
@@ -1909,6 +1929,7 @@ export const useAIImportStore = create<AIImportState>()(
         standaloneCv: s.standaloneCv,
         // CR-040 Phase 3b — sticky across refresh.
         coverageReport: s.coverageReport,
+        resolvedMissingFragmentIds: s.resolvedMissingFragmentIds,
         // CR-041 US-2/US-4/US-5 — batch context survives refresh so the
         // wizard rejoins Parse polling on the right batch.
         batchId: s.batchId,

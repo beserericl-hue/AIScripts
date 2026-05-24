@@ -44,9 +44,13 @@ single-page extraction, multi-page separation, empty/garbage/oversized
 rejection, and an end-to-end PDF-bytes → text → chunked-upsert round
 trip with the institution-stamping invariant preserved.
 
-n8n removal still pending — no production traffic to remove because no
-Reader-side caller exists today. When a caller lands, point it at
-``cshseAiClient``; the n8n nodes can be archived then.
+n8n archive: ``cshse-document-matcher.json`` and
+``cshse-self-study-standard-validation.json`` moved to
+``n8n-workflows/archived-superseded-by-cshse-ai/`` with a README
+explaining the cshse-ai replacements. The JSON exports stay in-tree
+for reference; they're not deployed in production. The other n8n
+workflows (help chat, document upload, spec loader) are unrelated
+and stay live.
 
 ## Phase 2 shipped 2026-05-24 — real extract/recommend/score implementations
 

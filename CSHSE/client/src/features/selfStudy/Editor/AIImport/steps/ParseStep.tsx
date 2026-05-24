@@ -380,6 +380,9 @@ function BatchProgress(): JSX.Element | null {
   const holdForReview = useAIImportStore((s) => s.holdForReview);
   const pollBatch = useAIImportStore((s) => s.pollBatch);
   const setStep = useAIImportStore((s) => s.setStep);
+  // CR-040 Phase 3b — hard coverage gate also applies to batch mode.
+  const coverageReport = useAIImportStore((s) => s.coverageReport);
+  const coverageBlocked = isCoverageHardBlocked(coverageReport);
   React.useEffect(() => {
     if (!batchId) return;
     pollBatch();
@@ -492,12 +495,14 @@ function BatchProgress(): JSX.Element | null {
         </div>
         <button
           onClick={() => setStep('review')}
-          disabled={!reviewUnlocked}
+          disabled={!reviewUnlocked || coverageBlocked}
           className="rounded bg-cshse-600 px-3 py-1 text-xs font-medium text-white shadow disabled:cursor-not-allowed disabled:bg-gray-300"
           title={
-            reviewUnlocked
-              ? 'Open merged Review'
-              : 'Hold-for-review gate active — every child must finish first'
+            coverageBlocked
+              ? 'Review blocked — coverage below the safety floor; see banner above'
+              : reviewUnlocked
+                ? 'Open merged Review'
+                : 'Hold-for-review gate active — every child must finish first'
           }
         >
           Next: Review ▸
@@ -513,20 +518,25 @@ function BatchProgress(): JSX.Element | null {
  * CR-040 Phase 3b — coverage stat surfaced under the pipeline.
  *
  * Reads coverageReport from the store; renders nothing until the
- * verifier has emitted a report. Color cues mirror the CR spec:
- * green ≥ 99.5%, amber 95–99.5%, red < 95%. Below 90% would
- * normally block Review entirely — for now we surface the cue and let
- * the coordinator continue. Hard-blocking gate ships when the verifier
- * has run against enough real coordinator docs to know the floor.
+ * verifier has emitted a report. Color cues per spec:
+ *   green ≥ 99.5%, amber 95–99.5%, red < 95%.
+ * Hard-block gate (acceptance criterion 20): when coverage_percent
+ * falls below 90%, the wizard refuses to advance to Review. Coordinator
+ * must retry the import or contact support with the import id.
  */
+const COVERAGE_HARD_BLOCK_PCT = 90;
+
 function CoverageBadge(): JSX.Element | null {
   const report = useAIImportStore((s) => s.coverageReport);
+  const importId = useAIImportStore((s) => s.importId);
+  const setStep = useAIImportStore((s) => s.setStep);
   if (!report) return null;
   const pct = typeof report.coveragePercentBytes === 'number'
     ? report.coveragePercentBytes
     : (report.coveragePercent ?? 100);
   const missing = report.missingFragments?.length ?? 0;
   const boundaryWarnings = report.boundaryWarnings?.length ?? 0;
+  const hardBlocked = pct < COVERAGE_HARD_BLOCK_PCT;
   const color =
     pct >= 99.5
       ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
@@ -534,14 +544,49 @@ function CoverageBadge(): JSX.Element | null {
       ? 'border-amber-300 bg-amber-50 text-amber-800'
       : 'border-red-300 bg-red-50 text-red-800';
   return (
-    <div className={`mt-3 inline-flex items-center gap-2 rounded border px-2.5 py-1 text-xs ${color}`}>
-      <span className="font-mono font-semibold">COVERAGE: {pct.toFixed(1)}%</span>
-      {missing > 0 && <span>· {missing} missing fragment{missing === 1 ? '' : 's'}</span>}
-      {boundaryWarnings > 0 && (
-        <span>· {boundaryWarnings} boundary warning{boundaryWarnings === 1 ? '' : 's'}</span>
+    <div className="mt-3 space-y-2">
+      <div className={`inline-flex items-center gap-2 rounded border px-2.5 py-1 text-xs ${color}`}>
+        <span className="font-mono font-semibold">COVERAGE: {pct.toFixed(1)}%</span>
+        {missing > 0 && <span>· {missing} missing fragment{missing === 1 ? '' : 's'}</span>}
+        {boundaryWarnings > 0 && (
+          <span>· {boundaryWarnings} boundary warning{boundaryWarnings === 1 ? '' : 's'}</span>
+        )}
+      </div>
+      {hardBlocked && (
+        <div className="rounded-md border-2 border-red-400 bg-red-50 p-3 text-sm text-red-900">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5 text-red-700" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold">
+                Coverage below the {COVERAGE_HARD_BLOCK_PCT}% floor — Review is blocked
+              </div>
+              <p className="mt-1 text-xs">
+                The parser only accounted for {pct.toFixed(1)}% of the source bytes.
+                That's well below the safety floor — Review cannot open until
+                this is investigated. Try a fresh upload, or contact support with
+                import id <code className="font-mono text-[11px] bg-red-100 px-1 py-0.5 rounded">{importId ?? '(unknown)'}</code>.
+              </p>
+              <button
+                onClick={() => setStep('upload')}
+                className="mt-2 rounded border border-red-400 bg-white px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+              >
+                ◂ Start over from Upload
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
+}
+
+/** Exported so other components (BatchProgress, Stepper) can gate advance. */
+export function isCoverageHardBlocked(report: { coveragePercentBytes?: number; coveragePercent?: number } | null | undefined): boolean {
+  if (!report) return false;
+  const pct = typeof report.coveragePercentBytes === 'number'
+    ? report.coveragePercentBytes
+    : (report.coveragePercent ?? 100);
+  return pct < COVERAGE_HARD_BLOCK_PCT;
 }
 
 // ----------------------------------------------------------------- StageList

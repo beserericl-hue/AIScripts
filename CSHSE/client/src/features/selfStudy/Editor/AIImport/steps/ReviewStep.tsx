@@ -18,6 +18,8 @@ import { ItemPreview } from '../review/ItemPreview';
 import { ReassignPopup } from '../review/ReassignPopup';
 import { ShowInSourceModal } from '../review/ShowInSourceModal';
 import { StandaloneCVReview } from '../review/StandaloneCVReview';
+import { MissingFragmentsView } from '../review/MissingFragmentsView';
+import { MISSING_FRAGMENTS_KEY } from '../review/SpecRail';
 import { api } from '../../../../../services/api';
 
 /**
@@ -304,6 +306,19 @@ function FullReviewStep(): JSX.Element {
   const isApplying = status === 'applying';
   const isApplied = status === 'applied' || status === 'finished';
   const [confirmApplyOpen, setConfirmApplyOpen] = useState(false);
+
+  // CR-040 Phase 3b — Apply is gated until every MissingFragment is
+  // resolved (Discard or Reassign from the "Missing from import" rail
+  // entry). resolvedMissingFragmentIds is persisted across refresh.
+  const resolvedMissingFragmentIds = useAIImportStore(
+    (s) => s.resolvedMissingFragmentIds
+  );
+  const unresolvedMissingFragments = React.useMemo(() => {
+    const fragments = coverageReport?.missingFragments ?? [];
+    const resolved = new Set(resolvedMissingFragmentIds);
+    return fragments.filter((f) => !resolved.has(f.sectionId));
+  }, [coverageReport, resolvedMissingFragmentIds]);
+  const applyBlockedByMissing = unresolvedMissingFragments.length > 0;
 
   const handleOneClickApply = useCallback(async () => {
     setConfirmApplyOpen(false);
@@ -761,9 +776,13 @@ function FullReviewStep(): JSX.Element {
           </button>
           <button
             onClick={() => setConfirmApplyOpen(true)}
-            disabled={isApplying || isApplied}
+            disabled={isApplying || isApplied || applyBlockedByMissing}
             className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-            title="Send all reviewed narratives, evidence, files, tags, and matrices straight to the standards editor"
+            title={
+              applyBlockedByMissing
+                ? `Apply blocked — ${unresolvedMissingFragments.length} missing fragment(s) need to be discarded or reassigned first`
+                : 'Send all reviewed narratives, evidence, files, tags, and matrices straight to the standards editor'
+            }
           >
             {isApplying ? (
               <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Applying…</>
@@ -839,29 +858,41 @@ function FullReviewStep(): JSX.Element {
           onAddFromSourceForIntro={handleAddFromSourceForIntro}
         />
         <main className="flex flex-1 flex-col overflow-hidden">
-          <ItemCardList
-            selectedKey={selectedSpecKey}
-            bucket={activeBucket}
-            unplacedTags={unplacedTags}
-            placeholders={placeholderSections}
-            matrices={matrices}
-            selectedSectionId={selectedSectionId}
-            onSelect={selectSection}
-            onBulkAction={handleBulkAction}
-            onCorrectMissingSpec={handleCorrectMissingSpec}
-            onChangeKind={handleChangeKind}
-            approvedIds={approvedIds}
-            onToggleApproval={toggleApproval}
-            onApproveAll={approveAll}
-            onClearApprovals={clearApprovals}
-            onJumpToMatrix={handleJumpToMatrix}
-            onAppendUnplacedToSpec={handleAppendUnplacedToSpec}
-            onEditStart={handleEditStart}
-            introductions={introductions}
-            onMoveToIntroduction={moveItemToIntroduction}
-            cvs={cvs}
-            evidenceDocs={evidenceDocs}
-          />
+          {/* CR-040 Phase 3b — when the rail's "Missing from import"
+              entry is selected, swap the middle pane for the
+              MissingFragmentsView that surfaces every unaccounted-for
+              section with Discard + Reassign actions. Apply is gated
+              on resolution. */}
+          {selectedSpecKey === MISSING_FRAGMENTS_KEY ? (
+            <MissingFragmentsView
+              fragments={coverageReport?.missingFragments ?? []}
+              resolvedIds={new Set(resolvedMissingFragmentIds)}
+            />
+          ) : (
+            <ItemCardList
+              selectedKey={selectedSpecKey}
+              bucket={activeBucket}
+              unplacedTags={unplacedTags}
+              placeholders={placeholderSections}
+              matrices={matrices}
+              selectedSectionId={selectedSectionId}
+              onSelect={selectSection}
+              onBulkAction={handleBulkAction}
+              onCorrectMissingSpec={handleCorrectMissingSpec}
+              onChangeKind={handleChangeKind}
+              approvedIds={approvedIds}
+              onToggleApproval={toggleApproval}
+              onApproveAll={approveAll}
+              onClearApprovals={clearApprovals}
+              onJumpToMatrix={handleJumpToMatrix}
+              onAppendUnplacedToSpec={handleAppendUnplacedToSpec}
+              onEditStart={handleEditStart}
+              introductions={introductions}
+              onMoveToIntroduction={moveItemToIntroduction}
+              cvs={cvs}
+              evidenceDocs={evidenceDocs}
+            />
+          )}
         </main>
         <ItemPreview
           bucket={activeBucket}
