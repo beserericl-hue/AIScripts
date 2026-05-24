@@ -167,7 +167,10 @@ function buildSnapshotFromImport(importRecord: any): object {
     evidenceDocs: importRecord.aiEvidenceDocs || [],
     introductionHints: importRecord.aiIntroductionHints || {},
     // CR-033 Phase 2c part 2 — standalone-CV mode flag.
-    standaloneCv: !!importRecord.aiStandaloneCv
+    standaloneCv: !!importRecord.aiStandaloneCv,
+    // CR-040 Phase 3b — coverage report (byte-level census +
+    // boundary warnings + missing fragments).
+    coverageReport: importRecord.aiCoverageReport || null
   };
 }
 
@@ -534,6 +537,11 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   // CR-033 Phase 2c part 2 — standalone-CV mode flag.
   if (typeof payload.standaloneCv === 'boolean') {
     (importRecord as any).aiStandaloneCv = payload.standaloneCv;
+  }
+  // CR-040 Phase 3b — coverage report.
+  if (payload.coverageReport && typeof payload.coverageReport === 'object') {
+    (importRecord as any).aiCoverageReport = payload.coverageReport;
+    (importRecord as any).markModified('aiCoverageReport');
   }
   // CR-040 Phase 2b — appendix papers + syllabi from
   // appendix_paper_detector. Same empty-array semantics as CVs.

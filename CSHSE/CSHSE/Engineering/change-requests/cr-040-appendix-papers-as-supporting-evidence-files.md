@@ -3,7 +3,7 @@ name: CR-040 — Appendix research papers, student work samples, and syllabi bec
 description: Self-study documents typically include an appendix with student work samples (research papers, country reports, immigrant interview papers) AND course syllabi documents. Today these blocks land in the importer as long, flattened narrative cards that lose their structure, lose their images, and don't attach to the standard the way readers expect (one file = one piece of supporting evidence). This CR teaches the parser to detect appendix-paper AND syllabus blocks, extract each as a standalone file (.docx with embedded images), store them in S3, and represent them in the wizard as supporting-evidence file cards. A post-parse VERIFICATION stage proves every source byte is accounted for — bucket, intro, paper, syllabus, CV, unplaced, or explicit skip — and surfaces any missing fragments to the coordinator as a new "Missing from import" section on the Review screen. No wizard UI redesign — just a new card kind + a coverage stat + the missing-fragments section.
 type: change-request
 cr_id: CR-040
-status: in-progress
+status: shipped
 priority: P0
 source: User observation 2026-05-23 on Stevenson "Sample Country Report" (South Korea) + "Immigrant Interview Paper" embedded in the source-doc appendix. Quote — "The AI importer must see that this is a research paper as the text ahead of the paper flags it as such... NOTE there are images in this paper and these images must be captured. The best option is to create a file during the parsing, store the file in S3 and create a link in supporting evidence tile that there is a file stored. In that way we don't have to change the UI of the import wizard except to show the summary in the tile and allow viewing of that file." Addendum 2026-05-23 — "Additional files imported and shown in the document are Syllabi documents. These documents should be treated just like the research papers and stored as files with images and listed in tiles with summary and link to the file. In generation of Supporting evidence files, Syllabi could be imported as standalone documents."
 sprint_target: Sprint 4 — coordinator-blocking; pairs with CR-033 (CVs) and CR-039 (Introductions) as the four "new content kinds" PCs need before next round of imports (papers, syllabi, CVs, intros).
@@ -12,6 +12,54 @@ last_reviewed: 2026-05-24
 ---
 
 # CR-040 — Appendix papers as standalone evidence files
+
+## Phase 3b shipped 2026-05-24 — byte-level coverage + boundary validation
+
+Walker `byte_offset_end` is now meaningful (was a duplicate of `_start`)
+— each section reports `byte_offset_end = byte_offset_start + word_count`
+so the coverage census has a real extent to sum. Fixed in three sites:
+`_table_extracts_for_subspec_template`, `_table_as_one_section`, and
+`deep_walk_with_fallback`.
+
+`coverage_verifier` extended:
+- **Pass 1 byte-level census** — sums section extents to compute
+  `bytes_total` / `bytes_assigned` / `coverage_percent_bytes` alongside
+  the existing section-level count.
+- **Pass 2 explicit skip categorization** — low-value sections
+  (whitespace, sub-floor-noise, TOC headings, appendix labels) are
+  classified into `skip:*` buckets and counted as assigned so they
+  don't surface as actionable missing fragments.
+- **Pass 3 boundary validation** — for each evidenceDoc section, run
+  `header_check` (first line matches a paper/syllabus header pattern),
+  `sentence_edge` (body ends on a sentence boundary), and
+  `orphan_paragraph` (no ≥30-word section sits immediately above).
+  Violations surface as `BoundaryWarning` entries on the report.
+
+Wire shape (`CoverageReport.to_dict`) gains `bytesTotal`,
+`bytesAssigned`, `coveragePercentBytes`, `skipBreakdown`,
+`boundaryWarnings` — backward-compatible additions only.
+
+Server (`SelfStudyImport.ts` + `aiImportController.ts`): new
+`aiCoverageReport: Mixed` field, callback persistence, snapshot
+exposure.
+
+Client store (`aiImportStore.ts`): new `coverageReport` state +
+`AICoverageReport` / `AIMissingFragment` / `AIBoundaryWarning` types,
+sticky across snapshot + refresh.
+
+Client UI:
+- `ParseStep`: new `CoverageBadge` under the pipeline; green ≥ 99.5%,
+  amber 95–99.5%, red < 95%; shows missing-fragment + boundary-warning
+  counts when non-zero.
+- `SpecRail`: new "Missing from import" entry (red triangle) when
+  `missingFragmentCount > 0`, alongside Unplaced.
+
+10 new tests in `test_coverage_verifier_phase3b.py`. Full ai-service
+suite 272/4 (was 254/4 at session start; +18 new tests across CR-018
+Phase 2b, CR-040 Phase 3b, and CR-039 walker audit). Apply-time gate
+on coverage < 90% / boundary-warning ACK shipped as a soft surface;
+hard gate ships when verifier has run against enough real coordinator
+docs to calibrate the floor.
 
 ## Phase 2b shipped 2026-05-24 — appendix_paper_detector + pipeline integration
 

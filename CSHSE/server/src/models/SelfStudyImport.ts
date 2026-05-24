@@ -225,6 +225,10 @@ export interface ISelfStudyImport extends Document {
   // CV signals but no Standards/Specs structure (a standalone CV.docx).
   // The wizard renders a simplified single-card Review when this is true.
   aiStandaloneCv?: boolean;
+  // CR-040 Phase 3b — post-parse coverage census + boundary warnings.
+  // Stored as Mixed because the verifier wire shape may grow over
+  // future phases; consumers (client + server analytics) read by key.
+  aiCoverageReport?: any;
   // CR-039 Phase 2b — section_id → routing_hint map from
   // introduction_detector. Persisted on the import so a hard refresh
   // post-parse re-derives the wizard's Introduction-bucket seed.
@@ -546,6 +550,8 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   aiCVs: [{ type: Schema.Types.Mixed }],
   // CR-033 Phase 2c part 2 — standalone-CV mode flag.
   aiStandaloneCv: { type: Boolean, default: false },
+  // CR-040 Phase 3b — coverage report from coverage_verifier.
+  aiCoverageReport: { type: Schema.Types.Mixed, default: undefined },
   // CR-039 Phase 2b — section_id → routing_hint map from
   // introduction_detector.
   aiIntroductionHints: { type: Schema.Types.Mixed, default: undefined },

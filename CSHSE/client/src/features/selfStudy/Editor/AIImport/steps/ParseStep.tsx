@@ -301,6 +301,7 @@ export function ParseStep(): JSX.Element {
             ? `${stages.filter((s) => s.state === 'done').length} of ${stages.length} stages complete · refreshing every ${POLL_INTERVAL_MS / 1000} s`
             : `Refreshing every ${POLL_INTERVAL_MS / 1000} s…`}
         </div>
+        <CoverageBadge />
       </section>
 
       {/* stall hint */}
@@ -357,6 +358,43 @@ export function ParseStep(): JSX.Element {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------- CoverageBadge
+
+/**
+ * CR-040 Phase 3b — coverage stat surfaced under the pipeline.
+ *
+ * Reads coverageReport from the store; renders nothing until the
+ * verifier has emitted a report. Color cues mirror the CR spec:
+ * green ≥ 99.5%, amber 95–99.5%, red < 95%. Below 90% would
+ * normally block Review entirely — for now we surface the cue and let
+ * the coordinator continue. Hard-blocking gate ships when the verifier
+ * has run against enough real coordinator docs to know the floor.
+ */
+function CoverageBadge(): JSX.Element | null {
+  const report = useAIImportStore((s) => s.coverageReport);
+  if (!report) return null;
+  const pct = typeof report.coveragePercentBytes === 'number'
+    ? report.coveragePercentBytes
+    : (report.coveragePercent ?? 100);
+  const missing = report.missingFragments?.length ?? 0;
+  const boundaryWarnings = report.boundaryWarnings?.length ?? 0;
+  const color =
+    pct >= 99.5
+      ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
+      : pct >= 95
+      ? 'border-amber-300 bg-amber-50 text-amber-800'
+      : 'border-red-300 bg-red-50 text-red-800';
+  return (
+    <div className={`mt-3 inline-flex items-center gap-2 rounded border px-2.5 py-1 text-xs ${color}`}>
+      <span className="font-mono font-semibold">COVERAGE: {pct.toFixed(1)}%</span>
+      {missing > 0 && <span>· {missing} missing fragment{missing === 1 ? '' : 's'}</span>}
+      {boundaryWarnings > 0 && (
+        <span>· {boundaryWarnings} boundary warning{boundaryWarnings === 1 ? '' : 's'}</span>
+      )}
     </div>
   );
 }

@@ -26,6 +26,8 @@ export const MATRICES_KEY = '_matrices';
 // CR-033 / CR-040 — synthetic rail keys for detector outputs.
 export const CVS_KEY = '_cvs';
 export const EVIDENCE_DOCS_KEY = '_evidence-docs';
+// CR-040 Phase 3b — synthetic rail key for the coverage_verifier output.
+export const MISSING_FRAGMENTS_KEY = '_missing-fragments';
 // CR-039 — Introduction bucket keys are namespaced so they never collide
 // with synthetic ('_unplaced') or real spec keys ('1.a').
 export const INTRO_DOC_KEY = '_intro:document';
@@ -47,6 +49,10 @@ interface SpecRailProps {
   // CR-033 / CR-040 — detector outputs surfaced as new rail entries.
   cvs?: CVItem[];
   evidenceDocs?: EvidenceDocItem[];
+  // CR-040 Phase 3b — count of unresolved missing fragments so the rail
+  // can surface "Missing from import (N)" alongside Unplaced when the
+  // coverage_verifier finds gaps.
+  missingFragmentCount?: number;
 }
 
 function coverageIcon(b: SpecBucket): string {
@@ -61,7 +67,18 @@ function bucketCount(b: SpecBucket): number {
   return b.narratives.length + b.evidenceText.length + b.evidenceFiles.length + mc;
 }
 
-export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, onSelect, introductions, cvs, evidenceDocs }: SpecRailProps): JSX.Element {
+export function SpecRail({
+  buckets,
+  tags,
+  placeholders,
+  matrices,
+  selectedKey,
+  onSelect,
+  introductions,
+  cvs,
+  evidenceDocs,
+  missingFragmentCount = 0
+}: SpecRailProps): JSX.Element {
   const [filter, setFilter] = useState('');
 
   // Group buckets by standard for the rail's accordion structure.
@@ -348,6 +365,31 @@ export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, o
                 <span>Unwritten</span>
               </span>
               <span className="rounded bg-gray-200 px-1.5 text-xs text-gray-700">{placeholders.length}</span>
+            </button>
+          )}
+
+          {/* CR-040 Phase 3b — Missing from import. Visible only when the
+              coverage_verifier flagged unaccounted-for sections. Different
+              icon (warning triangle in red) from Unplaced (amber) so
+              coordinators see "the system thought this was lost" vs
+              "the AI didn't know where to put it". */}
+          {missingFragmentCount > 0 && (
+            <button
+              role="tab"
+              aria-selected={selectedKey === MISSING_FRAGMENTS_KEY}
+              onClick={() => onSelect(MISSING_FRAGMENTS_KEY)}
+              className={`mt-1 flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+                selectedKey === MISSING_FRAGMENTS_KEY
+                  ? 'bg-red-50 text-red-900 ring-1 ring-red-500'
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+              title="Sections the parser flagged as unaccounted for. Place them in a spec or explicitly discard before Apply."
+            >
+              <span className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 text-red-600" aria-hidden />
+                <span>Missing from import</span>
+              </span>
+              <span className="rounded bg-red-100 px-1.5 text-xs text-red-700">{missingFragmentCount}</span>
             </button>
           )}
         </div>

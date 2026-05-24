@@ -65,6 +65,11 @@ export function ReviewStep(): JSX.Element {
 function FullReviewStep(): JSX.Element {
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
+  // CR-040 Phase 3b — coverage report drives the "Missing from import"
+  // SpecRail entry, the Parse-step stat carried forward into Review, and
+  // the soft Apply gate. Defensive `|| null` because older imports may
+  // not carry a report.
+  const coverageReport = useAIImportStore((s) => s.coverageReport);
   // CR-039 — Introduction buckets + move-into-introduction action
   const introductions = useAIImportStore((s) => s.introductions);
   const moveItemToIntroduction = useAIImportStore((s) => s.moveItemToIntroduction);
@@ -677,6 +682,7 @@ function FullReviewStep(): JSX.Element {
           introductions={introductions}
           cvs={cvs}
           evidenceDocs={evidenceDocs}
+          missingFragmentCount={coverageReport?.missingFragments?.length || 0}
         />
         <main className="flex flex-1 flex-col overflow-hidden">
           <ItemCardList

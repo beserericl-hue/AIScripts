@@ -289,7 +289,12 @@ def _table_extracts_for_subspec_template(table: Tag, base_id: str, order_start: 
                 heading_level=3,
                 markdown=body,
                 byte_offset_start=order,
-                byte_offset_end=order,
+                # CR-040 Phase 3b — byte_offset_end now reflects the
+                # section's content size (in words, the natural unit our
+                # coverage census uses) rather than being a duplicate of
+                # _start. The interval map becomes meaningful so byte-level
+                # census and gap detection can compute a real coverage %.
+                byte_offset_end=order + max(1, len(body.split())),
                 word_count=len(body.split()),
                 contains_table=False,
                 contains_image=False,
@@ -373,7 +378,9 @@ def _table_as_one_section(
         markdown=text,
         # CR-031 — document-order index passed in by the caller.
         byte_offset_start=order,
-        byte_offset_end=order,
+        # CR-040 Phase 3b — non-collapsed end so coverage census sees a
+        # real extent (size = word count).
+        byte_offset_end=order + max(1, len(words)),
         word_count=len(words),
         contains_table=True,
         contains_image=bool(images),
@@ -595,7 +602,11 @@ def deep_walk_with_fallback(
                 heading_level=int(tag.name[1]) if is_heading else 2,
                 markdown=text,
                 byte_offset_start=prose_order,
-                byte_offset_end=prose_order,
+                # CR-040 Phase 3b — give the prose section a non-zero
+                # extent so the byte-level coverage census stops
+                # reading prose as "zero-width" and treating it as a
+                # spurious gap.
+                byte_offset_end=prose_order + max(1, len(text.split())),
                 word_count=len(text.split()),
                 contains_table=False,
                 contains_image=bool(p_images),

@@ -244,6 +244,43 @@ export type AIStatusSnapshot = {
   // CR-033 Phase 2c part 2 — true when the upload is standalone CV(s)
   // with no Standards/Specs structure. Wizard renders a one-card Review.
   standaloneCv?: boolean;
+  // CR-040 Phase 3b — post-parse coverage report (byte-level census,
+  // boundary warnings, missing fragments). Shape mirrors
+  // CoverageReport.to_dict() on the ai-service side.
+  coverageReport?: AICoverageReport | null;
+};
+
+// CR-040 Phase 3b — wire shape for the coverage report. Fields stay
+// optional so older imports (pre-Phase-3b) still parse cleanly.
+export type AIMissingFragment = {
+  sectionId: string;
+  heading: string;
+  snippet: string;
+  wordCount: number;
+  byteOffsetStart: number;
+  splitterTier: string;
+  why: string;
+};
+export type AIBoundaryWarning = {
+  sectionId: string;
+  kind: 'header_check' | 'sentence_edge' | 'orphan_paragraph' | string;
+  detail: string;
+};
+export type AICoverageReport = {
+  totalSections?: number;
+  sectionsToBuckets?: number;
+  sectionsToTags?: number;
+  sectionsToIntroductions?: number;
+  sectionsToCVs?: number;
+  sectionsToEvidenceDocs?: number;
+  sectionsToMatrices?: number;
+  coveragePercent?: number;
+  bytesTotal?: number;
+  bytesAssigned?: number;
+  coveragePercentBytes?: number;
+  skipBreakdown?: Record<string, number>;
+  boundaryWarnings?: AIBoundaryWarning[];
+  missingFragments?: AIMissingFragment[];
 };
 
 // ---------------------------------------------------------------- state
@@ -352,6 +389,12 @@ interface AIImportState {
   // file. ReviewStep checks this and renders the simplified
   // single-card Review instead of the full three-column workspace.
   standaloneCv: boolean;
+
+  // CR-040 Phase 3b — coverage report from ai-service. The wizard
+  // surfaces it as a Parse-step stat (with color cue), a SpecRail
+  // "Missing from import" entry when missingFragments is non-empty,
+  // and a soft Apply gate when coverage is below the threshold.
+  coverageReport: AICoverageReport | null;
 
   // CR-041 user story 1 — pending file queue when the coordinator
   // drops multiple files on the Upload step. The first file is
@@ -511,6 +554,8 @@ const initialState = {
   cvs: [] as CVItem[],
   // CR-033 Phase 2c part 2
   standaloneCv: false,
+  // CR-040 Phase 3b
+  coverageReport: null as AICoverageReport | null,
   // CR-041 user story 1
   pendingFiles: [] as File[]
 };
@@ -939,7 +984,13 @@ export const useAIImportStore = create<AIImportState>()(
           standaloneCv:
             typeof snap.standaloneCv === 'boolean'
               ? snap.standaloneCv
-              : current.standaloneCv
+              : current.standaloneCv,
+          // CR-040 Phase 3b — coverage report. Server-side determination,
+          // mirror onto client for UI surfaces.
+          coverageReport:
+            snap.coverageReport !== undefined
+              ? (snap.coverageReport as AICoverageReport | null)
+              : current.coverageReport
         });
       },
 
@@ -1409,7 +1460,9 @@ export const useAIImportStore = create<AIImportState>()(
         cvs: s.cvs,
         // CR-033 Phase 2c part 2 — sticky across refresh so the wizard
         // re-enters the StandaloneCVReview path on reload.
-        standaloneCv: s.standaloneCv
+        standaloneCv: s.standaloneCv,
+        // CR-040 Phase 3b — sticky across refresh.
+        coverageReport: s.coverageReport
       })
     }
   )

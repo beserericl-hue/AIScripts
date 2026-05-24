@@ -95,7 +95,10 @@ def test_empty_input_is_full_coverage() -> None:
 
 
 def test_to_dict_wire_shape() -> None:
-    raw = [_section("orphan", heading="orphan h", body="orphan body", words=2)]
+    # Use a section above the CR-040 Phase 3b noise floor so it surfaces
+    # as a real missing fragment rather than auto-classified as
+    # skip:whitespace-or-noise.
+    raw = [_section("orphan", heading="orphan h", body="orphan body with enough words here", words=6)]
     report = verify_coverage(
         raw_sections=raw,
         bucketed_section_ids=set(),
@@ -111,3 +114,9 @@ def test_to_dict_wire_shape() -> None:
     mf = d["missingFragments"][0]
     assert mf["sectionId"] == "orphan"
     assert mf["why"] == "unassigned"
+    # Phase 3b wire fields present.
+    assert "bytesTotal" in d
+    assert "bytesAssigned" in d
+    assert "coveragePercentBytes" in d
+    assert "skipBreakdown" in d
+    assert "boundaryWarnings" in d
