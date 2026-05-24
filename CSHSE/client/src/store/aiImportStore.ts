@@ -241,6 +241,9 @@ export type AIStatusSnapshot = {
   cvs?: CVItem[] | null;
   evidenceDocs?: EvidenceDocItem[] | null;
   introductionHints?: Record<string, string> | null;
+  // CR-033 Phase 2c part 2 — true when the upload is standalone CV(s)
+  // with no Standards/Specs structure. Wizard renders a one-card Review.
+  standaloneCv?: boolean;
 };
 
 // ---------------------------------------------------------------- state
@@ -345,6 +348,11 @@ interface AIImportState {
   // standalone-CV upload + UI card variant land in Phase 2/3.
   cvs: CVItem[];
 
+  // CR-033 Phase 2c part 2 — true when the upload is a standalone CV(s)
+  // file. ReviewStep checks this and renders the simplified
+  // single-card Review instead of the full three-column workspace.
+  standaloneCv: boolean;
+
   // CR-041 user story 1 — pending file queue when the coordinator
   // drops multiple files on the Upload step. The first file is
   // promoted into `uploadFile` for the existing single-file pipeline;
@@ -368,6 +376,12 @@ interface AIImportState {
   setEvidenceDocs: (docs: EvidenceDocItem[]) => void;
   // CR-033 Phase 1
   setCVs: (cvs: CVItem[]) => void;
+  // CR-033 Phase 2c part 2 — coordinator edits a CV's faculty name on
+  // the standalone-CV Review screen.
+  updateCvFacultyName: (sectionId: string, name: string) => void;
+  // CR-033 Phase 2c part 2 — coordinator picks a different (std, spec)
+  // for a CV on the standalone-CV Review screen.
+  updateCvRouting: (sectionId: string, std: string, spec: string) => void;
   // CR-041 user story 1
   enqueueFiles: (files: File[]) => void;
   popNextPendingFile: () => File | null;
@@ -495,6 +509,8 @@ const initialState = {
   evidenceDocs: [] as EvidenceDocItem[],
   // CR-033 Phase 1
   cvs: [] as CVItem[],
+  // CR-033 Phase 2c part 2
+  standaloneCv: false,
   // CR-041 user story 1
   pendingFiles: [] as File[]
 };
@@ -563,6 +579,33 @@ export const useAIImportStore = create<AIImportState>()(
       setIntroductions: (introductions) => set({ introductions, dirty: true }),
       setEvidenceDocs: (docs) => set({ evidenceDocs: docs, dirty: true }),
       setCVs: (cvs) => set({ cvs, dirty: true }),
+      // CR-033 Phase 2c part 2 — standalone-CV Review edits. These mutate
+      // the existing CV entry in place so apply() picks up the
+      // coordinator's choices via the existing aiCVs pass-through.
+      updateCvFacultyName: (sectionId, name) =>
+        set((s) => ({
+          cvs: s.cvs.map((c) =>
+            c.sectionId === sectionId ? { ...c, facultyName: name } : c
+          ),
+          dirty: true
+        })),
+      updateCvRouting: (sectionId, std, spec) =>
+        set((s) => ({
+          cvs: s.cvs.map((c) =>
+            c.sectionId === sectionId
+              ? {
+                  ...c,
+                  resolvedStd: std,
+                  resolvedSpec: spec,
+                  // Coordinator override — mark routing as 'matcher' so the
+                  // post-Apply audit shows the choice came from a deliberate
+                  // pick, not a matrix-row autoresolve.
+                  routing: { ...(c.routing || { source: 'matcher' }), source: 'matcher' as const }
+                }
+              : c
+          ),
+          dirty: true
+        })),
       // CR-041 user story 1 — multi-file queue. First file in `files`
       // promotes into `uploadFile` (the single-file pipeline's input);
       // the rest queue. If `uploadFile` is already set the entire batch
@@ -888,7 +931,15 @@ export const useAIImportStore = create<AIImportState>()(
           evidenceDocs: keepLocalBuckets
             ? current.evidenceDocs
             : (snap.evidenceDocs ?? current.evidenceDocs),
-          introductions: nextIntroductions
+          introductions: nextIntroductions,
+          // CR-033 Phase 2c part 2 — standalone-CV mode is a server-side
+          // determination; mirror it onto the client so ReviewStep can
+          // route to the single-card flow. Sticky across snapshots so a
+          // subsequent /ai-status poll doesn't drop the flag.
+          standaloneCv:
+            typeof snap.standaloneCv === 'boolean'
+              ? snap.standaloneCv
+              : current.standaloneCv
         });
       },
 
@@ -1355,7 +1406,10 @@ export const useAIImportStore = create<AIImportState>()(
         // across /ai-status reapplies.
         introductions: s.introductions,
         evidenceDocs: s.evidenceDocs,
-        cvs: s.cvs
+        cvs: s.cvs,
+        // CR-033 Phase 2c part 2 — sticky across refresh so the wizard
+        // re-enters the StandaloneCVReview path on reload.
+        standaloneCv: s.standaloneCv
       })
     }
   )

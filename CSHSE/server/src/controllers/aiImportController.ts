@@ -165,7 +165,9 @@ function buildSnapshotFromImport(importRecord: any): object {
     // these fields when the terminal callback arrives.
     cvs: importRecord.aiCVs || [],
     evidenceDocs: importRecord.aiEvidenceDocs || [],
-    introductionHints: importRecord.aiIntroductionHints || {}
+    introductionHints: importRecord.aiIntroductionHints || {},
+    // CR-033 Phase 2c part 2 — standalone-CV mode flag.
+    standaloneCv: !!importRecord.aiStandaloneCv
   };
 }
 
@@ -528,6 +530,10 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   if (Array.isArray(payload.cvs)) {
     (importRecord as any).aiCVs = payload.cvs;
     (importRecord as any).markModified('aiCVs');
+  }
+  // CR-033 Phase 2c part 2 — standalone-CV mode flag.
+  if (typeof payload.standaloneCv === 'boolean') {
+    (importRecord as any).aiStandaloneCv = payload.standaloneCv;
   }
   // CR-040 Phase 2b — appendix papers + syllabi from
   // appendix_paper_detector. Same empty-array semantics as CVs.

@@ -141,6 +141,11 @@ class JobRecord:
     # CR-033 Phase 2b — per-faculty CV extractions (one entry per
     # detected CV). Same wire format as CVDetection.cv_to_dict().
     cvs: list[Any] | None = None
+    # CR-033 Phase 2c part 2 — standalone-CV mode. True when the upload
+    # has CV signals but no Standards/Specs structure (i.e. the coordinator
+    # uploaded just a CV.docx). The wizard switches to a simplified
+    # single-card Review when this flag is set.
+    standalone_cv: bool = False
     # CR-040 Phase 2b — per-paper / per-syllabus extractions. Same
     # wire format as EvidenceDocDetection.evidence_doc_to_dict().
     evidence_docs: list[Any] | None = None
@@ -175,6 +180,8 @@ class JobRecord:
             "matrices": self.matrices,
             # CR-033 Phase 2b — per-faculty CVs detected by cv_detector.
             "cvs": self.cvs or [],
+            # CR-033 Phase 2c part 2 — standalone-CV mode flag.
+            "standaloneCv": bool(self.standalone_cv),
             # CR-040 Phase 2b — appendix papers + syllabi detected by
             # appendix_paper_detector.
             "evidenceDocs": self.evidence_docs or [],
@@ -839,6 +846,21 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     job.buckets = buckets
     job.tags = tags
     job.matrices = matrices
+
+    # CR-033 Phase 2c part 2 — detect standalone-CV uploads. When the
+    # coordinator drops just a CV.docx (no Standards/Specs structure),
+    # we land here with zero populated buckets and >=1 CV detection.
+    # The wizard switches to a one-card Review when this flag is set.
+    populated_buckets = sum(
+        1 for b in buckets.values()
+        if (b.get("narratives") or b.get("evidenceText") or b.get("evidenceFiles"))
+    )
+    if populated_buckets == 0 and (job.cvs or []):
+        job.standalone_cv = True
+        job.warnings.append(
+            f"standalone_cv: {len(job.cvs)} CV(s) detected with no spec content — "
+            "wizard will render the single-card Review path"
+        )
 
     # CR-040 Phase 3 — final coverage check. Pulls section ids out of
     # every destination set and emits a per-section accounting plus a

@@ -17,6 +17,7 @@ import { ItemCardList, type ItemKind } from '../review/ItemCardList';
 import { ItemPreview } from '../review/ItemPreview';
 import { ReassignPopup } from '../review/ReassignPopup';
 import { ShowInSourceModal } from '../review/ShowInSourceModal';
+import { StandaloneCVReview } from '../review/StandaloneCVReview';
 import { api } from '../../../../../services/api';
 
 /**
@@ -52,6 +53,16 @@ function stripCardHeading(snippet: string): string {
 }
 
 export function ReviewStep(): JSX.Element {
+  // CR-033 Phase 2c part 2 — standalone-CV mode short-circuits the
+  // three-column workspace. The coordinator dropped just a CV.docx —
+  // show the one-card Review with editable faculty name + spec dropdown.
+  // The full + standalone variants live in two distinct child components
+  // so React's Rules of Hooks aren't broken by a top-level early return.
+  const standaloneCv = useAIImportStore((s) => s.standaloneCv);
+  return standaloneCv ? <StandaloneCVReview /> : <FullReviewStep />;
+}
+
+function FullReviewStep(): JSX.Element {
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
   // CR-039 — Introduction buckets + move-into-introduction action

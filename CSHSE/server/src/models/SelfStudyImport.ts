@@ -221,6 +221,10 @@ export interface ISelfStudyImport extends Document {
   // ai-service/app/splitter/cv_detector.py (Phase 2). Phase 1 lands the
   // store / apply pass-through only.
   aiCVs?: any[];
+  // CR-033 Phase 2c part 2 — set true by ai-service when the upload has
+  // CV signals but no Standards/Specs structure (a standalone CV.docx).
+  // The wizard renders a simplified single-card Review when this is true.
+  aiStandaloneCv?: boolean;
   // CR-039 Phase 2b — section_id → routing_hint map from
   // introduction_detector. Persisted on the import so a hard refresh
   // post-parse re-derives the wizard's Introduction-bucket seed.
@@ -540,6 +544,8 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   aiEvidenceDocs: [{ type: Schema.Types.Mixed }],
   // CR-033 Phase 1 — same Mixed[] pattern.
   aiCVs: [{ type: Schema.Types.Mixed }],
+  // CR-033 Phase 2c part 2 — standalone-CV mode flag.
+  aiStandaloneCv: { type: Boolean, default: false },
   // CR-039 Phase 2b — section_id → routing_hint map from
   // introduction_detector.
   aiIntroductionHints: { type: Schema.Types.Mixed, default: undefined },

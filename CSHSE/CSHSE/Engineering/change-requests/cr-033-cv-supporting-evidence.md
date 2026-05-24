@@ -3,7 +3,7 @@ name: CR-033 — CV (faculty resume) supporting evidence detection & routing
 description: Detect curriculum vitae blocks inside the uploaded self-study, group the entire CV as one supporting-evidence unit per faculty member, route it to the spec/subspec it belongs to, and let coordinators upload a CV standalone too. Each CV lands as a discrete "CV Supporting Evidence" card on the Review step and is written out as a supporting-evidence file at Apply.
 type: change-request
 cr_id: CR-033
-status: in-progress
+status: shipped
 priority: P1
 source: User observation 2026-05-22 — coordinator screenshot shows Barry W. Thomas's full CV being rendered as a generic "Evidence" card under Standard 7.b instead of as a discrete CV supporting-evidence file. Coordinator wants CVs handled as a first-class kind.
 sprint_target: Sprint 4 (post-demo)
@@ -12,6 +12,38 @@ last_reviewed: 2026-05-24
 ---
 
 # CR-033 — CV supporting evidence detection & routing
+
+## Phase 2c part 2 shipped 2026-05-24 — standalone-CV upload flow
+
+The pipeline now detects when an upload is just CV(s) (no Standards/Specs
+body) and the wizard renders a simplified single-card Review screen
+instead of the full three-column workspace. End-to-end in well under a
+minute.
+
+What landed:
+- **ai-service** (``import_jobs.py``): new ``standalone_cv`` field on
+  ``JobRecord`` + ``standaloneCv`` in the snapshot. Set true at end of
+  pipeline when ``populated_buckets == 0 AND len(cvs) >= 1``. A
+  warning entry records the condition for the audit log.
+- **Server** (``SelfStudyImport.ts`` + ``aiImportController.ts``): new
+  ``aiStandaloneCv: boolean`` field on the import record. Terminal
+  callback persists it; ``buildSnapshotFromImport`` exposes it via
+  ``/ai-status`` + SSE.
+- **Client store** (``aiImportStore.ts``): new ``standaloneCv`` state
+  field + ``updateCvFacultyName(sectionId, name)`` +
+  ``updateCvRouting(sectionId, std, spec)`` actions. Persisted via
+  partialize so a hard refresh stays on the standalone path.
+- **Client UI** (``StandaloneCVReview.tsx``): new component that
+  fetches ``/api/standards`` for the dropdown, renders one card per
+  detected CV with editable faculty name + standard + spec selects,
+  and an Apply button that gates on every CV having a (std, spec)
+  resolution. ReviewStep checks ``standaloneCv`` and dispatches to
+  this component or the existing three-column workspace
+  (refactored into a ``FullReviewStep`` inner component so React's
+  Rules of Hooks aren't violated by the dispatch).
+
+Apply path is unchanged: ``cvs[]`` is already persisted via the
+existing CR-033 Phase 2 aiCVs pass-through.
 
 ## Phase 2b shipped 2026-05-24 — pipeline integration
 
