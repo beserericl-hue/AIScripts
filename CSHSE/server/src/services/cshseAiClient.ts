@@ -92,8 +92,16 @@ function _unwrapStubResponse<T>(
 export interface EvidenceExtractRequest {
   institutionId: string;
   submissionId: string;
-  documentS3Key: string;
+  documentId?: string;
+  /** Highest-priority input: already-extracted markdown. */
+  markdown?: string;
+  /** Inline PDF bytes (base64). */
+  pdfBase64?: string;
+  /** S3/Tigris object key. Required when neither markdown nor pdfBase64 is set. */
+  documentS3Key?: string;
+  /** Use 'application/pdf' to trigger the pypdf path on documentS3Key. */
   documentMimeType?: string;
+  sourceFilename?: string;
 }
 
 export interface EvidenceRecommendRequest {
@@ -115,7 +123,12 @@ export interface EvidenceScoreRequest {
 
 export async function extractEvidence(req: EvidenceExtractRequest) {
   const res = await postSigned('/ai/evidence/extract', req);
-  return _unwrapStubResponse<{ chunksUpserted: number; collection: string }>(res);
+  return _unwrapStubResponse<{
+    chunksUpserted: number;
+    collection: string;
+    pdfSource?: 'pdfBase64' | 'documentS3Key';
+    extractedChars?: number;
+  }>(res);
 }
 
 export async function recommendEvidence(req: EvidenceRecommendRequest) {

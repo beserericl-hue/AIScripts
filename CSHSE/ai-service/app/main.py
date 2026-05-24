@@ -358,15 +358,26 @@ from app.evidence.score import score_evidence
 class EvidenceExtractRequest(BaseModel):
     """Evidence-extract input.
 
-    Phase 2 accepts already-extracted ``markdown``. PDF binaries
-    (``documentS3Key`` + ``documentMimeType``) ship in Phase 2b when the
-    marker-pdf binary lands in the ai-service container.
+    Three input modes (in priority order):
+
+    1. ``markdown`` — caller already converted to text (e.g. via mammoth
+       on a DOCX). Cheapest path.
+    2. ``pdfBase64`` — inline PDF bytes. The route pulls text with pypdf
+       and feeds it into ``extract_evidence_text``.
+    3. ``documentS3Key`` + ``documentMimeType: "application/pdf"`` —
+       route fetches the PDF from S3/Tigris (using the same env-var
+       convention as the import pipeline) and extracts.
+
+    Phase 2b swapped marker-pdf for pypdf — same downstream behavior,
+    pure-Python, no container bloat. If structured table extraction is
+    needed later, callers should send DOCX instead.
     """
     institutionId: str = Field(..., description="MongoDB ObjectId; required for per-institution Qdrant payload filter.")
     submissionId: str
     documentId: str = Field(default="", description="Originator's doc id (e.g. SupportingEvidence._id) — stamped on every chunk payload for later retrieval.")
-    markdown: str | None = Field(default=None, description="Already-extracted markdown body. Provide this OR documentS3Key.")
-    documentS3Key: str | None = None
+    markdown: str | None = Field(default=None, description="Already-extracted markdown body. Highest priority input.")
+    pdfBase64: str | None = Field(default=None, description="Inline PDF bytes (base64). Decoded + extracted via pypdf.")
+    documentS3Key: str | None = Field(default=None, description="S3/Tigris object key; fetched + extracted server-side when mime is application/pdf.")
     documentMimeType: str = Field(default="text/markdown")
     sourceFilename: str | None = None
 
@@ -393,21 +404,55 @@ class EvidenceScoreRequest(BaseModel):
 async def evidence_extract(req: EvidenceExtractRequest, request: Request) -> dict:
     body = await request.body()
     verify_hmac_signature(request, body)
-    if not req.markdown:
+
+    markdown = req.markdown
+    pdf_source: str | None = None
+
+    if not markdown and req.pdfBase64:
+        import base64
+        from app.evidence.pdf_extract import extract_text_from_pdf_bytes
+        try:
+            pdf_bytes = base64.b64decode(req.pdfBase64, validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"pdfBase64 decode failed: {exc}")
+        try:
+            markdown = extract_text_from_pdf_bytes(pdf_bytes)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        pdf_source = "pdfBase64"
+
+    if not markdown and req.documentS3Key and req.documentMimeType == "application/pdf":
+        from app.evidence.pdf_extract import extract_text_from_s3
+        try:
+            markdown = extract_text_from_s3(req.documentS3Key)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=502,
+                detail=f"pdf s3 fetch/extract failed: {type(exc).__name__}: {exc}",
+            )
+        pdf_source = "documentS3Key"
+
+    if not markdown:
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail={
                 **EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY,
                 "endpoint": "evidence.extract",
-                "reason": "markdown body is required in Phase 2; PDF binary path lands in Phase 2b",
+                "reason": (
+                    "no extractable body — provide markdown, pdfBase64, or "
+                    "documentS3Key with documentMimeType=application/pdf"
+                ),
             },
         )
+
     try:
-        return extract_evidence_text(
+        out = extract_evidence_text(
             institution_id=req.institutionId,
             submission_id=req.submissionId,
             document_id=req.documentId or req.submissionId,
-            markdown=req.markdown,
+            markdown=markdown,
             source_filename=req.sourceFilename,
         )
     except Exception as exc:  # noqa: BLE001
@@ -415,6 +460,11 @@ async def evidence_extract(req: EvidenceExtractRequest, request: Request) -> dic
             status_code=502,
             detail=f"evidence_extract failed: {type(exc).__name__}: {exc}",
         )
+
+    if pdf_source:
+        out["pdfSource"] = pdf_source
+        out["extractedChars"] = len(markdown)
+    return out
 
 
 @app.post("/ai/evidence/recommend")

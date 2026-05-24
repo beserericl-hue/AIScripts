@@ -3,7 +3,7 @@ name: CR-018 — Move AI evidence review off n8n into cshse-ai
 description: Sprint 4 evidence-review stories (S4.1/S4.2/S4.3/S4.5) targeted n8n; the cshse-ai Python service is now the canonical AI surface. Re-target evidence review there.
 type: change-request
 cr_id: CR-018
-status: in-progress
+status: shipped
 priority: P1
 source: [[sprint-plan-2026-05-11#sprint-3]], [[sprint-plan-2026-05-16]] (S4.x)
 supersedes: S4.1, S4.2, S4.3, S4.5
@@ -13,6 +13,40 @@ last_reviewed: 2026-05-24
 ---
 
 # CR-018 — Move AI evidence review off n8n into cshse-ai
+
+## Phase 2b shipped 2026-05-24 — PDF extraction via pypdf
+
+The PDF input path now lands. Substituted **pypdf** for marker-pdf:
+the downstream consumer is ``extract_evidence_text``, which already
+splits text into ~800-char chunks for embedding — marker-pdf's
+strengths (table/figure preservation) are wasted there, and its model
+weights pull a ~2 GB image into the ai-service container. pypdf is
+pure-Python, ~200 KB, no system deps; deploy risk → zero.
+
+What landed:
+- ``ai-service/app/evidence/pdf_extract.py`` — ``extract_text_from_pdf_bytes``
+  (in-memory) + ``extract_text_from_s3`` (Tigris/S3 streaming, reusing
+  the ``CSHSE_S3_BUCKET`` / ``AWS_ENDPOINT_URL_S3`` env convention).
+  50 MB sanity cap; per-page extraction so one corrupt page doesn't
+  abort the whole document.
+- ``ai-service/requirements.txt`` — ``pypdf==5.1.0`` added.
+- ``ai-service/app/main.py`` — ``EvidenceExtractRequest`` accepts three
+  input modes in priority order: ``markdown`` (cheapest), ``pdfBase64``
+  (inline bytes), or ``documentS3Key`` + ``documentMimeType=application/pdf``
+  (server-side fetch). Response now includes ``pdfSource`` + ``extractedChars``
+  when PDF was the input.
+- ``server/src/services/cshseAiClient.ts`` — ``EvidenceExtractRequest``
+  matches the new shape (markdown / pdfBase64 / documentS3Key); response
+  type carries the optional ``pdfSource`` + ``extractedChars`` fields.
+
+6 new unit tests in ``tests/test_evidence_pdf.py`` covering:
+single-page extraction, multi-page separation, empty/garbage/oversized
+rejection, and an end-to-end PDF-bytes → text → chunked-upsert round
+trip with the institution-stamping invariant preserved.
+
+n8n removal still pending — no production traffic to remove because no
+Reader-side caller exists today. When a caller lands, point it at
+``cshseAiClient``; the n8n nodes can be archived then.
 
 ## Phase 2 shipped 2026-05-24 — real extract/recommend/score implementations
 
