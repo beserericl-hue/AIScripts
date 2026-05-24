@@ -226,7 +226,9 @@ const KIND_LABEL: Record<ItemKind, string> = {
   evidenceText: 'Evidence text',
   file: 'Evidence file',
   matrix: 'Matrix cell',
-  tag: 'Tag'
+  tag: 'Tag',
+  introduction: 'Introduction',  // CR-039
+  evidenceDoc: 'Evidence document' // CR-040 Phase 1
 };
 
 export function ItemCardList({
