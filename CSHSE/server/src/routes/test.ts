@@ -311,10 +311,10 @@ export function buildTestRouter(): Router | null {
     // `import.zustandState` if a spec needs a different shape.
     const fixtureStep =
       (importSpec.wizardStep as string) ?? 'review';
-    const fixtureStatus =
-      (importSpec.aiStatus as string) === 'finished'
-        ? 'finished'
-        : 'parsed';
+    // Mirror the fixture's aiStatus 1:1 into the Zustand snapshot. Fixtures
+    // that want to land on Review should set aiStatus='parsed' (NOT
+    // 'finished' — that routes the wizard to Apply via deriveStepFromStatus).
+    const fixtureStatus = (importSpec.aiStatus as string) ?? 'parsed';
     const autoZustandState = {
       importId: String(importDoc._id),
       submissionId: String(submissionDoc._id),

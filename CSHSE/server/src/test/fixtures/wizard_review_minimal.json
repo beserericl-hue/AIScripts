@@ -15,7 +15,8 @@
   },
   "import": {
     "originalFilename": "e2e-test-self-study.docx",
-    "aiStatus": "finished",
+    "_aiStatus_note": "'parsed' is the wizard's 'AI done, coordinator on Review' state. 'finished' would route the wizard to Apply via deriveStepFromStatus, defeating Review-step tests.",
+    "aiStatus": "parsed",
     "aiProgramLevel": "bachelors",
     "aiBuckets": {
       "1.a": {
