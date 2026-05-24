@@ -1195,3 +1195,25 @@ Three more Phase 2 advances on the AI Importer ai-service track.
 | CR-039 | 2a detector | `introduction_detector.py` ships heading-based intro detection (spec case 3). `is_introduction_heading`, `routing_hint_for_section`, `detect_introductions`. 23 new tests. Matcher prompt extension + walker-audit silent-drop fix + post-Apply editor surface still ahead in Phase 2b. |
 
 Test totals: ai-service pytest 222 passed / 4 skipped (was 176; +46 tests across the three new modules). No regressions.
+
+## [2026-05-24] update | change-requests
+
+Three Phase 2b integrations — detectors now actually run in the pipeline + wire to the cshse-server.
+
+| CR | Phase | What landed |
+|---|---|---|
+| CR-033 | 2b | `detect_cvs` integrated into `import_jobs._run_self_study_pipeline` after `deep_walker`. Detected CVs pulled out of matcher input (no spec competition) and ride the terminal callback as `payload.cvs`. `receiveAICallback` server-side already persists into `aiCVs`. New `cv_detector` stage record visible in wizard Parse step. |
+| CR-039 | 2b | `detect_introductions` integrated; hints ride callback as `payload.introductionHints`. NEW `SelfStudyImport.aiIntroductionHints: Mixed` field — server persists the map so hard refresh re-derives Introduction-bucket seed without re-running the detector. New `introduction_detector` stage record. |
+| CR-040 | 2b detector + integration | NEW `ai-service/app/splitter/appendix_paper_detector.py` — paper + syllabus heuristics from the spec (header + body-length signals; two-tier rejection). `detect_evidence_docs(sections) → (detections, residual)`. Integrated into pipeline; rides callback as `payload.evidenceDocs`; persisted into `aiEvidenceDocs` via `receiveAICallback`. 9 new tests pinning paper-with-points, paper-with-title, syllabus-with-code, body-length threshold, image-bypass, residual semantics, wire format. |
+
+Pipeline order: deep_walker → cv_detector → evidence_doc_detector → introduction_detector → matcher. Detectors are pure functions of the section stream and don't interfere with the matcher's recommendation logic; the matcher receives the residual stream so it never competes with extracted papers / CVs / syllabi.
+
+Test totals: ai-service pytest **231 passed / 4 skipped** (was 222; +9 new). client + server vitest unchanged.
+
+What still needs real engineering days:
+- CR-033 Phase 2c: client UI card variant + standalone-CV upload flow
+- CR-039 Phase 2c: matcher-prompt routing-hint override + walker silent-drop audit + Self-Study Editor surface
+- CR-040 Phase 2c/3: `.docx` generation + S3 upload pipeline + client card variant + standalone-upload + post-parse coverage verification
+- CR-018 Phase 2: real Marker-PDF extract + Qdrant collection bootstrap + Haiku scoring + n8n removal
+- CR-024 Sprint 4: post-apply matrix hotlink + AI eval reads matrix rows
+- CR-002 / CR-041: blocked on Phase 2 detectors landing (now done) + Phase 2c integrations

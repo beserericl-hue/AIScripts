@@ -138,6 +138,17 @@ class JobRecord:
     tags: list[Any] | None = None
     placeholder_sections: list[Any] | None = None
     matrices: list[Any] | None = None
+    # CR-033 Phase 2b — per-faculty CV extractions (one entry per
+    # detected CV). Same wire format as CVDetection.cv_to_dict().
+    cvs: list[Any] | None = None
+    # CR-040 Phase 2b — per-paper / per-syllabus extractions. Same
+    # wire format as EvidenceDocDetection.evidence_doc_to_dict().
+    evidence_docs: list[Any] | None = None
+    # CR-039 Phase 2b — section_id → routing_hint map (e.g.
+    # "introduction:document", "introduction:standard-3"). Surfaced via
+    # the callback so cshse-server can seed the wizard's Introduction
+    # buckets without re-running the heading-based detector client-side.
+    introduction_hints: dict[str, str] | None = None
     started_at: float | None = None
     completed_at: float | None = None
 
@@ -158,6 +169,16 @@ class JobRecord:
             "tags": self.tags,
             "placeholderSections": self.placeholder_sections,
             "matrices": self.matrices,
+            # CR-033 Phase 2b — per-faculty CVs detected by cv_detector.
+            "cvs": self.cvs or [],
+            # CR-040 Phase 2b — appendix papers + syllabi detected by
+            # appendix_paper_detector.
+            "evidenceDocs": self.evidence_docs or [],
+            # CR-039 Phase 2b — section_id → routing_hint map from
+            # introduction_detector. cshse-server consumes this to seed
+            # the wizard's Introduction buckets (Phase 2c will also use
+            # it as a matcher-prompt override).
+            "introductionHints": self.introduction_hints or {},
         }
 
 
@@ -588,6 +609,63 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     if preserved:
         detail += f" (preserved {preserved} short letter-tagged responses)"
     _stage_done(job, "deep_walker", detail)
+
+    # CR-033 Phase 2b — pull CV sections out of the matcher's input so
+    # they don't compete with regular specs. detect_cvs returns
+    # (detections, residual_sections); the residual feeds the matcher,
+    # the detections ride to the callback as job.cvs.
+    from app.splitter.cv_detector import detect_cvs, cv_to_dict
+    cv_detections, sections = detect_cvs(sections)
+    if cv_detections:
+        job.cvs = [cv_to_dict(cv) for cv in cv_detections]
+        _stage_done(
+            job,
+            "cv_detector",
+            f"{len(cv_detections)} CV(s) detected, removed from matcher input",
+        )
+    else:
+        _stage_skipped(job, "cv_detector", "no CV anchors matched")
+
+    # CR-040 Phase 2b — same shape as CR-033: detect appendix papers +
+    # syllabi, pull them out of the matcher input, send them through
+    # the callback as job.evidence_docs.
+    from app.splitter.appendix_paper_detector import (
+        detect_evidence_docs,
+        evidence_doc_to_dict,
+    )
+    evidence_doc_detections, sections = detect_evidence_docs(sections)
+    if evidence_doc_detections:
+        job.evidence_docs = [
+            evidence_doc_to_dict(d) for d in evidence_doc_detections
+        ]
+        n_paper = sum(1 for d in evidence_doc_detections if d.doc_sub_kind == "paper")
+        n_syll = sum(1 for d in evidence_doc_detections if d.doc_sub_kind == "syllabus")
+        _stage_done(
+            job,
+            "evidence_doc_detector",
+            f"{n_paper} paper(s) + {n_syll} syllabus(es); removed from matcher input",
+        )
+    else:
+        _stage_skipped(job, "evidence_doc_detector", "no paper / syllabus headers matched")
+
+    # CR-039 Phase 2b — compute the Introduction routing-hint map BEFORE
+    # the matcher runs. The map is surfaced via the callback so
+    # cshse-server can pre-route intro material into the wizard's
+    # Introduction buckets. Sections themselves stay in the matcher
+    # stream — the matcher will use the hint as a confidence override
+    # in Phase 2c (next slice). This commit just gets the hints to the
+    # callback so the client UI can render them.
+    from app.splitter.introduction_detector import detect_introductions
+    intro_hints = detect_introductions(sections)
+    job.introduction_hints = intro_hints
+    if intro_hints:
+        _stage_done(
+            job,
+            "introduction_detector",
+            f"{len(intro_hints)} intro candidate(s) detected via heading match",
+        )
+    else:
+        _stage_skipped(job, "introduction_detector", "no intro headings matched")
 
     store = VectorStore(settings.qdrant_url, settings.qdrant_api_key or None)
     embedder = EmbeddingClient(settings.openai_api_key)

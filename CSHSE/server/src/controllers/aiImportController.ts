@@ -514,6 +514,29 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
     importRecord.aiMatrices = payload.matrices;
     importRecord.markModified('aiMatrices');  // Mixed[] needs explicit mark
   }
+  // CR-033 Phase 2b — per-faculty CVs from cv_detector. Empty array
+  // means "detector ran, no CVs found" — explicitly distinct from
+  // "field absent" so an empty terminal callback doesn't accidentally
+  // strand stale CVs from a previous run.
+  if (Array.isArray(payload.cvs)) {
+    (importRecord as any).aiCVs = payload.cvs;
+    (importRecord as any).markModified('aiCVs');
+  }
+  // CR-040 Phase 2b — appendix papers + syllabi from
+  // appendix_paper_detector. Same empty-array semantics as CVs.
+  if (Array.isArray(payload.evidenceDocs)) {
+    (importRecord as any).aiEvidenceDocs = payload.evidenceDocs;
+    (importRecord as any).markModified('aiEvidenceDocs');
+  }
+  // CR-039 Phase 2b — section_id → routing_hint map from
+  // introduction_detector. Persisted so cshse-server can re-derive the
+  // wizard's Introduction-bucket seed on a hard refresh; client picks
+  // them up via the Zustand `introductions` field after Apply (Phase 2c
+  // adds the actual seeding logic).
+  if (payload.introductionHints && typeof payload.introductionHints === 'object') {
+    (importRecord as any).aiIntroductionHints = payload.introductionHints;
+    (importRecord as any).markModified('aiIntroductionHints');
+  }
   importRecord.aiCompletedAt = new Date();
   importRecord.aiQueuePosition = null;
   importRecord.aiQueueDepth = null;

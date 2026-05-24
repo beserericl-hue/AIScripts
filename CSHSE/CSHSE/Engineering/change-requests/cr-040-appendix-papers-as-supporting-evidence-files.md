@@ -13,6 +13,42 @@ last_reviewed: 2026-05-24
 
 # CR-040 — Appendix papers as standalone evidence files
 
+## Phase 2b shipped 2026-05-24 — appendix_paper_detector + pipeline integration
+
+`ai-service/app/splitter/appendix_paper_detector.py` ships the
+paper + syllabus detectors from the spec:
+
+- Paper signals: title line matching `(Sample\s+)?Word (Report|Paper|Project|Essay|Reflection|Interview|...)` OR a `(NN points)` suffix; body ≥200 words OR ≥1 image.
+- Syllabus signals: course code (`CHS 220`) AND a syllabus keyword
+  (`syllabus`, `course outline`, `learning outcomes`, ...) in the
+  heading or first 10 lines.
+- Two-tier rejection: header without body fails; body without header
+  fails. Both required.
+
+`detect_evidence_docs(sections)` returns `(detections, residual_sections)`,
+same shape as `detect_cvs`. Each detection carries `doc_sub_kind`
+(`paper` | `syllabus`), title, summary, byte-offset, page-count estimate,
+image count, optional course-code + points.
+
+Integration: runs in `import_jobs._run_self_study_pipeline` right after
+the CV detector. Surfaces as `payload.evidenceDocs` on the terminal
+callback; `receiveAICallback` persists into `aiEvidenceDocs` (existing
+field from CR-040 Phase 1).
+
+Stage record: `evidence_doc_detector` visible in the wizard's Parse
+step stage list with per-kind counts.
+
+`tests/test_appendix_paper_detector.py` — 9 tests covering: paper
+with points suffix, paper with title only, body-length threshold,
+image-bypass, syllabus with course code + keyword, syllabus keyword
+without code rejected, course code without keyword rejected, residual
+behavior, wire format.
+
+Phase 2c/3 remaining: cshse-server `.docx` generation + S3 upload
+pipeline for evidenceDocs at Apply time; client card variant with
+"View file" button; standalone-upload entry point on Upload step;
+post-parse coverage verification (addendum section of this CR).
+
 ## Phase 2a shipped 2026-05-24 — image capture in the walker
 
 Fixed the hardcoded `contains_image=False` constant. Three deep_walker

@@ -13,6 +13,19 @@ last_reviewed: 2026-05-24
 
 # CR-033 — CV supporting evidence detection & routing
 
+## Phase 2b shipped 2026-05-24 — pipeline integration
+
+`detect_cvs` now runs in `import_jobs._run_self_study_pipeline` right
+after `deep_walker` produces the section stream. Detected CVs are
+pulled out of the matcher input so they never compete with regular
+specs for placement. Carried to the terminal callback as `payload.cvs`;
+`receiveAICallback` on the server persists into `aiCVs`.
+
+Stage record: `cv_detector` is now visible in the wizard's Parse step
+stage list (alongside `mammoth`, `deep_walker`, `matcher`, …).
+
+Phase 2 remaining: client UI card variant + standalone-CV upload flow.
+
 ## Phase 2 shipped 2026-05-24 — cv_detector module
 
 `ai-service/app/splitter/cv_detector.py` ships the detector heuristic

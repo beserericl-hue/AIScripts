@@ -13,6 +13,24 @@ last_reviewed: 2026-05-24
 
 # CR-039 — Standard-level Introduction sections
 
+## Phase 2b shipped 2026-05-24 — pipeline integration + persistence
+
+`detect_introductions` now runs in `import_jobs._run_self_study_pipeline`
+right after the CV detector. Hints surface as `payload.introductionHints`
+on the terminal callback. Server-side `receiveAICallback` persists the
+map into a new `SelfStudyImport.aiIntroductionHints` field (Mixed) so a
+hard refresh post-parse re-derives the wizard's Introduction-bucket
+seed without re-running the detector.
+
+Stage record: `introduction_detector` visible in the wizard's Parse
+step stage list.
+
+Phase 2c remaining: wire `introductionHints` into the matcher prompt as
+a confidence override (so the matcher prefers Introduction routing for
+hinted sections unless its own spec confidence is ≥ 0.75); walker
+silent-drop audit; Self-Study Editor surface to render
+`documentIntroduction` + `standardIntroductions` post-Apply.
+
 ## Phase 2a shipped 2026-05-24 — introduction_detector module
 
 `ai-service/app/splitter/introduction_detector.py` implements
