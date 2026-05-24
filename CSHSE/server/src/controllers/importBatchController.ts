@@ -168,7 +168,8 @@ export async function addFileToBatch(
     // starts processing without an extra /start round-trip.
     if (reopened) {
       try {
-        const { startNextChild } = await import('../services/batchAdvancer');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { startNextChild } = require('../services/batchAdvancer');
         await startNextChild(batch._id as any);
       } catch (advErr) {
         console.warn('[ImportBatch] reopen-start non-fatal:', advErr);

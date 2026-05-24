@@ -621,12 +621,16 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
 
   // CR-041 US-3 — if this import is part of a batch, tell the advancer
   // so it can bump counts + start the next pending child. Best-effort;
-  // a failure here doesn't roll back the callback.
+  // a failure here doesn't roll back the callback. Required to use a
+  // runtime require() rather than an esbuild-compiled dynamic import()
+  // because esbuild leaves the ESM import literal in the CJS output
+  // and Node 20's ESM resolver demands a file extension.
   const batchId = (importRecord as any).batchId;
   const terminalStatus = (importRecord as any).aiStatus;
   if (batchId && ['parsed', 'failed', 'canceled'].includes(terminalStatus)) {
     try {
-      const { advanceBatch } = await import('../services/batchAdvancer');
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { advanceBatch } = require('../services/batchAdvancer');
       await advanceBatch(batchId, terminalStatus as 'parsed' | 'failed' | 'canceled');
     } catch (advErr) {
       console.error('[ai-callback] batchAdvancer hook failed:', advErr);

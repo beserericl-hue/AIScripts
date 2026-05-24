@@ -292,7 +292,10 @@ export function buildTestRouter(): Router | null {
       // present. The single-import created above remains for legacy
       // fixtures that don't want a batch.
       if (batchSpec) {
-        const { ImportBatch } = await import('../models/ImportBatch');
+        // Use runtime require() — esbuild leaves `await import()` as a
+        // literal ESM specifier that Node's CJS resolver can't load.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { ImportBatch } = require('../models/ImportBatch');
         const children = (batchSpec.children ?? []) as Array<Record<string, unknown>>;
         const batchDoc = await ImportBatch.create({
           submissionId: submissionDoc._id,

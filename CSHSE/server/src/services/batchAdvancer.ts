@@ -22,11 +22,15 @@ import { ImportBatch } from '../models/ImportBatch';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 
 // We re-call the same /start-ai code path the single-file flow uses
-// rather than duplicating the postToAIService logic. Lazy import to
-// avoid a circular dep with aiImportController.
-async function _startChild(importId: string, programLevel?: string): Promise<void> {
-  const { startAIImportForBatch } = await import('../controllers/aiImportController');
-  await startAIImportForBatch(importId, programLevel);
+// rather than duplicating the postToAIService logic. Use a runtime
+// require() here (instead of a top-of-file static import) to break the
+// circular dep with aiImportController. esbuild with `bundle: false`
+// preserves `await import()` as literal ESM specifiers that Node's
+// CJS resolver can't load — so we use require() explicitly.
+function _startChild(importId: string, programLevel?: string): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { startAIImportForBatch } = require('../controllers/aiImportController');
+  return startAIImportForBatch(importId, programLevel);
 }
 
 /**
