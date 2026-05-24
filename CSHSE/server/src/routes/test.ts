@@ -130,13 +130,25 @@ function startJanitor(): void {
 }
 
 export function buildTestRouter(): Router | null {
-  // Defense: never mount in production, even if env var is set.
-  if (process.env.NODE_ENV === 'production') {
-    console.warn('[test-router] REFUSING to mount in production');
-    return null;
-  }
   if (process.env.E2E_SEED_ENABLED !== '1') {
     return null;
+  }
+  // CR-042: E2E_SEED_ENABLED is the explicit operator opt-in and is the
+  // single mount gate. The actual security boundary is the
+  // E2E_SEED_TOKEN-checked `x-e2e-seed-token` header on every endpoint —
+  // the router is useless without it.
+  //
+  // We deliberately do NOT block on NODE_ENV === 'production'. Railway
+  // (and most PaaS) set NODE_ENV=production for every deployed Node app,
+  // which would force operators to choose between "real Express
+  // optimizations" and "E2E seeding" in the same environment. The
+  // intended deployment for cshse-develop is NODE_ENV=production + seed
+  // router enabled. NEVER set E2E_SEED_ENABLED=1 on the real production
+  // service.
+  if (process.env.NODE_ENV === 'production') {
+    console.warn(
+      '[test-router] mounting under NODE_ENV=production — verify this is a development environment (cshse-develop, not prod)'
+    );
   }
 
   const router = express.Router();
