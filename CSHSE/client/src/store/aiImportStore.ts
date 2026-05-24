@@ -100,6 +100,43 @@ export type SpecBucket = {
   coverageStrengths: string[];
 };
 
+// CR-039 — Standard-level (and document-level) introduction bucket. Lives
+// alongside SpecBucket but is keyed by 'document' or `standard-{N}` rather
+// than `{std}.{spec}`. The wizard's left rail surfaces these as siblings
+// to the standard rows so coordinators can move intro material out of
+// misplaced specs without losing it to Unplaced.
+export type IntroductionBucket = {
+  scope: 'document' | 'standard';
+  standardCode: string | null;     // null for document-level
+  items: BucketItem[];
+};
+
+// CR-040 Phase 1 — appendix paper / syllabus extracted as a standalone
+// file. The wizard renders these as compact cards with a "View file"
+// button rather than a wall of body text. Detection + .docx generation +
+// S3 upload live in later phases; this Phase 1 lands the data shape so
+// follow-on work doesn't require schema churn.
+export type EvidenceDocSubKind = 'paper' | 'syllabus';
+export type EvidenceDocItem = {
+  sectionId: string;
+  docSubKind: EvidenceDocSubKind;
+  title: string;
+  author?: string;
+  date?: string;
+  courseCode?: string;
+  subject?: string;
+  points?: number;
+  pageCountEstimate: number;
+  imageCount: number;
+  summary: string;
+  byteOffsetStart?: number;
+  s3Key?: string;            // populated post-Phase-2 (docx + S3 upload)
+  s3SignedUrl?: string;      // server refreshes on demand
+  fileSize?: number;
+  resolvedStd?: string;
+  resolvedSpec?: string;
+};
+
 export type Tag = {
   tagId: string;
   sectionId: string;
@@ -263,10 +300,30 @@ interface AIImportState {
   // signal that applies across all matrices at once.
   matrixScrollSpec: string | null;
 
+  // CR-039 — Introduction buckets keyed by 'document' or `standard-{N}`.
+  // Coordinators move misplaced intro material here via the Reassign
+  // dropdown. ai-service auto-detection lands in a follow-on phase; until
+  // then the buckets exist and are manually populated.
+  introductions: Record<string, IntroductionBucket>;
+
+  // CR-040 Phase 1 — appendix paper + syllabus extractions. ai-service
+  // detection + .docx generation + S3 upload land in Phase 2/3; the field
+  // sits at [] until then so apply() and renderers can be wired against
+  // a stable shape today.
+  evidenceDocs: EvidenceDocItem[];
+
   // ---------- actions ----------
   setStep: (s: WizardStep) => void;
   setApprovedIds: (ids: string[]) => void;
   setMatrixScrollSpec: (specKey: string | null) => void;
+  // CR-039
+  setIntroductions: (introductions: Record<string, IntroductionBucket>) => void;
+  moveItemToIntroduction: (
+    sectionId: string,
+    targetKey: string
+  ) => void;
+  // CR-040 Phase 1
+  setEvidenceDocs: (docs: EvidenceDocItem[]) => void;
   setSubmissionId: (id: string) => void;
   setUploadFile: (f: File | null) => void;
   setProgramLevel: (l: ProgramLevel) => void;
@@ -367,7 +424,27 @@ const initialState = {
   dirty: false,
   errors: [],
   approvedIds: [] as string[],
-  matrixScrollSpec: null as string | null
+  matrixScrollSpec: null as string | null,
+  // CR-039 — seeded with the 1 document-level + 9 standard-level
+  // Introduction buckets so the UI can render them as empty rails even
+  // before the matcher or coordinator routes anything in. Standards 1-9
+  // cover the full CSHSE rubric; any additional standards added later
+  // get their bucket lazily on first use.
+  introductions: ((): Record<string, IntroductionBucket> => {
+    const out: Record<string, IntroductionBucket> = {
+      document: { scope: 'document', standardCode: null, items: [] }
+    };
+    for (let n = 1; n <= 9; n++) {
+      out[`standard-${n}`] = {
+        scope: 'standard',
+        standardCode: String(n),
+        items: []
+      };
+    }
+    return out;
+  })(),
+  // CR-040 Phase 1
+  evidenceDocs: [] as EvidenceDocItem[]
 };
 
 function deriveStepFromStatus(status: WizardStatus, currentStep: WizardStep): WizardStep {
@@ -431,6 +508,73 @@ export const useAIImportStore = create<AIImportState>()(
       },
       setApprovedIds: (ids) => set({ approvedIds: ids }),
       setMatrixScrollSpec: (specKey) => set({ matrixScrollSpec: specKey }),
+      setIntroductions: (introductions) => set({ introductions, dirty: true }),
+      setEvidenceDocs: (docs) => set({ evidenceDocs: docs, dirty: true }),
+      moveItemToIntroduction: (sectionId, targetKey) =>
+        set((s) => {
+          // Pull the item out of whichever bucket OR introduction currently
+          // holds it, then drop it into the target Introduction bucket.
+          // No-op if the item isn't found anywhere (defensive — UI should
+          // only offer Reassign on items that exist).
+          let pulled: BucketItem | null = null;
+
+          // Search SpecBuckets for the item (narratives / evidenceText only;
+          // matrix cells + evidenceFiles aren't movable to Introductions).
+          const newBuckets: Record<string, SpecBucket> = {};
+          for (const [key, b] of Object.entries(s.buckets)) {
+            const nIdx = b.narratives.findIndex((i) => i.sectionId === sectionId);
+            const eIdx = b.evidenceText.findIndex((i) => i.sectionId === sectionId);
+            if (nIdx >= 0) {
+              pulled = b.narratives[nIdx];
+              newBuckets[key] = {
+                ...b,
+                narratives: [...b.narratives.slice(0, nIdx), ...b.narratives.slice(nIdx + 1)]
+              };
+            } else if (eIdx >= 0) {
+              pulled = b.evidenceText[eIdx];
+              newBuckets[key] = {
+                ...b,
+                evidenceText: [...b.evidenceText.slice(0, eIdx), ...b.evidenceText.slice(eIdx + 1)]
+              };
+            } else {
+              newBuckets[key] = b;
+            }
+          }
+
+          // Also search other Introduction buckets (in case the coordinator
+          // is re-routing intro material from one Introduction to another).
+          const newIntros: Record<string, IntroductionBucket> = {};
+          for (const [key, ib] of Object.entries(s.introductions)) {
+            const idx = ib.items.findIndex((i) => i.sectionId === sectionId);
+            if (idx >= 0) {
+              if (!pulled) pulled = ib.items[idx];
+              newIntros[key] = {
+                ...ib,
+                items: [...ib.items.slice(0, idx), ...ib.items.slice(idx + 1)]
+              };
+            } else {
+              newIntros[key] = ib;
+            }
+          }
+
+          if (!pulled) return s;
+
+          const target = newIntros[targetKey];
+          if (!target) {
+            // Target Introduction bucket doesn't exist — refuse silently.
+            return s;
+          }
+          newIntros[targetKey] = {
+            ...target,
+            items: [...target.items, pulled]
+          };
+
+          return {
+            buckets: newBuckets,
+            introductions: newIntros,
+            dirty: true
+          };
+        }),
       setSubmissionId: (id) => set({ submissionId: id }),
       setUploadFile: (f) => set({ uploadFile: f, uploadProgress: 0 }),
       setProgramLevel: (l) => set({ programLevel: l }),
@@ -918,6 +1062,36 @@ export const useAIImportStore = create<AIImportState>()(
           }
         }
 
+        // CR-039 — collapse the per-bucket Introduction items into a flat
+        // payload keyed by 'document' / 'standard-N'. Server's apply path
+        // unpacks this and writes documentIntroduction +
+        // standardIntroductions on the Submission.
+        const { introductions, evidenceDocs } = get();
+        const linkify = (s: string) =>
+          s.replace(
+            /\bhttps?:\/\/[^\s<>"')]+/g,
+            (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`
+          );
+        const introductionsPayload: Record<
+          string,
+          { scope: 'document' | 'standard'; standardCode: string | null; content: string }
+        > = {};
+        for (const [key, ib] of Object.entries(introductions)) {
+          if (!ib.items?.length) continue;
+          const content = ib.items
+            .map((it) => {
+              const h = (it.htmlSnippet || '').trim();
+              if (h) return h;
+              return `<p>${linkify(it.snippet || '').replace(/\n/g, '<br/>')}</p>`;
+            })
+            .join('<hr/>');
+          introductionsPayload[key] = {
+            scope: ib.scope,
+            standardCode: ib.standardCode,
+            content
+          };
+        }
+
         try {
           const res = await api.post(`/api/imports/${importId}/apply-ai`, {
             narratives: narrativesPayload,
@@ -932,7 +1106,14 @@ export const useAIImportStore = create<AIImportState>()(
             placeholderSections,
             globalMergeMode: mergeMode,
             perSpecResolution,
-            idempotencyKey
+            idempotencyKey,
+            // CR-039 / CR-040 Phase 1 — new content kinds. Server is
+            // forward-compat: when these payloads land before the
+            // server-side handlers are wired (Phase 2 for evidenceDocs),
+            // the extra fields are ignored — no behavior change for
+            // anyone NOT producing them.
+            introductions: introductionsPayload,
+            evidenceDocs
           });
           set({
             status: 'applied',
@@ -1031,7 +1212,12 @@ export const useAIImportStore = create<AIImportState>()(
         // 2026-05-22 (rail badge correct, middle pane empty).
         dirty: s.dirty,
         // CR-034 — per-card review checkmarks survive hard refresh.
-        approvedIds: s.approvedIds
+        approvedIds: s.approvedIds,
+        // CR-039 / CR-040 — new content kinds also need to survive
+        // refresh; the same dirty=true guard keeps them in place across
+        // /ai-status reapplies.
+        introductions: s.introductions,
+        evidenceDocs: s.evidenceDocs
       })
     }
   )

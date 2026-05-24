@@ -3,15 +3,37 @@ name: CR-039 — Standard-level Introduction sections (capture, route, edit, app
 description: Add an "Introduction" sibling to each Standard in the wizard's SpecRail. Today, introductory paragraphs (school background, terms, mission, list of departments) get either (a) silently swallowed by the parser, or (b) misplaced into a spec like 1.a where they don't belong. Coordinators have no UI to move them somewhere correct because there IS no "somewhere correct" — Introduction isn't a kind of bucket the wizard understands. This CR adds Introduction as a first-class bucket per Standard (and one at the document level), wires up move-into-Introduction, fixes the parser miss, and writes Introductions to a new Self-Study field at Apply.
 type: change-request
 cr_id: CR-039
-status: proposed
+status: in-progress
 priority: P0
 source: User observation 2026-05-23 on the Stevenson card under spec 1.a — the body is the document's school-introduction text + Stevenson history + departmental org chart, NOT a response to "Institutional Requirements." Same pattern observed in Kennesaw State self-study. Coordinators routinely use the area at the top of each Standard for narrative introduction; the wizard has no place for it.
 sprint_target: Sprint 4 — required before next coordinator round of imports because today every import puts intro material in the wrong place
 tags: [wizard, parse, matcher, review, apply, schema, p0, standards-template, introduction]
-last_reviewed: 2026-05-23
+last_reviewed: 2026-05-24
 ---
 
 # CR-039 — Standard-level Introduction sections
+
+## Phase 1 shipped 2026-05-24 — manual Introduction routing UX
+
+The data model + apply path + coordinator move-into-Introduction UI shipped today. ai-service auto-detection (the matcher/walker work in Sequencing step 2) deferred to Phase 2.
+
+What landed:
+- **Client store**: `IntroductionBucket` type, `introductions: Record<string, IntroductionBucket>` field seeded with 1 document-level + 9 standard-level buckets; `setIntroductions`, `moveItemToIntroduction` actions; partialize persists across refresh.
+- **Client UI**: SpecRail renders Document Introduction at the top + per-Standard Introduction as the first row under each Standard heading. ItemCardList renders intro items when a `_intro:*` key is selected. Each narrative + evidence-text card on a regular spec gets a `→ Intro…` dropdown with Document Introduction + the spec's own Standard-N Introduction as targets.
+- **apply()**: collapses each non-empty Introduction bucket to `{ scope, standardCode, content }` (HTML, linkified) and POSTs alongside the existing narratives payload.
+- **Server schema**: `SelfStudyImport.aiIntroductions: Mixed` + `Submission.documentIntroduction: string` + `Submission.standardIntroductions: Map<string, string>`. All optional, all back-compat.
+- **Server apply path**: `applyAIImport` unpacks `payload.introductions` and writes to the new Submission fields with `markModified` for the Map.
+
+What remains for Phase 2:
+- ai-service walker audit (Problem 3 — silent paragraph drop)
+- ai-service matcher prompt extension (intro routing option + bias)
+- Self-Study Editor surface to render `documentIntroduction` + `standardIntroductions` post-Apply (storage works; visible editor is a small follow-on)
+- "+ Add from source for this Introduction" affordance (reuse the existing modal)
+- E2E spec `23_introduction.spec.ts`
+
+CR stays `in-progress` until Phase 2 ships.
+
+
 
 ## Source quote
 

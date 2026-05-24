@@ -3,15 +3,37 @@ name: CR-040 — Appendix research papers, student work samples, and syllabi bec
 description: Self-study documents typically include an appendix with student work samples (research papers, country reports, immigrant interview papers) AND course syllabi documents. Today these blocks land in the importer as long, flattened narrative cards that lose their structure, lose their images, and don't attach to the standard the way readers expect (one file = one piece of supporting evidence). This CR teaches the parser to detect appendix-paper AND syllabus blocks, extract each as a standalone file (.docx with embedded images), store them in S3, and represent them in the wizard as supporting-evidence file cards. A post-parse VERIFICATION stage proves every source byte is accounted for — bucket, intro, paper, syllabus, CV, unplaced, or explicit skip — and surfaces any missing fragments to the coordinator as a new "Missing from import" section on the Review screen. No wizard UI redesign — just a new card kind + a coverage stat + the missing-fragments section.
 type: change-request
 cr_id: CR-040
-status: proposed
+status: in-progress
 priority: P0
 source: User observation 2026-05-23 on Stevenson "Sample Country Report" (South Korea) + "Immigrant Interview Paper" embedded in the source-doc appendix. Quote — "The AI importer must see that this is a research paper as the text ahead of the paper flags it as such... NOTE there are images in this paper and these images must be captured. The best option is to create a file during the parsing, store the file in S3 and create a link in supporting evidence tile that there is a file stored. In that way we don't have to change the UI of the import wizard except to show the summary in the tile and allow viewing of that file." Addendum 2026-05-23 — "Additional files imported and shown in the document are Syllabi documents. These documents should be treated just like the research papers and stored as files with images and listed in tiles with summary and link to the file. In generation of Supporting evidence files, Syllabi could be imported as standalone documents."
 sprint_target: Sprint 4 — coordinator-blocking; pairs with CR-033 (CVs) and CR-039 (Introductions) as the four "new content kinds" PCs need before next round of imports (papers, syllabi, CVs, intros).
 tags: [wizard, parse, ai-service, server, s3, supporting-evidence, images, p0, appendix, research-paper, syllabus]
-last_reviewed: 2026-05-23
+last_reviewed: 2026-05-24
 ---
 
 # CR-040 — Appendix papers as standalone evidence files
+
+## Phase 1 shipped 2026-05-24 — data shape + apply skeleton
+
+Only the data shape landed today so Phase 2/3 (ai-service detection, image capture, .docx generation, S3 upload, UI cards) can land in follow-on sessions without schema churn.
+
+What landed:
+- **Client store**: `'evidenceDoc'` added to `ItemKind`. New `EvidenceDocItem` type with the per-paper/syllabus metadata shape from the spec (title/author/date/courseCode/subject/points/pageCountEstimate/imageCount/summary/byteOffsetStart + S3 fields populated only post-Phase-2). `evidenceDocs: EvidenceDocItem[]` field defaults to `[]`. `setEvidenceDocs` action. Persisted via partialize.
+- **Client apply()**: sends `evidenceDocs` array (empty until Phase 2 fills it).
+- **Server schema**: `SelfStudyImport.aiEvidenceDocs: Mixed[]` (defaults to `[]`).
+- **Server apply path**: receives and persists `payload.evidenceDocs` so a hard refresh post-apply still surfaces them.
+
+What remains for Phase 2 (per the body below):
+- ai-service `appendix_paper_detector.py` + syllabus rules
+- ai-service image capture (fix `contains_image=False` constant) + per-section image list
+- ai-service `.docx` generation via python-docx
+- Server: S3 upload pipeline (mirror to import-scoped + submission-scoped keys) + DocumentRef linkage on Apply
+- Client: card variant with "View file" button + metadata block + standalone-upload entry point on Upload step
+- Post-parse coverage verification stage (full spec at the bottom of this CR)
+
+CR stays `in-progress` until Phase 2/3 ship.
+
+
 
 ## Source quote
 

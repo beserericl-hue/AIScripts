@@ -95,6 +95,13 @@ export interface ISubmission extends Document {
   standardsStatus: Map<string, IStandardStatusInfo>;
   imports: mongoose.Types.ObjectId[];
   curriculumMatrices: mongoose.Types.ObjectId[];
+  // CR-039 — Standard-level + document-level Introductions written by the
+  // wizard's apply step. Kept as opaque HTML strings (same shape as
+  // narratives' content) so the existing TipTap editor surface can render
+  // them as soon as a per-Standard intro UI lands. Both fields are
+  // optional; absent == no introductions captured for this submission.
+  documentIntroduction?: string;
+  standardIntroductions?: Map<string, string>;
 
   // Reader lock
   readerLock: IReaderLock;
@@ -222,6 +229,15 @@ const SubmissionSchema = new Schema<ISubmission>({
       of: NarrativeContentSchema
     },
     default: {}
+  },
+  // CR-039 — Introduction storage. Both fields are optional + default
+  // empty so prior submissions remain valid. documentIntroduction is one
+  // HTML blob; standardIntroductions is keyed by standardCode -> HTML.
+  documentIntroduction: { type: String, default: undefined },
+  standardIntroductions: {
+    type: Map,
+    of: String,
+    default: undefined
   },
   documents: [DocumentRefSchema],
   decision: DecisionSchema,

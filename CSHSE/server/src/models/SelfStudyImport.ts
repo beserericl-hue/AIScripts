@@ -209,6 +209,14 @@ export interface ISelfStudyImport extends Document {
   aiTags?: IAITag[];
   aiPlaceholderSections?: IAIPlaceholderSection[];
   aiMatrices?: any[];
+  // CR-039 — Introduction buckets keyed by 'document' or 'standard-{N}'.
+  // Stored as Mixed because the bucket items are the same shape as
+  // aiBuckets[].narratives, with one new wrapping field (scope).
+  aiIntroductions?: Record<string, any>;
+  // CR-040 Phase 1 — appendix paper + syllabus extractions. Detection +
+  // S3 upload + .docx generation land in Phase 2/3; the field is here so
+  // apply-time payloads have somewhere to land without schema churn.
+  aiEvidenceDocs?: any[];
   aiErrors?: string[];
   aiStartedAt?: Date;
   aiCompletedAt?: Date;
@@ -516,6 +524,10 @@ const SelfStudyImportSchema = new Schema<ISelfStudyImport>({
   aiTags: { type: [AITagSchema], default: [] },
   aiPlaceholderSections: { type: [AIPlaceholderSchema], default: [] },
   aiMatrices: [{ type: Schema.Types.Mixed }],
+  // CR-039
+  aiIntroductions: { type: Schema.Types.Mixed, default: undefined },
+  // CR-040 Phase 1
+  aiEvidenceDocs: { type: [Schema.Types.Mixed], default: [] },
   aiErrors: { type: [String], default: [] },
   aiStartedAt: Date,
   aiCompletedAt: Date,

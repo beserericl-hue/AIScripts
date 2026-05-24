@@ -54,6 +54,9 @@ function stripCardHeading(snippet: string): string {
 export function ReviewStep(): JSX.Element {
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
+  // CR-039 — Introduction buckets + move-into-introduction action
+  const introductions = useAIImportStore((s) => s.introductions);
+  const moveItemToIntroduction = useAIImportStore((s) => s.moveItemToIntroduction);
   const placeholderSections = useAIImportStore((s) => s.placeholderSections);
   const selectedSpecKey = useAIImportStore((s) => s.selectedSpecKey);
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
@@ -657,6 +660,7 @@ export function ReviewStep(): JSX.Element {
           matrices={matrices}
           selectedKey={selectedSpecKey}
           onSelect={handleSelectSpec}
+          introductions={introductions}
         />
         <main className="flex flex-1 flex-col overflow-hidden">
           <ItemCardList
@@ -677,6 +681,8 @@ export function ReviewStep(): JSX.Element {
             onJumpToMatrix={handleJumpToMatrix}
             onAppendUnplacedToSpec={handleAppendUnplacedToSpec}
             onEditStart={handleEditStart}
+            introductions={introductions}
+            onMoveToIntroduction={moveItemToIntroduction}
           />
         </main>
         <ItemPreview

@@ -574,6 +574,21 @@ type ApplyPayload = {
   globalMergeMode?: 'merge' | 'replace' | 'per_spec';
   perSpecResolution?: Record<string, 'keep' | 'take' | 'merge'>;
   idempotencyKey?: string;
+  // CR-039 — Introduction payload keyed by 'document' / 'standard-{N}'.
+  // content is opaque HTML the client renders with the same TipTap path
+  // it uses for narratives.
+  introductions?: Record<
+    string,
+    {
+      scope: 'document' | 'standard';
+      standardCode: string | null;
+      content: string;
+    }
+  >;
+  // CR-040 Phase 1 — appendix paper / syllabus list. Detection +
+  // .docx generation + S3 upload land in Phase 2/3; until then this
+  // field arrives empty and the apply path is a no-op.
+  evidenceDocs?: any[];
 };
 
 function resolveMode(
@@ -849,6 +864,34 @@ export async function applyAIImport(req: AuthenticatedRequest, res: Response): P
     counts.tags = (payload.importTags || []).length;
     counts.placeholders = (payload.placeholderSections || []).length;
 
+    // CR-039 — persist Introductions into the Submission. The payload's
+    // `document` key writes documentIntroduction; every `standard-{N}`
+    // key writes one entry into standardIntroductions (keyed by the bare
+    // standard code, e.g. '1', '2', ...). Empty content is treated as
+    // intentional clearing — coordinators can wipe a draft Introduction
+    // by moving all its items out before Apply.
+    const intros = (payload.introductions ?? {}) as Record<
+      string,
+      { scope: 'document' | 'standard'; standardCode: string | null; content: string }
+    >;
+    if (Object.keys(intros).length > 0) {
+      for (const [key, val] of Object.entries(intros)) {
+        if (key === 'document' && val.scope === 'document') {
+          (submission as any).documentIntroduction = val.content || '';
+        } else if (val.scope === 'standard' && val.standardCode) {
+          if (!(submission as any).standardIntroductions) {
+            (submission as any).standardIntroductions = new Map<string, string>();
+          }
+          ((submission as any).standardIntroductions as Map<string, string>).set(
+            String(val.standardCode),
+            val.content || ''
+          );
+        }
+      }
+      (submission as any).markModified('documentIntroduction');
+      (submission as any).markModified('standardIntroductions');
+    }
+
     (submission as any).markModified('narratives');
     await submission.save(session ? { session } : {});
 
@@ -857,6 +900,16 @@ export async function applyAIImport(req: AuthenticatedRequest, res: Response): P
     importRecord.aiAppliedCounts = counts;
     importRecord.aiTags = (payload.importTags || []) as any;
     importRecord.aiPlaceholderSections = (payload.placeholderSections || []) as any;
+    // CR-039 / CR-040 Phase 1 — preserve the new content kinds on the
+    // import record so a hard refresh post-apply still surfaces them.
+    if (payload.introductions) {
+      (importRecord as any).aiIntroductions = payload.introductions;
+      (importRecord as any).markModified('aiIntroductions');
+    }
+    if (Array.isArray(payload.evidenceDocs)) {
+      (importRecord as any).aiEvidenceDocs = payload.evidenceDocs;
+      (importRecord as any).markModified('aiEvidenceDocs');
+    }
     if (idempotencyKey) {
       (importRecord as any).aiLastIdempotencyKey = idempotencyKey;
     }

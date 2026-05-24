@@ -9,17 +9,25 @@
  *   - "Unwritten": placeholder template sections (template format only)
  */
 import React, { useMemo, useState } from 'react';
-import { Search, AlertTriangle, FileText, Grid3x3 } from 'lucide-react';
+import { Search, AlertTriangle, FileText, Grid3x3, BookOpen } from 'lucide-react';
 import type {
   SpecBucket,
   PlaceholderSection,
   Tag,
-  MatrixData
+  MatrixData,
+  IntroductionBucket
 } from '../../../../../store/aiImportStore';
 
 export const UNPLACED_KEY = '_unplaced';
 export const UNWRITTEN_KEY = '_unwritten';
 export const MATRICES_KEY = '_matrices';
+// CR-039 — Introduction bucket keys are namespaced so they never collide
+// with synthetic ('_unplaced') or real spec keys ('1.a').
+export const INTRO_DOC_KEY = '_intro:document';
+export const introStandardKey = (n: string) => `_intro:standard-${n}`;
+export const isIntroKey = (k: string | null) => !!k && k.startsWith('_intro:');
+export const introBucketKeyFromSpecKey = (k: string): string =>
+  k.startsWith('_intro:') ? k.slice('_intro:'.length) : k;
 
 interface SpecRailProps {
   buckets: Record<string, SpecBucket>;
@@ -28,6 +36,9 @@ interface SpecRailProps {
   matrices: MatrixData[];
   selectedKey: string | null;
   onSelect: (key: string) => void;
+  // CR-039 — Introduction buckets keyed by 'document' / 'standard-{N}'.
+  // Pass-through optional; when absent the rail behaves as before.
+  introductions?: Record<string, IntroductionBucket>;
 }
 
 function coverageIcon(b: SpecBucket): string {
@@ -42,7 +53,7 @@ function bucketCount(b: SpecBucket): number {
   return b.narratives.length + b.evidenceText.length + b.evidenceFiles.length + mc;
 }
 
-export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, onSelect }: SpecRailProps): JSX.Element {
+export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, onSelect, introductions }: SpecRailProps): JSX.Element {
   const [filter, setFilter] = useState('');
 
   // Group buckets by standard for the rail's accordion structure.
@@ -90,6 +101,36 @@ export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, o
       </div>
 
       <nav role="tablist" aria-orientation="vertical" className="flex-1 overflow-auto p-2 text-sm">
+        {/* CR-039 — Document-level Introduction sits at the very top so
+            coordinators routing intro material always have a target with
+            zero scrolling. Only render if the bucket exists; ItemCardList
+            handles the empty state. */}
+        {introductions?.document && (
+          <div className="mb-2">
+            <button
+              role="tab"
+              aria-selected={selectedKey === INTRO_DOC_KEY}
+              onClick={() => onSelect(INTRO_DOC_KEY)}
+              title="Document Introduction — school-wide narrative that introduces the institution before any standard. Use Reassign on a misplaced spec card to move text here."
+              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+                selectedKey === INTRO_DOC_KEY
+                  ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
+                  : 'hover:bg-gray-100 text-gray-700'
+              }`}
+            >
+              <span className="flex items-center gap-1.5">
+                <BookOpen className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
+                <span className="font-medium">Document Introduction</span>
+              </span>
+              {introductions.document.items.length > 0 && (
+                <span className="rounded bg-cshse-200 px-1.5 text-xs text-cshse-800">
+                  {introductions.document.items.length}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
+
         {matrices.length > 0 && (
           // Sticky so it stays visible no matter how far the coordinator
           // scrolls into the 21-standard rail. Without this, the entry
@@ -122,12 +163,46 @@ export function SpecRail({ buckets, tags, placeholders, matrices, selectedKey, o
             filterMatches(`${std}.${b.specCode} ${b.standardTitle} ${b.specPrompt}`)
           );
           if (visible.length === 0) return null;
+          // CR-039 — per-Standard Introduction sibling above the spec list.
+          // Only render when the IntroductionBucket exists for this
+          // standard. Empty buckets get a faint count badge ("0") to
+          // signal the row is intentionally there but has no items yet —
+          // coordinators can still click to land on the bucket and
+          // Reassign material in.
+          const intro = introductions?.[`standard-${std}`];
           return (
             <div key={std} className="mb-2">
               <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Standard {std}
               </div>
               <ul>
+                {intro && (
+                  <li>
+                    <button
+                      role="tab"
+                      aria-selected={selectedKey === introStandardKey(std)}
+                      onClick={() => onSelect(introStandardKey(std))}
+                      title={`Standard ${std} Introduction — narrative that introduces the standard before any specific subspec. Use Reassign on a misplaced spec card to move text here.`}
+                      className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left ${
+                        selectedKey === introStandardKey(std)
+                          ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
+                          : 'hover:bg-gray-100 text-gray-700'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        <BookOpen className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
+                        <span className="text-xs italic">Introduction</span>
+                      </span>
+                      <span className="flex items-center gap-1 text-xs">
+                        {intro.items.length > 0 && (
+                          <span className="rounded bg-cshse-200 px-1.5 text-cshse-800">
+                            {intro.items.length}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  </li>
+                )}
                 {visible.map((b) => {
                   const key = `${b.standardCode}.${b.specCode}`;
                   const count = bucketCount(b);

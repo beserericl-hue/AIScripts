@@ -1150,3 +1150,25 @@ CR-017 fully shipped — audit + both regression gaps + two real leaks fixed.
 Server vitest: 52/62 pass (up from 47/57). The 10 remaining fails are unchanged pre-existing `documentVersionService` tests needing S3 creds in the local env.
 
 Gap 3 (PR-review checklist) and Gap 4 (external pen-test) are ongoing process items, not open code work. CR-017 closed.
+
+## [2026-05-24] update | change-requests
+
+CR-039 + CR-040 Phase 1 shipped — data shape + apply path + a coordinator-facing UX for CR-039.
+
+**CR-039 (Standard-level Introductions)** — `proposed → in-progress`. The model layer + apply path + Move-to-Introduction UX shipped today; ai-service auto-detection (walker + matcher) deferred to Phase 2.
+- `client/src/store/aiImportStore.ts`: new `IntroductionBucket` + `EvidenceDocItem` types; `introductions: Record<string, IntroductionBucket>` (seeded with 1 document-level + 9 standard-level buckets); `setIntroductions` + `moveItemToIntroduction` actions; `'introduction'` added to `ItemKind`; partialize persists across refresh.
+- `client/src/features/selfStudy/Editor/AIImport/review/SpecRail.tsx`: Document Introduction row at the top + per-Standard Introduction as the first row under each Standard heading. New `INTRO_DOC_KEY` / `introStandardKey` / `isIntroKey` / `introBucketKeyFromSpecKey` helpers.
+- `client/src/features/selfStudy/Editor/AIImport/review/ItemCardList.tsx`: renders intro items when an `_intro:*` key is selected; per-card `→ Intro…` dropdown on narrative + evidence-text cards lets coordinators move misplaced intro material to Document Introduction OR the current spec's Standard Introduction.
+- `client/src/features/selfStudy/Editor/AIImport/steps/ReviewStep.tsx`: passes `introductions` + `moveItemToIntroduction` through to the rail + card list; apply() collapses each non-empty Introduction to `{ scope, standardCode, content }` (HTML, linkified) and posts alongside narratives.
+- `server/src/models/SelfStudyImport.ts`: `aiIntroductions: Mixed` + `aiEvidenceDocs: Mixed[]`.
+- `server/src/models/Submission.ts`: `documentIntroduction: String` + `standardIntroductions: Map<String, String>`.
+- `server/src/controllers/aiImportController.ts` applyAIImport: unpacks `payload.introductions` (and `payload.evidenceDocs`) and writes to the new Submission fields with the `markModified` Map machinery.
+
+**CR-040 (papers + syllabi → standalone files)** — `proposed → in-progress`. **Phase 1 = data shape + apply skeleton only**. Lets Phase 2 land (ai-service appendix_paper_detector + image capture + .docx generation + S3 upload + card variant) without schema churn.
+- `'evidenceDoc'` added to `ItemKind`.
+- `EvidenceDocItem` type with the per-paper/syllabus metadata shape from the spec.
+- `evidenceDocs: EvidenceDocItem[]` on the store (defaults to `[]`).
+- `aiEvidenceDocs: Mixed[]` on `SelfStudyImport`.
+- `applyAIImport` receives and persists `payload.evidenceDocs` so hard-refresh post-apply still surfaces them.
+
+Server vitest: 52/62 (unchanged). Client vitest: 42/44 (unchanged). E2E sweep pending the deploy.

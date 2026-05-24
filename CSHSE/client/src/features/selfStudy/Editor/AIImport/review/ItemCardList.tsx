@@ -22,16 +22,31 @@ import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2 } from 'l
 import {
   useAIImportStore,
   type BucketItem,
+  type IntroductionBucket,
   type MatrixData,
   type PlaceholderSection,
   type SpecBucket,
   type Tag
 } from '../../../../../store/aiImportStore';
-import { UNPLACED_KEY, UNWRITTEN_KEY, MATRICES_KEY } from './SpecRail';
+import {
+  UNPLACED_KEY,
+  UNWRITTEN_KEY,
+  MATRICES_KEY,
+  INTRO_DOC_KEY,
+  isIntroKey,
+  introBucketKeyFromSpecKey
+} from './SpecRail';
 import { nearestPlacedNeighborFor } from './nearestPlacedNeighbor';
 import { tableizeIfBareRows } from './tableizeHtml';
 
-export type ItemKind = 'text' | 'evidenceText' | 'file' | 'matrix' | 'tag';
+export type ItemKind =
+  | 'text'
+  | 'evidenceText'
+  | 'file'
+  | 'matrix'
+  | 'tag'
+  | 'introduction'   // CR-039 — Standard-level Introduction items
+  | 'evidenceDoc';   // CR-040 Phase 1 — appendix paper / syllabus file
 
 export interface CardItem {
   rowId: string;
@@ -84,6 +99,10 @@ interface ItemCardListProps {
   /** CR-032: pencil click on a card. ReviewStep sets editingSectionId so the
    *  preview pane flips into edit mode for that item. */
   onEditStart?: (sectionId: string) => void;
+  /** CR-039: Introduction buckets so ItemCardList can render them when an
+   *  intro key is selected AND populate Reassign-to-Introduction targets. */
+  introductions?: Record<string, IntroductionBucket>;
+  onMoveToIntroduction?: (sectionId: string, targetBucketKey: string) => void;
 }
 
 // Headings like "b.", "c.", "1)", "(a)", "i.", or "x." are non-descriptive —
@@ -227,7 +246,9 @@ export function ItemCardList({
   onClearApprovals,
   onJumpToMatrix,
   onAppendUnplacedToSpec,
-  onEditStart
+  onEditStart,
+  introductions,
+  onMoveToIntroduction
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
@@ -370,13 +391,35 @@ export function ItemCardList({
     return out;
   }, [bucket, matrices, matrixRowEdits]);
 
+  // CR-039 — Resolve the currently-selected Introduction bucket when the
+  // selectedKey is an intro key, so the items renderer can flatten it.
+  const activeIntroBucket: IntroductionBucket | null = useMemo(() => {
+    if (!selectedKey || !isIntroKey(selectedKey) || !introductions) return null;
+    const key = introBucketKeyFromSpecKey(selectedKey);
+    return introductions[key] ?? null;
+  }, [selectedKey, introductions]);
+
   const items = useMemo<CardItem[]>(() => {
     if (selectedKey === UNPLACED_KEY) return flattenTags(unplacedTags);
     if (selectedKey === UNWRITTEN_KEY) return flattenPlaceholders(placeholders);
     if (selectedKey === MATRICES_KEY) return [];
+    if (activeIntroBucket) {
+      return activeIntroBucket.items.map((it) => ({
+        rowId: it.sectionId,
+        sectionId: it.sectionId,
+        kind: 'introduction' as ItemKind,
+        confidence: it.confidence ?? 1,
+        wordCount: it.wordCount ?? 0,
+        snippet: it.snippet,
+        htmlSnippet: it.htmlSnippet ?? null,
+        rawHeading: it.heading || 'Introduction item',
+        displayLabel: it.heading || 'Introduction item',
+        rationale: it.rationale ?? ''
+      }));
+    }
     if (!bucket) return [];
     return flattenBucket(bucket);
-  }, [selectedKey, bucket, unplacedTags, placeholders]);
+  }, [selectedKey, bucket, unplacedTags, placeholders, activeIntroBucket]);
 
   // CR-032 — set of sectionIds whose underlying BucketItem / Tag has been
   // edited (editedAt !== undefined). Used by KindSection to render the
@@ -762,6 +805,8 @@ export function ItemCardList({
               onChangeKind={onChangeKind}
               onEditStart={onEditStart}
               editedSectionIds={editedSectionIds}
+              bucketStandardCode={bucket?.standardCode ?? null}
+              onMoveToIntroduction={onMoveToIntroduction}
             />
             <KindSection
               title="Supporting evidence — text"
@@ -780,6 +825,8 @@ export function ItemCardList({
               onChangeKind={onChangeKind}
               onEditStart={onEditStart}
               editedSectionIds={editedSectionIds}
+              bucketStandardCode={bucket?.standardCode ?? null}
+              onMoveToIntroduction={onMoveToIntroduction}
             />
             <KindSection
               title="Supporting evidence — files"
@@ -841,6 +888,10 @@ export function ItemCardList({
                 onKeyDown={(e) => handleKeyDown(e, item, idx)}
                 onEditStart={onEditStart}
                 isEdited={editedSectionIds.has(item.sectionId)}
+                bucketStandardCode={bucket?.standardCode ?? null}
+                onMoveToIntroduction={
+                  !activeIntroBucket ? onMoveToIntroduction : undefined
+                }
               />
             ))}
           </ul>
@@ -892,6 +943,9 @@ interface KindSectionProps {
   onEditStart?: (sectionId: string) => void;
   /** Per-item "is this item currently edited?" lookup (by sectionId). */
   editedSectionIds?: Set<string>;
+  // CR-039 — Move-to-Introduction pass-through.
+  bucketStandardCode?: string | null;
+  onMoveToIntroduction?: (sectionId: string, targetKey: string) => void;
 }
 
 function KindSection({
@@ -910,7 +964,9 @@ function KindSection({
   onToggleApproval,
   onChangeKind,
   onEditStart,
-  editedSectionIds
+  editedSectionIds,
+  bucketStandardCode,
+  onMoveToIntroduction
 }: KindSectionProps): JSX.Element | null {
   if (items.length === 0) return null;
   return (
@@ -938,6 +994,8 @@ function KindSection({
             onKeyDown={(e) => onKeyDown(e, item, idx)}
             onEditStart={onEditStart}
             isEdited={!!editedSectionIds?.has(item.sectionId)}
+            bucketStandardCode={bucketStandardCode}
+            onMoveToIntroduction={onMoveToIntroduction}
           />
         ))}
       </ul>
@@ -962,6 +1020,13 @@ interface ItemCardProps {
   // selects the item and opens edit mode there.
   onEditStart?: (sectionId: string) => void;
   isEdited?: boolean;
+  // CR-039 — Move-to-Introduction action. Renders a small "→ Intro"
+  // dropdown that lists Document Introduction + the current spec's
+  // Standard-N Introduction as targets. Hidden on intro cards (you
+  // don't reassign an intro item to another intro from a card-level
+  // chip — that goes through the standard Reassign modal).
+  bucketStandardCode?: string | null;
+  onMoveToIntroduction?: (sectionId: string, targetKey: string) => void;
 }
 
 function ItemCard({
@@ -977,7 +1042,9 @@ function ItemCard({
   onChangeKind,
   onKeyDown,
   onEditStart,
-  isEdited
+  isEdited,
+  bucketStandardCode,
+  onMoveToIntroduction
 }: ItemCardProps): JSX.Element {
   const band = confBand(item.confidence);
   const hasHtmlTable = !!(item.htmlSnippet && item.htmlSnippet.includes('<table'));
@@ -1100,6 +1167,33 @@ function ItemCard({
               >
                 <Pencil className="h-3 w-3" aria-hidden /> Edit
               </button>
+            )}
+            {/* CR-039 — Move-to-Introduction. Two-click flow: click → pick
+                Document or Standard-N. Hidden on intro cards and on
+                non-text kinds (matrices / files / tags don't go into
+                Introductions). */}
+            {onMoveToIntroduction && (item.kind === 'text' || item.kind === 'evidenceText') && (
+              <select
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  const target = e.target.value;
+                  if (!target) return;
+                  onMoveToIntroduction(item.sectionId, target);
+                  e.target.value = '';
+                }}
+                title="Move this card to an Introduction bucket"
+                defaultValue=""
+                className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-0.5 text-xs text-cshse-700 hover:bg-cshse-50"
+              >
+                <option value="" disabled>→ Intro…</option>
+                <option value="document">Document Introduction</option>
+                {bucketStandardCode && (
+                  <option value={`standard-${bucketStandardCode}`}>
+                    Standard {bucketStandardCode} Introduction
+                  </option>
+                )}
+              </select>
             )}
             {/* One-click Discard. The same outcome is available via the
                 right-pane "Place this item as → Discard" dropdown, but
