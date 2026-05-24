@@ -115,21 +115,8 @@
         "coverageStrengths": []
       }
     },
-    "aiTags": [
-      {
-        "tagId": "seed-tag-001",
-        "sectionId": "seed-tag-001",
-        "summary": "Faculty meeting cadence",
-        "fullText": "Faculty meet monthly to review student progress, curriculum alignment, and program improvements. Meetings rotate between in-person and virtual formats.",
-        "suggestedStd": "6",
-        "suggestedSpec": "a",
-        "confidence": 0.55,
-        "sourceHeading": "Personnel — Faculty Operations",
-        "acceptState": "flagged",
-        "rationale": "Medium-confidence; could fit multiple specs.",
-        "byteOffsetStart": 6500
-      }
-    ],
+    "_aiTags_note": "Intentionally empty — flagged tags trigger the wizard to auto-route to the tag-triage step ahead of Review, breaking specs that want to land on Review. The 21_empty_buckets_guard / future tag specs should use a dedicated fixture with tags populated.",
+    "aiTags": [],
     "aiPlaceholderSections": [],
     "aiMatrices": [],
     "aiStages": [

@@ -161,12 +161,15 @@ export async function gotoReviewStep(page: Page, seed: SeedResult): Promise<void
   await expect(wizardBtn).toBeVisible({ timeout: 20_000 });
   await wizardBtn.click();
 
-  // Click Review in the left rail
-  const reviewBtn = page.getByRole('button', { name: /^review$/i });
-  await expect(reviewBtn).toBeVisible({ timeout: 30_000 });
-  await reviewBtn.click();
+  // The wizard's step rail uses role=tab with names like "3 Review".
+  // Tabs may be `[disabled]` if upstream state isn't ready — but with the
+  // CR-034 Zustand seed injected by loginAsSeededViaSso, status='finished'
+  // unlocks Review and beyond.
+  const reviewTab = page.getByRole('tab', { name: /review/i });
+  await expect(reviewTab).toBeVisible({ timeout: 30_000 });
+  await reviewTab.click();
 
-  // Wait for at least one card to render
+  // Wait for at least one Review card to render
   await expect(
     page.getByRole('button', { name: /^edit$/i }).first()
   ).toBeVisible({ timeout: 30_000 });
