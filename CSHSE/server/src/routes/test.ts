@@ -130,9 +130,20 @@ function startJanitor(): void {
 }
 
 export function buildTestRouter(): Router | null {
-  if (process.env.E2E_SEED_ENABLED !== '1') {
+  // Accept any truthy spelling and strip stray quotes / whitespace — some
+  // dashboard UIs persist the literal `"1"` if the operator pastes a
+  // quoted value, and there's nothing useful gained by being strict.
+  const seedEnabledRaw = (process.env.E2E_SEED_ENABLED ?? '')
+    .replace(/['"]/g, '')
+    .trim()
+    .toLowerCase();
+  const seedEnabled = ['1', 'true', 'yes', 'on'].includes(seedEnabledRaw);
+  if (!seedEnabled) {
     return null;
   }
+  console.warn(
+    `[test-router] E2E_SEED_ENABLED=${JSON.stringify(process.env.E2E_SEED_ENABLED)} parsed as ENABLED — mounting /api/test`
+  );
   // CR-042: E2E_SEED_ENABLED is the explicit operator opt-in and is the
   // single mount gate. The actual security boundary is the
   // E2E_SEED_TOKEN-checked `x-e2e-seed-token` header on every endpoint —
