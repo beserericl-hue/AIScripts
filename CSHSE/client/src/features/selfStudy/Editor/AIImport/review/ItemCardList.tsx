@@ -67,6 +67,10 @@ export interface CardItem {
   // monospace heuristic over `snippet`.
   htmlSnippet?: string | null;
   rationale: string;
+  // CR-041 US-6 — provenance stamped during the batch merge so the
+  // ItemCard chip can render "📄 <filename>" when in batch mode.
+  sourceImportId?: string;
+  sourceFilename?: string;
 }
 
 interface ItemCardListProps {
@@ -188,7 +192,12 @@ function toCard(item: BucketItem, kind: ItemKind): CardItem {
     wordCount: item.wordCount,
     snippet: item.snippet,
     htmlSnippet: item.htmlSnippet ?? null,
-    rationale: item.rationale
+    rationale: item.rationale,
+    // CR-041 US-6 — provenance fields stamped during the batch merge
+    // need to ride through the toCard projection or the source-file
+    // chip never renders.
+    sourceImportId: item.sourceImportId,
+    sourceFilename: item.sourceFilename
   };
 }
 
@@ -203,7 +212,10 @@ function flattenTags(tags: Tag[]): CardItem[] {
     wordCount: t.fullText.split(/\s+/).length,
     snippet: t.fullText,
     htmlSnippet: t.htmlSnippet ?? null,
-    rationale: t.rationale
+    rationale: t.rationale,
+    // CR-041 US-6 — same provenance pass-through for unplaced tags.
+    sourceImportId: t.sourceImportId,
+    sourceFilename: t.sourceFilename
   }));
 }
 
