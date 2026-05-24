@@ -303,6 +303,39 @@ export function buildTestRouter(): Router | null {
     });
     startJanitor();
 
+    // CR-034 — auto-build a Zustand `ai-import-storage` snapshot that lands
+    // the wizard on the requested step with the seeded buckets/tags/etc.
+    // visible. Without this, every spec that uses gotoReviewStep stalls on
+    // the Upload tab (Parse/Review/Apply are disabled until store.status
+    // becomes 'parsed' or later). Fixtures may override pieces via
+    // `import.zustandState` if a spec needs a different shape.
+    const fixtureStep =
+      (importSpec.wizardStep as string) ?? 'review';
+    const fixtureStatus =
+      (importSpec.aiStatus as string) === 'finished'
+        ? 'finished'
+        : 'parsed';
+    const autoZustandState = {
+      importId: String(importDoc._id),
+      submissionId: String(submissionDoc._id),
+      jobId: importDoc.aiJobId ?? `seed-${stamp}`,
+      step: fixtureStep,
+      status: fixtureStatus,
+      programLevel: (importSpec.aiProgramLevel as string) ?? 'bachelors',
+      isReimport: false,
+      selectedSpecKey: null,
+      selectedSectionId: null,
+      buckets: importSpec.aiBuckets ?? {},
+      tags: importSpec.aiTags ?? [],
+      placeholderSections: importSpec.aiPlaceholderSections ?? [],
+      matrices: importSpec.aiMatrices ?? [],
+      matrixRowEdits: {},
+      dirty: false
+    };
+    const zustandState =
+      (importSpec.zustandState as Record<string, unknown> | undefined) ??
+      autoZustandState;
+
     return res.json({
       cleanupToken,
       userId: String(userDoc._id),
@@ -315,9 +348,12 @@ export function buildTestRouter(): Router | null {
       submissionDocumentId: submissionDoc.submissionId, // human-readable id like 2026-001
       importId: String(importDoc._id),
       fixture,
-      // The Zustand store key + payload, ready to inject into localStorage:
+      // The Zustand store key + payload, ready to inject into localStorage.
+      // Wrapped in the same `{state, version}` envelope Zustand's persist
+      // middleware writes, so the helper can JSON.stringify and drop it
+      // straight into localStorage without re-wrapping.
       localStorageKey: 'ai-import-storage',
-      localStorageValue: importSpec.zustandState ?? null
+      localStorageValue: { state: zustandState, version: 0 }
     });
   });
 

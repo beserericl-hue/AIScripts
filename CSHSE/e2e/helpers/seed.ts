@@ -115,9 +115,36 @@ export async function loginAsSeeded(page: Page, seed: SeedResult): Promise<void>
  * CR-042 Slice 3 — log in as a seeded user via the SSO API instead of the
  * password form. The seeded user must already exist in the DB (created
  * during `seedFixture`); no auto-provision is involved.
+ *
+ * Also plants the seed's `localStorageValue` (the Zustand
+ * `ai-import-storage` snapshot built by the seed endpoint) so the wizard
+ * lands on its requested step with buckets/tags/matrices populated. Without
+ * this, every spec that calls gotoReviewStep stalls on the Upload tab.
  */
 export async function loginAsSeededViaSso(page: Page, seed: SeedResult): Promise<void> {
   await loginViaSso(page, seed.userEmail);
+  if (seed.localStorageValue) {
+    const key = seed.localStorageKey;
+    const value = JSON.stringify(seed.localStorageValue);
+    await page.context().addInitScript(
+      ({ key, value }) => {
+        window.localStorage.setItem(key, value);
+      },
+      { key, value }
+    );
+    // Also patch the open page (loginViaSso already navigated to baseOrigin).
+    try {
+      await page.evaluate(
+        ({ key, value }) => {
+          window.localStorage.setItem(key, value);
+        },
+        { key, value }
+      );
+    } catch {
+      // First evaluate can fail if page hasn't loaded yet; the init script
+      // covers every subsequent navigation.
+    }
+  }
 }
 
 /**
