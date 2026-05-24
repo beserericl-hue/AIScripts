@@ -603,6 +603,51 @@ function FullReviewStep(): JSX.Element {
     setSourceOpen(true);
   }, []);
 
+  // CR-039 Phase 2c part 2 — "+ Add from source" for an Introduction
+  // bucket. Opens the same ShowInSourceModal in selection mode but
+  // routes the confirmed text into the intro bucket instead of a spec.
+  const [introTarget, setIntroTarget] = useState<string | null>(null);
+  const setIntroductionsAction = useAIImportStore((s) => s.setIntroductions);
+  const handleAddFromSourceForIntro = useCallback((introBucketKey: string) => {
+    setIntroTarget(introBucketKey);
+    setSourceOpen(true);
+  }, []);
+  const handleIntroSelectionConfirmed = useCallback(
+    (text: string, location: { paragraphIndex?: number; html?: string }) => {
+      if (!introTarget) return;
+      const current = useAIImportStore.getState().introductions;
+      const bucket = current[introTarget];
+      if (!bucket) {
+        setSourceOpen(false);
+        setIntroTarget(null);
+        return;
+      }
+      const localItem: BucketItem = {
+        sectionId: `intro-correction-${Date.now().toString(36)}`,
+        heading:
+          introTarget === 'document'
+            ? 'Document Introduction · coordinator add'
+            : `Standard ${introTarget.replace('standard-', '')} Introduction · coordinator add`,
+        snippet: text,
+        htmlSnippet: location.html || null,
+        wordCount: text.split(/\s+/).filter(Boolean).length,
+        confidence: 1.0,
+        acceptState: 'auto_accept',
+        rationale: 'Manually added by the coordinator from the source document.'
+      };
+      setIntroductionsAction({
+        ...current,
+        [introTarget]: {
+          ...bucket,
+          items: [...bucket.items, localItem]
+        }
+      });
+      setSourceOpen(false);
+      setIntroTarget(null);
+    },
+    [introTarget, setIntroductionsAction]
+  );
+
   // User picked a passage in the source modal. Fire the corrections API +
   // append a synthetic BucketItem so the spec card fills immediately.
   const handleCorrectionConfirmed = useCallback(
@@ -791,6 +836,7 @@ function FullReviewStep(): JSX.Element {
           cvs={cvs}
           evidenceDocs={evidenceDocs}
           missingFragmentCount={coverageReport?.missingFragments?.length || 0}
+          onAddFromSourceForIntro={handleAddFromSourceForIntro}
         />
         <main className="flex flex-1 flex-col overflow-hidden">
           <ItemCardList
@@ -847,9 +893,25 @@ function FullReviewStep(): JSX.Element {
         onClose={() => {
           setSourceOpen(false);
           setCorrectionTarget(null);
+          setIntroTarget(null);
         }}
-        selectionTarget={correctionTarget}
-        onSelectionConfirmed={correctionTarget ? handleCorrectionConfirmed : undefined}
+        // Either a spec-correction OR an intro-add target is active.
+        // The modal renders selection mode iff selectionTarget is set;
+        // we synthesize a marker object for the intro path so the
+        // modal opens in selection mode without further refactor.
+        selectionTarget={
+          correctionTarget ??
+          (introTarget
+            ? { std: '_intro', spec: introTarget }
+            : null)
+        }
+        onSelectionConfirmed={
+          correctionTarget
+            ? handleCorrectionConfirmed
+            : introTarget
+              ? handleIntroSelectionConfirmed
+              : undefined
+        }
       />
     </div>
   );

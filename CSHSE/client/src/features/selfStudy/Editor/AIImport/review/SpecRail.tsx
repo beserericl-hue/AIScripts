@@ -53,6 +53,10 @@ interface SpecRailProps {
   // can surface "Missing from import (N)" alongside Unplaced when the
   // coverage_verifier finds gaps.
   missingFragmentCount?: number;
+  // CR-039 Phase 2c part 2 — "+ Add from source" affordance on every
+  // Introduction row. Opens ShowInSourceModal in selection mode
+  // targeting that intro bucket key ('document' or 'standard-{N}').
+  onAddFromSourceForIntro?: (introBucketKey: string) => void;
 }
 
 function coverageIcon(b: SpecBucket): string {
@@ -77,7 +81,8 @@ export function SpecRail({
   introductions,
   cvs,
   evidenceDocs,
-  missingFragmentCount = 0
+  missingFragmentCount = 0,
+  onAddFromSourceForIntro
 }: SpecRailProps): JSX.Element {
   const [filter, setFilter] = useState('');
 
@@ -131,13 +136,13 @@ export function SpecRail({
             zero scrolling. Only render if the bucket exists; ItemCardList
             handles the empty state. */}
         {introductions?.document && (
-          <div className="mb-2">
+          <div className="mb-2 flex items-center gap-1">
             <button
               role="tab"
               aria-selected={selectedKey === INTRO_DOC_KEY}
               onClick={() => onSelect(INTRO_DOC_KEY)}
               title="Document Introduction — school-wide narrative that introduces the institution before any standard. Use Reassign on a misplaced spec card to move text here."
-              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+              className={`flex flex-1 items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
                 selectedKey === INTRO_DOC_KEY
                   ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
                   : 'hover:bg-gray-100 text-gray-700'
@@ -153,6 +158,18 @@ export function SpecRail({
                 </span>
               )}
             </button>
+            {onAddFromSourceForIntro && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddFromSourceForIntro('document');
+                }}
+                title="Add from source — open the source document, select a passage, drop it into the Document Introduction"
+                className="rounded border border-cshse-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50"
+              >
+                + Add
+              </button>
+            )}
           </div>
         )}
 
@@ -254,13 +271,13 @@ export function SpecRail({
               </div>
               <ul>
                 {intro && (
-                  <li>
+                  <li className="flex items-center gap-1">
                     <button
                       role="tab"
                       aria-selected={selectedKey === introStandardKey(std)}
                       onClick={() => onSelect(introStandardKey(std))}
                       title={`Standard ${std} Introduction — narrative that introduces the standard before any specific subspec. Use Reassign on a misplaced spec card to move text here.`}
-                      className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left ${
+                      className={`flex flex-1 items-center justify-between rounded px-2 py-1.5 text-left ${
                         selectedKey === introStandardKey(std)
                           ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
                           : 'hover:bg-gray-100 text-gray-700'
@@ -278,6 +295,18 @@ export function SpecRail({
                         )}
                       </span>
                     </button>
+                    {onAddFromSourceForIntro && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddFromSourceForIntro(`standard-${std}`);
+                        }}
+                        title={`Add from source for Standard ${std} Introduction — select a passage in the source document`}
+                        className="rounded border border-cshse-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50"
+                      >
+                        + Add
+                      </button>
+                    )}
                   </li>
                 )}
                 {visible.map((b) => {
