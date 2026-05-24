@@ -83,8 +83,12 @@ export function UploadStep(): JSX.Element {
   // CR-041 user story 1 — accept N files. enqueueFiles promotes the
   // first into uploadFile + queues the rest. handleFile remains for
   // single-file callers (input change without multi-select).
+  // CR-041 US-2/US-5 — multi-file batched upload + hold-for-review flag.
   const enqueueFiles = useAIImportStore((s) => s.enqueueFiles);
   const pendingFiles = useAIImportStore((s) => s.pendingFiles);
+  const startBatchUpload = useAIImportStore((s) => s.startBatchUpload);
+  const holdForReview = useAIImportStore((s) => s.holdForReview);
+  const setHoldForReview = useAIImportStore((s) => s.setHoldForReview);
   const handleDrop = useCallback((e: React.DragEvent<HTMLLabelElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -101,11 +105,20 @@ export function UploadStep(): JSX.Element {
   const handleNext = useCallback(async () => {
     setLocalError(null);
     try {
-      await startUpload();
+      // CR-041 US-2 — when the coordinator has 2+ files queued, route
+      // through the batched-import code path. Single-file uploads keep
+      // the legacy startUpload flow so the existing wizard semantics
+      // stay unchanged.
+      if (pendingFiles.length > 0 && uploadFile) {
+        const allFiles = [uploadFile, ...pendingFiles];
+        await startBatchUpload(allFiles);
+      } else {
+        await startUpload();
+      }
     } catch (err: any) {
       setLocalError(err?.message || String(err));
     }
-  }, [startUpload]);
+  }, [startUpload, startBatchUpload, pendingFiles, uploadFile]);
 
   const isUploading = status === 'uploading';
   // After upload hits 100% the client makes a follow-up POST /start-ai;
@@ -171,15 +184,19 @@ export function UploadStep(): JSX.Element {
         </div>
       )}
 
-      {/* CR-041 user story 1 — show queued files so the coordinator knows
-          what's next. Parallel processing + batched Review merge (stories
-          2-10) ride on top of this in a follow-on. */}
+      {/* CR-041 US-2/US-5 — multi-file queue + hold-for-review flag. */}
       {pendingFiles.length > 0 && (
         <div className="rounded-md border border-cshse-200 bg-cshse-50 p-3 text-sm">
           <div className="font-medium text-cshse-800">
-            {pendingFiles.length} file{pendingFiles.length === 1 ? '' : 's'} queued after this one:
+            Multi-file batch: {(pendingFiles.length + (uploadFile ? 1 : 0))} files queued
           </div>
           <ul className="mt-1 space-y-0.5 text-xs text-cshse-700">
+            {uploadFile && (
+              <li className="flex items-center justify-between">
+                <span className="truncate font-mono">{uploadFile.name}</span>
+                <span className="text-cshse-500">{(uploadFile.size / 1024 / 1024).toFixed(2)} MB</span>
+              </li>
+            )}
             {pendingFiles.map((f, i) => (
               <li key={`${f.name}-${i}`} className="flex items-center justify-between">
                 <span className="truncate font-mono">{f.name}</span>
@@ -187,9 +204,18 @@ export function UploadStep(): JSX.Element {
               </li>
             ))}
           </ul>
-          <div className="mt-2 text-[11px] italic text-cshse-600">
-            Each file processes sequentially. After Apply you{"'"}ll be prompted to start the next one.
-          </div>
+          <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-cshse-800">
+            <input
+              type="checkbox"
+              checked={holdForReview}
+              onChange={(e) => setHoldForReview(e.target.checked)}
+              className="mt-0.5 rounded text-cshse-600 focus:ring-cshse-500"
+            />
+            <span>
+              <strong>Hold review until all files have processed (recommended).</strong>{' '}
+              When unchecked, the Review step opens as the first file completes and later files merge in live.
+            </span>
+          </label>
         </div>
       )}
 

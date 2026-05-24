@@ -302,6 +302,7 @@ export function ParseStep(): JSX.Element {
             : `Refreshing every ${POLL_INTERVAL_MS / 1000} s…`}
         </div>
         <CoverageBadge />
+        <BatchProgress />
       </section>
 
       {/* stall hint */}
@@ -359,6 +360,104 @@ export function ParseStep(): JSX.Element {
         )}
       </div>
     </div>
+  );
+}
+
+// --------------------------------------------------------------- BatchProgress
+
+/**
+ * CR-041 US-4 — multi-file batch progress.
+ *
+ * Renders one row per child of the parent ImportBatch when the wizard
+ * is in batch mode. Polls /api/imports/batch/:id every 3 s so the
+ * coordinator sees status changes without an SSE channel per child.
+ * US-5 gate (hold-for-review) lives here too: when on, the Next button
+ * is disabled until every child has finished.
+ */
+function BatchProgress(): JSX.Element | null {
+  const batchId = useAIImportStore((s) => s.batchId);
+  const snapshot = useAIImportStore((s) => s.batchSnapshot);
+  const holdForReview = useAIImportStore((s) => s.holdForReview);
+  const pollBatch = useAIImportStore((s) => s.pollBatch);
+  const setStep = useAIImportStore((s) => s.setStep);
+  React.useEffect(() => {
+    if (!batchId) return;
+    pollBatch();
+    const id = setInterval(pollBatch, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [batchId, pollBatch]);
+  if (!batchId || !snapshot) return null;
+
+  const done = snapshot.completedCount + snapshot.failedCount;
+  const total = snapshot.fileCount;
+  const allDone = done >= total;
+  const reviewUnlocked = !holdForReview ? done >= 1 : allDone;
+
+  return (
+    <section className="mt-6 rounded-md border border-cshse-200 bg-white p-3">
+      <header className="mb-2 flex items-center justify-between">
+        <div className="text-sm font-medium text-gray-800">
+          Multi-file batch — {done} of {total} files complete
+          {snapshot.failedCount > 0 && (
+            <span className="ml-2 text-red-700">· {snapshot.failedCount} failed</span>
+          )}
+        </div>
+        <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-mono text-gray-700">
+          {snapshot.status}
+        </span>
+      </header>
+      <ul className="space-y-1 text-xs">
+        {snapshot.children.map((c) => (
+          <li
+            key={c.importId}
+            className="flex items-center justify-between gap-2 rounded border border-gray-100 bg-gray-50 px-2 py-1"
+          >
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="font-mono text-gray-500">{c.batchPosition}.</span>
+              <span className="truncate font-medium text-gray-800">
+                {c.originalFilename}
+              </span>
+            </span>
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${
+                c.status === 'parsed'
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : c.status === 'failed'
+                  ? 'bg-red-100 text-red-800'
+                  : c.status === 'parsing'
+                  ? 'bg-cshse-100 text-cshse-800'
+                  : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              {c.status}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex items-center justify-between">
+        <div className="text-[11px] italic text-gray-600">
+          {holdForReview
+            ? allDone
+              ? 'All files complete. Open merged Review when ready.'
+              : 'Waiting for every file to finish before opening Review (hold-for-review ON).'
+            : reviewUnlocked
+            ? 'Review is open. New files merge in as they complete.'
+            : 'Review opens after the first file finishes.'}
+        </div>
+        <button
+          onClick={() => setStep('review')}
+          disabled={!reviewUnlocked}
+          className="rounded bg-cshse-600 px-3 py-1 text-xs font-medium text-white shadow disabled:cursor-not-allowed disabled:bg-gray-300"
+          title={
+            reviewUnlocked
+              ? 'Open merged Review'
+              : 'Hold-for-review gate active — every child must finish first'
+          }
+        >
+          Next: Review ▸
+        </button>
+      </div>
+    </section>
   );
 }
 

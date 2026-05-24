@@ -248,6 +248,32 @@ export type AIStatusSnapshot = {
   // boundary warnings, missing fragments). Shape mirrors
   // CoverageReport.to_dict() on the ai-service side.
   coverageReport?: AICoverageReport | null;
+  // CR-041 US-4 — batch context (multi-file). Null when this snapshot
+  // is for a legacy single-file import.
+  batch?: ChildSnapshotBatch | null;
+};
+
+// CR-041 — multi-file batched import wire shapes (GET /api/imports/batch/:id).
+export type ChildSnapshotEntry = {
+  importId: string;
+  batchPosition: number;
+  originalFilename: string;
+  status: WizardStatus;
+  stages: StageProgress[];
+  errors: string[];
+  appliedCounts?: any;
+};
+export type ChildSnapshotBatch = {
+  batchId: string;
+  submissionId: string;
+  status: 'pending' | 'processing' | 'partial_failure' | 'completed' | 'canceled';
+  fileCount: number;
+  holdForReview: boolean;
+  completedCount: number;
+  failedCount: number;
+  reviewUnlockedAt: string | null;
+  appliedAt: string | null;
+  children: ChildSnapshotEntry[];
 };
 
 // CR-040 Phase 3b — wire shape for the coverage report. Fields stay
@@ -396,6 +422,18 @@ interface AIImportState {
   // and a soft Apply gate when coverage is below the threshold.
   coverageReport: AICoverageReport | null;
 
+  // CR-041 US-2/US-4 — multi-file batch context. Null in single-file
+  // mode (backward-compat). When set, the wizard uses the batch's
+  // per-child status for Parse progress and gates Review on
+  // batch.holdForReview semantics.
+  batchId: string | null;
+  batchSnapshot: ChildSnapshotBatch | null;
+  // CR-041 US-5 — Hold-for-review flag. Coordinator-controlled on the
+  // Upload step (default ON). When true, "Next: Review" is gated until
+  // every child in the batch finishes. When false, Review opens as
+  // soon as the first child completes.
+  holdForReview: boolean;
+
   // CR-041 user story 1 — pending file queue when the coordinator
   // drops multiple files on the Upload step. The first file is
   // promoted into `uploadFile` for the existing single-file pipeline;
@@ -479,6 +517,14 @@ interface AIImportState {
   cancelImport: () => Promise<void>;
   apply: () => Promise<void>;
   loadExisting: (importId: string) => Promise<void>;
+  // CR-041 US-5
+  setHoldForReview: (v: boolean) => void;
+  // CR-041 US-2/US-3 — initiate a multi-file batch run. Creates a
+  // batch, uploads each file as a child, kicks off the advancer.
+  startBatchUpload: (files: File[]) => Promise<void>;
+  // CR-041 US-4 — poll the parent batch's status + per-child rows for
+  // the Parse step UI. Idempotent.
+  pollBatch: () => Promise<void>;
   reset: () => void;
   // Clear the transient state from a finished or failed run (errors, stages,
   // buckets, matrices, importId) and return the wizard to the Upload step.
@@ -556,6 +602,13 @@ const initialState = {
   standaloneCv: false,
   // CR-040 Phase 3b
   coverageReport: null as AICoverageReport | null,
+  // CR-041 US-2/US-4/US-5 — multi-file batch context. batchId is null
+  // when the wizard is running a single-file legacy import.
+  batchId: null as string | null,
+  batchSnapshot: null as ChildSnapshotBatch | null,
+  // CR-041 US-5 — Hold-for-review flag (default ON per spec).
+  // Persisted across refresh so the coordinator's preference survives.
+  holdForReview: true,
   // CR-041 user story 1
   pendingFiles: [] as File[]
 };
@@ -889,6 +942,140 @@ export const useAIImportStore = create<AIImportState>()(
         }),
 
       setMergeMode: (m) => set({ mergeMode: m }),
+
+      // CR-041 US-5 — Hold-for-review flag.
+      setHoldForReview: (v) => set({ holdForReview: v }),
+
+      // CR-041 US-2/US-3 — multi-file batch upload. Coordinator dropped
+      // N files; we (1) create a batch, (2) upload each as a child via
+      // /api/imports/batch/:id/file, (3) call /start to kick off the
+      // serial advancer. Errors at any step land in the wizard's error
+      // surface; partial successes keep the batch alive.
+      startBatchUpload: async (files) => {
+        const { submissionId, holdForReview } = get();
+        if (!submissionId) {
+          throw new Error('submissionId is required to start a batch');
+        }
+        if (!files || files.length === 0) return;
+
+        // Reset stale state from a prior run; mirror the single-file
+        // startUpload's reset block so the new batch starts clean.
+        set({
+          status: 'uploading',
+          uploadProgress: 0,
+          errors: [],
+          dirty: false,
+          buckets: {},
+          tags: [],
+          matrices: [],
+          placeholderSections: [],
+          matrixRowEdits: {},
+          approvedIds: [],
+          batchId: null,
+          batchSnapshot: null
+        });
+
+        let batchId: string;
+        try {
+          const res = await api.post('/api/imports/batch', {
+            submissionId,
+            holdForReview
+          });
+          batchId = res.data.batchId;
+          set({ batchId, importId: null });
+        } catch (err: any) {
+          const detail =
+            err?.response?.data?.error || err?.message || String(err);
+          set({ status: 'failed', errors: [`Batch create failed: ${detail}`] });
+          throw new Error(`Batch create failed: ${detail}`);
+        }
+
+        // Upload each file as a child. Sequential to keep server pressure
+        // bounded; files are typically a handful of docx blobs.
+        const childImportIds: string[] = [];
+        for (let i = 0; i < files.length; i++) {
+          const f = files[i];
+          const form = new FormData();
+          form.append('file', f);
+          try {
+            const res = await api.post(
+              `/api/imports/batch/${batchId}/file`,
+              form,
+              {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress: (event) => {
+                  if (event.total) {
+                    // Aggregate progress: (completed files + current
+                    // file's fraction) / total files.
+                    const fraction = event.loaded / event.total;
+                    set({ uploadProgress: (i + fraction) / files.length });
+                  }
+                }
+              }
+            );
+            childImportIds.push(res.data.importId);
+          } catch (err: any) {
+            const detail =
+              err?.response?.data?.error || err?.message || String(err);
+            // Surface the per-file failure; continue with the rest so
+            // the batch isn't all-or-nothing on upload.
+            set((s) => ({
+              errors: [
+                ...s.errors,
+                `Upload failed for ${f.name}: ${detail}`
+              ]
+            }));
+          }
+        }
+        set({ uploadProgress: 1 });
+
+        if (childImportIds.length === 0) {
+          set({
+            status: 'failed',
+            errors: [...get().errors, 'No files in the batch uploaded successfully.']
+          });
+          return;
+        }
+
+        // Kick off the advancer.
+        try {
+          await api.post(`/api/imports/batch/${batchId}/start`);
+        } catch (err: any) {
+          const detail =
+            err?.response?.data?.error || err?.message || String(err);
+          set({
+            status: 'failed',
+            step: 'parse',
+            errors: [...get().errors, `Batch start failed: ${detail}`]
+          });
+          throw new Error(`Batch start failed: ${detail}`);
+        }
+
+        set({
+          status: 'queued',
+          step: 'parse',
+          // For convenience the wizard's existing single-file SSE
+          // connection points at the FIRST child so the user gets at
+          // least one live stream; the per-child Parse rows come from
+          // the polling pollBatch loop.
+          importId: childImportIds[0]
+        });
+        get().pollBatch();
+      },
+
+      // CR-041 US-4 — pull the parent batch snapshot for Parse rendering.
+      pollBatch: async () => {
+        const { batchId } = get();
+        if (!batchId) return;
+        try {
+          const res = await api.get(`/api/imports/batch/${batchId}`);
+          set({ batchSnapshot: res.data as ChildSnapshotBatch });
+        } catch (err) {
+          // Non-fatal — Parse step will keep showing the last-known
+          // snapshot; next poll tick retries.
+        }
+      },
+
 
       _applySnapshot: (snap) => {
         const current = get();
@@ -1462,7 +1649,12 @@ export const useAIImportStore = create<AIImportState>()(
         // re-enters the StandaloneCVReview path on reload.
         standaloneCv: s.standaloneCv,
         // CR-040 Phase 3b — sticky across refresh.
-        coverageReport: s.coverageReport
+        coverageReport: s.coverageReport,
+        // CR-041 US-2/US-4/US-5 — batch context survives refresh so the
+        // wizard rejoins Parse polling on the right batch.
+        batchId: s.batchId,
+        batchSnapshot: s.batchSnapshot,
+        holdForReview: s.holdForReview
       })
     }
   )
