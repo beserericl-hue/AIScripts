@@ -1,0 +1,92 @@
+{
+  "_fixture_name": "wizard_batch_review_minimal",
+  "_purpose": "CR-041 US-10 — land Playwright on the Parse / Review step of the AI Import Wizard with a multi-file batch in 'completed' state. 2 child imports, each carrying a small bucket payload, share one batchId. Used by 25_multifile_batch.spec.ts to assert per-file rows + merged Review semantics.",
+  "user": {
+    "email": "batch-coordinator@example.test",
+    "name": "E2E Batch Coordinator",
+    "role": "program_coordinator",
+    "institutionName": "E2E Test University"
+  },
+  "submission": {
+    "institutionName": "E2E Test University",
+    "programName": "Human Services BS — batch",
+    "programLevel": "bachelors"
+  },
+  "import": {
+    "originalFilename": "batch-anchor.docx",
+    "aiStatus": "parsed",
+    "aiProgramLevel": "bachelors",
+    "wizardStep": "parse",
+    "aiBuckets": {},
+    "aiTags": [],
+    "aiPlaceholderSections": [],
+    "aiMatrices": []
+  },
+  "batch": {
+    "fileCount": 2,
+    "holdForReview": true,
+    "status": "completed",
+    "children": [
+      {
+        "originalFilename": "Standards-1-5-DepartmentChair.docx",
+        "aiStatus": "parsed",
+        "aiBuckets": {
+          "1.a": {
+            "standardCode": "1",
+            "specCode": "a",
+            "standardTitle": "Institutional Requirements and Specifications",
+            "specPrompt": "1.a - Program description",
+            "narratives": [
+              {
+                "sectionId": "batch-c1-narr-001",
+                "heading": "Department-chair narrative",
+                "snippet": "The department chair contributed Standards 1 through 5. This is the program overview, mission alignment, and historical context that anchors the entire self-study.",
+                "wordCount": 26,
+                "confidence": 0.9,
+                "acceptState": "auto_accepted",
+                "rationale": "from child 1 of the batch",
+                "byteOffsetStart": 1000
+              }
+            ],
+            "evidenceText": [],
+            "evidenceFiles": [],
+            "matrixCells": []
+          }
+        },
+        "aiTags": [],
+        "aiPlaceholderSections": [],
+        "aiMatrices": []
+      },
+      {
+        "originalFilename": "Standards-6-9-CurriculumLead.docx",
+        "aiStatus": "parsed",
+        "aiBuckets": {
+          "7.b": {
+            "standardCode": "7",
+            "specCode": "b",
+            "standardTitle": "Personnel — Faculty Credentials",
+            "specPrompt": "7.b - Faculty CV",
+            "narratives": [
+              {
+                "sectionId": "batch-c2-narr-001",
+                "heading": "Faculty mix",
+                "snippet": "The curriculum lead contributed Standards 6 through 9. Faculty mix includes full-time and adjunct instructors with terminal degrees.",
+                "wordCount": 18,
+                "confidence": 0.85,
+                "acceptState": "auto_accepted",
+                "rationale": "from child 2 of the batch",
+                "byteOffsetStart": 2000
+              }
+            ],
+            "evidenceText": [],
+            "evidenceFiles": [],
+            "matrixCells": []
+          }
+        },
+        "aiTags": [],
+        "aiPlaceholderSections": [],
+        "aiMatrices": []
+      }
+    ]
+  }
+}

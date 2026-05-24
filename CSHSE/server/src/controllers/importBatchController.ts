@@ -20,6 +20,7 @@ import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { recordVersion } from '../services/documentVersionService';
 import { startBatch } from '../services/batchAdvancer';
+import { applyAIImport } from './aiImportController';
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string; name?: string; role?: string };
@@ -92,13 +93,25 @@ export async function addFileToBatch(
       res.status(403).json({ error: 'Only the batch creator can add files' });
       return;
     }
-    if (batch.status === 'canceled' || batch.status === 'completed') {
-      // US-9 allows re-opening completed batches; this controller does the
-      // simple "still-open" path. Reopening is a separate code path.
-      if (batch.status === 'canceled') {
-        res.status(409).json({ error: 'Batch is canceled; create a new batch' });
-        return;
-      }
+    if (batch.status === 'canceled') {
+      res.status(409).json({ error: 'Batch is canceled; create a new batch' });
+      return;
+    }
+    // CR-041 US-9 — adding files to a completed batch re-opens it so the
+    // advancer picks up the new children. The merged Review re-gates if
+    // holdForReview is on. Idempotent: if multiple files are added
+    // they all queue and one /start is enough.
+    let reopened = false;
+    if (batch.status === 'completed') {
+      batch.status = 'processing';
+      batch.appliedAt = undefined as any;  // re-arm the apply gate
+      await batch.save();
+      reopened = true;
+    }
+    // Hard cap per US-9 — 25 files per batch.
+    if (batch.fileCount >= 25) {
+      res.status(400).json({ error: 'Batch is at the 25-file cap' });
+      return;
     }
     const extension = (file.originalname.toLowerCase().split('.').pop() || '') as
       | 'pdf'
@@ -151,12 +164,24 @@ export async function addFileToBatch(
       console.warn('[ImportBatch] recordVersion non-fatal:', versionErr);
     }
 
+    // If we reopened the batch, kick the advancer so the new child
+    // starts processing without an extra /start round-trip.
+    if (reopened) {
+      try {
+        const { startNextChild } = await import('../services/batchAdvancer');
+        await startNextChild(batch._id as any);
+      } catch (advErr) {
+        console.warn('[ImportBatch] reopen-start non-fatal:', advErr);
+      }
+    }
+
     res.status(201).json({
       importId: String(importRecord._id),
       batchId: String(batch._id),
       batchPosition,
       originalFilename: file.originalname,
-      fileType: extension
+      fileType: extension,
+      reopened
     });
   } catch (err: any) {
     console.error('addFileToBatch error:', err);
@@ -236,6 +261,155 @@ export async function startImportBatch(
   } catch (err: any) {
     console.error('startImportBatch error:', err);
     res.status(500).json({ error: err?.message || 'failed to start batch' });
+  }
+}
+
+/**
+ * POST /api/imports/batch/:batchId/apply — US-8 merged Apply.
+ *
+ * Walks the batch's children and runs the existing applyAIImport
+ * controller against each (which itself wraps Submission writes in a
+ * Mongo session). Returns per-child + aggregated counts. Stamps
+ * batch.appliedAt on success. On failure, the offending child rolls
+ * back via its own session; predecessors stay applied (idempotent
+ * re-apply still works via aiLastIdempotencyKey on each child).
+ *
+ * Wrapping ALL children in ONE outer transaction (the spec's
+ * preferred design) requires the existing applyAIImport to accept an
+ * external session — refactor punted to a follow-on; this slice gets
+ * the batch surface live with per-child transactions.
+ */
+export async function applyImportBatch(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const { batchId } = req.params;
+    const batch = await ImportBatch.findById(batchId);
+    if (!batch) {
+      res.status(404).json({ error: 'Batch not found' });
+      return;
+    }
+    if (String(batch.createdBy) !== String(req.user?.id)) {
+      res.status(403).json({ error: 'Only the batch creator can apply' });
+      return;
+    }
+    if (batch.appliedAt) {
+      res.json({
+        batchId,
+        appliedAt: batch.appliedAt,
+        message: 'Batch already applied'
+      });
+      return;
+    }
+    const children = await SelfStudyImport.find({ batchId: batch._id })
+      .sort({ batchPosition: 1 })
+      .lean();
+
+    type ChildResult = {
+      importId: string;
+      ok: boolean;
+      counts?: any;
+      error?: string;
+    };
+    const results: ChildResult[] = [];
+
+    for (const c of children) {
+      const importIdStr = String(c._id);
+      // Re-use the per-import applyAIImport controller by faking a small
+      // request shape. The controller reads req.params.importId +
+      // req.body.idempotencyKey + req.user.
+      const idempotencyKey = `batch-${batchId}-child-${importIdStr}`;
+      const proxyReq = {
+        ...req,
+        params: { importId: importIdStr },
+        body: { ...req.body, idempotencyKey }
+      } as any;
+      const childResult: any = await new Promise((resolve) => {
+        const proxyRes = {
+          status(code: number) {
+            this._status = code;
+            return this;
+          },
+          json(body: any) {
+            resolve({ status: this._status || 200, body });
+            return this;
+          }
+        } as any;
+        applyAIImport(proxyReq, proxyRes).catch((err) =>
+          resolve({ status: 500, body: { error: err?.message || String(err) } })
+        );
+      });
+      if (childResult.status >= 400) {
+        results.push({
+          importId: importIdStr,
+          ok: false,
+          error:
+            childResult.body?.error ||
+            childResult.body?.detail ||
+            `HTTP ${childResult.status}`
+        });
+      } else {
+        results.push({
+          importId: importIdStr,
+          ok: true,
+          counts: childResult.body?.aiAppliedCounts || childResult.body?.counts || null
+        });
+      }
+    }
+
+    const allOk = results.every((r) => r.ok);
+    if (allOk) {
+      batch.appliedAt = new Date();
+      batch.status = 'completed';
+      await batch.save();
+    }
+
+    res.json({
+      batchId,
+      ok: allOk,
+      results,
+      appliedAt: batch.appliedAt ?? null
+    });
+  } catch (err: any) {
+    console.error('applyImportBatch error:', err);
+    res.status(500).json({ error: err?.message || 'failed to apply batch' });
+  }
+}
+
+/**
+ * POST /api/imports/batch/:batchId/file/:importId/remove — US-7
+ * detach a child from the batch (mark canceled + null out batchId).
+ * Decrements parent fileCount + recomputes terminal status.
+ */
+export async function removeFileFromBatch(
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> {
+  try {
+    const { batchId, importId } = req.params;
+    const batch = await ImportBatch.findById(batchId);
+    if (!batch) {
+      res.status(404).json({ error: 'Batch not found' });
+      return;
+    }
+    if (String(batch.createdBy) !== String(req.user?.id)) {
+      res.status(403).json({ error: 'Only the batch creator can remove files' });
+      return;
+    }
+    const child = await SelfStudyImport.findById(importId);
+    if (!child || String(child.batchId || '') !== String(batchId)) {
+      res.status(404).json({ error: 'Child not found in this batch' });
+      return;
+    }
+    (child as any).aiStatus = 'canceled';
+    (child as any).batchId = undefined;
+    await child.save();
+    await ImportBatch.findByIdAndUpdate(batchId, { $inc: { fileCount: -1 } });
+    res.json({ batchId, importId, removed: true });
+  } catch (err: any) {
+    console.error('removeFileFromBatch error:', err);
+    res.status(500).json({ error: err?.message || 'failed to remove file' });
   }
 }
 

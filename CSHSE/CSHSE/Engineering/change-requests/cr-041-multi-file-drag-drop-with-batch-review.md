@@ -3,7 +3,7 @@ name: CR-041 — Multi-file drag-drop import with batched "hold-for-review" sema
 description: Today the import wizard accepts exactly one document per session. Coordinators routinely receive self-study material as multiple files — one Standard per faculty author, bulk syllabi from the registrar, a folder of research-paper appendices, a faculty member's CV update. This CR adds multi-file drag-drop on the Upload step, treats the dropped set as a single logical "import batch" with one shared Review screen, processes each file through the existing ai-service pipeline serially, and gates advancement to Review on a per-batch "hold-for-review" flag (default ON — the whole point is batch review, not one-at-a-time). Eight numbered user stories sized for sprint planning.
 type: change-request
 cr_id: CR-041
-status: in-progress
+status: shipped
 priority: P0
 source: User direction 2026-05-23 — "Allow many files to be drag/dropped to the importer. This will allow the PC to take different sections of the document written by different people or take bulk syllabi or papers and drag them to the import wizard. This will queue up multiple import jobs to be run consecutively. However there should be a flag in the wizard UI to hold off review until all documents have been run, so it is not an ordinary job queue. Analyse this requirement and break it down in the CR to specify the user stories in the sprint."
 sprint_target: Sprint 5 — strong dependencies on CR-033 (CV detection), CR-039 (Introductions), CR-040 (papers/syllabi as files) all of which assume the "kind" of content a dropped file can carry; CR-041 makes multi-file workflows real.
@@ -12,6 +12,70 @@ last_reviewed: 2026-05-24
 ---
 
 # CR-041
+
+## User stories 2-10 shipped 2026-05-24
+
+The full multi-file batched-import surface ships:
+
+- **US-2** — `ImportBatch` Mongoose model with submissionId / fileCount /
+  holdForReview / status / completedCount / failedCount /
+  reviewUnlockedAt / appliedAt. New routes:
+  `POST /api/imports/batch`, `POST /api/imports/batch/:id/file`,
+  `GET /api/imports/batch/:id`, `POST /api/imports/batch/:id/cancel`.
+  SelfStudyImport gains optional `batchId` / `batchPosition` /
+  `batchHoldForReview` back-pointers.
+- **US-3** — `batchAdvancer.ts` service walks children serially via the
+  same `/start-ai` codepath the single-file flow uses (new
+  `startAIImportForBatch` helper). `receiveAICallback` calls
+  `advanceBatch` on every terminal child to bump counts + kick off the
+  next pending one. Batch transitions to `completed` /
+  `partial_failure` once all children finish.
+- **US-4** — `BatchProgress` component on the Parse step renders one
+  row per child (filename + position + status badge) with 3 s polling
+  via the new `pollBatch` store action.
+- **US-5** — Hold-for-review checkbox on Upload step (default ON,
+  persisted across refresh). `BatchProgress` gates the Review button:
+  hold ON ⇒ wait for every child terminal; hold OFF ⇒ opens after the
+  first completes.
+- **US-6** — `loadBatchChildren` store action fetches each child's
+  `/ai-status` and merges buckets / tags / cvs / evidenceDocs /
+  introductions into the parent state. Each item is stamped with
+  `sourceImportId` + `sourceFilename`. `ItemCardList` renders a
+  source-file chip (📄 filename) on every card when in batch mode.
+- **US-7** — Failed-row controls on `BatchProgress`: per-child Retry
+  (re-runs `/restart-ai`) + Remove (new
+  `POST /api/imports/batch/:id/file/:importId/remove` endpoint
+  detaches the child, decrements `fileCount`).
+- **US-8** — Merged Apply via
+  `POST /api/imports/batch/:id/apply` — walks children + delegates to
+  the existing `applyAIImport` per-child with batch-scoped
+  idempotency keys; client `apply()` short-circuits to the batch
+  endpoint when `batchId` is set. Per-child Mongo transactions for
+  now; outer transaction wrapping all children is a future
+  refactor.
+- **US-9** — Mid-flight file add: existing `/batch/:id/file` endpoint
+  now re-opens `completed` batches into `processing` + kicks the
+  advancer; 25-file cap enforced.
+- **US-10** — New `wizard_batch_review_minimal.json` fixture seeds a
+  2-child batch in `completed` state. Test seed router (CR-034)
+  extended to create ImportBatch + child SelfStudyImports +
+  expose `batchId` on the returned Zustand state. New
+  `e2e/tests/25_multifile_batch.spec.ts` asserts: GET batch returns
+  2 children; BatchProgress UI lists both files; Next:Review enabled;
+  merged Review shows source-file chips for both source documents.
+
+Architecture decisions live in
+`Engineering/architecture/ai-import-multi-file-store-redesign-2026-05-24.md`
+— Option B (extend existing store with multi-import support) per the
+"backward-compat by construction" rationale.
+
+What's not in this slice (deferred to follow-ons):
+- Edit-routing for batch mode (mutations apply to the merged view; a
+  follow-on routes them back to the source child via `sourceImportId`).
+- Outer Mongo transaction wrapping the whole batch Apply
+  (per-child transactions only for now).
+- Source-file filter dropdown on the Review screen (CR spec US-6
+  acceptance #4) — still useful, not load-bearing for the workflow.
 
 ## User story 1 shipped 2026-05-24 — multi-file drop with visible queue
 

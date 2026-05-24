@@ -61,10 +61,20 @@ export type Recommendation = {
   wordCount: number;
 };
 
+// CR-041 US-6 — provenance fields stamped during merge so the wizard
+// can show "from <filename>" chips on every item card. Optional on
+// every item shape so single-file imports stay backward-compatible.
+export type ItemProvenance = {
+  sourceImportId?: string;
+  sourceFilename?: string;
+};
+
 export type BucketItem = {
   sectionId: string;
   heading: string;
   snippet: string;
+  sourceImportId?: string;
+  sourceFilename?: string;
   // Original `<table>` HTML for table-derived items; ItemCard renders this
   // verbatim when present instead of the get_text()-flattened snippet.
   htmlSnippet?: string | null;
@@ -123,6 +133,8 @@ export type CVItem = {
   htmlSnippet?: string | null;
   snippet: string;
   byteOffsetStart?: number;
+  sourceImportId?: string;
+  sourceFilename?: string;
   routing: {
     source: CVRoutingSource;
     matrixRowAnchor?: string;
@@ -144,6 +156,8 @@ export type EvidenceDocItem = {
   sectionId: string;
   docSubKind: EvidenceDocSubKind;
   title: string;
+  sourceImportId?: string;
+  sourceFilename?: string;
   author?: string;
   date?: string;
   courseCode?: string;
@@ -165,6 +179,8 @@ export type Tag = {
   sectionId: string;
   summary: string;
   fullText: string;
+  sourceImportId?: string;
+  sourceFilename?: string;
   htmlSnippet?: string | null;
   suggestedStd: string | null;
   suggestedSpec: string | null;
@@ -525,6 +541,11 @@ interface AIImportState {
   // CR-041 US-4 — poll the parent batch's status + per-child rows for
   // the Parse step UI. Idempotent.
   pollBatch: () => Promise<void>;
+  // CR-041 US-6 — fetch every child's snapshot + merge buckets / tags /
+  // cvs / evidenceDocs / introductions into the parent state. Each
+  // item is stamped with sourceImportId + sourceFilename so the Review
+  // UI can show provenance chips.
+  loadBatchChildren: () => Promise<void>;
   reset: () => void;
   // Clear the transient state from a finished or failed run (errors, stages,
   // buckets, matrices, importId) and return the wizard to the Upload step.
@@ -1076,6 +1097,146 @@ export const useAIImportStore = create<AIImportState>()(
         }
       },
 
+      // CR-041 US-6 — fetch each child's snapshot + merge into parent
+      // state. The merged view mirrors the single-file shape so all
+      // existing Review components keep working without modification.
+      // Each item carries sourceImportId + sourceFilename for chip
+      // rendering.
+      loadBatchChildren: async () => {
+        const { batchId, batchSnapshot, dirty } = get();
+        if (!batchId || !batchSnapshot) return;
+        // Skip the merge when the coordinator has made local edits —
+        // we would overwrite their work. They can refresh manually if
+        // they want to re-pull from the server.
+        if (dirty) return;
+        const childrenSnapshots: Array<{
+          importId: string;
+          filename: string;
+          snap: AIStatusSnapshot;
+        }> = [];
+        for (const c of batchSnapshot.children) {
+          // Only merge children that have finished parsing — partial
+          // results would show empty buckets and confuse the count.
+          if (c.status !== 'parsed') continue;
+          try {
+            const res = await api.get(`/api/imports/${c.importId}/ai-status`);
+            childrenSnapshots.push({
+              importId: c.importId,
+              filename: c.originalFilename,
+              snap: res.data as AIStatusSnapshot
+            });
+          } catch (err) {
+            // Per-child fetch failure is non-fatal; skip and continue.
+          }
+        }
+        if (childrenSnapshots.length === 0) return;
+
+        // Build merged buckets.
+        const mergedBuckets: Record<string, SpecBucket> = {};
+        const mergedTags: Tag[] = [];
+        const mergedMatrices: MatrixData[] = [];
+        const mergedCvs: CVItem[] = [];
+        const mergedEvidenceDocs: EvidenceDocItem[] = [];
+        const mergedIntroductions: Record<string, IntroductionBucket> = {};
+        // Seed the intro keys so the UI's empty rails render.
+        for (const [key, ib] of Object.entries(get().introductions)) {
+          mergedIntroductions[key] = { ...ib, items: [] };
+        }
+
+        const stamp = <T extends { sourceImportId?: string; sourceFilename?: string }>(
+          item: T,
+          importId: string,
+          filename: string
+        ): T => ({
+          ...item,
+          sourceImportId: importId,
+          sourceFilename: filename
+        });
+
+        for (const { importId, filename, snap } of childrenSnapshots) {
+          // Buckets — keyed by std.spec. Concat per kind.
+          if (snap.buckets) {
+            for (const [bk, b] of Object.entries(snap.buckets)) {
+              const existing = mergedBuckets[bk];
+              if (!existing) {
+                mergedBuckets[bk] = {
+                  ...b,
+                  narratives: b.narratives.map((it) => stamp(it, importId, filename)),
+                  evidenceText: b.evidenceText.map((it) => stamp(it, importId, filename)),
+                  evidenceFiles: b.evidenceFiles.map((it) => stamp(it, importId, filename))
+                };
+              } else {
+                mergedBuckets[bk] = {
+                  ...existing,
+                  narratives: [
+                    ...existing.narratives,
+                    ...b.narratives.map((it) => stamp(it, importId, filename))
+                  ],
+                  evidenceText: [
+                    ...existing.evidenceText,
+                    ...b.evidenceText.map((it) => stamp(it, importId, filename))
+                  ],
+                  evidenceFiles: [
+                    ...existing.evidenceFiles,
+                    ...b.evidenceFiles.map((it) => stamp(it, importId, filename))
+                  ]
+                };
+              }
+            }
+          }
+          if (Array.isArray(snap.tags)) {
+            for (const t of snap.tags) {
+              mergedTags.push(stamp(t, importId, filename));
+            }
+          }
+          if (Array.isArray(snap.matrices)) {
+            for (const m of snap.matrices) {
+              mergedMatrices.push(m);
+            }
+          }
+          if (Array.isArray(snap.cvs)) {
+            for (const c of snap.cvs) {
+              mergedCvs.push(stamp(c, importId, filename));
+            }
+          }
+          if (Array.isArray(snap.evidenceDocs)) {
+            for (const e of snap.evidenceDocs) {
+              mergedEvidenceDocs.push(stamp(e, importId, filename));
+            }
+          }
+          // Introductions — merge per bucket key.
+          if (snap.introductionHints && Object.keys(snap.introductionHints).length > 0) {
+            for (const [sectionId, hint] of Object.entries(snap.introductionHints)) {
+              const targetKey = hint.startsWith('introduction:')
+                ? hint.slice('introduction:'.length)
+                : null;
+              if (!targetKey || !mergedIntroductions[targetKey]) continue;
+              // Find the item across this child's buckets.
+              if (snap.buckets) {
+                for (const b of Object.values(snap.buckets)) {
+                  const found = b.narratives.find((n) => n.sectionId === sectionId);
+                  if (found) {
+                    mergedIntroductions[targetKey].items.push(
+                      stamp(found, importId, filename)
+                    );
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        set({
+          buckets: mergedBuckets,
+          tags: mergedTags,
+          matrices: mergedMatrices,
+          cvs: mergedCvs,
+          evidenceDocs: mergedEvidenceDocs,
+          introductions: mergedIntroductions
+        });
+      },
+
 
       _applySnapshot: (snap) => {
         const current = get();
@@ -1357,7 +1518,39 @@ export const useAIImportStore = create<AIImportState>()(
       },
 
       apply: async () => {
-        const { importId, buckets, tags, placeholderSections, matrices, mergeMode, perSpecResolution, matrixRowEdits } = get();
+        const { importId, batchId, buckets, tags, placeholderSections, matrices, mergeMode, perSpecResolution, matrixRowEdits } = get();
+        // CR-041 US-8 — batch mode short-circuits to the batch Apply
+        // endpoint which iterates per-child apply server-side. The
+        // merged payload already lives on the server-side child
+        // SelfStudyImport records (the matcher wrote them at parse
+        // time); the merge we computed client-side is for display
+        // only. Edits a coordinator made client-side stay in this
+        // batch surface as a follow-on (server-side merged write of
+        // edits).
+        if (batchId) {
+          set({ status: 'applying', applyError: null });
+          try {
+            const res = await api.post(`/api/imports/batch/${batchId}/apply`);
+            if (res.data?.ok === false) {
+              const failedChildren = (res.data?.results || [])
+                .filter((r: any) => !r.ok)
+                .map((r: any) => `${r.importId}: ${r.error}`)
+                .join('; ');
+              set({
+                status: 'failed',
+                applyError: `Batch apply had failures — ${failedChildren}`
+              });
+              return;
+            }
+            set({ status: 'finished', applyError: null });
+            return;
+          } catch (err: any) {
+            const detail =
+              err?.response?.data?.error || err?.message || String(err);
+            set({ status: 'failed', applyError: `Batch apply failed: ${detail}` });
+            return;
+          }
+        }
         if (!importId) return;
         set({ status: 'applying', applyError: null });
 

@@ -53,7 +53,9 @@ import {
   addFileToBatch,
   getImportBatch,
   startImportBatch,
-  cancelImportBatch
+  applyImportBatch,
+  cancelImportBatch,
+  removeFileFromBatch
 } from '../controllers/importBatchController';
 import { authenticate } from '../middleware/auth';
 
@@ -114,7 +116,9 @@ router.post('/batch', createImportBatch);
 router.post('/batch/:batchId/file', upload.single('file'), addFileToBatch);
 router.post('/batch/:batchId/start', startImportBatch);
 router.get('/batch/:batchId', getImportBatch);
+router.post('/batch/:batchId/apply', applyImportBatch);
 router.post('/batch/:batchId/cancel', cancelImportBatch);
+router.post('/batch/:batchId/file/:importId/remove', removeFileFromBatch);
 
 /**
  * @route   GET /api/imports/check/:submissionId

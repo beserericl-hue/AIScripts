@@ -1151,6 +1151,18 @@ function ItemCard({
               <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">{KIND_LABEL[item.kind]}</span>
             )}
             <span className="text-xs text-gray-500">{item.wordCount} words</span>
+            {/* CR-041 US-6 — source-file chip when in batch mode. The
+                merge in aiImportStore.loadBatchChildren stamps every
+                item with sourceFilename so coordinators see provenance
+                at a glance. Hidden in single-file mode. */}
+            {(item as any).sourceFilename && (
+              <span
+                className="rounded bg-cshse-50 px-1.5 py-0.5 text-[10px] font-mono text-cshse-700"
+                title={`From ${(item as any).sourceFilename}`}
+              >
+                📄 {(item as any).sourceFilename}
+              </span>
+            )}
             {hasHtmlTable && (
               <span
                 className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700"

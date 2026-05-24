@@ -198,6 +198,10 @@ export function buildTestRouter(): Router | null {
     const userSpec = (merged.user ?? {}) as Record<string, unknown>;
     const submissionSpec = (merged.submission ?? {}) as Record<string, unknown>;
     const importSpec = (merged.import ?? {}) as Record<string, unknown>;
+    // CR-041 US-10 — multi-file batch fixtures. When present, the seed
+    // creates an ImportBatch + N child SelfStudyImport records instead
+    // of (or in addition to) the single-import payload above.
+    const batchSpec = (merged.batch ?? null) as Record<string, unknown> | null;
 
     // Stamp a unique token onto the email so reruns don't collide.
     const stamp = crypto.randomBytes(4).toString('hex');
@@ -282,6 +286,61 @@ export function buildTestRouter(): Router | null {
         { _id: submissionDoc._id },
         { $push: { imports: importDoc._id } }
       );
+
+      // CR-041 US-10 — batch fixture support. Create an ImportBatch
+      // plus per-child SelfStudyImport records when batchSpec is
+      // present. The single-import created above remains for legacy
+      // fixtures that don't want a batch.
+      if (batchSpec) {
+        const { ImportBatch } = await import('../models/ImportBatch');
+        const children = (batchSpec.children ?? []) as Array<Record<string, unknown>>;
+        const batchDoc = await ImportBatch.create({
+          submissionId: submissionDoc._id,
+          createdBy: userDoc._id,
+          fileCount: children.length,
+          holdForReview: (batchSpec.holdForReview as boolean) ?? true,
+          status: (batchSpec.status as string) ?? 'completed',
+          completedCount: children.filter(
+            (c) => (c.aiStatus as string) === 'parsed' || (c.aiStatus as string) === 'finished'
+          ).length,
+          failedCount: children.filter(
+            (c) => (c.aiStatus as string) === 'failed'
+          ).length,
+          reviewUnlockedAt: new Date()
+        });
+        for (let i = 0; i < children.length; i++) {
+          const child = children[i];
+          const childDoc = await SelfStudyImport.create({
+            submissionId: submissionDoc._id,
+            originalFilename: (child.originalFilename as string) ?? `seed-child-${i + 1}.docx`,
+            fileType: 'docx',
+            uploadedBy: userDoc._id,
+            status: 'completed',
+            aiStatus: (child.aiStatus as string) ?? 'parsed',
+            aiJobId: (child.aiJobId as string) ?? `seed-${stamp}-child-${i + 1}`,
+            aiProgramLevel: (child.aiProgramLevel as string) ?? 'bachelors',
+            aiBuckets: child.aiBuckets ?? {},
+            aiTags: child.aiTags ?? [],
+            aiPlaceholderSections: child.aiPlaceholderSections ?? [],
+            aiMatrices: child.aiMatrices ?? [],
+            aiStages: child.aiStages ?? [],
+            aiCVs: child.aiCVs ?? [],
+            aiEvidenceDocs: child.aiEvidenceDocs ?? [],
+            aiStartedAt: new Date(),
+            aiCompletedAt: new Date(),
+            batchId: batchDoc._id,
+            batchPosition: i + 1,
+            batchHoldForReview: batchDoc.holdForReview
+          });
+          await Submission.updateOne(
+            { _id: submissionDoc._id },
+            { $push: { imports: childDoc._id } }
+          );
+        }
+        // Stash batchId so the response can hand it back for the
+        // client's Zustand state.
+        (importDoc as any).__seededBatchId = String(batchDoc._id);
+      }
     } catch (err: any) {
       console.error('[test-seed] create failed', err);
       // Best-effort cleanup on partial failure
@@ -315,6 +374,7 @@ export function buildTestRouter(): Router | null {
     // that want to land on Review should set aiStatus='parsed' (NOT
     // 'finished' — that routes the wizard to Apply via deriveStepFromStatus).
     const fixtureStatus = (importSpec.aiStatus as string) ?? 'parsed';
+    const seededBatchId: string | undefined = (importDoc as any).__seededBatchId;
     const autoZustandState = {
       importId: String(importDoc._id),
       submissionId: String(submissionDoc._id),
@@ -335,7 +395,10 @@ export function buildTestRouter(): Router | null {
       // overwriting them with whatever /ai-status returns from the server.
       // Without this, every "edit + hard refresh" spec sees its edit
       // bounced back to the pre-edit state.
-      dirty: true
+      dirty: true,
+      // CR-041 US-10 — batch context for multi-file fixtures.
+      batchId: seededBatchId ?? null,
+      holdForReview: batchSpec ? ((batchSpec.holdForReview as boolean) ?? true) : true
     };
     const zustandState =
       (importSpec.zustandState as Record<string, unknown> | undefined) ??

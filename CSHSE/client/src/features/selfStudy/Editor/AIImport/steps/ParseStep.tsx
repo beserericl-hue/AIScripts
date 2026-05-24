@@ -386,6 +386,34 @@ function BatchProgress(): JSX.Element | null {
     const id = setInterval(pollBatch, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [batchId, pollBatch]);
+
+  // CR-041 US-7 — per-child retry + remove.
+  const handleRetry = React.useCallback(
+    async (importId: string) => {
+      try {
+        const { api } = await import('../../../../../services/api');
+        await api.post(`/api/imports/${importId}/restart-ai`);
+        await pollBatch();
+      } catch (err) {
+        console.error('retry failed:', err);
+      }
+    },
+    [pollBatch]
+  );
+  const handleRemove = React.useCallback(
+    async (importId: string) => {
+      if (!batchId) return;
+      try {
+        const { api } = await import('../../../../../services/api');
+        await api.post(`/api/imports/batch/${batchId}/file/${importId}/remove`);
+        await pollBatch();
+      } catch (err) {
+        console.error('remove failed:', err);
+      }
+    },
+    [batchId, pollBatch]
+  );
+
   if (!batchId || !snapshot) return null;
 
   const done = snapshot.completedCount + snapshot.failedCount;
@@ -418,18 +446,36 @@ function BatchProgress(): JSX.Element | null {
                 {c.originalFilename}
               </span>
             </span>
-            <span
-              className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${
-                c.status === 'parsed'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : c.status === 'failed'
-                  ? 'bg-red-100 text-red-800'
-                  : c.status === 'parsing'
-                  ? 'bg-cshse-100 text-cshse-800'
-                  : 'bg-gray-200 text-gray-700'
-              }`}
-            >
-              {c.status}
+            <span className="flex items-center gap-1">
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-mono ${
+                  c.status === 'parsed'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : c.status === 'failed'
+                    ? 'bg-red-100 text-red-800'
+                    : c.status === 'parsing'
+                    ? 'bg-cshse-100 text-cshse-800'
+                    : 'bg-gray-200 text-gray-700'
+                }`}
+              >
+                {c.status}
+              </span>
+              {c.status === 'failed' && (
+                <>
+                  <button
+                    onClick={() => handleRetry(c.importId)}
+                    className="rounded border border-cshse-300 bg-white px-1.5 py-0.5 text-[10px] text-cshse-700 hover:bg-cshse-50"
+                  >
+                    Retry
+                  </button>
+                  <button
+                    onClick={() => handleRemove(c.importId)}
+                    className="rounded border border-gray-300 bg-white px-1.5 py-0.5 text-[10px] text-gray-700 hover:bg-gray-50"
+                  >
+                    Remove
+                  </button>
+                </>
+              )}
             </span>
           </li>
         ))}

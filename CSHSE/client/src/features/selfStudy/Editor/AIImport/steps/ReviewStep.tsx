@@ -63,6 +63,18 @@ export function ReviewStep(): JSX.Element {
 }
 
 function FullReviewStep(): JSX.Element {
+  // CR-041 US-6 — when in batch mode, fetch each child's snapshot and
+  // merge into the parent state. Runs once on mount, and again when
+  // additional children finish (driven by batchSnapshot.completedCount).
+  const batchId = useAIImportStore((s) => s.batchId);
+  const batchSnapshotForReview = useAIImportStore((s) => s.batchSnapshot);
+  const loadBatchChildren = useAIImportStore((s) => s.loadBatchChildren);
+  React.useEffect(() => {
+    if (batchId) {
+      loadBatchChildren();
+    }
+  }, [batchId, batchSnapshotForReview?.completedCount, loadBatchChildren]);
+
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
   // CR-040 Phase 3b — coverage report drives the "Missing from import"
