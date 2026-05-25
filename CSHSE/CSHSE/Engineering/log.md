@@ -8,6 +8,21 @@ type: log
 
 Append-only. Format: `## [YYYY-MM-DD] <action> | <subject>` followed by free-form body.
 
+## [2026-05-25] ingest | CR-043 proposed — decouple Review from the AI Import Wizard
+
+User flagged a coordinator-breaking regression in the multi-author workflow: after a successful first import + partial Review (some approved, some mid-edit), clicking "Importer Wizard" a second time wipes the prior Review state. The `aiReviewState` lives in the wizard's Zustand store + localStorage cache; `startUpload` resets the whole structure. Reimport (the checkbox) doesn't help — it ships through to the matcher but doesn't change the merge-vs-wipe behavior on the client.
+
+[[cr-043-decouple-review-from-wizard-persist-across-reimport]] proposes:
+- Promote Review + Matrix to first-class Self-Study Editor toolbar buttons (currently buried inside the wizard's Stepper).
+- Persist `aiReviewState` + `aiMatrixState` on `Submission` (server-side), so wizard close → re-open → second-file-drop doesn't destroy work.
+- Rewrite "reimport" semantics to merge-in-place with strict (content-hash + filename) dedupe. No silent duplicate CVs / papers / syllabi.
+- Approved-mark identity moves from volatile `sectionId` to immutable `itemSources` content hash so reimport doesn't wipe approval marks accidentally.
+- Wizard Stepper collapses to Upload → Parse → "Open Review" handoff button; ApplyStep moves to the persisted Review surface.
+
+Estimated 8-9 days. Sequencing: server schema first, then client decoupling, then UI toolbar restructure, then reimport merge logic + content-hash plumbing, then E2E coverage (new `26_review_persistence.spec.ts` for the multi-import scenario).
+
+Supersedes the wizard-scoped state assumption in [[cr-041-multi-file-drag-drop-with-batch-review]] (which still ships per-batch state); CR-043 generalizes to one persisted Review state per Submission.
+
 ## [2026-05-10] setup | initial vault scaffolding
 
 Created vault skeleton: CLAUDE.md (schema), index.md (catalog), overview.md (placeholder), README.md, glossary.md, log.md. MCP server `obsidian-vault` configured in project `.mcp.json`. Skills `challenge-obsidian` and `save-obsidian` installed under `.claude/skills/`.
