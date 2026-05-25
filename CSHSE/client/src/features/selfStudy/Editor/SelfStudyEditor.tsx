@@ -259,6 +259,16 @@ function AIImportTabButton({
   const queuePosition = useAIImportStore((s) => s.queuePosition);
   const tagCount = useAIImportStore((s) => s.tags.length);
   const placeholderCount = useAIImportStore((s) => s.placeholderSections.length);
+  // CR-043 follow-on bug fix — when the user clicks the Importer Wizard
+  // toolbar button while the store still holds a completed import's
+  // state (parsed / applied / finished), the wizard would mount on
+  // whatever last step the prior run reached (Review, Apply, etc.),
+  // hiding the Upload step. Coordinators couldn't import a SECOND file
+  // without doing a hard refresh first. Detect that case and call the
+  // existing startOver() so the wizard lands on Upload with a clean
+  // slate. Persisted Submission.aiReviewState is untouched (CR-043 —
+  // it's submission-scoped and survives wizard state resets).
+  const startOver = useAIImportStore((s) => s.startOver);
 
   let badge: { text: string; cls: string } | null = null;
   if (status === 'queued') {
@@ -278,7 +288,17 @@ function AIImportTabButton({
 
   return (
     <button
-      onClick={() => setActiveView('ai-import')}
+      onClick={() => {
+        // If the prior import has already finished, reset the wizard so a
+        // fresh click lands the user on Upload (not the stale Review /
+        // Apply step from the last run). Coordinators expect "Importer
+        // Wizard" to mean "start a new import" once the prior one ran
+        // through Apply.
+        if (status === 'parsed' || status === 'applied' || status === 'finished' || status === 'failed' || status === 'canceled') {
+          startOver();
+        }
+        setActiveView('ai-import');
+      }}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
         activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
       }`}
