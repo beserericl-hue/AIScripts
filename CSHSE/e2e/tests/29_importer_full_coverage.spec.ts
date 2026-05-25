@@ -38,9 +38,18 @@ const F = {
   standards6to9: path.join(FIXTURE_DIR, `${PREFIX}02-standards-06-09.docx`),
   standards14to21: path.join(FIXTURE_DIR, `${PREFIX}04-standards-14-21.docx`),
   appendix: path.join(FIXTURE_DIR, `${PREFIX}05-appendix.docx`),
-  paperResponse: path.join(FIXTURE_DIR, `${PREFIX}paper__sample-response-paper.docx`),
+  // The Stevenson splitter's paper-output heuristic produces malformed
+  // fixtures (it captures a paper title but the next 80 paragraphs are
+  // a course catalog, not the paper body). For a clean paper assertion
+  // we use a hand-written synthetic fixture that has the exact shape a
+  // real coordinator paper-upload would have.
+  paperResponse: path.join(FIXTURE_DIR, 'synthetic-paper-country-report.docx'),
   paperCountry: path.join(FIXTURE_DIR, `${PREFIX}paper__sample-country-report.docx`),
-  syllabusChs: path.join(FIXTURE_DIR, `${PREFIX}syllabus__chs-105-human-services-social-policy.docx`),
+  // Synthetic fixture — the Stevenson splitter's syllabus output only
+  // captures the course-list TOC entry (3 paragraphs), not the actual
+  // syllabus body. We hand-write a complete CHS-105 syllabus to exercise
+  // the detector end-to-end.
+  syllabusChs: path.join(FIXTURE_DIR, 'synthetic-syllabus-chs-105.docx'),
 };
 
 async function ssoToken(email: string): Promise<string> {

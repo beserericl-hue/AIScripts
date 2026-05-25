@@ -313,9 +313,15 @@ def detect_evidence_docs_from_html(
         points_hit = _POINTS_LINE_RE.search(line)
         title_hit = _TITLE_LINE_RE.match(line) if not points_hit else None
         is_paper_header = bool(points_hit or title_hit)
+        # Syllabus header — coordinator-authored syllabi often split the
+        # course-code line from the "Course Syllabus" / "Course
+        # Description" / "Learning Outcomes" keyword line. Look across a
+        # 3-paragraph window so we catch the dual signal even when the
+        # docx puts them on separate <p> tags.
+        head_window = "\n".join(paragraphs[i: min(i + 3, n)])
         is_syllabus_header = (
-            _SYLLABUS_KEYWORDS_RE.search(line) is not None
-            and _COURSE_CODE_RE.search(line) is not None
+            _SYLLABUS_KEYWORDS_RE.search(head_window) is not None
+            and _COURSE_CODE_RE.search(head_window) is not None
         )
         if not (is_paper_header or is_syllabus_header):
             i += 1
@@ -330,11 +336,12 @@ def detect_evidence_docs_from_html(
             nxt_points = _POINTS_LINE_RE.search(nxt)
             nxt_title = _TITLE_LINE_RE.match(nxt) if not nxt_points else None
             nxt_is_paper = bool(nxt_points or nxt_title)
+            nxt_window = "\n".join(paragraphs[j: min(j + 3, n)])
             nxt_is_syllabus = (
-                _SYLLABUS_KEYWORDS_RE.search(nxt) is not None
-                and _COURSE_CODE_RE.search(nxt) is not None
+                _SYLLABUS_KEYWORDS_RE.search(nxt_window) is not None
+                and _COURSE_CODE_RE.search(nxt_window) is not None
             )
-            if (nxt_is_paper or nxt_is_syllabus) and j > i + 1:
+            if (nxt_is_paper or nxt_is_syllabus) and j > i + 3:
                 break
             body_parts.append(nxt)
             consumed_local.append(j)
