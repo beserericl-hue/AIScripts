@@ -213,6 +213,9 @@ Apply step moves entirely OUT of the wizard — it's a button on the persisted R
 
 ## Acceptance criteria
 
+(see also "First-deploy migration" below — clear-then-write is part of the
+acceptance shape, not just a risk-mitigation note)
+
 1. **Toolbar order** — Self-Study Editor toolbar shows Standards / Curriculum Matrix / Supporting File Library / Import Document (Legacy) / **Importer Wizard (AI)** / **Review** / **Matrix** in that order. Review + Matrix render disabled until their persisted state has content.
 2. **Wizard close ↔ Review survives** — PC parses one file in the Wizard, closes the Wizard panel, reopens an hour later. Review button is enabled. Clicking it shows the prior Review state (buckets, tags, CVs, etc.) — every item the parser produced is visible.
 3. **Second-file workflow** — PC parses `file-A.docx`. Review shows 12 items across 4 standards. PC approves 3, leaves 9 pre-decision. PC opens the Wizard again WITHOUT reimport checkbox, drops `file-B.docx`. After parse, Review shows the 12 prior items PLUS file-B's new items. Approved/discarded marks on file-A's items persist.
@@ -225,6 +228,8 @@ Apply step moves entirely OUT of the wizard — it's a button on the persisted R
 10. **Cross-PC isolation** — Submission's `aiReviewState` is owned by the submission's PC. A different user (admin, reader) sees Review disabled even if `aiReviewState` is populated. (Standard auth scoping.)
 11. **Wizard re-entry never destroys Review state** — There is no path in the wizard that calls a `clearReviewState` action on `aiReviewState`. The only thing that clears items is per-item approve/discard from the Review surface, or a deliberate "Discard all unreviewed" action.
 12. **No more "wipe on startUpload"** — `aiImportStore.startUpload` no longer resets `buckets` / `tags` / `matrices` / `cvs` / `evidenceDocs` / `introductions` / `approvedIds`. The store reads merged state from `aiReviewState` instead. (The pre-CR-043 reset was the load-bearing bug.)
+13. **Pre-CR-043 state cleared on first post-deploy import** — A submission that had in-flight wizard state from before this CR shipped sees that state cleared on the first new import that arrives. Coordinator re-runs the import; nothing partial bleeds through into `aiReviewState`. Audit-log entry records the clear.
+14. **Clear is submission-scoped + idempotent** — A second import on the same submission AFTER the cutover does NOT clear again; the `aiReviewState !== null` check disables that branch permanently for the submission.
 
 ## Files affected
 
@@ -247,9 +252,46 @@ Apply step moves entirely OUT of the wizard — it's a button on the persisted R
 - [[cr-033-cv-supporting-evidence]], [[cr-039-standard-introduction-buckets]], [[cr-040-appendix-papers-as-supporting-evidence-files]] — each contributes a kind that participates in the reimport merge.
 - [[cr-005-pc-lockout-on-final-submit]] — once the Submission transitions to `submitted-for-review`, BOTH the Wizard AND the Review surface go read-only.
 
-## Risk
+## First-deploy migration — explicit clear, no auto-hydrate
 
-- **State migration on first deploy.** Existing in-flight imports have wizard-side state but no `Submission.aiReviewState`. Migration: on first read after deploy, build `aiReviewState` from the most-recent `SelfStudyImport.aiBuckets/Tags/CVs/EvidenceDocs/Introductions` for the submission. One-time hydration; no manual coordinator action.
+**User direction 2026-05-25:** "We are going to assume that the import process starts over again. The state data which is not correct with this new change should be cleared and we assume we have to import our files over again to clear the state. Since the parser is going to write a new state, should we not mitigate that risk by clearing the old, no longer used state on import of files? This should not touch the new import state."
+
+So the migration story is *intentional clear*, not best-effort
+auto-hydrate. Trade-off: coordinators with in-flight imports re-run
+the import once. Benefit: no risk of inconsistent merge between the
+old wizard-scoped state shape and the new submission-scoped
+`aiReviewState`.
+
+Implementation (runs on the FIRST import after the CR-043 deploy
+lands for a given submission, NOT a one-shot migration script):
+
+1. `receiveAICallback` writes the parser's output to
+   `Submission.aiReviewState` per the new contract.
+2. **Before** that write — when it sees the submission has stale
+   pre-CR-043 wizard state (detected by absence of `aiReviewState` +
+   presence of `SelfStudyImport.aiBuckets` from an older import) —
+   the handler **clears** the affected pre-CR-043 fields:
+   - `SelfStudyImport.aiBuckets`, `aiTags`, `aiCVs`,
+     `aiEvidenceDocs`, `aiIntroductions`, `aiIntroductionHints`,
+     `aiPlaceholderSections`, `aiMatrices` on every prior
+     `SelfStudyImport` record for that submission.
+   - `aiImportStore`'s localStorage cache flushed on next client load
+     (Zustand persist version bump from 0 → 1 invalidates the cache).
+3. The fresh parse then populates `aiReviewState` cleanly.
+4. The clear is scoped to the SUBMISSION — touching one submission's
+   pre-CR-043 state doesn't affect another.
+
+The "should not touch the new import state" invariant: the clear only
+fires when `Submission.aiReviewState` is `null` AND prior SelfStudyImport
+records carry pre-CR-043 fields. Once `aiReviewState` exists, the
+clear branch is dead code for that submission.
+
+Audit trail: every clear writes an `auditLog` entry capturing the
+import id, the submission, and the pre-clear counts (so support can
+explain "your stuff is gone because of the CR-043 cutover" with
+specifics if a coordinator asks).
+
+## Risk
 - **Reimport merge bugs are coordinator-visible.** A bad hash comparison would silently drop items or accumulate duplicates. Mitigation: every merge writes an audit log entry on `aiReviewState.mergeLog` with kept-count / replaced-count / added-count per kind. Coordinators can request a support replay if numbers look wrong.
 - **Approved-item carry-through.** Approve marks tied to `sectionId` (which changes on reimport since the parser produces new section ids). The strict-match-by-content-hash replacement preserves the LOGICAL identity but the section id changes. We need the approve mark to ride on `itemSources` (the immutable per-item source-record), not on the volatile section id. Implementation detail: approvedIds becomes a set of `itemSources` content hashes, not section ids.
 - **CR-041 multi-file batch state.** CR-041 introduced batch-scoped Review state. CR-043 supersedes that scoping — `aiReviewState` is submission-scoped, not batch-scoped. Refactor: the batch advancer's merge-on-completion now writes to submission's `aiReviewState`. Batch becomes a parse-orchestration concern only, not a Review-state container.

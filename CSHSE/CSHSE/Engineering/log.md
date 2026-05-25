@@ -8,6 +8,12 @@ type: log
 
 Append-only. Format: `## [YYYY-MM-DD] <action> | <subject>` followed by free-form body.
 
+## [2026-05-25] update | CR-043 first-deploy migration tightened + CR-044 proposed
+
+**CR-043 update.** Replaced the "auto-hydrate `aiReviewState` from prior `SelfStudyImport.aiBuckets/...`" risk-mitigation with the user's preferred cutover story: on first post-CR-043 import per submission, `receiveAICallback` explicitly **clears** pre-CR-043 wizard state on every prior `SelfStudyImport` record for that submission before writing the new `aiReviewState`. The clear is scoped to the submission, idempotent (only fires when `aiReviewState === null`), and audit-logged. Trade-off: coordinators with in-flight imports re-run them once at the cutover. Benefit: no risk of half-migrated state shapes colliding under the new merge rules. Two new acceptance criteria (#13 + #14) pin the cutover behavior.
+
+**[[cr-044-review-screen-typography-parity]] proposed.** Review screen card body text renders at `text-xs` (~12px); the Self-Study NarrativeEditor uses `prose prose-sm` (~14px). The PC's eye re-calibrates every time they flip between the two surfaces during a multi-author workflow. CR-044 lifts the Review body baseline to match — card chrome (buttons / chips / metadata) stays small; only the *content* the coordinator reads to decide grows. ~1-2 hour Tailwind class swap across four files (`ItemCardList`, `ItemPreview`, `StandaloneCVReview`, `MissingFragmentsView`). Will also apply to the new ReviewSurface that [[cr-043-decouple-review-from-wizard-persist-across-reimport]] introduces.
+
 ## [2026-05-25] ingest | CR-043 proposed — decouple Review from the AI Import Wizard
 
 User flagged a coordinator-breaking regression in the multi-author workflow: after a successful first import + partial Review (some approved, some mid-edit), clicking "Importer Wizard" a second time wipes the prior Review state. The `aiReviewState` lives in the wizard's Zustand store + localStorage cache; `startUpload` resets the whole structure. Reimport (the checkbox) doesn't help — it ships through to the matcher but doesn't change the merge-vs-wipe behavior on the client.
