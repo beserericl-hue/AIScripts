@@ -294,7 +294,11 @@ function AIImportTabButton({
         // Apply step from the last run). Coordinators expect "Importer
         // Wizard" to mean "start a new import" once the prior one ran
         // through Apply.
-        if (status === 'parsed' || status === 'applied' || status === 'finished' || status === 'failed' || status === 'canceled') {
+        // Reset on SUCCESS states only — coordinator who failed/canceled
+        // should see the error panel first before being silently
+        // returned to the Upload step. They can click 'Start Over' from
+        // the failed panel if they want a fresh slate.
+        if (status === 'parsed' || status === 'applied' || status === 'finished') {
           startOver();
         }
         setActiveView('ai-import');
