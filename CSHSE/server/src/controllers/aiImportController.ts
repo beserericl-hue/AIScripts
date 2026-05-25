@@ -541,12 +541,37 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
     const totalItems = sumBucketItems(payload.buckets);
     const totalTags = Array.isArray(payload.tags) ? payload.tags.length : 0;
     const totalMatrices = Array.isArray(payload.matrices) ? payload.matrices.length : 0;
-    const totalAll = totalItems + totalTags + totalMatrices;
+    // CR-033 / CR-040 — CV-only and evidence-doc-only uploads are
+    // legitimately zero across buckets/tags/matrices (all content lives
+    // in payload.cvs / payload.evidenceDocs / payload.introductions).
+    // Counting those in the empty-bucket guard is what made the
+    // standalone-CV path silently rewrite successful Stevenson CV-only
+    // uploads to "failed" — surfaced by 28_stevenson_multifile_
+    // integration AC#3 ("CV-only file → aiStandaloneCv=true").
+    const totalCVs = Array.isArray(payload.cvs) ? payload.cvs.length : 0;
+    const totalEvidenceDocs = Array.isArray(payload.evidenceDocs)
+      ? payload.evidenceDocs.length
+      : 0;
+    const totalIntroItems =
+      payload.introductions && typeof payload.introductions === 'object'
+        ? Object.values(payload.introductions as Record<string, any>).reduce(
+            (acc: number, ib: any) =>
+              acc + (Array.isArray(ib?.items) ? ib.items.length : 0),
+            0
+          )
+        : 0;
+    const totalAll =
+      totalItems +
+      totalTags +
+      totalMatrices +
+      totalCVs +
+      totalEvidenceDocs +
+      totalIntroItems;
     const hasReportedErrors =
       Array.isArray(payload.errors) && payload.errors.length > 0;
     if (totalAll === 0 && !hasReportedErrors) {
       console.warn(
-        `[cr-037] empty-buckets terminal callback for import=${importId}; rewriting to failed`
+        `[cr-037] empty-content terminal callback for import=${importId}; rewriting to failed`
       );
       payload.status = 'failed';
       payload.errors = [

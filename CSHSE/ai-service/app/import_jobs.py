@@ -637,7 +637,6 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     # Detections from (1) feed a fingerprint set used to drop matching
     # walker sections so the CV content never reaches the matcher's
     # bucket router twice.
-    _stage_started(job, "cv_detector", "")
     from app.splitter.cv_detector import (
         detect_cvs,
         detect_cvs_from_html,
@@ -654,10 +653,6 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     cv_detections = cv_detections_pre + cv_detections_post
     if cv_detections:
         job.cvs = [cv_to_dict(cv) for cv in cv_detections]
-        job.warnings.append(
-            f"[diag-cv] cv_detector wrote {len(job.cvs)} entries; "
-            f"first sectionId={job.cvs[0].get('sectionId') if job.cvs else 'NONE'}"
-        )
         _stage_done(
             job,
             "cv_detector",
@@ -882,12 +877,6 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     populated_buckets = sum(
         1 for b in buckets.values()
         if (b.get("narratives") or b.get("evidenceText") or b.get("evidenceFiles"))
-    )
-    job.errors.append(
-        f"[diag-standalone] populated_buckets={populated_buckets}, "
-        f"job.cvs is {'None' if job.cvs is None else f'list[{len(job.cvs)}]'}, "
-        f"buckets keys={len(buckets)}, "
-        f"first_bucket_keys={list(buckets.keys())[:3] if buckets else []}"
     )
     if populated_buckets == 0 and (job.cvs or []):
         job.standalone_cv = True
