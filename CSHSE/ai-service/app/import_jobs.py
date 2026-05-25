@@ -654,6 +654,10 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     cv_detections = cv_detections_pre + cv_detections_post
     if cv_detections:
         job.cvs = [cv_to_dict(cv) for cv in cv_detections]
+        job.warnings.append(
+            f"[diag-cv] cv_detector wrote {len(job.cvs)} entries; "
+            f"first sectionId={job.cvs[0].get('sectionId') if job.cvs else 'NONE'}"
+        )
         _stage_done(
             job,
             "cv_detector",
