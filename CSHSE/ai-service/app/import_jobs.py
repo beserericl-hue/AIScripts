@@ -637,6 +637,7 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     # Detections from (1) feed a fingerprint set used to drop matching
     # walker sections so the CV content never reaches the matcher's
     # bucket router twice.
+    _stage_started(job, "cv_detector", "")
     from app.splitter.cv_detector import (
         detect_cvs,
         detect_cvs_from_html,
