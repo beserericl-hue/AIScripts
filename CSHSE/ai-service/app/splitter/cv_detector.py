@@ -56,6 +56,19 @@ _TITLE_PREFIX_RE = re.compile(r"^(Dr|Prof|Mr|Mrs|Ms|Mx)\.?\s+", re.IGNORECASE)
 _NAME_WORD_RE = re.compile(r"^[A-Z][A-Za-z'\-]{1,30}$")
 _NAME_INITIAL_RE = re.compile(r"^[A-Z]\.?$")
 _NAME_PARTICLES = {"de", "del", "della", "van", "von", "la", "di", "da", "du"}
+# Tokens that strongly signal "institution" rather than "person". A line
+# containing any of these words is rejected as a CV anchor — without
+# this stoplist, "Towson University" and "Loyola University Maryland"
+# (both 2-3 title-case tokens that pass _NAME_WORD_RE) would be
+# misclassified as anchor lines inside Stevenson-style CVs that list
+# their faculty's degree-granting institutions one per line.
+_NON_PERSON_TOKENS = {
+    "university", "college", "institute", "academy", "school",
+    "department", "association", "foundation", "corporation",
+    "company", "inc", "ltd", "llc", "center", "centre", "council",
+    "committee", "society", "program", "office", "division",
+    "service", "services", "agency",
+}
 _TRAILING_PUNCT_RE = re.compile(r"[,.;:]+$")
 
 _CONTACT_RE = re.compile(
@@ -150,6 +163,14 @@ def _is_anchor_line(line: str) -> str | None:
     s = line.strip()
     if not s or len(s) > 60:
         return None
+    # Reject ALL-CAPS lines — those are section headings ("ACADEMIC
+    # EMPLOYMENT", "AWARDS AND HONORS"), not proper names. Without this
+    # gate, the pre-walker scan in detect_cvs_from_html would treat CV
+    # subsection headers as fresh anchors and emit one CVDetection per
+    # marker line.
+    has_lower = any(c.islower() for c in s)
+    if not has_lower and any(c.isalpha() for c in s):
+        return None
     s = _TRAILING_PUNCT_RE.sub("", s)
     s = _strip_honorific(s)
     tokens = s.split()
@@ -169,6 +190,14 @@ def _is_anchor_line(line: str) -> str | None:
     # they could pass the token check (e.g. "Standard One Introduction").
     low = s.lower()
     if "standard" in low or "spec" in low or "appendix" in low:
+        return None
+    # Filter out institution-name lines that happen to look like a
+    # 2-3-token title-case sequence ("Towson University", "Loyola
+    # University Maryland", "The Johns Hopkins University") — a real
+    # Stevenson-style CV lists those one per line inside the Education
+    # subsection, so without this check the windowed pre-scan would
+    # start a new "CV" at every degree-granting institution.
+    if any(tok.lower() in _NON_PERSON_TOKENS for tok in tokens):
         return None
     return s
 
@@ -242,10 +271,18 @@ def detect_cvs(
       regular specs for routing.
 
     Pure function — no I/O, no logging. Deterministic on the input.
+
+    Implements a sliding-window scan: when a section starts with a name
+    anchor, accumulate forward through subsequent sections (up to
+    ``_MAX_CV_WINDOW``) until we either find enough markers to detect a
+    CV or hit a boundary (next anchor, CSHSE structural marker, or
+    window limit). Without the window the detector misses real CVs
+    that the deep_walker fragments across many small `<p>` tags.
     """
     sections_list = list(sections)
     cvs: list[CVDetection] = []
     consumed_ids: set[str] = set()
+    n = len(sections_list)
 
     for sec in sections_list:
         if sec.id in consumed_ids:
@@ -254,9 +291,6 @@ def detect_cvs(
         if not candidate:
             continue
         name, marker_count = candidate
-        # First-line snippet preview ~ 200 chars of body for the wire
-        # format. The full body is in ``markdown``; the snippet is just
-        # for the card preview.
         snippet = (sec.markdown or "").strip()[:200]
         cvs.append(
             CVDetection(
@@ -273,6 +307,131 @@ def detect_cvs(
 
     residual = [s for s in sections_list if s.id not in consumed_ids]
     return cvs, residual
+
+
+# Window size for the sliding-section scan above. 400 covers a long
+# Stevenson-style CV (Education + Academic Employment + Teaching
+# Experiences + Publications + Service + Affiliations).
+_MAX_CV_WINDOW = 400
+
+
+def detect_cvs_from_html(
+    html_bytes: bytes,
+) -> tuple[list[CVDetection], list[str]]:
+    """Pre-scan the raw HTML for CV blocks at the `<p>` level.
+
+    The standard pipeline runs ``deep_walker`` first, which filters out
+    paragraphs with fewer than 5 words. For Stevenson-style CVs, the
+    anchor name ("Barry W. Thomas"), the section markers ("EDUCATION",
+    "PUBLICATIONS"), and the contact lines are ALL below that floor —
+    so the section stream that reaches ``detect_cvs`` has none of the
+    CV signals. The detector then can't fire.
+
+    This pre-scan walks every top-level `<p>` in the HTML, applies the
+    same anchor + marker heuristics in a sliding window, and returns
+    one ``CVDetection`` per CV plus a list of normalised paragraph
+    text fingerprints. The caller uses the fingerprints to drop any
+    deep_walker section whose markdown matches a paragraph inside a
+    detected CV, ensuring CV content doesn't double-emit to the
+    matcher's bucket-routing path.
+
+    Returns ``(cvs, dropped_paragraph_texts)``.
+    """
+    from bs4 import BeautifulSoup  # local import to keep the module's
+                                    # public surface dependency-free
+
+    soup = BeautifulSoup(html_bytes, "html.parser")
+    for tag in soup(["script", "style", "head"]):
+        tag.decompose()
+    # Collect ordered paragraph text (every <p> + heading), regardless
+    # of word count, so we don't lose CV signals to the walker floor.
+    paragraphs: list[str] = []
+    for tag in soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"]):
+        # Skip tags inside tables — those are matrix / form territory.
+        if any(a.name == "table" for a in tag.parents):
+            continue
+        text = tag.get_text(separator=" ", strip=True)
+        if not text:
+            continue
+        paragraphs.append(text)
+
+    n = len(paragraphs)
+
+    def _is_real_anchor(idx: int) -> str | None:
+        """A line at ``idx`` is a real anchor only if (a) it passes the
+        token-level name check AND (b) the next 5 non-blank paragraphs
+        contain either contact info (email / phone) or an explicit CV
+        section marker. Without this gate, CV body lines that happen to
+        be 2-4 title-case words ("Successful Parent Teacher Conferences",
+        "American Counseling Association") get falsely promoted to
+        anchor lines and fragment a real CV into many small detections.
+        """
+        nm = _is_anchor_line(paragraphs[idx])
+        if not nm:
+            return None
+        head_lines = paragraphs[idx + 1: min(idx + 1 + 5, n)]
+        head = "\n".join(head_lines)
+        if _CONTACT_RE.search(head):
+            return nm
+        if _CV_SECTION_MARKERS_RE.search(head):
+            return nm
+        return None
+
+    cvs: list[CVDetection] = []
+    dropped_texts: list[str] = []
+    i = 0
+    while i < n:
+        name = _is_real_anchor(i)
+        if not name:
+            i += 1
+            continue
+        # Accumulate forward until next real anchor / CSHSE boundary / window.
+        accumulated_parts = [paragraphs[i]]
+        consumed_local: list[int] = [i]
+        next_anchor_at: int | None = None
+        for j in range(i + 1, min(i + _MAX_CV_WINDOW, n)):
+            if _is_real_anchor(j) is not None and j > i + 1:
+                next_anchor_at = j
+                break
+            if _contains_cshse_boundary(paragraphs[j]):
+                break
+            accumulated_parts.append(paragraphs[j])
+            consumed_local.append(j)
+        accumulated_text = "\n".join(accumulated_parts)
+        if _contains_cshse_boundary(accumulated_text):
+            i += 1
+            continue
+        marker_count = _count_cv_markers(accumulated_text)
+        if marker_count < 1:
+            i += 1
+            continue
+        if marker_count < 2:
+            head = "\n".join(accumulated_parts[:5])
+            if not _CONTACT_RE.search(head):
+                i += 1
+                continue
+        snippet = accumulated_text.strip()[:200]
+        # Synthesise a stable section id from the anchor + paragraph idx
+        # so callers can dedupe across re-runs of the same upload.
+        section_id = f"cv-prescan:{i}:{name.replace(' ', '-')}"
+        cvs.append(
+            CVDetection(
+                section_id=section_id,
+                faculty_name=name,
+                snippet=snippet,
+                html_snippet=None,
+                byte_offset_start=i,
+                section_marker_count=marker_count,
+                section_ids=[section_id],
+            )
+        )
+        dropped_texts.extend(paragraphs[k] for k in consumed_local)
+        if next_anchor_at is not None:
+            i = next_anchor_at
+        else:
+            i = consumed_local[-1] + 1
+
+    return cvs, dropped_texts
 
 
 def cv_to_dict(cv: CVDetection) -> dict:

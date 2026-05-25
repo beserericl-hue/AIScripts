@@ -625,17 +625,40 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     _stage_done(job, "deep_walker", detail)
 
     # CR-033 Phase 2b — pull CV sections out of the matcher's input so
-    # they don't compete with regular specs. detect_cvs returns
-    # (detections, residual_sections); the residual feeds the matcher,
-    # the detections ride to the callback as job.cvs.
-    from app.splitter.cv_detector import detect_cvs, cv_to_dict
-    cv_detections, sections = detect_cvs(sections)
+    # they don't compete with regular specs. Two complementary scans:
+    #   1. detect_cvs_from_html — pre-scans raw `<p>` tags before the
+    #      deep_walker's 5-word floor strips out CV anchors / markers /
+    #      contact lines. Catches Stevenson-style CVs where every
+    #      signal line is short ("Barry W. Thomas", "EDUCATION",
+    #      "thomas.bw@verizon.net").
+    #   2. detect_cvs (sliding window over walker sections) — catches
+    #      CVs whose paragraphs survive the word floor and reach the
+    #      section stream.
+    # Detections from (1) feed a fingerprint set used to drop matching
+    # walker sections so the CV content never reaches the matcher's
+    # bucket router twice.
+    from app.splitter.cv_detector import (
+        detect_cvs,
+        detect_cvs_from_html,
+        cv_to_dict,
+    )
+    cv_detections_pre, dropped_texts = detect_cvs_from_html(html_bytes)
+    if dropped_texts:
+        dropped_set = {t[:200].strip() for t in dropped_texts if t and t.strip()}
+        sections = [
+            s for s in sections
+            if (s.markdown or "").strip()[:200] not in dropped_set
+        ]
+    cv_detections_post, sections = detect_cvs(sections)
+    cv_detections = cv_detections_pre + cv_detections_post
     if cv_detections:
         job.cvs = [cv_to_dict(cv) for cv in cv_detections]
         _stage_done(
             job,
             "cv_detector",
-            f"{len(cv_detections)} CV(s) detected, removed from matcher input",
+            f"{len(cv_detections)} CV(s) detected "
+            f"({len(cv_detections_pre)} pre-walker, {len(cv_detections_post)} post-walker), "
+            f"removed from matcher input",
         )
     else:
         _stage_skipped(job, "cv_detector", "no CV anchors matched")
