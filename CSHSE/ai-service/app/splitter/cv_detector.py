@@ -183,20 +183,40 @@ def _contains_cshse_boundary(text: str) -> bool:
 
 def _section_is_cv_candidate(section: Section) -> tuple[str, int] | None:
     """Return ``(faculty_name, marker_count)`` if the section's first
-    non-blank line is a plausible anchor AND its body has >=2 CV section
-    markers, else None.
+    non-blank line is a plausible anchor AND its body looks like a CV,
+    else None.
+
+    Two acceptance paths so terse CVs (a short docx with EDUCATION +
+    contact info) still detect, without breaking precision on
+    embedded-CV runs (where a multi-marker rule keeps prose from
+    accidentally matching):
+
+    1. ``>= 2`` line-anchored CV section markers (original rule —
+       embedded CVs in a self-study almost always have Education +
+       Professional Experience + Publications, etc.).
+    2. ``>= 1`` marker AND contact info (email or phone) inside the
+       first 5 non-blank lines. Plain prose rarely combines a CV
+       section heading with contact details — Stevenson's standalone
+       CV uploads land here.
     """
     text = section.markdown or ""
     if not text.strip():
         return None
     # First non-blank line drives anchor detection.
-    first_line = next((ln for ln in text.splitlines() if ln.strip()), "")
+    lines = text.splitlines()
+    non_blank = [ln for ln in lines if ln.strip()]
+    first_line = non_blank[0] if non_blank else ""
     name = _is_anchor_line(first_line)
     if not name:
         return None
     marker_count = _count_cv_markers(text)
-    if marker_count < 2:
+    if marker_count < 1:
         return None
+    if marker_count < 2:
+        # Single-marker fallback: require contact info near the anchor.
+        head = "\n".join(non_blank[:5])
+        if not _CONTACT_RE.search(head):
+            return None
     # Reject if the section straddles a CSHSE structural marker — that
     # means we'd swallow content that belongs to a Standard.
     if _contains_cshse_boundary(text):
