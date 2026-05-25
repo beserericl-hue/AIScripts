@@ -668,9 +668,24 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     # the callback as job.evidence_docs.
     from app.splitter.appendix_paper_detector import (
         detect_evidence_docs,
+        detect_evidence_docs_from_html,
         evidence_doc_to_dict,
     )
-    evidence_doc_detections, sections = detect_evidence_docs(sections)
+    # Pre-walker pass — catches papers/syllabi whose header signal sits
+    # in a paragraph below the deep_walker's 30-word filter floor
+    # (e.g. "Sample Country Report (125 points)" is short, but the
+    # body that follows is long). Without this pre-pass, real papers
+    # never fire the per-section detector because the header and the
+    # body live in different walker sections.
+    pre_docs, pre_dropped = detect_evidence_docs_from_html(html_bytes)
+    if pre_dropped:
+        pre_drop_set = {t[:200].strip() for t in pre_dropped if t and t.strip()}
+        sections = [
+            s for s in sections
+            if (s.markdown or "").strip()[:200] not in pre_drop_set
+        ]
+    post_docs, sections = detect_evidence_docs(sections)
+    evidence_doc_detections = pre_docs + post_docs
     if evidence_doc_detections:
         # CR-040 Phase 2c — generate one .docx per detection and upload
         # to import-scoped S3 keys so the wizard's "View file" button

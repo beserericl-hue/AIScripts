@@ -269,6 +269,125 @@ def detect_evidence_docs(
     return detections, residual
 
 
+def detect_evidence_docs_from_html(
+    html_bytes: bytes,
+    *,
+    min_paper_word_count: int = 200,
+) -> tuple[list[EvidenceDocDetection], list[str]]:
+    """Pre-walker pass for appendix papers + syllabi.
+
+    Mirrors ``cv_detector.detect_cvs_from_html`` — the standard
+    ``deep_walker`` fragments a paper across many `<p>` sections, none
+    of which carry BOTH the header signal AND the body length together,
+    so ``detect_evidence_docs`` (per-section) never fires on a real
+    paper. This pre-scan walks every top-level `<p>` + heading in the
+    raw HTML, finds header-signal paragraphs, then accumulates the
+    body forward until the next header or document end. Returns
+    ``(detections, dropped_paragraph_texts)`` so the caller can
+    fingerprint-drop matching deep_walker sections.
+    """
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html_bytes, "html.parser")
+    for tag in soup(["script", "style", "head"]):
+        tag.decompose()
+
+    paragraphs: list[str] = []
+    for tag in soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"]):
+        if any(a.name == "table" for a in tag.parents):
+            continue
+        text = tag.get_text(separator=" ", strip=True)
+        if not text:
+            continue
+        paragraphs.append(text)
+
+    n = len(paragraphs)
+    detections: list[EvidenceDocDetection] = []
+    dropped: list[str] = []
+    i = 0
+    while i < n:
+        line = paragraphs[i]
+        # Header-signal test: (NN points) line OR a title-line keyword
+        # match. Pre-scan is permissive — false positives become
+        # editable cards.
+        points_hit = _POINTS_LINE_RE.search(line)
+        title_hit = _TITLE_LINE_RE.match(line) if not points_hit else None
+        is_paper_header = bool(points_hit or title_hit)
+        is_syllabus_header = (
+            _SYLLABUS_KEYWORDS_RE.search(line) is not None
+            and _COURSE_CODE_RE.search(line) is not None
+        )
+        if not (is_paper_header or is_syllabus_header):
+            i += 1
+            continue
+
+        # Accumulate body forward until the next header-shaped line or
+        # the end of the document.
+        body_parts = [line]
+        consumed_local = [i]
+        for j in range(i + 1, min(i + 200, n)):
+            nxt = paragraphs[j]
+            nxt_points = _POINTS_LINE_RE.search(nxt)
+            nxt_title = _TITLE_LINE_RE.match(nxt) if not nxt_points else None
+            nxt_is_paper = bool(nxt_points or nxt_title)
+            nxt_is_syllabus = (
+                _SYLLABUS_KEYWORDS_RE.search(nxt) is not None
+                and _COURSE_CODE_RE.search(nxt) is not None
+            )
+            if (nxt_is_paper or nxt_is_syllabus) and j > i + 1:
+                break
+            body_parts.append(nxt)
+            consumed_local.append(j)
+        body = "\n".join(body_parts)
+        word_count = len(body.split())
+        if word_count < min_paper_word_count:
+            i = consumed_local[-1] + 1
+            continue
+
+        title: str
+        points: int | None = None
+        course_code: str | None = None
+        kind: DocSubKind
+        if is_paper_header:
+            kind = "paper"
+            if title_hit:
+                title = title_hit.group(0).strip()
+            else:
+                title = line.strip()
+            pv = _POINTS_VALUE_RE.search(line)
+            if pv:
+                try:
+                    points = int(pv.group(1))
+                except ValueError:
+                    points = None
+        else:
+            kind = "syllabus"
+            code = _COURSE_CODE_RE.search(line)
+            course_code = code.group(0) if code else None
+            title = line.strip()
+
+        synth_id = f"evdoc-prescan:{i}:{kind}"
+        detections.append(
+            EvidenceDocDetection(
+                section_id=synth_id,
+                doc_sub_kind=kind,
+                title=title,
+                summary=_summary_of(body),
+                byte_offset_start=i,
+                page_count_estimate=_estimate_pages(word_count, 0),
+                image_count=0,
+                course_code=course_code,
+                points=points,
+                section_ids=[synth_id],
+                body=body,
+            )
+        )
+        dropped.extend(paragraphs[k] for k in consumed_local)
+        i = consumed_local[-1] + 1
+
+    return detections, dropped
+
+
 def evidence_doc_to_dict(doc: EvidenceDocDetection) -> dict:
     """Wire format mirrors the client-side ``EvidenceDocItem`` shape."""
     return {
