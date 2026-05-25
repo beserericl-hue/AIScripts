@@ -3,7 +3,7 @@ name: CR-044 — Review screen typography parity with Self-Study Editor
 description: The AI Importer Review screen's body text + card content renders at `text-xs` (~12px). The Self-Study Editor uses `prose prose-sm` (~14px). Coordinators flip between the two surfaces during the multi-author workflow; the size mismatch makes the Review screen feel cramped + unscannable next to the editor. Standardize the Review screen on the same `prose prose-sm` baseline so the eye doesn't have to re-calibrate.
 type: change-request
 cr_id: CR-044
-status: proposed
+status: shipped
 priority: P2
 source: User direction 2026-05-25 (annotated screenshot — Standard 1 / spec 1.a editor view marked "Correct Font size on this screen"; Review screen tile body text noticeably smaller)
 sprint_target: Sprint 5 — paired with [[cr-043-decouple-review-from-wizard-persist-across-reimport]] since the new Review surface is the natural place to set the new baseline
@@ -12,6 +12,27 @@ last_reviewed: 2026-05-25
 ---
 
 # CR-044 — Review screen typography parity with Self-Study Editor
+
+## Shipped 2026-05-25
+
+Tailwind class swaps across four files:
+
+- `ItemCardList.tsx` — card body wraps in `prose prose-sm max-w-none`
+  (matches the editor's NarrativeEditor baseline); displayLabel goes
+  to `text-base font-semibold`; source-heading subline goes to
+  `text-sm italic`. HTML-table cards keep their dense table chrome
+  but the surrounding body inherits `prose-sm`.
+- `ItemPreview.tsx` — header heading + source-heading both
+  `text-base`; AI rationale body wraps in `prose prose-sm`.
+- `StandaloneCVReview.tsx` — CV body preview moves from
+  `font-mono text-[11px]` to `prose prose-sm max-w-none`. Preserves
+  the whitespace-pre-wrap for the CV's pre-formatted layout.
+- `MissingFragmentsView.tsx` — fragment body moves to
+  `prose prose-sm`.
+
+Card chrome (Edit / Discard / Approve / Reassign buttons; confidence
+chips; word-count badges; source-file chips) unchanged. Coordinator
+no longer re-calibrates flipping between Review tiles + the editor.
 
 ## Source
 

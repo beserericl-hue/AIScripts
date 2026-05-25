@@ -114,9 +114,11 @@ export function MissingFragmentsView({
                 </button>
               </div>
             </div>
-            <p className="text-xs text-gray-700 whitespace-pre-wrap font-mono bg-gray-50 rounded p-2 max-h-24 overflow-y-auto">
+            {/* CR-044 typography parity — fragment body is content the
+                PC reads to decide. prose-sm matches editor baseline. */}
+            <div className="prose prose-sm max-w-none whitespace-pre-wrap rounded bg-gray-50 p-3 text-gray-800 max-h-32 overflow-y-auto">
               {fragment.snippet}
-            </p>
+            </div>
           </article>
         ))}
         {resolved.length > 0 && (

@@ -616,6 +616,102 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   importRecord.aiQueueDepth = null;
   await importRecord.save();
 
+  // CR-043 — merge this import's output into Submission.aiReviewState.
+  // First import per submission after the cutover triggers a clear of
+  // pre-CR-043 wizard state on prior SelfStudyImports. Best-effort:
+  // failure here logs but doesn't fail the callback (per-import
+  // aiBuckets/etc are already persisted above as the authoritative
+  // per-import record).
+  if (importRecord.aiStatus === 'parsed') {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const merge = require('../services/aiReviewMerge');
+      const submissionDoc = await Submission.findById(importRecord.submissionId);
+      if (submissionDoc) {
+        const isFirstPostCr043 = !(submissionDoc as any).aiReviewState;
+        let cleared = 0;
+        if (isFirstPostCr043) {
+          // User-directed cutover: clear pre-CR-043 fields on every
+          // OTHER prior import for this submission. The current import
+          // record stays — its fields are now mirrored into aiReviewState
+          // and serve as the authoritative per-source provenance.
+          cleared = await merge.clearPreCR043State(
+            SelfStudyImport,
+            importRecord.submissionId,
+            importRecord._id
+          );
+        }
+        const state = (submissionDoc as any).aiReviewState ?? merge.buildEmptyReviewState();
+        // Pull the content hash from the import's DocumentVersion if
+        // available; fallback to filename-derived hash so the merge
+        // still computes (degraded but functional). The upload path
+        // already stamps aiDocumentVersionId on every import.
+        let contentHash = '';
+        if ((importRecord as any).aiDocumentVersionId) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires
+            const docVerModelMod = require('../models/DocumentVersion');
+            const DV = docVerModelMod.DocumentVersion || docVerModelMod.default;
+            const dv = DV ? await DV.findById((importRecord as any).aiDocumentVersionId).select('sha256').lean() : null;
+            if (dv && (dv as any).sha256) contentHash = String((dv as any).sha256);
+          } catch (_dvErr) {
+            // DocumentVersion lookup is best-effort; fall through.
+          }
+        }
+        if (!contentHash) {
+          contentHash = merge.sha256Hex(
+            `${importRecord.originalFilename}::${importRecord._id}`
+          );
+        }
+        const report = merge.mergeImportIntoReviewState(state, {
+          importId: String(importRecord._id),
+          sourceFilename: importRecord.originalFilename || 'unknown.docx',
+          sourceContentHash: contentHash,
+          importedAt: new Date(),
+          reimport: !!(importRecord as any).aiIsReimport,
+          buckets: importRecord.aiBuckets || {},
+          tags: importRecord.aiTags || [],
+          cvs: (importRecord as any).aiCVs || [],
+          evidenceDocs: (importRecord as any).aiEvidenceDocs || [],
+          introductions: (importRecord as any).aiIntroductions || {},
+          placeholderSections: importRecord.aiPlaceholderSections || [],
+          coverageReport: (importRecord as any).aiCoverageReport
+        });
+        (submissionDoc as any).aiReviewState = state;
+        (submissionDoc as any).markModified('aiReviewState');
+        // Matrix state ships separately (same submission scoping).
+        if (Array.isArray(importRecord.aiMatrices) && importRecord.aiMatrices.length > 0) {
+          const matrixState = (submissionDoc as any).aiMatrixState ?? {
+            matrices: [],
+            matrixRowEdits: {},
+            lastUpdatedAt: new Date()
+          };
+          // Replace whole-matrix by matrixId. matrixRowEdits keyed by
+          // `${matrixId}|${rowAnchor}` so retag/remove decisions survive.
+          const seen = new Set<string>();
+          for (const m of importRecord.aiMatrices as any[]) {
+            seen.add(m.matrixId);
+          }
+          matrixState.matrices = [
+            ...(matrixState.matrices || []).filter((m: any) => !seen.has(m.matrixId)),
+            ...(importRecord.aiMatrices as any[])
+          ];
+          matrixState.lastUpdatedAt = new Date();
+          (submissionDoc as any).aiMatrixState = matrixState;
+          (submissionDoc as any).markModified('aiMatrixState');
+        }
+        await submissionDoc.save();
+        console.log(
+          `[CR-043 merge] importId=${importRecord._id} submissionId=${submissionDoc._id} ` +
+          `cleared=${cleared} firstPostCr043=${isFirstPostCr043} ` +
+          `counts=${JSON.stringify(report.counts)}`
+        );
+      }
+    } catch (mergeErr) {
+      console.error('[CR-043 merge] non-fatal merge failure:', mergeErr);
+    }
+  }
+
   // Final SSE event, then connected clients drop the EventSource.
   broadcastSSE(importId, buildSnapshotFromImport(importRecord));
 

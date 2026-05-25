@@ -1289,14 +1289,18 @@ function ItemCard({
               </button>
             )}
           </div>
-          <div className="mt-2 text-sm font-semibold text-gray-900">{item.displayLabel}</div>
+          {/* CR-044 — typography parity with NarrativeEditor.
+              displayLabel goes to text-base font-semibold; sub-heading
+              source-heading gets text-sm italic; body content wraps in
+              prose prose-sm (matches Self-Study editor's exact baseline). */}
+          <div className="mt-2 text-base font-semibold text-gray-900">{item.displayLabel}</div>
           {item.rawHeading && item.rawHeading !== item.displayLabel && (
-            <div className="mt-0.5 text-xs italic text-gray-500">Source heading: {item.rawHeading}</div>
+            <div className="mt-0.5 text-sm italic text-gray-500">Source heading: {item.rawHeading}</div>
           )}
           {hasHtmlTable ? (
             <div
-              className="ai-html-snippet mt-3 max-h-[28rem] overflow-auto rounded border border-gray-200 bg-white p-3 text-sm leading-relaxed text-gray-800
-                [&_table]:w-full [&_table]:border-collapse [&_table]:text-xs
+              className="ai-html-snippet prose prose-sm mt-3 max-h-[28rem] max-w-none overflow-auto rounded border border-gray-200 bg-white p-3 text-gray-800
+                [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm
                 [&_td]:border [&_td]:border-gray-300 [&_td]:p-1.5 [&_td]:align-top
                 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-50 [&_th]:p-1.5 [&_th]:text-left [&_th]:font-semibold
                 [&_p]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
@@ -1309,11 +1313,13 @@ function ItemCard({
               dangerouslySetInnerHTML={{ __html: tableizeIfBareRows(item.htmlSnippet || '') }}
             />
           ) : tabular ? (
-            <pre className="mt-3 max-h-96 overflow-auto whitespace-pre rounded bg-gray-50 p-3 font-mono text-xs leading-snug text-gray-800">
+            <pre className="mt-3 max-h-96 overflow-auto whitespace-pre rounded bg-gray-50 p-3 font-mono text-sm leading-snug text-gray-800">
               {item.snippet}
             </pre>
           ) : (
-            <div className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">{item.snippet}</div>
+            <div className="prose prose-sm mt-3 max-w-none whitespace-pre-wrap text-gray-800">
+              {item.snippet}
+            </div>
           )}
         </div>
       </div>

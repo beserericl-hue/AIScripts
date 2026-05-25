@@ -63,6 +63,57 @@ export interface IDecision {
   comments: string;
 }
 
+/**
+ * CR-043 — per-item provenance stamped at merge time so a reimport can
+ * locate "the EXACT same source artifact" and replace only matching
+ * items. Without these stamps, reimport degrades to add-everything
+ * (the pre-CR-043 behavior was wipe-everything; both are wrong).
+ */
+export interface IAIItemSource {
+  importId: string;            // SelfStudyImport._id that produced this item
+  sourceFilename: string;      // original DOCX filename
+  sourceContentHash: string;   // SHA-256 of the original DOCX bytes
+  importedAt: Date;
+}
+
+export interface IAIReviewState {
+  // Mirrors the per-import shapes the wizard's snapshot already carries.
+  // Stored as Mixed in Mongoose so the schema evolves without migration
+  // (matches the existing SelfStudyImport.aiBuckets pattern).
+  buckets: Record<string, any>;
+  tags: any[];
+  cvs: any[];
+  evidenceDocs: any[];
+  introductions: Record<string, any>;
+  placeholderSections: any[];
+  // CR-040 Phase 3b — coverage stays attached at the review-state level
+  // since it's a property of the (merged) parse output, not any one
+  // import. Updated on each merge.
+  coverageReport?: any;
+  // Per-item approval/discard. Identity is the content-hash-derived
+  // stable key (see IAIItemSource.sourceContentHash + sectionId) so
+  // reimport-replace doesn't silently re-approve a drifted item.
+  approvedIds: string[];
+  discardedIds: string[];
+  itemSources: Record<string, IAIItemSource>;  // keyed by item.sectionId
+  // CR-043 merge audit log — every receiveAICallback merge appends one
+  // entry capturing per-kind kept/replaced/added counts so support can
+  // explain "why is my CV gone" with specifics.
+  mergeLog: Array<{
+    importId: string;
+    importedAt: Date;
+    reimport: boolean;
+    counts: Record<string, { kept: number; replaced: number; added: number }>;
+  }>;
+  lastUpdatedAt: Date;
+}
+
+export interface IAIMatrixState {
+  matrices: any[];
+  matrixRowEdits: Record<string, any>;  // CR-026 row controls
+  lastUpdatedAt: Date;
+}
+
 export interface IReaderLock {
   isLocked: boolean;
   lockedBy?: mongoose.Types.ObjectId;
@@ -102,6 +153,16 @@ export interface ISubmission extends Document {
   // optional; absent == no introductions captured for this submission.
   documentIntroduction?: string;
   standardIntroductions?: Map<string, string>;
+
+  // CR-043 — submission-scoped persisted Review state. Survives wizard
+  // close, browser refresh, multi-author multi-file imports. Replaces
+  // the prior wizard-Zustand-scoped state which got wiped on every new
+  // import. Items here are pre-Apply; once approved they flow into
+  // narratives + curriculumMatrices and leave aiReviewState.
+  aiReviewState?: IAIReviewState;
+  // CR-043 — submission-scoped pre-Apply matrix state. Separate from
+  // the post-Apply curriculumMatrices array.
+  aiMatrixState?: IAIMatrixState;
 
   // Reader lock
   readerLock: IReaderLock;
@@ -239,6 +300,13 @@ const SubmissionSchema = new Schema<ISubmission>({
     of: String,
     default: undefined
   },
+  // CR-043 — submission-scoped persisted Review state. Stored as Mixed
+  // so the wire shape can evolve without migrations (mirrors the
+  // existing SelfStudyImport.aiBuckets pattern). Empty/missing on a
+  // fresh submission; populated by receiveAICallback's merge on every
+  // parse-complete.
+  aiReviewState: { type: Schema.Types.Mixed, default: undefined },
+  aiMatrixState: { type: Schema.Types.Mixed, default: undefined },
   documents: [DocumentRefSchema],
   decision: DecisionSchema,
   assignedReaders: [{

@@ -221,11 +221,13 @@ export function StandaloneCVReview(): JSX.Element {
                 )}
 
                 {cv.snippet && (
-                  <details className="mt-3 text-xs text-gray-600">
+                  <details className="mt-3 text-sm text-gray-600">
                     <summary className="cursor-pointer text-cshse-700">
                       Preview CV content
                     </summary>
-                    <div className="mt-2 max-h-48 overflow-y-auto whitespace-pre-wrap rounded border border-gray-100 bg-gray-50 p-2 font-mono text-[11px]">
+                    {/* CR-044 typography parity — CV body is content the
+                        PC reads to decide. prose-sm matches editor. */}
+                    <div className="prose prose-sm mt-2 max-h-72 max-w-none overflow-y-auto whitespace-pre-wrap rounded border border-gray-100 bg-gray-50 p-3 text-gray-800">
                       {cv.snippet.slice(0, 1500)}
                       {cv.snippet.length > 1500 ? '\n…' : ''}
                     </div>

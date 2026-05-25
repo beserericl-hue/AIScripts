@@ -158,7 +158,9 @@ export function ItemPreview({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-cshse-600" aria-hidden />
-            <h3 className="text-sm font-semibold text-gray-900">
+            {/* CR-044 typography parity — header stays text-base
+                so it reads at the same size as the editor's heading. */}
+            <h3 className="text-base font-semibold text-gray-900">
               {isEditing ? 'Editing text' : 'AI evaluation'}
             </h3>
             {isEdited && !isEditing && (
@@ -194,7 +196,7 @@ export function ItemPreview({
 
         <div>
           <div className="text-xs uppercase tracking-wide text-gray-500">Source heading</div>
-          <div className="mt-1 text-sm font-medium text-gray-900 break-words">
+          <div className="mt-1 text-base font-medium text-gray-900 break-words">
             {heading || '(no heading)'}
           </div>
         </div>
@@ -288,8 +290,10 @@ export function ItemPreview({
         /* Rationale — the meat of the evaluation */
         <div className="flex-1 overflow-auto p-4">
           <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">AI rationale</div>
+          {/* CR-044 typography parity — rationale body to prose-sm
+              so the supporting evaluation reads at the editor baseline. */}
           {rationale ? (
-            <div className="rounded border border-cshse-100 bg-cshse-50 px-3 py-3 text-sm leading-relaxed text-cshse-900">
+            <div className="prose prose-sm max-w-none rounded border border-cshse-100 bg-cshse-50 px-3 py-3 text-cshse-900">
               {rationale}
             </div>
           ) : (

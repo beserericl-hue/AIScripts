@@ -73,6 +73,33 @@ router.patch('/:submissionId/narrative', submissionLockout, saveNarrative);
  */
 router.patch('/:submissionId/introduction', submissionLockout, saveIntroduction);
 
+// ============================================
+// CR-043 — submission-scoped persisted Review + Matrix state
+// ============================================
+//
+// Review state survives wizard close + re-open + multi-author imports.
+// Per-item approve/discard mutations write through to the persisted
+// state. Apply walks the persisted state and pushes approved items
+// into the Submission's narratives + supporting evidence + matrices.
+
+import {
+  getReviewState,
+  approveItem,
+  discardItem,
+  clearItem,
+  applyReviewState,
+  getMatrixState,
+  setMatrixRowEdit
+} from '../controllers/aiReviewController';
+
+router.get('/:submissionId/review', getReviewState);
+router.post('/:submissionId/review/approve', submissionLockout, approveItem);
+router.post('/:submissionId/review/discard', submissionLockout, discardItem);
+router.post('/:submissionId/review/clear-item', submissionLockout, clearItem);
+router.post('/:submissionId/review/apply', submissionLockout, applyReviewState);
+router.get('/:submissionId/matrix-state', getMatrixState);
+router.post('/:submissionId/matrix-state', submissionLockout, setMatrixRowEdit);
+
 /**
  * @route   POST /api/submissions/:submissionId/submit
  * @desc    Submit the entire self-study for review (locks the submission)
