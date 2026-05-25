@@ -883,6 +883,12 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
         1 for b in buckets.values()
         if (b.get("narratives") or b.get("evidenceText") or b.get("evidenceFiles"))
     )
+    job.errors.append(
+        f"[diag-standalone] populated_buckets={populated_buckets}, "
+        f"job.cvs is {'None' if job.cvs is None else f'list[{len(job.cvs)}]'}, "
+        f"buckets keys={len(buckets)}, "
+        f"first_bucket_keys={list(buckets.keys())[:3] if buckets else []}"
+    )
     if populated_buckets == 0 and (job.cvs or []):
         job.standalone_cv = True
         job.warnings.append(
