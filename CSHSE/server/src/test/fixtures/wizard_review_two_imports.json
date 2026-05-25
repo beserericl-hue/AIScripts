@@ -14,11 +14,63 @@
     "programLevel": "bachelors"
   },
   "import": {
+    "_comment_aiBuckets": "Mirror of reviewState.buckets so the wizard's localStorage hydration (which reads importSpec.aiBuckets) leaves the Review toolbar button enabled on first paint. The reviewState block below is what the persisted Submission.aiReviewState gets.",
     "originalFilename": "two-import-anchor.docx",
     "aiStatus": "parsed",
     "aiProgramLevel": "bachelors",
     "wizardStep": "review",
-    "aiBuckets": {},
+    "aiBuckets": {
+      "1.a": {
+        "standardCode": "1",
+        "specCode": "a",
+        "standardTitle": "Institutional Requirements and Specifications",
+        "specPrompt": "1.a - Program description",
+        "narratives": [
+          {
+            "sectionId": "sec-A-1",
+            "heading": "Program ID from Department Chair",
+            "snippet": "Program description authored by the department chair, covering institutional requirements per standards-01-05.",
+            "wordCount": 17,
+            "confidence": 0.9,
+            "acceptState": "auto_accepted",
+            "rationale": "From file-A.",
+            "byteOffsetStart": 1000
+          }
+        ],
+        "evidenceText": [],
+        "evidenceFiles": [],
+        "matrixCells": [],
+        "coverageScore": 0.9,
+        "coverageCovered": true,
+        "coverageGaps": [],
+        "coverageStrengths": []
+      },
+      "7.b": {
+        "standardCode": "7",
+        "specCode": "b",
+        "standardTitle": "Personnel — Faculty Credentials",
+        "specPrompt": "7.b - Coordinator credentials",
+        "narratives": [
+          {
+            "sectionId": "sec-B-1",
+            "heading": "Faculty from Curriculum Lead",
+            "snippet": "Faculty credentials authored by the curriculum lead, covering personnel for standards-06-09.",
+            "wordCount": 14,
+            "confidence": 0.85,
+            "acceptState": "auto_accepted",
+            "rationale": "From file-B.",
+            "byteOffsetStart": 7000
+          }
+        ],
+        "evidenceText": [],
+        "evidenceFiles": [],
+        "matrixCells": [],
+        "coverageScore": 0.85,
+        "coverageCovered": true,
+        "coverageGaps": [],
+        "coverageStrengths": []
+      }
+    },
     "aiTags": [],
     "aiPlaceholderSections": [],
     "aiMatrices": [],
