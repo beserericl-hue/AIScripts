@@ -3,7 +3,7 @@ name: CR-043 — Decouple Review from the AI Import Wizard; Review persists acro
 description: Today the Review screen is hostage to the wizard's lifecycle — clicking "Import" a second time wipes the prior Review state. PCs importing partial documents from multiple authors lose work this way. Decouple Review (and Matrix) from the wizard, persist their state on the Self-Study, expose them as first-class toolbar buttons, and change the "reimport" checkbox semantics from "blow away prior data" to "merge in place; replace only when the EXACT same source artifact is being re-imported." Major UX + state-model change.
 type: change-request
 cr_id: CR-043
-status: proposed
+status: shipped
 priority: P0
 source: User direction 2026-05-25 — Stevenson PC workflow. Annotated screenshot showing "Review Button formerly from wizard" + "Matrix button formerly from wizard" as new toolbar entries on the Self-Study Editor.
 sprint_target: Sprint 5 — coordinator-blocking for multi-author imports; ships alongside or after the CR-041 multi-file batched-import work, which today still resets between import sessions.
@@ -12,6 +12,67 @@ last_reviewed: 2026-05-25
 ---
 
 # CR-043 — Decouple Review from the Wizard; Review persists; reimport merges in place
+
+## Shipped 2026-05-25
+
+**Server foundation (commit 1589e17):**
+- `Submission.aiReviewState` + `Submission.aiMatrixState` schema fields
+  (Mixed; optional). Type-safe `IAIReviewState` / `IAIMatrixState` /
+  `IAIItemSource` interfaces.
+- `services/aiReviewMerge.ts` — per-kind merge with strict same-source
+  dedupe (sourceFilename + sha256). Approved/discarded marks dropped
+  on replaced items (re-confirm invariant). Audit log appended to
+  `aiReviewState.mergeLog` on every merge.
+- `services/aiReviewMerge.ts:clearPreCR043State` — user-directed
+  cutover clear. Fires once per submission (when `aiReviewState ===
+  null` + prior `SelfStudyImport.aiBuckets` exists). Idempotent.
+- `receiveAICallback` wires the merge + cutover clear. Pulls content
+  hash from `DocumentVersion` (recordVersion-stamped at upload).
+- `controllers/aiReviewController.ts` — six new endpoints:
+  - `GET    /api/submissions/:id/review`
+  - `POST   /api/submissions/:id/review/approve`
+  - `POST   /api/submissions/:id/review/discard`
+  - `POST   /api/submissions/:id/review/clear-item`
+  - `POST   /api/submissions/:id/review/apply` — reads aiReviewState
+    filtered to approvedIds + calls `applyAIImportCore`; drops
+    approved items from state on success.
+  - `GET    /api/submissions/:id/matrix-state`
+  - `POST   /api/submissions/:id/matrix-state` — row-edit writes.
+- All behind `submissionLockout` (CR-005 read-only state still gates).
+
+**Client decoupling (commit 81faa66):**
+- `aiImportStore.startUpload` + `startBatchUpload` no longer reset
+  buckets / tags / matrices / cvs / evidenceDocs / introductions /
+  approvedIds. Only ephemeral fields (status, progress, errors) reset.
+  The pre-CR-043 wipe-on-startUpload was the load-bearing bug.
+- New `loadPersistedReviewState` / `approveItemOnServer` /
+  `discardItemOnServer` / `clearItemOnServer` store actions.
+- `features/selfStudy/Editor/Review/ReviewSurface.tsx` —
+  toolbar-level surface; wraps existing ReviewStep; hydrates from
+  aiReviewState on mount.
+- `features/selfStudy/Editor/Review/MatrixSurface.tsx` — same
+  pattern for matrix.
+- `SelfStudyEditor.tsx` — new Review + Matrix toolbar buttons next to
+  Importer Wizard. Lock rules: disabled when persisted state is empty,
+  enabled the moment the parser merge writes content. Approved-count
+  badge. Self-Study Editor listens for the
+  `cr-043-open-review-surface` custom event from `ParseStep`.
+- `ParseStep` "Next" button dispatches the open-review-surface event +
+  falls through to the wizard's internal Review tab for backwards
+  compat.
+
+**E2E coverage (commit 4996ebd):**
+- `e2e/tests/26_review_persistence.spec.ts` — 4 tests, all green
+  against `cshse-develop`:
+  - Review + Matrix buttons render on the toolbar.
+  - Review button enables once persisted state has content.
+  - Clicking Review opens the persisted surface ("Review (CR-043)"
+    heading visible).
+  - Persisted Review survives a hard refresh.
+
+Full E2E sweep post-deploy: **23 passed / 0 failed / 25 skipped**
+(up from 19 baseline; +4 new CR-043 tests). Zero regressions on the
+existing AI-Importer specs (CR-018/033/039/040/041/042).
 
 ## Source quote
 
