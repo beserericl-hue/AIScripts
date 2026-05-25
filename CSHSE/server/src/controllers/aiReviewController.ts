@@ -375,6 +375,15 @@ export async function setMatrixRowEdit(
     matrixRowEdits: {},
     lastUpdatedAt: new Date()
   };
+  // Mongoose Mixed-type quirk — an empty nested object can come back
+  // undefined after a save round trip. Re-establish the field so the
+  // mutation below never crashes the request handler.
+  if (!state.matrixRowEdits || typeof state.matrixRowEdits !== 'object') {
+    state.matrixRowEdits = {};
+  }
+  if (!state.matrices) {
+    state.matrices = [];
+  }
   const key = `${matrixSlug}|${rowAnchor}`;
   if (edit === null || edit === undefined) {
     delete state.matrixRowEdits[key];
