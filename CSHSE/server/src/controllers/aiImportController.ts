@@ -574,14 +574,13 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
         `[cr-037] empty-content terminal callback for import=${importId}; rewriting to failed`
       );
       payload.status = 'failed';
+      // SelfStudyImport.aiErrors is typed as string[] — Mongoose coerces
+      // a {stage, severity, message} object to '[object Object]' which
+      // is what the coordinator actually sees in the failed-state panel.
+      // Push the message string directly.
       payload.errors = [
         ...(Array.isArray(payload.errors) ? payload.errors : []),
-        {
-          stage: 'matcher',
-          severity: 'error',
-          message:
-            'AI matcher returned zero items. The document may be malformed or all sections may have failed individually. Try re-uploading; contact support if this persists.'
-        }
+        'AI matcher returned zero items. The document may be malformed or all sections may have failed individually. Try re-uploading; contact support if this persists.'
       ];
     }
   }

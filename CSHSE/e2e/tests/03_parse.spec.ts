@@ -104,10 +104,14 @@ test.describe('Parse step', () => {
     await page.getByRole('button', { name: /importer wizard/i }).click();
     await expect(page.getByText('Matching to specifications')).toBeVisible({ timeout: 15_000 });
 
-    // Hard refresh. The wizard rehydrates from localStorage + polls
-    // /ai-status; the same Parse step + same running stage should render.
+    // Hard refresh. The wizard's open/closed state (activeView) is
+    // React-local and resets to 'standards' on reload, but the
+    // Zustand step + stages are localStorage-persisted and rehydrate
+    // synchronously. Re-open the wizard and verify the same running
+    // stage is still rendered.
     await page.reload();
     await page.waitForLoadState('networkidle');
+    await page.getByRole('button', { name: /importer wizard/i }).click();
     await expect(page.getByText('Matching to specifications')).toBeVisible({ timeout: 20_000 });
   });
 });

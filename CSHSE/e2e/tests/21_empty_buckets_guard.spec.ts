@@ -86,11 +86,7 @@ test.describe('CR-037 — Empty buckets guard', () => {
         aiPlaceholderSections: [],
         aiMatrices: [],
         aiErrors: [
-          {
-            stage: 'matcher',
-            severity: 'error',
-            message: 'AI matcher returned zero items. The document may be malformed or all sections may have failed individually.',
-          },
+          'AI matcher returned zero items. The document may be malformed or all sections may have failed individually.',
         ],
       } as any,
     });
