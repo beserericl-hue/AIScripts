@@ -151,12 +151,99 @@ def _is_full_cv_anchor(paragraphs: list[tuple[str, str]], idx: int) -> str | Non
     return None
 
 
-def _detect_cv_blocks(paragraphs: list[tuple[str, str]]) -> list[tuple[str, list[int]]]:
-    """CV detector: name-shaped line + EDUCATION within 10 paras.
+def _bookmark_cv_blocks(doc: _DocumentT) -> list[tuple[str, list[int]]] | None:
+    """If the source document carries ``FacCVs*`` bookmarks (Stevenson
+    uses these to anchor the TOC entries that point to each faculty
+    CV), use them as authoritative CV boundaries. Returns
+    [(faculty_name, [paragraph_indices])] in document order, or None if
+    no such bookmarks exist (caller falls back to heuristic detection).
 
-    Returns [(faculty_name, [paragraph_indices])]. Each block extends
-    until the next *real* CV anchor (also name + EDUCATION) or until
-    240 paragraphs pass — long enough to contain a full Stevenson CV
+    Faculty names are pulled from the paragraph nearest the bookmark
+    (some bookmarks attach to empty paragraphs that precede the actual
+    CV body) so the produced filenames are coordinator-friendly
+    (``barry-w-thomas`` rather than the raw bookmark slug ``Thomas``).
+    """
+    W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    para_elements = [p._element for p in doc.paragraphs]
+    para_idx_by_element = {id(el): i for i, el in enumerate(para_elements)}
+
+    bookmark_positions: list[tuple[int, str]] = []
+    for el in doc.element.iter():
+        if el.tag != f"{W}bookmarkStart":
+            continue
+        name = el.attrib.get(f"{W}name", "")
+        if not name.startswith("FacCVs"):
+            continue
+        parent = el
+        while parent is not None and parent.tag != f"{W}p":
+            parent = parent.getparent() if hasattr(parent, "getparent") else None
+        if parent is None or id(parent) not in para_idx_by_element:
+            continue
+        para_idx = para_idx_by_element[id(parent)]
+        if name == "FacCVs":
+            # Parent "Faculty Curriculum Vitae" anchor — skip; the
+            # per-faculty bookmarks (FacCVsRosicky, FacCVsSwish, ...)
+            # carry the precise per-CV starts.
+            continue
+        bookmark_positions.append((para_idx, name))
+
+    if not bookmark_positions:
+        return None
+
+    # Dedupe duplicate bookmarks at the same paragraph index (Stevenson
+    # has both FacCVsLess + FacCVsLesser pointing at Loryn Lesser).
+    seen_idx: set[int] = set()
+    deduped: list[tuple[int, str]] = []
+    for idx, name in sorted(bookmark_positions):
+        if idx in seen_idx:
+            continue
+        seen_idx.add(idx)
+        deduped.append((idx, name))
+    bookmark_positions = deduped
+
+    total_paragraphs = len(doc.paragraphs)
+    out: list[tuple[str, list[int]]] = []
+    for i, (start_idx, raw_name) in enumerate(bookmark_positions):
+        if i + 1 < len(bookmark_positions):
+            end_idx = bookmark_positions[i + 1][0]
+        else:
+            # Last CV — cap at the next "Standard N" heading if one
+            # appears within 250 paragraphs, else absolute cap.
+            end_idx = min(start_idx + 250, total_paragraphs)
+            for k in range(start_idx + 5, end_idx):
+                text = doc.paragraphs[k].text or ""
+                if _STANDARD_RE.match(text):
+                    end_idx = k
+                    break
+        # Resolve a coordinator-friendly faculty name. Some bookmarks
+        # land on empty paragraphs (page breaks / separators) — scan
+        # forward up to 5 paragraphs for the first non-empty line that
+        # matches the name regex.
+        faculty_name: str | None = None
+        for k in range(start_idx, min(start_idx + 5, end_idx)):
+            text = (doc.paragraphs[k].text or "").strip()
+            if not text:
+                continue
+            # Strip honorific / credential suffix (e.g. ", J.D., HS-BCP")
+            head = re.split(r"[,(]", text, maxsplit=1)[0].strip()
+            head = re.sub(r"^(Dr|Prof|Mr|Mrs|Ms|Mx)\.?\s+", "", head, flags=re.IGNORECASE)
+            tokens = head.split()
+            if 2 <= len(tokens) <= 5 and all(t[:1].isalpha() for t in tokens):
+                faculty_name = head
+                break
+        if not faculty_name:
+            faculty_name = raw_name[len("FacCVs"):] or f"cv-{start_idx}"
+        out.append((faculty_name, list(range(start_idx, end_idx))))
+    return out
+
+
+def _detect_cv_blocks(paragraphs: list[tuple[str, str]]) -> list[tuple[str, list[int]]]:
+    """Heuristic fallback for documents without FacCVs* bookmarks.
+
+    Name-shaped line + EDUCATION within 10 paras. Returns
+    [(faculty_name, [paragraph_indices])]. Each block extends until
+    the next *real* CV anchor (also name + EDUCATION) or until 240
+    paragraphs pass — long enough to contain a full Stevenson CV
     (which routinely runs 150+ paragraphs once Education + Academic
     Employment + Teaching Experiences + Publications + Service are
     all included).
@@ -305,9 +392,17 @@ def main(argv: list[str]) -> int:
         print(f"  wrote {out_path.name} ({len(appendix_paragraphs)} paragraphs)")
 
     # Optional standalone CV / paper / syllabus files (for CR-033 + CR-040
-    # standalone-upload testing).
-    cvs = _detect_cv_blocks(paragraphs)
-    for name, idxs in cvs[:5]:  # cap to keep output manageable
+    # standalone-upload testing). Prefer FacCVs* bookmarks when present —
+    # Stevenson's source doc has them and they give us byte-exact CV
+    # boundaries; the heuristic fallback over-extends past the actual CV
+    # end-of-content (it ran 240 paragraphs forward and swallowed the
+    # "Academic Affairs Committee" section that follows the last CV).
+    bookmark_cvs = _bookmark_cv_blocks(src)
+    if bookmark_cvs is not None:
+        cvs = bookmark_cvs
+    else:
+        cvs = _detect_cv_blocks(paragraphs)
+    for name, idxs in cvs:  # bookmark path is authoritative — emit all
         slug = _slugify(name)
         out_path = out_dir / f"{base}__cv-only__{slug}.docx"
         _write_docx(src, idxs, out_path, f"CV — {name}")
