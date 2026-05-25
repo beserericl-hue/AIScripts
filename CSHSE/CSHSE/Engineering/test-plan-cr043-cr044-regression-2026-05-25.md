@@ -2,7 +2,9 @@
 name: CR-043 + CR-044 — Regression test plan
 description: The complete test plan to close the testing gap on CR-043 (decouple Review from wizard) and CR-044 (typography). Enumerates every function + endpoint + UI surface that needs coverage, the fixtures, the expected behaviors, and the spec files a follow-on session must write. Designed so a fresh Claude Code session can read this doc + start implementing without further context.
 type: test-plan
-status: ready-to-execute
+status: complete
+completed_on: 2026-05-25
+completed_totals: "Section 1: 35/35 · Section 2: 35/35 · Section 3: 9/9 · Section 4 (slow): 5/5 · Section 4B (slow): 11/11 · Section 5 regression: 32/0/30 · 14 production bugs surfaced + fixed"
 priority: P0
 source: User direction 2026-05-25 — "I am totally uncomfortable with no testing. I expect you to develop E2E tests not only to test functions, but to do regression testing as well. These tests must work."
 tags: [testing, e2e, playwright, unit, regression, cr-043, cr-044, ai-import]

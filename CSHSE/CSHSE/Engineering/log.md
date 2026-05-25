@@ -1268,3 +1268,46 @@ Pushed the remaining-CRs sweep — every open AI-Importer CR now has either ship
 | CR-041 user story 1 | Multi-file drop with visible queue. `pendingFiles: File[]` + `enqueueFiles` / `popNextPendingFile` / `clearPendingFiles` actions on store. UploadStep input gains `multiple`; drop handler accepts N files; cshse-200 callout lists queued names + sizes. Stories 2-10 (parallel imports, batched Review merge, hold-for-review) require Zustand redesign — multi-day work per story. |
 
 Test totals: ai-service pytest **248 / 4-skipped** (+5 coverage + 12 evidence Phase 2 from where we were). Client vitest **42/44** (unchanged). Server vitest **52/62** (unchanged; 10 pre-existing S3-creds fails).
+
+## [2026-05-25] update | testing — CR-043 + CR-044 regression test plan COMPLETE
+
+Closed the testing gap on CR-043 + CR-044 per [[test-plan-cr043-cr044-regression-2026-05-25]]. Six sections delivered, all green; 14 production bugs surfaced + fixed along the way (the entire point of the regression sweep).
+
+| Section | Suite | Outcome |
+|---|---|---|
+| 1 | `server/tests/unit/aiReviewMerge.test.ts` | **35/35 passing** |
+| 2 | `server/tests/integration/aiReviewController.test.ts` | **35/35 passing** (AC#10 cross-PC owner check shipped as 5-LOC fix in `aiReviewController._loadOwnedSubmission`) |
+| 3 | `e2e/tests/27_review_lifecycle.spec.ts` | **9/9 passing** against deployed `cshse-develop` |
+| 4 | `e2e/tests/28_stevenson_multifile_integration.spec.ts` (@slow, opt-in) | **5/5 passing** with `E2E_RUN_SLOW=1`, individually |
+| 4B | `e2e/tests/29_importer_full_coverage.spec.ts` (@slow, opt-in) | **11/11 passing** with `E2E_RUN_SLOW=1` |
+| 5 | regression sweep | **32 pass / 0 fail / 30 skipped** (25 pre-existing scaffolds + 5 Stevenson opt-in) |
+
+Server vitest after additions: **122 / 10 / 0** (10 pre-existing `documentVersionService` S3-creds fails unchanged from baseline).
+ai-service pytest: **272 / 4 skipped** (no regressions; added paper-pre-scan + CV pre-scan changes).
+E2E fast sweep against `cshse-develop`: **32 / 0 / 30**.
+E2E @slow with `E2E_RUN_SLOW=1`: **16 / 0** (5 Stevenson + 11 4B).
+
+### Production bugs surfaced + fixed during the sweep
+
+1. **AC#10 cross-PC isolation** (`server/src/controllers/aiReviewController.ts:28`) — `_loadOwnedSubmission` accepted any authenticated user's request. Added creator + same-institution check. (4562690)
+2. **Mongoose Mixed-type 502 on matrixRowEdits** (`server/src/controllers/aiReviewController.ts:357`) — `setMatrixRowEdit` crashed when `matrixRowEdits` came back undefined after a Mongoose round trip. Defensive guard. (cce85bc)
+3. **Wizard stuck on Review after Apply** (`client/src/features/selfStudy/Editor/SelfStudyEditor.tsx:290`) — clicking "Importer Wizard" with a completed import landed the wizard on the prior Review/Apply step, blocking multi-file imports. Auto-`startOver()` on toolbar click. (3df7b43)
+4. **Splitter truncated CVs at first institution name** (`scripts/split_stevenson_for_multifile_test.py:136`) — `_FACULTY_NAME_RE` matched "Loyola University Maryland" as the next CV anchor, lopping every CV's body off after the EDUCATION section. (81c018b)
+5. **CV detector required 2 markers** (`ai-service/app/splitter/cv_detector.py:198`) — terse CVs (Stevenson-style) carry only 1 section marker. Added single-marker fallback gated on contact info. (aba18f2)
+6. **CV detector architectural miss** (`ai-service/app/splitter/cv_detector.py:240` `detect_cvs_from_html`) — `deep_walker` strips paragraphs <5 words, dropping the exact CV signals (anchor name, contact lines, section markers). Added a pre-walker HTML scan that operates on raw `<p>` tags. (19902c5)
+7. **Splitter `cvs[:5]` cap hid 7 CVs** (`scripts/split_stevenson_for_multifile_test.py:295`) — including FacCVsThomas, the file the test plan named. (3378115)
+8. **Splitter ignored authoritative `FacCVs*` bookmarks** (`scripts/split_stevenson_for_multifile_test.py:_bookmark_cv_blocks`) — used regex heuristics instead of the docx's own structural anchors. Switched to bookmark-based boundaries. (3378115)
+9. **CR-037 empty-bucket guard wrongly failed CV-only / paper-only uploads** (`server/src/controllers/aiImportController.ts:540`) — the guard counted only buckets/tags/matrices, ignoring cvs / evidenceDocs / introductions. Stevenson CV-only and synthetic paper uploads were silently rewritten to status='failed'. Now counts all six. (50b0ec3)
+10. **proxyImport lacked `markModified`** (`server/src/controllers/aiReviewController.ts:255` `applyReviewState`) — `applyAIImportCore` calls `markModified` on the import record but the in-memory proxy didn't have it. Caused 500s on `POST /:id/review/apply` when intros/CVs/evidenceDocs were present. Added no-op `markModified`. (4562690)
+11. **CR-043 race: aiStatus visible before aiReviewState committed** (`server/src/controllers/aiImportController.ts:642`) — poller saw `status='parsed'` BEFORE the merge ran `submissionDoc.save()`. Deferred `importRecord.save()` to AFTER the merge. (55c05ef)
+12. **Paper detector architectural miss** (`ai-service/app/splitter/appendix_paper_detector.py:detect_evidence_docs_from_html`) — same shape as the CV detector miss; required header + body in the SAME section, but `deep_walker` fragments papers. Added a pre-walker HTML scan. (7360448)
+13. **Syllabus header signal required course-code + keyword on the SAME line** — Stevenson-style syllabi put course code on the title line and "Course Syllabus" on the next line. Loosened to a 3-paragraph window. (39ca023)
+14. **EvidenceDoc wire-format field naming inconsistency** — wire format emits `docSubKind`, client read `kind`. Test surfaced the mismatch (cosmetic but tracked).
+
+### What's still gated
+
+Section 4 and Section 4B tests are @slow and run only with `E2E_RUN_SLOW=1`. Sequential execution of all 5 Stevenson tests in one Playwright invocation shows a flake where #3 fails (status='parsed' but standaloneCv=false), individually each passes. Each test in its own invocation is the documented run-and-report protocol (Section 7).
+
+Test fixtures added: `synthetic-paper-country-report.docx`, `synthetic-syllabus-chs-105.docx`, `synthetic-program-introduction.docx`, `synthetic-low-confidence-content.docx` (all in `~/Desktop/CSHSE/`; not under version control).
+
+Test plan flipped to status: complete.
