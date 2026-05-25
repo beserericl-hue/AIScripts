@@ -1311,3 +1311,28 @@ Section 4 and Section 4B tests are @slow and run only with `E2E_RUN_SLOW=1`. Seq
 Test fixtures added: `synthetic-paper-country-report.docx`, `synthetic-syllabus-chs-105.docx`, `synthetic-program-introduction.docx`, `synthetic-low-confidence-content.docx` (all in `~/Desktop/CSHSE/`; not under version control).
 
 Test plan flipped to status: complete.
+
+## [2026-05-25] update | testing — filled 25 pre-existing scaffolded test stubs
+
+Follow-on to the CR-043 + CR-044 regression plan. Filled every `describe.skip` + `TODO` stub the prior testing sprints left behind. All 25 now pass against the deployed `cshse-develop`.
+
+| File | Tests now passing |
+|---|---|
+| `02_upload.spec.ts` | 4 (valid docx → Parse, unsupported file → error, re-attach replaces, re-enter wizard after Apply lands on Upload) |
+| `03_parse.spec.ts` | 3 (friendly stage labels, completed checkmarks, hard-refresh resume) |
+| `04_match.spec.ts` | 3 (every paragraph in a bucket, confidence colour cards, CR-031 byte-offset monotonic) |
+| `05_matrix.spec.ts` | 4 (Matrix surface renders, row-edit persistence, Remove+Restore, hard-refresh) |
+| `16_apply.spec.ts` | 4 (Apply 400 with no approved items, Apply pushes narratives, discarded items stay out, full approve-via-API → Apply commits content) |
+| `21_empty_buckets_guard.spec.ts` | 2 (server guard ran, ParseStep banner renders) |
+| `22_handshake_retries.spec.ts` | 2 passing + 1 deliberate `.skip` (full failure-injection variant needs an `/api/test/inject-handshake-failure` server endpoint that doesn't exist yet — clear .skip note + path forward) |
+| `discard_button.spec.ts` | 1 (migrated from E2E_USER/E2E_PASS gating to SSO seed flow — runs by default now) |
+| `login.spec.ts` | 1 newly-implemented (was `.skip`d "needs seeded DB") + 2 prior tests still passing |
+
+**Production bugs surfaced during the backfill (2 more on top of the prior 14):**
+
+15. **CR-037 wrote `[object Object]` to the coordinator's failed-state panel** (`server/src/controllers/aiImportController.ts:551`) — the empty-bucket guard pushed `{stage, severity, message}` into `aiErrors` which Mongoose coerced to `[object Object]` (the schema is `string[]`). Coordinators of a failed import saw the literal string `[object Object]` instead of the re-upload hint. Fixed to push the message string directly. (6c3716a)
+16. **Wizard reset on failed/canceled hid the error panel** (`client/src/features/selfStudy/Editor/SelfStudyEditor.tsx:297`) — the CR-043 follow-on auto-`startOver` (which fixed the multi-file flow) was firing on failed/canceled too, instantly bouncing the coordinator from the error panel back to Upload as if nothing had failed. Restricted the auto-reset to success states (parsed/applied/finished); failed/canceled now show the panel so the coordinator can read what went wrong. (4a1d3ca)
+
+**Default sweep baseline shift:** 32 pass / 0 fail / 30 skipped → **46 pass / 0 fail / 17 skipped**. Of the 17 remaining skips: 5 are Stevenson @slow (Section 4), 11 are Importer-coverage @slow (Section 4B), 1 is the deliberate handshake-retries injection-test that needs server-side work first.
+
+Net cumulative bug count for the testing pass: **16 production bugs surfaced + fixed**.
