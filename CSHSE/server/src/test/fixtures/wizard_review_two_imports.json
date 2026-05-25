@@ -1,0 +1,122 @@
+{
+  "_fixture_name": "wizard_review_two_imports",
+  "_purpose": "CR-043 AC#3 multi-import lifecycle. Seeds a Submission.aiReviewState populated by TWO synthetic imports (file-A from a DepartmentChair and file-B from a CurriculumLead). One item from file-A is pre-approved. Specs verify the second-file workflow preserves prior items + approvals, and that the Review toolbar surface lights up with the merged content.",
+  "user": {
+    "_comment_password": "CR-042 — password field intentionally absent. Seeded users are SSO-only.",
+    "email": "coordinator-multi@example.test",
+    "name": "Multi Import Coordinator",
+    "role": "program_coordinator",
+    "institutionName": "E2E Multi University"
+  },
+  "submission": {
+    "institutionName": "E2E Multi University",
+    "programName": "Human Services BS",
+    "programLevel": "bachelors"
+  },
+  "import": {
+    "originalFilename": "two-import-anchor.docx",
+    "aiStatus": "parsed",
+    "aiProgramLevel": "bachelors",
+    "wizardStep": "review",
+    "aiBuckets": {},
+    "aiTags": [],
+    "aiPlaceholderSections": [],
+    "aiMatrices": [],
+    "aiStages": [
+      { "name": "matcher", "state": "done" }
+    ]
+  },
+  "reviewState": {
+    "itemSources": {
+      "sec-A-1": {
+        "importId": "synthetic-import-A",
+        "sourceFilename": "standards-1-5-DepartmentChair.docx",
+        "sourceContentHash": "hashA1",
+        "importedAt": "2026-05-25T10:00:00.000Z"
+      },
+      "sec-B-1": {
+        "importId": "synthetic-import-B",
+        "sourceFilename": "standards-6-9-CurriculumLead.docx",
+        "sourceContentHash": "hashB1",
+        "importedAt": "2026-05-25T11:00:00.000Z"
+      }
+    },
+    "buckets": {
+      "1.a": {
+        "standardCode": "1",
+        "specCode": "a",
+        "standardTitle": "Institutional Requirements and Specifications",
+        "specPrompt": "1.a - Program description",
+        "narratives": [
+          {
+            "sectionId": "sec-A-1",
+            "heading": "Program ID from Department Chair",
+            "snippet": "Program description authored by the department chair, covering institutional requirements per standards-01-05.",
+            "wordCount": 17,
+            "confidence": 0.9,
+            "acceptState": "auto_accepted",
+            "rationale": "From file-A.",
+            "byteOffsetStart": 1000,
+            "sourceImportId": "synthetic-import-A",
+            "sourceFilename": "standards-1-5-DepartmentChair.docx"
+          }
+        ],
+        "evidenceText": [],
+        "evidenceFiles": [],
+        "matrixCells": [],
+        "coverageScore": 0.9,
+        "coverageCovered": true,
+        "coverageGaps": [],
+        "coverageStrengths": []
+      },
+      "7.b": {
+        "standardCode": "7",
+        "specCode": "b",
+        "standardTitle": "Personnel — Faculty Credentials",
+        "specPrompt": "7.b - Coordinator credentials",
+        "narratives": [
+          {
+            "sectionId": "sec-B-1",
+            "heading": "Faculty from Curriculum Lead",
+            "snippet": "Faculty credentials authored by the curriculum lead, covering personnel for standards-06-09.",
+            "wordCount": 14,
+            "confidence": 0.85,
+            "acceptState": "auto_accepted",
+            "rationale": "From file-B.",
+            "byteOffsetStart": 7000,
+            "sourceImportId": "synthetic-import-B",
+            "sourceFilename": "standards-6-9-CurriculumLead.docx"
+          }
+        ],
+        "evidenceText": [],
+        "evidenceFiles": [],
+        "matrixCells": [],
+        "coverageScore": 0.85,
+        "coverageCovered": true,
+        "coverageGaps": [],
+        "coverageStrengths": []
+      }
+    },
+    "tags": [],
+    "cvs": [],
+    "evidenceDocs": [],
+    "introductions": {},
+    "placeholderSections": [],
+    "approvedIds": ["sec-A-1"],
+    "discardedIds": [],
+    "mergeLog": [
+      {
+        "importId": "synthetic-import-A",
+        "importedAt": "2026-05-25T10:00:00.000Z",
+        "reimport": false,
+        "counts": { "narratives": { "kept": 0, "replaced": 0, "added": 1 } }
+      },
+      {
+        "importId": "synthetic-import-B",
+        "importedAt": "2026-05-25T11:00:00.000Z",
+        "reimport": false,
+        "counts": { "narratives": { "kept": 1, "replaced": 0, "added": 1 } }
+      }
+    ]
+  }
+}

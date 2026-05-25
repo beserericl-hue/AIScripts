@@ -35,9 +35,22 @@ async function _loadOwnedSubmission(
     res.status(404).json({ error: 'Submission not found' });
     return null;
   }
-  // Auth: same scoping as the existing submission routes (PC owner +
-  // admin). Reader access is a separate ACL handled elsewhere. For
-  // now we trust the authenticate middleware + role check.
+  // CR-043 AC#10 — cross-PC isolation. Admins + superusers bypass; readers
+  // and lead readers get downstream ACLs; for a program_coordinator the
+  // submission must be theirs (creator scoping) OR same institution.
+  const user: any = req.user;
+  const isElevated = user?.role === 'admin' || user?.isSuperuser === true;
+  if (!isElevated && user?.role === 'program_coordinator') {
+    const isOwner = submission.submitterId?.toString() === (user.id || user._id);
+    const sameInstitution =
+      user.institutionId &&
+      submission.institutionId &&
+      submission.institutionId.toString() === user.institutionId;
+    if (!isOwner && !sameInstitution) {
+      res.status(403).json({ error: 'Forbidden: cross-PC access' });
+      return null;
+    }
+  }
   return submission;
 }
 
@@ -262,6 +275,9 @@ export async function applyReviewState(
       // No-op: we don't persist this proxy — Submission writes carry the
       // applied state. The core's importRecord.save() calls fall here
       // and intentionally do nothing.
+    },
+    markModified(_path: string): void {
+      // No-op: the proxy is in-memory only; nothing to flag dirty.
     }
   };
 

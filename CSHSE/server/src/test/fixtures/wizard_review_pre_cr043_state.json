@@ -1,0 +1,81 @@
+{
+  "_fixture_name": "wizard_review_pre_cr043_state",
+  "_purpose": "CR-043 AC#13/14 cutover-clear test. Seeds a submission with NO Submission.aiReviewState but with a prior SelfStudyImport that has pre-CR-043 aiBuckets / aiTags / aiCVs / aiEvidenceDocs / aiIntroductions / aiIntroductionHints / aiPlaceholderSections / aiMatrices populated. Specs verify the first post-CR-043 merge wipes those fields on prior imports (AC#13) and that the clear is idempotent on subsequent imports (AC#14).",
+  "user": {
+    "_comment_password": "CR-042 — password field intentionally absent. Seeded users are SSO-only.",
+    "email": "coordinator-pre-cr043@example.test",
+    "name": "Pre CR-043 Coordinator",
+    "role": "program_coordinator",
+    "institutionName": "E2E PreCR043 University"
+  },
+  "submission": {
+    "institutionName": "E2E PreCR043 University",
+    "programName": "Human Services BS",
+    "programLevel": "bachelors"
+  },
+  "import": {
+    "originalFilename": "pre-cr043-import.docx",
+    "aiStatus": "parsed",
+    "aiProgramLevel": "bachelors",
+    "wizardStep": "review",
+    "aiBuckets": {
+      "1.a": {
+        "standardCode": "1",
+        "specCode": "a",
+        "standardTitle": "Institutional Requirements and Specifications",
+        "specPrompt": "1.a - Program description",
+        "narratives": [
+          {
+            "sectionId": "pre-cr043-narr-1",
+            "heading": "Pre-CR-043 narrative",
+            "snippet": "Pre-CR-043 narrative that lived on SelfStudyImport.aiBuckets and should be wiped on the first post-CR-043 merge that fires for this submission.",
+            "wordCount": 28,
+            "confidence": 0.8,
+            "acceptState": "auto_accepted",
+            "rationale": "Seeded.",
+            "byteOffsetStart": 1000
+          }
+        ],
+        "evidenceText": [],
+        "evidenceFiles": [],
+        "matrixCells": [],
+        "coverageScore": 0.8,
+        "coverageCovered": true,
+        "coverageGaps": [],
+        "coverageStrengths": []
+      }
+    },
+    "aiTags": [
+      {
+        "tagId": "pre-cr043-tag-1",
+        "sectionId": "pre-cr043-tag-sec-1",
+        "summary": "Pre-CR-043 tag",
+        "fullText": "Pre-CR-043 tag",
+        "suggestedStd": null,
+        "suggestedSpec": null,
+        "confidence": 0.7,
+        "sourceHeading": "Pre",
+        "acceptState": "review_unknown",
+        "rationale": "Seeded.",
+        "byteOffsetStart": 1100
+      }
+    ],
+    "aiPlaceholderSections": [
+      { "paragraphIndex": 0, "heading": "Pre-CR-043 placeholder", "standardHint": null, "specHint": null }
+    ],
+    "aiMatrices": [],
+    "aiCVs": [
+      { "sectionId": "pre-cr043-cv-1", "facultyName": "Pre Faculty" }
+    ],
+    "aiEvidenceDocs": [
+      { "sectionId": "pre-cr043-ed-1", "kind": "syllabus", "title": "Pre syllabus" }
+    ],
+    "aiIntroductions": {
+      "document": { "scope": "document", "items": [{ "sectionId": "pre-cr043-intro-1", "snippet": "Pre intro" }] }
+    },
+    "aiIntroductionHints": { "pre-cr043-intro-1": "document" },
+    "aiStages": [
+      { "name": "matcher", "state": "done" }
+    ]
+  }
+}

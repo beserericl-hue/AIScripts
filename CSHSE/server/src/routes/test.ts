@@ -202,6 +202,12 @@ export function buildTestRouter(): Router | null {
     // creates an ImportBatch + N child SelfStudyImport records instead
     // of (or in addition to) the single-import payload above.
     const batchSpec = (merged.batch ?? null) as Record<string, unknown> | null;
+    // CR-043 — submission-scoped persisted Review state fixture block.
+    // When present, the seed stamps `Submission.aiReviewState` directly
+    // so multi-import lifecycle specs can land on the Self-Study Editor
+    // toolbar's Review surface with merged items from N synthetic imports.
+    const reviewStateSpec = (merged.reviewState ?? null) as Record<string, unknown> | null;
+    const matrixStateSpec = (merged.matrixState ?? null) as Record<string, unknown> | null;
 
     // Stamp a unique token onto the email so reruns don't collide.
     const stamp = crypto.randomBytes(4).toString('hex');
@@ -277,6 +283,12 @@ export function buildTestRouter(): Router | null {
         aiPlaceholderSections: importSpec.aiPlaceholderSections ?? [],
         aiMatrices: importSpec.aiMatrices ?? [],
         aiStages: importSpec.aiStages ?? [],
+        // CR-043 cutover-clear coverage — let fixtures seed the remaining
+        // pre-CR-043 fields so AC#13/14 tests can verify they get wiped.
+        aiCVs: importSpec.aiCVs ?? [],
+        aiEvidenceDocs: importSpec.aiEvidenceDocs ?? [],
+        aiIntroductions: importSpec.aiIntroductions ?? {},
+        aiIntroductionHints: importSpec.aiIntroductionHints ?? {},
         aiStartedAt: new Date(),
         aiCompletedAt: new Date()
       });
@@ -286,6 +298,28 @@ export function buildTestRouter(): Router | null {
         { _id: submissionDoc._id },
         { $push: { imports: importDoc._id } }
       );
+
+      // CR-043 — when the fixture includes a reviewState block, stamp it
+      // onto the submission. lastUpdatedAt is forced to "now" so the
+      // wizard's read-through cache picks the fixture over any stale
+      // localStorage value.
+      if (reviewStateSpec || matrixStateSpec) {
+        if (reviewStateSpec) {
+          (submissionDoc as any).aiReviewState = {
+            ...reviewStateSpec,
+            lastUpdatedAt: new Date()
+          };
+          (submissionDoc as any).markModified('aiReviewState');
+        }
+        if (matrixStateSpec) {
+          (submissionDoc as any).aiMatrixState = {
+            ...matrixStateSpec,
+            lastUpdatedAt: new Date()
+          };
+          (submissionDoc as any).markModified('aiMatrixState');
+        }
+        await submissionDoc.save();
+      }
 
       // CR-041 US-10 — batch fixture support. Create an ImportBatch
       // plus per-child SelfStudyImport records when batchSpec is
