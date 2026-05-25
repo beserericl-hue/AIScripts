@@ -41,19 +41,23 @@ test.describe('CR-037 — Empty buckets guard', () => {
     // before persistence — we seed status='failed' to match what a real
     // empty-bucket terminal callback produces. The wizard's ParseStep
     // then renders the "AI matcher returned zero items" error panel.
+    // Pass null for objects we want to CLEAR — deepMerge in the seed
+    // router treats null as a replace-value (versus an empty object,
+    // which the recursive merge interprets as "no changes"). The seed
+    // router's `?? {}` fallback then normalises null to empty.
     seed = await seedFixture('wizard_review_minimal', {
       user: { email: 'cr037-empty@x.test' },
       import: {
         wizardStep: 'parse',
         aiStatus: 'failed',
-        aiBuckets: {},
+        aiBuckets: null,
         aiTags: [],
         aiPlaceholderSections: [],
         aiMatrices: [],
         aiCVs: [],
         aiEvidenceDocs: [],
-        aiIntroductions: {},
-      },
+        aiIntroductions: null,
+      } as any,
     });
     const token = await ssoToken(seed.userEmail);
     const status = await (await fetch(
@@ -77,7 +81,7 @@ test.describe('CR-037 — Empty buckets guard', () => {
       import: {
         wizardStep: 'parse',
         aiStatus: 'failed',
-        aiBuckets: {},
+        aiBuckets: null,
         aiTags: [],
         aiPlaceholderSections: [],
         aiMatrices: [],

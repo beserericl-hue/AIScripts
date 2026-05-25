@@ -295,6 +295,7 @@ export function buildTestRouter(): Router | null {
           ? new Date(importSpec.aiAppliedAt as string)
           : undefined,
         aiAppliedCounts: (importSpec.aiAppliedCounts as any) ?? undefined,
+        aiErrors: (importSpec.aiErrors as any) ?? [],
         aiStartedAt: new Date(),
         aiCompletedAt: new Date()
       });

@@ -30,8 +30,8 @@ test.describe('Match step', () => {
       '1.a': {
         standardCode: '1', specCode: 'a', standardTitle: 'X', specPrompt: '1.a',
         narratives: [
-          { sectionId: 's-1', heading: 'A', snippet: 'a a a a a a a a a a a', wordCount: 11, confidence: 0.95, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 100 },
-          { sectionId: 's-2', heading: 'B', snippet: 'b b b b b b b b b b b', wordCount: 11, confidence: 0.65, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 200 },
+          { sectionId: 's-1', heading: 'A', snippet: 'a a a a a a a a a a a', wordCount: 11, confidence: 0.95, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 100, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' },
+          { sectionId: 's-2', heading: 'B', snippet: 'b b b b b b b b b b b', wordCount: 11, confidence: 0.65, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 200, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' },
         ],
         evidenceText: [], evidenceFiles: [], matrixCells: [],
         coverageScore: 0.8, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
@@ -39,7 +39,7 @@ test.describe('Match step', () => {
       '2.a': {
         standardCode: '2', specCode: 'a', standardTitle: 'Y', specPrompt: '2.a',
         narratives: [
-          { sectionId: 's-3', heading: 'C', snippet: 'c c c c c c c c c c c', wordCount: 11, confidence: 0.35, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 300 },
+          { sectionId: 's-3', heading: 'C', snippet: 'c c c c c c c c c c c', wordCount: 11, confidence: 0.35, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 300, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' },
         ],
         evidenceText: [], evidenceFiles: [], matrixCells: [],
         coverageScore: 0.5, coverageCovered: false, coverageGaps: [], coverageStrengths: [],
@@ -52,6 +52,16 @@ test.describe('Match step', () => {
         aiStatus: 'parsed',
         aiBuckets: buckets,
       },
+      reviewState: {
+        itemSources: {
+          's-1': { importId: 'imp-A', sourceFilename: 'file-A.docx', sourceContentHash: 'h-A', importedAt: new Date().toISOString() },
+          's-2': { importId: 'imp-A', sourceFilename: 'file-A.docx', sourceContentHash: 'h-A', importedAt: new Date().toISOString() },
+          's-3': { importId: 'imp-A', sourceFilename: 'file-A.docx', sourceContentHash: 'h-A', importedAt: new Date().toISOString() },
+        },
+        buckets,
+        tags: [], cvs: [], evidenceDocs: [], introductions: {}, placeholderSections: [],
+        approvedIds: [], discardedIds: [], mergeLog: [],
+      },
     });
     await loginAsSeededViaSso(page, seed);
     await page.goto(`/self-study/${seed.submissionId}`);
@@ -60,7 +70,7 @@ test.describe('Match step', () => {
     const reviewBtn = page.getByRole('button', { name: /^Review/ });
     await expect(reviewBtn).toBeEnabled({ timeout: 15_000 });
     await reviewBtn.click();
-    await expect(page.getByRole('heading', { name: /Review/i })).toBeVisible({
+    await expect(page.getByRole('heading', { name: /Review \(CR-043\)/i })).toBeVisible({
       timeout: 10_000,
     });
 
@@ -71,23 +81,34 @@ test.describe('Match step', () => {
 
   test('Confidence-color stripe renders on cards', async ({ page }) => {
     test.setTimeout(60_000);
+    const colorBuckets = {
+      '1.a': {
+        standardCode: '1', specCode: 'a', standardTitle: 'X', specPrompt: '1.a',
+        narratives: [
+          { sectionId: 's-hi', heading: 'high-conf', snippet: 'high confidence item with enough words to render', wordCount: 9, confidence: 0.95, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 100, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' },
+          { sectionId: 's-md', heading: 'med-conf',  snippet: 'medium confidence item with enough words to render', wordCount: 9, confidence: 0.65, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 200, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' },
+          { sectionId: 's-lo', heading: 'low-conf',  snippet: 'low confidence item with enough words to render',     wordCount: 9, confidence: 0.35, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 300, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' },
+        ],
+        evidenceText: [], evidenceFiles: [], matrixCells: [],
+        coverageScore: 0.8, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
+      },
+    };
     seed = await seedFixture('wizard_review_minimal', {
       user: { email: 'match-colors@x.test' },
       import: {
         wizardStep: 'review',
         aiStatus: 'parsed',
-        aiBuckets: {
-          '1.a': {
-            standardCode: '1', specCode: 'a', standardTitle: 'X', specPrompt: '1.a',
-            narratives: [
-              { sectionId: 's-hi', heading: 'high-conf', snippet: 'high confidence item with enough words to render', wordCount: 9, confidence: 0.95, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 100 },
-              { sectionId: 's-md', heading: 'med-conf',  snippet: 'medium confidence item with enough words to render', wordCount: 9, confidence: 0.65, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 200 },
-              { sectionId: 's-lo', heading: 'low-conf',  snippet: 'low confidence item with enough words to render',     wordCount: 9, confidence: 0.35, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 300 },
-            ],
-            evidenceText: [], evidenceFiles: [], matrixCells: [],
-            coverageScore: 0.8, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
-          },
+        aiBuckets: colorBuckets,
+      },
+      reviewState: {
+        itemSources: {
+          's-hi': { importId: 'imp-A', sourceFilename: 'file-A.docx', sourceContentHash: 'h-A', importedAt: new Date().toISOString() },
+          's-md': { importId: 'imp-A', sourceFilename: 'file-A.docx', sourceContentHash: 'h-A', importedAt: new Date().toISOString() },
+          's-lo': { importId: 'imp-A', sourceFilename: 'file-A.docx', sourceContentHash: 'h-A', importedAt: new Date().toISOString() },
         },
+        buckets: colorBuckets,
+        tags: [], cvs: [], evidenceDocs: [], introductions: {}, placeholderSections: [],
+        approvedIds: [], discardedIds: [], mergeLog: [],
       },
     });
     await loginAsSeededViaSso(page, seed);
@@ -110,23 +131,29 @@ test.describe('Match step', () => {
 
   test('byte_offset_start is monotonic within an import (CR-031)', async ({ page }) => {
     test.setTimeout(60_000);
+    const narratives = [
+      { sectionId: 's-1', heading: 'first',  snippet: 'first item with enough words to render',  wordCount: 8, confidence: 0.9, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 100, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' },
+      { sectionId: 's-2', heading: 'second', snippet: 'second item with enough words to render', wordCount: 8, confidence: 0.9, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 250, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' },
+      { sectionId: 's-3', heading: 'third',  snippet: 'third item with enough words to render',  wordCount: 8, confidence: 0.9, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 450, sourceImportId: 'imp-A', sourceFilename: 'file-A.docx' },
+    ];
     seed = await seedFixture('wizard_review_minimal', {
       user: { email: 'match-byteoffset@x.test' },
-      import: {
-        wizardStep: 'review',
-        aiStatus: 'parsed',
-        aiBuckets: {
+      reviewState: {
+        itemSources: {
+          's-1': { importId: 'imp-A', sourceFilename: 'file-A.docx', sourceContentHash: 'h-A', importedAt: new Date().toISOString() },
+          's-2': { importId: 'imp-A', sourceFilename: 'file-A.docx', sourceContentHash: 'h-A', importedAt: new Date().toISOString() },
+          's-3': { importId: 'imp-A', sourceFilename: 'file-A.docx', sourceContentHash: 'h-A', importedAt: new Date().toISOString() },
+        },
+        buckets: {
           '1.a': {
             standardCode: '1', specCode: 'a', standardTitle: 'X', specPrompt: '1.a',
-            narratives: [
-              { sectionId: 's-1', heading: 'first',  snippet: 'first item with enough words to render',  wordCount: 8, confidence: 0.9, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 100 },
-              { sectionId: 's-2', heading: 'second', snippet: 'second item with enough words to render', wordCount: 8, confidence: 0.9, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 250 },
-              { sectionId: 's-3', heading: 'third',  snippet: 'third item with enough words to render',  wordCount: 8, confidence: 0.9, acceptState: 'auto_accepted', rationale: '', byteOffsetStart: 450 },
-            ],
+            narratives,
             evidenceText: [], evidenceFiles: [], matrixCells: [],
             coverageScore: 0.8, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
           },
         },
+        tags: [], cvs: [], evidenceDocs: [], introductions: {}, placeholderSections: [],
+        approvedIds: [], discardedIds: [], mergeLog: [],
       },
     });
     // Read the persisted state directly via the API — the on-the-wire
@@ -146,9 +173,9 @@ test.describe('Match step', () => {
       `${BASE_URL}/api/submissions/${seed.submissionId}/review`,
       { headers: { authorization: `Bearer ${token}` } }
     )).json() as any;
-    const narratives = rev.aiReviewState?.buckets?.['1.a']?.narratives || [];
-    expect(narratives.length).toBe(3);
-    const offsets = narratives.map((n: any) => n.byteOffsetStart);
+    const persisted = rev.aiReviewState?.buckets?.['1.a']?.narratives || [];
+    expect(persisted.length).toBe(3);
+    const offsets = persisted.map((n: any) => n.byteOffsetStart);
     for (let i = 1; i < offsets.length; i++) {
       expect(offsets[i]).toBeGreaterThan(offsets[i - 1]);
     }

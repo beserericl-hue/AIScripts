@@ -27,11 +27,15 @@ test.describe('Parse step', () => {
       user: { email: 'parse-labels@x.test' },
       import: {
         wizardStep: 'parse',
-        aiStatus: 'parsed',
+        // Use 'parsing' (not 'parsed') so the wizard's auto-route logic
+        // (deriveStepFromStatus) keeps us on the Parse step instead of
+        // jumping ahead to Review. ParseStep renders the friendly
+        // stage labels regardless of running vs done state.
+        aiStatus: 'parsing',
         aiStages: [
           { name: 'mammoth', state: 'done', detail: '1.2 MB HTML' },
           { name: 'deep_walker', state: 'done', detail: '142 sections' },
-          { name: 'matcher', state: 'done', detail: '142 / 142' },
+          { name: 'matcher', state: 'running', detail: '50 / 142' },
         ],
       },
     });
@@ -55,7 +59,7 @@ test.describe('Parse step', () => {
       user: { email: 'parse-checks@x.test' },
       import: {
         wizardStep: 'parse',
-        aiStatus: 'parsed',
+        aiStatus: 'parsing',
         aiStages: [
           { name: 'mammoth', state: 'done' },
           { name: 'deep_walker', state: 'done' },
