@@ -289,6 +289,12 @@ export function buildTestRouter(): Router | null {
         aiEvidenceDocs: importSpec.aiEvidenceDocs ?? [],
         aiIntroductions: importSpec.aiIntroductions ?? {},
         aiIntroductionHints: importSpec.aiIntroductionHints ?? {},
+        // Scaffolded-stub support — fixtures that want to land the
+        // wizard at the Apply / Applied state need to pass these.
+        aiAppliedAt: importSpec.aiAppliedAt
+          ? new Date(importSpec.aiAppliedAt as string)
+          : undefined,
+        aiAppliedCounts: (importSpec.aiAppliedCounts as any) ?? undefined,
         aiStartedAt: new Date(),
         aiCompletedAt: new Date()
       });
