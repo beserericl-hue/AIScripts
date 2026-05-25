@@ -58,6 +58,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | [[../ai-import-wizard-e2e-regression-plan-2026-05-22]] | Full Playwright regression suite for the AI Import Wizard; depends on CR-034 | draft |
 | [[../ai-import-wizard-e2e-coverage-review-2026-05-22]] | Coverage inventory + gap analysis + per-tier spec list; pre-go-live checklist | draft |
 | [[../critical-error-processing-review-2026-05-22]] | Critical review of error handling across client / server / ai-service; 14 findings ranked by impact | draft |
+| [[../test-plan-cr043-cr044-regression-2026-05-25]] | **P0 — ready to execute.** Complete test plan to close the CR-043 testing gap. ~30 unit tests for `aiReviewMerge.ts`, ~30 integration tests for `aiReviewController.ts`, ~10 E2E tests for the multi-import lifecycle (AC#3-#10, #12-#14), ~5 @slow Stevenson real-file integration tests driven via `page.setInputFiles()` (no drag/drop), plus regression sweep against every existing AI-Importer spec. Designed for a fresh Claude Code session to read + execute in the background. | **ready-to-execute** |
 
 ## P1 — required for general beta
 

@@ -8,6 +8,19 @@ type: log
 
 Append-only. Format: `## [YYYY-MM-DD] <action> | <subject>` followed by free-form body.
 
+## [2026-05-25] ingest | CR-043 + CR-044 regression test plan written + ready to execute
+
+The CR-043/CR-044 acceptance gap was 10 of 14 acceptance criteria implemented-but-not-tested, plus zero unit coverage on `aiReviewMerge.ts` (the heart of the CR). User direction: close the gap with a full regression suite, including Stevenson real-file integration driven via `page.setInputFiles()` (no drag/drop).
+
+[[test-plan-cr043-cr044-regression-2026-05-25]] enumerates:
+- Every function in `aiReviewMerge.ts` that needs unit tests (~30 tests across `sha256Hex`, `buildEmptyReviewState`, `mergeImportIntoReviewState` fresh + reimport branches, per-kind dedupe for tags/cvs/evidenceDocs/intros/placeholders, audit-log appending, `clearPreCR043State`).
+- Every endpoint in `aiReviewController.ts` that needs integration tests (~30 tests across `getReviewState`, `approveItem`, `discardItem`, `clearItem`, `applyReviewState`, matrix-state get + set, plus cross-PC isolation which will SURFACE a known gap — `_loadOwnedSubmission` doesn't enforce creator scoping today).
+- 10 E2E tests for the multi-import lifecycle (AC#3-#10, #12-#14) using a new `wizard_review_two_imports.json` fixture + a new `27_review_lifecycle.spec.ts`.
+- 5 @slow E2E tests driving the real Stevenson splits in `~/Desktop/CSHSE/` via `page.setInputFiles()` — bypasses drag/drop entirely.
+- A regression assertion that every existing AI-Importer spec still passes against the new wizard handoff.
+
+The plan is structured so a fresh Claude Code session reads section 1 → 7 in order and produces the entire suite without further context. Estimated 8-12 hours of focused work. After execution, AI-Importer track moves from "implemented and hoping it works" to "regression-proof."
+
 ## [2026-05-25] update | CR-043 first-deploy migration tightened + CR-044 proposed
 
 **CR-043 update.** Replaced the "auto-hydrate `aiReviewState` from prior `SelfStudyImport.aiBuckets/...`" risk-mitigation with the user's preferred cutover story: on first post-CR-043 import per submission, `receiveAICallback` explicitly **clears** pre-CR-043 wizard state on every prior `SelfStudyImport` record for that submission before writing the new `aiReviewState`. The clear is scoped to the submission, idempotent (only fires when `aiReviewState === null`), and audit-logged. Trade-off: coordinators with in-flight imports re-run them once at the cutover. Benefit: no risk of half-migrated state shapes colliding under the new merge rules. Two new acceptance criteria (#13 + #14) pin the cutover behavior.
