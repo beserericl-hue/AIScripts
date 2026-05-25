@@ -34,10 +34,27 @@ const SSO_KEY = process.env.E2E_SSO_KEY ?? '';
 
 const F = {
   preamble: path.join(FIXTURE_DIR, `${PREFIX}00-preamble.docx`),
+  // Stevenson's preamble split is mostly TOC entries — no intro-style
+  // prose. We use a hand-written intro fixture for the introduction_detector
+  // test instead.
+  programIntro: path.join(FIXTURE_DIR, 'synthetic-program-introduction.docx'),
   standards1to5: path.join(FIXTURE_DIR, `${PREFIX}01-standards-01-05.docx`),
   standards6to9: path.join(FIXTURE_DIR, `${PREFIX}02-standards-06-09.docx`),
   standards14to21: path.join(FIXTURE_DIR, `${PREFIX}04-standards-14-21.docx`),
   appendix: path.join(FIXTURE_DIR, `${PREFIX}05-appendix.docx`),
+  // The Stevenson splitter strips tables (python-docx paragraph-only
+  // copy). To exercise the curriculum-matrix extractor we have to
+  // upload the FULL Stevenson docx — both MatrixHSR and Matrix2
+  // bookmarks live inside table elements that the splitter drops.
+  stevensonFull: path.join(FIXTURE_DIR, '2024 CSHSE Self-Study Stevenson University.docx'),
+  // Synthetic fixture: content unrelated to CSHSE standards so the
+  // matcher returns low-confidence recommendations → sections route
+  // to tags (per the matcher's `primary_confidence < 0.50` branch in
+  // import_jobs._run_self_study_pipeline). Real Stevenson splits
+  // produce 0 tags because the matcher confidently routes every
+  // sentence to SOMETHING, which is its own concern but isn't what
+  // we want to probe here.
+  lowConfidence: path.join(FIXTURE_DIR, 'synthetic-low-confidence-content.docx'),
   // The Stevenson splitter's paper-output heuristic produces malformed
   // fixtures (it captures a paper title but the next 80 paragraphs are
   // a course catalog, not the paper body). For a clean paper assertion
@@ -162,7 +179,7 @@ test.describe('@slow Importer end-to-end coverage extension (Section 4B)', () =>
     expect(rev.aiReviewState).toBeTruthy();
     const docs = rev.aiReviewState.evidenceDocs || [];
     expect(docs.length).toBeGreaterThan(0);
-    expect(docs.some((d: any) => (d.kind || '').toLowerCase() === 'syllabus')).toBe(true);
+    expect(docs.some((d: any) => (d.docSubKind || d.kind || '').toLowerCase() === 'syllabus')).toBe(true);
   });
 
   // ------------------------------------------------------------------ 3
@@ -173,14 +190,15 @@ test.describe('@slow Importer end-to-end coverage extension (Section 4B)', () =>
     await page.goto(`/self-study/${seed.submissionId}`);
     await page.waitForLoadState('networkidle');
 
-    const importId = await uploadViaWizard(page, F.preamble);
+    const importId = await uploadViaWizard(page, F.programIntro);
     const token = await ssoToken(seed.userEmail);
     const final = await pollUntilParsed(token, importId, 720_000);
     expect(['parsed', 'finished']).toContain(final.status);
     const hints = final.introductionHints || {};
     expect(typeof hints === 'object' && hints !== null).toBe(true);
-    // Preamble carries Mission / About / Vision — the introduction_detector
-    // should flag at least one section as document-scope intro.
+    // The synthetic intro fixture carries Introduction / Mission / About
+    // the Program / Vision headings; introduction_detector should flag
+    // at least one as document-scope intro.
     expect(Object.keys(hints).length).toBeGreaterThan(0);
   });
 
@@ -198,33 +216,33 @@ test.describe('@slow Importer end-to-end coverage extension (Section 4B)', () =>
     expect(['parsed', 'finished']).toContain(final.status);
     const cov = final.coverageReport;
     expect(cov).toBeTruthy();
-    expect(typeof cov.totalParagraphs === 'number' && cov.totalParagraphs > 0).toBe(true);
+    // The wire shape: totalSections + coveragePercent + bytesTotal +
+    // bytesAssigned + coveragePercentBytes + skipBreakdown +
+    // boundaryWarnings + missingFragments.
+    expect(typeof cov.totalSections === 'number' && cov.totalSections > 0).toBe(true);
     expect(typeof cov.coveragePercent === 'number').toBe(true);
   });
 
   // ------------------------------------------------------------------ 5
-  test('curriculum matrix extraction — full Stevenson appendix populates matrices', async ({ page }) => {
-    test.setTimeout(1_800_000);
+  test('curriculum matrix extraction — full Stevenson docx populates matrices', async ({ page }) => {
+    test.setTimeout(2_400_000); // 40 min — full doc parses ~10-15 min
     seed = await freshUploadSeed('matrix-extract');
     await loginAsSeededViaSso(page, seed);
     await page.goto(`/self-study/${seed.submissionId}`);
     await page.waitForLoadState('networkidle');
 
-    // The full standards-06-09 split contains MatrixHSR + Matrix2 anchors
-    // (per matrix_extract stage in the Stevenson logs).
-    const importId = await uploadViaWizard(page, F.standards6to9);
+    // Upload the FULL Stevenson docx. The MatrixHSR + Matrix2 bookmarks
+    // live inside table elements that the splitter would otherwise drop.
+    const importId = await uploadViaWizard(page, F.stevensonFull);
     const token = await ssoToken(seed.userEmail);
-    const final = await pollUntilParsed(token, importId, 1_200_000);
+    const final = await pollUntilParsed(token, importId, 1_800_000);
     expect(['parsed', 'finished']).toContain(final.status);
-    // matrices is null when none detected, an array of matrix dicts when
-    // detected. The wizard's matrix_extract stage logs the count.
     expect(Array.isArray(final.matrices)).toBe(true);
     if ((final.matrices || []).length === 0) {
-      // If the matcher truly detected 0 matrices for this split, fail
-      // and force investigation rather than weaken the test.
       throw new Error(
-        `Expected at least one curriculum matrix from standards-06-09. ` +
-        `Got matrices=${JSON.stringify(final.matrices)}. Matrix detector or anchor table classification may be broken.`
+        `Expected at least one curriculum matrix from full Stevenson docx. ` +
+        `Got matrices=${JSON.stringify(final.matrices)}. ` +
+        `Matrix detector or anchor table classification may be broken.`
       );
     }
     expect(final.matrices[0]).toHaveProperty('matrixId');
@@ -238,14 +256,15 @@ test.describe('@slow Importer end-to-end coverage extension (Section 4B)', () =>
     await page.goto(`/self-study/${seed.submissionId}`);
     await page.waitForLoadState('networkidle');
 
-    const importId = await uploadViaWizard(page, F.standards14to21);
+    // Upload content unrelated to CSHSE standards. The matcher's
+    // primary_confidence drops below 0.50 for off-topic text, so it
+    // routes to tags rather than buckets. Real Stevenson splits route
+    // everything confidently because the content genuinely maps to
+    // Standards — they're not useful for probing the tag fallback.
+    const importId = await uploadViaWizard(page, F.lowConfidence);
     const token = await ssoToken(seed.userEmail);
     const final = await pollUntilParsed(token, importId, 720_000);
     expect(['parsed', 'finished']).toContain(final.status);
-    // standards-14-21 is sparse — the matcher should leave some sections
-    // unplaced (low confidence) → they become tags. If zero tags, that's
-    // a regression in the matcher's confidence floor or in the wizard's
-    // tag-routing.
     expect(Array.isArray(final.tags)).toBe(true);
     expect(final.tags.length).toBeGreaterThan(0);
     for (const t of final.tags.slice(0, 3) as any[]) {
