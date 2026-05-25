@@ -343,12 +343,24 @@ export function ParseStep(): JSX.Element {
           Cancel
         </button>
         <button
-          onClick={() => setStep('review')}
+          onClick={() => {
+            // CR-043 — dispatch open-review-surface event for the
+            // SelfStudyEditor to handle (route to persisted Review).
+            // Fall through to setStep('review') so the wizard's
+            // internal Review tab still works if the host doesn't
+            // intercept (e.g. legacy embedding contexts).
+            try {
+              window.dispatchEvent(new CustomEvent('cr-043-open-review-surface'));
+            } catch {
+              // best-effort
+            }
+            setStep('review');
+          }}
           disabled={!isReady || isEmptyParse}
           title={isEmptyParse ? 'AI returned zero items — re-upload or contact support' : undefined}
           className="rounded-md bg-cshse-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-cshse-700 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          Next ▸
+          Next: Review ▸
         </button>
         {isEmptyParse && (
           <div

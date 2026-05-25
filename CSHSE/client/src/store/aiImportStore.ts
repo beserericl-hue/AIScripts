@@ -561,6 +561,15 @@ interface AIImportState {
   // item is stamped with sourceImportId + sourceFilename so the Review
   // UI can show provenance chips.
   loadBatchChildren: () => Promise<void>;
+  // CR-043 — fetch the submission-scoped persisted Review state and
+  // hydrate the in-memory wizard store from it. Idempotent. Called on
+  // ReviewSurface mount + after every per-item approve/discard so the
+  // store and server stay in sync.
+  loadPersistedReviewState: () => Promise<void>;
+  // CR-043 — per-item server-persisted approve/discard.
+  approveItemOnServer: (sectionId: string, approved: boolean) => Promise<void>;
+  discardItemOnServer: (sectionId: string, discarded: boolean) => Promise<void>;
+  clearItemOnServer: (sectionId: string) => Promise<void>;
   reset: () => void;
   // Clear the transient state from a finished or failed run (errors, stages,
   // buckets, matrices, importId) and return the wizard to the Upload step.
@@ -987,6 +996,85 @@ export const useAIImportStore = create<AIImportState>()(
       setHoldForReview: (v) => set({ holdForReview: v }),
       // CR-041 US-6 — Source-file filter.
       setReviewSourceFilter: (importId) => set({ reviewSourceFilter: importId }),
+      // CR-043 — hydrate from the submission-scoped persisted Review
+      // state. The store's buckets/tags/cvs/evidenceDocs/introductions
+      // fields become read-through caches of aiReviewState.
+      loadPersistedReviewState: async () => {
+        const { submissionId } = get();
+        if (!submissionId) return;
+        try {
+          const res = await api.get(`/api/submissions/${submissionId}/review`);
+          const state = res.data?.aiReviewState;
+          const matrixState = res.data?.aiMatrixState;
+          if (state) {
+            // Hydrate the existing store fields so the UI keeps reading
+            // from the same selectors. approvedIds is merged from the
+            // server set.
+            set({
+              buckets: state.buckets || {},
+              tags: state.tags || [],
+              cvs: state.cvs || [],
+              evidenceDocs: state.evidenceDocs || [],
+              introductions: state.introductions || get().introductions,
+              placeholderSections: state.placeholderSections || [],
+              coverageReport: state.coverageReport ?? get().coverageReport,
+              approvedIds: state.approvedIds || []
+            });
+          }
+          if (matrixState) {
+            set({
+              matrices: matrixState.matrices || [],
+              matrixRowEdits: matrixState.matrixRowEdits || {}
+            });
+          }
+        } catch (err) {
+          // Non-fatal — Review surface renders an empty state instead.
+          console.warn('[CR-043] loadPersistedReviewState failed:', err);
+        }
+      },
+
+      approveItemOnServer: async (sectionId, approved) => {
+        const { submissionId } = get();
+        if (!submissionId) return;
+        try {
+          const res = await api.post(`/api/submissions/${submissionId}/review/approve`, {
+            sectionId,
+            approved
+          });
+          set({ approvedIds: res.data?.approvedIds ?? get().approvedIds });
+        } catch (err) {
+          console.warn('[CR-043] approveItemOnServer failed:', err);
+        }
+      },
+
+      discardItemOnServer: async (sectionId, discarded) => {
+        const { submissionId } = get();
+        if (!submissionId) return;
+        try {
+          await api.post(`/api/submissions/${submissionId}/review/discard`, {
+            sectionId,
+            discarded
+          });
+        } catch (err) {
+          console.warn('[CR-043] discardItemOnServer failed:', err);
+        }
+      },
+
+      clearItemOnServer: async (sectionId) => {
+        const { submissionId } = get();
+        if (!submissionId) return;
+        try {
+          await api.post(`/api/submissions/${submissionId}/review/clear-item`, {
+            sectionId
+          });
+          // After clear, re-pull the state so the store mirrors the
+          // server's authoritative shape.
+          await get().loadPersistedReviewState();
+        } catch (err) {
+          console.warn('[CR-043] clearItemOnServer failed:', err);
+        }
+      },
+
       // CR-040 Phase 3b — fragment resolution.
       resolveMissingFragment: (sectionId) =>
         set((s) => ({
@@ -1009,19 +1097,13 @@ export const useAIImportStore = create<AIImportState>()(
         }
         if (!files || files.length === 0) return;
 
-        // Reset stale state from a prior run; mirror the single-file
-        // startUpload's reset block so the new batch starts clean.
+        // CR-043 — keep persisted Review state; only reset ephemeral
+        // wizard fields. See startUpload comment.
         set({
           status: 'uploading',
           uploadProgress: 0,
           errors: [],
           dirty: false,
-          buckets: {},
-          tags: [],
-          matrices: [],
-          placeholderSections: [],
-          matrixRowEdits: {},
-          approvedIds: [],
           batchId: null,
           batchSnapshot: null
         });
@@ -1434,20 +1516,19 @@ export const useAIImportStore = create<AIImportState>()(
           throw new Error('uploadFile and submissionId are required to start an import');
         }
 
-        // Clear stale edit state + leftover buckets from a prior import.
-        // Otherwise the dirty=true guard on _applySnapshot would block
-        // the new run's snapshots from populating buckets.
+        // CR-043 — DO NOT clear buckets / tags / matrices / cvs /
+        // evidenceDocs / introductions / approvedIds on startUpload.
+        // The server-side aiReviewState is the source of truth and
+        // merges this import's output into the persisted state. The
+        // pre-CR-043 reset destroyed coordinator work between imports;
+        // we keep the only state that's still wizard-local (status,
+        // progress, errors). dirty=false because we're about to merge
+        // the next snapshot.
         set({
           status: 'uploading',
           uploadProgress: 0,
           errors: [],
-          dirty: false,
-          buckets: {},
-          tags: [],
-          matrices: [],
-          placeholderSections: [],
-          matrixRowEdits: {},
-          approvedIds: []
+          dirty: false
         });
 
         const form = new FormData();

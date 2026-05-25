@@ -24,12 +24,15 @@ import {
   PlayCircle,
   MessageSquarePlus,
   Lock,
+  Sparkles,
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { useNavigate } from 'react-router-dom';
 import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { IntroductionEditor } from './IntroductionEditor';
+import { ReviewSurface } from './Review/ReviewSurface';
+import { MatrixSurface } from './Review/MatrixSurface';
 import { FinalSubmitModal } from './FinalSubmitModal';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
 import { FileLibrary } from '../FileLibrary';
@@ -249,8 +252,8 @@ function AIImportTabButton({
   activeView,
   setActiveView
 }: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'ai-import';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'ai-import') => void;
+  activeView: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
 }) {
   const status = useAIImportStore((s) => s.status);
   const queuePosition = useAIImportStore((s) => s.queuePosition);
@@ -297,6 +300,109 @@ function AIImportTabButton({
   );
 }
 
+/**
+ * CR-043 — Review toolbar button. Enabled iff aiReviewState has any
+ * content (buckets / tags / cvs / evidenceDocs / introductions). The
+ * client store mirrors aiReviewState; we check those fields directly
+ * so the button updates the moment the parser merge writes new items.
+ */
+function ReviewSurfaceButton({
+  activeView,
+  setActiveView
+}: {
+  activeView: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
+}) {
+  const buckets = useAIImportStore((s) => s.buckets);
+  const tags = useAIImportStore((s) => s.tags);
+  const cvs = useAIImportStore((s) => s.cvs);
+  const evidenceDocs = useAIImportStore((s) => s.evidenceDocs);
+  const introductions = useAIImportStore((s) => s.introductions);
+  const approvedIds = useAIImportStore((s) => s.approvedIds);
+
+  // Disabled iff every kind is empty (no parser-produced content yet)
+  // OR everything has been approved + applied (then disabled until the
+  // next parse adds new content).
+  const hasContent =
+    Object.values(buckets).some(
+      (b) => b.narratives.length || b.evidenceText.length || b.evidenceFiles.length
+    ) ||
+    tags.length > 0 ||
+    cvs.length > 0 ||
+    evidenceDocs.length > 0 ||
+    Object.values(introductions).some((ib) => ib.items?.length);
+  const disabled = !hasContent;
+
+  return (
+    <button
+      onClick={() => !disabled && setActiveView('review-surface')}
+      disabled={disabled}
+      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+        disabled
+          ? 'text-gray-400 cursor-not-allowed'
+          : activeView === 'review-surface'
+            ? 'bg-cshse-100 text-cshse-700'
+            : 'text-gray-600 hover:bg-gray-100'
+      }`}
+      title={
+        disabled
+          ? 'Review enables once the wizard parses content'
+          : 'Review — persists across imports; approve to push items into the editor'
+      }
+    >
+      <Sparkles className="w-4 h-4 flex-shrink-0" />
+      Review
+      {hasContent && (
+        <span className="rounded bg-cshse-100 px-1.5 py-0.5 text-[10px] font-semibold text-cshse-700">
+          ready
+        </span>
+      )}
+      {approvedIds.length > 0 && (
+        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+          {approvedIds.length} approved
+        </span>
+      )}
+    </button>
+  );
+}
+
+function MatrixSurfaceButton({
+  activeView,
+  setActiveView
+}: {
+  activeView: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
+}) {
+  const matrices = useAIImportStore((s) => s.matrices);
+  const hasContent = matrices.length > 0;
+  return (
+    <button
+      onClick={() => hasContent && setActiveView('matrix-surface')}
+      disabled={!hasContent}
+      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+        !hasContent
+          ? 'text-gray-400 cursor-not-allowed'
+          : activeView === 'matrix-surface'
+            ? 'bg-cshse-100 text-cshse-700'
+            : 'text-gray-600 hover:bg-gray-100'
+      }`}
+      title={
+        !hasContent
+          ? 'Matrix enables once a parsed import produces curriculum matrices'
+          : 'Matrix — edit row mappings; survives wizard close'
+      }
+    >
+      <Grid3X3 className="w-4 h-4 flex-shrink-0" />
+      Matrix
+      {hasContent && (
+        <span className="rounded bg-cshse-100 px-1.5 py-0.5 text-[10px] font-semibold text-cshse-700">
+          {matrices.length}
+        </span>
+      )}
+    </button>
+  );
+}
+
 export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator', userId, userName }: SelfStudyEditorProps) {
   const isProgramCoordinator = userRole === 'program_coordinator';
   const isReviewer = userRole === 'reader' || userRole === 'lead_reader';
@@ -308,7 +414,18 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [selectedStandard, setSelectedStandard] = useState('1');
   const [selectedSpec, setSelectedSpec] = useState<string | null>('a');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'ai-import'>('standards');
+  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface'>('standards');
+
+  // CR-043 — wizard's Parse step dispatches `cr-043-open-review-surface`
+  // when the PC clicks "Next: Review" so the wizard hands off to the
+  // persisted Review surface (instead of routing to the wizard's
+  // internal Review tab). Listener lives on the editor since it owns
+  // activeView.
+  useEffect(() => {
+    const handler = () => setActiveView('review-surface');
+    window.addEventListener('cr-043-open-review-surface', handler);
+    return () => window.removeEventListener('cr-043-open-review-surface', handler);
+  }, []);
   // When the user clicks "View in matrix" from a spec, we stash the target
   // (std, spec) here and switch to the curriculum view. CurriculumMatrixEditor
   // consumes the target via `scrollToSpec` and clears the state after it has
@@ -2038,6 +2155,15 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 </button>
               )}
               {isProgramCoordinator && <AIImportTabButton activeView={activeView} setActiveView={setActiveView} />}
+              {/* CR-043 — Review + Matrix buttons promoted out of the
+                  wizard. Disabled until the persisted aiReviewState /
+                  aiMatrixState has content. */}
+              {isProgramCoordinator && (
+                <ReviewSurfaceButton activeView={activeView} setActiveView={setActiveView} />
+              )}
+              {isProgramCoordinator && (
+                <MatrixSurfaceButton activeView={activeView} setActiveView={setActiveView} />
+              )}
             </div>
           </div>
           {/* Right cluster: progress + submit. ml-auto pushes it right when
@@ -2408,6 +2534,27 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           {activeView === 'ai-import' && isProgramCoordinator && submissionId && (
             <main className="flex-1 overflow-hidden p-2">
               <AIImportWizard submissionId={submissionId} />
+            </main>
+          )}
+
+          {/* CR-043 — Review surface, decoupled from the wizard.
+              State comes from Submission.aiReviewState. */}
+          {activeView === 'review-surface' && isProgramCoordinator && submissionId && (
+            <main className="flex-1 overflow-hidden">
+              <ReviewSurface
+                submissionId={submissionId}
+                onClose={() => setActiveView('standards')}
+              />
+            </main>
+          )}
+
+          {/* CR-043 — Matrix surface, decoupled from the wizard. */}
+          {activeView === 'matrix-surface' && isProgramCoordinator && submissionId && (
+            <main className="flex-1 overflow-hidden">
+              <MatrixSurface
+                submissionId={submissionId}
+                onClose={() => setActiveView('standards')}
+              />
             </main>
           )}
         </div>
