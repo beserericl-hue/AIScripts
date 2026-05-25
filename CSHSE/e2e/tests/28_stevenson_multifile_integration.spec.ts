@@ -247,14 +247,21 @@ test.describe('@slow Stevenson real-file multi-import integration', () => {
     const importA = await uploadViaWizard(page, FIXTURES.standards1to5);
     await pollUntilParsed(token, importA, 720_000);
 
-    // Pick the first narrative sectionId from the merged state and
-    // approve it via the API.
+    // Pick ANY narrative sectionId from the merged state and approve
+    // it via the API. Some buckets carry only evidence — we need a
+    // bucket whose narratives[] is non-empty.
     const rev1 = await (await fetch(
       `${BASE_URL}/api/submissions/${seed.submissionId}/review`,
       { headers: { authorization: `Bearer ${token}` } }
     )).json() as any;
-    const firstSpec = Object.values(rev1.aiReviewState.buckets || {})[0] as any;
-    const firstSec = firstSpec?.narratives?.[0]?.sectionId;
+    expect(rev1.aiReviewState).toBeTruthy();
+    let firstSec: string | undefined;
+    for (const b of Object.values(rev1.aiReviewState.buckets || {}) as any[]) {
+      if (b?.narratives?.length) {
+        firstSec = b.narratives[0].sectionId;
+        break;
+      }
+    }
     expect(firstSec).toBeTruthy();
     const approve = await fetch(`${BASE_URL}/api/submissions/${seed.submissionId}/review/approve`, {
       method: 'POST',

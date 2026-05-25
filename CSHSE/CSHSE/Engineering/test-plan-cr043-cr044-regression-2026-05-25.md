@@ -38,6 +38,7 @@ CR-044 is pure typography — no functional regression risk. We add a single Pla
 2. [Server integration tests — aiReviewController.ts](#section-2)
 3. [E2E tests — CR-043 acceptance criteria #3-#10, #12-#14](#section-3)
 4. [E2E tests — Stevenson multi-file integration (real ~/Desktop/CSHSE/ files)](#section-4)
+4B. [Importer end-to-end coverage extension (@slow)](#section-4b) — added 2026-05-25 after Section 4 surfaced 10 production bugs; same-shape probes across every importer surface
 5. [Regression sweep — every existing AI Importer spec must still pass](#section-5)
 6. [Test fixtures — what to add to seed.ts / fixtures/](#section-6)
 7. [Run-and-report protocol](#section-7)
@@ -643,6 +644,72 @@ test.describe('@slow Stevenson real-file multi-import integration', () => {
 
 ---
 
+<a id="section-4b"></a>
+
+## 4B. Importer end-to-end coverage extension (@slow)
+
+**File:** `e2e/tests/29_importer_full_coverage.spec.ts` (new)
+**Framework:** Playwright `@slow`, gated behind `E2E_RUN_SLOW=1`
+**Trigger:** added to plan scope 2026-05-25 after Section 4's Stevenson #1–#3 surfaced 10 production bugs (CR-037 empty-bucket guard wrongly failing CV-only uploads; CV detector architectural miss; splitter truncation; etc.). The same code paths that produced those bugs sit under every other importer surface — these specs probe each one to make sure no latent siblings remain.
+
+**Sequencing:** run AFTER Stevenson #4 (reimport) and #5 (4-file sequence) complete green. The order matters because #4 + #5 validate the multi-file lifecycle that this extension's tests reuse implicitly.
+
+**Goal:** every importer surface that depends on the same terminal-callback / detector / walker plumbing now has a real-docx assertion. If any of these surfaces breaks the way CV-only broke, the test catches it instead of a coordinator finding it in production.
+
+### Test cases (one per surface)
+
+1. **Paper-only upload (CR-040 evidenceDocs)**
+   Upload `__paper__sample-response-paper.docx`. Assert: status='parsed', `payload.evidenceDocs.length > 0`, `Submission.aiReviewState.evidenceDocs.length > 0`. Confirms the CR-037 empty-bucket guard's `evidenceDocs` count works end-to-end.
+
+2. **Syllabus-only upload (CR-040 evidenceDocs)**
+   Upload `__syllabus__chs-105-human-services-social-policy.docx`. Same assertions as paper, plus that the detected `kind === 'syllabus'`.
+
+3. **Introduction-only docx (CR-039 introductionHints)**
+   Upload a fixture containing "Mission", "About the Program" headings with no Standards. Assert: `payload.introductionHints` non-empty, `introductions` populated in `aiReviewState`. The CR-037 fix also has to count intro items — verify it does.
+
+4. **Coverage report populated (CR-040 Phase 3b)**
+   Upload `__01-standards-01-05.docx`. Assert: `payload.coverageReport` is an object with `totalParagraphs > 0` and `coveragePercent` set; `aiReviewState.coverageReport` mirrors it.
+
+5. **Curriculum matrix extraction**
+   Upload the appropriate Stevenson split that contains `MatrixHSR` + `Matrix2` anchors (or the full Stevenson if needed). Assert: `aiMatrixState.matrices.length >= 1`, with non-empty `cells[]` and `columnHeaders[]`.
+
+6. **Tag handling (CR-032)**
+   Upload a Stevenson split that contains content the matcher won't confidently place (e.g. a generic prose section without a Standards heading). Assert: `payload.tags.length > 0`, each tag has `suggestedStd` + `suggestedSpec` + `confidence` + `acceptState='review_unknown'`.
+
+7. **Placeholder sections (CR-037 "Unwritten" rail)**
+   Upload a template-style docx with `Standard 7.b` heading but no body content. Assert: `payload.placeholderSections.length > 0`, `aiReviewState.placeholderSections` populated.
+
+8. **Format detector — template path**
+   Upload a known template-format docx (one with the template signals). Assert: `payload.format.format === 'template'`, `_run_template_pipeline` ran (not `_run_self_study_pipeline`), and the wizard reaches Review.
+
+9. **Malformed inputs**
+   Four sub-cases:
+     a. 0-byte docx → assert HTTP 400 on upload (NOT a silent pipeline crash).
+     b. Renamed PDF (`.pdf` content but `.docx` extension) → assert detector catches it; surfaces actionable error.
+     c. Password-protected docx → assert mammoth raises; surfaced as `payload.errors[0].message` with a coordinator-friendly hint.
+     d. Truncated docx (zip damaged) → assert recovery / explicit failure, never a silent zero-content `parsed`.
+
+10. **Large appendix performance**
+    Upload Stevenson's `__05-appendix.docx` (5,952 paragraphs). Assert: parse completes within 15 minutes; `aiReviewState.evidenceDocs.length > 0` (the appendix is mostly papers + syllabi); no `processing_state='failed'` from a per-section timeout. This is also a soft memory regression catch — Railway's container OOM-kills on memory pressure, which would surface as the parse hanging on a stage.
+
+11. **Concurrent imports (same user, no batch)**
+    Two browser contexts, same submission, same user, two different files uploaded simultaneously. Assert: both imports reach `parsed`, `Submission.aiReviewState.itemSources` contains entries from BOTH files (no clobbering). This is distinct from CR-041's batch flow (same-coordinator-multi-file inside ONE wizard run) — here we exercise the race where two separate wizard sessions hit the merge service concurrently.
+
+**Estimated test count for Section 4B:** 11 @slow integration tests (one is split into 4 sub-cases, so ~14 assertion clusters).
+
+**Fixtures needed:**
+- Existing Stevenson splits cover items 1, 2, 4, 5, 10.
+- Item 3 needs a new fixture: pick `__00-preamble.docx` (likely contains "Mission" / "About the Program") and verify, else hand-craft a minimal intro-only docx.
+- Item 6 needs to identify a Stevenson section the matcher can't place — likely from `__04-standards-14-21.docx` (sparse content).
+- Item 7 needs a hand-crafted template-format docx.
+- Item 8 same as item 7.
+- Item 9 fixtures: 0-byte file (write empty), rename a real PDF, find a password-protected docx, intentionally truncate a real docx.
+- Item 11 reuses any two standards splits.
+
+**Bug-fix policy:** per the standing rule, any failing test == real production bug. Fix the implementation, not the test. The expected outcome is 0 failures after iteration; the test plan stays open until every assertion is green.
+
+---
+
 <a id="section-5"></a>
 
 ## 5. Regression sweep — every existing AI-Importer spec
@@ -820,8 +887,9 @@ After implementing every test in this plan, the new session must:
    Section 2 — aiReviewController.test.ts:   30/30 passing (after isolation fix)
    Section 3 — 27_review_lifecycle.spec.ts:  10/10 passing
    Section 4 — Stevenson @slow (opt-in):     5/5 passing with E2E_RUN_SLOW=1
+   Section 4B — Importer extension (opt-in): 11/11 passing with E2E_RUN_SLOW=1
    Section 5 — regression sweep:             23/23 prior specs still passing
-   Total: 98 tests, 0 failures.
+   Total: 109 tests, 0 failures.
    ```
 
 5. **Update the testing doc** in `Engineering/log.md` with the date + results.
