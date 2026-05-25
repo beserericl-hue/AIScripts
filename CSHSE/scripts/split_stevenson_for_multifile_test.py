@@ -133,35 +133,50 @@ def _write_docx(
     out.save(out_path)
 
 
+def _is_full_cv_anchor(paragraphs: list[tuple[str, str]], idx: int) -> str | None:
+    """Return the captured name if `paragraphs[idx]` is a real CV anchor
+    (name-shaped line followed by EDUCATION within 10 paragraphs), else
+    None. Centralises the dual-signal check so block-extension below
+    can reuse it and not mis-fire on institution names like ``Loyola
+    University Maryland`` that happen to be 3 capitalised tokens.
+    """
+    if idx < 0 or idx >= len(paragraphs):
+        return None
+    nm = _FACULTY_NAME_RE.match(paragraphs[idx][1])
+    if not nm:
+        return None
+    for j in range(idx + 1, min(idx + 11, len(paragraphs))):
+        if _EDUCATION_RE.match(paragraphs[j][1]):
+            return nm.group(1).strip()
+    return None
+
+
 def _detect_cv_blocks(paragraphs: list[tuple[str, str]]) -> list[tuple[str, list[int]]]:
-    """Cheap CV detector: name-shaped line + EDUCATION within 10 paras.
+    """CV detector: name-shaped line + EDUCATION within 10 paras.
 
     Returns [(faculty_name, [paragraph_indices])]. Each block extends
-    until the next CV anchor or until 60 paragraphs pass.
+    until the next *real* CV anchor (also name + EDUCATION) or until
+    240 paragraphs pass — long enough to contain a full Stevenson CV
+    (which routinely runs 150+ paragraphs once Education + Academic
+    Employment + Teaching Experiences + Publications + Service are
+    all included).
     """
     out: list[tuple[str, list[int]]] = []
     i = 0
     while i < len(paragraphs):
-        _, text = paragraphs[i]
-        nm = _FACULTY_NAME_RE.match(text)
-        if not nm:
+        name = _is_full_cv_anchor(paragraphs, i)
+        if not name:
             i += 1
             continue
-        # Look ahead for EDUCATION.
-        edu_hit = False
-        for j in range(i + 1, min(i + 11, len(paragraphs))):
-            if _EDUCATION_RE.match(paragraphs[j][1]):
-                edu_hit = True
-                break
-        if not edu_hit:
-            i += 1
-            continue
-        name = nm.group(1).strip()
-        # Extend block until next CV anchor or 60 paragraphs.
-        end = min(i + 60, len(paragraphs))
-        for k in range(i + 1, end):
-            if k > i + 5 and _FACULTY_NAME_RE.match(paragraphs[k][1]):
-                # Next CV starts; close this block before it.
+        # Extend block until the next *real* anchor (name + EDUCATION
+        # within 10 paras) or up to 240 paragraphs. Plain name-shaped
+        # lines (e.g. institution names like "Loyola University Maryland")
+        # do NOT close the block — they were the source of the
+        # previous truncation bug that lopped Barry W. Thomas's CV off
+        # at the first institution name inside his Education block.
+        end = min(i + 240, len(paragraphs))
+        for k in range(i + 6, end):
+            if _is_full_cv_anchor(paragraphs, k):
                 end = k
                 break
         out.append((name, list(range(i, end))))
