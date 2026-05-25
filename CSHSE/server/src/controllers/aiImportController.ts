@@ -639,7 +639,13 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   importRecord.aiCompletedAt = new Date();
   importRecord.aiQueuePosition = null;
   importRecord.aiQueueDepth = null;
-  await importRecord.save();
+  // CR-043 race fix — defer the importRecord.save() that flips
+  // aiStatus visible to the poller until AFTER the merge has committed
+  // submissionDoc.aiReviewState. Without this, a fast poll between the
+  // two saves catches status='parsed' but aiReviewState=null. Surfaced
+  // by 28_stevenson_multifile_integration #1 (standards-01-05 →
+  // aiReviewState has narratives) when the test polled the live cshse-
+  // develop fast enough to hit the intermediate state.
 
   // CR-043 — merge this import's output into Submission.aiReviewState.
   // First import per submission after the cutover triggers a clear of
@@ -736,6 +742,12 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
       console.error('[CR-043 merge] non-fatal merge failure:', mergeErr);
     }
   }
+
+  // CR-043 race fix — flip aiStatus to its terminal value AFTER the
+  // merge has committed Submission.aiReviewState. A poller that watches
+  // aiStatus will now never observe 'parsed' before aiReviewState is
+  // populated. Failed/canceled statuses also persist via this save.
+  await importRecord.save();
 
   // Final SSE event, then connected clients drop the EventSource.
   broadcastSSE(importId, buildSnapshotFromImport(importRecord));
