@@ -312,7 +312,7 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
             : `Refreshing every ${POLL_INTERVAL_MS / 1000} s…`}
         </div>
         <CoverageBadge />
-        <BatchProgress />
+        <BatchProgress onOpenReview={onOpenReview} />
       </section>
 
       {/* stall hint */}
@@ -397,12 +397,20 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
  * US-5 gate (hold-for-review) lives here too: when on, the Next button
  * is disabled until every child has finished.
  */
-function BatchProgress(): JSX.Element | null {
+interface BatchProgressProps {
+  // CR-043 follow-on — same handoff prop ParseStep accepts. The batch
+  // mode "Open merged Review" button uses it to flip the editor's
+  // activeView to 'review-surface' rather than setStep('review').
+  onOpenReview?: () => void;
+}
+
+function BatchProgress({ onOpenReview }: BatchProgressProps = {}): JSX.Element | null {
   const batchId = useAIImportStore((s) => s.batchId);
   const snapshot = useAIImportStore((s) => s.batchSnapshot);
   const holdForReview = useAIImportStore((s) => s.holdForReview);
   const pollBatch = useAIImportStore((s) => s.pollBatch);
   const setStep = useAIImportStore((s) => s.setStep);
+  void setStep; // legacy fallback (unused after CR-043 follow-on)
   // CR-040 Phase 3b — hard coverage gate also applies to batch mode.
   const coverageReport = useAIImportStore((s) => s.coverageReport);
   const coverageBlocked = isCoverageHardBlocked(coverageReport);

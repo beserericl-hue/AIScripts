@@ -217,7 +217,6 @@ describe('aiImportStore — moveItemToIntroduction (CR-039)', () => {
           scope: 'document',
           standardCode: null,
           items: [],
-          isLocked: false,
         },
       },
     });
