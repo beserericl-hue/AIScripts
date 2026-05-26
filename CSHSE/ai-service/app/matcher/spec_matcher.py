@@ -90,6 +90,7 @@ SectionType = Literal[
     "narrative_response",   # body answers a (standard, spec) prose prompt
     "supporting_evidence",  # CV, syllabus, course catalog, faculty handbook, etc.
     "curriculum_matrix",    # the (course × standard.spec) grid
+    "introduction",         # CR-039 Phase 2c — intro / mission / about-the-program
     "context",              # framing prose that doesn't answer a specific spec
     "unknown",
 ]
@@ -153,6 +154,13 @@ def _build_prompt(
         "    handbook, accreditation letter, or other artefact that supports a spec rather",
         "    than answering one in prose",
         "  - curriculum_matrix: the (course x standard.spec) grid (Standard 11 typically)",
+        "  - introduction: school-wide intro / mission / philosophy / about-the-program text",
+        "    that frames the WHOLE submission or a WHOLE Standard, but does NOT answer any",
+        "    specific spec's prompt. Signals: heading contains 'Introduction' / 'Mission' /",
+        "    'Welcome' / 'About'; content describes the program's history, vision, values,",
+        "    or institutional setting rather than evidencing a specific accreditation spec.",
+        "    Use this even when a candidate spec scores reasonably — intro material is the",
+        "    matcher's most common false-positive (lands under whichever spec embeds best).",
         "  - context: framing prose that doesn't answer a specific spec (preamble,",
         "    'Specifications for Standard X' header text without substantive response, etc.)",
         "  - unknown: cannot tell",
@@ -185,7 +193,7 @@ def _build_prompt(
         '  "primary_confidence": float 0.0..1.0',
         '  "alternates":       array of objects each with the same field rules: {"standardCode": "<digits>", "specCode": "<letter>", "confidence": <float>}',
         '  "rationale":        1-2 sentence explanation citing the spec language being addressed',
-        '  "section_type":     one of "narrative_response" | "supporting_evidence" | "curriculum_matrix" | "context" | "unknown"',
+        '  "section_type":     one of "narrative_response" | "supporting_evidence" | "curriculum_matrix" | "introduction" | "context" | "unknown"',
         "",
         "EXAMPLES of CORRECT responses:",
         'Narrative answering a spec prompt about demographics:',
@@ -196,6 +204,14 @@ def _build_prompt(
         'Faculty CV used as evidence for the program-philosophy standard:',
         '{"primary_standard":"3","primary_spec":"a","primary_confidence":0.78,'
         '"alternates":[],"rationale":"Faculty CV is supporting evidence for the qualifications spec; placed under the closest narrative anchor.","section_type":"supporting_evidence"}',
+        '',
+        'CR-039: school-wide introduction (NO spec answered):',
+        '{"primary_standard":"1","primary_spec":"a","primary_confidence":0.10,'
+        '"alternates":[],"rationale":"Heading \'Welcome from the Chair\' and body describing the program\'s history; frames the submission rather than answering any spec.","section_type":"introduction"}',
+        '',
+        'CR-039: per-Standard introduction (frames Standard 3, no specific spec answered):',
+        '{"primary_standard":"3","primary_spec":"a","primary_confidence":0.20,'
+        '"alternates":[],"rationale":"Section heading \'Standard 3: Curriculum — Introduction\' followed by mission-style prose; frames Standard 3 globally without addressing 3.a, 3.b, or 3.c specifically.","section_type":"introduction"}',
     ])
     return "\n".join(lines)
 

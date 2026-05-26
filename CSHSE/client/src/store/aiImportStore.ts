@@ -172,6 +172,12 @@ export type EvidenceDocItem = {
   fileSize?: number;
   resolvedStd?: string;
   resolvedSpec?: string;
+  // CR-040 Phase 2c — populated at Apply time when the server packages
+  // the evidenceDoc as a SupportingEvidence record. The "View file"
+  // button uses `fileId` to hit
+  // GET /api/submissions/:submissionId/evidence/:fileId/download.
+  fileId?: string;
+  fileName?: string;
 };
 
 export type Tag = {
@@ -1698,17 +1704,50 @@ export const useAIImportStore = create<AIImportState>()(
       apply: async () => {
         const { importId, batchId, buckets, tags, placeholderSections, matrices, mergeMode, perSpecResolution, matrixRowEdits } = get();
         // CR-041 US-8 — batch mode short-circuits to the batch Apply
-        // endpoint which iterates per-child apply server-side. The
-        // merged payload already lives on the server-side child
-        // SelfStudyImport records (the matcher wrote them at parse
-        // time); the merge we computed client-side is for display
-        // only. Edits a coordinator made client-side stay in this
-        // batch surface as a follow-on (server-side merged write of
-        // edits).
+        // endpoint which iterates per-child apply server-side.
+        //
+        // CR-041 Phase 2 follow-on (edit-routing for batch mode):
+        // Client-side edits in the merged Review are stamped with
+        // `editedAt` + carry the `sourceImportId` of the file they came
+        // from. Group those edits by sourceImportId so the server can
+        // route them back to each child's aiBuckets BEFORE the per-
+        // child applyAIImportCore runs. Without this, edits made on
+        // the merged view get silently dropped at Apply time.
         if (batchId) {
           set({ status: 'applying', applyError: null });
+          // Build editsByChild: { importId: { sectionId: { snippet, kind } } }.
+          // Only items with editedAt set are propagated.
+          const editsByChild: Record<string, Record<string, {
+            snippet: string;
+            kind: 'narrative' | 'evidenceText' | 'tag';
+          }>> = {};
+          for (const bucket of Object.values(buckets)) {
+            for (const it of bucket.narratives) {
+              if (it.editedAt && (it as any).sourceImportId) {
+                const sid = (it as any).sourceImportId;
+                editsByChild[sid] ||= {};
+                editsByChild[sid][it.sectionId] = { snippet: it.snippet, kind: 'narrative' };
+              }
+            }
+            for (const it of bucket.evidenceText) {
+              if (it.editedAt && (it as any).sourceImportId) {
+                const sid = (it as any).sourceImportId;
+                editsByChild[sid] ||= {};
+                editsByChild[sid][it.sectionId] = { snippet: it.snippet, kind: 'evidenceText' };
+              }
+            }
+          }
+          for (const t of tags) {
+            if (t.editedAt && (t as any).sourceImportId) {
+              const sid = (t as any).sourceImportId;
+              editsByChild[sid] ||= {};
+              editsByChild[sid][t.sectionId] = { snippet: t.fullText, kind: 'tag' };
+            }
+          }
           try {
-            const res = await api.post(`/api/imports/batch/${batchId}/apply`);
+            const res = await api.post(`/api/imports/batch/${batchId}/apply`, {
+              editsByChild,
+            });
             if (res.data?.ok === false) {
               const failedChildren = (res.data?.results || [])
                 .filter((r: any) => !r.ok)

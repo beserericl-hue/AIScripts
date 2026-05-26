@@ -27,6 +27,10 @@ import commentsRouter from './routes/comments';
 import readerLockRouter from './routes/readerLock';
 import authRouter from './routes/auth';
 import authV1Router from './routes/authV1';
+// CR-042 Phase B — browser-facing SSO routes (ticket redeem + MemberClick relay).
+import ssoBrowserRouter from './routes/ssoBrowser';
+// CR-042 Phase B — public OpenAPI spec + docs.
+import openapiRouter from './routes/openapi';
 import usersRouter from './routes/users';
 import institutionsRouter from './routes/institutions';
 import apiKeysRouter from './routes/apiKeys';
@@ -130,6 +134,11 @@ app.get('/ready', (_req, res) => {
 app.use('/api/auth', authRouter);
 // CR-042 — versioned public SSO endpoints (server-to-server, no browser CORS)
 app.use('/api/v1/auth', authV1Router);
+// CR-042 Phase B — browser SSO mount (NOT under /api so the public URL
+// is /sso/v1/start... matching the documented integration surface).
+app.use('/sso', ssoBrowserRouter);
+// CR-042 Phase B — OpenAPI spec + public docs at /api/v1/openapi.json + /api/v1/docs.
+app.use('/api/v1', openapiRouter);
 app.use('/api/invitations', invitationsRouter);
 app.use('/api/standards', standardsRouter); // Public endpoint - standard definitions
 

@@ -44,7 +44,9 @@ let cachedAllowlist: { domains: Set<string>; expiresAt: number } | null = null;
  * Cached 30s to absorb traffic bursts without hammering Mongo with the same
  * distinct-aggregation.
  */
-async function getDerivedDomainAllowlist(): Promise<Set<string>> {
+// Exported for the MemberClick relay (CR-042 Phase B Slice 6) which
+// reuses the same allowlist computation for domain validation.
+export async function getDerivedDomainAllowlist(): Promise<Set<string>> {
   const now = Date.now();
   if (cachedAllowlist && cachedAllowlist.expiresAt > now) {
     return cachedAllowlist.domains;
@@ -75,7 +77,9 @@ export function invalidateSsoAllowlistCache(): void {
   cachedAllowlist = null;
 }
 
-function problemDetails(
+// Exported so the SSO ticket controller (CR-042 Phase B) reuses the
+// same RFC 7807 problem+json envelope without duplicating the helper.
+export function problemDetails(
   status: number,
   code: string,
   title: string,

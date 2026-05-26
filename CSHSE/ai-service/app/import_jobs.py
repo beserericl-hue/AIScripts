@@ -377,10 +377,48 @@ def _run_pipeline(job: JobRecord) -> None:
             _run_self_study_pipeline(job, docx_path)
 
         if job.status not in ("failed", "canceled"):
-            job.status = "parsed"
-            job.completed_at = _now()
-            _publish_status(job)
-            _publish_terminal(job)
+            # CR-037 Defense 1 — ai-service self-validates before the
+            # terminal callback. Defenses 2 + 3 (server rewrite, client
+            # gate) ship today, but the cleanest place to catch an
+            # empty-bucket parse is right here, before we even publish
+            # `parsed`. If every content kind summed to zero, the matcher
+            # didn't actually place anything — flip to `failed` with an
+            # actionable error rather than handing the server a
+            # technically-successful-but-empty terminal callback.
+            #
+            # Counts every kind the rail surfaces so a CV-only import or
+            # paper-only import (legitimate empty-bucket-but-not-empty
+            # cases) still passes.
+            buckets_count = 0
+            for b in (job.buckets or {}).values():
+                buckets_count += len((b or {}).get("narratives") or [])
+                buckets_count += len((b or {}).get("evidenceText") or [])
+                buckets_count += len((b or {}).get("evidenceFiles") or [])
+                buckets_count += len((b or {}).get("matrixCells") or [])
+            content_total = (
+                buckets_count
+                + len(job.tags or [])
+                + len(job.matrices or [])
+                + len(job.cvs or [])
+                + len(job.evidence_docs or [])
+                + len(job.introduction_hints or {})
+            )
+            if content_total == 0:
+                job.errors.append(
+                    "AI matcher returned zero items. The document may be "
+                    "malformed or every section may have failed to match. "
+                    "Re-upload after fixing the source; contact support if "
+                    "this persists."
+                )
+                job.status = "failed"
+                job.completed_at = _now()
+                _publish_status(job)
+                _publish_terminal(job)
+            else:
+                job.status = "parsed"
+                job.completed_at = _now()
+                _publish_status(job)
+                _publish_terminal(job)
 
     except Exception as exc:  # noqa: BLE001
         job.errors.append(f"pipeline failed: {type(exc).__name__}: {exc}")
@@ -784,24 +822,58 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
         }
 
     tags: list[dict[str, Any]] = []
-    # CR-039 Phase 2c — when the introduction_detector flagged a section
-    # as an intro candidate AND the matcher's confidence in a real spec
-    # is below 0.75, prefer the Introduction routing. Bias per spec:
-    # false-positive intros are easy for the coordinator to move into a
-    # spec; false-negative intros (intro material misplaced into a spec)
-    # are the bug we're closing.
+    # CR-039 Phase 2c — three-source intro routing:
+    #
+    #   1. introduction_detector heuristic (splitter-side, lexical)
+    #      → populates job.introduction_hints[sec.id] = "introduction:document"
+    #        or "introduction:standard-N" before the matcher even runs.
+    #
+    #   2. matcher LLM section_type='introduction' (NEW in Phase 2c)
+    #      → the Haiku prompt explicitly classifies intro-shaped sections
+    #        as section_type='introduction'. We derive the standard hint
+    #        from rec.primary_standard when present, otherwise route to
+    #        the document-level intro.
+    #
+    #   3. heuristic-confirms-low-confidence (existing Phase 2b path)
+    #      → if heuristic flagged but matcher's confidence in a real spec
+    #        is below 0.75, prefer the intro routing.
+    #
+    # All three converge on the same dict shape (intro_hint key) and the
+    # same routing (tags + rationale marker). Heuristic source wins for
+    # the hint string; matcher source fills in when the heuristic missed.
     INTRO_OVERRIDE_THRESHOLD = 0.75
     intro_routed_count = 0
+    matcher_intro_count = 0
     for sec in sections:
         rec = recommendations.get(sec.id)
         intro_hint = (job.introduction_hints or {}).get(sec.id)
-        # If we have an intro hint AND the matcher isn't very confident
-        # in a real spec, route to tags with an introduction marker on
-        # the rationale. The Zustand store's _applySnapshot picks up
-        # `introductionHints` and seeds the Introduction buckets from
-        # the matched section. We tag-route here (rather than
-        # bucket-route) so the section never appears under a wrong spec.
-        if intro_hint and (rec is None or rec.primary_confidence < INTRO_OVERRIDE_THRESHOLD):
+
+        # Source 2 — matcher LLM classified this as an introduction.
+        # When the heuristic missed it, synthesize the hint from the
+        # matcher's primary_standard (per-Standard intro) or fall back
+        # to the document-level intro bucket.
+        if (
+            not intro_hint
+            and rec is not None
+            and rec.section_type == "introduction"
+        ):
+            if rec.primary_standard:
+                intro_hint = f"introduction:standard-{rec.primary_standard}"
+            else:
+                intro_hint = "introduction:document"
+            # Backfill into job.introduction_hints so the terminal callback
+            # carries it and the wizard's Zustand store can route it into
+            # the right Introduction bucket without re-checking section_type.
+            if job.introduction_hints is None:
+                job.introduction_hints = {}
+            job.introduction_hints[sec.id] = intro_hint
+            matcher_intro_count += 1
+
+        # Source 1 + 3 — heuristic flag with optional low-confidence gate.
+        # Source 2 always overrides the matcher's spec placement (the LLM
+        # explicitly said "this is an intro, not a spec answer").
+        is_matcher_intro = rec is not None and rec.section_type == "introduction"
+        if intro_hint and (is_matcher_intro or rec is None or rec.primary_confidence < INTRO_OVERRIDE_THRESHOLD):
             intro_routed_count += 1
             tag = _recommendation_to_tag(sec, rec)
             # Stamp the intro hint onto the tag's rationale so downstream
@@ -834,10 +906,16 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
             tags.append(_recommendation_to_tag(sec, rec))
     if intro_routed_count > 0:
         # Add a soft warning so the audit log shows the matcher override
-        # rate (per CR-039 telemetry requirements).
+        # rate (per CR-039 telemetry requirements). Phase 2c splits the
+        # count between heuristic-driven and matcher-driven overrides so
+        # we can track how often each source caught an intro the other
+        # would have missed.
+        heuristic_count = intro_routed_count - matcher_intro_count
         job.warnings.append(
-            f"introduction_detector overrode matcher for {intro_routed_count} section(s) "
-            f"(confidence threshold {INTRO_OVERRIDE_THRESHOLD})"
+            f"introduction routing overrode matcher placement for "
+            f"{intro_routed_count} section(s) "
+            f"(heuristic={heuristic_count}, matcher_llm={matcher_intro_count}, "
+            f"confidence threshold {INTRO_OVERRIDE_THRESHOLD})"
         )
 
     filled = [

@@ -316,12 +316,124 @@ export async function applyImportBatch(
     if (session) session.startTransaction();
 
     try {
+      // CR-041 Phase 2 follow-on — edit-routing for batch mode. The
+      // wizard ships coordinator-edited snippets per (sourceImportId,
+      // sectionId) under body.editsByChild. Apply them to each child's
+      // in-memory aiBuckets BEFORE applyAIImportCore so the per-child
+      // narratives write picks up the edited text rather than the
+      // matcher's original. editedAt + originalSnippet are stamped so
+      // the audit trail survives.
+      const editsByChild: Record<string, Record<string, {
+        snippet: string;
+        kind: 'narrative' | 'evidenceText' | 'tag';
+      }>> = (req.body && (req.body as any).editsByChild) || {};
+
       for (const child of children) {
         const importIdStr = String(child._id);
+        const childEdits = editsByChild[importIdStr];
+        if (childEdits && Object.keys(childEdits).length > 0) {
+          const buckets = (child.aiBuckets as any) || {};
+          for (const bucket of Object.values<any>(buckets)) {
+            const apply = (list: any[]) => {
+              for (const it of list) {
+                const edit = childEdits[it.sectionId];
+                if (edit && (edit.kind === 'narrative' || edit.kind === 'evidenceText')) {
+                  if (it.snippet !== edit.snippet) {
+                    if (it.originalSnippet === undefined) it.originalSnippet = it.snippet;
+                    it.snippet = edit.snippet;
+                    it.editedAt = Date.now();
+                    it.wordCount = (edit.snippet || '').trim().split(/\s+/).filter(Boolean).length;
+                  }
+                }
+              }
+            };
+            apply(bucket.narratives || []);
+            apply(bucket.evidenceText || []);
+          }
+          // Tag-fullText edits route the same way (matcher stamped the
+          // tag with sourceImportId; we update fullText in place).
+          for (const t of (child.aiTags as any[]) || []) {
+            const edit = childEdits[t.sectionId];
+            if (edit && edit.kind === 'tag') {
+              if (t.fullText !== edit.snippet) {
+                if (t.originalSnippet === undefined) t.originalSnippet = t.fullText;
+                t.fullText = edit.snippet;
+                t.editedAt = Date.now();
+              }
+            }
+          }
+          child.markModified('aiBuckets');
+          child.markModified('aiTags');
+        }
+
+        // CR-041 Phase 2 follow-on — reconstruct the apply payload
+        // from each child's aiBuckets server-side. The single-import
+        // apply gets its narratives/evidenceText/evidenceFiles payload
+        // from the client (the wizard's store builds it from buckets);
+        // batch mode short-circuits that path so the server has to
+        // rebuild from the persisted aiBuckets. Without this rebuild
+        // the per-child Submission writes were no-ops and coordinators
+        // saw "applied" but their data wasn't on the Submission.
+        const childBuckets: any = (child.aiBuckets as any) || {};
+        const narrativesPayload: Record<string, Record<string, { content: string }>> = {};
+        const evidenceTextPayload: Record<string, Record<string, { text: string }>> = {};
+        const evidenceFilesPayload: Array<{ std: string; spec: string; sectionId: string; heading: string; snippet: string }> = [];
+        const childHasEdits = childEdits && Object.keys(childEdits).length > 0;
+        void childHasEdits; // edits already mutated child.aiBuckets above
+
+        for (const [, bucket] of Object.entries<any>(childBuckets)) {
+          if (!bucket?.standardCode || !bucket?.specCode) continue;
+          const std = String(bucket.standardCode);
+          const spec = String(bucket.specCode);
+          const narrText = (bucket.narratives || [])
+            .map((n: any) => n.snippet || '')
+            .filter((s: string) => s.trim().length > 0)
+            .join('\n\n');
+          if (narrText) {
+            narrativesPayload[std] = narrativesPayload[std] || {};
+            narrativesPayload[std][spec] = { content: narrText };
+          }
+          const evText = (bucket.evidenceText || [])
+            .map((e: any) => e.snippet || '')
+            .filter((s: string) => s.trim().length > 0)
+            .join('\n\n');
+          if (evText) {
+            evidenceTextPayload[std] = evidenceTextPayload[std] || {};
+            evidenceTextPayload[std][spec] = { text: evText };
+          }
+          for (const f of bucket.evidenceFiles || []) {
+            evidenceFilesPayload.push({
+              std,
+              spec,
+              sectionId: f.sectionId,
+              heading: f.heading || '',
+              snippet: f.snippet || ''
+            });
+          }
+        }
+
         const idempotencyKey = `batch-${batchId}-child-${importIdStr}`;
         const result = await applyAIImportCore({
           importRecord: child,
-          payload: { ...(req.body || {}), idempotencyKey },
+          payload: {
+            ...(req.body || {}),
+            // Server-rebuilt payload from aiBuckets. The client may also
+            // send narratives in req.body for the single-import path;
+            // batch mode prefers our server rebuild so per-child writes
+            // pick up edits applied above.
+            narratives: narrativesPayload,
+            supportingEvidenceText: evidenceTextPayload,
+            evidenceFiles: evidenceFilesPayload,
+            // Pass through tags/matrices/cvs/evidenceDocs/introductions from
+            // the persisted child record so the apply path sees the full
+            // shape.
+            tags: child.aiTags || [],
+            matrices: child.aiMatrices || [],
+            cvs: child.aiCVs || [],
+            evidenceDocs: child.aiEvidenceDocs || [],
+            introductions: child.aiIntroductions || {},
+            idempotencyKey
+          },
           userId: req.user?.id,
           session,
           // Pass externalSession=true so the core doesn't pre-flush

@@ -1572,6 +1572,10 @@ interface EvidenceDocsViewProps {
 }
 
 function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
+  // CR-040 Phase 2c — submissionId from the store is required to build
+  // the download URL for the View-file button. The same id powers the
+  // ReviewSurface + MatrixSurface.
+  const submissionId = useAIImportStore((s) => s.submissionId);
   if (docs.length === 0) {
     return (
       <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
@@ -1581,6 +1585,7 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
   }
   const papers = docs.filter((d) => d.docSubKind === 'paper');
   const syllabi = docs.filter((d) => d.docSubKind === 'syllabus');
+  const anyApplied = docs.some((d) => d.fileId);
   return (
     <div className="flex h-full flex-1 flex-col bg-gray-50">
       <div className="border-b border-gray-200 bg-white px-4 py-2 text-sm">
@@ -1589,7 +1594,9 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
           {syllabi.length} syllab{syllabi.length === 1 ? 'us' : 'i'}
         </span>
         <span className="ml-2 text-xs text-gray-500">
-          Each will be packaged as a standalone .docx at Apply (CR-040 Phase 3).
+          {anyApplied
+            ? 'Click "View file" on a card to open the captured evidence in a new tab.'
+            : 'Each will be packaged as a standalone file at Apply time.'}
         </span>
       </div>
       <ul className="flex-1 space-y-3 overflow-auto p-4">
@@ -1627,13 +1634,32 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
                   → Spec {d.resolvedStd}.{d.resolvedSpec}
                 </span>
               )}
-              <button
-                disabled
-                title="The downloadable .docx is generated at Apply time (CR-040 Phase 3)"
-                className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
-              >
-                📂 View file (pending)
-              </button>
+              {/* CR-040 Phase 2c — View-file button. Enabled once the
+                  server has packaged the evidenceDoc into a
+                  SupportingEvidence record at Apply time and stamped
+                  fileId. Anchors at /api/submissions/.../download with
+                  target=_blank so the browser opens the captured
+                  evidence in a new tab. Pre-Apply or if packaging
+                  failed: stays disabled with a tooltip explaining why. */}
+              {d.fileId && submissionId ? (
+                <a
+                  href={`/api/submissions/${submissionId}/evidence/${d.fileId}/download`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`Open ${d.fileName || d.title || 'evidence file'} in a new tab`}
+                  className="ml-auto rounded border border-cshse-300 bg-white px-2 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50"
+                >
+                  📂 View file
+                </a>
+              ) : (
+                <button
+                  disabled
+                  title="View file becomes available once you Apply the import — the server packages the evidence into a SupportingEvidence record at that point."
+                  className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
+                >
+                  📂 View file (pending Apply)
+                </button>
+              )}
             </div>
           </li>
         ))}

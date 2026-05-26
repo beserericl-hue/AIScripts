@@ -46,6 +46,18 @@ import {
 } from '../models/ImportCorrection';
 import { AuthenticatedRequest } from '../middleware/auth';
 
+// CR-040 Phase 2c — escape user-supplied strings for the evidenceDoc
+// HTML wrapper we generate at Apply time. Captures the five characters
+// that close out an HTML attribute value or open a script tag.
+function escapeHtml(s: string): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Env vars read lazily so tests that set them in beforeEach see the new value.
 function getAIServiceUrl(): string {
   return process.env.AI_SERVICE_URL || 'http://ai-service.railway.internal:8080';
@@ -1353,7 +1365,87 @@ async function _runApplyBody(args: {
       (importRecord as any).markModified('aiIntroductions');
     }
     if (Array.isArray(payload.evidenceDocs)) {
-      (importRecord as any).aiEvidenceDocs = payload.evidenceDocs;
+      // CR-040 Phase 2c — at Apply time each evidenceDoc gets packaged
+      // as a SupportingEvidence record so coordinators can open it via
+      // the existing download endpoint. We generate a self-contained
+      // HTML representation with title + metadata + body (the snippet
+      // is the source text the detector captured). MVP storage =
+      // base64-in-Mongo; the client "View file" button is identical
+      // regardless of backing store (S3 vs base64). When S3 is wired
+      // in production the FileData.storageType flips to 's3' without
+      // touching the wizard UI.
+      try {
+        const { SupportingEvidence } = await import('../models/SupportingEvidence');
+        const stampedDocs = await Promise.all(
+          (payload.evidenceDocs as any[]).map(async (doc) => {
+            // Skip if a SupportingEvidence record was already created
+            // (re-apply / idempotent replay).
+            if (doc.fileId) return doc;
+            const title = doc.title || 'Evidence Document';
+            const kind = doc.docSubKind || 'paper';
+            const safeTitle = String(title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'evidence';
+            const html = [
+              '<!DOCTYPE html><html><head>',
+              '<meta charset="utf-8">',
+              `<title>${escapeHtml(title)}</title>`,
+              '<style>body{font-family:Georgia,serif;max-width:760px;margin:2em auto;padding:0 1em;line-height:1.5;color:#222}h1{font-size:1.5em;border-bottom:1px solid #ddd;padding-bottom:0.3em}dt{font-weight:600;color:#444;margin-top:0.6em}dd{margin-left:1em;color:#222}pre{white-space:pre-wrap;font-family:Georgia,serif}</style>',
+              '</head><body>',
+              `<h1>${escapeHtml(title)}</h1>`,
+              `<p><em>${escapeHtml(kind === 'syllabus' ? 'Course syllabus' : 'Appendix paper')}${doc.courseCode ? ' — ' + escapeHtml(doc.courseCode) : ''}</em></p>`,
+              '<dl>',
+              doc.author ? `<dt>Author</dt><dd>${escapeHtml(doc.author)}</dd>` : '',
+              doc.date ? `<dt>Date</dt><dd>${escapeHtml(doc.date)}</dd>` : '',
+              doc.subject ? `<dt>Subject</dt><dd>${escapeHtml(doc.subject)}</dd>` : '',
+              doc.pageCountEstimate ? `<dt>Pages (est.)</dt><dd>${doc.pageCountEstimate}</dd>` : '',
+              '</dl>',
+              doc.summary ? `<h2>Summary</h2><p>${escapeHtml(doc.summary)}</p>` : '',
+              '<h2>Content</h2>',
+              `<pre>${escapeHtml(doc.snippet || '(no captured body — see source document)')}</pre>`,
+              '</body></html>'
+            ].join('\n');
+            const buffer = Buffer.from(html, 'utf-8');
+            const evidence = await SupportingEvidence.create({
+              institutionId: submission.institutionId,
+              submissionId: submission._id,
+              uploadedBy: userId || importRecord.uploadedBy,
+              standardCode: doc.routing?.std || undefined,
+              specCode: doc.routing?.spec || undefined,
+              evidenceType: 'document',
+              file: {
+                filename: `${safeTitle}.html`,
+                originalName: doc.sourceFilename || `${safeTitle}.html`,
+                mimeType: 'text/html',
+                size: buffer.byteLength,
+                data: buffer.toString('base64'),
+                encoding: 'base64',
+                storageType: 'base64',
+                uploadedAt: new Date(),
+                uploadedBy: userId || importRecord.uploadedBy
+              } as any,
+              description: title,
+              versionNumber: 1,
+              isCurrentVersion: true,
+              isDeleted: false,
+              linkedNarratives: [],
+              tags: ['ai-import', `kind:${kind}`]
+            });
+            counts.evidenceFiles += 1;
+            return {
+              ...doc,
+              fileId: String(evidence._id),
+              fileName: `${safeTitle}.html`
+            };
+          })
+        );
+        (importRecord as any).aiEvidenceDocs = stampedDocs;
+      } catch (err) {
+        // Non-fatal: if SupportingEvidence creation fails the apply
+        // continues with the un-stamped docs so the rail still shows
+        // the cards. View-file will be unavailable but coordinators
+        // can still see the captured snippet in the wizard.
+        (importRecord as any).aiEvidenceDocs = payload.evidenceDocs;
+        console.warn('[CR-040] evidenceDoc → SupportingEvidence packaging failed:', err);
+      }
       (importRecord as any).markModified('aiEvidenceDocs');
     }
     if (Array.isArray(payload.cvs)) {

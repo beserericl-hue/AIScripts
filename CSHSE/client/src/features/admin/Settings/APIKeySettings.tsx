@@ -24,6 +24,8 @@ interface APIKey {
   keyMasked: string;
   purpose: string;
   permissions: string[];
+  // CR-042 — distinguishes 'sso-login' (public SSO) from 'general-api' (webhooks etc).
+  scope?: 'general-api' | 'sso-login';
   isActive: boolean;
   expiresAt?: string;
   lastUsedAt?: string;
@@ -35,16 +37,23 @@ interface APIKey {
 export function APIKeySettings() {
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // CR-042 Phase B — scope on the new-key result so the SSO integration
+  // package only renders for sso-login keys.
   const [newKeyData, setNewKeyData] = useState<{
     key: string;
     name: string;
+    scope?: 'general-api' | 'sso-login';
   } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     purpose: 'webhook_callback',
     permissions: ['webhook:callback'],
     expiresInDays: 365,
-    description: ''
+    description: '',
+    // CR-042 Phase B — scope picker. Defaults to general-api for
+    // back-compat; admins flipping to sso-login mint a key that's only
+    // valid against /api/v1/auth/sso-* + the relay endpoints.
+    scope: 'general-api' as 'general-api' | 'sso-login'
   });
 
   // Fetch API keys
@@ -66,14 +75,16 @@ export function APIKeySettings() {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
       setNewKeyData({
         key: data.apiKey.key,
-        name: data.apiKey.name
+        name: data.apiKey.name,
+        scope: data.apiKey.scope
       });
       setFormData({
         name: '',
         purpose: 'webhook_callback',
         permissions: ['webhook:callback'],
         expiresInDays: 365,
-        description: ''
+        description: '',
+        scope: 'general-api'
       });
     }
   });
@@ -98,7 +109,8 @@ export function APIKeySettings() {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
       setNewKeyData({
         key: data.apiKey.key,
-        name: data.apiKey.name
+        name: data.apiKey.name,
+        scope: data.apiKey.scope
       });
     }
   });
@@ -179,6 +191,14 @@ export function APIKeySettings() {
                       ) : (
                         <span className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">
                           Revoked
+                        </span>
+                      )}
+                      {/* CR-042 Phase B — scope chip lets admins
+                          identify SSO keys at a glance (different cap,
+                          different valid routes). */}
+                      {key.scope === 'sso-login' && (
+                        <span className="px-2 py-0.5 text-xs bg-cshse-100 text-cshse-700 rounded-full font-medium">
+                          SSO
                         </span>
                       )}
                     </div>
@@ -265,6 +285,36 @@ export function APIKeySettings() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Scope
+                </label>
+                <select
+                  value={formData.scope}
+                  onChange={(e) => {
+                    const scope = e.target.value as 'general-api' | 'sso-login';
+                    setFormData({
+                      ...formData,
+                      scope,
+                      // SSO keys default to the 'integration' purpose enum
+                      // since the server treats scope as the real gate.
+                      purpose: scope === 'sso-login' ? 'integration' : formData.purpose
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="general-api">general-api — webhooks, n8n, etc.</option>
+                  <option value="sso-login">sso-login — public SSO entry points (CR-042)</option>
+                </select>
+                {formData.scope === 'sso-login' && (
+                  <p className="mt-1 text-xs text-cshse-700 bg-cshse-50 border border-cshse-200 rounded px-2 py-1">
+                    SSO keys are only valid against <code>/api/v1/auth/sso-*</code> +{' '}
+                    <code>/sso/v1/*</code>. After creation you'll see a copy-paste
+                    integration snippet for MemberClick and other partners.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Purpose
                 </label>
                 <select
@@ -272,7 +322,8 @@ export function APIKeySettings() {
                   onChange={(e) =>
                     setFormData({ ...formData, purpose: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  disabled={formData.scope === 'sso-login'}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 disabled:bg-gray-100 disabled:text-gray-500"
                 >
                   <option value="webhook_callback">Webhook Callback</option>
                   <option value="webhook_outbound">Webhook Outbound</option>
@@ -383,6 +434,73 @@ export function APIKeySettings() {
                   </button>
                 </div>
               </div>
+
+              {/* CR-042 Phase B — Integration package wizard. SSO keys
+                  ship with copy-paste snippets a non-programmer admin can
+                  hand to MemberClick or any other partner site. */}
+              {newKeyData.scope === 'sso-login' && (
+                <div className="mt-4 space-y-3">
+                  <h4 className="text-sm font-semibold text-gray-900 border-t pt-3">
+                    Integration package
+                  </h4>
+                  <p className="text-xs text-gray-600">
+                    Give these snippets to the partner site administrator. They
+                    enable single-sign-on for users coming from that site.
+                  </p>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      1. Direct server-to-server login (curl example)
+                    </label>
+                    <pre className="px-3 py-2 bg-gray-900 text-gray-100 rounded-lg text-[11px] font-mono overflow-x-auto whitespace-pre">{`curl -X POST https://cshse.org/api/v1/auth/sso-login \\
+  -H "x-cshse-api-key: ${newKeyData.key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"member@partner-domain.org"}'`}</pre>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      2. Browser redirect (ticket flow)
+                    </label>
+                    <pre className="px-3 py-2 bg-gray-900 text-gray-100 rounded-lg text-[11px] font-mono overflow-x-auto whitespace-pre">{`# 1. Server-side: mint a ticket for the signed-in user
+TICKET=$(curl -sX POST https://cshse.org/api/v1/auth/sso-mint-ticket \\
+  -H "x-cshse-api-key: ${newKeyData.key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"email":"member@partner-domain.org","returnTo":"/dashboard"}' \\
+  | jq -r .ticket)
+
+# 2. Redirect the user's browser:
+# https://cshse.org/sso/v1/start?ticket=$TICKET`}</pre>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      3. MemberClick relay endpoint
+                    </label>
+                    <p className="text-[11px] text-gray-600 mb-1">
+                      Point the MemberClick admin at <code>POST https://cshse.org/sso/v1/from-memberclick</code>
+                      {' '}with body fields <code>email</code>, <code>timestamp</code> (unix seconds),
+                      and <code>signature</code> = HMAC-SHA256(shared-secret, <code>{`${'${email}'}.${'${timestamp}'}`}</code>).
+                      Share the secret out-of-band; set on the CSHSE server as
+                      {' '}<code>MEMBERCLICK_SHARED_SECRET</code>.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Full reference
+                    </label>
+                    <a
+                      href="/api/v1/docs"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-teal-700 hover:underline"
+                    >
+                      → Open OpenAPI docs ↗
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end p-4 border-t border-gray-200 bg-gray-50">
