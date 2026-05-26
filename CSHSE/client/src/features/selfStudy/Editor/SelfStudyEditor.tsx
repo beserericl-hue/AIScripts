@@ -286,19 +286,34 @@ function AIImportTabButton({
     badge = { text: `${placeholderCount} unwritten`, cls: 'bg-yellow-100 text-yellow-800' };
   }
 
+  // CR-043 — derive the wizard's current step so the auto-reset only
+  // fires when the prior run is fully consumed. Resetting from step='review'
+  // bounces the coordinator off cards they were mid-way through reviewing
+  // and locks the Review tab (the Stepper gates forward steps by
+  // step ordering — current='upload' makes 'review' unreachable).
+  const wizardStep = useAIImportStore((s) => s.step);
+
   return (
     <button
       onClick={() => {
-        // If the prior import has already finished, reset the wizard so a
-        // fresh click lands the user on Upload (not the stale Review /
-        // Apply step from the last run). Coordinators expect "Importer
-        // Wizard" to mean "start a new import" once the prior one ran
-        // through Apply.
-        // Reset on SUCCESS states only — coordinator who failed/canceled
-        // should see the error panel first before being silently
-        // returned to the Upload step. They can click 'Start Over' from
-        // the failed panel if they want a fresh slate.
-        if (status === 'parsed' || status === 'applied' || status === 'finished') {
+        // If the prior import has already finished AND the coordinator
+        // has already moved past Review (i.e. they're on Apply or done),
+        // reset the wizard so a fresh click lands on Upload. Coordinators
+        // expect "Importer Wizard" to mean "start a new import" once they
+        // ran through Apply.
+        //
+        // Do NOT auto-reset while step='review' — the coordinator is
+        // actively reviewing cards (or just resumed) and wants the
+        // wizard's Review surface to reopen where they left off. The
+        // Stepper would otherwise lock the Review tab because current
+        // would flip to 'upload'.
+        //
+        // Also skip for failed/canceled — show the error panel so the
+        // coordinator can read what went wrong before any reset.
+        const finishedRun =
+          (status === 'applied' || status === 'finished') &&
+          (wizardStep === 'apply' || wizardStep === 'tags');
+        if (finishedRun) {
           startOver();
         }
         setActiveView('ai-import');

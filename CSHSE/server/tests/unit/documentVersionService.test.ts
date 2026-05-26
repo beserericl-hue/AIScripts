@@ -1,12 +1,5 @@
 import mongoose from 'mongoose';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-
-vi.mock('../../src/services/s3Service', () => ({
-  uploadFile: vi.fn(async (key: string, buffer: Buffer) => ({
-    key,
-    bucket: 'mock-bucket',
-  })),
-}));
+import { describe, expect, it, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import {
   DocumentVersion,
@@ -19,14 +12,33 @@ import {
   sha256,
   softDeleteVersion,
 } from '../../src/services/documentVersionService';
-import { uploadFile } from '../../src/services/s3Service';
+// Star-import so we can vi.spyOn the uploadFile property at runtime. vi.mock
+// hoisting is unreliable under vitest's `isolate: false` config because
+// other test files import s3Service before this file's mock factory runs;
+// spyOn rebinds the export on every test run regardless of load order.
+import * as s3Service from '../../src/services/s3Service';
 
 const fakeSubmissionId = () => new mongoose.Types.ObjectId();
 const fakeUserId = () => new mongoose.Types.ObjectId();
 
+let uploadFileSpy: ReturnType<typeof vi.spyOn>;
+
 describe('documentVersionService', () => {
+  beforeAll(() => {
+    uploadFileSpy = vi
+      .spyOn(s3Service, 'uploadFile')
+      .mockImplementation(async (key: string, _buffer: Buffer) => ({
+        key,
+        bucket: 'mock-bucket',
+      } as any));
+  });
+
+  afterAll(() => {
+    uploadFileSpy.mockRestore();
+  });
+
   beforeEach(() => {
-    vi.clearAllMocks();
+    uploadFileSpy.mockClear();
   });
 
   describe('sha256', () => {
@@ -67,7 +79,7 @@ describe('documentVersionService', () => {
       expect(v.s3Key).toMatch(
         new RegExp(`^versioned/submission/${submissionId}/original_import/v1/stevenson\\.docx$`)
       );
-      expect(uploadFile).toHaveBeenCalledTimes(1);
+      expect(uploadFileSpy).toHaveBeenCalledTimes(1);
     });
 
     it('writes documentId so the version line is identifiable', async () => {
@@ -123,7 +135,7 @@ describe('documentVersionService', () => {
         (v2._id as mongoose.Types.ObjectId).toString()
       );
 
-      expect(uploadFile).toHaveBeenCalledTimes(2);
+      expect(uploadFileSpy).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -157,7 +169,7 @@ describe('documentVersionService', () => {
 
       expect(same._id.toString()).toBe((v1._id as mongoose.Types.ObjectId).toString());
       expect(same.version).toBe(1);
-      expect(uploadFile).toHaveBeenCalledTimes(1); // ONLY the first upload
+      expect(uploadFileSpy).toHaveBeenCalledTimes(1); // ONLY the first upload
     });
 
     it('does NOT dedup across different (owner, kind) tuples', async () => {
@@ -188,7 +200,7 @@ describe('documentVersionService', () => {
       });
 
       expect(a._id.toString()).not.toBe((b._id as mongoose.Types.ObjectId).toString());
-      expect(uploadFile).toHaveBeenCalledTimes(2);
+      expect(uploadFileSpy).toHaveBeenCalledTimes(2);
     });
 
     it('honors dedupBySha=false (forces a new version even if bytes match)', async () => {
@@ -220,7 +232,7 @@ describe('documentVersionService', () => {
       });
 
       expect(v2.version).toBe(2);
-      expect(uploadFile).toHaveBeenCalledTimes(2);
+      expect(uploadFileSpy).toHaveBeenCalledTimes(2);
     });
   });
 

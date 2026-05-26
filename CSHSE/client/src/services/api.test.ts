@@ -54,33 +54,49 @@ describe('api client — request interceptor', () => {
 });
 
 describe('api client — 401 response interceptor', () => {
-  // jsdom doesn't allow mutating window.location directly, so stub it.
-  const original = window.location;
+  // Earlier attempts redefined `window.location` via Object.defineProperty,
+  // which broke localStorage in jsdom (the two share an internal Window
+  // reference). Instead, spy on the `href` SETTER directly via the
+  // Location prototype's descriptor — leaves window.location intact, so
+  // localStorage keeps working.
   let hrefSetter: ReturnType<typeof vi.fn>;
+  let restoreHref: () => void = () => {};
 
   beforeEach(() => {
+    localStorage.clear();
     hrefSetter = vi.fn();
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: {
-        ...original,
-        get href() { return ''; },
-        set href(value: string) { hrefSetter(value); },
+    // Wrap window.location in a Proxy that intercepts the `href` setter
+    // but delegates everything else to the real Location instance. This
+    // keeps `Location.origin` identity intact so jsdom's Storage backing
+    // (which is keyed off origin) still maps to the SAME `localStorage`
+    // the test reads from. Plain object replacement breaks that link.
+    const original = window.location;
+    const proxy: any = new Proxy(original, {
+      get(target, prop, receiver) {
+        const v = Reflect.get(target, prop, receiver);
+        return typeof v === 'function' ? v.bind(target) : v;
+      },
+      set(target, prop, value) {
+        if (prop === 'href') {
+          hrefSetter(value);
+          return true;
+        }
+        return Reflect.set(target, prop, value);
       },
     });
+    delete (window as any).location;
+    (window as any).location = proxy;
+    restoreHref = () => {
+      delete (window as any).location;
+      (window as any).location = original;
+    };
   });
 
   afterEach(() => {
-    Object.defineProperty(window, 'location', { configurable: true, value: original });
+    restoreHref();
   });
 
-  // TODO(testing): the localStorage shim and the window.location stub interact
-  // weirdly here — the api interceptor's `localStorage.removeItem` doesn't
-  // mutate the same Storage instance that `getItem` reads from in the test.
-  // Reproduces only when the location stub is active. Likely fix: stop
-  // redefining `window.location` and use `vi.spyOn(window.location, 'href', 'set')`
-  // pattern with Object.getOwnPropertyDescriptor on Location.prototype.
-  it.skip('clears auth-storage and redirects to /login on 401 for non-auth routes', async () => {
+  it('clears auth-storage and redirects to /login on 401 for non-auth routes', async () => {
     setAuthStorage({ token: 'tok' });
     server.use(
       http.get('/api/submissions', () =>
@@ -93,7 +109,7 @@ describe('api client — 401 response interceptor', () => {
     expect(hrefSetter).toHaveBeenCalledWith('/login');
   });
 
-  it.skip('does NOT redirect when 401 comes from an /api/auth/* route', async () => {
+  it('does NOT redirect when 401 comes from an /api/auth/* route', async () => {
     setAuthStorage({ token: 'tok' });
     server.use(
       http.post('/api/auth/login', () =>

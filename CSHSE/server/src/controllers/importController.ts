@@ -1558,28 +1558,40 @@ export const applyMappings = async (req: AuthenticatedRequest, res: Response) =>
       });
 
       if (mapping.fieldType === 'narrative') {
-        // Get or create standard map
+        // BUG-FIX: when a standard is brand new (no prior narrative under
+        // it), the inner Map created via `new Map()` and then `.set()` on
+        // that fresh Map is NOT tracked by Mongoose — the outer Map's
+        // value reference is captured at .set() time and subsequent
+        // mutations on the inner Map are lost. The legacy code worked
+        // accidentally only when the standard already had an entry (a
+        // mongoose-tracked Map was returned by .get()), so the first
+        // narrative ever written to a fresh standard was silently dropped.
+        //
+        // Use submission.set() with a dotted path; mongoose handles the
+        // creation of intermediate Maps and tracks the leaf write
+        // correctly for both new and existing paths.
         let standardNarratives = submission.narratives.get(mapping.standardCode);
-        if (!standardNarratives) {
-          standardNarratives = new Map();
-          submission.narratives.set(mapping.standardCode, standardNarratives);
-        }
-
-        // Get existing narrative or create new
-        const existingNarrative = standardNarratives.get(mapping.specCode);
+        const existingNarrative = standardNarratives?.get(mapping.specCode);
 
         // Append or set narrative content
         const newContent = existingNarrative?.content
           ? `${existingNarrative.content}\n\n${section.content}`
           : section.content;
 
-        standardNarratives.set(mapping.specCode, {
+        const narrativeValue = {
           content: newContent,
           lastModified: new Date(),
           isComplete: false,
           linkedDocuments: existingNarrative?.linkedDocuments || [],
           supportingEvidenceText: existingNarrative?.supportingEvidenceText || ''
-        });
+        };
+
+        // mongoose path-set handles both cases (new outer key, existing
+        // outer key) without losing the leaf write.
+        submission.set(
+          `narratives.${mapping.standardCode}.${mapping.specCode}`,
+          narrativeValue
+        );
 
         appliedCount++;
         appliedMappings.push({
