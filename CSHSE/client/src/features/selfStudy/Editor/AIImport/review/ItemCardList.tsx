@@ -1595,8 +1595,8 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
         </span>
         <span className="ml-2 text-xs text-gray-500">
           {anyApplied
-            ? 'Click "View file" on a card to open the captured evidence in a new tab.'
-            : 'Each will be packaged as a standalone file at Apply time.'}
+            ? 'Click "Download .docx" on a card to open the captured evidence in Word.'
+            : 'Each will be packaged as a standalone .docx at Apply time.'}
         </span>
       </div>
       <ul className="flex-1 space-y-3 overflow-auto p-4">
@@ -1646,18 +1646,19 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
                   href={`/api/submissions/${submissionId}/evidence/${d.fileId}/download`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title={`Open ${d.fileName || d.title || 'evidence file'} in a new tab`}
+                  download={d.fileName}
+                  title={`Download ${d.fileName || d.title || 'evidence file'} (.docx — opens in Word)`}
                   className="ml-auto rounded border border-cshse-300 bg-white px-2 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50"
                 >
-                  📂 View file
+                  📂 Download .docx
                 </a>
               ) : (
                 <button
                   disabled
-                  title="View file becomes available once you Apply the import — the server packages the evidence into a SupportingEvidence record at that point."
+                  title="Download becomes available once you Apply the import — the server packages the evidence as a .docx file at that point."
                   className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
                 >
-                  📂 View file (pending Apply)
+                  📂 Download .docx (pending Apply)
                 </button>
               )}
             </div>

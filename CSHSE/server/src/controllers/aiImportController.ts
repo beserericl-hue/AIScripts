@@ -1367,15 +1367,25 @@ async function _runApplyBody(args: {
     if (Array.isArray(payload.evidenceDocs)) {
       // CR-040 Phase 2c — at Apply time each evidenceDoc gets packaged
       // as a SupportingEvidence record so coordinators can open it via
-      // the existing download endpoint. We generate a self-contained
-      // HTML representation with title + metadata + body (the snippet
-      // is the source text the detector captured). MVP storage =
-      // base64-in-Mongo; the client "View file" button is identical
-      // regardless of backing store (S3 vs base64). When S3 is wired
-      // in production the FileData.storageType flips to 's3' without
-      // touching the wizard UI.
+      // the existing download endpoint. We generate a REAL .docx via
+      // the `docx` npm package — coordinators open it in Word (or any
+      // .docx viewer) and can add comments / track-changes review
+      // directly, matching the format they originally uploaded.
+      //
+      // MVP storage = base64-in-Mongo; the client "View file" button
+      // is identical regardless of backing store (S3 vs base64). When
+      // S3 is wired in production the FileData.storageType flips to
+      // 's3' without touching the wizard UI.
       try {
         const { SupportingEvidence } = await import('../models/SupportingEvidence');
+        const {
+          Document,
+          Packer,
+          Paragraph,
+          TextRun,
+          HeadingLevel,
+          AlignmentType,
+        } = await import('docx');
         const stampedDocs = await Promise.all(
           (payload.evidenceDocs as any[]).map(async (doc) => {
             // Skip if a SupportingEvidence record was already created
@@ -1383,27 +1393,82 @@ async function _runApplyBody(args: {
             if (doc.fileId) return doc;
             const title = doc.title || 'Evidence Document';
             const kind = doc.docSubKind || 'paper';
-            const safeTitle = String(title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'evidence';
-            const html = [
-              '<!DOCTYPE html><html><head>',
-              '<meta charset="utf-8">',
-              `<title>${escapeHtml(title)}</title>`,
-              '<style>body{font-family:Georgia,serif;max-width:760px;margin:2em auto;padding:0 1em;line-height:1.5;color:#222}h1{font-size:1.5em;border-bottom:1px solid #ddd;padding-bottom:0.3em}dt{font-weight:600;color:#444;margin-top:0.6em}dd{margin-left:1em;color:#222}pre{white-space:pre-wrap;font-family:Georgia,serif}</style>',
-              '</head><body>',
-              `<h1>${escapeHtml(title)}</h1>`,
-              `<p><em>${escapeHtml(kind === 'syllabus' ? 'Course syllabus' : 'Appendix paper')}${doc.courseCode ? ' — ' + escapeHtml(doc.courseCode) : ''}</em></p>`,
-              '<dl>',
-              doc.author ? `<dt>Author</dt><dd>${escapeHtml(doc.author)}</dd>` : '',
-              doc.date ? `<dt>Date</dt><dd>${escapeHtml(doc.date)}</dd>` : '',
-              doc.subject ? `<dt>Subject</dt><dd>${escapeHtml(doc.subject)}</dd>` : '',
-              doc.pageCountEstimate ? `<dt>Pages (est.)</dt><dd>${doc.pageCountEstimate}</dd>` : '',
-              '</dl>',
-              doc.summary ? `<h2>Summary</h2><p>${escapeHtml(doc.summary)}</p>` : '',
-              '<h2>Content</h2>',
-              `<pre>${escapeHtml(doc.snippet || '(no captured body — see source document)')}</pre>`,
-              '</body></html>'
-            ].join('\n');
-            const buffer = Buffer.from(html, 'utf-8');
+            const safeTitle =
+              String(title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'evidence';
+
+            // Build the .docx body. Title → heading 1. Subtitle line
+            // identifies the kind (paper / syllabus) + course code.
+            // Metadata pairs go in a small definition-list-style block.
+            // Then summary (if any) + the captured snippet body.
+            const children: any[] = [];
+            children.push(
+              new Paragraph({
+                text: title,
+                heading: HeadingLevel.HEADING_1,
+              })
+            );
+            const kindLabel =
+              kind === 'syllabus' ? 'Course syllabus' : 'Appendix paper';
+            const subtitle = doc.courseCode
+              ? `${kindLabel} — ${doc.courseCode}`
+              : kindLabel;
+            children.push(
+              new Paragraph({
+                alignment: AlignmentType.LEFT,
+                children: [new TextRun({ text: subtitle, italics: true })],
+              })
+            );
+            // Metadata pairs
+            const meta: Array<[string, string]> = [];
+            if (doc.author) meta.push(['Author', String(doc.author)]);
+            if (doc.date) meta.push(['Date', String(doc.date)]);
+            if (doc.subject) meta.push(['Subject', String(doc.subject)]);
+            if (doc.pageCountEstimate)
+              meta.push(['Pages (est.)', String(doc.pageCountEstimate)]);
+            for (const [k, v] of meta) {
+              children.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: `${k}: `, bold: true }),
+                    new TextRun({ text: v }),
+                  ],
+                })
+              );
+            }
+            if (doc.summary) {
+              children.push(
+                new Paragraph({
+                  text: 'Summary',
+                  heading: HeadingLevel.HEADING_2,
+                })
+              );
+              children.push(new Paragraph({ text: String(doc.summary) }));
+            }
+            children.push(
+              new Paragraph({
+                text: 'Content',
+                heading: HeadingLevel.HEADING_2,
+              })
+            );
+            // Split the snippet on blank lines into paragraphs so Word
+            // shows the original paragraph breaks.
+            const bodyText = String(
+              doc.snippet || '(no captured body — see source document)'
+            );
+            const paragraphs = bodyText.split(/\n\s*\n/);
+            for (const p of paragraphs) {
+              children.push(new Paragraph({ text: p.trim() }));
+            }
+
+            const docx = new Document({
+              creator: 'CSHSE AI Importer',
+              title,
+              description: `${kindLabel}${doc.courseCode ? ' — ' + doc.courseCode : ''}`,
+              sections: [{ properties: {}, children }],
+            });
+            const buffer = await Packer.toBuffer(docx);
+
+            const filename = `${safeTitle}.docx`;
             const evidence = await SupportingEvidence.create({
               institutionId: submission.institutionId,
               submissionId: submission._id,
@@ -1412,28 +1477,29 @@ async function _runApplyBody(args: {
               specCode: doc.routing?.spec || undefined,
               evidenceType: 'document',
               file: {
-                filename: `${safeTitle}.html`,
-                originalName: doc.sourceFilename || `${safeTitle}.html`,
-                mimeType: 'text/html',
+                filename,
+                originalName: doc.sourceFilename || filename,
+                mimeType:
+                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                 size: buffer.byteLength,
                 data: buffer.toString('base64'),
                 encoding: 'base64',
                 storageType: 'base64',
                 uploadedAt: new Date(),
-                uploadedBy: userId || importRecord.uploadedBy
+                uploadedBy: userId || importRecord.uploadedBy,
               } as any,
               description: title,
               versionNumber: 1,
               isCurrentVersion: true,
               isDeleted: false,
               linkedNarratives: [],
-              tags: ['ai-import', `kind:${kind}`]
+              tags: ['ai-import', `kind:${kind}`],
             });
             counts.evidenceFiles += 1;
             return {
               ...doc,
               fileId: String(evidence._id),
-              fileName: `${safeTitle}.html`
+              fileName: filename,
             };
           })
         );

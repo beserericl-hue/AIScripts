@@ -572,7 +572,13 @@ export function buildTestRouter(): Router | null {
         allowedRoles,
         isActive: true,
         createdBy: bootstrapId,
-        createdByName: 'e2e-bootstrap'
+        createdByName: 'e2e-bootstrap',
+        // CR-042 Phase B — the E2E suite hammers this key with a login
+        // per seeded user (often 50+ per default run). The default
+        // sso-login cap of 60/min would 429 the suite mid-run. Lift the
+        // ceiling for the bootstrap key only; production keys still get
+        // the default tier.
+        metadata: { rateLimit: 10000 }
       });
 
       console.warn(

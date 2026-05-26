@@ -106,11 +106,16 @@ describe('CR-040 Phase 2c — evidenceDoc packaging at Apply', () => {
     expect(created.length).toBe(2);
 
     // Both records carry institutionId so CR-017 isolation works.
+    // CR-040 Phase 2c+: emit a real .docx (Word can open it directly,
+    // coordinators add comments + track changes for reader review).
     for (const rec of created) {
       expect(rec.institutionId.toString()).toBe(submission.institutionId.toString());
       expect(rec.submissionId.toString()).toBe((submission._id as any).toString());
       expect(rec.evidenceType).toBe('document');
-      expect(rec.file?.mimeType).toBe('text/html');
+      expect(rec.file?.mimeType).toBe(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      );
+      expect(rec.file?.filename).toMatch(/\.docx$/);
     }
 
     // The aiEvidenceDocs array on the import got re-stamped with fileId.
@@ -125,7 +130,7 @@ describe('CR-040 Phase 2c — evidenceDoc packaging at Apply', () => {
     expect(evidenceIds.has(String(docs[1].fileId))).toBe(true);
   });
 
-  it('generated file is HTML containing the title + snippet body', async () => {
+  it('generated file is a valid .docx (PK zip) containing the title + snippet body', async () => {
     const { user } = await createUser();
     const token = signTokenFor(user as any);
     const submission = await seedSubmission(user._id);
@@ -136,7 +141,7 @@ describe('CR-040 Phase 2c — evidenceDoc packaging at Apply', () => {
         title: 'Unique Title Marker For Test',
         pageCountEstimate: 1,
         imageCount: 0,
-        snippet: 'Body content stamped into the HTML wrapper.',
+        snippet: 'Body content stamped into the docx wrapper.',
         summary: '',
       },
     ]);
@@ -147,11 +152,17 @@ describe('CR-040 Phase 2c — evidenceDoc packaging at Apply', () => {
 
     const evidence = await SupportingEvidence.findOne({ submissionId: submission._id });
     expect(evidence).toBeTruthy();
-    // base64 → utf-8 string
-    const html = Buffer.from(evidence!.file!.data!, 'base64').toString('utf-8');
-    expect(html).toContain('Unique Title Marker For Test');
-    expect(html).toContain('Body content stamped into the HTML wrapper.');
-    expect(html.toLowerCase()).toContain('<!doctype html>');
+    // .docx is a ZIP — the first two bytes are "PK".
+    const buf = Buffer.from(evidence!.file!.data!, 'base64');
+    expect(buf.slice(0, 2).toString('utf-8')).toBe('PK');
+    // Inflate word/document.xml to confirm the title + body landed in
+    // the document body (ZIP content is compressed so a raw-byte
+    // substring search would miss the text).
+    const JSZip = (await import('jszip')).default;
+    const zip = await JSZip.loadAsync(buf);
+    const documentXml = await zip.file('word/document.xml')!.async('string');
+    expect(documentXml).toContain('Unique Title Marker For Test');
+    expect(documentXml).toContain('Body content stamped into the docx wrapper.');
   });
 
   it('re-apply with the same idempotency key does not double-package', async () => {
@@ -197,7 +208,7 @@ describe('CR-040 Phase 2c — evidenceDoc packaging at Apply', () => {
     expect(afterSecond).toBe(1); // not doubled
   });
 
-  it('HTML body escapes user-supplied strings (no script injection via title)', async () => {
+  it('.docx body XML-escapes user-supplied strings (no script-tag passthrough)', async () => {
     const { user } = await createUser();
     const token = signTokenFor(user as any);
     const submission = await seedSubmission(user._id);
@@ -217,9 +228,16 @@ describe('CR-040 Phase 2c — evidenceDoc packaging at Apply', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ evidenceDocs: (imp.aiEvidenceDocs as any[]) });
     const evidence = await SupportingEvidence.findOne({ submissionId: submission._id });
-    const html = Buffer.from(evidence!.file!.data!, 'base64').toString('utf-8');
-    expect(html).not.toContain('<script>alert(1)</script>');
-    expect(html).toContain('&lt;script&gt;');
-    expect(html).toContain('&amp;');
+    // The docx library produces a ZIP with XML inside; user-supplied
+    // text must be XML-entity-escaped on the way through (otherwise
+    // the .docx itself becomes malformed). Inflate the document.xml
+    // and assert the malicious tag is escaped, not passed through.
+    const JSZip = (await import('jszip')).default;
+    const zip = await JSZip.loadAsync(Buffer.from(evidence!.file!.data!, 'base64'));
+    const documentXml = await zip.file('word/document.xml')!.async('string');
+    // Raw <script> would corrupt the .docx; the library escapes to &lt;.
+    expect(documentXml).not.toContain('<script>alert(1)</script>');
+    expect(documentXml).toContain('&lt;script&gt;');
+    expect(documentXml).toContain('&amp;');
   });
 });
