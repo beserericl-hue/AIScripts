@@ -550,6 +550,49 @@ export function buildTestRouter(): Router | null {
     }
   });
 
+  /**
+   * CR-036 test hook — inject N failures into the next ai-service
+   * dispatches so tests can deterministically verify the retry
+   * mechanism + the wizard's yellow "Connecting…" banner. Token-gated
+   * by `x-e2e-seed-token` just like the rest of this router; the
+   * injection state lives in module scope on aiImportController and
+   * resets to null between calls.
+   *
+   * POST body: { count: number, statusCode?: number, pathPattern?: string }
+   *   count       — number of upcoming attempts to short-circuit (the
+   *                 retry loop will burn through them, then on attempt
+   *                 N+1 the real fetch fires)
+   *   statusCode  — defaults to 503 (the canonical retryable error)
+   *   pathPattern — substring match on the AI-service path. Default
+   *                 '/' matches every call; pass e.g. '/ai/import/start'
+   *                 to target only handshake calls.
+   *
+   * POST with { count: 0 } or no body clears any prior injection.
+   */
+  router.post('/inject-ai-failure', async (req: Request, res: Response) => {
+    if (!requireSeedToken(req, res)) return;
+    const { count, statusCode, pathPattern } = (req.body || {}) as Record<string, any>;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const ctrl = require('../controllers/aiImportController');
+      if (typeof ctrl._testSetInjectedAIFailures !== 'function') {
+        return res.status(500).json({ error: 'injection hook not wired' });
+      }
+      ctrl._testSetInjectedAIFailures(
+        typeof count === 'number' && count > 0
+          ? { count, statusCode, pathPattern }
+          : null
+      );
+      const remaining = typeof ctrl._testGetInjectedAIFailuresRemaining === 'function'
+        ? ctrl._testGetInjectedAIFailuresRemaining()
+        : null;
+      return res.json({ ok: true, remaining });
+    } catch (err: any) {
+      console.error('[test-inject-ai-failure] failed', err);
+      return res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
   router.delete('/seed', async (req: Request, res: Response) => {
     if (!requireSeedToken(req, res)) return;
     const { cleanupToken } = req.body ?? {};

@@ -208,11 +208,61 @@ function jitter(ms: number): number {
   return Math.round(ms * (0.75 + Math.random() * 0.5));
 }
 
+/**
+ * Test-only failure-injection state. Tests POST to
+ * /api/test/inject-ai-failure to populate this; postToAIService below
+ * consumes one entry per attempt and short-circuits the fetch. Reset
+ * to null between test runs. NEVER set this in production.
+ */
+let _injectedAIFailures:
+  | { remaining: number; statusCode: number; pathPattern: string }
+  | null = null;
+
+export function _testSetInjectedAIFailures(
+  spec: { count: number; statusCode?: number; pathPattern?: string } | null
+): void {
+  if (!spec || spec.count <= 0) {
+    _injectedAIFailures = null;
+    return;
+  }
+  _injectedAIFailures = {
+    remaining: spec.count,
+    statusCode: spec.statusCode ?? 503,
+    pathPattern: spec.pathPattern ?? '/',
+  };
+}
+
+export function _testGetInjectedAIFailuresRemaining(): number {
+  return _injectedAIFailures?.remaining ?? 0;
+}
+
 async function postToAIService(path: string, payload: object): Promise<any> {
   const body = JSON.stringify(payload);
   const { signature } = signOutgoing(body);
   let lastError: Error | undefined;
   for (let attempt = 1; attempt <= AI_SERVICE_MAX_ATTEMPTS; attempt++) {
+    // CR-036 test hook — if a failure was injected for this path,
+    // consume one attempt's worth without actually firing fetch. The
+    // surrounding retry loop then exercises the same backoff +
+    // jitter + re-attempt path it would for a real 5xx.
+    if (
+      _injectedAIFailures &&
+      _injectedAIFailures.remaining > 0 &&
+      path.includes(_injectedAIFailures.pathPattern)
+    ) {
+      _injectedAIFailures.remaining -= 1;
+      lastError = new Error(
+        `AI service ${path} returned ${_injectedAIFailures.statusCode}: [test-injected failure]`
+      );
+      if (attempt < AI_SERVICE_MAX_ATTEMPTS) {
+        const delay = jitter(AI_SERVICE_BASE_DELAY_MS * 2 ** (attempt - 1));
+        console.warn(
+          `[ai-service-retry] ${path} attempt ${attempt} test-injected ${_injectedAIFailures.statusCode}; retrying in ${delay}ms`
+        );
+        await new Promise((r) => setTimeout(r, delay));
+      }
+      continue;
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), AI_SERVICE_PER_ATTEMPT_TIMEOUT_MS);
     try {
