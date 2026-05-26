@@ -25,6 +25,12 @@ import { Submission, INarrativeContent } from '../models/Submission';
 // silently no-op'd the CR-043 merge with a 'Cannot find module' that
 // the surrounding try/catch swallowed).
 import * as aiReviewMerge from '../services/aiReviewMerge';
+// Static import to mirror the batchAdvancer fix — runtime require()
+// silently no-op'd under vitest because the .ts extension didn't
+// resolve. ESM partial-binding handles the circular reference because
+// advanceBatch is only called inside the receiveAICallback function
+// body, not at module load time.
+import * as batchAdvancerService from '../services/batchAdvancer';
 import {
   CurriculumMatrix,
   ICourseEntry,
@@ -766,9 +772,10 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   const terminalStatus = (importRecord as any).aiStatus;
   if (batchId && ['parsed', 'failed', 'canceled'].includes(terminalStatus)) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { advanceBatch } = require('../services/batchAdvancer');
-      await advanceBatch(batchId, terminalStatus as 'parsed' | 'failed' | 'canceled');
+      await batchAdvancerService.advanceBatch(
+        batchId,
+        terminalStatus as 'parsed' | 'failed' | 'canceled'
+      );
     } catch (advErr) {
       console.error('[ai-callback] batchAdvancer hook failed:', advErr);
     }

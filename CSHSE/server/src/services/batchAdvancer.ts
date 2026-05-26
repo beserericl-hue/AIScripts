@@ -20,17 +20,16 @@ import mongoose from 'mongoose';
 
 import { ImportBatch } from '../models/ImportBatch';
 import { SelfStudyImport } from '../models/SelfStudyImport';
+// Static import — replaces a runtime require() that didn't resolve
+// .ts under vitest, swallowing batch-start errors. Both this module
+// and aiImportController use their imports lazily inside functions,
+// so the circular reference resolves cleanly at runtime via ESM
+// partial-binding semantics. Tests can now vi.mock the controller
+// module and have the mock actually intercept.
+import * as aiImportController from '../controllers/aiImportController';
 
-// We re-call the same /start-ai code path the single-file flow uses
-// rather than duplicating the postToAIService logic. Use a runtime
-// require() here (instead of a top-of-file static import) to break the
-// circular dep with aiImportController. esbuild with `bundle: false`
-// preserves `await import()` as literal ESM specifiers that Node's
-// CJS resolver can't load — so we use require() explicitly.
 function _startChild(importId: string, programLevel?: string): Promise<void> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { startAIImportForBatch } = require('../controllers/aiImportController');
-  return startAIImportForBatch(importId, programLevel);
+  return aiImportController.startAIImportForBatch(importId, programLevel);
 }
 
 /**
@@ -57,16 +56,14 @@ export async function startNextChild(
       err
     );
     // Mark the child failed so the advancer can move past it.
+    // aiErrors is typed string[] — push a plain string (Mongoose
+    // coerces objects to '[object Object]', which is what coordinators
+    // would see in the failed-state panel). Same pattern fixed in
+    // CR-037's empty-bucket guard 2026-05-25.
     await SelfStudyImport.findByIdAndUpdate(importId, {
       $set: {
         aiStatus: 'failed',
-        aiErrors: [
-          {
-            stage: 'start',
-            severity: 'error',
-            message: `batch start failed: ${err?.message || String(err)}`
-          }
-        ],
+        aiErrors: [`batch start failed: ${err?.message || String(err)}`],
         aiCompletedAt: new Date()
       }
     });
