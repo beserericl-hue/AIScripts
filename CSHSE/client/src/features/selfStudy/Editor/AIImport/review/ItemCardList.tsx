@@ -37,6 +37,8 @@ import {
   INTRO_DOC_KEY,
   CVS_KEY,
   EVIDENCE_DOCS_KEY,
+  PAPERS_KEY,
+  SYLLABI_KEY,
   isIntroKey,
   introBucketKeyFromSpecKey
 } from './SpecRail';
@@ -563,11 +565,21 @@ export function ItemCardList({
     );
   }
 
-  // CR-040 Phase 2c — Evidence docs view. Same compact list pattern.
+  // CR-040 Phase 2c — Evidence docs view. The rail now splits this
+  // into Syllabi (docSubKind='syllabus') and Papers (everything else),
+  // each with its own synthetic key. Legacy EVIDENCE_DOCS_KEY still
+  // routes here showing the combined list — kept for back-compat with
+  // any persisted selectedSpecKey from before the split.
   if (selectedKey === EVIDENCE_DOCS_KEY) {
-    return (
-      <EvidenceDocsView docs={evidenceDocs || []} />
-    );
+    return <EvidenceDocsView docs={evidenceDocs || []} />;
+  }
+  if (selectedKey === SYLLABI_KEY) {
+    const syllabi = (evidenceDocs || []).filter((d) => d.docSubKind === 'syllabus');
+    return <EvidenceDocsView docs={syllabi} />;
+  }
+  if (selectedKey === PAPERS_KEY) {
+    const papers = (evidenceDocs || []).filter((d) => d.docSubKind !== 'syllabus');
+    return <EvidenceDocsView docs={papers} />;
   }
 
   return (

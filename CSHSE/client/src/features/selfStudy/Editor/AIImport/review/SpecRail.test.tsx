@@ -191,8 +191,12 @@ describe('<SpecRail />', () => {
     expect(screen.getByRole('tab', { name: /Matrices/i })).toBeInTheDocument();
   });
 
-  it('renders CVs entry only when cvs are present, and never on empty arrays', () => {
-    const { rerender } = render(
+  it('Supporting Evidence group: CVs / Syllabi / Papers tiles ALWAYS render (even when empty)', () => {
+    // Post-release UX feedback (2026-05-26) — coordinators couldn't
+    // tell whether CVs/Syllabi/Papers were a system feature or just
+    // hidden because the import had none. The Supporting Evidence
+    // group now renders unconditionally with zero-count badges.
+    render(
       <SpecRail
         buckets={{}}
         tags={NO_TAGS}
@@ -201,30 +205,27 @@ describe('<SpecRail />', () => {
         selectedKey={null}
         onSelect={() => {}}
         cvs={[]}
+        evidenceDocs={[]}
       />
     );
-    expect(screen.queryByRole('tab', { name: /^CVs$/ })).toBeNull();
-
-    const cvs: CVItem[] = [
-      { sectionId: 's', facultyName: 'Dr. A', snippet: '', confidence: 0.9 } as any,
-    ];
-    rerender(
-      <SpecRail
-        buckets={{}}
-        tags={NO_TAGS}
-        placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
-        selectedKey={null}
-        onSelect={() => {}}
-        cvs={cvs}
-      />
-    );
-    expect(screen.getByRole('tab', { name: /CVs/i })).toBeInTheDocument();
+    // Section heading.
+    expect(screen.getByText(/Supporting Evidence/i)).toBeInTheDocument();
+    // All three sub-tiles present with "0" count badges.
+    expect(screen.getByRole('tab', { name: /^CVs/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /^Syllabi/ })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Papers/ })).toBeInTheDocument();
   });
 
-  it('renders Evidence files entry only when evidenceDocs are present', () => {
+  it('Supporting Evidence: count badges reflect cvs.length + evidenceDocs split by docSubKind', () => {
+    const cvs: CVItem[] = [
+      { sectionId: 'cv1', facultyName: 'Dr. A', snippet: '', confidence: 0.9 } as any,
+      { sectionId: 'cv2', facultyName: 'Dr. B', snippet: '', confidence: 0.9 } as any,
+    ];
     const docs: EvidenceDocItem[] = [
-      { sectionId: 's', kind: 'paper', title: 't', snippet: '', confidence: 0.9 } as any,
+      { sectionId: 'ed1', docSubKind: 'paper', title: 'Paper 1' } as any,
+      { sectionId: 'ed2', docSubKind: 'paper', title: 'Paper 2' } as any,
+      { sectionId: 'ed3', docSubKind: 'paper', title: 'Paper 3' } as any,
+      { sectionId: 'ed4', docSubKind: 'syllabus', title: 'Syl 1' } as any,
     ];
     render(
       <SpecRail
@@ -234,10 +235,13 @@ describe('<SpecRail />', () => {
         matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
+        cvs={cvs}
         evidenceDocs={docs}
       />
     );
-    expect(screen.getByRole('tab', { name: /Evidence files/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /CVs/ }).textContent).toContain('2');
+    expect(screen.getByRole('tab', { name: /^Syllabi/ }).textContent).toContain('1');
+    expect(screen.getByRole('tab', { name: /Papers/ }).textContent).toContain('3');
   });
 
   it('renders Document Introduction at the top when present', () => {

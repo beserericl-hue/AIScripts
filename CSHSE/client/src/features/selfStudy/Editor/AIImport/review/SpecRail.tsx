@@ -26,6 +26,12 @@ export const MATRICES_KEY = '_matrices';
 // CR-033 / CR-040 — synthetic rail keys for detector outputs.
 export const CVS_KEY = '_cvs';
 export const EVIDENCE_DOCS_KEY = '_evidence-docs';
+// CR-040 follow-on (post-release UX feedback) — Supporting Evidence
+// rail group has a header + three always-visible sub-tiles so
+// coordinators see the section structure even before the detectors
+// have surfaced anything for this submission.
+export const PAPERS_KEY = '_evidence-docs:paper';
+export const SYLLABI_KEY = '_evidence-docs:syllabus';
 // CR-040 Phase 3b — synthetic rail key for the coverage_verifier output.
 export const MISSING_FRAGMENTS_KEY = '_missing-fragments';
 // CR-039 — Introduction bucket keys are namespaced so they never collide
@@ -85,6 +91,19 @@ export function SpecRail({
   onAddFromSourceForIntro
 }: SpecRailProps): JSX.Element {
   const [filter, setFilter] = useState('');
+
+  // CR-040 follow-on — split evidenceDocs by sub-kind so the rail can
+  // render Syllabi and Papers/Projects as separate sub-tiles. Papers
+  // captures both 'paper' (research papers in the appendix) and any
+  // future sub-kind that isn't 'syllabus' so we don't drop items.
+  const syllabusCount = useMemo(
+    () => (evidenceDocs || []).filter((d) => d.docSubKind === 'syllabus').length,
+    [evidenceDocs]
+  );
+  const paperCount = useMemo(
+    () => (evidenceDocs || []).filter((d) => d.docSubKind !== 'syllabus').length,
+    [evidenceDocs]
+  );
 
   // Group buckets by standard for the rail's accordion structure.
   const byStandard = useMemo(() => {
@@ -201,57 +220,118 @@ export function SpecRail({
           </div>
         )}
 
-        {/* CR-033 — CVs detected by cv_detector. Only render when there
-            are any; an empty CVs section adds rail clutter for zero
-            value. */}
-        {cvs && cvs.length > 0 && (
-          <div className="mb-2">
-            <button
-              role="tab"
-              aria-selected={selectedKey === CVS_KEY}
-              onClick={() => onSelect(CVS_KEY)}
-              title={`${cvs.length} faculty CV(s) detected — view + reassign to spec or Discard`}
-              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
-                selectedKey === CVS_KEY
-                  ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
-                  : 'hover:bg-gray-100 text-gray-700'
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                <User className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
-                <span className="font-medium">CVs</span>
-              </span>
-              <span className="rounded bg-cshse-200 px-1.5 text-xs text-cshse-800">
-                {cvs.length}
-              </span>
-            </button>
+        {/* CR-033 / CR-040 follow-on (post-release UX feedback 2026-05-26)
+            — Supporting Evidence rail group. ALWAYS rendered with three
+            sub-tiles (CVs / Syllabi / Papers) even when the count is 0,
+            so coordinators see the section structure regardless of
+            whether the detectors surfaced anything for this submission.
+            Empty tiles render with a gray "0" badge; populated tiles
+            use the cshse accent. Clicking any sub-tile opens its filtered
+            list in the middle pane. */}
+        <div className="mb-3">
+          <div className="px-2 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Supporting Evidence
           </div>
-        )}
+          <ul className="space-y-0.5">
+            {/* CVs sub-tile */}
+            <li>
+              <button
+                role="tab"
+                aria-selected={selectedKey === CVS_KEY}
+                onClick={() => onSelect(CVS_KEY)}
+                title={
+                  cvs && cvs.length > 0
+                    ? `${cvs.length} faculty CV(s) detected — review + reassign to spec or Discard`
+                    : 'Faculty CVs detected by the cv_detector during parse. No CVs detected in this import yet.'
+                }
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+                  selectedKey === CVS_KEY
+                    ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
+                  <span className="font-medium">CVs</span>
+                </span>
+                <span
+                  className={`rounded px-1.5 text-xs ${
+                    cvs && cvs.length > 0
+                      ? 'bg-cshse-200 text-cshse-800'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {(cvs && cvs.length) || 0}
+                </span>
+              </button>
+            </li>
+            {/* Syllabi sub-tile */}
+            <li>
+              <button
+                role="tab"
+                aria-selected={selectedKey === SYLLABI_KEY}
+                onClick={() => onSelect(SYLLABI_KEY)}
+                title={
+                  syllabusCount > 0
+                    ? `${syllabusCount} course syllab${syllabusCount === 1 ? 'us' : 'i'} detected`
+                    : 'Course syllabi detected by appendix_paper_detector during parse. None detected in this import yet.'
+                }
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+                  selectedKey === SYLLABI_KEY
+                    ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <FileBox className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
+                  <span className="font-medium">Syllabi</span>
+                </span>
+                <span
+                  className={`rounded px-1.5 text-xs ${
+                    syllabusCount > 0
+                      ? 'bg-cshse-200 text-cshse-800'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {syllabusCount}
+                </span>
+              </button>
+            </li>
+            {/* Papers / Projects sub-tile */}
+            <li>
+              <button
+                role="tab"
+                aria-selected={selectedKey === PAPERS_KEY}
+                onClick={() => onSelect(PAPERS_KEY)}
+                title={
+                  paperCount > 0
+                    ? `${paperCount} appendix paper(s) / student work sample(s) detected`
+                    : 'Appendix papers + student work samples detected by appendix_paper_detector. None detected in this import yet.'
+                }
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+                  selectedKey === PAPERS_KEY
+                    ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <FileBox className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
+                  <span className="font-medium">Papers / Projects</span>
+                </span>
+                <span
+                  className={`rounded px-1.5 text-xs ${
+                    paperCount > 0
+                      ? 'bg-cshse-200 text-cshse-800'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {paperCount}
+                </span>
+              </button>
+            </li>
+          </ul>
+        </div>
 
-        {/* CR-040 — papers + syllabi detected by appendix_paper_detector. */}
-        {evidenceDocs && evidenceDocs.length > 0 && (
-          <div className="mb-2">
-            <button
-              role="tab"
-              aria-selected={selectedKey === EVIDENCE_DOCS_KEY}
-              onClick={() => onSelect(EVIDENCE_DOCS_KEY)}
-              title={`${evidenceDocs.length} evidence document(s) — papers, syllabi`}
-              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
-                selectedKey === EVIDENCE_DOCS_KEY
-                  ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
-                  : 'hover:bg-gray-100 text-gray-700'
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                <FileBox className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
-                <span className="font-medium">Evidence files</span>
-              </span>
-              <span className="rounded bg-cshse-200 px-1.5 text-xs text-cshse-800">
-                {evidenceDocs.length}
-              </span>
-            </button>
-          </div>
-        )}
         {byStandard.map(([std, list]) => {
           const visible = list.filter((b) =>
             filterMatches(`${std}.${b.specCode} ${b.standardTitle} ${b.specPrompt}`)

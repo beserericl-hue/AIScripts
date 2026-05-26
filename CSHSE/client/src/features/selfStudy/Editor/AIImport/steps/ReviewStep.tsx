@@ -13,6 +13,9 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Rocket, Loader2 } from 'lucide-react';
 import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY } from '../review/SpecRail';
+// Any selectedSpecKey starting with '_' is a synthetic rail key (matrices,
+// cvs, evidence-docs, papers, syllabi, etc.) — none of them map to a real
+// bucket lookup, so activeBucket must return null for them.
 import { ItemCardList, type ItemKind } from '../review/ItemCardList';
 import { ItemPreview } from '../review/ItemPreview';
 import { ReassignPopup } from '../review/ReassignPopup';
@@ -329,9 +332,12 @@ function FullReviewStep(): JSX.Element {
   }, [apply, setStep]);
 
   const activeBucket =
-    selectedSpecKey && selectedSpecKey !== UNPLACED_KEY && selectedSpecKey !== UNWRITTEN_KEY
+    selectedSpecKey && !selectedSpecKey.startsWith('_')
       ? buckets[selectedSpecKey] || null
       : null;
+  // Suppress unused-imports lint when the old key references are pruned.
+  void UNPLACED_KEY;
+  void UNWRITTEN_KEY;
 
   const unplacedTags = tags.filter((t) => !t.suggestedStd || !t.suggestedSpec);
 
