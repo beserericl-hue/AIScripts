@@ -157,55 +157,50 @@ export async function loginAsSeededViaSso(page: Page, seed: SeedResult): Promise
 }
 
 /**
- * Navigate to the wizard's Review step for a seeded import. Assumes the
- * fixture's aiStatus was 'finished' — the wizard will short-circuit Parse
- * and Match and render the Review screen directly.
+ * Navigate to the Review surface for a seeded import.
+ *
+ * CR-043 follow-on (2026-05-26) — Review is no longer a wizard step.
+ * It's a first-class toolbar button on the Self-Study Editor that
+ * opens a standalone ReviewSurface backed by the persisted
+ * `Submission.aiReviewState`. This helper opens that surface.
+ *
+ * Assumes the fixture's aiStatus was 'parsed' or later — the toolbar
+ * Review button is enabled by the seeded localStorage Zustand snapshot
+ * (buckets/tags/etc.) so it lights up without needing the server-side
+ * merge to have fired.
  */
 export async function gotoReviewStep(page: Page, seed: SeedResult): Promise<void> {
   await page.goto(`/self-study/${seed.submissionId}`);
   await page.waitForLoadState('networkidle');
 
-  // Open the Importer Wizard
-  const wizardBtn = page.getByRole('button', { name: /importer wizard/i });
-  await expect(wizardBtn).toBeVisible({ timeout: 20_000 });
-  await wizardBtn.click();
+  // CR-043 — click the toolbar Review button. Multiple buttons match
+  // /review/i (header chrome can carry the word too), so scope to the
+  // toolbar by aria-label / button name with the "ready" chip suffix.
+  // Falls back to the first /^Review/ button in the toolbar nav.
+  const reviewBtn = page.getByRole('button', { name: /^Review\b/i }).first();
+  await expect(reviewBtn).toBeVisible({ timeout: 20_000 });
+  await reviewBtn.click();
 
-  // The wizard's step rail uses role=tab with names like "3 Review".
-  // Tabs may be `[disabled]` if upstream state isn't ready — but with the
-  // CR-034 Zustand seed injected by loginAsSeededViaSso, status='finished'
-  // unlocks Review and beyond.
-  const reviewTab = page.getByRole('tab', { name: /review/i });
-  await expect(reviewTab).toBeVisible({ timeout: 30_000 });
-  await reviewTab.click();
+  // Wait for the Review surface's heading to appear.
+  await expect(
+    page.getByRole('heading', { name: /Review \(CR-043\)/i })
+  ).toBeVisible({ timeout: 15_000 });
 
-  // The Review pane is master/detail: left rail lists specs, middle pane
-  // shows cards for the currently-selected spec. With nothing selected the
-  // middle pane says "Select a spec from the left." — click the first
-  // spec tab so the cards render and downstream spec-agnostic assertions
-  // (Discard/Edit/etc.) have something to bind against.
-  //
-  // The Review step mounts in two waves: first the rail renders from the
-  // hydrated Zustand buckets, then `pollAIStatus` returns and the
-  // resulting setState triggers a re-render that detaches the rail
-  // buttons (the badges flip from "2 covered" → final values). Wait for
-  // network-idle first so the click hits a stable DOM.
+  // The Review pane is master/detail: left rail lists specs, middle
+  // pane shows cards for the currently-selected spec. Pick a tab whose
+  // accessible name starts with a real spec id ("1.a", "2.a", etc.)
+  // so the middle pane has cards to bind against.
   await page.waitForLoadState('networkidle');
-  // CR-039 added Introduction tabs to the rail (Document Introduction at
-  // the very top + per-Standard Introduction siblings). Those have no
-  // narrative cards by default, so naively picking .first() lands on an
-  // empty pane. Pick a tab whose accessible name starts with a real
-  // spec id ("1.a", "2.a", etc.) instead.
   const specsTabList = page
     .getByRole('complementary', { name: /specifications/i })
     .getByRole('tab', { name: /^\d+\.[a-z]/i })
     .first();
   await expect(specsTabList).toBeVisible({ timeout: 15_000 });
   // force: true skips Playwright's element-stability check, which
-  // mis-fires when React re-renders the rail mid-click. Safe here
-  // because we've already asserted visibility.
+  // mis-fires when React re-renders the rail mid-click.
   await specsTabList.click({ force: true });
 
-  // Wait for at least one Review card to render
+  // Wait for at least one Review card to render.
   await expect(
     page.getByRole('button', { name: /^edit$/i }).first()
   ).toBeVisible({ timeout: 30_000 });

@@ -77,16 +77,18 @@ test.describe('CR-041 US-10 — multi-file batch wizard surface', () => {
     expect(names).toContain('Standards-1-5-DepartmentChair.docx');
     expect(names).toContain('Standards-6-9-CurriculumLead.docx');
 
-    // 2. UI check: open the wizard. The wizard auto-routes to Review
-    // because aiStatus='parsed' triggers deriveStepFromStatus to land
-    // on the Review tab. loadBatchChildren fetches each child's
-    // snapshot + merges their buckets into the parent state; the
-    // SpecRail then has populated buckets to render.
+    // 2. UI check — CR-043 follow-on: Review is no longer a wizard
+    // step. Click the toolbar Review button to open the standalone
+    // ReviewSurface. ReviewSurface reads the persisted aiReviewState
+    // (loadBatchChildren no longer fires from within Review — the
+    // merge happened server-side via CR-043's aiReviewMerge, OR is
+    // hydrated from the localStorage Zustand seed that the
+    // loginAsSeededViaSso helper plants).
     await page.goto(`/self-study/${seed!.submissionId}`);
     await page.waitForLoadState('networkidle');
-    const wizardBtn = page.getByRole('button', { name: /importer wizard/i });
-    await expect(wizardBtn).toBeVisible({ timeout: 20_000 });
-    await wizardBtn.click();
+    const reviewBtn = page.getByRole('button', { name: /^Review\b/i }).first();
+    await expect(reviewBtn).toBeVisible({ timeout: 20_000 });
+    await reviewBtn.click();
 
     // 3. Wait for loadBatchChildren to pull both files' data and the
     //    Review header to update from "0 narratives" to "2 narratives"

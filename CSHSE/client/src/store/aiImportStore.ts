@@ -1030,21 +1030,34 @@ export const useAIImportStore = create<AIImportState>()(
             // Hydrate the existing store fields so the UI keeps reading
             // from the same selectors. approvedIds is merged from the
             // server set.
+            //
+            // CR-043 follow-on — conservative merge: if the server's
+            // aiReviewState is missing a field (e.g. `buckets: undefined`),
+            // keep the in-memory value rather than clobbering it with `{}`.
+            // This matters when the page is hydrated from a localStorage
+            // Zustand seed BEFORE the server-side merge has run (E2E seeds,
+            // pre-CR-043 imports, etc.). Without this guard, opening the
+            // Review surface on a fresh seed wipes the data.
+            const current = get();
             set({
-              buckets: state.buckets || {},
-              tags: state.tags || [],
-              cvs: state.cvs || [],
-              evidenceDocs: state.evidenceDocs || [],
-              introductions: state.introductions || get().introductions,
+              buckets: state.buckets ?? current.buckets,
+              tags: state.tags ?? current.tags,
+              cvs: state.cvs ?? current.cvs,
+              evidenceDocs: state.evidenceDocs ?? current.evidenceDocs,
+              introductions: state.introductions ?? current.introductions,
               placeholderSections: state.placeholderSections || [],
               coverageReport: state.coverageReport ?? get().coverageReport,
               approvedIds: state.approvedIds || []
             });
           }
           if (matrixState) {
+            // Same conservative merge as the buckets branch above —
+            // preserve in-memory matrices when the server response
+            // doesn't include them (seed-only path, pre-merge state).
+            const current = get();
             set({
-              matrices: matrixState.matrices || [],
-              matrixRowEdits: matrixState.matrixRowEdits || {}
+              matrices: matrixState.matrices ?? current.matrices,
+              matrixRowEdits: matrixState.matrixRowEdits ?? current.matrixRowEdits
             });
           }
         } catch (err) {
