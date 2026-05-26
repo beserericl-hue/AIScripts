@@ -1528,6 +1528,149 @@ async function _runApplyBody(args: {
 }
 
 // ============================================================================
+// POST /api/imports/:importId/redetect
+//   — CR-040 follow-on: re-run cv_detector + appendix_paper_detector +
+//   introduction_detector against the already-uploaded DOCX without
+//   re-triggering the matcher. Used by the Review surface "Re-run
+//   detectors" button for imports that predate a detector deploy. The
+//   coordinator's existing review state (approvals, edits, discards)
+//   is preserved by aiReviewMerge's dedupe-by-sectionId — only the
+//   standalone cvs[] / evidenceDocs[] / introductions{} arrays get
+//   refreshed.
+// ============================================================================
+
+export async function redetectImport(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const { importId } = req.params;
+  try {
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) {
+      res.status(404).json({ error: 'Import not found' });
+      return;
+    }
+    const submission = await Submission.findById(importRecord.submissionId);
+    if (!submission) {
+      res.status(404).json({ error: 'Submission not found for this import' });
+      return;
+    }
+    // Owner check — mirror _loadOwnedSubmission so a PC at institution A
+    // can't redetect institution B's import.
+    const userId = req.user?.id;
+    const userRole = req.user?.role;
+    const userInstId = (req.user as any)?.institutionId;
+    const isElevated = userRole === 'admin' || (req.user as any)?.isSuperuser;
+    if (
+      !isElevated &&
+      userRole === 'program_coordinator' &&
+      userInstId &&
+      (submission as any).institutionId &&
+      (submission as any).institutionId.toString() !== userInstId
+    ) {
+      res.status(403).json({ error: 'Forbidden: cross-institution access' });
+      return;
+    }
+    void userId;
+
+    const s3Key = (importRecord as any).aiS3Key;
+    if (!s3Key) {
+      res.status(409).json({
+        error: 'no-s3-key',
+        detail: 'This import has no S3 key on record — redetect requires the original DOCX to still be in storage. Re-upload via the Importer Wizard instead.'
+      });
+      return;
+    }
+
+    // Synchronous round-trip to ai-service. Detectors are lexical
+    // heuristics + a single walker pass; typical Stevenson-size doc
+    // returns in <10s. We use the existing postToAIService wrapper so
+    // HMAC signing + retries + timeouts ride along.
+    const submissionDoc = await Submission.findById(importRecord.submissionId)
+      .select('institutionId')
+      .lean();
+    const institutionIdStr = submissionDoc?.institutionId ? String(submissionDoc.institutionId) : null;
+    let result: any;
+    try {
+      result = await postToAIService('/ai/import/redetect', {
+        s3Key,
+        importId: String(importRecord._id),
+        submissionId: String(importRecord.submissionId),
+        institutionId: institutionIdStr
+      });
+    } catch (err: any) {
+      res.status(502).json({
+        error: 'ai-service-failed',
+        detail: err?.message || String(err)
+      });
+      return;
+    }
+    if (!result || result.ok !== true) {
+      res.status(502).json({
+        error: 'ai-service-bad-shape',
+        detail: 'ai-service did not return ok:true'
+      });
+      return;
+    }
+
+    // Update the SelfStudyImport with the freshly-detected output.
+    (importRecord as any).aiCVs = result.cvs || [];
+    (importRecord as any).markModified('aiCVs');
+    (importRecord as any).aiEvidenceDocs = result.evidenceDocs || [];
+    (importRecord as any).markModified('aiEvidenceDocs');
+    (importRecord as any).aiIntroductionHints = result.introductionHints || {};
+    (importRecord as any).markModified('aiIntroductionHints');
+    await importRecord.save();
+
+    // Re-merge into the persisted Review state so the Review surface
+    // immediately reflects the new tiles. dedupe-by-sectionId means
+    // existing review work (approvals, edits, discards on buckets/tags)
+    // survives — only the standalone cvs/evidenceDocs/intros refresh.
+    const state = (submission as any).aiReviewState || {
+      buckets: {},
+      tags: [],
+      cvs: [],
+      evidenceDocs: [],
+      introductions: {},
+      placeholderSections: [],
+      approvedIds: [],
+      discardedIds: [],
+      itemSources: {},
+      mergeLog: [],
+      lastUpdatedAt: new Date()
+    };
+    const contentHash = aiReviewMerge.sha256Hex(
+      `${importRecord.originalFilename}::${importRecord._id}`
+    );
+    aiReviewMerge.mergeImportIntoReviewState(state, {
+      importId: String(importRecord._id),
+      sourceFilename: importRecord.originalFilename || 'unknown.docx',
+      sourceContentHash: contentHash,
+      importedAt: new Date(),
+      reimport: false,
+      // Pass the EXISTING buckets/tags untouched — redetect only refreshes
+      // the standalone arrays, never the per-spec buckets. Empty objects
+      // would cause the merge to no-op those kinds (no items to add).
+      buckets: {},
+      tags: [],
+      cvs: result.cvs || [],
+      evidenceDocs: result.evidenceDocs || [],
+      introductions: {},
+      placeholderSections: []
+    });
+    (submission as any).aiReviewState = state;
+    (submission as any).markModified('aiReviewState');
+    await submission.save();
+
+    res.json({
+      ok: true,
+      counts: result.counts || {},
+      message: `Re-detect complete. Found ${(result.counts || {}).cvs || 0} CV(s), ${(result.counts || {}).papers || 0} paper(s), ${(result.counts || {}).syllabi || 0} syllab${((result.counts || {}).syllabi || 0) === 1 ? 'us' : 'i'}.`
+    });
+  } catch (err: any) {
+    console.error('redetectImport error', err);
+    res.status(500).json({ error: 'redetect-failed', detail: err?.message || String(err) });
+  }
+}
+
+// ============================================================================
 // POST /api/imports/:importId/restart-ai  (re-run with a different format)
 // ============================================================================
 

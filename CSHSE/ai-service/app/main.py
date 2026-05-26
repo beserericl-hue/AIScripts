@@ -172,6 +172,135 @@ async def start_import(req: StartImportRequest, request: Request) -> dict:
     return snapshot
 
 
+class RedetectRequest(BaseModel):
+    """CR-040 follow-on — re-run the standalone-evidence detectors
+    (cv_detector, appendix_paper_detector, introduction_detector)
+    against an already-uploaded .docx without re-triggering the
+    matcher / matrix extraction.
+
+    Used by the wizard's Re-detect button on the Review surface: a
+    coordinator who already worked through Review on an import that
+    predates a detector deploy can click Re-detect to populate the
+    standalone Supporting Evidence tiles without losing their existing
+    review progress.
+    """
+    s3Key: str
+    importId: str
+    submissionId: str
+    institutionId: str | None = None
+
+
+@app.post("/ai/import/redetect")
+async def redetect(req: RedetectRequest, request: Request) -> dict:
+    """Synchronous re-detect — pulls the .docx from S3, runs walker +
+    standalone detectors only, returns {cvs, evidenceDocs, introductionHints}.
+
+    No matcher, no matrix extractor, no callback. The caller (cshse-server)
+    persists the result to SelfStudyImport.aiCVs / aiEvidenceDocs /
+    aiIntroductionHints and triggers the CR-043 aiReviewMerge.
+
+    Designed to run in <10s for a typical 50-page DOCX — the detectors
+    are lexical heuristics + a single deep-walker pass.
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+
+    # Imports kept local so a misconfigured deploy doesn't fail at module
+    # load time — the redetect path can stay quiet behind 503s instead.
+    import io
+    import os
+    import shutil
+    import tempfile
+    from pathlib import Path
+    import boto3
+    import mammoth
+    from botocore.client import Config as BotoConfig
+    from app.splitter.deep_walker import deep_walk_with_fallback
+    from app.splitter.cv_detector import (
+        detect_cvs,
+        detect_cvs_from_html,
+        cv_to_dict,
+    )
+    from app.splitter.appendix_paper_detector import (
+        detect_evidence_docs,
+        detect_evidence_docs_from_html,
+        evidence_doc_to_dict,
+    )
+    from app.splitter.introduction_detector import detect_introductions
+
+    # Pull the DOCX from S3 to a temp file.
+    bucket = os.environ.get("CSHSE_S3_BUCKET", "cshse-filestorage-qlyj5pn")
+    endpoint = os.environ.get("AWS_ENDPOINT_URL_S3") or os.environ.get("AWS_ENDPOINT_URL")
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        config=BotoConfig(s3={"addressing_style": "path"}),
+    )
+    tmp_dir = Path(tempfile.mkdtemp(prefix=f"redetect-{req.importId}-"))
+    docx_path = tmp_dir / "source.docx"
+    try:
+        try:
+            s3.download_file(bucket, req.s3Key, str(docx_path))
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=502,
+                detail=f"s3 fetch failed for {req.s3Key}: {type(exc).__name__}: {exc}",
+            )
+
+        # mammoth: DOCX → HTML bytes (same shape as _run_self_study_pipeline).
+        with open(docx_path, "rb") as f:
+            html_str = mammoth.convert_to_html(io.BytesIO(f.read())).value
+        html_bytes = html_str.encode("utf-8")
+
+        # deep_walker — produces filtered Section list from the HTML bytes.
+        sections = deep_walk_with_fallback(html_bytes, base_id=req.importId)
+
+        # CV detector — same two-phase pattern as _run_self_study_pipeline.
+        cv_pre, dropped_texts = detect_cvs_from_html(html_bytes)
+        if dropped_texts:
+            dropped_set = {t[:200].strip() for t in dropped_texts if t and t.strip()}
+            sections = [
+                s for s in sections
+                if (s.markdown or "").strip()[:200] not in dropped_set
+            ]
+        cv_post, sections = detect_cvs(sections)
+        cv_detections = cv_pre + cv_post
+        cvs_wire = [cv_to_dict(cv) for cv in cv_detections]
+
+        # Evidence-doc detector — same two-phase pattern.
+        ed_pre, ed_dropped = detect_evidence_docs_from_html(html_bytes)
+        if ed_dropped:
+            ed_drop_set = {t[:200].strip() for t in ed_dropped if t and t.strip()}
+            sections = [
+                s for s in sections
+                if (s.markdown or "").strip()[:200] not in ed_drop_set
+            ]
+        ed_post, sections = detect_evidence_docs(sections)
+        evidence_docs = ed_pre + ed_post
+        evidence_docs_wire = [evidence_doc_to_dict(d) for d in evidence_docs]
+
+        # Introduction hints (lexical heuristic only; no matcher LLM here).
+        intro_hints = detect_introductions(sections)
+
+        return {
+            "ok": True,
+            "cvs": cvs_wire,
+            "evidenceDocs": evidence_docs_wire,
+            "introductionHints": intro_hints or {},
+            "counts": {
+                "cvs": len(cvs_wire),
+                "papers": sum(1 for d in evidence_docs if d.doc_sub_kind == "paper"),
+                "syllabi": sum(1 for d in evidence_docs if d.doc_sub_kind == "syllabus"),
+                "introHints": len(intro_hints or {}),
+            },
+        }
+    finally:
+        try:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 @app.get("/ai/import/{job_id}")
 async def get_import(job_id: str, request: Request) -> dict:
     """Synchronous snapshot of a job's current state.

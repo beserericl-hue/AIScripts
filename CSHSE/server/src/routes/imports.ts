@@ -41,6 +41,7 @@ import {
   receiveAICallback,
   applyAIImport,
   restartAIImport,
+  redetectImport,
   createImportCorrection,
   listImportCorrections,
   inferMatrixColumns,
@@ -205,6 +206,10 @@ router.get('/:importId/ai-status', getAIImportStatus);
 router.get('/:importId/ai-events', streamAIImportEvents);
 router.post('/:importId/apply-ai', applyAIImport);
 router.post('/:importId/restart-ai', restartAIImport);
+// CR-040 follow-on — re-run standalone detectors (CVs / papers / syllabi
+// / introductions) without re-uploading or re-running the matcher. Used
+// by the Review surface "Re-run detectors" button.
+router.post('/:importId/redetect', redetectImport);
 // Coordinator-supplied corrections — see ImportCorrection model.
 router.post('/:importId/corrections', createImportCorrection);
 router.get('/:importId/corrections', listImportCorrections);
