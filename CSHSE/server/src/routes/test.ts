@@ -471,6 +471,17 @@ export function buildTestRouter(): Router | null {
       tags: importSpec.aiTags ?? [],
       placeholderSections: importSpec.aiPlaceholderSections ?? [],
       matrices: importSpec.aiMatrices ?? [],
+      // CR-033 / CR-040 / CR-039 — detector outputs the rail surfaces
+      // as standalone entries. The auto-state previously only carried
+      // buckets+tags+matrices, so seed fixtures that set aiCVs /
+      // aiEvidenceDocs / aiIntroductions on the SelfStudyImport had
+      // them DROPPED on the way into Zustand (the wizard's localStorage
+      // hydration is the source of truth for the rail render).
+      cvs: importSpec.aiCVs ?? [],
+      evidenceDocs: importSpec.aiEvidenceDocs ?? [],
+      introductions: importSpec.aiIntroductions ?? {
+        document: { scope: 'document', standardCode: null, items: [] }
+      },
       matrixRowEdits: {},
       // CR-034: dirty=true so the wizard's _applySnapshot guard preserves
       // the seeded buckets (and any subsequent user edits) instead of

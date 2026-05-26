@@ -90,12 +90,15 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
 
     await page.getByRole('button', { name: /Importer Wizard/i }).click();
 
-    // The wizard renders the Stepper with role="tablist" — the easiest
-    // structural cue that the AI wizard surface is mounted (the Legacy
-    // panel does NOT render a tablist).
-    await expect(page.getByRole('tablist')).toBeVisible({ timeout: 15_000 });
+    // The wizard renders the Stepper with role="tablist" + aria-label
+    // "Wizard steps". Scope to that to avoid colliding with the
+    // SpecRail tablist that also appears when Review is the active step.
     await expect(
-      page.getByRole('tab', { name: /upload/i })
+      page.getByRole('tablist', { name: /wizard steps/i })
+    ).toBeVisible({ timeout: 15_000 });
+    // Within the wizard step tablist, the Upload step is always present.
+    await expect(
+      page.getByRole('tab', { name: /^Upload$/i })
     ).toBeVisible();
   });
 
@@ -105,13 +108,17 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
     await page.goto(`/self-study/${seed!.submissionId}`);
     await page.waitForLoadState('networkidle');
 
-    // Open Wizard first
+    // Open Wizard first — scope the assertion to the Wizard steps tablist
+    // so it doesn't collide with the SpecRail tablist also rendered on
+    // the Review step.
     await page.getByRole('button', { name: /Importer Wizard/i }).click();
-    await expect(page.getByRole('tablist')).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole('tablist', { name: /wizard steps/i })
+    ).toBeVisible({ timeout: 10_000 });
 
-    // Now click Import Document — the legacy panel opens, the wizard's
-    // tablist remains in the DOM but the legacy heading must also appear
-    // (the surfaces coexist within their respective panels).
+    // Now click Import Document — the legacy side panel opens. The
+    // panel renders its own header (NOT the toolbar button text); use
+    // getByRole heading inside the panel region.
     await page.getByRole('button', { name: /Import Document/i }).click();
     await expect(
       page.getByRole('heading', { name: /Import Document/i })
