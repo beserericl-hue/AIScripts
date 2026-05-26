@@ -35,6 +35,9 @@ import { User } from '../models/User';
 import { Submission } from '../models/Submission';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { APIKey } from '../models/APIKey';
+// CR-017 isolation support — seed router optionally links user+submission
+// to a real Institution doc so the cross-institution guard can fire.
+import { Institution } from '../models/Institution';
 
 const FIXTURE_DIR = path.join(__dirname, '..', 'test', 'fixtures');
 
@@ -236,13 +239,47 @@ export function buildTestRouter(): Router | null {
         (userSpec.lastName as string) ??
         (nameParts.slice(1).join(' ') || 'Seed');
 
+      // CR-017 isolation support — find-or-create an Institution doc by
+      // name so both the user and submission get a real institutionId.
+      // Without this, the institutionId field on user + submission is
+      // undefined and the cross-institution guard in submissionController
+      // can't fire (the equality check skips when either side is falsy).
+      // Fixtures that DON'T want isolation just don't pass institutionName.
+      const userInstName = (userSpec.institutionName as string) ?? 'E2E Test University';
+      const subInstName = (submissionSpec.institutionName as string) ?? userInstName;
+      // Look up or create the user's institution.
+      let userInst = await Institution.findOne({ name: userInstName });
+      if (!userInst) {
+        userInst = await Institution.create({
+          name: userInstName,
+          type: 'university',
+          address: { street: '1 Test St', city: 'Test', state: 'CA', zip: '90000', country: 'USA' },
+          primaryContact: { name: 'Test Admin', email: 'admin@test.local', phone: '555-0000' },
+        } as any);
+      }
+      // Look up or create the submission's institution (may differ for
+      // cross-institution negative-case tests).
+      let subInst = userInst;
+      if (subInstName !== userInstName) {
+        subInst = await Institution.findOne({ name: subInstName }) ?? undefined as any;
+        if (!subInst) {
+          subInst = await Institution.create({
+            name: subInstName,
+            type: 'university',
+            address: { street: '1 Test St', city: 'Test', state: 'CA', zip: '90000', country: 'USA' },
+            primaryContact: { name: 'Test Admin', email: 'admin@test.local', phone: '555-0000' },
+          } as any);
+        }
+      }
+
       const userPayload: Record<string, unknown> = {
         email,
         firstName,
         lastName,
         role: (userSpec.role as string) ?? 'program_coordinator',
         status: 'active',
-        institutionName: (userSpec.institutionName as string) ?? 'E2E Test University',
+        institutionName: userInstName,
+        institutionId: userInst._id,
         isActive: true,
         // CR-042: seeded users land in the trusted-domain allowlist (so any
         // future autoProvision request from the same domain is accepted).
@@ -261,7 +298,8 @@ export function buildTestRouter(): Router | null {
         // so we have to stamp it explicitly here. Format mirrors the model
         // hook (YYYY-NNN) but uses the per-seed stamp for uniqueness.
         submissionId: `E2E-${stamp}`,
-        institutionName: (submissionSpec.institutionName as string) ?? 'E2E Test University',
+        institutionName: subInstName,
+        institutionId: subInst._id,
         programName: (submissionSpec.programName as string) ?? 'E2E Test Program',
         programLevel: (submissionSpec.programLevel as string) ?? 'bachelors',
         submitterId: userDoc._id,

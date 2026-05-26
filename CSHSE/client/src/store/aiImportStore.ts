@@ -662,6 +662,17 @@ const initialState = {
   pendingFiles: [] as File[]
 };
 
+// CR-015 — auto-linkify bare http(s) URLs in plain-text snippets so the
+// Reader/PC view surfaces them as clickable anchors when no htmlSnippet
+// was captured by the walker. Exported for unit-test coverage; the apply()
+// flow at two sites (narrative + introduction render) calls into this.
+export function linkifyPlainText(s: string): string {
+  return s.replace(
+    /\bhttps?:\/\/[^\s<>"')]+/g,
+    (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`
+  );
+}
+
 function deriveStepFromStatus(status: WizardStatus, currentStep: WizardStep): WizardStep {
   // Terminal failure ALWAYS forces back to the Parse step regardless of where
   // the user (or persisted state) thought they were — ParseStep renders the
@@ -1791,11 +1802,8 @@ export const useAIImportStore = create<AIImportState>()(
         // auto-linkify bare URLs so the Reader/PC view still surfaces them
         // as clickable anchors. The htmlSnippet path is unchanged — if the
         // walker already preserved <a href>, we keep that as-is.
-        const linkifyPlainText = (s: string): string =>
-          s.replace(
-            /\bhttps?:\/\/[^\s<>"')]+/g,
-            (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`
-          );
+        // (Linkifier extracted to module-scope linkifyPlainText for shared
+        // use + unit-test coverage.)
         const renderBody = (item: { snippet: string; htmlSnippet?: string | null }): string => {
           const h = (item.htmlSnippet || '').trim();
           if (h) return h;
@@ -1852,11 +1860,9 @@ export const useAIImportStore = create<AIImportState>()(
         // unpacks this and writes documentIntroduction +
         // standardIntroductions on the Submission.
         const { introductions, evidenceDocs, cvs } = get();
-        const linkify = (s: string) =>
-          s.replace(
-            /\bhttps?:\/\/[^\s<>"')]+/g,
-            (m) => `<a href="${m}" target="_blank" rel="noopener noreferrer">${m}</a>`
-          );
+        // CR-015 — share the same linkifier used by the narrative renderBody
+        // above so introduction content gets the same anchor treatment.
+        const linkify = linkifyPlainText;
         const introductionsPayload: Record<
           string,
           { scope: 'document' | 'standard'; standardCode: string | null; content: string }

@@ -321,3 +321,107 @@ describe('aiImportStore — setCVs (CR-033 Phase 2c)', () => {
     expect(useAIImportStore.getState().cvs.length).toBe(0);
   });
 });
+
+describe('aiImportStore — setStep clears stale errors (CR-027)', () => {
+  beforeEach(reset);
+
+  it('clears errors[] when navigating BACK to Upload outside a running status', () => {
+    useAIImportStore.setState({ status: 'failed', errors: ['matcher returned zero items'] });
+    useAIImportStore.getState().setStep('upload');
+    const s = useAIImportStore.getState();
+    expect(s.step).toBe('upload');
+    expect(s.errors).toEqual([]);
+  });
+
+  it('KEEPS errors[] when navigating to Upload mid-run (status=uploading)', () => {
+    useAIImportStore.setState({ status: 'uploading', errors: ['transient blip'] });
+    useAIImportStore.getState().setStep('upload');
+    const s = useAIImportStore.getState();
+    expect(s.step).toBe('upload');
+    // Mid-run errors stay visible so the coordinator sees what just broke.
+    expect(s.errors).toEqual(['transient blip']);
+  });
+
+  it('KEEPS errors[] when navigating mid-run with status=parsing', () => {
+    useAIImportStore.setState({ status: 'parsing', errors: ['boom'] });
+    useAIImportStore.getState().setStep('upload');
+    expect(useAIImportStore.getState().errors).toEqual(['boom']);
+  });
+
+  it('KEEPS errors[] when navigating mid-run with status=applying', () => {
+    useAIImportStore.setState({ status: 'applying', errors: ['boom'] });
+    useAIImportStore.getState().setStep('upload');
+    expect(useAIImportStore.getState().errors).toEqual(['boom']);
+  });
+
+  it('does NOT clear errors when navigating to a step OTHER than upload', () => {
+    useAIImportStore.setState({ status: 'failed', errors: ['boom'] });
+    useAIImportStore.getState().setStep('parse');
+    expect(useAIImportStore.getState().errors).toEqual(['boom']);
+  });
+
+  it('is a no-op clear when errors is already empty', () => {
+    useAIImportStore.setState({ status: 'idle', errors: [] });
+    useAIImportStore.getState().setStep('upload');
+    expect(useAIImportStore.getState().errors).toEqual([]);
+    expect(useAIImportStore.getState().step).toBe('upload');
+  });
+
+  it('handles queued status as in-flight (keeps errors)', () => {
+    useAIImportStore.setState({ status: 'queued', errors: ['x'] });
+    useAIImportStore.getState().setStep('upload');
+    expect(useAIImportStore.getState().errors).toEqual(['x']);
+  });
+});
+
+describe('aiImportStore — matrix row edits (CR-035 + CR-026)', () => {
+  beforeEach(reset);
+
+  const slug = 'mx-1';
+  const anchor = 'matrix-mx-1-row-3-a';
+  const key = `${slug}|${anchor}`;
+
+  it('retagMatrixRow records a {kind:"retag", newStd, newSpec} entry + dirty=true', () => {
+    useAIImportStore.getState().retagMatrixRow(slug, anchor, '4', 'b');
+    const s = useAIImportStore.getState();
+    expect(s.matrixRowEdits[key]).toEqual({ kind: 'retag', newStd: '4', newSpec: 'b' });
+    expect(s.dirty).toBe(true);
+  });
+
+  it('removeMatrixRow records a {kind:"remove"} entry + dirty=true', () => {
+    useAIImportStore.getState().removeMatrixRow(slug, anchor);
+    const s = useAIImportStore.getState();
+    expect(s.matrixRowEdits[key]).toEqual({ kind: 'remove' });
+    expect(s.dirty).toBe(true);
+  });
+
+  it('restoreMatrixRow deletes the entry + bumps dirty=true', () => {
+    useAIImportStore.setState({
+      matrixRowEdits: { [key]: { kind: 'remove' } },
+      dirty: false,
+    });
+    useAIImportStore.getState().restoreMatrixRow(slug, anchor);
+    const s = useAIImportStore.getState();
+    expect(s.matrixRowEdits[key]).toBeUndefined();
+    expect(s.dirty).toBe(true);
+  });
+
+  it('retag overrides a prior remove for the same row (last write wins)', () => {
+    useAIImportStore.getState().removeMatrixRow(slug, anchor);
+    useAIImportStore.getState().retagMatrixRow(slug, anchor, '5', 'c');
+    expect(useAIImportStore.getState().matrixRowEdits[key]).toEqual({
+      kind: 'retag',
+      newStd: '5',
+      newSpec: 'c',
+    });
+  });
+
+  it('different (matrixSlug, anchor) tuples write to different keys', () => {
+    useAIImportStore.getState().retagMatrixRow('mx-a', 'row-1', '1', 'a');
+    useAIImportStore.getState().retagMatrixRow('mx-b', 'row-2', '2', 'b');
+    const edits = useAIImportStore.getState().matrixRowEdits;
+    expect(Object.keys(edits).length).toBe(2);
+    expect(edits['mx-a|row-1']).toEqual({ kind: 'retag', newStd: '1', newSpec: 'a' });
+    expect(edits['mx-b|row-2']).toEqual({ kind: 'retag', newStd: '2', newSpec: 'b' });
+  });
+});
