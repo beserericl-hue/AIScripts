@@ -127,17 +127,24 @@ describe('aiImportStore — _applySnapshot', () => {
     expect(s.status).toBe('parsed');
     expect(s.buckets['1.a']).toBeDefined();
     expect(s.buckets['1.a'].narratives).toHaveLength(1);
-    // parsed + previously on 'upload' → step derives to 'review'
-    expect(s.step).toBe('review');
+    // CR-043 follow-on — wizard is Upload + Parse only; Review,
+    // Matrix, Apply are toolbar surfaces. status='parsed' keeps the
+    // wizard on 'parse' (where the "Open Review" CTA lives).
+    expect(s.step).toBe('parse');
   });
 
   it('does not bounce the user back when they have already moved past', () => {
-    useAIImportStore.getState().setStep('apply');
+    // CR-043 follow-on — the wizard no longer routes through `apply`
+    // as a step. The closest forward state is `parse` (parsing) and
+    // anything past it stays in the toolbar Review/Matrix surfaces.
+    // We pin the regression-relevant invariant: a `parsed` snapshot
+    // doesn't yank a user already on `parse` somewhere else.
+    useAIImportStore.getState().setStep('parse');
     useAIImportStore.getState()._applySnapshot({
       status: 'parsed',
       stages: []
     });
-    expect(useAIImportStore.getState().step).toBe('apply');
+    expect(useAIImportStore.getState().step).toBe('parse');
   });
 
   it('preserves current state when snapshot omits optional fields', () => {

@@ -3,14 +3,24 @@
  *
  * Steps are clickable once "reached" — forward navigation is gated by
  * `isReached`; backwards navigation is always allowed and never destroys
- * state (UI spec §6). The Matrix step is conditionally shown based on
- * the host's `showMatrix` prop (only when matrices were detected).
+ * state (UI spec §6).
+ *
+ * CR-043 follow-on (post-release feedback): the wizard's internal
+ * Review / Matrix / Apply steps are REMOVED from this stepper. They
+ * live on the Self-Study Editor toolbar as standalone surfaces
+ * (ReviewSurface, MatrixSurface) and the Review surface itself carries
+ * an Apply button. The wizard is now strictly the "ingest" phase —
+ * Upload a file, watch it Parse, then the coordinator switches to the
+ * Review tab to do everything else.
+ *
+ * `showMatrix` is retained as a prop for backward compatibility; it
+ * no longer affects rendering since Matrix is not a wizard step.
  */
 import React from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import type { WizardStep, WizardStatus } from '../../../../store/aiImportStore';
 
-const STEP_ORDER: WizardStep[] = ['upload', 'parse', 'review', 'matrix', 'apply'];
+const STEP_ORDER: WizardStep[] = ['upload', 'parse'];
 const STEP_LABELS: Record<WizardStep, string> = {
   upload: 'Upload',
   parse: 'Parse',
@@ -44,8 +54,11 @@ function stepState(step: WizardStep, current: WizardStep, status: WizardStatus):
   return 'locked';
 }
 
-export function Stepper({ current, status, showMatrix, onSelect }: StepperProps): JSX.Element {
-  const visible = STEP_ORDER.filter((s) => s !== 'matrix' || showMatrix);
+export function Stepper({ current, status, showMatrix: _showMatrix, onSelect }: StepperProps): JSX.Element {
+  // CR-043 follow-on — Matrix is no longer a wizard step; the prop
+  // stays in the interface for any spec test still passing it.
+  void _showMatrix;
+  const visible = STEP_ORDER;
 
   return (
     <nav aria-label="Wizard steps" role="tablist" className="w-56 border-r border-gray-200 bg-gray-50 p-4">

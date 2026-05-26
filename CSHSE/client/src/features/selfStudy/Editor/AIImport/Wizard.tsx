@@ -1,9 +1,14 @@
 /**
- * AI Import Wizard — top-level component (sub-sprint 1.a scaffold).
+ * AI Import Wizard — top-level component.
  *
- * Lays out the left stepper + active step content. Handles step routing
- * internally (no separate React Router routes — those land in 1.b once
- * we need deep-linking for the TagPopup, per UI spec §20.8).
+ * CR-043 follow-on (post-release feedback 2026-05-26): the wizard is
+ * now strictly the INGEST surface — Upload + Parse only. Review, Matrix,
+ * and Apply moved to standalone toolbar surfaces (ReviewSurface,
+ * MatrixSurface, with Apply inline in the Review header). When parsing
+ * completes the wizard stays on its Parse step but renders a
+ * "Done — open the Review tab" CTA that flips the editor's activeView
+ * to 'review-surface'. Coordinator never has to think about wizard
+ * steps beyond "did the file parse?".
  *
  * Loads existing wizard state on mount via `loadExisting` if the store
  * has a persisted importId — this is how a tab refresh resumes mid-flow.
@@ -12,19 +17,31 @@ import React, { useEffect } from 'react';
 import { Stepper } from './Stepper';
 import { UploadStep } from './steps/UploadStep';
 import { ParseStep } from './steps/ParseStep';
-import { ReviewStep } from './steps/ReviewStep';
-import { MatrixStep } from './steps/MatrixStep';
-import { ApplyStep } from './steps/ApplyStep';
 import { TagListView } from './tags/TagListView';
 import { useAIImportStore } from '../../../../store/aiImportStore';
+
+type ActiveView =
+  | 'standards'
+  | 'curriculum'
+  | 'files'
+  | 'ai-import'
+  | 'review-surface'
+  | 'matrix-surface';
 
 interface WizardProps {
   submissionId: string;
   /** Optional deep-link target — open the TagListView with this tagId pre-selected. */
   initialTagId?: string | null;
+  /**
+   * CR-043 follow-on — Wizard's Parse step hands off to the Review
+   * surface once parsing completes. The parent (SelfStudyEditor) wires
+   * this callback so the "Open the Review tab" CTA in ParseStep can
+   * flip activeView without the user having to click into the toolbar.
+   */
+  setActiveView?: (v: ActiveView) => void;
 }
 
-export function Wizard({ submissionId, initialTagId = null }: WizardProps): JSX.Element {
+export function Wizard({ submissionId, initialTagId = null, setActiveView }: WizardProps): JSX.Element {
   const step = useAIImportStore((s) => s.step);
   const status = useAIImportStore((s) => s.status);
   const matrices = useAIImportStore((s) => s.matrices);
@@ -60,23 +77,32 @@ export function Wizard({ submissionId, initialTagId = null }: WizardProps): JSX.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, tags.length]);
 
+  // CR-043 follow-on — `review` / `matrix` / `apply` are no longer
+  // wizard steps. If the persisted store still carries one of those
+  // (older Zustand snapshots from before this deploy), normalize to
+  // 'parse' so the wizard surface renders correctly.
+  const normalizedStep =
+    step === 'review' || step === 'matrix' || step === 'apply' ? 'parse' : step;
+  // Suppress unused-imports lint complaint after we stopped rendering matrices/tags here.
+  void matrices;
+  void tags;
+
   return (
     <div className="flex h-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-      {step !== 'tags' && (
+      {normalizedStep !== 'tags' && (
         <Stepper
-          current={step}
+          current={normalizedStep}
           status={status}
-          showMatrix={matrices.length > 0}
+          showMatrix={false}
           onSelect={setStep}
         />
       )}
       <div className="flex-1 overflow-auto">
-        {step === 'upload' && <UploadStep />}
-        {step === 'parse' && <ParseStep />}
-        {step === 'review' && <ReviewStep />}
-        {step === 'matrix' && <MatrixStep />}
-        {step === 'apply' && <ApplyStep />}
-        {step === 'tags' && <TagListView initialTagId={initialTagId} />}
+        {normalizedStep === 'upload' && <UploadStep />}
+        {normalizedStep === 'parse' && (
+          <ParseStep onOpenReview={setActiveView ? () => setActiveView('review-surface') : undefined} />
+        )}
+        {normalizedStep === 'tags' && <TagListView initialTagId={initialTagId} />}
       </div>
     </div>
   );

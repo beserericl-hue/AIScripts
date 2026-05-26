@@ -2569,10 +2569,13 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             </main>
           )}
 
-          {/* AI Import Wizard View (Sprint 1) */}
+          {/* AI Import Wizard View (Sprint 1). CR-043 follow-on:
+              pass setActiveView down so the wizard's Open-Review CTA
+              flips us to the toolbar Review surface directly (no more
+              wizard-internal Review/Matrix/Apply steps). */}
           {activeView === 'ai-import' && isProgramCoordinator && submissionId && (
             <main className="flex-1 overflow-hidden p-2">
-              <AIImportWizard submissionId={submissionId} />
+              <AIImportWizard submissionId={submissionId} setActiveView={setActiveView} />
             </main>
           )}
 

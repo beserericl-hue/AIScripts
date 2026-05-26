@@ -684,11 +684,14 @@ function deriveStepFromStatus(status: WizardStatus, currentStep: WizardStep): Wi
   // the user (or persisted state) thought they were — ParseStep renders the
   // red error surface for failed/canceled and gives a Start Over action.
   if (status === 'failed' || status === 'canceled') return 'parse';
-  // Don't bounce the user back to an earlier step if they've already navigated.
-  // The status drives the FURTHEST reached step; the user can navigate back.
+  // CR-043 follow-on — wizard is now strictly Upload + Parse. Review,
+  // Matrix, and Apply live as standalone toolbar surfaces. When status
+  // reaches parsed/applied/finished the wizard stays on Parse (which
+  // renders a "Done — open the Review tab" banner). The coordinator
+  // clicks the toolbar's Review button to continue.
   if (currentStep === 'tags') return 'tags';
-  if (status === 'applied' || status === 'finished') return 'apply';
-  if (status === 'parsed') return currentStep === 'upload' || currentStep === 'parse' ? 'review' : currentStep;
+  if (status === 'applied' || status === 'finished') return 'parse';
+  if (status === 'parsed') return 'parse';
   if (status === 'queued' || status === 'parsing') return 'parse';
   return currentStep;
 }

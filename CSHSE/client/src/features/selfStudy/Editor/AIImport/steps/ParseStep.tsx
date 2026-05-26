@@ -81,7 +81,17 @@ function parseStageProgress(detail: string | undefined): { current: number; tota
   return { current, total };
 }
 
-export function ParseStep(): JSX.Element {
+interface ParseStepProps {
+  /**
+   * CR-043 follow-on — Wizard hands ParseStep a way to flip the editor's
+   * activeView to 'review-surface' on the "Next: Review" click. When the
+   * callback isn't passed (legacy embed or test harness), we fall back
+   * to the window-event dispatch.
+   */
+  onOpenReview?: () => void;
+}
+
+export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
   const status = useAIImportStore((s) => s.status);
   const queuePosition = useAIImportStore((s) => s.queuePosition);
   const queueDepth = useAIImportStore((s) => s.queueDepth);
@@ -344,23 +354,24 @@ export function ParseStep(): JSX.Element {
         </button>
         <button
           onClick={() => {
-            // CR-043 — dispatch open-review-surface event for the
-            // SelfStudyEditor to handle (route to persisted Review).
-            // Fall through to setStep('review') so the wizard's
-            // internal Review tab still works if the host doesn't
-            // intercept (e.g. legacy embedding contexts).
+            // CR-043 follow-on — prefer the direct callback from
+            // SelfStudyEditor → Wizard → ParseStep. Falls back to the
+            // window event for legacy hosts that don't pass the prop.
+            if (onOpenReview) {
+              onOpenReview();
+              return;
+            }
             try {
               window.dispatchEvent(new CustomEvent('cr-043-open-review-surface'));
             } catch {
               // best-effort
             }
-            setStep('review');
           }}
           disabled={!isReady || isEmptyParse}
           title={isEmptyParse ? 'AI returned zero items — re-upload or contact support' : undefined}
           className="rounded-md bg-cshse-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-cshse-700 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          Next: Review ▸
+          Open Review ▸
         </button>
         {isEmptyParse && (
           <div
@@ -506,7 +517,20 @@ function BatchProgress(): JSX.Element | null {
             : 'Review opens after the first file finishes.'}
         </div>
         <button
-          onClick={() => setStep('review')}
+          onClick={() => {
+            // CR-043 follow-on — same handoff as the single-file Open
+            // Review button above. Prefer the direct callback; fall back
+            // to the window event for legacy embeds.
+            if (onOpenReview) {
+              onOpenReview();
+              return;
+            }
+            try {
+              window.dispatchEvent(new CustomEvent('cr-043-open-review-surface'));
+            } catch {
+              // best-effort
+            }
+          }}
           disabled={!reviewUnlocked || coverageBlocked}
           className="rounded bg-cshse-600 px-3 py-1 text-xs font-medium text-white shadow disabled:cursor-not-allowed disabled:bg-gray-300"
           title={
