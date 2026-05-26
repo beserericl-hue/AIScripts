@@ -121,9 +121,11 @@ test.describe('CR-040 — evidence docs rail entry (default suite)', () => {
     await gotoReviewStep(page, seed);
 
     await page.getByRole('tab', { name: /Evidence files/i }).click();
-    // Both kind labels render somewhere on the card list (badge text).
-    await expect(page.getByText(/^paper$/i).first()).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText(/^syllabus$/i).first()).toBeVisible();
+    // Both kind labels render somewhere on the card list. Badges are
+    // prefixed with an emoji (📄 paper / 📚 syllabus) so we match the
+    // word without the anchored `^...$` form.
+    await expect(page.getByText(/paper/i).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/syllabus/i).first()).toBeVisible();
   });
 
   test('Evidence files rail entry is HIDDEN when aiEvidenceDocs is empty', async ({ page }) => {

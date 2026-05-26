@@ -94,12 +94,11 @@ test.describe('CR-024 — matrix ↔ spec bidirectional link', () => {
       page.getByText(/Curriculum matrices for 1\.a/i)
     ).toBeVisible({ timeout: 15_000 });
 
-    // The Jump button uses the `title` attribute as its accessible name:
-    // "Jump to this spec's row in Curriculum Map (N course cells)".
-    // Match on that instead of bare "Curriculum Map" — title overrides
-    // the span text when both are present.
+    // The Jump button's accessible name is its inner text — matrix
+    // name + cell-count chip. e.g. "Curriculum Map 2 cells". Match
+    // on that (title attribute does NOT win when there's child text).
     const matrixBtn = page.getByRole('button', {
-      name: /Jump to this spec's row in Curriculum Map/i,
+      name: /Curriculum Map\s+\d+\s+cells?/i,
     });
     await expect(matrixBtn).toBeVisible({ timeout: 10_000 });
     await matrixBtn.click();
