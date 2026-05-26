@@ -90,4 +90,41 @@ describe('CR-042 Phase B — apiKeyRateLimit', () => {
       .send({ email: 'a@example.test' });
     expect(res.headers['x-ratelimit-limit']).toBe('60');
   });
+
+  it('e2e-bootstrap keys are exempt from rate limiting (E2E suite parallelism)', async () => {
+    _testResetRateLimits();
+    // Manually craft a bootstrap key (createdByName='e2e-bootstrap')
+    // to mirror what /api/test/bootstrap-sso-key produces.
+    const raw = `key_${crypto.randomBytes(12).toString('hex')}`;
+    const keyHash = crypto.createHash('sha256').update(raw).digest('hex');
+    await APIKey.create({
+      name: `bootstrap-rl-${Date.now()}`,
+      keyPrefix: 'cshse_sso_v1_',
+      keySuffix: raw.slice(-4),
+      keyHash,
+      scope: 'sso-login',
+      purpose: 'integration',
+      isActive: true,
+      createdBy: new (require('mongoose').Types.ObjectId)('000000000000000000000000'),
+      createdByName: 'e2e-bootstrap',
+    } as any);
+
+    // Hit the endpoint 70 times — past the default sso-login cap of
+    // 60/min. With the bypass, none of them 429.
+    let any429 = false;
+    let bypassHeader: string | undefined;
+    for (let i = 0; i < 70; i++) {
+      const res = await request(app)
+        .post('/api/v1/auth/sso-mint-ticket')
+        .set('x-cshse-api-key', raw)
+        .send({ email: `boot-${i}@example.test` });
+      if (res.status === 429) {
+        any429 = true;
+        break;
+      }
+      if (i === 0) bypassHeader = res.headers['x-ratelimit-bypass'];
+    }
+    expect(any429).toBe(false);
+    expect(bypassHeader).toBe('e2e-bootstrap');
+  });
 });

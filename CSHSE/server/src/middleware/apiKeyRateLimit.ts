@@ -65,10 +65,23 @@ export async function apiKeyRateLimit(req: Request, res: Response, next: NextFun
     if (rawKey) {
       const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
       const k = await APIKey.findOne({ keyHash, isActive: true }).select(
-        'scope metadata _id'
+        'scope metadata createdByName _id'
       );
       if (k) {
         apiKeyId = String(k._id);
+        // CR-042 Phase B follow-on — bootstrap keys (created via
+        // /api/test/bootstrap-sso-key, only mounted when NODE_ENV != production)
+        // are exempt from the rate limiter. The E2E suite hammers ONE
+        // bootstrap key with login-per-seeded-user, often >60 logins per
+        // run — the production-tier 60/min sso-login cap would 429 the
+        // suite mid-flight. Production keys never carry the
+        // 'e2e-bootstrap' creator stamp.
+        if (k.createdByName === 'e2e-bootstrap') {
+          res.setHeader('X-RateLimit-Limit', 'unlimited');
+          res.setHeader('X-RateLimit-Bypass', 'e2e-bootstrap');
+          next();
+          return;
+        }
         const override = k.metadata?.rateLimit;
         if (typeof override === 'number' && override > 0) {
           limit = override;
