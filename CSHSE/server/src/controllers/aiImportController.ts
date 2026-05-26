@@ -19,6 +19,12 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission, INarrativeContent } from '../models/Submission';
+// Static import (was runtime require() — esbuild compiles to CJS just
+// fine here and vitest's TS resolver picks it up under test, whereas
+// the dynamic require missed the .ts extension in the test env and
+// silently no-op'd the CR-043 merge with a 'Cannot find module' that
+// the surrounding try/catch swallowed).
+import * as aiReviewMerge from '../services/aiReviewMerge';
 import {
   CurriculumMatrix,
   ICourseEntry,
@@ -654,8 +660,7 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   // per-import record).
   if (importRecord.aiStatus === 'parsed') {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const merge = require('../services/aiReviewMerge');
+      const merge = aiReviewMerge;
       const submissionDoc = await Submission.findById(importRecord.submissionId);
       if (submissionDoc) {
         const isFirstPostCr043 = !(submissionDoc as any).aiReviewState;
