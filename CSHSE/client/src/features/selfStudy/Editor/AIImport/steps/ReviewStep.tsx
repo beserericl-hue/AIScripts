@@ -904,6 +904,8 @@ function FullReviewStep(): JSX.Element {
           bucket={activeBucket}
           selectedSectionId={selectedSectionId}
           tags={tags}
+          cvs={cvs}
+          evidenceDocs={evidenceDocs}
           onChangeKind={handleChangeKind}
           onReassign={handleSinglePreviewReassign}
           onShowInSource={handleShowInSource}

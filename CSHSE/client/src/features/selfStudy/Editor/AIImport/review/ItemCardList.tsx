@@ -1522,6 +1522,15 @@ interface CVsViewProps {
 }
 
 function CVsView({ cvs }: CVsViewProps): JSX.Element {
+  // CR-040 follow-on (post-release UX feedback) — clicking a CV card
+  // selects it so the right-pane AI evaluation (confidence + heuristic
+  // rationale + "show in source document") reads the same sectionId.
+  // Without this, the right pane stayed on "Select an item from the
+  // middle pane" forever.
+  const selectSection = useAIImportStore((s) => s.selectSection);
+  const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
+  const submissionId = useAIImportStore((s) => s.submissionId);
+
   if (cvs.length === 0) {
     return (
       <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
@@ -1536,40 +1545,76 @@ function CVsView({ cvs }: CVsViewProps): JSX.Element {
           {cvs.length} faculty CV{cvs.length === 1 ? '' : 's'} detected
         </span>
         <span className="ml-2 text-xs text-gray-500">
-          Each card was lifted out of the matcher input so it doesn{"'"}t compete with regular spec routing.
+          Click a card to see confidence + source location in the right pane.
         </span>
       </div>
       <ul className="flex-1 space-y-3 overflow-auto p-4">
-        {cvs.map((cv) => (
-          <li
-            key={cv.sectionId}
-            className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <h3 className="text-sm font-semibold text-gray-900">{cv.facultyName}</h3>
-              <span className="rounded bg-cshse-100 px-1.5 py-0.5 text-[10px] font-medium text-cshse-800">
-                via {cv.routing?.source ?? 'matcher'}
-              </span>
-            </div>
-            {cv.snippet && (
-              <p className="mt-1 text-xs text-gray-700 line-clamp-3">{cv.snippet}</p>
-            )}
-            <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
-              {cv.resolvedStd && cv.resolvedSpec && (
-                <span className="font-mono text-cshse-700">
-                  → Spec {cv.resolvedStd}.{cv.resolvedSpec}
+        {cvs.map((cv) => {
+          const isSelected = selectedSectionId === cv.sectionId;
+          return (
+            <li
+              key={cv.sectionId}
+              data-section-id={cv.sectionId}
+              role="button"
+              tabIndex={0}
+              aria-pressed={isSelected}
+              onClick={() => selectSection(cv.sectionId)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  selectSection(cv.sectionId);
+                }
+              }}
+              className={`cursor-pointer rounded-lg border bg-white p-3 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cshse-500 ${
+                isSelected
+                  ? 'border-cshse-500 ring-2 ring-cshse-300'
+                  : 'border-gray-200 hover:border-cshse-300 hover:shadow-md'
+              }`}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-sm font-semibold text-gray-900">{cv.facultyName}</h3>
+                <span className="rounded bg-cshse-100 px-1.5 py-0.5 text-[10px] font-medium text-cshse-800">
+                  via {cv.routing?.source ?? 'detector'}
                 </span>
+              </div>
+              {cv.snippet && (
+                <p className="mt-1 text-xs text-gray-700 line-clamp-3">{cv.snippet}</p>
               )}
-              <button
-                disabled
-                title="The downloadable .docx is generated at Apply time (CR-033 Phase 3)"
-                className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
-              >
-                📂 View file (pending)
-              </button>
-            </div>
-          </li>
-        ))}
+              <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
+                {cv.resolvedStd && cv.resolvedSpec && (
+                  <span className="font-mono text-cshse-700">
+                    → Spec {cv.resolvedStd}.{cv.resolvedSpec}
+                  </span>
+                )}
+                {/* CR-040 follow-on — File button mirrors evidenceDocs.
+                    Once Apply has packaged the CV as a .docx the button
+                    becomes the download anchor; pre-Apply it's disabled. */}
+                {cv.fileId && submissionId ? (
+                  <a
+                    href={`/api/submissions/${submissionId}/evidence/${cv.fileId}/download`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={cv.fileName}
+                    onClick={(e) => e.stopPropagation()}
+                    className="ml-auto rounded border border-cshse-300 bg-white px-2 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50"
+                  >
+                    📂 Download .docx
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    title="The CV file is generated at Apply time (CR-033 Phase 3)."
+                    className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    📂 Download .docx (pending Apply)
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -1588,6 +1633,10 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
   // the download URL for the View-file button. The same id powers the
   // ReviewSurface + MatrixSurface.
   const submissionId = useAIImportStore((s) => s.submissionId);
+  // CR-040 follow-on — click-to-select so the right-pane AI evaluation
+  // shows the detector heuristics + source location for the picked doc.
+  const selectSection = useAIImportStore((s) => s.selectSection);
+  const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
   if (docs.length === 0) {
     return (
       <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
@@ -1612,10 +1661,27 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
         </span>
       </div>
       <ul className="flex-1 space-y-3 overflow-auto p-4">
-        {docs.map((d) => (
+        {docs.map((d) => {
+          const isSelected = selectedSectionId === d.sectionId;
+          return (
           <li
             key={d.sectionId}
-            className="rounded-lg border border-gray-200 bg-white p-3 shadow-sm"
+            data-section-id={d.sectionId}
+            role="button"
+            tabIndex={0}
+            aria-pressed={isSelected}
+            onClick={() => selectSection(d.sectionId)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                selectSection(d.sectionId);
+              }
+            }}
+            className={`cursor-pointer rounded-lg border bg-white p-3 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cshse-500 ${
+              isSelected
+                ? 'border-cshse-500 ring-2 ring-cshse-300'
+                : 'border-gray-200 hover:border-cshse-300 hover:shadow-md'
+            }`}
           >
             <div className="flex items-baseline justify-between gap-2">
               <h3 className="text-sm font-semibold text-gray-900">{d.title}</h3>
@@ -1660,14 +1726,17 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
                   rel="noopener noreferrer"
                   download={d.fileName}
                   title={`Download ${d.fileName || d.title || 'evidence file'} (.docx — opens in Word)`}
+                  onClick={(e) => e.stopPropagation()}
                   className="ml-auto rounded border border-cshse-300 bg-white px-2 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50"
                 >
                   📂 Download .docx
                 </a>
               ) : (
                 <button
+                  type="button"
                   disabled
                   title="Download becomes available once you Apply the import — the server packages the evidence as a .docx file at that point."
+                  onClick={(e) => e.stopPropagation()}
                   className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
                 >
                   📂 Download .docx (pending Apply)
@@ -1675,7 +1744,8 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
               )}
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </div>
   );
