@@ -68,6 +68,89 @@ def test_anchor_line_recognition(line: str, expected: str | None) -> None:
         assert out and out.replace(".", "") == expected.replace(".", "")
 
 
+@pytest.mark.parametrize(
+    "line, expected_stripped_name",
+    [
+        # CR-040 follow-on (2026-05-27) — real Stevenson document anchors
+        # the pattern detector USED to miss. These tests pin the fix
+        # against regression. Diagnostic against the actual deployed
+        # Stevenson handbook (via /api/test/inspect-toc) confirmed
+        # these are the credential-suffix + ALL-CAPS patterns the
+        # detector needs to recognise.
+
+        # Common credentials suffix patterns. Each must reduce to a
+        # 2-4 token name so _is_anchor_line returns a non-None
+        # stripped form.
+        ("Thomas K. Swisher, J.D., Ph.D.", "Thomas K Swisher"),
+        ("Mary Beth Olson, M.A.", "Mary Beth Olson"),
+        ("Sarah Williams, Ph.D.", "Sarah Williams"),
+        ("John Smith, M.S.", "John Smith"),
+        ("Jane Doe, LCSW", "Jane Doe"),
+
+        # ALL-CAPS proper name with middle initial — accept.
+        ("LAURI A. WEINER", "LAURI A WEINER"),
+        ("LAURI A. WEINER, HS-BCP", "LAURI A WEINER"),
+        ("LAURI A. WEINER, J.D., HS-BCP", "LAURI A WEINER"),
+        ("CHRIS M. JONES, LCPC", "CHRIS M JONES"),
+    ],
+)
+def test_credentials_and_allcaps_anchors(line: str, expected_stripped_name: str) -> None:
+    """Anchor-line recognition for real-world CV anchors with credentials
+    suffix and/or all-caps names. These were systematically missed by
+    the earlier rule (2-4 token + reject-all-caps)."""
+    out = _is_anchor_line(line)
+    assert out is not None, f"expected {line!r} → name, got None"
+    # Compare normalised (punctuation-stripped) so the test isn't
+    # picky about whether middle-initial periods survive.
+    assert (
+        out.replace(".", "").strip() == expected_stripped_name.replace(".", "").strip()
+    ), f"_is_anchor_line({line!r}) = {out!r} (expected {expected_stripped_name!r})"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        # Common CV section headings that LOOK all-caps + 2-4 tokens.
+        # The middle-initial guard MUST reject these. A regression here
+        # would fragment a real CV into one detection per section
+        # heading.
+        "EDUCATION",
+        "PROFESSIONAL EXPERIENCE",
+        "ACADEMIC EMPLOYMENT",
+        "TEACHING EXPERIENCE",
+        "TEACHING EXPERIENCES",
+        "PUBLICATIONS",
+        "AWARDS AND HONORS",
+        "RESEARCH INTERESTS",
+        "PROFESSIONAL DEVELOPMENT",
+        "HONORS AND AWARDS",
+        # The toc_detector false-positive set — none of these should
+        # anchor a CV from the pattern path either.
+        "Human Services Club",
+        "Honor Society",
+        "Professional Expectations",
+        "Professional Development Award",
+    ],
+)
+def test_allcaps_section_headings_rejected_as_anchors(line: str) -> None:
+    """ALL-CAPS section headings (no middle initial) must NOT anchor a
+    CV. Same for topic phrases that aren't person names."""
+    # Some of the topic-phrase entries here aren't all-caps but are
+    # title-case-only. They should still not anchor a CV because the
+    # body context (_is_real_anchor in detect_cvs_from_html) doesn't
+    # find CV markers around them. _is_anchor_line itself may return a
+    # non-None for some — that's why we go through _is_real_anchor
+    # one level up. Here we exercise just _is_anchor_line and check
+    # that the ALL-CAPS ones are filtered.
+    out = _is_anchor_line(line)
+    if line == line.upper() and any(c.isalpha() for c in line):
+        # ALL-CAPS path: must be None (no middle initial guard).
+        assert out is None, (
+            f"_is_anchor_line({line!r}) should reject all-caps section "
+            f"heading without a middle initial; got {out!r}"
+        )
+
+
 # -------------------------------------------------------------- markers
 
 

@@ -56,6 +56,34 @@ _TITLE_PREFIX_RE = re.compile(r"^(Dr|Prof|Mr|Mrs|Ms|Mx)\.?\s+", re.IGNORECASE)
 _NAME_WORD_RE = re.compile(r"^[A-Z][A-Za-z'\-]{1,30}$")
 _NAME_INITIAL_RE = re.compile(r"^[A-Z]\.?$")
 _NAME_PARTICLES = {"de", "del", "della", "van", "von", "la", "di", "da", "du"}
+
+# CR-040 follow-on (2026-05-27) — strip trailing credentials suffix
+# from candidate name lines BEFORE tokenizing. Without this, real CV
+# anchors like "Thomas K. Swisher, J.D., Ph.D." (8 tokens after split)
+# overflow the 2-4 token range and never match. The stripped version
+# "Thomas K. Swisher" has 3 tokens and passes cleanly. Diagnostic
+# against the real Stevenson document confirmed this is the
+# blocker — Swisher and Weiner's CV anchors both carry credentials.
+#
+# COMMA-anchored: a credential must be preceded by ", " and at end
+# of string. Without the comma anchor, the regex would eat "ms"
+# (matching M\.?S\.?) out of "Williams" — exact false positive
+# observed when the earlier draft of this regex used a generic
+# word-boundary anchor.
+#
+# Apply repeatedly (in a while loop) to peel off ", J.D., Ph.D." in
+# two passes: strip ", Ph.D." → "Thomas K. Swisher, J.D." → strip
+# ", J.D." → "Thomas K. Swisher".
+_CV_CREDENTIALS_SUFFIX_RE = re.compile(
+    r",\s*(?:"
+    r"J\.?\s?D\.?|Ph\.?\s?D\.?|Ed\.?\s?D\.?|M\.?\s?D\.?|"
+    r"M\.?\s?A\.?|M\.?\s?S\.?|M\.?\s?Ed\.?|"
+    r"B\.?\s?A\.?|B\.?\s?S\.?|"
+    r"HS-?BCP|LCSW|LPC|LCPC|LCMHC|RN|BSN|MSW|MSN|DSW|BSW|"
+    r"NCC|NCSC|ACS|CAS"
+    r")\.?\s*$",
+    re.IGNORECASE,
+)
 # Tokens that strongly signal "institution" rather than "person". A line
 # containing any of these words is rejected as a CV anchor — without
 # this stoplist, "Towson University" and "Loyola University Maryland"
@@ -159,21 +187,37 @@ def _is_anchor_line(line: str) -> str | None:
     Permissive — false positives become editable Discard-able cards;
     false negatives mean a CV slips past detection and surfaces as a
     misrouted narrative, which is the bug we're trying to fix.
+
+    CR-040 follow-on (2026-05-27) — diagnostic against the real
+    Stevenson document showed two systematic misses:
+      • Names with credentials suffix ("Thomas K. Swisher, J.D., Ph.D.")
+        had 8 tokens after split, overflowing the 2-4 range.
+      • All-caps proper names ("LAURI A. WEINER") were rejected
+        wholesale by the all-caps-equals-section-heading guard.
+    Both are fixed below: credentials are stripped before token
+    counting, and all-caps lines are now accepted iff they have a
+    middle-initial token (a real proper name signature that section
+    headings like "ACADEMIC EMPLOYMENT" don't have).
     """
     s = line.strip()
-    if not s or len(s) > 60:
+    if not s or len(s) > 80:
         return None
-    # Reject ALL-CAPS lines — those are section headings ("ACADEMIC
-    # EMPLOYMENT", "AWARDS AND HONORS"), not proper names. Without this
-    # gate, the pre-walker scan in detect_cvs_from_html would treat CV
-    # subsection headers as fresh anchors and emit one CVDetection per
-    # marker line.
-    has_lower = any(c.islower() for c in s)
-    if not has_lower and any(c.isalpha() for c in s):
-        return None
-    s = _TRAILING_PUNCT_RE.sub("", s)
-    s = _strip_honorific(s)
-    tokens = s.split()
+    # Strip trailing credentials BEFORE token analysis. A line like
+    # "Thomas K. Swisher, J.D., Ph.D." has 8 raw tokens but only 3
+    # after stripping ", J.D., Ph.D." Apply the regex repeatedly
+    # since there can be multiple credential suffixes
+    # (", J.D., Ph.D." = two separate matches).
+    s_stripped = s
+    while True:
+        new_s = _CV_CREDENTIALS_SUFFIX_RE.sub("", s_stripped).rstrip(" ,.").strip()
+        if new_s == s_stripped:
+            break
+        s_stripped = new_s
+    has_lower = any(c.islower() for c in s_stripped)
+    is_all_caps = (not has_lower) and any(c.isalpha() for c in s_stripped)
+    s_clean = _TRAILING_PUNCT_RE.sub("", s_stripped)
+    s_clean = _strip_honorific(s_clean)
+    tokens = s_clean.split()
     if not (2 <= len(tokens) <= 4):
         return None
     if not all(_is_name_token(tok) for tok in tokens):
@@ -188,7 +232,7 @@ def _is_anchor_line(line: str) -> str | None:
         return None
     # Filter out lines that contain Standard-N or spec-id, even though
     # they could pass the token check (e.g. "Standard One Introduction").
-    low = s.lower()
+    low = s_clean.lower()
     if "standard" in low or "spec" in low or "appendix" in low:
         return None
     # Filter out institution-name lines that happen to look like a
@@ -199,7 +243,17 @@ def _is_anchor_line(line: str) -> str | None:
     # start a new "CV" at every degree-granting institution.
     if any(tok.lower() in _NON_PERSON_TOKENS for tok in tokens):
         return None
-    return s
+    # All-caps line — accept iff there's a middle-initial token
+    # (LAURI A. WEINER has "A." → name; ACADEMIC EMPLOYMENT has no
+    # initial → still rejected as a section heading). The presence
+    # of a single-letter punctuated token in an all-caps line is a
+    # strong signature of a proper name; section headings of length
+    # 2-4 tokens essentially never contain one.
+    if is_all_caps:
+        has_initial = any(_NAME_INITIAL_RE.match(t) for t in tokens)
+        if not has_initial:
+            return None
+    return s_clean
 
 
 def _count_cv_markers(text: str) -> int:

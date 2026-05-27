@@ -276,33 +276,17 @@ def _classify_entry(text: str, section_hint: TocEntryKind | None) -> TocEntryKin
         return "cv"
     if _PAPER_LABEL_RE.search(text):
         return "paper"
-    # Plausibly a person name (no contact info required — we trust the TOC).
-    stripped = _CREDENTIALS_SUFFIX_RE.sub("", text).strip(" ,")
-    tokens = stripped.split()
-    if 2 <= len(tokens) <= 5:
-        # All tokens title-case-able (start with uppercase letter or are
-        # particles / initials).
-        ok = True
-        for tok in tokens:
-            t = tok.rstrip(",.:;")
-            if not t:
-                continue
-            if t.lower() in {"de", "del", "della", "van", "von", "la", "di", "da", "du"}:
-                continue
-            # Topic-word guard — short-circuits topic phrases (Standard,
-            # Part, Introduction, ...) so they never reach the name path.
-            if t.lower() in _NON_PERSON_TOPIC_WORDS:
-                ok = False
-                break
-            if not t[0].isupper() and not t[0].isalpha():
-                # Hyphen / apostrophe-leading? unusual — bail.
-                ok = False
-                break
-            if not t[0].isupper():
-                ok = False
-                break
-        if ok:
-            return "cv"
+    # CR-040 follow-on (2026-05-27) — the title-case-tokens → CV
+    # fallback that used to live here was REMOVED after diagnostic
+    # against the real Stevenson handbook revealed it produced
+    # uncontrollable false positives. The handbook's TOC contains
+    # "Human Services Club", "Honor Society", "Professional
+    # Expectations", "Professional Development Award", etc. — all 2-4
+    # token title-case phrases that the fallback classified as CVs.
+    # Without an explicit CV section_hint or a "Curriculum Vitae" /
+    # "CV" / "Faculty CV" token, we now stay conservative and emit
+    # ``unknown`` rather than guessing. The pattern detector is
+    # responsible for finding bare-name CV anchors in the body.
     return "unknown"
 
 

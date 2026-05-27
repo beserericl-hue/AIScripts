@@ -84,10 +84,34 @@ class TestClassifyEntry:
         assert _classify_entry("Sample Research Paper", None) == "paper"
         assert _classify_entry("Country Report Project", None) == "paper"
 
-    def test_plain_name_fallback_to_cv(self):
-        assert _classify_entry("John Rosicky", None) == "cv"
-        assert _classify_entry("Thomas K. Swisher, J.D., Ph.D.", None) == "cv"
-        assert _classify_entry("LAURI A. WEINER", None) == "cv"
+    def test_plain_name_with_no_hint_returns_unknown(self):
+        """CR-040 follow-on (2026-05-27) — the title-case-tokens → CV
+        fallback was removed after the real Stevenson handbook's TOC
+        produced 6 false positives ("Human Services Club", "Honor
+        Society", "Professional Expectations", "Professional
+        Development Award", etc.) — all 2-4 token title-case phrases
+        that aren't CVs. Without an explicit CV section_hint or a
+        "Curriculum Vitae" keyword in the text, plain title-case
+        entries are now classified as "unknown" and don't make it
+        into the anchored detections pass. The pattern detector
+        handles bare-name CV anchors in the body."""
+        # Bare names with no CV context → unknown (was "cv" before).
+        assert _classify_entry("John Rosicky", None) == "unknown"
+        assert _classify_entry("Thomas K. Swisher, J.D., Ph.D.", None) == "unknown"
+        # Explicit CV keyword still wins.
+        assert _classify_entry("Curriculum Vitae — Mary Smith", None) == "cv"
+        # And section_hint overrides everything.
+        assert _classify_entry("John Rosicky", "cv") == "cv"
+
+    def test_topic_phrases_no_longer_misclassify_as_cv(self):
+        """Stevenson handbook TOC false positives — these must classify
+        as 'unknown', not 'cv'. They're the bug the fallback removal
+        was specifically designed to fix."""
+        assert _classify_entry("Human Services Club", None) == "unknown"
+        assert _classify_entry("Honor Society", None) == "unknown"
+        assert _classify_entry("Professional Expectations", None) == "unknown"
+        assert _classify_entry("Professional Development Award", None) == "unknown"
+        assert _classify_entry("Department Chair's Letter", None) == "unknown"
 
     def test_random_phrase_is_unknown(self):
         assert _classify_entry("introduction to the program", None) == "unknown"
