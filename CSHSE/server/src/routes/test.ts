@@ -649,6 +649,41 @@ export function buildTestRouter(): Router | null {
   });
 
   /**
+   * CR-040 follow-on (2026-05-27) — list imports on a submission so a
+   * diagnostic test can find a known submission's importId without
+   * needing JWT auth. Read-only, seed-token-gated.
+   *
+   * GET /api/test/imports-for-submission/:submissionId
+   * Response: { imports: [{ id, originalFilename, aiStatus, aiS3Key,
+   *                          createdAt, hasS3Key }, ...] }
+   */
+  router.get('/imports-for-submission/:submissionId', async (req: Request, res: Response) => {
+    if (!requireSeedToken(req, res)) return;
+    const { submissionId } = req.params;
+    try {
+      const imports: any[] = await SelfStudyImport.find({ submissionId })
+        .select('_id originalFilename aiStatus aiS3Key createdAt')
+        .sort({ createdAt: -1 })
+        .lean();
+      return res.json({
+        ok: true,
+        submissionId,
+        imports: imports.map((i) => ({
+          id: String(i._id),
+          originalFilename: i.originalFilename,
+          aiStatus: i.aiStatus,
+          aiS3Key: i.aiS3Key || null,
+          hasS3Key: Boolean(i.aiS3Key),
+          createdAt: i.createdAt,
+        })),
+      });
+    } catch (err: any) {
+      console.error('[test-imports-for-submission] failed', err);
+      return res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
+  /**
    * CR-040 follow-on (2026-05-27) — TOC inspection on a real import.
    *
    * GET /api/test/inspect-toc/:importId
