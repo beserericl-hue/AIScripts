@@ -533,6 +533,77 @@ class TestParseSubTocs:
         html = b"<html><body><p>Just prose, no sub-TOC anywhere.</p></body></html>"
         assert parse_sub_tocs(html) == []
 
+    def test_sub_toc_bare_name_roster_under_cv_heading(self):
+        """CR-040 follow-on (2026-05-27) — real Stevenson document
+        diagnostic via /api/test/inspect-toc revealed the production
+        doc's sub-TOC format is NOT dotted-leader-with-page-number.
+        Instead, "Faculty Curriculum Vitae" is followed by a roster
+        of bare name lines, each with a credentials suffix:
+
+          Faculty Curriculum Vitae
+          Full-Time Faculty
+          John Rosicky, Ph.D.
+          Tom Swisher, J.D., Ph.D.
+          Lauri Weiner, J.D., M.A. Couns .
+          Mayaugust Finkenberg, Ed.D.
+          Part-Time Faculty
+          Carol Dietrich , MSW
+          ...
+
+        parse_sub_tocs must accept this format (no page numbers, no
+        dotted leaders). Pin all 9 names recovered.
+        """
+        html = (
+            "<html><body>"
+            "<h1>Table of Contents</h1>"
+            "<p>Standard 1 ............ 14</p>"
+            "<p>Standard 6 ............ 80</p>"
+            "<h2>Introduction</h2>"
+            "<p>A self-study introduction with body prose that is long "
+            "enough to trip the 200-character prose-paragraph gate so "
+            "the main TOC walker bails here. We need at least 200 "
+            "characters which is more than this sentence alone provides. "
+            "Adding another sentence brings us comfortably over the gate.</p>"
+            "<h2>Standard 6 - Personnel</h2>"
+            "<p>Standard 6 body prose discussing personnel qualifications "
+            "and the faculty roster that follows.</p>"
+            "<h2>Faculty Curriculum Vitae</h2>"
+            "<p>Full-Time Faculty</p>"
+            "<p>John Rosicky, Ph.D.</p>"
+            "<p>Tom Swisher, J.D., Ph.D.</p>"
+            "<p>Lauri Weiner, J.D., M.A. Couns.</p>"
+            "<p>Mayaugust Finkenberg, Ed.D.</p>"
+            "<p>Part-Time Faculty</p>"
+            "<p>Carol Dietrich, MSW</p>"
+            "<p>Bunny Ebling, LCSW</p>"
+            "<p>Roxanne Epps, MSW</p>"
+            "<p>Barbara Guthrie, M.Sp.Ed.</p>"
+            "<h2>Appendix B</h2>"
+            "<p>Other body content following the faculty list.</p>"
+            "</body></html>"
+        ).encode("utf-8")
+        entries = parse_sub_tocs(html)
+        labels = [e.label for e in entries]
+        # All 9 faculty names recovered without dotted-leader page numbers.
+        assert any("John Rosicky" in l for l in labels)
+        assert any("Tom Swisher" in l for l in labels)
+        assert any("Lauri Weiner" in l for l in labels)
+        assert any("Mayaugust Finkenberg" in l for l in labels)
+        assert any("Carol Dietrich" in l for l in labels)
+        assert any("Bunny Ebling" in l for l in labels)
+        assert any("Roxanne Epps" in l for l in labels)
+        assert any("Barbara Guthrie" in l for l in labels)
+        # All are CVs under the section hint.
+        for e in entries:
+            if any(
+                kw in e.label
+                for kw in ("Rosicky", "Swisher", "Weiner", "Finkenberg",
+                          "Dietrich", "Ebling", "Epps", "Guthrie")
+            ):
+                assert e.kind == "cv", (
+                    f"Expected {e.label!r} classified as cv, got {e.kind!r}"
+                )
+
     def test_sub_toc_requires_two_toc_shaped_lines(self):
         """A heading "Faculty CVs" followed by ONE name line and then
         prose should NOT trip a sub-TOC — that's just a regular CV

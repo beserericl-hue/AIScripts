@@ -456,6 +456,43 @@ _TOC_LINE_SHAPE_RE = re.compile(
 )
 
 
+def _looks_like_person_name(text: str) -> bool:
+    """Heuristic — does ``text`` look like a person-name TOC entry?
+
+    Used by the sub-TOC scanner's lookahead and inner walk when the
+    group hint is ``cv``. Real Stevenson self-studies list their
+    faculty roster as bare name lines following a "Faculty Curriculum
+    Vitae" heading — no dotted leader, no page number, just the name
+    (optionally with a credentials suffix). We need to accept those
+    as TOC entries without the dotted-leader signature.
+
+    A name looks like:
+      • 2-5 whitespace-separated tokens (after stripping credentials),
+      • First token starts with an uppercase letter,
+      • No token is a known non-person topic word (Standard, Part,
+        Course, etc.),
+      • No prose-y phrasing (lacks common verb-endings).
+    """
+    # Strip credentials and trailing punctuation.
+    s = _CREDENTIALS_SUFFIX_RE.sub("", text).strip(" ,.")
+    s = re.sub(r"[ \s]+", " ", s).strip()
+    if not s:
+        return False
+    tokens = s.split()
+    if not (2 <= len(tokens) <= 5):
+        return False
+    if not tokens[0][0].isalpha() or not tokens[0][0].isupper():
+        return False
+    for tok in tokens:
+        t = tok.rstrip(",.:;").lower()
+        if t in _NON_PERSON_TOPIC_WORDS:
+            return False
+        # Reject prose markers that occasionally sneak in.
+        if t in {"the", "and", "or", "of", "for", "with", "in", "on", "at", "as"}:
+            return False
+    return True
+
+
 def parse_sub_tocs(html_bytes: bytes) -> list[TocEntry]:
     """CR-040 follow-on (2026-05-27) — find SUB-TOCs scattered through
     the document body.
@@ -560,11 +597,20 @@ def parse_sub_tocs(html_bytes: bytes) -> list[TocEntry]:
         if group is None:
             i += 1
             continue
-        # Only treat as sub-TOC start if next N lines actually look
-        # like TOC entries (have dotted leaders + page numbers).
-        # Without this gate, a body heading "Faculty CVs" followed by
-        # full prose CV bodies would be wrongly classified.
+        # Treat as sub-TOC start if the next N lines actually look
+        # like TOC entries. Two acceptable shapes:
+        #   (a) Dotted-leader + page number ("John Smith ........ 45")
+        #   (b) Bare-name listing under a known group heading
+        #       ("Faculty Curriculum Vitae" → "Tom Swisher, J.D.,
+        #        Ph.D." with no trailer)
+        # Without (b), real Stevenson self-studies that list their
+        # faculty roster as bare names after a "Faculty Curriculum
+        # Vitae" heading get missed — diagnostic against the actual
+        # uploaded Stevenson document on 2026-05-27 confirmed this
+        # is the production-doc shape, not the dotted-leader one my
+        # synthetic fixtures used.
         toc_shaped_count = 0
+        bare_name_count = 0
         lookahead_end = min(i + 1 + 40, n)
         for k in range(i + 1, lookahead_end):
             t = tags_in_order[k].get_text(separator=" ", strip=True)
@@ -576,7 +622,20 @@ def parse_sub_tocs(html_bytes: bytes) -> list[TocEntry]:
                     break
             elif len(t) > 200:
                 break  # prose — abandon
-        if toc_shaped_count < 2:
+            else:
+                # Bare-name candidate: short line that could be a name
+                # OR a sub-group heading ("Full-Time Faculty",
+                # "Part-Time Faculty") that the inner walk treats as a
+                # divider. Look like a name = 2-5 tokens, first token
+                # starts uppercase, no obvious prose markers.
+                cleaned_t = _clean_toc_line(t)
+                if cleaned_t and len(cleaned_t) <= 100:
+                    looks_like_name = _looks_like_person_name(cleaned_t)
+                    if looks_like_name:
+                        bare_name_count += 1
+                        if bare_name_count >= 2:
+                            break
+        if toc_shaped_count < 2 and bare_name_count < 2:
             i += 1
             continue
 
@@ -618,26 +677,51 @@ def parse_sub_tocs(html_bytes: bytes) -> list[TocEntry]:
                     )
                 i += 1
             else:
-                non_toc_run += 1
-                if non_toc_run >= 5:
-                    break
-                # Some sub-TOC entries lack the dotted leader — they're
-                # just bare text with no page number. If the line is
-                # short and looks like a name / title, accept it as
-                # an entry under the current group.
+                # Bare-name fallback — under a known group hint, accept
+                # short lines that look like a person name even without
+                # a dotted-leader trailer. This is the format real
+                # Stevenson docs use under "Faculty Curriculum Vitae":
+                # bare "Tom Swisher, J.D., Ph.D." entries one per line,
+                # no page numbers.
                 cleaned = _clean_toc_line(sub_text)
+                accepted = False
                 if cleaned and len(cleaned) <= 100:
-                    kind = _classify_entry(cleaned, group)
-                    if kind != "unknown":
+                    if group == "cv" and _looks_like_person_name(cleaned):
                         entries.append(
                             TocEntry(
                                 label=cleaned,
-                                kind=kind,
+                                kind="cv",
                                 raw=sub_text,
                                 section_hint=group,
                             )
                         )
-                        non_toc_run = 0
+                        accepted = True
+                    else:
+                        kind = _classify_entry(cleaned, group)
+                        if kind != "unknown":
+                            entries.append(
+                                TocEntry(
+                                    label=cleaned,
+                                    kind=kind,
+                                    raw=sub_text,
+                                    section_hint=group,
+                                )
+                            )
+                            accepted = True
+                if accepted:
+                    non_toc_run = 0
+                else:
+                    # Tolerate a few sub-headings ("Full-Time Faculty",
+                    # "Part-Time Faculty") that split a single sub-TOC
+                    # into groups. _detect_group_heading above catches
+                    # any line that maps to a *known* group; everything
+                    # else is consumed as noise. 8 consecutive
+                    # non-name lines = bail (was 5 — relaxed because
+                    # real docs sometimes have a section banner line
+                    # between roster groups).
+                    non_toc_run += 1
+                    if non_toc_run >= 8:
+                        break
                 i += 1
         # Continue the outer scan from where we stopped.
 
