@@ -474,7 +474,16 @@ _CV_BODY_WORDS = {
     "vita", "vitae", "curriculum",
     "table", "contents", "appendix", "section", "page", "standard",
     "phone", "email", "address", "office", "street", "drive", "road",
-    "avenue", "court", "lane", "boulevard",
+    "avenue", "court", "lane", "boulevard", "box",
+    # US state names - addresses lead with a city + state + zip.
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+    "connecticut", "delaware", "florida", "georgia", "hawaii", "idaho",
+    "illinois", "indiana", "iowa", "kansas", "kentucky", "louisiana",
+    "maine", "maryland", "massachusetts", "michigan", "minnesota",
+    "mississippi", "missouri", "montana", "nebraska", "nevada",
+    "ohio", "oklahoma", "oregon", "pennsylvania", "tennessee",
+    "texas", "utah", "vermont", "virginia", "washington", "wisconsin",
+    "wyoming",
 }
 
 
@@ -501,6 +510,13 @@ def _looks_like_person_name(text: str) -> bool:
     # Tightened 2026-05-27 - the loose version classified 300+
     # CV-body fragments as names against the real Stevenson doc.
     if len(text) > 60:
+        return False
+    # Reject lines containing a ZIP code or phone number - those are
+    # addresses / contact lines that happen to lead with a title-case
+    # token (city, Telephone:, PO Box).
+    if re.search(r"\b\d{5}(?:-\d{4})?\b", text):
+        return False
+    if re.search(r"\(\d{3}\)|\b\d{3}-\d{3,4}\b", text):
         return False
     if not s:
         return False
