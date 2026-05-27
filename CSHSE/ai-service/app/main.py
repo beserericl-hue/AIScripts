@@ -371,6 +371,152 @@ async def redetect(req: RedetectRequest, request: Request) -> dict:
             pass
 
 
+class InspectTocRequest(BaseModel):
+    """CR-040 follow-on (2026-05-27) — debug endpoint to inspect what
+    the TOC detector ACTUALLY sees in a real document.
+
+    User feedback after the first redetect deploys missed CVs on the
+    real Stevenson doc: my synthetic test fixtures didn't match the
+    real document's TOC structure. This endpoint pulls the .docx from
+    S3, runs ONLY parse_toc + parse_sub_tocs + anchor_in_body, and
+    returns the full structure so a test can verify what's there
+    instead of guessing.
+
+    Same HMAC + S3 gating as /ai/import/redetect.
+    """
+    s3Key: str
+
+
+@app.post("/ai/debug/inspect-toc")
+async def inspect_toc(req: InspectTocRequest, request: Request) -> dict:
+    """Pull the DOCX from S3 and return the full TOC structure.
+
+    Response shape:
+      {
+        "ok": true,
+        "mainTocEntries": [{"label", "kind", "section_hint", "raw"}, ...],
+        "subTocEntries":  [{"label", "kind", "section_hint", "raw"}, ...],
+        "anchoredDetections": [
+          {"label", "kind", "section_hint", "course_code",
+           "byte_offset_start", "body_text_preview" (first 300 chars)},
+          ...
+        ],
+        "counts": {
+          "mainTocByKind":    {"cv": N, "syllabus": N, "paper": N, "unknown": N},
+          "subTocByKind":     {...},
+          "anchoredByKind":   {...},
+          "totalTocEntries":  N,
+          "totalAnchored":    N,
+        }
+      }
+
+    No pattern-detector, no matcher, no callback. Strictly read-only
+    inspection so a test can call this against the deployed S3
+    and report what's actually in the user's document.
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+
+    import io
+    import os
+    import shutil
+    import tempfile
+    from pathlib import Path
+    import boto3
+    import mammoth
+    from botocore.client import Config as BotoConfig
+    from app.splitter.toc_detector import (
+        parse_toc,
+        parse_sub_tocs,
+        anchor_in_body,
+    )
+
+    bucket = os.environ.get("CSHSE_S3_BUCKET", "cshse-filestorage-qlyj5pn")
+    endpoint = os.environ.get("AWS_ENDPOINT_URL_S3") or os.environ.get("AWS_ENDPOINT_URL")
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        config=BotoConfig(s3={"addressing_style": "path"}),
+    )
+    tmp_dir = Path(tempfile.mkdtemp(prefix="inspect-toc-"))
+    docx_path = tmp_dir / "source.docx"
+    try:
+        try:
+            s3.download_file(bucket, req.s3Key, str(docx_path))
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(
+                status_code=502,
+                detail=f"s3 fetch failed for {req.s3Key}: {type(exc).__name__}: {exc}",
+            )
+
+        with open(docx_path, "rb") as f:
+            html_str = mammoth.convert_to_html(io.BytesIO(f.read())).value
+        html_bytes = html_str.encode("utf-8")
+
+        main_entries = parse_toc(html_bytes)
+        sub_entries = parse_sub_tocs(html_bytes)
+        all_entries = main_entries + sub_entries
+        anchored = anchor_in_body(html_bytes, all_entries) if all_entries else []
+
+        def _count_by_kind(entries):
+            out: dict = {"cv": 0, "syllabus": 0, "paper": 0, "unknown": 0}
+            for e in entries:
+                out[e.kind] = out.get(e.kind, 0) + 1
+            return out
+
+        def _count_anchored_by_kind(dets):
+            out: dict = {"cv": 0, "syllabus": 0, "paper": 0}
+            for d in dets:
+                out[d.kind] = out.get(d.kind, 0) + 1
+            return out
+
+        return {
+            "ok": True,
+            "mainTocEntries": [
+                {
+                    "label": e.label,
+                    "kind": e.kind,
+                    "section_hint": e.section_hint,
+                    "raw": e.raw,
+                }
+                for e in main_entries
+            ],
+            "subTocEntries": [
+                {
+                    "label": e.label,
+                    "kind": e.kind,
+                    "section_hint": e.section_hint,
+                    "raw": e.raw,
+                }
+                for e in sub_entries
+            ],
+            "anchoredDetections": [
+                {
+                    "label": d.label,
+                    "kind": d.kind,
+                    "section_hint": d.section_hint,
+                    "course_code": d.course_code,
+                    "byte_offset_start": d.byte_offset_start,
+                    "body_text_preview": (d.body_text or "")[:300],
+                }
+                for d in anchored
+            ],
+            "counts": {
+                "mainTocByKind": _count_by_kind(main_entries),
+                "subTocByKind": _count_by_kind(sub_entries),
+                "anchoredByKind": _count_anchored_by_kind(anchored),
+                "totalTocEntries": len(all_entries),
+                "totalAnchored": len(anchored),
+            },
+            "documentBytes": len(html_bytes),
+        }
+    finally:
+        try:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 @app.get("/ai/import/{job_id}")
 async def get_import(job_id: str, request: Request) -> dict:
     """Synchronous snapshot of a job's current state.

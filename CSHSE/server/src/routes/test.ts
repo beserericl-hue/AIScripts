@@ -648,6 +648,99 @@ export function buildTestRouter(): Router | null {
     }
   });
 
+  /**
+   * CR-040 follow-on (2026-05-27) — TOC inspection on a real import.
+   *
+   * GET /api/test/inspect-toc/:importId
+   *
+   * Used by the diagnostic test that walks the REAL Stevenson document
+   * (per user feedback: "stop guessing and actually test this out").
+   * Returns the import's aiS3Key + originalFilename + submission info,
+   * then POSTs /ai/debug/inspect-toc to cshse-ai to get the full TOC
+   * structure (main TOC entries, sub-TOC entries, body-anchored
+   * detections, counts).
+   *
+   * Auth: x-e2e-seed-token only — no JWT required. Read-only.
+   */
+  router.get('/inspect-toc/:importId', async (req: Request, res: Response) => {
+    if (!requireSeedToken(req, res)) return;
+    const { importId } = req.params;
+    try {
+      const importRecord: any = await SelfStudyImport.findById(importId).lean();
+      if (!importRecord) {
+        return res.status(404).json({ error: `import ${importId} not found` });
+      }
+      const s3Key = importRecord.aiS3Key;
+      if (!s3Key) {
+        return res.status(409).json({
+          error: 'no-s3-key',
+          detail: 'This import has no aiS3Key — cannot inspect TOC.',
+          import: {
+            id: String(importRecord._id),
+            originalFilename: importRecord.originalFilename,
+            aiStatus: importRecord.aiStatus,
+          },
+        });
+      }
+
+      // Call the cshse-ai /ai/debug/inspect-toc endpoint, signing with
+      // the shared HMAC secret. Reuse the existing controller helper.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const ctrl = require('../controllers/aiImportController');
+      // The internal postToAIService is not exported — but we can hit
+      // it through fetch directly, signing here.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const crypto = require('crypto');
+      const secret = process.env.NODE_SERVICE_HMAC_SECRET;
+      if (!secret) {
+        return res.status(500).json({ error: 'NODE_SERVICE_HMAC_SECRET not set on this server' });
+      }
+      const body = JSON.stringify({ s3Key });
+      const ts = Math.floor(Date.now() / 1000).toString();
+      const digest = crypto
+        .createHmac('sha256', secret)
+        .update(`${ts}.${body}`)
+        .digest('hex');
+      const aiBase =
+        process.env.AI_SERVICE_URL || 'http://ai-service.railway.internal:8080';
+      const r = await fetch(`${aiBase}/ai/debug/inspect-toc`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Service-Signature': `t=${ts},v1=${digest}`,
+        },
+        body,
+        // Long timeout — TOC inspection on a 370MB Stevenson doc needs
+        // a full mammoth conversion.
+        signal: AbortSignal.timeout(5 * 60 * 1000),
+      });
+      if (!r.ok) {
+        const errText = await r.text();
+        return res.status(502).json({
+          error: 'ai-service-failed',
+          status: r.status,
+          detail: errText.slice(0, 1000),
+        });
+      }
+      const aiResult = await r.json();
+      void ctrl; // (controller import kept for parity; not used here.)
+      return res.json({
+        ok: true,
+        import: {
+          id: String(importRecord._id),
+          originalFilename: importRecord.originalFilename,
+          aiStatus: importRecord.aiStatus,
+          aiS3Key: s3Key,
+          submissionId: String(importRecord.submissionId),
+        },
+        inspection: aiResult,
+      });
+    } catch (err: any) {
+      console.error('[test-inspect-toc] failed', err);
+      return res.status(500).json({ error: err?.message ?? String(err) });
+    }
+  });
+
   router.delete('/seed', async (req: Request, res: Response) => {
     if (!requireSeedToken(req, res)) return;
     const { cleanupToken } = req.body ?? {};
