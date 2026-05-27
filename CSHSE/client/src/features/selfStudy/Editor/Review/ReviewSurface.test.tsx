@@ -2,15 +2,16 @@
  * Component unit test for CR-043 ReviewSurface.
  *
  * The surface itself is thin — it sets submissionId on the store,
- * fires loadPersistedReviewState, renders the "Review (CR-043)"
- * header + a Back-to-editor close button, and embeds the larger
- * ReviewStep component. We mock ReviewStep so the test isolates
- * the surface's own contract:
+ * fires loadPersistedReviewState, renders the "Review" header
+ * + a Back-to-editor close button, and embeds the larger ReviewStep
+ * component. We mock ReviewStep so the test isolates the surface's
+ * own contract:
  *   - submissionId propagates to the store
  *   - loadPersistedReviewState is called on mount + when submissionId changes
  *   - the close callback fires on click
- *   - the heading is the canonical 'Review (CR-043)' string that the
- *     E2E tests assert against
+ *   - the heading is the canonical 'Review' string that the
+ *     E2E tests assert against (engineering CR-NNN identifiers are
+ *     intentionally not exposed to end users)
  */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
@@ -32,10 +33,10 @@ describe('<ReviewSurface />', () => {
     useAIImportStore.getState().reset();
   });
 
-  it("renders the 'Review (CR-043)' heading and the embedded ReviewStep", () => {
+  it("renders the 'Review' heading and the embedded ReviewStep", () => {
     render(<ReviewSurface submissionId="sub-1" onClose={() => {}} />);
     expect(
-      screen.getByRole('heading', { name: /Review \(CR-043\)/i })
+      screen.getByRole('heading', { name: /^Review$/i })
     ).toBeInTheDocument();
     expect(screen.getByTestId('review-step-stub')).toBeInTheDocument();
   });

@@ -91,7 +91,7 @@ test.describe('CR-043 — multi-import review lifecycle', () => {
     const reviewBtn = page.getByRole('button', { name: /^Review/ });
     await expect(reviewBtn).toBeEnabled({ timeout: 15_000 });
     await reviewBtn.click();
-    await expect(page.getByRole('heading', { name: /Review \(CR-043\)/ })).toBeVisible({
+    await expect(page.getByRole('heading', { name: /^Review$/ })).toBeVisible({
       timeout: 15_000,
     });
   });

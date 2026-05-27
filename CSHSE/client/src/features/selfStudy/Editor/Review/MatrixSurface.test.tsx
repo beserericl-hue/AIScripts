@@ -3,8 +3,8 @@
  *
  * Parallel coverage to ReviewSurface.test.tsx — the surface mounts
  * MatrixStep, propagates submissionId to the store, hydrates persisted
- * matrix state on mount + on prop changes, renders the "Matrix (CR-043)"
- * heading the E2E tests assert against, and wires the close callback.
+ * matrix state on mount + on prop changes, renders the "Matrix" heading
+ * the E2E tests assert against, and wires the close callback.
  *
  * We stub MatrixStep so the test isolates the surface's own contract
  * (no course-catalog fetches, no matrix bucket-card tree).
@@ -26,10 +26,10 @@ describe('<MatrixSurface />', () => {
     useAIImportStore.getState().reset();
   });
 
-  it("renders the 'Matrix (CR-043)' heading and the embedded MatrixStep", () => {
+  it("renders the 'Matrix' heading and the embedded MatrixStep", () => {
     render(<MatrixSurface submissionId="sub-1" onClose={() => {}} />);
     expect(
-      screen.getByRole('heading', { name: /Matrix \(CR-043\)/i })
+      screen.getByRole('heading', { name: /^Matrix$/i })
     ).toBeInTheDocument();
     expect(screen.getByTestId('matrix-step-stub')).toBeInTheDocument();
   });

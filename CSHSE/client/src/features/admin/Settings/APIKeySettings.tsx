@@ -302,7 +302,7 @@ export function APIKeySettings() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
                 >
                   <option value="general-api">general-api — webhooks, n8n, etc.</option>
-                  <option value="sso-login">sso-login — public SSO entry points (CR-042)</option>
+                  <option value="sso-login">sso-login — public SSO entry points</option>
                 </select>
                 {formData.scope === 'sso-login' && (
                   <p className="mt-1 text-xs text-cshse-700 bg-cshse-50 border border-cshse-200 rounded px-2 py-1">

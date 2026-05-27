@@ -59,7 +59,7 @@ test.describe('Matrix step', () => {
     const matrixBtn = page.getByRole('button', { name: /^Matrix/ });
     await expect(matrixBtn).toBeEnabled({ timeout: 15_000 });
     await matrixBtn.click();
-    await expect(page.getByRole('heading', { name: /Matrix \(CR-043\)/i })).toBeVisible({
+    await expect(page.getByRole('heading', { name: /^Matrix$/i })).toBeVisible({
       timeout: 10_000,
     });
   });
@@ -167,7 +167,7 @@ test.describe('Matrix step', () => {
     const matrixBtn = page.getByRole('button', { name: /^Matrix/ });
     await expect(matrixBtn).toBeEnabled({ timeout: 15_000 });
     await matrixBtn.click();
-    await expect(page.getByRole('heading', { name: /Matrix \(CR-043\)/i })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('heading', { name: /^Matrix$/i })).toBeVisible({ timeout: 10_000 });
     await page.reload();
     await page.waitForLoadState('networkidle');
     // Toolbar's Matrix button still enabled after refresh — submission-

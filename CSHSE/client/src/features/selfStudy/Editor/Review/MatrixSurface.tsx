@@ -27,7 +27,7 @@ export function MatrixSurface({ submissionId, onClose }: MatrixSurfaceProps): JS
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-2">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900">Matrix (CR-043)</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Matrix</h1>
           <p className="text-xs text-gray-500">
             In-flight matrix from the most recent imports. Row edits persist
             with the submission. Apply via the Review surface to write the

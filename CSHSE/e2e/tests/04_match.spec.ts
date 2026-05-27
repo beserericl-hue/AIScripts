@@ -70,7 +70,7 @@ test.describe('Match step', () => {
     const reviewBtn = page.getByRole('button', { name: /^Review/ });
     await expect(reviewBtn).toBeEnabled({ timeout: 15_000 });
     await reviewBtn.click();
-    await expect(page.getByRole('heading', { name: /Review \(CR-043\)/i })).toBeVisible({
+    await expect(page.getByRole('heading', { name: /^Review$/i })).toBeVisible({
       timeout: 10_000,
     });
 

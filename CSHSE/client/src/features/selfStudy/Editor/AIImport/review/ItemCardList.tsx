@@ -1604,7 +1604,7 @@ function CVsView({ cvs }: CVsViewProps): JSX.Element {
                   <button
                     type="button"
                     disabled
-                    title="The CV file is generated at Apply time (CR-033 Phase 3)."
+                    title="The CV file is generated when you Apply the import. Until then, the download isn't available."
                     className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
                     onClick={(e) => e.stopPropagation()}
                   >

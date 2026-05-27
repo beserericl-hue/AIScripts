@@ -85,7 +85,7 @@ test.describe('CR-043 — persisted Review surface on the toolbar', () => {
 
     // The persisted Review surface renders a header "Review (CR-043)"
     // to distinguish it from the wizard-internal Review step.
-    await expect(page.getByRole('heading', { name: /Review \(CR-043\)/ })).toBeVisible({
+    await expect(page.getByRole('heading', { name: /^Review$/ })).toBeVisible({
       timeout: 15_000
     });
     // And the "Back to editor" close button.
@@ -102,7 +102,7 @@ test.describe('CR-043 — persisted Review surface on the toolbar', () => {
     const reviewBtn = page.getByRole('button', { name: /^Review/ });
     await expect(reviewBtn).toBeEnabled({ timeout: 15_000 });
     await reviewBtn.click();
-    await expect(page.getByRole('heading', { name: /Review \(CR-043\)/ })).toBeVisible({
+    await expect(page.getByRole('heading', { name: /^Review$/ })).toBeVisible({
       timeout: 15_000
     });
 

@@ -95,7 +95,7 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between gap-2 border-b border-gray-200 bg-white px-6 py-2">
         <div>
-          <h1 className="text-lg font-semibold text-gray-900">Review (CR-043)</h1>
+          <h1 className="text-lg font-semibold text-gray-900">Review</h1>
           <p className="text-xs text-gray-500">
             Items live on the submission and survive wizard close + re-open.
             Approve to push into the editor; discard to skip; clear to remove

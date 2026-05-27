@@ -181,9 +181,11 @@ export async function gotoReviewStep(page: Page, seed: SeedResult): Promise<void
   await expect(reviewBtn).toBeVisible({ timeout: 20_000 });
   await reviewBtn.click();
 
-  // Wait for the Review surface's heading to appear.
+  // Wait for the Review surface's heading to appear. The heading is
+  // a clean "Review" string — engineering CR-NNN identifiers were
+  // removed from the UI in 2026-05-26 follow-up.
   await expect(
-    page.getByRole('heading', { name: /Review \(CR-043\)/i })
+    page.getByRole('heading', { name: /^Review$/i })
   ).toBeVisible({ timeout: 15_000 });
 
   // The Review pane is master/detail: left rail lists specs, middle
