@@ -717,23 +717,45 @@ def parse_sub_tocs(html_bytes: bytes) -> list[TocEntry]:
                 cleaned = _clean_toc_line(sub_text)
                 accepted = False
                 if cleaned and len(cleaned) <= 100:
-                    if group == "cv" and _looks_like_person_name(cleaned):
-                        entries.append(
-                            TocEntry(
-                                label=cleaned,
-                                kind="cv",
-                                raw=sub_text,
-                                section_hint=group,
-                            )
-                        )
-                        accepted = True
-                    else:
-                        kind = _classify_entry(cleaned, group)
-                        if kind != "unknown":
+                    # CR-040 follow-on (2026-05-27) — for CV groups,
+                    # REQUIRE _looks_like_person_name. Do NOT fall back
+                    # to _classify_entry(cleaned, group): with
+                    # section_hint='cv', _classify_entry's
+                    # "section_hint wins" rule promotes any text
+                    # whatsoever to 'cv', which is exactly the runaway
+                    # behaviour the real-doc diagnostic exposed.
+                    # For syllabus / paper groups, _classify_entry is
+                    # safe because it checks for course codes or
+                    # paper-keywords before defaulting to the hint.
+                    if group == "cv":
+                        if _looks_like_person_name(cleaned):
                             entries.append(
                                 TocEntry(
                                     label=cleaned,
-                                    kind=kind,
+                                    kind="cv",
+                                    raw=sub_text,
+                                    section_hint=group,
+                                )
+                            )
+                            accepted = True
+                    else:
+                        # Syllabus / paper — _classify_entry checks
+                        # for course code / paper keywords, so it's
+                        # not unsafe to let the section_hint win
+                        # only when those signals are absent.
+                        # Still gated on the line not being prose —
+                        # require a course code OR a paper keyword
+                        # OR a short bare title under the hint.
+                        if (
+                            _COURSE_CODE_RE.search(cleaned)
+                            or _SYLLABUS_LABEL_RE.search(cleaned)
+                            or _PAPER_LABEL_RE.search(cleaned)
+                            or (len(cleaned.split()) <= 8 and len(cleaned) <= 80)
+                        ):
+                            entries.append(
+                                TocEntry(
+                                    label=cleaned,
+                                    kind=group,
                                     raw=sub_text,
                                     section_hint=group,
                                 )
