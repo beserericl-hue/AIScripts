@@ -248,11 +248,31 @@ export function _testGetInjectedAIFailuresRemaining(): number {
   return _injectedAIFailures?.remaining ?? 0;
 }
 
-async function postToAIService(path: string, payload: object): Promise<any> {
+interface PostToAIServiceOptions {
+  /** Per-attempt timeout in ms. Defaults to 30s. Long-running calls
+   *  like /ai/import/redetect on a large DOCX need to override this —
+   *  mammoth conversion + deep_walker + detector passes on a 370MB
+   *  Stevenson-class document routinely exceed 30s, so the default
+   *  triggers 5 retries of "aborted" before the user sees an error. */
+  perAttemptTimeoutMs?: number;
+  /** Max retry attempts. Defaults to 5. Long-running calls should
+   *  use ``maxAttempts: 1`` so a slow response doesn't get
+   *  retried-into-oblivion (the doc isn't going to convert faster
+   *  on the 4th try). */
+  maxAttempts?: number;
+}
+
+async function postToAIService(
+  path: string,
+  payload: object,
+  opts: PostToAIServiceOptions = {}
+): Promise<any> {
   const body = JSON.stringify(payload);
   const { signature } = signOutgoing(body);
+  const perAttemptTimeoutMs = opts.perAttemptTimeoutMs ?? AI_SERVICE_PER_ATTEMPT_TIMEOUT_MS;
+  const maxAttempts = opts.maxAttempts ?? AI_SERVICE_MAX_ATTEMPTS;
   let lastError: Error | undefined;
-  for (let attempt = 1; attempt <= AI_SERVICE_MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     // CR-036 test hook — if a failure was injected for this path,
     // consume one attempt's worth without actually firing fetch. The
     // surrounding retry loop then exercises the same backoff +
@@ -266,7 +286,7 @@ async function postToAIService(path: string, payload: object): Promise<any> {
       lastError = new Error(
         `AI service ${path} returned ${_injectedAIFailures.statusCode}: [test-injected failure]`
       );
-      if (attempt < AI_SERVICE_MAX_ATTEMPTS) {
+      if (attempt < maxAttempts) {
         const delay = jitter(AI_SERVICE_BASE_DELAY_MS * 2 ** (attempt - 1));
         console.warn(
           `[ai-service-retry] ${path} attempt ${attempt} test-injected ${_injectedAIFailures.statusCode}; retrying in ${delay}ms`
@@ -276,7 +296,7 @@ async function postToAIService(path: string, payload: object): Promise<any> {
       continue;
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), AI_SERVICE_PER_ATTEMPT_TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
     try {
       const res = await fetch(`${getAIServiceUrl()}${path}`, {
         method: 'POST',
@@ -313,7 +333,7 @@ async function postToAIService(path: string, payload: object): Promise<any> {
       }
       lastError = err instanceof Error ? err : new Error(String(err));
     }
-    if (attempt < AI_SERVICE_MAX_ATTEMPTS) {
+    if (attempt < maxAttempts) {
       const delay = jitter(AI_SERVICE_BASE_DELAY_MS * 2 ** (attempt - 1));
       console.warn(
         `[ai-service-retry] ${path} attempt ${attempt} failed (${lastError?.message?.slice(0, 120)}); retrying in ${delay}ms`
@@ -1589,12 +1609,26 @@ export async function redetectImport(req: AuthenticatedRequest, res: Response): 
     const institutionIdStr = submissionDoc?.institutionId ? String(submissionDoc.institutionId) : null;
     let result: any;
     try {
-      result = await postToAIService('/ai/import/redetect', {
-        s3Key,
-        importId: String(importRecord._id),
-        submissionId: String(importRecord.submissionId),
-        institutionId: institutionIdStr
-      });
+      // CR-040 follow-on (2026-05-27) — long timeout + no retries.
+      // Real Stevenson-class .docx (370MB+) needs >30s for mammoth
+      // conversion alone; deep_walker + detector passes add another
+      // ~20s. The default 30s × 5-retry config aborted the request
+      // at attempt 1 and then re-aborted each retry — surfacing
+      // "This operation was aborted" to the user with no result.
+      // 5 minutes single attempt is the right shape for the redetect
+      // workload: deterministic, bounded, no thundering herd of
+      // mammoth conversions if the request was actually slow not
+      // stuck.
+      result = await postToAIService(
+        '/ai/import/redetect',
+        {
+          s3Key,
+          importId: String(importRecord._id),
+          submissionId: String(importRecord.submissionId),
+          institutionId: institutionIdStr
+        },
+        { perAttemptTimeoutMs: 5 * 60 * 1000, maxAttempts: 1 }
+      );
     } catch (err: any) {
       res.status(502).json({
         error: 'ai-service-failed',

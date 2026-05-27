@@ -21,6 +21,7 @@ from app.splitter.toc_detector import (
     TocEntry,
     TocAnchoredDetection,
     parse_toc,
+    parse_sub_tocs,
     anchor_in_body,
     merge_cv_detections,
     merge_evidence_doc_detections,
@@ -428,6 +429,104 @@ class TestMergeEvidenceDocDetections:
 # ----------------------------------------------------------------------
 
 
+class TestParseSubTocs:
+    """CR-040 follow-on (2026-05-27) — sub-TOC scanner.
+
+    Stevenson real-world TOC structure: the main TOC has a single
+    line "Appendices (List of Supporting Documents) ... 112", and
+    the per-CV / per-syllabus enumeration lives deeper in the body
+    as a sub-TOC block. parse_sub_tocs scans for those blocks.
+    """
+
+    _STEVENSON_SUB_TOC_HTML = (
+        "<html><body>"
+        # Main TOC with no per-CV entries.
+        "<h1>Table of Contents</h1>"
+        "<p>Standard 1 ............ 14</p>"
+        "<p>Standard 2 ............ 17</p>"
+        "<p>Appendices (List of Supporting Documents) ............ 112</p>"
+        # Body prose intervenes.
+        "<h2>Introduction</h2>"
+        "<p>A long enough self-study introduction paragraph to push past "
+        "the 200-character prose-gate so the main TOC walker bails here. "
+        "Stevenson University's Human Services baccalaureate program "
+        "submission for CSHSE accreditation review.</p>"
+        # Standard 1 body section
+        "<h2>Standard 1 - Institutional Requirements</h2>"
+        "<p>Lengthy prose describing the program's institutional accreditation, "
+        "mission alignment, and faculty governance structure — this paragraph "
+        "needs to exceed the 200-character heuristic so the body region is "
+        "clearly inside the prose and not a TOC.</p>"
+        # Sub-TOC: Appendices listing
+        "<h2>List of Faculty CVs</h2>"
+        "<p>John Rosicky ............ 113</p>"
+        "<p>Carol A. Dietrich ............ 117</p>"
+        "<p>Thomas K. Swisher, J.D., Ph.D. ............ 121</p>"
+        "<p>LAURI A. WEINER, HS-BCP ............ 125</p>"
+        "<p>Mary Beth Olson, M.A. ............ 130</p>"
+        # Sub-TOC: Course Syllabi
+        "<h2>List of Course Syllabi</h2>"
+        "<p>CHS 220 — Introduction to Human Services ............ 200</p>"
+        "<p>CHS 305 — Family Systems ............ 220</p>"
+        # Sub-TOC: Student Work
+        "<h2>List of Student Papers</h2>"
+        "<p>Sample Country Report ............ 300</p>"
+        "<p>Final Research Project ............ 320</p>"
+        "</body></html>"
+    ).encode("utf-8")
+
+    def test_parses_all_cv_names_from_sub_toc(self):
+        entries = parse_sub_tocs(self._STEVENSON_SUB_TOC_HTML)
+        labels = [e.label for e in entries]
+        assert "John Rosicky" in labels
+        assert "Carol A. Dietrich" in labels
+        assert "Thomas K. Swisher, J.D., Ph.D." in labels
+        assert "LAURI A. WEINER, HS-BCP" in labels
+        assert "Mary Beth Olson, M.A." in labels
+
+    def test_sub_toc_entries_have_cv_section_hint(self):
+        entries = parse_sub_tocs(self._STEVENSON_SUB_TOC_HTML)
+        cv_entries = [e for e in entries if "rosicky" in e.label.lower() or "weiner" in e.label.lower()]
+        assert all(e.section_hint == "cv" for e in cv_entries)
+        assert all(e.kind == "cv" for e in cv_entries)
+
+    def test_sub_toc_finds_syllabi(self):
+        entries = parse_sub_tocs(self._STEVENSON_SUB_TOC_HTML)
+        syllabi = [e for e in entries if e.kind == "syllabus"]
+        # CHS 220 + CHS 305 — both course-codes detected from sub-TOC.
+        labels = [e.label for e in syllabi]
+        assert any("CHS 220" in l for l in labels)
+        assert any("CHS 305" in l for l in labels)
+
+    def test_sub_toc_finds_papers(self):
+        entries = parse_sub_tocs(self._STEVENSON_SUB_TOC_HTML)
+        papers = [e for e in entries if e.kind == "paper"]
+        labels = [e.label for e in papers]
+        assert any("Country Report" in l for l in labels)
+        assert any("Research Project" in l for l in labels)
+
+    def test_no_sub_toc_returns_empty(self):
+        html = b"<html><body><p>Just prose, no sub-TOC anywhere.</p></body></html>"
+        assert parse_sub_tocs(html) == []
+
+    def test_sub_toc_requires_two_toc_shaped_lines(self):
+        """A heading "Faculty CVs" followed by ONE name line and then
+        prose should NOT trip a sub-TOC — that's just a regular CV
+        body section, not a sub-TOC."""
+        html = (
+            "<html><body>"
+            "<h2>Faculty CVs</h2>"
+            "<p>John Rosicky</p>"
+            "<p>1051 Omar Drive, Crownsville, MD 21032. EDUCATION 1990 "
+            "University of Maryland B.A. Sociology. This is body content "
+            "of a CV not a sub-TOC because there are no page-number "
+            "trailers and this paragraph is long enough to count as prose.</p>"
+            "</body></html>"
+        ).encode("utf-8")
+        entries = parse_sub_tocs(html)
+        assert entries == []
+
+
 class TestEndToEnd:
     def test_stevenson_like_html_yields_three_cvs_from_toc(self):
         """With NO pattern detections, the TOC-anchored pass alone must
@@ -441,6 +540,47 @@ class TestEndToEnd:
         assert "John Rosicky" in cv_names
         assert "Thomas K. Swisher, J.D., Ph.D." in cv_names
         assert "LAURI A. WEINER, HS-BCP" in cv_names
+
+    def test_stevenson_real_shape_main_toc_includes_standard_entries(self):
+        """Real Stevenson-class self-studies list "Standard 1 –
+        Institutional Requirements..." as TOC ENTRIES (not body
+        sections). Earlier draft of parse_toc bailed at the first
+        Standard line, never reaching the appendix entries deeper
+        in the TOC. This test pins the fix.
+        """
+        html = (
+            "<html><body>"
+            "<h1>Table of Contents</h1>"
+            "<p>Certification of the Self-Study ............ 4</p>"
+            "<p>Appendices (List of Supporting Documents) ............ 112</p>"
+            "<p>Course Syllabi and Materials ............ 114</p>"
+            "<p>Introductory Information ............ 5</p>"
+            "<p>Glossary of Terms ............ 13</p>"
+            "<p>Part I: General Program Characteristics</p>"
+            "<p>Standard 1 - Institutional Requirements and Primary Program Objective ............ 14</p>"
+            "<p>Standard 2 - Philosophical Base of Program ............ 17</p>"
+            "<p>Standard 6 - Personnel ............ 80</p>"
+            "<p>Faculty CVs</p>"
+            "<p>John Rosicky ............ 100</p>"
+            "<p>Thomas K. Swisher, J.D., Ph.D. ............ 140</p>"
+            "<p>LAURI A. WEINER, HS-BCP ............ 150</p>"
+            "<h2>Introduction</h2>"
+            "<p>This long body paragraph marks where the table of contents "
+            "actually ends and the body prose begins. It is long enough "
+            "to trip the 200-character prose gate so the parser stops "
+            "walking entries here rather than further down.</p>"
+            "</body></html>"
+        ).encode("utf-8")
+        entries = parse_toc(html)
+        labels = [e.label for e in entries]
+        # Standards line up — they're ENTRIES, not body markers.
+        assert any("Standard 1" in l for l in labels)
+        assert any("Standard 2" in l for l in labels)
+        assert any("Standard 6" in l for l in labels)
+        # CV entries DEEPER in the same TOC must also be parsed.
+        assert "John Rosicky" in labels
+        assert "Thomas K. Swisher, J.D., Ph.D." in labels
+        assert "LAURI A. WEINER, HS-BCP" in labels
 
     def test_routing_source_marked_as_toc(self):
         """Detections added by the TOC path carry routing.source='toc' so

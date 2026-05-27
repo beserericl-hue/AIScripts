@@ -165,9 +165,25 @@ _TOC_GROUP_HEADINGS: dict[str, TocEntryKind] = {
 # Headings that mark the END of the TOC region — once we hit one in the
 # walk-forward, stop. These are the document's body heading or the next
 # top-level section.
+#
+# Subtle: ``standard\s+\d+`` was REMOVED from this regex on 2026-05-27.
+# Real Stevenson-class self-studies list "Standard 1 – Institutional
+# Requirements ...", "Standard 2 – Philosophical Base ...", etc. as
+# TOC ENTRIES (not body section starts). The earlier draft of this
+# detector bailed at the first "Standard 1" line in the TOC and never
+# reached the nested Appendices section deeper in the same TOC where
+# the CV / syllabus / paper entries live. So the test fixture that
+# put all CVs directly under a top-level "CVs" heading worked, but
+# the real-world doc — which has CVs under "Appendices (List of
+# Supporting Documents)" — never produced any CV recoveries.
+#
+# Without an explicit "Standard" terminator, the TOC walk relies on
+# the long-paragraph heuristic (>200 chars = prose) and the
+# explicit body-heading list below.
 _TOC_BODY_BOUNDARY_RE = re.compile(
-    r"^\s*(?:standard\s+\d+\b|introduction\b|chapter\s+\d+\b|"
-    r"executive\s+summary\b|self-?study\b)",
+    r"^\s*(?:introduction\b|chapter\s+\d+\b|"
+    r"executive\s+summary\b|self-?study\b|"
+    r"part\s+[ivx0-9]+\s*[:.]?\s*[a-z])",
     re.IGNORECASE,
 )
 
@@ -214,6 +230,26 @@ def _normalize_heading(text: str) -> str:
     return s
 
 
+# Words that strongly signal a TOC entry is a TOPIC HEADING (section
+# label, table-of-contents subsection, etc.) — NOT a person name. The
+# 2-5-title-case-token fallback used to misfire on "Part I: General
+# Program Characteristics", "Introductory Information", "Course Syllabi
+# and Materials" because each tokenizes into title-case words.
+_NON_PERSON_TOPIC_WORDS = {
+    "introduction", "introductory", "information", "general", "program",
+    "programs", "characteristics", "course", "courses", "materials",
+    "evaluation", "evaluations", "evidence", "documents", "supporting",
+    "appendix", "appendices", "section", "sections", "part", "parts",
+    "table", "contents", "glossary", "terms", "certification",
+    "summary", "overview", "preface", "foreword", "acknowledgements",
+    "philosophy", "philosophical", "personnel", "institutional",
+    "requirements", "objective", "objectives", "policy", "policies",
+    "procedure", "procedures", "guideline", "guidelines",
+    "self-study", "self", "study",
+    "standard", "standards",  # "Standard 1 – ..." is a TOC entry, not a name
+}
+
+
 def _classify_entry(text: str, section_hint: TocEntryKind | None) -> TocEntryKind:
     """Decide what kind of supporting-evidence this TOC entry is.
 
@@ -224,6 +260,10 @@ def _classify_entry(text: str, section_hint: TocEntryKind | None) -> TocEntryKin
       4. Explicit ``Curriculum Vitae`` / ``CV`` token.
       5. ``Paper`` / ``Project`` / ``Research`` token.
       6. 2-5 token title-case sequence (looks like a person name) → ``cv``.
+         GUARDED: rejected if any token is a known non-person topic
+         word (Introduction, Part, Standard, Materials, ...) — otherwise
+         "Part I: General Program Characteristics" gets misclassified as
+         a CV via the title-case fallback.
       7. Otherwise ``unknown``.
     """
     if section_hint:
@@ -244,11 +284,16 @@ def _classify_entry(text: str, section_hint: TocEntryKind | None) -> TocEntryKin
         # particles / initials).
         ok = True
         for tok in tokens:
-            t = tok.rstrip(",.")
+            t = tok.rstrip(",.:;")
             if not t:
                 continue
             if t.lower() in {"de", "del", "della", "van", "von", "la", "di", "da", "du"}:
                 continue
+            # Topic-word guard — short-circuits topic phrases (Standard,
+            # Part, Introduction, ...) so they never reach the name path.
+            if t.lower() in _NON_PERSON_TOPIC_WORDS:
+                ok = False
+                break
             if not t[0].isupper() and not t[0].isalpha():
                 # Hyphen / apostrophe-leading? unusual — bail.
                 ok = False
@@ -418,6 +463,201 @@ def _iter_following_block_tags(start_tag):
         if any(p.name == "table" for p in tag.parents):
             continue
         yield tag
+
+
+# Pattern that strongly suggests a line is a TOC entry: it ends with a
+# dotted/tab/ellipsis/underscore leader followed by a page number.
+_TOC_LINE_SHAPE_RE = re.compile(
+    r"(?:\.{2,}|\t+|…+|_{2,})\s*\d{1,4}\s*$"
+)
+
+
+def parse_sub_tocs(html_bytes: bytes) -> list[TocEntry]:
+    """CR-040 follow-on (2026-05-27) — find SUB-TOCs scattered through
+    the document body.
+
+    Real Stevenson-class self-studies don't list every CV / syllabus /
+    paper in the main top-of-document TOC. Instead, the main TOC has a
+    single line "Appendices (List of Supporting Documents) ... 112",
+    and the actual per-item enumeration lives ON page 112 as a
+    sub-TOC. mammoth flattens all of this into one HTML stream, so
+    we can find those sub-TOC blocks by scanning the body for runs
+    of TOC-shaped lines under a known group heading.
+
+    A sub-TOC region is recognised as:
+
+      1. A heading (``<h1>``..``<h4>``) OR a short paragraph whose
+         normalised text matches a key in :data:`_TOC_GROUP_HEADINGS`
+         OR a "List of <something>" / "Appendix <X>: <something>"
+         label that maps to a known group.
+      2. Followed by ≥2 paragraphs that match :data:`_TOC_LINE_SHAPE_RE`
+         (i.e. end with dotted leader + page number) within a
+         5-blank-line window.
+
+    Returns one :class:`TocEntry` per line in each sub-TOC. The
+    section_hint propagates from the group heading.
+
+    Pure function — no I/O. Empty list if no sub-TOC patterns found.
+    """
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html_bytes, "html.parser")
+    for tag in soup(["script", "style", "head"]):
+        tag.decompose()
+
+    # Find the MAIN TOC anchor so we can skip ahead — sub-TOCs by
+    # definition live after the main TOC, in the body. If there's no
+    # main TOC, scan from the document start (some docs only have
+    # sub-TOCs).
+    skip_anchor = None
+    for tag in soup.find_all(["h1", "h2", "h3"]):
+        if tag.get_text(strip=True).lower().startswith("table of contents"):
+            skip_anchor = tag
+            break
+
+    # Collect block tags after the main-TOC anchor.
+    iterable = (
+        _iter_following_block_tags(skip_anchor)
+        if skip_anchor is not None
+        else soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6", "li"])
+    )
+    tags_in_order = list(iterable)
+    if not tags_in_order:
+        return []
+
+    entries: list[TocEntry] = []
+    n = len(tags_in_order)
+    i = 0
+
+    def _detect_group_heading(text: str) -> TocEntryKind | None:
+        """Return the section-hint kind if ``text`` looks like a
+        sub-TOC group heading (``"Faculty CVs"``, ``"List of Course
+        Syllabi"``, ``"Appendix A: List of Faculty CVs"``, ...), else
+        None.
+
+        Strips nested prefixes RECURSIVELY — "Appendix A: List of
+        Faculty CVs" peels off "appendix a " first, leaving "list of
+        faculty cvs", then peels off "list of " to yield
+        "faculty cvs" which IS a known group key. Without recursion,
+        the regex only stripped one layer and missed the nested
+        "list of" inside "Appendix A:" prefixes.
+        """
+        prefix_re = re.compile(
+            r"^(?:list\s+of\s+|appendix\s+[a-z0-9]+\s*[:.\-—]?\s*)",
+            re.IGNORECASE,
+        )
+        candidate = _normalize_heading(_clean_toc_line(text))
+        # Recursively peel — capped at 4 levels so a pathological
+        # input can't loop forever.
+        for _ in range(4):
+            if candidate in _TOC_GROUP_HEADINGS:
+                return _TOC_GROUP_HEADINGS[candidate]
+            stripped = prefix_re.sub("", candidate, count=1)
+            if stripped == candidate:
+                break
+            candidate = stripped.strip()
+        if candidate in _TOC_GROUP_HEADINGS:
+            return _TOC_GROUP_HEADINGS[candidate]
+        return None
+
+    while i < n:
+        tag = tags_in_order[i]
+        text = tag.get_text(separator=" ", strip=True)
+        if not text:
+            i += 1
+            continue
+
+        # Identify a sub-TOC start: short heading-ish line that
+        # normalises to a known group, OR text containing "List of <X>"
+        # / "Appendix X: <X>" where X maps to a group.
+        is_heading = tag.name in ("h1", "h2", "h3", "h4")
+        group = _detect_group_heading(text)
+
+        if group is None:
+            i += 1
+            continue
+        # Only treat as sub-TOC start if next N lines actually look
+        # like TOC entries (have dotted leaders + page numbers).
+        # Without this gate, a body heading "Faculty CVs" followed by
+        # full prose CV bodies would be wrongly classified.
+        toc_shaped_count = 0
+        lookahead_end = min(i + 1 + 40, n)
+        for k in range(i + 1, lookahead_end):
+            t = tags_in_order[k].get_text(separator=" ", strip=True)
+            if not t:
+                continue
+            if _TOC_LINE_SHAPE_RE.search(t):
+                toc_shaped_count += 1
+                if toc_shaped_count >= 2:
+                    break
+            elif len(t) > 200:
+                break  # prose — abandon
+        if toc_shaped_count < 2:
+            i += 1
+            continue
+
+        # Walk the sub-TOC and emit entries. Stop when 5 consecutive
+        # non-TOC-shaped lines appear OR a long prose paragraph.
+        i += 1
+        non_toc_run = 0
+        while i < n:
+            sub_tag = tags_in_order[i]
+            sub_text = sub_tag.get_text(separator=" ", strip=True)
+            if not sub_text:
+                i += 1
+                continue
+            if len(sub_text) > 200:
+                break
+            # Check if this is a NEW group heading (nested sub-TOC).
+            # Uses the same helper as the outer scan so "List of X" /
+            # "Appendix N: X" variants are caught — without this, a
+            # subsequent "List of Course Syllabi" heading was being
+            # treated as a non-TOC line and its syllabus entries were
+            # being absorbed into the previous CV sub-TOC under the
+            # wrong section_hint.
+            if _detect_group_heading(sub_text) is not None:
+                # Don't consume — let the outer loop pick it up so
+                # the new group's section_hint applies.
+                break
+            if _TOC_LINE_SHAPE_RE.search(sub_text):
+                non_toc_run = 0
+                cleaned = _clean_toc_line(sub_text)
+                if cleaned:
+                    kind = _classify_entry(cleaned, group)
+                    entries.append(
+                        TocEntry(
+                            label=cleaned,
+                            kind=kind,
+                            raw=sub_text,
+                            section_hint=group,
+                        )
+                    )
+                i += 1
+            else:
+                non_toc_run += 1
+                if non_toc_run >= 5:
+                    break
+                # Some sub-TOC entries lack the dotted leader — they're
+                # just bare text with no page number. If the line is
+                # short and looks like a name / title, accept it as
+                # an entry under the current group.
+                cleaned = _clean_toc_line(sub_text)
+                if cleaned and len(cleaned) <= 100:
+                    kind = _classify_entry(cleaned, group)
+                    if kind != "unknown":
+                        entries.append(
+                            TocEntry(
+                                label=cleaned,
+                                kind=kind,
+                                raw=sub_text,
+                                section_hint=group,
+                            )
+                        )
+                        non_toc_run = 0
+                i += 1
+        # Continue the outer scan from where we stopped.
+
+    return entries
 
 
 # ----------------------------------------------------------------------

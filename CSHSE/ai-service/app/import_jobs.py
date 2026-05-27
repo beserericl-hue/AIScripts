@@ -698,11 +698,17 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
     # here, share the result with the evidence-doc pass below.
     from app.splitter.toc_detector import (
         parse_toc as _parse_toc,
+        parse_sub_tocs as _parse_sub_tocs,
         anchor_in_body as _toc_anchor_in_body,
         merge_cv_detections as _merge_cv_dets,
         merge_evidence_doc_detections as _merge_ed_dets,
     )
-    toc_entries = _parse_toc(html_bytes)
+    # Stevenson-class docs put per-CV entries in a SUB-TOC under
+    # "Appendices" rather than the main TOC, so we accumulate both
+    # passes before anchoring in the body.
+    _main_toc = _parse_toc(html_bytes)
+    _sub_toc = _parse_sub_tocs(html_bytes)
+    toc_entries = _main_toc + _sub_toc
     toc_detections_all = (
         _toc_anchor_in_body(html_bytes, toc_entries) if toc_entries else []
     )

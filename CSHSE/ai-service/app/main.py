@@ -237,6 +237,7 @@ async def redetect(req: RedetectRequest, request: Request) -> dict:
     # overlap; TOC adds anything pattern missed).
     from app.splitter.toc_detector import (
         parse_toc,
+        parse_sub_tocs,
         anchor_in_body,
         merge_cv_detections,
         merge_evidence_doc_detections,
@@ -301,7 +302,19 @@ async def redetect(req: RedetectRequest, request: Request) -> dict:
         # Pattern-based entries win on overlap (they keep their
         # original sectionIds the rest of the pipeline references);
         # TOC adds anything pattern missed.
-        toc_entries = parse_toc(html_bytes)
+        #
+        # 2026-05-27 follow-up: real Stevenson-class docs don't list
+        # individual CV / syllabus / paper names in the MAIN TOC.
+        # Instead, the main TOC has a single line "Appendices (List
+        # of Supporting Documents) ... 112", and the per-item
+        # enumeration is a SUB-TOC at that page. parse_sub_tocs
+        # scans the entire body for those sub-TOC blocks and
+        # contributes their entries. Without this, a Stevenson
+        # re-detect found 0 added CVs via TOC because the main TOC
+        # had nothing CV-shaped in it.
+        main_toc_entries = parse_toc(html_bytes)
+        sub_toc_entries = parse_sub_tocs(html_bytes)
+        toc_entries = main_toc_entries + sub_toc_entries
         toc_detections = anchor_in_body(html_bytes, toc_entries) if toc_entries else []
         toc_counts_pre = {
             "cvs": len(cvs_wire),

@@ -488,6 +488,233 @@ def no_toc_docx(tmp_path):
     return out
 
 
+def _build_stevenson_real_shape_docx(out_path: Path) -> None:
+    """CR-040 follow-on (2026-05-27) — fixture matching the REAL
+    Stevenson document shape the user reported.
+
+    Real Stevenson docs DON'T list individual CVs in the main TOC.
+    The main TOC has a single line "Appendices (List of Supporting
+    Documents) ... 112", and the per-CV enumeration lives in a
+    sub-TOC at page 112 (under a "List of Faculty CVs" heading).
+    There are also Standard 1...6 entries IN the main TOC that
+    must NOT be misread as body-section headers (the earlier
+    parse_toc bailed on them).
+
+    Pattern detector + main-TOC pass alone produces 0 CV recoveries
+    here. Only the sub-TOC scanner recovers them. If the sub-TOC
+    code regresses, the count drops to 2 and the test fails.
+    """
+    from docx import Document
+
+    doc = Document()
+
+    # --- Main TOC: just standards + appendix index, no CV enumeration ---
+    doc.add_heading("Table of Contents", level=1)
+    doc.add_paragraph("Certification of the Self-Study ............ 4")
+    doc.add_paragraph("Introductory Information ............ 5")
+    doc.add_paragraph("Glossary of Terms ............ 13")
+    doc.add_paragraph("Part I: General Program Characteristics")
+    doc.add_paragraph("Standard 1 - Institutional Requirements ............ 14")
+    doc.add_paragraph("Standard 2 - Philosophical Base ............ 17")
+    doc.add_paragraph("Standard 6 - Personnel ............ 80")
+    doc.add_paragraph("Appendices (List of Supporting Documents) ............ 112")
+    doc.add_paragraph("Course Syllabi and Materials ............ 114")
+
+    # --- Body intro (forces the main-TOC walker to bail here) ---
+    doc.add_heading("Introduction", level=2)
+    doc.add_paragraph(
+        "This self-study presents the Stevenson University Human Services "
+        "program in extensive detail, covering all six CSHSE standards. "
+        "Body prose continues with the standards narratives, faculty "
+        "qualifications, and program-level evidence. The narrative is "
+        "organised by standard and includes references to the appendix "
+        "where supporting evidence is collected."
+    )
+
+    # --- Standards body (no CV listing) ---
+    doc.add_heading("Standard 1 - Institutional Requirements", level=2)
+    doc.add_paragraph(
+        "Stevenson University is accredited by the Middle States Commission "
+        "on Higher Education. The Human Services baccalaureate program "
+        "operates within the College of Education, Human Services, and "
+        "Health. Detailed institutional information follows in the "
+        "subsequent sections of this Standard."
+    )
+    doc.add_heading("Standard 6 - Personnel", level=2)
+    doc.add_paragraph(
+        "The faculty roster comprises full-time and part-time members "
+        "whose qualifications are documented in Appendix A. Detailed "
+        "credentials, teaching experience, and professional service are "
+        "provided in the curriculum vitae section."
+    )
+
+    # --- Appendix A: List of Faculty CVs (sub-TOC) ---
+    doc.add_heading("Appendix A: List of Faculty CVs", level=2)
+    doc.add_paragraph("John Rosicky ............ 113")
+    doc.add_paragraph("Carol A. Dietrich ............ 117")
+    doc.add_paragraph("Roxanne M. Epps ............ 119")
+    doc.add_paragraph("Barry W. Thomas ............ 121")
+    doc.add_paragraph("Thomas K. Swisher, J.D., Ph.D. ............ 125")
+    doc.add_paragraph("LAURI A. WEINER, HS-BCP ............ 130")
+    doc.add_paragraph("Mary Beth Olson, M.A. ............ 135")
+
+    # --- Appendix B: List of Course Syllabi (sub-TOC) ---
+    doc.add_heading("Appendix B: List of Course Syllabi", level=2)
+    doc.add_paragraph("CHS 220 - Introduction to Human Services ............ 200")
+    doc.add_paragraph("CHS 305 - Family Systems ............ 220")
+    doc.add_paragraph("CHS 410 - Capstone Seminar ............ 240")
+
+    # --- Appendix C: List of Student Papers (sub-TOC) ---
+    doc.add_heading("Appendix C: List of Student Papers", level=2)
+    doc.add_paragraph("Sample Country Report ............ 300")
+    doc.add_paragraph("Final Research Project ............ 320")
+
+    # --- CV bodies (deep in body, would defeat pattern detector) ---
+    doc.add_heading("Appendix A — Faculty CVs", level=2)
+
+    # CV body that the pattern detector CAN find (John Rosicky shape)
+    doc.add_paragraph("John Rosicky")
+    doc.add_paragraph("1051 Omar Dr.")
+    doc.add_paragraph("Crownsville, MD 21032")
+    doc.add_paragraph("jrosicky@stevenson.edu")
+    doc.add_paragraph("EDUCATION")
+    doc.add_paragraph("1990 University of Maryland B.A. Sociology")
+    doc.add_paragraph("PROFESSIONAL EXPERIENCE")
+    doc.add_paragraph("2005-Present Stevenson University")
+
+    # CV body that the pattern detector CANNOT find — only sub-TOC anchors it.
+    doc.add_paragraph("Thomas K. Swisher, J.D., Ph.D.")
+    doc.add_paragraph("11886 Simpson Road")
+    doc.add_paragraph("Clarksville, Md. 21029")
+    doc.add_paragraph("Education")  # Title-case, defeats _is_anchor pattern
+    doc.add_paragraph("1983 University of Virginia B.S. Secondary Education")
+    doc.add_paragraph("1986 University of Baltimore Juris Doctorate")
+
+    doc.add_paragraph("LAURI A. WEINER, J.D., HS-BCP")  # all-caps name
+    doc.add_paragraph("7905 Winterset Avenue")
+    doc.add_paragraph("Baltimore, Maryland 21208")
+    doc.add_paragraph("lweiner@stevenson.edu")
+    doc.add_paragraph("Education")
+    doc.add_paragraph("J.D., University of Maryland School of Law, 1992")
+
+    doc.add_paragraph("250 Faculty Drive · Baltimore, MD 21210")  # contact before name
+    doc.add_paragraph("Mary Beth Olson, M.A.")
+    doc.add_paragraph("Education")
+    doc.add_paragraph("2007 Loyola University Maryland M.A. Counseling")
+
+    doc.save(out_path)
+
+
+@pytest.fixture
+def stevenson_real_shape_docx(tmp_path):
+    out = tmp_path / "stevenson-real.docx"
+    _build_stevenson_real_shape_docx(out)
+    return out
+
+
+class TestRedetectStevensonRealShape:
+    """End-to-end coverage for the REAL Stevenson document shape the
+    user reported (2026-05-27 screenshot):
+
+      - Main TOC has Standard N entries (not body markers) and a single
+        "Appendices (List of Supporting Documents)" line.
+      - Per-CV / per-syllabus / per-paper entries live in SUB-TOCs deep
+        in the body, under "Appendix A: List of Faculty CVs" etc.
+      - CV body paragraphs use credentials-prefixed names + Title-case
+        section markers that defeat the pattern detector's anchor.
+
+    Without the sub-TOC scanner + the parse_toc fix, the re-detect
+    surfaced only 4 CVs (John, Carol, Roxanne, Barry — the easy ones).
+    With both fixes, all 7 CVs are recovered.
+    """
+
+    def test_main_toc_with_standard_entries_does_not_bail_early(
+        self, client, stevenson_real_shape_docx
+    ):
+        """The main TOC has Standard 1, Standard 2, Standard 6 listed
+        as entries. parse_toc must walk THROUGH those (they're TOC
+        lines, not body markers) and continue to the Appendices
+        entry at the bottom."""
+        resp = _post_redetect(
+            client,
+            {"s3Key": "imports/stevenson-real.docx", "importId": "imp-real", "submissionId": "sub-real"},
+            stevenson_real_shape_docx,
+        )
+        body = resp.json()
+        assert body["ok"] is True
+        # tocEntriesFound includes the Standards entries AND the
+        # Appendices line. Should be ≥ 5.
+        assert body["tocDiagnostics"]["tocEntriesFound"] >= 5
+
+    def test_sub_toc_recovers_credentials_prefixed_cvs(
+        self, client, stevenson_real_shape_docx
+    ):
+        """The sub-TOC scanner finds the per-CV entries listed under
+        "Appendix A: List of Faculty CVs" and anchors them in the
+        body. Without this, Thomas Swisher / LAURI Weiner / Mary Beth
+        Olson would be missed (their body anchors defeat the pattern
+        detector)."""
+        resp = _post_redetect(
+            client,
+            {"s3Key": "imports/stevenson-real.docx", "importId": "imp-real", "submissionId": "sub-real"},
+            stevenson_real_shape_docx,
+        )
+        body = resp.json()
+        cv_names_lower = " | ".join(c["facultyName"].lower() for c in body["cvs"])
+        assert "thomas k. swisher" in cv_names_lower, (
+            f"Expected Thomas K. Swisher recovered via sub-TOC; got {cv_names_lower}"
+        )
+        assert "lauri a. weiner" in cv_names_lower
+        assert "mary beth olson" in cv_names_lower
+        # And pattern-found CVs are still present.
+        assert "john rosicky" in cv_names_lower
+
+    def test_sub_toc_count_at_least_seven(self, client, stevenson_real_shape_docx):
+        """All 7 CVs listed in the sub-TOC must be in the final cvs[]."""
+        resp = _post_redetect(
+            client,
+            {"s3Key": "imports/stevenson-real.docx", "importId": "imp-real", "submissionId": "sub-real"},
+            stevenson_real_shape_docx,
+        )
+        body = resp.json()
+        assert body["counts"]["cvs"] >= 7, (
+            f"Expected ≥7 CVs from sub-TOC + pattern; got {body['counts']['cvs']}. "
+            f"Sub-TOC scanner is broken or merged into wrong section."
+        )
+
+    def test_sub_toc_recovers_three_syllabi(self, client, stevenson_real_shape_docx):
+        resp = _post_redetect(
+            client,
+            {"s3Key": "imports/stevenson-real.docx", "importId": "imp-real", "submissionId": "sub-real"},
+            stevenson_real_shape_docx,
+        )
+        body = resp.json()
+        syllabi = [d for d in body["evidenceDocs"] if d["docSubKind"] == "syllabus"]
+        # CHS 220, CHS 305, CHS 410 — three course-coded entries.
+        codes = " ".join(s.get("courseCode") or "" for s in syllabi)
+        codes += " " + " ".join(s["title"] for s in syllabi)
+        assert "CHS 220" in codes
+        assert "CHS 305" in codes
+        assert "CHS 410" in codes
+
+    def test_toc_diagnostics_reports_sub_toc_contribution(
+        self, client, stevenson_real_shape_docx
+    ):
+        """tocDiagnostics.tocAdded.cvs must be > 0 because the sub-TOC
+        contributed CVs the pattern detector missed."""
+        resp = _post_redetect(
+            client,
+            {"s3Key": "imports/stevenson-real.docx", "importId": "imp-real", "submissionId": "sub-real"},
+            stevenson_real_shape_docx,
+        )
+        body = resp.json()
+        diag = body["tocDiagnostics"]
+        assert diag["tocAdded"]["cvs"] >= 3, (
+            f"Sub-TOC pass should have recovered at least 3 CVs the "
+            f"pattern detector missed; got tocAdded={diag['tocAdded']}"
+        )
+
+
 class TestRedetectNoTocFallback:
     def test_no_toc_returns_zero_added(self, client, no_toc_docx):
         resp = _post_redetect(
