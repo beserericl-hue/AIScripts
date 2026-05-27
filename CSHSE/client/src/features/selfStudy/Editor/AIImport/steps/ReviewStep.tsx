@@ -610,11 +610,40 @@ function FullReviewStep(): JSX.Element {
         const tag = tags.find((t) => t.sectionId === sectionId);
         if (tag) matchText = stripCardHeading(tag.fullText);
       }
+      // CR-040 follow-on (2026-05-27) — Show-in-source bug fix.
+      // CV cards and evidenceDoc cards aren't in buckets[] or tags[],
+      // they live in their own top-level arrays. Without this branch,
+      // the modal opened with matchText='' which falls below the
+      // 20-char minimum in ShowInSourceModal and immediately renders
+      // "This content is no longer in the current document version,
+      // showing the document from the top." — exactly what the user
+      // saw on the Stevenson document.
+      if (!matchText) {
+        const cv = cvs.find((c) => c.sectionId === sectionId);
+        if (cv) {
+          // For CVs, the faculty name is the most distinctive marker
+          // in the source document — prepend it before the snippet so
+          // the modal's fuzzy match has a strong anchor even if the
+          // snippet was generated from a slightly different region of
+          // the body than what now lives in the latest DocumentVersion.
+          const headLine = cv.facultyName ? `${cv.facultyName}\n` : '';
+          matchText = headLine + stripCardHeading(cv.snippet || '');
+        }
+      }
+      if (!matchText) {
+        const ed = evidenceDocs.find((d) => d.sectionId === sectionId);
+        if (ed) {
+          // For evidence docs (paper or syllabus), title is the most
+          // distinctive marker; fall back to summary if title is short.
+          const headLine = ed.title ? `${ed.title}\n` : '';
+          matchText = headLine + stripCardHeading(ed.summary || '');
+        }
+      }
       setSourceSectionId(sectionId);
       setSourceMatchText(matchText);
       setSourceOpen(true);
     },
-    [activeBucket, tags]
+    [activeBucket, tags, cvs, evidenceDocs]
   );
 
   // Coordinator clicked "+ Add from source" on an empty spec card. Open the
