@@ -430,6 +430,7 @@ async def inspect_toc(req: InspectTocRequest, request: Request) -> dict:
         parse_sub_tocs,
         anchor_in_body,
     )
+    from app.splitter.cv_detector import detect_cvs_from_html
 
     bucket = os.environ.get("CSHSE_S3_BUCKET", "cshse-filestorage-qlyj5pn")
     endpoint = os.environ.get("AWS_ENDPOINT_URL_S3") or os.environ.get("AWS_ENDPOINT_URL")
@@ -457,6 +458,13 @@ async def inspect_toc(req: InspectTocRequest, request: Request) -> dict:
         sub_entries = parse_sub_tocs(html_bytes)
         all_entries = main_entries + sub_entries
         anchored = anchor_in_body(html_bytes, all_entries) if all_entries else []
+
+        # CR-040 follow-on (2026-05-27) — also report what the PATTERN
+        # detector finds in the body. The TOC pass alone doesn't reflect
+        # what the user sees in the redetect rail; the pattern detector
+        # is the source of most real-world CV detections, so a true
+        # diagnostic needs both.
+        pattern_cvs, _ = detect_cvs_from_html(html_bytes)
 
         def _count_by_kind(entries):
             out: dict = {"cv": 0, "syllabus": 0, "paper": 0, "unknown": 0}
@@ -501,12 +509,28 @@ async def inspect_toc(req: InspectTocRequest, request: Request) -> dict:
                 }
                 for d in anchored
             ],
+            # CR-040 follow-on (2026-05-27) — also surface what the
+            # PATTERN detector (cv_detector.detect_cvs_from_html) finds.
+            # The TOC pass alone doesn't reflect the rail count the
+            # coordinator sees; the pattern detector is the primary
+            # source for CV detection on documents whose TOC doesn't
+            # enumerate CVs (the Stevenson handbook case).
+            "patternCvs": [
+                {
+                    "facultyName": cv.faculty_name,
+                    "snippet": cv.snippet,
+                    "byte_offset_start": cv.byte_offset_start,
+                    "section_marker_count": cv.section_marker_count,
+                }
+                for cv in pattern_cvs
+            ],
             "counts": {
                 "mainTocByKind": _count_by_kind(main_entries),
                 "subTocByKind": _count_by_kind(sub_entries),
                 "anchoredByKind": _count_anchored_by_kind(anchored),
                 "totalTocEntries": len(all_entries),
                 "totalAnchored": len(anchored),
+                "patternCvCount": len(pattern_cvs),
             },
             "documentBytes": len(html_bytes),
         }
