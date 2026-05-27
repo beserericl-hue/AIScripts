@@ -689,13 +689,36 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
         ]
     cv_detections_post, sections = detect_cvs(sections)
     cv_detections = cv_detections_pre + cv_detections_post
-    if cv_detections:
-        job.cvs = [cv_to_dict(cv) for cv in cv_detections]
+    cvs_wire = [cv_to_dict(cv) for cv in cv_detections]
+
+    # CR-040 follow-on (2026-05-27) — TOC-anchored second pass for CVs.
+    # See toc_detector.py for the rationale: pattern-based detectors
+    # miss CVs whose body anchor doesn't match the heuristic, but the
+    # Table of Contents has the canonical index. Parse the TOC once
+    # here, share the result with the evidence-doc pass below.
+    from app.splitter.toc_detector import (
+        parse_toc as _parse_toc,
+        anchor_in_body as _toc_anchor_in_body,
+        merge_cv_detections as _merge_cv_dets,
+        merge_evidence_doc_detections as _merge_ed_dets,
+    )
+    toc_entries = _parse_toc(html_bytes)
+    toc_detections_all = (
+        _toc_anchor_in_body(html_bytes, toc_entries) if toc_entries else []
+    )
+    pre_toc_cv_count = len(cvs_wire)
+    cvs_wire = _merge_cv_dets(cvs_wire, toc_detections_all)
+    toc_added_cvs = len(cvs_wire) - pre_toc_cv_count
+
+    if cvs_wire:
+        job.cvs = cvs_wire
         _stage_done(
             job,
             "cv_detector",
-            f"{len(cv_detections)} CV(s) detected "
-            f"({len(cv_detections_pre)} pre-walker, {len(cv_detections_post)} post-walker), "
+            f"{len(cvs_wire)} CV(s) detected "
+            f"({len(cv_detections_pre)} pre-walker, "
+            f"{len(cv_detections_post)} post-walker, "
+            f"{toc_added_cvs} added via TOC); "
             f"removed from matcher input",
         )
     else:
@@ -732,16 +755,37 @@ def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:
         # land in Phase 3. Failures here are soft — a section with no
         # S3 key still ships as a metadata-only card.
         _persist_evidence_docs_to_s3(job, evidence_doc_detections)
-        job.evidence_docs = [
-            evidence_doc_to_dict(d) for d in evidence_doc_detections
-        ]
-        n_paper = sum(1 for d in evidence_doc_detections if d.doc_sub_kind == "paper")
-        n_syll = sum(1 for d in evidence_doc_detections if d.doc_sub_kind == "syllabus")
+    pattern_docs_wire = [
+        evidence_doc_to_dict(d) for d in evidence_doc_detections
+    ]
+    pre_toc_doc_count = len(pattern_docs_wire)
+    evidence_docs_wire = _merge_ed_dets(pattern_docs_wire, toc_detections_all)
+    toc_added_docs = len(evidence_docs_wire) - pre_toc_doc_count
+
+    n_paper = sum(1 for d in evidence_docs_wire if d.get("docSubKind") == "paper")
+    n_syll = sum(1 for d in evidence_docs_wire if d.get("docSubKind") == "syllabus")
+    n_pattern_paper = sum(
+        1 for d in evidence_doc_detections if d.doc_sub_kind == "paper"
+    )
+    n_pattern_syll = sum(
+        1 for d in evidence_doc_detections if d.doc_sub_kind == "syllabus"
+    )
+
+    if evidence_docs_wire:
+        job.evidence_docs = evidence_docs_wire
         n_uploaded = sum(1 for d in evidence_doc_detections if d.s3_key)
+        # CR-040 follow-on — TOC-added documents don't have a generated
+        # .docx (no body slice goes through _persist_evidence_docs_to_s3
+        # in this pass), so the count is pattern-only. A separate
+        # backfill pass can generate .docx for TOC-anchored entries
+        # later if coordinators want View-file working for them.
         _stage_done(
             job,
             "evidence_doc_detector",
-            f"{n_paper} paper(s) + {n_syll} syllabus(es); {n_uploaded}/{len(evidence_doc_detections)} uploaded to S3",
+            f"{n_paper} paper(s) + {n_syll} syllabus(es) "
+            f"({n_pattern_paper}+{n_pattern_syll} from pattern, "
+            f"{toc_added_docs} added via TOC); "
+            f"{n_uploaded}/{len(evidence_doc_detections)} uploaded to S3",
         )
     else:
         _stage_skipped(job, "evidence_doc_detector", "no paper / syllabus headers matched")

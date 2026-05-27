@@ -227,6 +227,20 @@ async def redetect(req: RedetectRequest, request: Request) -> dict:
         evidence_doc_to_dict,
     )
     from app.splitter.introduction_detector import detect_introductions
+    # CR-040 follow-on (2026-05-27) — TOC-anchored two-pass detector.
+    # User feedback: pattern-based detectors miss real CVs/syllabi/papers
+    # whose body signals don't match the anchor heuristic (different
+    # section-marker capitalisation, credentials on a separate line,
+    # etc.). The Table of Contents is the ground truth — parse it and
+    # use it as a canonical index, then slice body content between TOC
+    # anchors. Merge with pattern-based output (pattern wins on
+    # overlap; TOC adds anything pattern missed).
+    from app.splitter.toc_detector import (
+        parse_toc,
+        anchor_in_body,
+        merge_cv_detections,
+        merge_evidence_doc_detections,
+    )
 
     # Pull the DOCX from S3 to a temp file.
     bucket = os.environ.get("CSHSE_S3_BUCKET", "cshse-filestorage-qlyj5pn")
@@ -279,8 +293,38 @@ async def redetect(req: RedetectRequest, request: Request) -> dict:
         evidence_docs = ed_pre + ed_post
         evidence_docs_wire = [evidence_doc_to_dict(d) for d in evidence_docs]
 
+        # CR-040 follow-on (2026-05-27) — TOC-anchored second pass.
+        # Pattern-based detectors above miss real items when the body
+        # signal doesn't match the anchor heuristic. The Table of
+        # Contents is the document's own ground-truth index — parse it
+        # and slice body content between TOC anchors, then merge.
+        # Pattern-based entries win on overlap (they keep their
+        # original sectionIds the rest of the pipeline references);
+        # TOC adds anything pattern missed.
+        toc_entries = parse_toc(html_bytes)
+        toc_detections = anchor_in_body(html_bytes, toc_entries) if toc_entries else []
+        toc_counts_pre = {
+            "cvs": len(cvs_wire),
+            "papers": sum(1 for d in evidence_docs if d.doc_sub_kind == "paper"),
+            "syllabi": sum(1 for d in evidence_docs if d.doc_sub_kind == "syllabus"),
+        }
+        cvs_wire = merge_cv_detections(cvs_wire, toc_detections)
+        evidence_docs_wire = merge_evidence_doc_detections(
+            evidence_docs_wire, toc_detections
+        )
+
         # Introduction hints (lexical heuristic only; no matcher LLM here).
         intro_hints = detect_introductions(sections)
+
+        toc_added = {
+            "cvs": len(cvs_wire) - toc_counts_pre["cvs"],
+            "papers": sum(
+                1 for d in evidence_docs_wire if d.get("docSubKind") == "paper"
+            ) - toc_counts_pre["papers"],
+            "syllabi": sum(
+                1 for d in evidence_docs_wire if d.get("docSubKind") == "syllabus"
+            ) - toc_counts_pre["syllabi"],
+        }
 
         return {
             "ok": True,
@@ -289,9 +333,22 @@ async def redetect(req: RedetectRequest, request: Request) -> dict:
             "introductionHints": intro_hints or {},
             "counts": {
                 "cvs": len(cvs_wire),
-                "papers": sum(1 for d in evidence_docs if d.doc_sub_kind == "paper"),
-                "syllabi": sum(1 for d in evidence_docs if d.doc_sub_kind == "syllabus"),
+                "papers": sum(
+                    1 for d in evidence_docs_wire if d.get("docSubKind") == "paper"
+                ),
+                "syllabi": sum(
+                    1 for d in evidence_docs_wire if d.get("docSubKind") == "syllabus"
+                ),
                 "introHints": len(intro_hints or {}),
+            },
+            # CR-040 follow-on — diagnostics for the redetect banner.
+            # Tells the coordinator how many items the TOC-anchored pass
+            # added on top of pattern detection, plus the number of TOC
+            # entries parsed.
+            "tocDiagnostics": {
+                "tocEntriesFound": len(toc_entries),
+                "tocAnchoredDetections": len(toc_detections),
+                "tocAdded": toc_added,
             },
         }
     finally:

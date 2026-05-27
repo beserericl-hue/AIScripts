@@ -1659,10 +1659,32 @@ export async function redetectImport(req: AuthenticatedRequest, res: Response): 
     (submission as any).markModified('aiReviewState');
     await submission.save();
 
+    // CR-040 follow-on (2026-05-27) — TOC-anchored second-pass
+    // diagnostics. The ai-service now parses the document's Table of
+    // Contents and adds any CVs/syllabi/papers it listed but the
+    // pattern detector missed. Surface the TOC contribution so the
+    // coordinator can see when the TOC saved a detection that
+    // would otherwise have been lost.
+    const counts = result.counts || {};
+    const tocDiag = (result.tocDiagnostics || {}) as {
+      tocEntriesFound?: number;
+      tocAnchoredDetections?: number;
+      tocAdded?: { cvs?: number; papers?: number; syllabi?: number };
+    };
+    const tocAdded = tocDiag.tocAdded || {};
+    const tocAddedTotal =
+      (tocAdded.cvs || 0) + (tocAdded.papers || 0) + (tocAdded.syllabi || 0);
+    const syllabusWord = (counts.syllabi || 0) === 1 ? 'us' : 'i';
+    const base = `Re-detect complete. Found ${counts.cvs || 0} CV(s), ${counts.papers || 0} paper(s), ${counts.syllabi || 0} syllab${syllabusWord}.`;
+    const tocBlurb = tocAddedTotal > 0
+      ? ` (TOC pass recovered ${tocAdded.cvs || 0} CV(s), ${tocAdded.papers || 0} paper(s), ${tocAdded.syllabi || 0} syllab${(tocAdded.syllabi || 0) === 1 ? 'us' : 'i'} the pattern detector missed.)`
+      : '';
+
     res.json({
       ok: true,
-      counts: result.counts || {},
-      message: `Re-detect complete. Found ${(result.counts || {}).cvs || 0} CV(s), ${(result.counts || {}).papers || 0} paper(s), ${(result.counts || {}).syllabi || 0} syllab${((result.counts || {}).syllabi || 0) === 1 ? 'us' : 'i'}.`
+      counts,
+      tocDiagnostics: tocDiag,
+      message: base + tocBlurb
     });
   } catch (err: any) {
     console.error('redetectImport error', err);
