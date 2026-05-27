@@ -456,6 +456,28 @@ _TOC_LINE_SHAPE_RE = re.compile(
 )
 
 
+
+# CR-040 follow-on (2026-05-27) - words that strongly signal a CV body
+# fragment (section header, resume narrative). Used by
+# _looks_like_person_name to filter out lines that look like 2-5
+# title-case tokens but are actually CV-body content rather than
+# faculty roster names. Discovered against the real Stevenson doc.
+_CV_BODY_WORDS = {
+    "career", "objective", "summary", "employment", "experience",
+    "experiences", "education", "publications", "presentations",
+    "licenses", "licensure", "certifications", "service", "membership",
+    "professional", "academic", "teaching", "research",
+    "leadership", "skills", "outstanding", "expertise", "responsible",
+    "years", "doctoral", "graduate", "thesis", "advisor",
+    "associate", "assistant", "instructor", "professor", "faculty",
+    "department", "school", "college", "university", "institute",
+    "vita", "vitae", "curriculum",
+    "table", "contents", "appendix", "section", "page", "standard",
+    "phone", "email", "address", "office", "street", "drive", "road",
+    "avenue", "court", "lane", "boulevard",
+}
+
+
 def _looks_like_person_name(text: str) -> bool:
     """Heuristic — does ``text`` look like a person-name TOC entry?
 
@@ -475,7 +497,11 @@ def _looks_like_person_name(text: str) -> bool:
     """
     # Strip credentials and trailing punctuation.
     s = _CREDENTIALS_SUFFIX_RE.sub("", text).strip(" ,.")
-    s = re.sub(r"[ \s]+", " ", s).strip()
+    s = re.sub(r"\s+", " ", s).strip()
+    # Tightened 2026-05-27 - the loose version classified 300+
+    # CV-body fragments as names against the real Stevenson doc.
+    if len(text) > 60:
+        return False
     if not s:
         return False
     tokens = s.split()
@@ -483,12 +509,17 @@ def _looks_like_person_name(text: str) -> bool:
         return False
     if not tokens[0][0].isalpha() or not tokens[0][0].isupper():
         return False
+    # Reject ALL-CAPS lines (section headings like "CAREER OBJECTIVE")
+    if not any(c.islower() for tok in tokens for c in tok):
+        return False
     for tok in tokens:
         t = tok.rstrip(",.:;").lower()
         if t in _NON_PERSON_TOPIC_WORDS:
             return False
-        # Reject prose markers that occasionally sneak in.
-        if t in {"the", "and", "or", "of", "for", "with", "in", "on", "at", "as"}:
+        if t in _CV_BODY_WORDS:
+            return False
+        # Reject prose connectives.
+        if t in {"the", "and", "or", "of", "for", "with", "in", "on", "at", "as", "to", "by"}:
             return False
     return True
 
@@ -715,12 +746,12 @@ def parse_sub_tocs(html_bytes: bytes) -> list[TocEntry]:
                     # "Part-Time Faculty") that split a single sub-TOC
                     # into groups. _detect_group_heading above catches
                     # any line that maps to a *known* group; everything
-                    # else is consumed as noise. 8 consecutive
-                    # non-name lines = bail (was 5 — relaxed because
-                    # real docs sometimes have a section banner line
-                    # between roster groups).
+                    # else is consumed as noise. 3 consecutive
+                    # non-name lines = bail. (Earlier 8-cap was too
+                    # generous and let runaway scans absorb 100s of
+                    # CV-body fragments on the real Stevenson doc.)
                     non_toc_run += 1
-                    if non_toc_run >= 8:
+                    if non_toc_run >= 3:
                         break
                 i += 1
         # Continue the outer scan from where we stopped.
