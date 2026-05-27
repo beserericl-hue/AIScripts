@@ -237,26 +237,46 @@ export function ItemPreview({
               </span>
             )}
           </div>
-          {/* CR-032 — Edit button. Disabled for tables (route to Standards
-              editor after Apply) and during the parsing stage (snapshots
-              would clobber local state — though dirty flag would protect,
-              this is cleaner UX). */}
-          {!isEditing && onEditStart && (
-            <button
-              type="button"
-              onClick={() => onEditStart(selectedSectionId!)}
-              disabled={hasHtmlTable}
-              title={
-                hasHtmlTable
-                  ? 'This item contains a table. Edit it in the Standards editor after Apply.'
-                  : 'Edit this text before applying'
-              }
-              className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Pencil className="h-3 w-3" aria-hidden />
-              Edit
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* CR-040 follow-on (2026-05-27) — "Show in source" promoted
+                from the bottom of the scrollable rationale region to
+                the always-visible header so it never scrolls below the
+                fold when the rationale text is long. User feedback:
+                "the see in original document badge is missing for this
+                entry. It sometimes shows below the screen and probably
+                needs to be at the top of the sidebar." */}
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={() => onShowInSource(selectedSectionId!)}
+                title="Open the source document and jump to where this item came from"
+                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
+              >
+                <ExternalLink className="h-3 w-3" aria-hidden />
+                Show in source
+              </button>
+            )}
+            {/* CR-032 — Edit button. Disabled for tables (route to Standards
+                editor after Apply) and during the parsing stage (snapshots
+                would clobber local state — though dirty flag would protect,
+                this is cleaner UX). */}
+            {!isEditing && onEditStart && (
+              <button
+                type="button"
+                onClick={() => onEditStart(selectedSectionId!)}
+                disabled={hasHtmlTable}
+                title={
+                  hasHtmlTable
+                    ? 'This item contains a table. Edit it in the Standards editor after Apply.'
+                    : 'Edit this text before applying'
+                }
+                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Pencil className="h-3 w-3" aria-hidden />
+                Edit
+              </button>
+            )}
+          </div>
         </div>
 
         <div>
@@ -367,13 +387,10 @@ export function ItemPreview({
             </div>
           )}
 
-          <button
-            onClick={() => onShowInSource(selectedSectionId!)}
-            className="mt-4 inline-flex items-center gap-1 rounded border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-          >
-            <ExternalLink className="h-3 w-3" aria-hidden />
-            Show in source document
-          </button>
+          {/* CR-040 follow-on (2026-05-27) — the "Show in source"
+              button moved to the top-of-sidebar header so it can't
+              scroll below the fold. The old bottom-of-rationale button
+              has been removed. */}
         </div>
       )}
 
