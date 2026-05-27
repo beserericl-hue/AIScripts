@@ -755,28 +755,37 @@ def parse_sub_tocs(html_bytes: bytes) -> list[TocEntry]:
                             )
                             accepted = True
                     else:
-                        # Syllabus / paper — _classify_entry checks
-                        # for course code / paper keywords, so it's
-                        # not unsafe to let the section_hint win
-                        # only when those signals are absent.
-                        # Still gated on the line not being prose —
-                        # require a course code OR a paper keyword
-                        # OR a short bare title under the hint.
-                        if (
-                            _COURSE_CODE_RE.search(cleaned)
-                            or _SYLLABUS_LABEL_RE.search(cleaned)
-                            or _PAPER_LABEL_RE.search(cleaned)
-                            or (len(cleaned.split()) <= 8 and len(cleaned) <= 80)
-                        ):
-                            entries.append(
-                                TocEntry(
-                                    label=cleaned,
-                                    kind=group,
-                                    raw=sub_text,
-                                    section_hint=group,
+                        # Syllabus / paper — require EXPLICIT signal
+                        # (course code OR syllabus/paper keyword).
+                        # The earlier bare-title fallback let too
+                        # much body content through ("Fall 2018",
+                        # "Class Schedule", "Section number:",
+                        # instructor contact lines under a syllabus
+                        # body). If a line lacks a course code and
+                        # lacks an explicit keyword, it's body
+                        # content, not a TOC entry.
+                        if group == "syllabus":
+                            if _COURSE_CODE_RE.search(cleaned) or _SYLLABUS_LABEL_RE.search(cleaned):
+                                entries.append(
+                                    TocEntry(
+                                        label=cleaned,
+                                        kind=group,
+                                        raw=sub_text,
+                                        section_hint=group,
+                                    )
                                 )
-                            )
-                            accepted = True
+                                accepted = True
+                        elif group == "paper":
+                            if _PAPER_LABEL_RE.search(cleaned) or _COURSE_CODE_RE.search(cleaned):
+                                entries.append(
+                                    TocEntry(
+                                        label=cleaned,
+                                        kind=group,
+                                        raw=sub_text,
+                                        section_hint=group,
+                                    )
+                                )
+                                accepted = True
                 if accepted:
                     non_toc_run = 0
                 else:
