@@ -383,8 +383,16 @@ class InspectTocRequest(BaseModel):
     instead of guessing.
 
     Same HMAC + S3 gating as /ai/import/redetect.
+
+    ``searchTerms`` (optional) — list of strings to grep for in the
+    converted HTML. For each match, the response includes the
+    surrounding 5 paragraph contexts so a diagnostic can see WHERE
+    a known-to-be-present name (e.g. "Thomas K. Swisher") actually
+    appears in the body, and what structure surrounds it. Used to
+    verify whether the pattern detector's body anchors should fire.
     """
     s3Key: str
+    searchTerms: list[str] | None = None
 
 
 @app.post("/ai/debug/inspect-toc")
@@ -466,6 +474,45 @@ async def inspect_toc(req: InspectTocRequest, request: Request) -> dict:
         # diagnostic needs both.
         pattern_cvs, _ = detect_cvs_from_html(html_bytes)
 
+        # Search-term scan — find where caller-specified strings
+        # appear in the converted HTML so a diagnostic can compare
+        # actual body structure to what the pattern detector wants.
+        search_results: list[dict] = []
+        if req.searchTerms:
+            from bs4 import BeautifulSoup
+            soup_for_search = BeautifulSoup(html_bytes, "html.parser")
+            for tag in soup_for_search(["script", "style", "head"]):
+                tag.decompose()
+            # Collect paragraph-level text in document order.
+            paragraphs_for_search = []
+            for tag in soup_for_search.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"]):
+                if any(p.name == "table" for p in tag.parents):
+                    continue
+                txt = tag.get_text(separator=" ", strip=True)
+                if txt:
+                    paragraphs_for_search.append(txt)
+            for term in req.searchTerms:
+                term_lower = term.lower()
+                matches = []
+                for idx, p in enumerate(paragraphs_for_search):
+                    if term_lower in p.lower():
+                        # Surrounding context — 3 paragraphs before, 5 after.
+                        ctx_start = max(0, idx - 3)
+                        ctx_end = min(len(paragraphs_for_search), idx + 6)
+                        context = paragraphs_for_search[ctx_start:ctx_end]
+                        matches.append({
+                            "paragraphIndex": idx,
+                            "matchedLine": p[:200],
+                            "context": [c[:200] for c in context],
+                        })
+                        if len(matches) >= 5:
+                            break  # cap to 5 occurrences per term
+                search_results.append({
+                    "term": term,
+                    "matchCount": len(matches),
+                    "matches": matches,
+                })
+
         def _count_by_kind(entries):
             out: dict = {"cv": 0, "syllabus": 0, "paper": 0, "unknown": 0}
             for e in entries:
@@ -532,6 +579,7 @@ async def inspect_toc(req: InspectTocRequest, request: Request) -> dict:
                 "totalAnchored": len(anchored),
                 "patternCvCount": len(pattern_cvs),
             },
+            "searchResults": search_results,
             "documentBytes": len(html_bytes),
         }
     finally:

@@ -700,6 +700,17 @@ export function buildTestRouter(): Router | null {
   router.get('/inspect-toc/:importId', async (req: Request, res: Response) => {
     if (!requireSeedToken(req, res)) return;
     const { importId } = req.params;
+    // Comma-separated list of strings to grep for in the converted HTML.
+    // The ai-service /ai/debug/inspect-toc endpoint returns the
+    // surrounding 5-paragraph context for each match so the test can
+    // see where in the body a known-to-be-present name actually appears.
+    const searchTermsRaw = req.query.search as string | undefined;
+    const searchTerms = searchTermsRaw
+      ? searchTermsRaw
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : undefined;
     try {
       const importRecord: any = await SelfStudyImport.findById(importId).lean();
       if (!importRecord) {
@@ -730,7 +741,11 @@ export function buildTestRouter(): Router | null {
       if (!secret) {
         return res.status(500).json({ error: 'NODE_SERVICE_HMAC_SECRET not set on this server' });
       }
-      const body = JSON.stringify({ s3Key });
+      const body = JSON.stringify(
+        searchTerms && searchTerms.length > 0
+          ? { s3Key, searchTerms }
+          : { s3Key }
+      );
       const ts = Math.floor(Date.now() / 1000).toString();
       const digest = crypto
         .createHmac('sha256', secret)
