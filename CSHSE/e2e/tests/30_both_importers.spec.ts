@@ -102,8 +102,10 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
       page.getByRole('tablist', { name: /wizard steps/i })
     ).toBeVisible({ timeout: 15_000 });
     // Within the wizard step tablist, the Upload step is always present.
+    // The Stepper labels it "1 Upload" (step-number prefix), so match on
+    // /Upload/ rather than an exact-string anchor.
     await expect(
-      page.getByRole('tab', { name: /^Upload$/i })
+      page.getByRole('tab', { name: /Upload/i })
     ).toBeVisible();
   });
 

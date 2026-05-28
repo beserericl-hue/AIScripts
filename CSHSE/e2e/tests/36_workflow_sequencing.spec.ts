@@ -70,9 +70,10 @@ test.describe('Self-Study editor — workflow sequencing', () => {
     ).toBeVisible({ timeout: 15_000 });
     // …and the previous run's "Parsing complete" screen is NOT shown.
     await expect(page.getByText('Parsing complete')).toHaveCount(0);
-    // The Upload step is the active wizard step.
+    // The Upload step is the active wizard step. (The Stepper labels the
+    // tab "1 Upload" — step number prefix — so match on /Upload/.)
     await expect(
-      page.getByRole('tab', { name: /^Upload$/i, selected: true })
+      page.getByRole('tab', { name: /Upload/i, selected: true })
     ).toBeVisible();
   });
 });
