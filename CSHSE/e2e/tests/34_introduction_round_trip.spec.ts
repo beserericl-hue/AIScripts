@@ -65,9 +65,17 @@ test.describe('CR-046 — Introduction surface round-trip', () => {
     await editor.click();
     await editor.fill(marker);
 
-    // Click Save and wait for the "Saved" confirmation.
+    // Click Save and wait for the PATCH /introduction to resolve 200.
+    // (The on-screen "Saved" badge auto-clears after ~1.5s, so it's a
+    // flaky signal; the network response is the deterministic one.)
+    const savePromise = page.waitForResponse(
+      (r) =>
+        /\/api\/submissions\/[^/]+\/introduction$/.test(r.url()) &&
+        r.request().method() === 'PATCH'
+    );
     await page.getByRole('button', { name: /^Save$/i }).first().click();
-    await expect(page.getByText(/^Saved$/).first()).toBeVisible({ timeout: 10_000 });
+    const saveResp = await savePromise;
+    expect(saveResp.status()).toBe(200);
 
     // Reload — the text must survive (persisted to documentIntroduction).
     await page.reload();
