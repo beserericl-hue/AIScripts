@@ -1550,3 +1550,15 @@ Updated:
 - [[change-requests/index]] — CR-047 row → **shipped**.
 
 Status: **shipped**. Closes the CR-045 / CR-046 / CR-047 workflow-alignment trio.
+
+## [2026-05-28] update | Editor workflow-sequencing fixes (Upload Files reset + open-on-Review)
+
+Two PC-reported sequencing bugs on the Self-Study editor, fixed in `client/src/features/selfStudy/Editor/SelfStudyEditor.tsx` (commits `0b6c368` + e2e `b21c384`), verified on cshse-develop.
+
+1. **Upload Files jumped to the stale Parse screen.** Sitting on the Review surface and clicking "Upload Files" re-showed the *previous* run's "Parsing complete" pipeline instead of a fresh Upload step — the PC couldn't start a second import without a hard refresh. `AIImportTabButton` now calls `startOver()` whenever the prior run has **settled** (parsed / applied / finished / failed / canceled), not only when it reached Apply; it skips the reset only while a run is in flight (queued / parsing). The old "protect the wizard's internal review step" guard is obsolete — CR-043 moved Review to a standalone surface (its own toolbar button, backed by persisted `aiReviewState`), and `startOver()` keeps `submissionId` so the Review surface re-hydrates from the server.
+
+2. **Editor opened on Standards even with drafts waiting.** The editor hard-coded the initial view to Standards (workflow phase 3). It now opens on the **Review** surface (phase 2 DRAFTS) when the AI-import store (hydrated synchronously from localStorage) shows pending drafts for this submission and the import has **not** been applied/finished yet — so the PC follows IMPORT → DRAFTS → SELF-STUDY → SUBMIT order. A CR-047 deep-link (`?view=...`) still takes precedence. Extracted `computeDraftsCount()` so the DRAFTS badge and the initial-view decision share one definition.
+
+Tests: `e2e/tests/36_workflow_sequencing.spec.ts` (new, 2 tests) + fixed a pre-existing `/^Upload$/i` → `/Upload/` mismatch in `30_both_importers` (the Stepper labels the tab "1 Upload"). 12/12 green on cshse-develop (36 + 30 + 33 + 04); full client unit suite 191/191.
+
+Note for follow-up: the open-on-Review signal is *parsed-but-not-applied* drafts (Apply doesn't clear the in-memory buckets, so a plain "drafts > 0" would force Review forever). Loosen if the PC wants Review on every entry regardless of apply state.
