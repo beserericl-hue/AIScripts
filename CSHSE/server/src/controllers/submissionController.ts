@@ -7,6 +7,10 @@ import { emailService } from '../services/emailService';
 import { recordAuditEvent } from '../services/auditLog';
 import { User } from '../models/User';
 import { Spec } from '../models/Spec';
+import { SelfStudyImport } from '../models/SelfStudyImport';
+import { CurriculumMatrix } from '../models/CurriculumMatrix';
+import { SupportingEvidence } from '../models/SupportingEvidence';
+import { getAllStandards } from '../data/standards';
 import mongoose from 'mongoose';
 
 interface AuthenticatedRequest extends Request {
@@ -342,6 +346,158 @@ export const saveIntroduction = async (req: AuthenticatedRequest, res: Response)
   } catch (error) {
     console.error('Save introduction error:', error);
     return res.status(500).json({ error: 'Failed to save introduction' });
+  }
+};
+
+/**
+ * CR-047 — GET /api/submissions/:submissionId/workflow-summary
+ *
+ * Derived rollup powering the reorganized PC dashboard. Mirrors the
+ * IMPORT → DRAFTS → SELF-STUDY → SUBMIT workflow (CR-045). All counts
+ * are computed from already-persisted data — no schema change:
+ *   - import     ← SelfStudyImport records on this submission
+ *   - drafts     ← Submission.aiReviewState (cvs / evidenceDocs / intros / buckets)
+ *   - selfStudy  ← standardsStatus + narratives + CurriculumMatrix + SupportingEvidence
+ *   - submit     ← Institution.accreditationDeadline + validated/total
+ *
+ * Owner-PC / admin only; cross-institution PC access is 403 (mirrors
+ * getSubmission's CR-017 gate).
+ */
+export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
+    if (
+      !isElevated &&
+      req.user?.role === 'program_coordinator' &&
+      (req.user as any).institutionId &&
+      submission.institutionId &&
+      submission.institutionId.toString() !== (req.user as any).institutionId
+    ) {
+      return res.status(403).json({ error: 'Forbidden: cross-institution access' });
+    }
+
+    // -- IMPORT: the PC's uploaded self-study file(s) ----------------
+    const imports: any[] = await SelfStudyImport.find({ submissionId })
+      .select('originalFilename aiStatus aiS3Key createdAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    const withFile = imports.filter((i) => i.aiS3Key);
+    const latest = withFile[0] || imports[0] || null;
+    const importInfo = latest
+      ? {
+          filename: latest.originalFilename,
+          importedAt: latest.createdAt,
+          aiStatus: latest.aiStatus ?? null,
+          fileCount: withFile.length
+        }
+      : null;
+
+    // -- DRAFTS: items waiting in Review (aiReviewState) -------------
+    const rs: any = (submission as any).aiReviewState || {};
+    const evidenceDocs: any[] = Array.isArray(rs.evidenceDocs) ? rs.evidenceDocs : [];
+    const cvs = Array.isArray(rs.cvs) ? rs.cvs.length : 0;
+    const syllabi = evidenceDocs.filter((d) => d?.docSubKind === 'syllabus').length;
+    // "Projects" and "Plans" are the same thing (user direction
+    // 2026-05-27) — both map to docSubKind 'paper'.
+    const papers = evidenceDocs.filter((d) => d?.docSubKind === 'paper').length;
+    let introductions = 0;
+    const introsObj = rs.introductions || {};
+    for (const ib of Object.values(introsObj) as any[]) {
+      introductions += Array.isArray(ib?.items) ? ib.items.length : 0;
+    }
+    // Per-spec review items — only specs with > 0 (user direction).
+    const buckets = rs.buckets || {};
+    const bySpec: Array<{ std: string; spec: string; count: number }> = [];
+    let specItems = 0;
+    for (const [key, b] of Object.entries(buckets) as [string, any][]) {
+      const count =
+        (b?.narratives?.length || 0) +
+        (b?.evidenceText?.length || 0) +
+        (b?.evidenceFiles?.length || 0);
+      if (count > 0) {
+        // bucket keys are "std.spec" (e.g. "1.a") OR carry std/spec fields.
+        const std = b?.standardCode ?? key.split('.')[0] ?? key;
+        const spec = b?.specCode ?? key.split('.')[1] ?? '';
+        bySpec.push({ std: String(std), spec: String(spec), count });
+        specItems += count;
+      }
+    }
+    bySpec.sort((a, b) =>
+      a.std === b.std ? a.spec.localeCompare(b.spec) : a.std.localeCompare(b.std, undefined, { numeric: true })
+    );
+
+    // -- SELF-STUDY: committed content ------------------------------
+    const allStandards = getAllStandards();
+    let specsTotal = 0;
+    for (const s of allStandards) specsTotal += (s.specifications || []).length;
+    let specsValidated = 0;
+    if (submission.standardsStatus) {
+      submission.standardsStatus.forEach((v: any) => {
+        const vs = v?.validationStatus;
+        const st = v?.status;
+        if (vs === 'pass' || st === 'validated' || st === 'complete' || st === 'submitted') {
+          specsValidated++;
+        }
+      });
+    }
+    // narratives written — count specs with non-empty content.
+    let narrativesWritten = 0;
+    const narr: any = submission.narratives;
+    if (narr && typeof narr.forEach === 'function') {
+      narr.forEach((specMap: any) => {
+        const iter = specMap && typeof specMap.forEach === 'function' ? specMap : null;
+        if (iter) {
+          iter.forEach((content: any) => {
+            const html = content?.content || content?.html || '';
+            if (typeof html === 'string' && html.replace(/<[^>]*>/g, '').trim().length > 0) {
+              narrativesWritten++;
+            }
+          });
+        }
+      });
+    }
+    // matrix rows + evidence files (cheap counts on indexed submissionId).
+    const matrices: any[] = await CurriculumMatrix.find({ submissionId })
+      .select('rawContent')
+      .lean();
+    const matrixRows = matrices.reduce(
+      (sum, m) => sum + (Array.isArray(m.rawContent) ? m.rawContent.length : 0),
+      0
+    );
+    const evidenceFiles = await SupportingEvidence.countDocuments({
+      submissionId,
+      isDeleted: { $ne: true }
+    });
+
+    // -- SUBMIT readiness -------------------------------------------
+    let deadline: string | null = null;
+    if (submission.institutionId) {
+      const inst: any = await Institution.findById(submission.institutionId)
+        .select('accreditationDeadline')
+        .lean();
+      deadline = inst?.accreditationDeadline ?? null;
+    }
+
+    return res.json({
+      import: importInfo,
+      drafts: { cvs, syllabi, papers, introductions, specItems, bySpec },
+      selfStudy: { specsValidated, specsTotal, narrativesWritten, matrixRows, evidenceFiles },
+      submit: {
+        deadline,
+        validated: specsValidated,
+        total: specsTotal,
+        ready: specsTotal > 0 && specsValidated === specsTotal
+      }
+    });
+  } catch (error) {
+    console.error('Get workflow summary error:', error);
+    return res.status(500).json({ error: 'Failed to get workflow summary' });
   }
 };
 

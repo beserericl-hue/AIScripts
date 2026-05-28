@@ -27,7 +27,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { api } from '../../../services/api';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { IntroductionEditor } from './IntroductionEditor';
@@ -480,6 +480,35 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     const handler = () => setActiveView('review-surface');
     window.addEventListener('cr-043-open-review-surface', handler);
     return () => window.removeEventListener('cr-043-open-review-surface', handler);
+  }, []);
+
+  // CR-047 — deep-link from the PC dashboard's DRAFTS tiles. A tile/row
+  // navigates here with `?view=review[&specKey=<rail key>]`; on mount we
+  // open the Review surface and pre-select the matching rail entry
+  // (synthetic kinds like `_cvs` / `_evidence-docs:syllabus`, or a real
+  // spec key like `1.a`). selectSpec persists in the store, so it survives
+  // ReviewSurface's loadPersistedReviewState() call.
+  const [deepLinkParams, setDeepLinkParams] = useSearchParams();
+  useEffect(() => {
+    if (!isProgramCoordinator || !submissionId) return;
+    const view = deepLinkParams.get('view');
+    if (view === 'review') {
+      setActiveView('review-surface');
+      const specKey = deepLinkParams.get('specKey');
+      if (specKey) {
+        useAIImportStore.getState().selectSpec(specKey);
+      }
+    } else if (view === 'import') {
+      setActiveView('ai-import');
+    } else {
+      return;
+    }
+    // Strip the params so a manual refresh / Back doesn't re-trigger.
+    const next = new URLSearchParams(deepLinkParams);
+    next.delete('view');
+    next.delete('specKey');
+    setDeepLinkParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // When the user clicks "View in matrix" from a spec, we stash the target
   // (std, spec) here and switch to the curriculum view. CurriculumMatrixEditor

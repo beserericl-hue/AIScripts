@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getSubmission,
   getSubmissionProgress,
+  getWorkflowSummary,
   saveNarrative,
   saveIntroduction,
   submitStandard,
@@ -56,6 +57,14 @@ router.get('/:submissionId', getSubmission);
  * @access  Private
  */
 router.get('/:submissionId/progress', getSubmissionProgress);
+
+/**
+ * @route   GET /api/submissions/:submissionId/workflow-summary
+ * @desc    CR-047 — derived rollup for the PC dashboard's IMPORT →
+ *          DRAFTS → SELF-STUDY → SUBMIT workflow sections.
+ * @access  Private (Program Coordinator owner, Admin)
+ */
+router.get('/:submissionId/workflow-summary', getWorkflowSummary);
 
 /**
  * @route   PATCH /api/submissions/:submissionId/narrative

@@ -20,12 +20,13 @@ import {
   RefreshCw,
   Eye,
   Loader2,
-  ClipboardCheck,
   Download,
   FolderOpen,
 } from 'lucide-react';
 import { format, formatDistanceToNow, isWithinInterval, addDays } from 'date-fns';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { WorkflowSummary, type WorkflowSummaryData } from './WorkflowSummary';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -114,6 +115,7 @@ interface DashboardFilters {
 }
 
 export function Dashboard() {
+  const navigate = useNavigate();
   const { getEffectiveRole, getEffectiveUser } = useAuthStore();
   const effectiveRole = getEffectiveRole();
   const effectiveUser = getEffectiveUser();
@@ -126,6 +128,10 @@ export function Dashboard() {
     readerId: '',
     search: '',
   });
+
+  // CR-047 — the accreditation-admin panels (Change Requests + Site Visits)
+  // are demoted below the workflow and collapsed by default.
+  const [accreditationOpen, setAccreditationOpen] = useState(false);
 
   // Fetch institutions
   const { data: institutionsData, isLoading: institutionsLoading } = useQuery({
@@ -165,14 +171,17 @@ export function Dashboard() {
     enabled: isProgramCoordinator && !!effectiveUser?.institutionId
   });
 
-  // Fetch standards definitions (for total spec count)
-  const { data: standardsData } = useQuery<{ code: string; specifications: { code: string }[] }[]>({
-    queryKey: ['standards'],
+  // CR-047 — workflow summary (rolled-up IMPORT/DRAFTS/SELF-STUDY/SUBMIT
+  // counts) for the PC's current submission. Server-side rollup so we
+  // don't ship the full aiReviewState to the landing page.
+  const pcSubmissionId: string | undefined = mySubmissionData?.submissions?.[0]?._id;
+  const { data: workflowSummary, isLoading: workflowLoading } = useQuery<WorkflowSummaryData>({
+    queryKey: ['workflow-summary', pcSubmissionId],
     queryFn: async () => {
-      const response = await api.get(`${API_BASE}/standards`);
+      const response = await api.get(`${API_BASE}/submissions/${pcSubmissionId}/workflow-summary`);
       return response.data;
     },
-    enabled: isProgramCoordinator
+    enabled: isProgramCoordinator && !!pcSubmissionId,
   });
 
   // Fetch pending change requests
@@ -358,30 +367,9 @@ export function Dashboard() {
     return siteVisits;
   }, [siteVisits, isProgramCoordinator, effectiveUser, myInstitution]);
 
-  // Calculate statistics for PC — count validated specs out of total specs
-  const pcStats = useMemo(() => {
-    if (!standardsData || !mySubmission?.standardsStatus) {
-      return { completedItems: 0, totalItems: 83 };
-    }
-
-    let completedItems = 0;
-    let totalItems = 0;
-
-    for (const standard of standardsData) {
-      for (const spec of standard.specifications || []) {
-        totalItems++;
-        const status = mySubmission.standardsStatus[`${standard.code}_${spec.code}`];
-        if (status?.validationStatus === 'pass' || status?.status === 'validated' || status?.status === 'complete' || status?.status === 'submitted') {
-          completedItems++;
-        }
-      }
-    }
-
-    return {
-      completedItems,
-      totalItems: totalItems || 83
-    };
-  }, [mySubmission, standardsData]);
+  // CR-047 — the PC's validated-spec counts now come from the
+  // workflow-summary endpoint (server-side rollup); the old client-side
+  // pcStats useMemo was removed with the stat-card rewrite.
 
   // Calculate statistics for Admin/other roles
   const stats = useMemo(() => {
@@ -439,6 +427,15 @@ export function Dashboard() {
       );
     }
 
+    // CR-047 — deep-link helper into the Self-Study editor. Falls back to
+    // the no-id route (which opens/creates the PC's submission) when no
+    // submission exists yet.
+    const pcEditorPath = (suffix = '') =>
+      pcSubmissionId ? `/self-study/${pcSubmissionId}${suffix}` : '/self-study';
+    const hasAdminContent =
+      filteredChangeRequests.length > 0 || filteredSiteVisits.length > 0;
+    const accreditationExpanded = accreditationOpen || hasAdminContent;
+
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Spec Name Banner */}
@@ -480,75 +477,46 @@ export function Dashboard() {
         </div>
 
         <div className="max-w-7xl mx-auto px-6 py-8">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Items In Spec Completed</p>
-                  <p className="text-3xl font-bold text-primary-600">
-                    {pcStats.completedItems}/{pcStats.totalItems}
-                  </p>
-                </div>
-                <ClipboardCheck className="w-12 h-12 text-primary-100" />
-              </div>
-              <div className="mt-3 h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary-500 rounded-full transition-all"
-                  style={{ width: `${(pcStats.completedItems / pcStats.totalItems) * 100}%` }}
-                />
-              </div>
-            </div>
+          {/* CR-047 — workflow pipeline (IMPORT → DRAFTS → SELF-STUDY → SUBMIT) */}
+          <WorkflowSummary
+            summary={workflowSummary ?? null}
+            isLoading={workflowLoading && !!pcSubmissionId}
+            onOpenImporter={() => navigate(pcEditorPath('?view=import'))}
+            onOpenReview={(specKey) =>
+              navigate(
+                pcEditorPath(
+                  specKey
+                    ? `?view=review&specKey=${encodeURIComponent(specKey)}`
+                    : '?view=review'
+                )
+              )
+            }
+            onOpenSelfStudy={() => navigate(pcEditorPath())}
+            onSubmit={() => navigate(pcEditorPath())}
+          />
 
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Pending Requests</p>
-                  <p className="text-3xl font-bold text-amber-600">
-                    {filteredChangeRequests.length}
-                  </p>
-                </div>
-                <Bell className="w-12 h-12 text-amber-100" />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Deadline</p>
-                  <p className="text-lg font-bold text-red-600">
-                    {myInstitution?.accreditationDeadline
-                      ? format(new Date(myInstitution.accreditationDeadline), 'MMM d, yyyy')
-                      : 'Not set'}
-                  </p>
-                </div>
-                <Clock className="w-12 h-12 text-red-100" />
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-500">Site Visit</p>
-                  <p className="text-lg font-bold text-blue-600">
-                    {filteredSiteVisits.length > 0
-                      ? format(new Date(filteredSiteVisits[0].scheduledDate), 'MMM d, yyyy')
-                      : 'Not scheduled'}
-                  </p>
-                </div>
-                <Calendar className="w-12 h-12 text-blue-100" />
-              </div>
-            </div>
+          {/* CR-047 — accreditation-admin panels demoted below the workflow,
+              collapsed by default (auto-expanded when there's pending content). */}
+          <div className="mt-8">
+            <button
+              type="button"
+              onClick={() => setAccreditationOpen((o) => !o)}
+              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900"
+            >
+              <ChevronRight
+                className={`w-4 h-4 transition-transform ${accreditationExpanded ? 'rotate-90' : ''}`}
+              />
+              Accreditation status
+              {hasAdminContent && (
+                <span className="ml-1 px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700">
+                  {filteredChangeRequests.length + filteredSiteVisits.length}
+                </span>
+              )}
+            </button>
           </div>
 
-          {isLoading && (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
-            </div>
-          )}
-
-          {!isLoading && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {accreditationExpanded && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-4">
               {/* My Change Requests */}
               <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                 <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -647,83 +615,6 @@ export function Dashboard() {
                           </span>
                         </div>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Files Section */}
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 lg:col-span-2">
-                <div className="flex items-center justify-between p-6 border-b border-gray-200">
-                  <div className="flex items-center gap-2">
-                    <FolderOpen className="w-5 h-5 text-primary-500" />
-                    <h2 className="font-semibold text-gray-900">Files</h2>
-                  </div>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {dashboardFiles.length === 0 ? (
-                    <div className="p-6 text-center text-gray-500">
-                      <FolderOpen className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                      <p>No specification documents available</p>
-                    </div>
-                  ) : myInstitutions.length > 1 ? (
-                    // Multiple institutions: group files by spec/institution
-                    <div>
-                      {myInstitutions.map((inst) => {
-                        const specIdValue = inst.specId;
-                        const resolvedSpecId = typeof specIdValue === 'object' && specIdValue?._id
-                          ? specIdValue._id
-                          : specIdValue;
-                        const instFiles = dashboardFiles.filter((f) => f.relatedEntityId === resolvedSpecId);
-                        if (instFiles.length === 0) return null;
-                        return (
-                          <div key={inst._id}>
-                            <div className="px-4 py-2 bg-gray-50 border-b border-gray-200">
-                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                {inst.name} — {inst.specName || 'Unknown Spec'}
-                              </p>
-                            </div>
-                            {instFiles.map((file) => (
-                              <button
-                                key={file._id}
-                                onClick={() => handleFileDownload(file._id, file.originalName)}
-                                className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 text-left transition-colors border-b border-gray-100 last:border-b-0"
-                              >
-                                <FileCheck className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                  <p className="font-medium text-gray-900 truncate">
-                                    {file.originalName}
-                                  </p>
-                                  {file.description && (
-                                    <p className="text-xs text-gray-500 truncate">{file.description}</p>
-                                  )}
-                                </div>
-                                <Download className="w-4 h-4 text-gray-400" />
-                              </button>
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    // Single institution: flat list
-                    dashboardFiles.map((file) => (
-                      <button
-                        key={file._id}
-                        onClick={() => handleFileDownload(file._id, file.originalName)}
-                        className="w-full flex items-center gap-3 p-4 hover:bg-gray-50 text-left transition-colors"
-                      >
-                        <FileCheck className="w-5 h-5 text-primary-500 flex-shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-gray-900 truncate">
-                            {file.originalName}
-                          </p>
-                          {file.description && (
-                            <p className="text-xs text-gray-500 truncate">{file.description}</p>
-                          )}
-                        </div>
-                        <Download className="w-4 h-4 text-gray-400" />
-                      </button>
                     ))
                   )}
                 </div>
