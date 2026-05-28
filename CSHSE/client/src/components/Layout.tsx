@@ -48,6 +48,7 @@ export default function Layout() {
     getEffectiveUser,
     canAccessAdminSettings,
     isSuperuser,
+    updatePreferences,
   } = useAuthStore();
 
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -232,7 +233,30 @@ export default function Layout() {
                   <CogIcon />
                 </button>
                 {showUserMenu && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    {/* CR-045 — per-PC UI preferences. Only Program
+                        Coordinators see the legacy-importer toggle (the
+                        legacy "Import Document" button only renders for
+                        the PC role). hideLegacyImporter defaults true. */}
+                    {getEffectiveRole() === 'program_coordinator' && (
+                      <>
+                        <div className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                          Preferences
+                        </div>
+                        <label className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={user?.preferences?.hideLegacyImporter ?? true}
+                            onChange={(e) =>
+                              updatePreferences({ hideLegacyImporter: e.target.checked })
+                            }
+                            className="h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500"
+                          />
+                          Hide legacy importer
+                        </label>
+                        <div className="my-1 border-t border-gray-100" />
+                      </>
+                    )}
                     <button
                       onClick={() => {
                         setShowUserMenu(false);

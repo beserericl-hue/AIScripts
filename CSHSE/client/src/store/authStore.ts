@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '../services/api';
 
+// CR-045 — per-user UI preferences mirrored from GET /api/auth/me.
+export interface UserPreferences {
+  hideLegacyImporter?: boolean;
+}
+
 interface User {
   id: string;
   email: string;
@@ -11,6 +16,8 @@ interface User {
   institutionId?: string;
   institutionName?: string;
   isSuperuser?: boolean;
+  // CR-045 — server defaults hideLegacyImporter to true when absent.
+  preferences?: UserPreferences;
 }
 
 interface ImpersonationState {
@@ -38,6 +45,10 @@ interface AuthState {
   getEffectiveUser: () => User | null;
   isSuperuser: () => boolean;
   canAccessAdminSettings: () => boolean;
+  // CR-045 — patch the current user's UI preferences. Optimistically
+  // updates local state, then PATCHes the server; on failure the server
+  // value (re-fetched on next checkAuth) wins.
+  updatePreferences: (prefs: Partial<UserPreferences>) => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -200,6 +211,29 @@ export const useAuthStore = create<AuthState>()(
           ? impersonation.impersonatedRole
           : user?.role;
         return effectiveRole === 'admin';
+      },
+
+      updatePreferences: async (prefs: Partial<UserPreferences>) => {
+        const { user } = get();
+        if (!user) return;
+        // Optimistic local update so the checkbox flips instantly.
+        const merged: UserPreferences = { ...(user.preferences ?? {}), ...prefs };
+        set({ user: { ...user, preferences: merged } });
+        try {
+          const res = await api.patch('/api/auth/me/preferences', prefs);
+          // Sync to the server's defaulted echo (authoritative).
+          const serverPrefs = res.data?.preferences as UserPreferences | undefined;
+          if (serverPrefs) {
+            const cur = get().user;
+            if (cur) set({ user: { ...cur, preferences: serverPrefs } });
+          }
+        } catch (err) {
+          // Roll back on failure.
+          const cur = get().user;
+          if (cur) set({ user: { ...cur, preferences: user.preferences } });
+          // eslint-disable-next-line no-console
+          console.warn('[CR-045] updatePreferences failed:', err);
+        }
       },
     }),
     {

@@ -127,3 +127,42 @@ describe('authStore — role gating', () => {
     });
   });
 });
+
+// CR-045 — updatePreferences action. Mock the api module so the action's
+// PATCH resolves deterministically; assert optimistic local update + sync
+// to the server's echoed value.
+import { vi } from 'vitest';
+import { api } from '../services/api';
+
+vi.mock('../services/api', () => ({
+  api: { patch: vi.fn(), get: vi.fn().mockRejectedValue(new Error('no-op')) },
+}));
+
+describe('authStore — updatePreferences (CR-045)', () => {
+  beforeEach(() => {
+    reset(coord);
+    vi.clearAllMocks();
+  });
+
+  it('optimistically updates local preferences and syncs the server echo', async () => {
+    (api.patch as any).mockResolvedValue({ data: { ok: true, preferences: { hideLegacyImporter: false } } });
+    await useAuthStore.getState().updatePreferences({ hideLegacyImporter: false });
+    expect(api.patch).toHaveBeenCalledWith('/api/auth/me/preferences', { hideLegacyImporter: false });
+    expect(useAuthStore.getState().user?.preferences?.hideLegacyImporter).toBe(false);
+  });
+
+  it('rolls back local state when the PATCH fails', async () => {
+    // start from the default (hidden = true via absence)
+    useAuthStore.setState({ user: { ...coord, preferences: { hideLegacyImporter: true } } });
+    (api.patch as any).mockRejectedValue(new Error('network'));
+    await useAuthStore.getState().updatePreferences({ hideLegacyImporter: false });
+    // rolled back to the pre-call value
+    expect(useAuthStore.getState().user?.preferences?.hideLegacyImporter).toBe(true);
+  });
+
+  it('no-ops when there is no logged-in user', async () => {
+    reset(null);
+    await useAuthStore.getState().updatePreferences({ hideLegacyImporter: false });
+    expect(api.patch).not.toHaveBeenCalled();
+  });
+});

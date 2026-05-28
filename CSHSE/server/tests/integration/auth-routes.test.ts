@@ -160,3 +160,79 @@ describe('POST /api/auth/logout', () => {
     expect(meRes.status).toBe(200);
   });
 });
+
+describe('GET /api/auth/me — preferences (CR-045)', () => {
+  it('defaults hideLegacyImporter to true when the user has no preferences', async () => {
+    const { user } = await createUser({ status: 'active' });
+    const token = signTokenFor(user);
+    const res = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.user.preferences).toEqual({ hideLegacyImporter: true });
+  });
+});
+
+describe('PATCH /api/auth/me/preferences (CR-045)', () => {
+  it('persists hideLegacyImporter=false and reflects it on next GET /me', async () => {
+    const { user } = await createUser({ status: 'active' });
+    const token = signTokenFor(user);
+
+    const patch = await request(app)
+      .patch('/api/auth/me/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hideLegacyImporter: false });
+    expect(patch.status).toBe(200);
+    expect(patch.body.ok).toBe(true);
+    expect(patch.body.preferences).toEqual({ hideLegacyImporter: false });
+
+    const me = await request(app)
+      .get('/api/auth/me')
+      .set('Authorization', `Bearer ${token}`);
+    expect(me.body.user.preferences.hideLegacyImporter).toBe(false);
+  });
+
+  it('can toggle back to true', async () => {
+    const { user } = await createUser({ status: 'active' });
+    const token = signTokenFor(user);
+    await request(app)
+      .patch('/api/auth/me/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hideLegacyImporter: false });
+    const back = await request(app)
+      .patch('/api/auth/me/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hideLegacyImporter: true });
+    expect(back.body.preferences.hideLegacyImporter).toBe(true);
+  });
+
+  it('rejects a non-boolean value with 400', async () => {
+    const { user } = await createUser({ status: 'active' });
+    const token = signTokenFor(user);
+    const res = await request(app)
+      .patch('/api/auth/me/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hideLegacyImporter: 'yes' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/boolean/i);
+  });
+
+  it('returns 401 without a token', async () => {
+    const res = await request(app)
+      .patch('/api/auth/me/preferences')
+      .send({ hideLegacyImporter: false });
+    expect(res.status).toBe(401);
+  });
+
+  it('ignores unknown preference keys', async () => {
+    const { user } = await createUser({ status: 'active' });
+    const token = signTokenFor(user);
+    const res = await request(app)
+      .patch('/api/auth/me/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ hideLegacyImporter: false, somethingElse: 42 });
+    expect(res.status).toBe(200);
+    expect(res.body.preferences).toEqual({ hideLegacyImporter: false });
+    expect(res.body.preferences.somethingElse).toBeUndefined();
+  });
+});

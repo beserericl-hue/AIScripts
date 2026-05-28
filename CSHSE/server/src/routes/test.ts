@@ -290,6 +290,12 @@ export function buildTestRouter(): Router | null {
       if (password) {
         userPayload.passwordHash = password; // pre-save hook hashes it
       }
+      // CR-045 — let fixtures seed UI preferences (e.g. the
+      // both-importers spec needs hideLegacyImporter:false so the
+      // legacy "Import Document" button is visible).
+      if (userSpec.preferences && typeof userSpec.preferences === 'object') {
+        userPayload.preferences = userSpec.preferences;
+      }
       userDoc = await User.create(userPayload);
 
       submissionDoc = await Submission.create({

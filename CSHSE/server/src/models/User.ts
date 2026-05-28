@@ -42,12 +42,21 @@ export interface IUser extends Document {
   accountCreatedAt?: Date;
   // CR-042
   provisionedBy?: ProvisionedBy;
+  // CR-045 — per-user UI preferences. Optional; absent == defaults apply.
+  preferences?: IUserPreferences;
   createdAt: Date;
   updatedAt: Date;
 
   // Methods
   comparePassword(candidatePassword: string): Promise<boolean>;
   fullName(): string;
+}
+
+// CR-045 — per-user UI preferences. `hideLegacyImporter` defaults true so
+// every PC sees the clean single-importer toolbar; PCs who still want the
+// legacy paste-and-tag flow uncheck it in the cogwheel → Preferences menu.
+export interface IUserPreferences {
+  hideLegacyImporter?: boolean;
 }
 
 const UserSchema = new Schema<IUser>({
@@ -139,6 +148,15 @@ const UserSchema = new Schema<IUser>({
     },
     keyId: { type: Schema.Types.ObjectId, ref: 'APIKey' },
     at: Date
+  },
+  // CR-045 — per-user UI preferences. `default: undefined` keeps the
+  // subdoc absent until first write; the API + client treat a missing
+  // `hideLegacyImporter` as `true` (clean single-importer toolbar).
+  preferences: {
+    type: {
+      hideLegacyImporter: { type: Boolean }
+    },
+    default: undefined
   }
 }, {
   timestamps: true

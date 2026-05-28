@@ -258,11 +258,73 @@ router.get('/me', async (req: Request, res: Response) => {
         permissions: user.permissions,
         status: user.status,
         lastLogin: user.lastLogin,
-        isSuperuser: user.isSuperuser
+        isSuperuser: user.isSuperuser,
+        // CR-045 — per-user UI preferences. A missing field defaults to
+        // the clean single-importer toolbar (hideLegacyImporter: true).
+        preferences: {
+          hideLegacyImporter: user.preferences?.hideLegacyImporter ?? true
+        }
       }
     });
   } catch (error) {
     console.error('Get me error:', error);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+});
+
+/**
+ * @route   PATCH /api/auth/me/preferences
+ * @desc    Update the current user's UI preferences (CR-045).
+ * @access  Private
+ *
+ * Body: { hideLegacyImporter?: boolean }
+ * Only known preference keys are accepted; unknown keys are ignored so a
+ * stale client can't write arbitrary fields. Returns the full, defaulted
+ * preferences block so the client can sync its local state.
+ */
+router.patch('/me/preferences', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.slice(7);
+    const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
+    const decoded = jwt.verify(token, jwtSecret) as any;
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const body = (req.body || {}) as Record<string, unknown>;
+    if (
+      'hideLegacyImporter' in body &&
+      typeof body.hideLegacyImporter !== 'boolean'
+    ) {
+      return res
+        .status(400)
+        .json({ error: 'hideLegacyImporter must be a boolean' });
+    }
+
+    if (!user.preferences) {
+      user.preferences = {};
+    }
+    if ('hideLegacyImporter' in body) {
+      user.preferences.hideLegacyImporter = body.hideLegacyImporter as boolean;
+    }
+    user.markModified('preferences');
+    await user.save();
+
+    return res.json({
+      ok: true,
+      preferences: {
+        hideLegacyImporter: user.preferences?.hideLegacyImporter ?? true
+      }
+    });
+  } catch (error) {
+    console.error('Update preferences error:', error);
     return res.status(401).json({ error: 'Invalid token' });
   }
 });

@@ -29,7 +29,12 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
   let seed: SeedResult | undefined;
 
   test.beforeEach(async () => {
-    seed = await seedFixture('wizard_review_minimal');
+    // CR-045 — the legacy importer is hidden by default now. This spec
+    // exercises BOTH importers coexisting, so seed the PC with
+    // hideLegacyImporter:false to make the "Import Document" button show.
+    seed = await seedFixture('wizard_review_minimal', {
+      user: { preferences: { hideLegacyImporter: false } },
+    });
   });
 
   test.afterEach(async () => {
@@ -48,7 +53,7 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
       page.getByRole('button', { name: /Import Document/i })
     ).toBeVisible({ timeout: 15_000 });
     await expect(
-      page.getByRole('button', { name: /Importer Wizard/i })
+      page.getByRole('button', { name: /Upload Files/i })
     ).toBeVisible();
   });
 
@@ -88,7 +93,7 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
     await page.goto(`/self-study/${seed!.submissionId}`);
     await page.waitForLoadState('networkidle');
 
-    await page.getByRole('button', { name: /Importer Wizard/i }).click();
+    await page.getByRole('button', { name: /Upload Files/i }).click();
 
     // The wizard renders the Stepper with role="tablist" + aria-label
     // "Wizard steps". Scope to that to avoid colliding with the
@@ -111,7 +116,7 @@ test.describe('CR-001 — both importers coexist on the editor toolbar', () => {
     // Open Wizard first — scope the assertion to the Wizard steps tablist
     // so it doesn't collide with the SpecRail tablist also rendered on
     // the Review step.
-    await page.getByRole('button', { name: /Importer Wizard/i }).click();
+    await page.getByRole('button', { name: /Upload Files/i }).click();
     await expect(
       page.getByRole('tablist', { name: /wizard steps/i })
     ).toBeVisible({ timeout: 10_000 });

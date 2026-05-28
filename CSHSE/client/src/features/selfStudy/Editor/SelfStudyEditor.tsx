@@ -40,6 +40,8 @@ import { CommentSidebar } from '../../comments';
 import { DocumentViewer, SectionTagger, TaggedSectionsList, SubExtractionViewerModal, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
 import { Wizard as AIImportWizard } from './AIImport';
 import { useAIImportStore } from '../../../store/aiImportStore';
+import { useAuthStore } from '../../../store/authStore';
+import { PhaseIndicator } from './PhaseIndicator';
 
 // Use consistent API paths without relying on environment variable
 
@@ -250,10 +252,15 @@ function SectionSelectionItem({
  */
 function AIImportTabButton({
   activeView,
-  setActiveView
+  setActiveView,
+  showAiBadge = false
 }: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
+  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
+  // CR-045 — show the purple "AI" badge only when the legacy importer is
+  // ALSO visible (so the two need disambiguating). When legacy is hidden
+  // this is the only importer and the badge is noise.
+  showAiBadge?: boolean;
 }) {
   const status = useAIImportStore((s) => s.status);
   const queuePosition = useAIImportStore((s) => s.queuePosition);
@@ -321,15 +328,18 @@ function AIImportTabButton({
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
         activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
       }`}
-      title="Importer Wizard — upload a DOCX (or a partial section) and let the AI parse, tag, and place content. Use this when you have one document to import."
+      title="Upload Files — drag or select your self-study document(s) and let the AI parse, tag, and place the content. This is step 1 of the guided import."
     >
       <Upload className="w-4 h-4 flex-shrink-0" />
-      Importer Wizard
-      {/* CR-001 / S2A.4 — both paths coexist; the badge tells coordinators
-          which import surface is the AI-driven one at a glance. */}
-      <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
-        AI
-      </span>
+      Upload Files
+      {/* CR-045 — the "AI" badge only appears when the legacy importer is
+          also visible (the two need disambiguating). When legacy is
+          hidden, this is the only importer and the badge is just noise. */}
+      {showAiBadge && (
+        <span className="rounded bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">
+          AI
+        </span>
+      )}
       {badge && (
         <span className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-semibold ${badge.cls}`}>
           {badge.text}
@@ -349,8 +359,8 @@ function ReviewSurfaceButton({
   activeView,
   setActiveView
 }: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
+  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
 }) {
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
@@ -409,8 +419,8 @@ function MatrixSurfaceButton({
   activeView,
   setActiveView
 }: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
+  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
 }) {
   const matrices = useAIImportStore((s) => s.matrices);
   const hasContent = matrices.length > 0;
@@ -447,13 +457,19 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const isReviewer = userRole === 'reader' || userRole === 'lead_reader';
   const isReadOnly = !isProgramCoordinator;
 
+  // CR-045 — per-PC preference: hide the legacy paste-and-tag importer.
+  // Defaults true (clean single-importer toolbar) when the user has no
+  // saved preference.
+  const hideLegacyImporter =
+    useAuthStore((s) => s.user?.preferences?.hideLegacyImporter) ?? true;
+
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedStandard, setSelectedStandard] = useState('1');
   const [selectedSpec, setSelectedSpec] = useState<string | null>('a');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'ai-import' | 'review-surface' | 'matrix-surface'>('standards');
+  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface'>('standards');
 
   // CR-043 — wizard's Parse step dispatches `cr-043-open-review-surface`
   // when the PC clicks "Next: Review" so the wizard hands off to the
@@ -1970,6 +1986,26 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     return { validated, total };
   }, [standards, submission?.standardsStatus]);
 
+  // CR-045 — count of items waiting in the Drafts (Review) queue, for the
+  // PhaseIndicator's "2. Drafts (N)" badge. Mirrors the ReviewSurfaceButton
+  // content check but produces a count rather than a boolean.
+  const draftsBuckets = useAIImportStore((s) => s.buckets);
+  const draftsTags = useAIImportStore((s) => s.tags);
+  const draftsCvs = useAIImportStore((s) => s.cvs);
+  const draftsEvidenceDocs = useAIImportStore((s) => s.evidenceDocs);
+  const draftsIntroductions = useAIImportStore((s) => s.introductions);
+  const draftsCount = React.useMemo(() => {
+    let n = 0;
+    for (const b of Object.values(draftsBuckets) as any[]) {
+      n += (b.narratives?.length || 0) + (b.evidenceText?.length || 0) + (b.evidenceFiles?.length || 0);
+    }
+    n += draftsTags.length + draftsCvs.length + draftsEvidenceDocs.length;
+    for (const ib of Object.values(draftsIntroductions) as any[]) {
+      n += ib.items?.length || 0;
+    }
+    return n;
+  }, [draftsBuckets, draftsTags, draftsCvs, draftsEvidenceDocs, draftsIntroductions]);
+
   // Check if entire self-study is ready for submission (all specs validated)
   const isSelfStudyReadyForSubmit = React.useMemo(() => {
     if (!standards || !submission?.standardsStatus) return false;
@@ -2120,6 +2156,28 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           they sit on one line; below that the right cluster (progress +
           Submit) wraps below the tabs without losing any controls. */}
       <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
+        {/* CR-045 — wizard phase indicator strip. Shows the PC where they
+            are in the 4-step guided workflow. PC-only (the wizard
+            workflow doesn't apply to readers). */}
+        {isProgramCoordinator && (
+          <PhaseIndicator
+            activeView={activeView}
+            setActiveView={setActiveView}
+            draftsCount={draftsCount}
+            validated={validationProgress.validated}
+            totalSpecs={validationProgress.total}
+            onSubmitClick={() => {
+              setActiveView('standards');
+              // Focus the standalone Submit CTA; it lives in the header's
+              // right cluster. data-testid lets the click land precisely.
+              requestAnimationFrame(() => {
+                document
+                  .querySelector<HTMLButtonElement>('[data-testid="submit-self-study-cta"]')
+                  ?.focus();
+              });
+            }}
+          />
+        )}
         <div className="flex flex-wrap items-center gap-y-2 gap-x-4">
           <div className="flex items-center gap-3 flex-shrink-0">
             <button
@@ -2140,69 +2198,119 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           </div>
 
           <div className="flex items-center gap-3 flex-1 min-w-0">
-            {/* View Tabs — wraps onto its own line when the header is too
-                narrow. flex-wrap + gap-y so each button keeps full padding. */}
-            <div className="flex flex-wrap items-center gap-1 border-l pl-3 border-gray-200">
-              <button
-                onClick={() => setActiveView('standards')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                  activeView === 'standards'
-                    ? 'bg-teal-100 text-teal-700'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <BookOpen className="w-4 h-4 flex-shrink-0" />
-                Standards
-              </button>
-              <button
-                onClick={() => setActiveView('curriculum')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                  activeView === 'curriculum'
-                    ? 'bg-teal-100 text-teal-700'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Grid3X3 className="w-4 h-4 flex-shrink-0" />
-                Curriculum Matrix
-              </button>
-              <button
-                onClick={() => setActiveView('files')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                  activeView === 'files'
-                    ? 'bg-teal-100 text-teal-700'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <FolderOpen className="w-4 h-4 flex-shrink-0" />
-                Supporting File Library
-              </button>
+            {/* CR-045 — toolbar grouped by workflow phase. Left-to-right
+                matches the data flow: IMPORT → DRAFTS → SELF-STUDY. Each
+                group carries a plain-English label so a teacher reads the
+                row as a pipeline, not seven equal options. The phase
+                indicator strip above (PhaseIndicator) is the wizard. */}
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-l pl-3 border-gray-200">
+              {/* GROUP: IMPORT (PC only) — bring content in. */}
               {isProgramCoordinator && (
-                <button
-                  onClick={() => setShowImportModal(true)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                    showImportModal
-                      ? 'bg-teal-100 text-teal-700'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                  title="Import Document — paste a single section at a time into a chosen standard. Use this when multiple co-authors each contribute pieces of the self-study at different times."
-                >
-                  <FileUp className="w-4 h-4 flex-shrink-0" />
-                  Import Document
-                  <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-700">
-                    Legacy
+                <div className="flex flex-col gap-0.5">
+                  <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Import
                   </span>
-                </button>
+                  <div className="flex items-center gap-1">
+                    <AIImportTabButton
+                      activeView={activeView}
+                      setActiveView={setActiveView}
+                      showAiBadge={!hideLegacyImporter}
+                    />
+                    {/* CR-045 — legacy paste-and-tag importer is hidden by
+                        default; PCs re-enable it via cogwheel → Preferences
+                        → "Hide legacy importer". */}
+                    {!hideLegacyImporter && (
+                      <button
+                        onClick={() => setShowImportModal(true)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                          showImportModal
+                            ? 'bg-teal-100 text-teal-700'
+                            : 'text-gray-600 hover:bg-gray-100'
+                        }`}
+                        title="Import Document — paste a single section at a time into a chosen standard. Use this when multiple co-authors each contribute pieces of the self-study at different times."
+                      >
+                        <FileUp className="w-4 h-4 flex-shrink-0" />
+                        Import Document
+                        <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-700">
+                          Legacy
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
-              {isProgramCoordinator && <AIImportTabButton activeView={activeView} setActiveView={setActiveView} />}
-              {/* CR-043 — Review + Matrix buttons promoted out of the
-                  wizard. Disabled until the persisted aiReviewState /
-                  aiMatrixState has content. */}
+
+              {/* GROUP: DRAFTS (PC only) — triage what the import produced. */}
               {isProgramCoordinator && (
-                <ReviewSurfaceButton activeView={activeView} setActiveView={setActiveView} />
+                <div className="flex flex-col gap-0.5">
+                  <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                    Drafts
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <ReviewSurfaceButton activeView={activeView} setActiveView={setActiveView} />
+                    <MatrixSurfaceButton activeView={activeView} setActiveView={setActiveView} />
+                  </div>
+                </div>
               )}
-              {isProgramCoordinator && (
-                <MatrixSurfaceButton activeView={activeView} setActiveView={setActiveView} />
-              )}
+
+              {/* GROUP: SELF-STUDY — the published deliverable. Visible to
+                  every role (readers author nothing but still navigate it). */}
+              <div className="flex flex-col gap-0.5">
+                <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                  Self-Study
+                </span>
+                <div className="flex items-center gap-1">
+                  {/* CR-046 — Introduction surface, first in document order.
+                      Reuses the existing IntroductionEditor (CR-039) — this
+                      button just makes the document-level introduction
+                      discoverable instead of buried in the no-spec sub-state. */}
+                  <button
+                    onClick={() => setActiveView('introduction')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                      activeView === 'introduction'
+                        ? 'bg-teal-100 text-teal-700'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                    title="Introduction — the opening narrative of your self-study (mission, program description, terms). Imported intro content lands here."
+                  >
+                    <FileText className="w-4 h-4 flex-shrink-0" />
+                    Introduction
+                  </button>
+                  <button
+                    onClick={() => setActiveView('standards')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                      activeView === 'standards'
+                        ? 'bg-teal-100 text-teal-700'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <BookOpen className="w-4 h-4 flex-shrink-0" />
+                    Standards
+                  </button>
+                  <button
+                    onClick={() => setActiveView('curriculum')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                      activeView === 'curriculum'
+                        ? 'bg-teal-100 text-teal-700'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Grid3X3 className="w-4 h-4 flex-shrink-0" />
+                    Curriculum Matrix
+                  </button>
+                  <button
+                    onClick={() => setActiveView('files')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                      activeView === 'files'
+                        ? 'bg-teal-100 text-teal-700'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    <FolderOpen className="w-4 h-4 flex-shrink-0" />
+                    Supporting File Library
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           {/* Right cluster: progress + submit. ml-auto pushes it right when
@@ -2226,6 +2334,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
                 {/* Submit Self-Study Button */}
                 <button
+                  data-testid="submit-self-study-cta"
                   onClick={handleSubmitSelfStudy}
                   disabled={submitSelfStudyMutation.isPending || !isSelfStudyReadyForSubmit || isSubmissionLocked}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
@@ -2566,6 +2675,33 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 submissionId={submissionId}
                 readOnly={isReadOnly}
               />
+            </main>
+          )}
+
+          {/* CR-046 — Document Introduction surface. Reuses the existing
+              IntroductionEditor (CR-039) with document scope; this branch
+              just makes it reachable from the SELF-STUDY toolbar group
+              instead of only the buried no-spec sub-state. Visible to all
+              roles (readers navigate it read-only). */}
+          {activeView === 'introduction' && submissionId && (
+            <main className="flex-1 overflow-auto p-4">
+              <div className="mx-auto max-w-4xl">
+                <h2 className="mb-1 text-lg font-semibold text-gray-900">
+                  Document Introduction
+                </h2>
+                <p className="mb-4 text-sm text-gray-500">
+                  The opening narrative of your self-study — mission, program
+                  description, and terms. Content imported via the Drafts
+                  pipeline lands here; edit it freely before submitting.
+                </p>
+                <IntroductionEditor
+                  key={`doc-intro-view-${editorRefreshKey}`}
+                  submissionId={submissionId}
+                  scope="document"
+                  initialContent={(submission as any)?.documentIntroduction ?? ''}
+                  readOnly={isReadOnly}
+                />
+              </div>
             </main>
           )}
 
