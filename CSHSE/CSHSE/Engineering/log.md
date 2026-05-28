@@ -1514,3 +1514,23 @@ Deploy note: server (Node) deploys ~2min faster than the client (Vite static bui
 Commits: 320236c (impl) + e52c90c (E2E network-wait fix). Both CRs flipped proposed/accepted → **shipped** in index + CR files.
 
 Remaining not-fully-delivered after this: CR-018 (ai-service built, Reader caller pending) + the not-started Sprint 2A-8 reader/accreditation CRs.
+
+## [2026-05-27] ingest | CR-047 — PC dashboard workflow alignment (proposed)
+
+User direction (annotated /dashboard screenshot):
+
+> "The PC Dashboard needs to be reorganized to follow the workflow that is occurring. This should include the file that was imported, the numbers of items in draft numbers of CVs, Sylibi, Projects and Plans, and number of items in each spec in review, and the numbers of items in the self study."
+
+Audited `Dashboard.tsx` (PC branch lines 442-735). Today it shows four accreditation-admin cards (Items In Spec Completed, Pending Requests, Deadline, Site Visit) + admin-uploaded spec docs — NOT the PC's authoring pipeline, and NOT the file the PC imported (the "Files" section is `category: dashboard_document` filtered by specId, not `SelfStudyImport.originalFilename`).
+
+CR-047 rebuilds the PC branch as a four-section workflow pipeline matching CR-045's vocabulary: IMPORT (the imported file + parse status) → DRAFTS (count tiles for CVs / Syllabi / Projects / Introductions / per-spec review items, deep-linking into Review) → SELF-STUDY (validated specs + narratives/matrix/evidence committed) → SUBMIT (deadline + readiness CTA). Admin panels (change requests, site visits) demoted below.
+
+All counts derive from already-persisted data (`Submission.aiReviewState` + `standardsStatus` + import records) — no schema change. The only new server work is a `GET /:id/workflow-summary` rollup so the landing page doesn't ship the full aiReviewState. Effort ~2h40m.
+
+Created:
+- [[cr-047-pc-dashboard-workflow-alignment]]
+
+Updated:
+- [[change-requests/index]] — CR-047 row (P1).
+
+Status: **proposed**. Four open questions for sign-off — most important: **what is a "Plan"?** (CVs/Syllabi/Projects map to existing detector kinds; "Plans" is not a current category — recommendation: treat as the Introductions bucket, label "Introductions / Plans", confirm or correct).
