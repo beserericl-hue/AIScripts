@@ -74,7 +74,16 @@ test.describe('CR-047 — PC dashboard workflow pipeline', () => {
   let seed: SeedResult | undefined;
 
   test.beforeEach(async () => {
-    seed = await seedFixture('wizard_review_minimal', REVIEW_STATE_OVERRIDE);
+    // Unique institution per seed so the dashboard's
+    // `GET /submissions?institutionId=X&limit=1` resolves to THIS test's
+    // submission (the shared default institution would otherwise let one
+    // test's PC navigate to another test's submission → 404).
+    const uniqueInst = `CR047 E2E University ${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    seed = await seedFixture('wizard_review_minimal', {
+      ...REVIEW_STATE_OVERRIDE,
+      user: { institutionName: uniqueInst },
+      submission: { institutionName: uniqueInst },
+    });
   });
 
   test.afterEach(async () => {
@@ -112,9 +121,9 @@ test.describe('CR-047 — PC dashboard workflow pipeline', () => {
     await expect(workflow.getByRole('button', { name: '1.a 1' })).toBeVisible();
     await expect(workflow.getByRole('button', { name: '2.c 2' })).toBeVisible();
 
-    // 3 + 4. SELF-STUDY + SUBMIT sections render.
-    await expect(workflow.getByText('Self-Study')).toBeVisible();
-    await expect(workflow.getByText('Submit')).toBeVisible();
+    // 3 + 4. SELF-STUDY + SUBMIT section headings render.
+    await expect(workflow.getByRole('heading', { name: 'Self-Study' })).toBeVisible();
+    await expect(workflow.getByRole('heading', { name: 'Submit' })).toBeVisible();
     // Submit is disabled until every spec is validated.
     await expect(page.getByTestId('dashboard-submit-cta')).toBeDisabled();
   });
