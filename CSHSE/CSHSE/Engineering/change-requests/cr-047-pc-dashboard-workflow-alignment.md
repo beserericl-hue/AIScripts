@@ -3,22 +3,80 @@ name: CR-047 — PC Dashboard reorganized to follow the self-study workflow
 description: The Program Coordinator dashboard (/dashboard) shows four generic accreditation-admin cards (Items In Spec Completed, Pending Requests, Deadline, Site Visit) + admin-uploaded spec docs. It does not reflect the PC's actual work pipeline. Reorganize it around the same IMPORT → DRAFTS → SELF-STUDY → SUBMIT workflow CR-045 established on the editor toolbar — surface the imported file, the draft counts (CVs / Syllabi / Projects-Papers / Introductions / per-spec review items), and the self-study committed counts.
 type: change-request
 cr_id: CR-047
-status: proposed
+status: shipped
 priority: P1
 source: User direction 2026-05-27 — "The PC Dashboard needs to be reorganized to follow the workflow that is occurring. This should include the file that was imported, the numbers of items in draft numbers of CVs, Sylibi, Projects and Plans, and number of items in each spec in review, and the numbers of items in the self study. This should follow the workflow for the PC."
 sprint_target: Sprint 5 follow-on — pairs with CR-045 (toolbar) and CR-046 (introduction surface) as the third workflow-alignment CR.
 tags: [ui, dashboard, workflow, program-coordinator, counts]
-last_reviewed: 2026-05-27
+last_reviewed: 2026-05-28
+revision_history:
+  - 2026-05-27 — proposed
+  - 2026-05-27 — accepted; four open questions resolved (Projects==Plans, no new evidence; per-spec only >0; deep-link pre-filtered Review; PC-relevant admin panels shown collapsed-if-empty, non-PC content hidden)
+  - 2026-05-28 — shipped; commits df24cb6 (feat) + d49cd5d (e2e hardening); verified on cshse-develop (server 6 integration tests, client 12 unit tests, e2e 35 green)
 ---
 
 # CR-047 — PC Dashboard reorganized to follow the self-study workflow
 
-## Status: PROPOSED
+## Status: SHIPPED 2026-05-28
 
-Awaiting sign-off on four open questions (§7). Mirrors CR-045's
-plain-English IMPORT → DRAFTS → SELF-STUDY → SUBMIT workflow on the
-landing dashboard so the PC sees the same mental model the moment
-they log in.
+Delivered on `cshse-develop`. Commits `df24cb6` (feature) + `d49cd5d`
+(e2e hardening).
+
+**What shipped**
+
+- **Server** — `GET /api/submissions/:id/workflow-summary`
+  (`server/src/controllers/submissionController.ts:362`,
+  wired at `server/src/routes/submissions.ts:67`). Pure read; rolls up
+  the latest import, the `aiReviewState` draft counts (cvs / syllabi /
+  papers / introductions / per-spec >0 buckets), the committed
+  self-study counts (specs validated via `standardsStatus`, non-empty
+  narratives, `CurriculumMatrix.rawContent` rows, non-deleted
+  `SupportingEvidence`) and submit readiness. Owner-PC / admin auth,
+  403 cross-institution. No schema change. (Converted the controller's
+  `require()` lazy-loads to top-level ESM imports so it loads under the
+  test runner.)
+- **Client** — `client/src/features/dashboard/WorkflowSummary.tsx`
+  (new) renders the four sections; `Dashboard.tsx` PC-branch fetches the
+  summary and renders it, demotes Change Requests + Site Visits into a
+  collapsed "Accreditation status" strip (auto-expanded when there's
+  pending content), and drops the admin spec-file list from the PC view.
+  DRAFTS tiles / per-spec rows deep-link into the editor's Review
+  surface pre-selected to the matching `SpecRail` key via a new
+  `?view=review&specKey=` (and `?view=import`) mount-effect on
+  `SelfStudyEditor.tsx`.
+- **Tests** — `server/tests/integration/workflow-summary.test.ts` (6:
+  count correctness + auth owner/cross-inst-403/unauth-401/admin/fresh);
+  `client/src/features/dashboard/WorkflowSummary.test.tsx` (12: four
+  sections, tile counts, per-spec >0 filter, empty-import, deep-link
+  callbacks, submit enable/disable);
+  `e2e/tests/35_pc_dashboard_workflow.spec.ts` (2: dashboard rollup +
+  tile deep-link to Review). All green against `cshse-develop`.
+
+Original acceptance criteria (below) all met. The per-spec deep-link
+opens the Review surface pre-selected to the matching rail key (synthetic
+`_cvs` / `_evidence-docs:syllabus` / `_evidence-docs:paper` /
+`_intro:document`, or a real spec key `1.a`).
+
+## Status: ACCEPTED 2026-05-27
+
+Four open questions answered by the user 2026-05-27:
+
+1. **"Plans"** — Projects and Plans are **the same thing**. No new
+   evidence type. The DRAFTS "Projects" tile counts
+   `evidenceDocs.docSubKind === 'paper'`; there is no separate "Plans"
+   count.
+2. **Per-spec breakdown** — list only specs with > 0 review items.
+3. **Deep-link** — DRAFTS tiles open the Review surface pre-filtered
+   to that kind.
+4. **Admin panels** — keep the PC-relevant ones (the PC's own Change
+   Requests + their institution's Site Visits), demoted below the
+   workflow and collapsed when empty. Everything that is NOT
+   PC-relevant stays hidden from the PC (it already lives only in the
+   non-PC dashboard branch).
+
+Mirrors CR-045's plain-English IMPORT → DRAFTS → SELF-STUDY → SUBMIT
+workflow on the landing dashboard so the PC sees the same mental
+model the moment they log in.
 
 ## Source quote
 
@@ -185,10 +243,12 @@ Owner-PC / locked-submission auth, mirrors the existing
 
 ## Open questions
 
-1. **What is a "Plan"?** The user listed "CVs, Sylibi, Projects and Plans." CVs / Syllabi / Projects(Papers) map to existing detector kinds (`cv`, `evidenceDoc.docSubKind`). **"Plans" is not a current category.** Candidates: (a) the **Introduction** items (mission / program description — "program plan"?), (b) assessment/curriculum **plans** as a new evidence sub-kind, (c) a synonym for Projects. Recommendation: treat "Plans" as the **Introductions** bucket for now (closest existing concept) and label the tile "Introductions / Plans" — confirm or correct.
-2. **Per-spec review breakdown scope** — list only specs with > 0 review items (compact; recommended), or all 83 (complete but noisy)? Recommendation: only > 0, with a "view all in Review" link.
-3. **Deep-link behavior** — clicking a DRAFTS tile (e.g. "CVs 15") should open the editor's Review surface; should it pre-filter Review to that kind? Recommendation: open Review scrolled to / filtered on that kind if cheap; otherwise just open Review.
-4. **Keep the admin panels?** Change Requests + Site Visits demoted below the workflow (recommended) vs removed entirely from the PC view? Recommendation: demote + auto-collapse when empty (a PC with a pending deadline change still needs them).
+All four resolved 2026-05-27 (see top of page):
+
+1. **"Plans"** — RESOLVED: Projects == Plans, same thing. No new evidence type. "Projects" tile counts `docSubKind === 'paper'`.
+2. **Per-spec breakdown** — RESOLVED: only specs with > 0 review items.
+3. **Deep-link** — RESOLVED: DRAFTS tiles open the Review surface pre-filtered to that kind.
+4. **Admin panels** — RESOLVED: PC-relevant panels (Change Requests + Site Visits) shown, demoted, collapsed-if-empty; non-PC content stays hidden.
 
 ## Out of scope
 

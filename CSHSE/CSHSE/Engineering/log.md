@@ -1534,3 +1534,19 @@ Updated:
 - [[change-requests/index]] — CR-047 row (P1).
 
 Status: **proposed**. Four open questions for sign-off — most important: **what is a "Plan"?** (CVs/Syllabi/Projects map to existing detector kinds; "Plans" is not a current category — recommendation: treat as the Introductions bucket, label "Introductions / Plans", confirm or correct).
+
+## [2026-05-28] update | CR-047 shipped — PC dashboard workflow alignment
+
+Built + shipped [[cr-047-pc-dashboard-workflow-alignment]] to `cshse-develop`.
+
+Open questions resolved at acceptance: **"Plans" == Projects** (docSubKind `paper`, no new evidence type); per-spec breakdown lists only specs with >0 review items; DRAFTS tiles deep-link into the Review surface pre-selected to the matching kind; PC-relevant admin panels (Change Requests + Site Visits) demoted + collapsed-if-empty, non-PC content stays hidden.
+
+Delivered (commits `df24cb6` feat + `d49cd5d` e2e hardening):
+- **Server** — `GET /api/submissions/:id/workflow-summary` rollup (`server/src/controllers/submissionController.ts:362`, route at `server/src/routes/submissions.ts:67`). Pure read off `aiReviewState` + `standardsStatus` + import records + `CurriculumMatrix` / `SupportingEvidence` counts. Owner-PC / admin auth, 403 cross-institution, no schema change.
+- **Client** — new `WorkflowSummary.tsx` (4 sections IMPORT/DRAFTS/SELF-STUDY/SUBMIT); `Dashboard.tsx` PC-branch rewired; deep-links via new `?view=review&specKey=` / `?view=import` mount-effect on `SelfStudyEditor.tsx`.
+- **Tests** — 6 server integration + 12 client unit + 2 e2e (`35_pc_dashboard_workflow.spec.ts`), all green on cshse-develop; editor/Review regression smoke (33 + 13) green.
+
+Updated:
+- [[change-requests/index]] — CR-047 row → **shipped**.
+
+Status: **shipped**. Closes the CR-045 / CR-046 / CR-047 workflow-alignment trio.
