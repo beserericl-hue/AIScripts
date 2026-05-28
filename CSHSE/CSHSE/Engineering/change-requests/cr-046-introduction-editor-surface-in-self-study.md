@@ -3,7 +3,7 @@ name: CR-046 — Make the Introduction editor discoverable in the Self-Study Edi
 description: CR-039 Phase 2c already shipped a working Introduction editor (IntroductionEditor.tsx) + PATCH /api/submissions/:id/introduction endpoint + saveIntroduction controller — it reads/writes Submission.documentIntroduction and standardIntroductions. The bug is DISCOVERABILITY, not a missing feature: the editor only renders in the buried "Standard selected, no spec yet" sub-state, which a PC never lands in naturally. CR-046 surfaces the EXISTING editor via a discoverable `Introduction` button in CR-045's `SELF-STUDY` toolbar group + an `activeView='introduction'` branch. Reuse, do not rebuild.
 type: change-request
 cr_id: CR-046
-status: accepted
+status: shipped
 priority: P1
 source: User direction 2026-05-27 — "The Self Study editor is missing sections. It has the standards which is good. But does not have the document introduction which is now part of the import/review process. This needs to be corrected so that the data flows from review directly to the final editor."
 sprint_target: Ships AFTER CR-045 (the new button lives in CR-045's `SELF-STUDY` group). Can ship same sprint.

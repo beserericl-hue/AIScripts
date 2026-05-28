@@ -3,7 +3,7 @@ name: CR-045 — Self-Study Editor toolbar workflow alignment
 description: PCs report the Self-Study Editor toolbar is disorganized and does not reflect the actual workflow. Seven controls (Standards, Curriculum Matrix, Supporting File Library, Import Document, Importer Wizard, Review, Matrix) sit at the same visual level even though they belong to three different categories (destinations / entry points / staging surfaces). Redesign in four pillars — group by workflow phase (INPUT · STAGE · AUTHOR), hide legacy importer behind a per-PC cogwheel preference (default on), add a phase indicator strip, rename to fix the Matrix naming collision.
 type: change-request
 cr_id: CR-045
-status: accepted
+status: shipped
 priority: P1
 source: User direction 2026-05-27 — "the UI is disorganized and does not reflect the workflow of the self-study ... what they want is to hide the importer or the AI importer depending on user preference"
 sprint_target: Sprint 5 follow-on — depends on CR-001 (both importers shipped) and CR-043 (Review/Matrix surfaces promoted out of wizard)

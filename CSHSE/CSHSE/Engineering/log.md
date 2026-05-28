@@ -1484,3 +1484,33 @@ Updated:
 - CR-024 / CR-033 / CR-037 / CR-040 / CR-041 / CR-042 — dated reconciliation notes added.
 
 Net effect: the catalog now tells the truth. Genuinely-not-fully-delivered after this pass: **CR-018** (ai-service built, Reader caller pending) + the 18 not-started CRs (16 proposed + CR-045/046 accepted).
+
+## [2026-05-27] update | CR-045 + CR-046 shipped
+
+Both implemented, tested, and verified against deployed cshse-develop.
+
+### CR-045 — Self-Study Editor toolbar workflow alignment (shipped)
+
+Server (commit 320236c):
+- `User.preferences.hideLegacyImporter` (default-true at read time) + `PATCH /api/auth/me/preferences` (boolean-validated, 401 unauth, ignores unknown keys) + `/me` returns the defaulted block. Seed router accepts `user.preferences` override.
+
+Client:
+- authStore `updatePreferences()` (optimistic + server-echo + rollback).
+- Cogwheel "Hide legacy importer" checkbox (PC-only) in `Layout.tsx`.
+- Toolbar regrouped IMPORT / DRAFTS / SELF-STUDY (plain-English group labels, pipeline order). "Importer Wizard" → "Upload Files" (AI badge only when legacy also shown). Legacy "Import Document" gated behind `!hideLegacyImporter`.
+- New `PhaseIndicator.tsx` strip above the toolbar — the wizard's progress bar: `1. Import → 2. Drafts (N) → 3. Self-Study (X/Y) → 4. Submit`, click-to-jump, active phase derived from `activeView`. Submit chip focuses the standalone teal CTA (`data-testid=submit-self-study-cta`).
+
+### CR-046 — Introduction editor discoverability (shipped)
+
+Verified the editor + `PATCH /introduction` endpoint already existed (CR-039 Phase 2c) — rescoped to a discoverability fix. Added `Introduction` button first in the SELF-STUDY group + `activeView='introduction'` branch reusing the existing `IntroductionEditor` (document scope). No new component, no new endpoint.
+
+### Tests
+- server vitest: auth-routes 19 (6 new) + redetect 13 + unit = 89 passed.
+- client vitest: 179 passed (9 PhaseIndicator + 3 authStore new).
+- E2E against cshse-develop: 22/22 — `33_legacy_importer_preference` (2), `34_introduction_round_trip` (2, fixed to wait on PATCH response not the transient Saved badge), `30_both_importers` (5, seeded hideLegacyImporter:false + renamed Upload Files), plus 13 review/lifecycle regression specs (26 + 27) confirming the regroup didn't break Review/Matrix flows.
+
+Deploy note: server (Node) deploys ~2min faster than the client (Vite static build). The 401-on-PATCH signal confirms server-live; polling the served JS bundle for the "Upload Files" string confirms client-live. Ran E2E only after both.
+
+Commits: 320236c (impl) + e52c90c (E2E network-wait fix). Both CRs flipped proposed/accepted → **shipped** in index + CR files.
+
+Remaining not-fully-delivered after this: CR-018 (ai-service built, Reader caller pending) + the not-started Sprint 2A-8 reader/accreditation CRs.
