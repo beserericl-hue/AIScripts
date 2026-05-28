@@ -13,6 +13,10 @@ last_reviewed: 2026-05-24
 
 # CR-040 — Appendix papers as standalone evidence files
 
+## Reconciliation (2026-05-27)
+
+> Phase 2c/3 is complete: cshse-server `.docx` generation (real `docx` package output), S3 upload, the wizard "View file" button, standalone-evidence upload, the apply-time hard gate, and byte-level coverage verification all shipped. Body sections describing "Phase 2c/3 remaining" are superseded.
+
 ## Phase 3b shipped 2026-05-24 — byte-level coverage + boundary validation
 
 Walker `byte_offset_end` is now meaningful (was a duplicate of `_start`)

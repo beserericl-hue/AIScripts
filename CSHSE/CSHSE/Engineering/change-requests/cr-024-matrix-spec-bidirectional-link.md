@@ -13,6 +13,10 @@ last_reviewed: 2026-05-24
 
 # CR-024 — Matrix ↔ spec bidirectional link
 
+## Reconciliation (2026-05-27)
+
+> The Sprint 4 eval half (post-apply persistent matrix hotlinks + AI evaluation `scoreEvidence` accepting `matrixRows`) was completed during the AI-Importer close-out sprint. Earlier body sections describing it as a future Sprint 4 deliverable are superseded by this note.
+
 ## Sprint 4 shipped 2026-05-24
 
 **Post-apply matrix hotlink** — already shipped in

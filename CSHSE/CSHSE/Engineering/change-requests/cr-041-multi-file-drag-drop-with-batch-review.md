@@ -13,6 +13,10 @@ last_reviewed: 2026-05-24
 
 # CR-041
 
+## Reconciliation (2026-05-27)
+
+> The deferred follow-ons (batch edit-routing back to source child via `sourceImportId`, the Apply transaction wrapping, and the source-file filter on the Review surface) were completed during the close-out sprint. Genuinely-out-of-scope items remain out of scope (outer transaction wrapping ALL children, OCR for image-only PDFs, redundant-content auto-detection).
+
 ## User stories 2-10 shipped 2026-05-24
 
 The full multi-file batched-import surface ships:

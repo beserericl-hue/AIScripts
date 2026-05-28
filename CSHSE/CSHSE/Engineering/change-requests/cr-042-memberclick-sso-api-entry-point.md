@@ -40,6 +40,10 @@ Code is live on `cshse-develop`. Three commits on `developer`:
 
 # CR-042 — Public SSO API entry point
 
+## Reconciliation (2026-05-27)
+
+> Phase B is complete: the SSO ticket/redirect flow, the Settings UI for key management, the MemberClick relay endpoint with 4-defense validation, the OpenAPI 3.1 spec + Redoc docs page, and per-key tiered rate limiting all shipped. The frontmatter `shipped_phases` field + the "Phase B (deferred)" body sections predate this and are superseded.
+
 ## Note on scope — this is a PUBLIC API
 
 Per user clarification 2026-05-23 — "this api key will be a public api." That changes three things vs. a private MemberClick-only integration:

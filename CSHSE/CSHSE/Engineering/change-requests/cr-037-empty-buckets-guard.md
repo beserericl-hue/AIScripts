@@ -13,6 +13,10 @@ last_reviewed: 2026-05-24
 
 # CR-037 — Empty-buckets guard
 
+## Reconciliation (2026-05-27)
+
+> Defense 1 (ai-service self-validates buckets/tags/cvs/evidenceDocs/intros before emitting a terminal callback) was completed during the close-out sprint. The earlier note "Defense 1 still pending in ai-service" is superseded — all three defenses are now live.
+
 ## Source quote
 
 User, 2026-05-22 (post-demo):

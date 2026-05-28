@@ -1336,3 +1336,151 @@ Follow-on to the CR-043 + CR-044 regression plan. Filled every `describe.skip` +
 **Default sweep baseline shift:** 32 pass / 0 fail / 30 skipped → **46 pass / 0 fail / 17 skipped**. Of the 17 remaining skips: 5 are Stevenson @slow (Section 4), 11 are Importer-coverage @slow (Section 4B), 1 is the deliberate handshake-retries injection-test that needs server-side work first.
 
 Net cumulative bug count for the testing pass: **16 production bugs surfaced + fixed**.
+
+## [2026-05-27] ingest | CR-045 — Self-Study Editor toolbar workflow alignment (proposed)
+
+PC user feedback 2026-05-27 — annotated screenshot of the Self-Study Editor:
+
+> "The UI is disorganized and does not reflect the workflow of the self-study. What they want is to hide the importer or the AI importer depending on user preference. ... The PC can select the cogwheel icon which currently lets the user change the password or log out. If the AI importer is the default, then there should be a setting in the cogwheel menu that is a checkbox that says 'Hide legacy importer' and that should be checked by default."
+
+Captured as **CR-045** — a four-pillar redesign:
+
+1. **Group the toolbar by phase** — INPUT (importers) · STAGE (Review/Stage Matrix) · AUTHOR (Standards/Matrix/Files). Left-to-right matches data flow. Visual containers + labels per group.
+2. **Hide the legacy importer behind a per-PC cogwheel preference** — `User.preferences.hideLegacyImporter` default `true`. PATCH `/api/auth/me/preferences`. Drops the "AI" badge when there's no sibling to disambiguate against.
+3. **Phase indicator strip** above the toolbar — `[1. Import] → [2. Review (15)] → [3. Author (1/29)] → [4. Submit]` with `✓ done` / `◉ active` / `· open` / `· N/M ready` states; clickable.
+4. **Rename to fix the Matrix collision** — `Curriculum Matrix` (destination) → **Matrix**; `Matrix` (staging) → **Stage Matrix**.
+
+Audit identifies 8 specific UX problems in the current `SelfStudyEditor.tsx:2142-2206` toolbar. Implementation plan covers server (`User` model + endpoint), client (cogwheel toggle in `Layout.tsx:234-260`, toolbar regroup, new `PhaseIndicator` component, one-time migration banner), and tests (3 unit + 1 new E2E + 1 updated E2E). Total machine time: **~3 hours**.
+
+Created:
+- [[cr-045-self-study-editor-toolbar-workflow-alignment]] — full CR
+
+Updated:
+- [[change-requests/index]] — added CR-045 row under P1 section; bumped `last_reviewed`
+
+Status: **proposed**. Four open questions awaiting sign-off:
+1. Default value for `hideLegacyImporter` (recommend `true` for everyone with one-time banner)
+2. Phase indicator placement (recommend above toolbar)
+3. "Stage Matrix" naming (recommend `Stage Matrix` over `Matrix Queue` / `Pending Matrix`)
+4. Submit step in phase indicator (recommend both chip + standalone CTA)
+
+Original raw audit doc lives at `CSHSE/Engineering/ui-audit-self-study-editor-2026-05-27.md` and is referenced from the CR page for the full long-form analysis (component maps for current + proposed states, out-of-scope future work, migration considerations).
+
+## [2026-05-27] update | CR-045 — drop the post-deploy migration banner
+
+User direction: the one-time banner ("We've cleaned up the toolbar... open the cogwheel ⚙ → Preferences and uncheck 'Hide legacy importer' to bring it back") is not needed. Users will discover the toggle via the cogwheel menu itself.
+
+Removed from [[cr-045-self-study-editor-toolbar-workflow-alignment]]:
+- The `**Migration**` bullet under Acceptance describing the banner + `localStorage` flag.
+- `client/src/components/ToolbarRedesignBanner.tsx` from Files affected.
+- "One-time banner + dismiss logic: ~15 min" from Effort estimate; total drops 3h → 2h45m.
+- E2E spec description trimmed: "preference + migration banner" → "preference".
+
+Parallel update to the raw audit doc `CSHSE/Engineering/ui-audit-self-study-editor-2026-05-27.md`:
+- §6 Migration considerations rewritten — removed the banner paragraph; kept the E2E-fixture and telemetry notes.
+- §9 Effort estimate dropped the banner row; total updated.
+
+Updated:
+- [[cr-045-self-study-editor-toolbar-workflow-alignment]] — three sections edited; added `revision_history` to frontmatter so the second revision is traceable.
+- [[change-requests/index]] — effort-estimate text in the CR-045 row bumped to `~2h45m`.
+
+Status unchanged: **proposed**.
+
+## [2026-05-27] update | CR-045 accepted + CR-046 proposed
+
+### CR-045 — Self-Study Editor toolbar workflow alignment — ACCEPTED
+
+User signed off on all four open questions 2026-05-27, plus delivered one architectural refinement during the conversation:
+
+1. Default `hideLegacyImporter` = `true` for everyone (recommendation accepted).
+2. Phase indicator placement = above the toolbar (recommendation accepted).
+3. "Stage Matrix" naming — REJECTED all four candidates as too techie. Resolved via Approach C: group labels carry the staging concept; inner button stays `Matrix`. Group labels are plain-English `IMPORT` / `DRAFTS` / `SELF-STUDY`.
+4. Submit step in phase indicator = both chip + standalone CTA (recommendation accepted).
+
+Architectural refinement: the user pointed out that the "Importer Wizard" isn't a single button — the wizard IS the four-step guided workflow. The phase indicator strip at the top of the screen IS the wizard. The button labeled "Importer Wizard" today is just the first step's entry point. Renamed to `Upload Files` for what the teacher is actually doing.
+
+Final locked vocabulary:
+- Phase chips: `1. Import` → `2. Drafts` → `3. Self-Study` → `4. Submit`
+- Group labels: `IMPORT` · `DRAFTS` · `SELF-STUDY`
+- Inner buttons: `Upload Files` · `Review` · `Matrix` · `Standards` · `Curriculum Matrix` · `Files`
+- Cogwheel preference: `Hide legacy importer`
+
+Updated:
+- [[cr-045-self-study-editor-toolbar-workflow-alignment]] — status proposed → accepted; Decision section rewritten with the locked vocabulary table; Acceptance criteria updated; revision_history third entry.
+- [[change-requests/index]] — CR-045 row status `accepted 2026-05-27`; description summarises the locked vocabulary.
+
+### CR-046 — Document Introduction editor surface — PROPOSED
+
+User direction:
+
+> "The Self Study editor is missing sections. It has the standards which is good. But does not have the document introduction which is now part of the import/review process. This needs to be corrected so that the data flows from review directly to the final editor."
+
+Investigation confirmed the gap is exactly client-side:
+- Schema is already in place (`Submission.documentIntroduction?: string` + `standardIntroductions?: Map<string, string>` per `server/src/models/Submission.ts:154-155`).
+- Apply path already writes to `documentIntroduction` from the Review's introduction items (`server/src/controllers/aiImportController.ts:1346-1370`).
+- The schema comment explicitly says "so the existing TipTap editor surface can render them as soon as a per-Standard intro UI lands" — the work was always intended.
+- **No client UI reads back the field.** Text vanishes from the PC's view after Apply.
+
+CR-046 adds the missing editor surface as a new `Introduction` button in the `SELF-STUDY` toolbar group (per CR-045's locked vocabulary), positioned first because that's document order. Reuses the same TipTap rich-text editor pattern used by the Standards narrative editor. Server-side: one new `PATCH /api/submissions/:id/introduction` endpoint with the standard owner-PC / locked-submission auth gates.
+
+Per-Standard introductions UI explicitly deferred to a follow-on CR — schema is ready but the surface (likely inside the Standards editor as a top section per standard) is a separable scope of work.
+
+Effort estimate: ~2h20m machine-time.
+
+Created:
+- [[cr-046-introduction-editor-surface-in-self-study]] — full CR with frontmatter, source quote, scope (in / out), acceptance, files affected, dependencies, effort estimate, open questions, references.
+
+Updated:
+- [[change-requests/index]] — added CR-046 row under P1 section.
+
+Status: **proposed**. Two open questions for sign-off (button position in SELF-STUDY group; empty-state copy).
+
+## [2026-05-27] update | CR-046 accepted
+
+User signed off both open questions 2026-05-27:
+
+1. **Button position in `SELF-STUDY` group** — `Introduction` first (recommendation accepted; matches document order).
+2. **Empty-state copy** — none. A blank editor. PC types or pastes. Teachers know how to write — no need for helper copy.
+
+Updated:
+- [[cr-046-introduction-editor-surface-in-self-study]] — status proposed → accepted; both open questions marked resolved; In-Scope bullet rewritten for "blank editor / no helper copy"; Acceptance criterion updated likewise; `revision_history` second entry added.
+- [[change-requests/index]] — CR-046 row status `accepted 2026-05-27`; description updated with "positioned first (document order)" + "Empty state is a blank editor (no helper copy)".
+
+Both CR-045 and CR-046 are now `accepted` and ready to implement. Suggested ship order: CR-045 first (toolbar redesign provides the `SELF-STUDY` group that CR-046's new button lives in), CR-046 immediately after.
+
+## [2026-05-27] update | CR status reconciliation + CR-046 rescope + CR-018 correction
+
+Triggered by a "list all sprints + CRs not delivered" query that exposed the change-requests catalog had drifted from the CR-file ground truth. Reconciled three things.
+
+### 1. Index reconciliation — catalog now matches CR-file frontmatter
+
+The AI-Importer close-out sprint (2026-05-24/27) shipped six deferred phases but only flipped each CR's `status` frontmatter; the index rows + CR bodies still described them as in-progress/deferred. Fixed the stale [[change-requests/index]] rows:
+
+- CR-029 proposed → **shipped** (MatrixStep redesign)
+- CR-033 in-progress → **shipped** (cv_detector + TOC detector + UI card + standalone upload)
+- CR-039 in-progress → **shipped** (+ note: editor surface undiscoverable → CR-046)
+- CR-040 in-progress → **shipped** (Phase 2c/3: .docx + S3 + View file + coverage)
+- CR-041 in-progress → **shipped** (follow-ons: edit-routing + Apply txn + source filter)
+- CR-042 "Phase B deferred" → **shipped** (Phase B 2026-05-27)
+- CR-043 proposed → **shipped** (decouple + persist + full test coverage)
+- CR-044 proposed → **shipped** (typography parity)
+
+Added dated `## Reconciliation (2026-05-27)` notes (additive, not history rewrites per the schema's "supersede, don't edit history" rule) to the six CR bodies whose frontmatter said shipped but whose bodies still described the phase as deferred: CR-024, CR-033, CR-037, CR-040, CR-041, CR-042.
+
+### 2. CR-046 rescoped — reuse, don't rebuild
+
+Code verification disproved CR-046's original premise. The introduction editor (`IntroductionEditor.tsx`), the route (`submissions.ts:74`), and the controller (`saveIntroduction`, `submissionController.ts:305`) ALREADY EXIST from CR-039 Phase 2c. My earlier CR-046 investigation used a `head -15`-truncated grep and missed them — a real "verify, don't guess" miss caught by re-checking.
+
+The actual defect is **discoverability**: the editor renders only in the buried "Standard selected, no spec yet" sub-state (`SelfStudyEditor.tsx:2481` else-branch), which a PC never lands in (the UI auto-selects spec `a`). CR-046 rescoped from "build new editor + endpoint" (~2h20m) to "surface the existing editor via a discoverable `Introduction` toolbar button + `activeView='introduction'` branch" (~45m). Also discharges CR-039's deferred `23_introduction.spec.ts`.
+
+### 3. CR-018 status corrected shipped → in-progress
+
+[[cr-018-ai-evidence-review-via-cshse-ai]] was prematurely marked shipped. The ai-service `extract/recommend/score` endpoints + pypdf extraction are live, but the CR is NOT fully delivered: no production Reader-side caller, `cshse_evidence_{env}` Qdrant collection not bootstrapped, n8n nodes not archived. Its own body still reads "CR stays in-progress until Phase 2 ships." Blocked on the unbuilt Reader workflow (Sprints 4-5). Frontmatter corrected, status note added, index row updated.
+
+Updated:
+- [[change-requests/index]] — 9 rows reconciled (8 → shipped, CR-018 → honest in-progress, CR-046 rescope summary).
+- [[cr-046-introduction-editor-surface-in-self-study]] — full rewrite to the discoverability fix; revision_history third entry.
+- [[cr-018-ai-evidence-review-via-cshse-ai]] — status shipped → in-progress; status note; revision_history added.
+- CR-024 / CR-033 / CR-037 / CR-040 / CR-041 / CR-042 — dated reconciliation notes added.
+
+Net effect: the catalog now tells the truth. Genuinely-not-fully-delivered after this pass: **CR-018** (ai-service built, Reader caller pending) + the 18 not-started CRs (16 proposed + CR-045/046 accepted).

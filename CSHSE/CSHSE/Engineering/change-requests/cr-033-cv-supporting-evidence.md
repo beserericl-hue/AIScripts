@@ -13,6 +13,10 @@ last_reviewed: 2026-05-24
 
 # CR-033 — CV supporting evidence detection & routing
 
+## Reconciliation (2026-05-27)
+
+> Phase 2 is complete. `cv_detector` shipped, plus a TOC-anchored two-pass detector (faculty-roster recovery), the UI CV card variant, and the standalone-CV upload flow. Body sections that describe "Phase 2 remaining" predate this and are superseded.
+
 ## Phase 2c part 2 shipped 2026-05-24 — standalone-CV upload flow
 
 The pipeline now detects when an upload is just CV(s) (no Standards/Specs

@@ -3,16 +3,36 @@ name: CR-018 — Move AI evidence review off n8n into cshse-ai
 description: Sprint 4 evidence-review stories (S4.1/S4.2/S4.3/S4.5) targeted n8n; the cshse-ai Python service is now the canonical AI surface. Re-target evidence review there.
 type: change-request
 cr_id: CR-018
-status: shipped
+status: in-progress
 priority: P1
 source: [[sprint-plan-2026-05-11#sprint-3]], [[sprint-plan-2026-05-16]] (S4.x)
 supersedes: S4.1, S4.2, S4.3, S4.5
 sprint_target: Sprint 4 or 5
 tags: [ai-service, evidence-review, n8n, deprecation]
-last_reviewed: 2026-05-24
+last_reviewed: 2026-05-27
+revision_history:
+  - 2026-05-24 — Phase 1 (stubs) + Phase 2 (real extract/recommend/score) + Phase 2b (pypdf) shipped on the ai-service side
+  - 2026-05-27 — status corrected `shipped` → `in-progress`. The ai-service endpoints are live, but the CR is NOT fully delivered: no production Reader-side caller is wired, the `cshse_evidence_{env}` Qdrant collection is not bootstrapped, and the n8n nodes are not archived. The CR's own body still reads "CR stays in-progress until Phase 2 ships." Blocked on the unbuilt Reader workflow (Sprints 4-5).
 ---
 
 # CR-018 — Move AI evidence review off n8n into cshse-ai
+
+## Status note (2026-05-27)
+
+`status` was prematurely flipped to `shipped`. Corrected to
+`in-progress`. The **ai-service side is functionally built**
+(`extract` / `recommend` / `score` endpoints + pypdf extraction), but
+this CR is **not fully delivered** until:
+
+- a production Reader-side caller replaces the n8n calls (depends on
+  the Reader review UI, which is unbuilt — Sprints 4-5),
+- the `cshse_evidence_{env}` Qdrant collection is bootstrapped,
+- the old n8n evidence nodes are archived and verified to carry no
+  production traffic.
+
+The dated "Phase N shipped" sections below are accurate for the
+ai-service work; they do not constitute full delivery of the CR's
+end-to-end behavior.
 
 ## Phase 2b shipped 2026-05-24 — PDF extraction via pypdf
 
