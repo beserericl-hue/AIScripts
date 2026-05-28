@@ -293,34 +293,30 @@ function AIImportTabButton({
     badge = { text: `${placeholderCount} unwritten`, cls: 'bg-yellow-100 text-yellow-800' };
   }
 
-  // CR-043 — derive the wizard's current step so the auto-reset only
-  // fires when the prior run is fully consumed. Resetting from step='review'
-  // bounces the coordinator off cards they were mid-way through reviewing
-  // and locks the Review tab (the Stepper gates forward steps by
-  // step ordering — current='upload' makes 'review' unreachable).
-  const wizardStep = useAIImportStore((s) => s.step);
-
   return (
     <button
       onClick={() => {
-        // If the prior import has already finished AND the coordinator
-        // has already moved past Review (i.e. they're on Apply or done),
-        // reset the wizard so a fresh click lands on Upload. Coordinators
-        // expect "Importer Wizard" to mean "start a new import" once they
-        // ran through Apply.
+        // "Upload Files" means "start a NEW import". If a prior run has
+        // SETTLED — parsed / applied / finished / failed / canceled —
+        // clear the stale pipeline so the wizard opens on Upload instead
+        // of re-showing the old Parse / Review / Apply step (bug: sitting
+        // on the Review surface, clicking Upload Files jumped to the
+        // last run's "Parsing complete" screen). We intentionally reset
+        // from the parsed/review state too: CR-043 moved Review to a
+        // dedicated standalone surface (the "Review" toolbar button reads
+        // persisted Submission.aiReviewState), so Upload Files no longer
+        // needs to protect the wizard's internal review step. startOver()
+        // keeps submissionId and never touches persisted review items.
         //
-        // Do NOT auto-reset while step='review' — the coordinator is
-        // actively reviewing cards (or just resumed) and wants the
-        // wizard's Review surface to reopen where they left off. The
-        // Stepper would otherwise lock the Review tab because current
-        // would flip to 'upload'.
-        //
-        // Also skip for failed/canceled — show the error panel so the
-        // coordinator can read what went wrong before any reset.
-        const finishedRun =
-          (status === 'applied' || status === 'finished') &&
-          (wizardStep === 'apply' || wizardStep === 'tags');
-        if (finishedRun) {
+        // Skip the reset ONLY while a run is still in flight (queued /
+        // parsing) so live progress stays visible.
+        const settledRun =
+          status === 'parsed' ||
+          status === 'applied' ||
+          status === 'finished' ||
+          status === 'failed' ||
+          status === 'canceled';
+        if (settledRun) {
           startOver();
         }
         setActiveView('ai-import');
@@ -452,6 +448,28 @@ function MatrixSurfaceButton({
   );
 }
 
+// Count the items waiting in Review (drafts) for a given AI-import store
+// snapshot — buckets (narratives + evidence text + evidence files) plus
+// tags, CVs, evidence docs and introduction items. Shared by the DRAFTS
+// badge (reactive) and the initial-view decision (synchronous).
+function computeDraftsCount(s: {
+  buckets?: Record<string, any> | null;
+  tags?: any[] | null;
+  cvs?: any[] | null;
+  evidenceDocs?: any[] | null;
+  introductions?: Record<string, any> | null;
+}): number {
+  let n = 0;
+  for (const b of Object.values(s.buckets || {}) as any[]) {
+    n += (b?.narratives?.length || 0) + (b?.evidenceText?.length || 0) + (b?.evidenceFiles?.length || 0);
+  }
+  n += (s.tags?.length || 0) + (s.cvs?.length || 0) + (s.evidenceDocs?.length || 0);
+  for (const ib of Object.values(s.introductions || {}) as any[]) {
+    n += ib?.items?.length || 0;
+  }
+  return n;
+}
+
 export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator', userId, userName }: SelfStudyEditorProps) {
   const isProgramCoordinator = userRole === 'program_coordinator';
   const isReviewer = userRole === 'reader' || userRole === 'lead_reader';
@@ -469,7 +487,36 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [selectedStandard, setSelectedStandard] = useState('1');
   const [selectedSpec, setSelectedSpec] = useState<string | null>('a');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface'>('standards');
+  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface'>(() => {
+    // Open the editor on the step that matches where the PC is in the
+    // IMPORT → DRAFTS → SELF-STUDY → SUBMIT workflow. When un-applied
+    // drafts are still waiting in Review (an import has parsed but its
+    // items haven't been applied to the self-study yet), land on the
+    // Review surface (phase 2 DRAFTS) rather than Standards (phase 3) so
+    // the PC follows the workflow order instead of being dropped past it.
+    //
+    // The AI-import store is hydrated synchronously from localStorage on
+    // app boot, so this read is reliable in the common (same-session)
+    // case with no view flicker. A CR-047 deep-link (?view=...) takes
+    // precedence and is handled by the deepLink effect below, so we defer
+    // to 'standards' whenever a view param is present.
+    try {
+      const hasViewParam =
+        typeof window !== 'undefined' &&
+        !!new URLSearchParams(window.location.search).get('view');
+      if (isProgramCoordinator && submissionId && !hasViewParam) {
+        const s = useAIImportStore.getState();
+        const drafted =
+          s.status !== 'applied' && s.status !== 'finished' && s.status !== 'applying';
+        if (s.submissionId === submissionId && drafted && computeDraftsCount(s) > 0) {
+          return 'review-surface';
+        }
+      }
+    } catch {
+      /* no window / SSR — fall through to standards */
+    }
+    return 'standards';
+  });
 
   // CR-043 — wizard's Parse step dispatches `cr-043-open-review-surface`
   // when the PC clicks "Next: Review" so the wizard hands off to the
@@ -2023,17 +2070,17 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const draftsCvs = useAIImportStore((s) => s.cvs);
   const draftsEvidenceDocs = useAIImportStore((s) => s.evidenceDocs);
   const draftsIntroductions = useAIImportStore((s) => s.introductions);
-  const draftsCount = React.useMemo(() => {
-    let n = 0;
-    for (const b of Object.values(draftsBuckets) as any[]) {
-      n += (b.narratives?.length || 0) + (b.evidenceText?.length || 0) + (b.evidenceFiles?.length || 0);
-    }
-    n += draftsTags.length + draftsCvs.length + draftsEvidenceDocs.length;
-    for (const ib of Object.values(draftsIntroductions) as any[]) {
-      n += ib.items?.length || 0;
-    }
-    return n;
-  }, [draftsBuckets, draftsTags, draftsCvs, draftsEvidenceDocs, draftsIntroductions]);
+  const draftsCount = React.useMemo(
+    () =>
+      computeDraftsCount({
+        buckets: draftsBuckets,
+        tags: draftsTags,
+        cvs: draftsCvs,
+        evidenceDocs: draftsEvidenceDocs,
+        introductions: draftsIntroductions,
+      }),
+    [draftsBuckets, draftsTags, draftsCvs, draftsEvidenceDocs, draftsIntroductions]
+  );
 
   // Check if entire self-study is ready for submission (all specs validated)
   const isSelfStudyReadyForSubmit = React.useMemo(() => {
