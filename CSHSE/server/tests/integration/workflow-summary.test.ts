@@ -330,4 +330,42 @@ describe('GET /api/submissions/:id/workflow-summary — count correctness', () =
     expect(res.body.selfStudy.evidenceFiles).toBe(0);
     expect(res.body.submit.ready).toBe(false);
   });
+
+  it('CR-048 — draft counts exclude approved + discarded items (un-triaged only)', async () => {
+    const inst = new mongoose.Types.ObjectId();
+    const { user } = await createUser({
+      role: 'program_coordinator',
+      institutionId: inst.toString(),
+    });
+    // makeReviewState ids: cvs cv-1/cv-2, evidenceDocs ed-1(syllabus)/
+    // ed-2(syllabus)/ed-3(syllabus)/ed-4(paper), intro in-1/in-2,
+    // buckets 1.a→n-1, 2.c→n-2,n-3 + et-1.
+    // Approve cv-1, discard ed-1 (a syllabus) + n-2 (a 2.c narrative).
+    const sub = await seedSubmission({
+      submitterId: user._id as any,
+      institutionId: inst,
+      aiReviewState: {
+        ...makeReviewState(),
+        approvedIds: ['cv-1'],
+        discardedIds: ['ed-1', 'n-2'],
+      },
+    });
+    const token = signTokenFor(user as any);
+    const res = await request(app)
+      .get(`/api/submissions/${sub._id}/workflow-summary`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.drafts.cvs).toBe(1); // cv-2 (cv-1 approved)
+    expect(res.body.drafts.syllabi).toBe(2); // ed-2, ed-3 (ed-1 discarded)
+    expect(res.body.drafts.papers).toBe(1); // ed-4
+    expect(res.body.drafts.introductions).toBe(2); // in-1, in-2
+    expect(res.body.drafts.specItems).toBe(3); // 1.a n-1 + 2.c (n-3 + et-1); n-2 discarded
+    expect(res.body.drafts.bySpec).toEqual(
+      expect.arrayContaining([
+        { std: '1', spec: 'a', count: 1 },
+        { std: '2', spec: 'c', count: 2 },
+      ])
+    );
+  });
 });

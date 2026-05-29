@@ -711,3 +711,92 @@ describe('cross-PC isolation (AC#10)', () => {
     expect(res.status).toBe(200);
   });
 });
+
+// --- POST /review/finish (CR-048) -----------------------------------------
+
+describe('POST /api/submissions/:id/review/finish', () => {
+  // A review state spanning every kind so we can prove finish discards
+  // each un-triaged item: bucket narrative (n-1), CV (cv-A), evidence doc
+  // (ed-A), intro item (in-A). n-1 is pre-approved, in-A pre-discarded.
+  function mixedState() {
+    return {
+      buckets: {
+        '1.a': {
+          standardCode: '1',
+          specCode: 'a',
+          standardTitle: '',
+          specPrompt: '',
+          narratives: [
+            { sectionId: 'n-1', heading: 'h', snippet: 's', wordCount: 1 },
+            { sectionId: 'n-2', heading: 'h', snippet: 's', wordCount: 1 },
+          ],
+          evidenceText: [],
+          evidenceFiles: [],
+          matrixCells: [],
+        },
+      },
+      tags: [],
+      cvs: [{ sectionId: 'cv-A', personName: 'Jane Doe' }],
+      evidenceDocs: [{ sectionId: 'ed-A', docSubKind: 'syllabus' }],
+      introductions: { document: { items: [{ sectionId: 'in-A' }] } },
+      placeholderSections: [],
+      approvedIds: ['n-1'],
+      discardedIds: ['in-A'],
+      itemSources: {},
+      mergeLog: [],
+      lastUpdatedAt: new Date(),
+    };
+  }
+
+  it('returns 401 without auth', async () => {
+    const sub = await seedSubmission({ aiReviewState: mixedState() });
+    const res = await request(app).post(`/api/submissions/${sub._id}/review/finish`);
+    expect(res.status).toBe(401);
+  });
+
+  it('discards every un-triaged item, leaving approved + already-discarded untouched', async () => {
+    const { user } = await createUser({ role: 'program_coordinator' });
+    const sub = await seedSubmission({
+      submitterId: user._id as any,
+      aiReviewState: mixedState(),
+    });
+    const token = signTokenFor(user as any);
+    const res = await request(app)
+      .post(`/api/submissions/${sub._id}/review/finish`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    // Un-triaged were n-2, cv-A, ed-A → 3 newly discarded.
+    expect(res.body.newlyDiscarded).toBe(3);
+    // discardedIds now holds the original in-A + the three newly discarded;
+    // the approved n-1 is NOT discarded.
+    expect(res.body.discardedIds.sort()).toEqual(['cv-A', 'ed-A', 'in-A', 'n-2']);
+    expect(res.body.discardedIds).not.toContain('n-1');
+
+    const reload: any = await Submission.findById(sub._id).lean();
+    expect((reload.aiReviewState.discardedIds as string[]).sort()).toEqual([
+      'cv-A',
+      'ed-A',
+      'in-A',
+      'n-2',
+    ]);
+  });
+
+  it('is idempotent — a second finish discards nothing new', async () => {
+    const { user } = await createUser({ role: 'program_coordinator' });
+    const sub = await seedSubmission({
+      submitterId: user._id as any,
+      aiReviewState: mixedState(),
+    });
+    const token = signTokenFor(user as any);
+    await request(app)
+      .post(`/api/submissions/${sub._id}/review/finish`)
+      .set('Authorization', `Bearer ${token}`);
+    const second = await request(app)
+      .post(`/api/submissions/${sub._id}/review/finish`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(second.status).toBe(200);
+    expect(second.body.newlyDiscarded).toBe(0);
+  });
+});

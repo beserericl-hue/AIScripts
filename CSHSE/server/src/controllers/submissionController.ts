@@ -399,27 +399,35 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
       : null;
 
     // -- DRAFTS: items waiting in Review (aiReviewState) -------------
+    // CR-048 — counts reflect UN-TRIAGED items only: a draft is "pending"
+    // until the PC either approves it (it gets applied) or discards it
+    // (explicitly excluded, incl. via "Finish review"). Approved + applied
+    // items leave the state; discarded items stay but no longer count.
     const rs: any = (submission as any).aiReviewState || {};
+    const approvedSet = new Set<string>(Array.isArray(rs.approvedIds) ? rs.approvedIds : []);
+    const discardedSet = new Set<string>(Array.isArray(rs.discardedIds) ? rs.discardedIds : []);
+    const isUnresolved = (it: any): boolean =>
+      !!it?.sectionId && !approvedSet.has(it.sectionId) && !discardedSet.has(it.sectionId);
     const evidenceDocs: any[] = Array.isArray(rs.evidenceDocs) ? rs.evidenceDocs : [];
-    const cvs = Array.isArray(rs.cvs) ? rs.cvs.length : 0;
-    const syllabi = evidenceDocs.filter((d) => d?.docSubKind === 'syllabus').length;
+    const cvs = (Array.isArray(rs.cvs) ? rs.cvs : []).filter(isUnresolved).length;
+    const syllabi = evidenceDocs.filter((d) => d?.docSubKind === 'syllabus' && isUnresolved(d)).length;
     // "Projects" and "Plans" are the same thing (user direction
     // 2026-05-27) — both map to docSubKind 'paper'.
-    const papers = evidenceDocs.filter((d) => d?.docSubKind === 'paper').length;
+    const papers = evidenceDocs.filter((d) => d?.docSubKind === 'paper' && isUnresolved(d)).length;
     let introductions = 0;
     const introsObj = rs.introductions || {};
     for (const ib of Object.values(introsObj) as any[]) {
-      introductions += Array.isArray(ib?.items) ? ib.items.length : 0;
+      introductions += (Array.isArray(ib?.items) ? ib.items : []).filter(isUnresolved).length;
     }
-    // Per-spec review items — only specs with > 0 (user direction).
+    // Per-spec review items — only specs with > 0 unresolved (user direction).
     const buckets = rs.buckets || {};
     const bySpec: Array<{ std: string; spec: string; count: number }> = [];
     let specItems = 0;
     for (const [key, b] of Object.entries(buckets) as [string, any][]) {
       const count =
-        (b?.narratives?.length || 0) +
-        (b?.evidenceText?.length || 0) +
-        (b?.evidenceFiles?.length || 0);
+        (Array.isArray(b?.narratives) ? b.narratives : []).filter(isUnresolved).length +
+        (Array.isArray(b?.evidenceText) ? b.evidenceText : []).filter(isUnresolved).length +
+        (Array.isArray(b?.evidenceFiles) ? b.evidenceFiles : []).filter(isUnresolved).length;
       if (count > 0) {
         // bucket keys are "std.spec" (e.g. "1.a") OR carry std/spec fields.
         const std = b?.standardCode ?? key.split('.')[0] ?? key;

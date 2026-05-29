@@ -448,24 +448,37 @@ function MatrixSurfaceButton({
   );
 }
 
-// Count the items waiting in Review (drafts) for a given AI-import store
-// snapshot — buckets (narratives + evidence text + evidence files) plus
-// tags, CVs, evidence docs and introduction items. Shared by the DRAFTS
-// badge (reactive) and the initial-view decision (synchronous).
+// Count the UN-TRIAGED items waiting in Review (drafts) for a given
+// AI-import store snapshot — buckets (narratives + evidence text +
+// evidence files) plus tags, CVs, evidence docs and introduction items.
+// CR-048: an item is "pending" until it's approved (→ applied, leaves the
+// state) or discarded (→ explicitly excluded, incl. via "Finish review").
+// So the count excludes anything in approvedIds or discardedIds. Shared by
+// the DRAFTS badge (reactive) and the initial-view decision (synchronous).
 function computeDraftsCount(s: {
   buckets?: Record<string, any> | null;
   tags?: any[] | null;
   cvs?: any[] | null;
   evidenceDocs?: any[] | null;
   introductions?: Record<string, any> | null;
+  approvedIds?: string[] | null;
+  discardedIds?: string[] | null;
 }): number {
+  const approved = new Set(s.approvedIds || []);
+  const discarded = new Set(s.discardedIds || []);
+  const isUnresolved = (it: any): boolean =>
+    !!it?.sectionId && !approved.has(it.sectionId) && !discarded.has(it.sectionId);
   let n = 0;
   for (const b of Object.values(s.buckets || {}) as any[]) {
-    n += (b?.narratives?.length || 0) + (b?.evidenceText?.length || 0) + (b?.evidenceFiles?.length || 0);
+    n += (b?.narratives || []).filter(isUnresolved).length;
+    n += (b?.evidenceText || []).filter(isUnresolved).length;
+    n += (b?.evidenceFiles || []).filter(isUnresolved).length;
   }
-  n += (s.tags?.length || 0) + (s.cvs?.length || 0) + (s.evidenceDocs?.length || 0);
+  n += (s.tags || []).filter(isUnresolved).length;
+  n += (s.cvs || []).filter(isUnresolved).length;
+  n += (s.evidenceDocs || []).filter(isUnresolved).length;
   for (const ib of Object.values(s.introductions || {}) as any[]) {
-    n += ib?.items?.length || 0;
+    n += (ib?.items || []).filter(isUnresolved).length;
   }
   return n;
 }
@@ -506,9 +519,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         !!new URLSearchParams(window.location.search).get('view');
       if (isProgramCoordinator && submissionId && !hasViewParam) {
         const s = useAIImportStore.getState();
-        const drafted =
-          s.status !== 'applied' && s.status !== 'finished' && s.status !== 'applying';
-        if (s.submissionId === submissionId && drafted && computeDraftsCount(s) > 0) {
+        // CR-048 — open on Review only when UN-TRIAGED drafts remain.
+        // Once the PC has approved/discarded everything (incl. via "Finish
+        // review"), the count is 0 and we drop them on Standards.
+        if (s.submissionId === submissionId && computeDraftsCount(s) > 0) {
           return 'review-surface';
         }
       }
@@ -2070,6 +2084,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const draftsCvs = useAIImportStore((s) => s.cvs);
   const draftsEvidenceDocs = useAIImportStore((s) => s.evidenceDocs);
   const draftsIntroductions = useAIImportStore((s) => s.introductions);
+  const draftsApprovedIds = useAIImportStore((s) => s.approvedIds);
+  const draftsDiscardedIds = useAIImportStore((s) => s.discardedIds);
   const draftsCount = React.useMemo(
     () =>
       computeDraftsCount({
@@ -2078,8 +2094,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         cvs: draftsCvs,
         evidenceDocs: draftsEvidenceDocs,
         introductions: draftsIntroductions,
+        approvedIds: draftsApprovedIds,
+        discardedIds: draftsDiscardedIds,
       }),
-    [draftsBuckets, draftsTags, draftsCvs, draftsEvidenceDocs, draftsIntroductions]
+    [draftsBuckets, draftsTags, draftsCvs, draftsEvidenceDocs, draftsIntroductions, draftsApprovedIds, draftsDiscardedIds]
   );
 
   // Check if entire self-study is ready for submission (all specs validated)

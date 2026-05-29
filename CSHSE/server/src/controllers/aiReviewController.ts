@@ -54,6 +54,30 @@ async function _loadOwnedSubmission(
   return submission;
 }
 
+/**
+ * CR-048 — enumerate every draft item's sectionId across the review
+ * state: bucket narratives/evidenceText/evidenceFiles, tags, CVs,
+ * evidence docs, and introduction items. Used by finishReview to
+ * resolve "the rest" and by the unresolved-count rollups.
+ */
+function collectAllSectionIds(state: any): string[] {
+  const ids: string[] = [];
+  for (const bucket of Object.values(state?.buckets || {}) as any[]) {
+    for (const kind of ['narratives', 'evidenceText', 'evidenceFiles']) {
+      for (const it of (bucket?.[kind] || [])) {
+        if (it?.sectionId) ids.push(it.sectionId);
+      }
+    }
+  }
+  for (const t of (state?.tags || [])) if (t?.sectionId) ids.push(t.sectionId);
+  for (const c of (state?.cvs || [])) if (c?.sectionId) ids.push(c.sectionId);
+  for (const e of (state?.evidenceDocs || [])) if (e?.sectionId) ids.push(e.sectionId);
+  for (const ib of Object.values(state?.introductions || {}) as any[]) {
+    for (const it of (ib?.items || [])) if (it?.sectionId) ids.push(it.sectionId);
+  }
+  return ids;
+}
+
 /** GET /api/submissions/:submissionId/review */
 export async function getReviewState(req: AuthenticatedRequest, res: Response): Promise<void> {
   const submission = await _loadOwnedSubmission(req, res);
@@ -164,6 +188,40 @@ export async function clearItem(req: AuthenticatedRequest, res: Response): Promi
   (submission as any).markModified('aiReviewState');
   await submission.save();
   res.json({ ok: true });
+}
+
+/**
+ * POST /api/submissions/:submissionId/review/finish
+ *
+ * CR-048 — "I've reviewed enough." Mark every still-untriaged draft
+ * (neither approved nor already discarded) as discarded, i.e. an
+ * explicit "not included in the self-study". Items stay in the state
+ * (visible under a Discarded filter, individually un-discardable later),
+ * but the unresolved count drops to zero so the workflow stops treating
+ * Review as having pending work. Idempotent: a second call is a no-op.
+ */
+export async function finishReview(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const state = (submission as any).aiReviewState;
+  if (!state) {
+    res.status(409).json({ error: 'aiReviewState is empty' });
+    return;
+  }
+  const approved = new Set<string>(state.approvedIds || []);
+  const discarded = new Set<string>(state.discardedIds || []);
+  let newlyDiscarded = 0;
+  for (const id of collectAllSectionIds(state)) {
+    if (!approved.has(id) && !discarded.has(id)) {
+      discarded.add(id);
+      newlyDiscarded++;
+    }
+  }
+  state.discardedIds = Array.from(discarded);
+  state.lastUpdatedAt = new Date();
+  (submission as any).markModified('aiReviewState');
+  await submission.save();
+  res.json({ ok: true, discardedIds: state.discardedIds, newlyDiscarded });
 }
 
 /**

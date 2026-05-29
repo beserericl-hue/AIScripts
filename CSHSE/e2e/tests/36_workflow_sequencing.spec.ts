@@ -76,4 +76,36 @@ test.describe('Self-Study editor — workflow sequencing', () => {
       page.getByRole('tab', { name: /Upload/i, selected: true })
     ).toBeVisible();
   });
+
+  test('Finish review excludes the remaining drafts and stops auto-opening Review (CR-048)', async ({ page }) => {
+    test.setTimeout(60_000);
+    await loginAsSeededViaSso(page, seed!);
+    await page.goto(`/self-study/${seed!.submissionId}`);
+
+    // Editor opens on Review because the seeded import has pending drafts.
+    await expect(
+      page.getByRole('heading', { name: /^Review$/i })
+    ).toBeVisible({ timeout: 20_000 });
+
+    // The "Finish review" CTA is enabled and reports a non-zero remainder.
+    const finishBtn = page.getByTestId('finish-review-cta');
+    await expect(finishBtn).toBeEnabled({ timeout: 10_000 });
+    await expect(finishBtn).toHaveText(/exclude remaining \(\d+\)/i);
+
+    // Accept the confirmation dialog, then finish.
+    page.on('dialog', (d) => d.accept());
+    await finishBtn.click();
+
+    // The CTA flips to "complete" + disables once everything is triaged.
+    await expect(finishBtn).toHaveText(/Review complete/i, { timeout: 15_000 });
+    await expect(finishBtn).toBeDisabled();
+
+    // Reload — with zero un-triaged drafts the editor no longer drops the
+    // PC on Review; the Review surface heading is absent.
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(
+      page.getByRole('heading', { name: /^Review$/i })
+    ).toHaveCount(0);
+  });
 });

@@ -45,6 +45,56 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
   const loadPersistedReviewState = useAIImportStore((s) => s.loadPersistedReviewState);
   const importId = useAIImportStore((s) => s.importId);
 
+  // CR-048 — "Finish review" bookkeeping. Compute how many drafts are
+  // still un-triaged (neither approved nor discarded) so the button can
+  // show the count + disable when there's nothing left.
+  const buckets = useAIImportStore((s) => s.buckets);
+  const tags = useAIImportStore((s) => s.tags);
+  const cvs = useAIImportStore((s) => s.cvs);
+  const evidenceDocs = useAIImportStore((s) => s.evidenceDocs);
+  const introductions = useAIImportStore((s) => s.introductions);
+  const approvedIds = useAIImportStore((s) => s.approvedIds);
+  const discardedIds = useAIImportStore((s) => s.discardedIds);
+  const finishReviewOnServer = useAIImportStore((s) => s.finishReviewOnServer);
+
+  const unresolvedCount = React.useMemo(() => {
+    const approved = new Set(approvedIds || []);
+    const discarded = new Set(discardedIds || []);
+    const pending = (it: any) =>
+      !!it?.sectionId && !approved.has(it.sectionId) && !discarded.has(it.sectionId);
+    let n = 0;
+    for (const b of Object.values(buckets || {}) as any[]) {
+      n += (b?.narratives || []).filter(pending).length;
+      n += (b?.evidenceText || []).filter(pending).length;
+      n += (b?.evidenceFiles || []).filter(pending).length;
+    }
+    n += (tags || []).filter(pending).length;
+    n += (cvs || []).filter(pending).length;
+    n += (evidenceDocs || []).filter(pending).length;
+    for (const ib of Object.values(introductions || {}) as any[]) {
+      n += (ib?.items || []).filter(pending).length;
+    }
+    return n;
+  }, [buckets, tags, cvs, evidenceDocs, introductions, approvedIds, discardedIds]);
+
+  const [finishing, setFinishing] = useState(false);
+  const handleFinishReview = async () => {
+    if (unresolvedCount === 0) return;
+    const ok = window.confirm(
+      `Finish review? The ${unresolvedCount} remaining un-reviewed draft${
+        unresolvedCount === 1 ? '' : 's'
+      } will be marked "not included" in the self-study. You can re-open any of them later from the Discarded list.`
+    );
+    if (!ok) return;
+    setFinishing(true);
+    try {
+      await finishReviewOnServer();
+      await loadPersistedReviewState();
+    } finally {
+      setFinishing(false);
+    }
+  };
+
   const [redetectState, setRedetectState] = useState<
     | { kind: 'idle' }
     | { kind: 'running' }
@@ -141,6 +191,26 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
             className="rounded border border-cshse-300 bg-white px-3 py-1 text-sm font-medium text-cshse-700 hover:bg-cshse-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {redetectState.kind === 'running' ? '⏳ Re-detecting…' : '🔍 Re-run detectors'}
+          </button>
+          {/* CR-048 — "I'm done reviewing": discard every still-untriaged
+              draft so the remaining items are explicitly NOT included and
+              the workflow stops treating Review as having pending work. */}
+          <button
+            onClick={handleFinishReview}
+            disabled={finishing || unresolvedCount === 0}
+            data-testid="finish-review-cta"
+            title={
+              unresolvedCount === 0
+                ? 'Every draft has been triaged (approved or discarded).'
+                : `Mark the ${unresolvedCount} remaining un-reviewed draft(s) as "not included". Reversible from the Discarded list.`
+            }
+            className="rounded border border-amber-300 bg-white px-3 py-1 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {finishing
+              ? '⏳ Finishing…'
+              : unresolvedCount > 0
+              ? `✓ Finish review — exclude remaining (${unresolvedCount})`
+              : '✓ Review complete'}
           </button>
           <button
             onClick={onClose}

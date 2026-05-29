@@ -96,6 +96,7 @@ import {
   approveItem,
   discardItem,
   clearItem,
+  finishReview,
   applyReviewState,
   getMatrixState,
   setMatrixRowEdit
@@ -105,6 +106,8 @@ router.get('/:submissionId/review', getReviewState);
 router.post('/:submissionId/review/approve', submissionLockout, approveItem);
 router.post('/:submissionId/review/discard', submissionLockout, discardItem);
 router.post('/:submissionId/review/clear-item', submissionLockout, clearItem);
+// CR-048 — "I'm done reviewing": discard all remaining un-triaged drafts.
+router.post('/:submissionId/review/finish', submissionLockout, finishReview);
 router.post('/:submissionId/review/apply', submissionLockout, applyReviewState);
 router.get('/:submissionId/matrix-state', getMatrixState);
 router.post('/:submissionId/matrix-state', submissionLockout, setMatrixRowEdit);

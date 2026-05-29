@@ -409,6 +409,11 @@ interface AIImportState {
   // JSON-serializable). Previously local React state in ReviewStep, which
   // meant a hard refresh wiped the coordinator's progress.
   approvedIds: string[];
+  // CR-048 — sectionIds the PC has discarded (explicitly NOT included in
+  // the self-study). Mirrors Submission.aiReviewState.discardedIds so the
+  // DRAFTS counts can show un-triaged items only (total − approved −
+  // discarded) and "Finish review" can drop the count to zero.
+  discardedIds: string[];
 
   // CR-024 — spec-rail click broadcasts the selected spec so EVERY visible
   // matrix scrolls + flashes its matching row simultaneously. Distinct
@@ -576,6 +581,9 @@ interface AIImportState {
   approveItemOnServer: (sectionId: string, approved: boolean) => Promise<void>;
   discardItemOnServer: (sectionId: string, discarded: boolean) => Promise<void>;
   clearItemOnServer: (sectionId: string) => Promise<void>;
+  // CR-048 — "I'm done reviewing": discard every still-untriaged draft so
+  // the unresolved count drops to zero. Returns the number newly discarded.
+  finishReviewOnServer: () => Promise<number>;
   reset: () => void;
   // Clear the transient state from a finished or failed run (errors, stages,
   // buckets, matrices, importId) and return the wizard to the Upload step.
@@ -626,6 +634,7 @@ const initialState = {
   dirty: false,
   errors: [],
   approvedIds: [] as string[],
+  discardedIds: [] as string[],
   matrixScrollSpec: null as string | null,
   // CR-039 — seeded with the 1 document-level + 9 standard-level
   // Introduction buckets so the UI can render them as empty rails even
@@ -1047,7 +1056,8 @@ export const useAIImportStore = create<AIImportState>()(
               introductions: state.introductions ?? current.introductions,
               placeholderSections: state.placeholderSections || [],
               coverageReport: state.coverageReport ?? get().coverageReport,
-              approvedIds: state.approvedIds || []
+              approvedIds: state.approvedIds || [],
+              discardedIds: state.discardedIds || []
             });
           }
           if (matrixState) {
@@ -1074,7 +1084,14 @@ export const useAIImportStore = create<AIImportState>()(
             sectionId,
             approved
           });
-          set({ approvedIds: res.data?.approvedIds ?? get().approvedIds });
+          set({
+            approvedIds: res.data?.approvedIds ?? get().approvedIds,
+            // Approving overrides a prior discard (server does the same).
+            discardedIds:
+              approved !== false
+                ? get().discardedIds.filter((id) => id !== sectionId)
+                : get().discardedIds
+          });
         } catch (err) {
           console.warn('[CR-043] approveItemOnServer failed:', err);
         }
@@ -1084,9 +1101,18 @@ export const useAIImportStore = create<AIImportState>()(
         const { submissionId } = get();
         if (!submissionId) return;
         try {
-          await api.post(`/api/submissions/${submissionId}/review/discard`, {
+          const res = await api.post(`/api/submissions/${submissionId}/review/discard`, {
             sectionId,
             discarded
+          });
+          // CR-048 — mirror the server's discardedIds so the unresolved
+          // DRAFTS count updates immediately. Discarding overrides approve.
+          set({
+            discardedIds: res.data?.discardedIds ?? get().discardedIds,
+            approvedIds:
+              discarded !== false
+                ? get().approvedIds.filter((id) => id !== sectionId)
+                : get().approvedIds
           });
         } catch (err) {
           console.warn('[CR-043] discardItemOnServer failed:', err);
@@ -1105,6 +1131,21 @@ export const useAIImportStore = create<AIImportState>()(
           await get().loadPersistedReviewState();
         } catch (err) {
           console.warn('[CR-043] clearItemOnServer failed:', err);
+        }
+      },
+
+      finishReviewOnServer: async () => {
+        const { submissionId } = get();
+        if (!submissionId) return 0;
+        try {
+          const res = await api.post(`/api/submissions/${submissionId}/review/finish`);
+          // Mirror the server's discardedIds so the unresolved DRAFTS count
+          // drops to zero immediately (the badge + open-on-Review read it).
+          set({ discardedIds: res.data?.discardedIds ?? get().discardedIds });
+          return Number(res.data?.newlyDiscarded ?? 0);
+        } catch (err) {
+          console.warn('[CR-048] finishReviewOnServer failed:', err);
+          return 0;
         }
       },
 
@@ -2060,6 +2101,7 @@ export const useAIImportStore = create<AIImportState>()(
         dirty: s.dirty,
         // CR-034 — per-card review checkmarks survive hard refresh.
         approvedIds: s.approvedIds,
+        discardedIds: s.discardedIds,
         // CR-039 / CR-040 / CR-033 — new content kinds also need to
         // survive refresh; the same dirty=true guard keeps them in place
         // across /ai-status reapplies.
