@@ -10,6 +10,7 @@ import { SelfStudyImport } from '../models/SelfStudyImport';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getAllStandards } from '../data/standards';
+import { ingestCorrection } from '../services/cshseAiClient';
 import mongoose from 'mongoose';
 
 interface AuthenticatedRequest extends Request {
@@ -907,6 +908,75 @@ export const evaluateSpec = async (req: AuthenticatedRequest, res: Response) => 
   } catch (error) {
     console.error('Evaluate spec error:', error);
     return res.status(500).json({ error: 'Failed to evaluate spec' });
+  }
+};
+
+/**
+ * CR-049 Phase 4b — a reader/lead reader overrides the AI verdict for a
+ * spec. The override becomes the authoritative verdict on the latest
+ * ValidationResult AND is fed to the institution's RAG store
+ * (`section_eval_override`) so future evaluations learn from it.
+ *
+ * (The reader-facing UI that calls this lives on the Sprint 3 reader
+ * client; this is the endpoint it will hit.)
+ */
+export const recordSectionEvalOverride = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId, standardCode, specCode } = req.params;
+    const { verdict, note } = req.body || {};
+    const VALID = ['pass', 'needs_improvement', 'fail'];
+    if (!VALID.includes(verdict)) {
+      return res.status(400).json({ error: 'verdict must be pass, needs_improvement, or fail' });
+    }
+    // Readers + lead readers (and admins) record overrides.
+    const role = req.user?.role;
+    if (!(role === 'reader' || role === 'lead_reader' || role === 'admin' || (req.user as any)?.isSuperuser)) {
+      return res.status(403).json({ error: 'Only readers may override an evaluation' });
+    }
+
+    const submission = await Submission.findById(submissionId).select('institutionId programLevel').lean();
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // Update the latest ValidationResult for this spec (or create one).
+    const latest: any = await ValidationResult.findOne({ submissionId, standardCode, specCode }).sort({
+      validatedAt: -1
+    });
+    if (latest) {
+      latest.result.verdict = verdict;
+      latest.result.readerOverridden = true;
+      if (typeof note === 'string') latest.result.readerOverrideNote = note.slice(0, 2000);
+      latest.markModified('result');
+      await latest.save();
+    } else {
+      await ValidationResult.create({
+        submissionId: new mongoose.Types.ObjectId(submissionId),
+        standardCode,
+        specCode,
+        validationType: 'manual_save',
+        validatedAt: new Date(),
+        result: { status: verdict === 'pass' ? 'pass' : 'fail', verdict, readerOverridden: true, readerOverrideNote: typeof note === 'string' ? note.slice(0, 2000) : undefined },
+        attemptNumber: 1
+      });
+    }
+
+    // Feed the learning store (best-effort — never block the override).
+    void ingestCorrection({
+      correctionId: new mongoose.Types.ObjectId().toString(),
+      institutionId: submission.institutionId?.toString() || '',
+      programLevel: (submission as any).programLevel || 'bachelors',
+      expectedStd: standardCode,
+      expectedSpec: specCode,
+      expectedSectionType: 'narrative_response',
+      sourceText: typeof note === 'string' && note ? note : `reader override → ${verdict}`,
+      correctionType: 'section_eval_override'
+    }).catch((err: any) => console.error('[CR-049] section_eval_override ingest failed', err));
+
+    return res.json({ verdict, readerOverridden: true });
+  } catch (error) {
+    console.error('Record section-eval override error:', error);
+    return res.status(500).json({ error: 'Failed to record override' });
   }
 };
 

@@ -35,8 +35,13 @@ revision_history:
 **Phase 4a shipped 2026-05-29 — Final-Submit auto-eval (reader-report seed).**
 `ValidationService.runReaderReportSeed(submissionId)` re-evaluates every spec that has narrative content (one `validateSection` per spec, each within the 60s client timeout) and persists a fresh `ValidationResult` — the authoritative reader-report seed, produced once at submission even for sections already evaluated per-standard. `submitSelfStudy` fires it **detached** (`void …`) after the save/audit, so the submit response returns immediately; best-effort (a seed failure never blocks the submission). Detached background work is reliable here because cshse-server is a **persistent Express container** (handles SSE/webhooks), not serverless. Test: `validate-section.test.ts` (`runReaderReportSeed` evaluates only content-bearing specs + persists each; full file 5 green; submitSelfStudy still 13/13).
 
-**Remaining (scoped):**
-- **Phase 4b — reader override → learning loop.** The override UI lives on the reader review surface (**Sprint 3 reader client**, not yet built). CR-049 owns the learning ingest (`section_eval_override` → `/ai/corrections/ingest`), wired when the reader client exists.
+**Phase 4b shipped 2026-05-29 — reader override → learning ingest (plumbing).**
+- Server: `POST /:id/standards/:std/specs/:spec/override` (`recordSectionEvalOverride`, reader/lead/admin) — the reader's verdict becomes the authoritative verdict on the latest `ValidationResult` (`readerOverridden` + note) AND is fed to the institution's RAG via `cshseAiClient.ingestCorrection` (`correctionType: 'section_eval_override'`, best-effort). `ValidationResult` gained `readerOverridden`/`readerOverrideNote`.
+- ai-service: `evaluate_section` gained an injectable `hints_fn(std, spec) → str` that surfaces prior reader-override hints into the per-spec prompt (the learning *read* side), fail-soft. Tests: server `section-eval-override.test.ts` (3 — override updates verdict + ingests; PC 403; bad verdict 400); ai-service `test_section_eval.py` (+2 — hint injection + hint-failure swallowed). ai-service suite 400 passed/5 skipped; server CR-049 files 24 passed.
+
+**Remaining (Sprint-3-coupled, not blocking):**
+- **Reader-override UI** — the button that calls `…/override` lives on the reader review surface (**Sprint 3 reader client**, not yet built).
+- **Endpoint hint activation** — wiring the `section_evaluate` endpoint's `hints_fn` to the live `retrieve_for_section` Qdrant query (thread `programLevel` through the request + an env gate). One step, deferred until overrides actually exist to retrieve. The mechanism is built + unit-tested.
 
 ## Phase 1 shipped 2026-05-29 — ai-service section evaluator
 

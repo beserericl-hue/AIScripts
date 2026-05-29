@@ -239,3 +239,45 @@ def test_evaluate_section_requires_institution():
         assert False, "expected ValueError"
     except ValueError:
         pass
+
+
+def test_evaluate_section_injects_correction_hints_into_prompt():
+    # CR-049 Phase 4b — prior reader-override hints are surfaced to the
+    # evaluator (the learning loop's read side).
+    fake = _FakeAnthropic(verdict="pass")
+    calls: list[tuple[str, str]] = []
+
+    def hints_fn(std: str, spec: str) -> str:
+        calls.append((std, spec))
+        return "Previously-corrected: reader marked 1.a as pass despite a non-text org-chart link."
+
+    evaluate_section(
+        institution_id="inst-1",
+        submission_id="sub-1",
+        specs=[{"standardCode": "1", "specCode": "a", "criteria": "org structure"}],
+        narrative_html="<p>See org chart.</p>",
+        anthropic=fake,
+        settings=Settings(anthropic_api_key="test"),
+        hints_fn=hints_fn,
+    )
+    assert calls == [("1", "a")]
+    assert "Previously-corrected: reader marked 1.a as pass" in fake.prompts[0]
+
+
+def test_evaluate_section_hints_fn_failure_is_swallowed():
+    fake = _FakeAnthropic(verdict="pass")
+
+    def boom(std, spec):
+        raise RuntimeError("qdrant down")
+
+    out = evaluate_section(
+        institution_id="inst-1",
+        submission_id="sub-1",
+        specs=[{"standardCode": "1", "specCode": "a", "criteria": "c"}],
+        narrative_html="<p>x</p>",
+        anthropic=fake,
+        settings=Settings(anthropic_api_key="test"),
+        hints_fn=boom,
+    )
+    # eval still completes despite the hint retrieval failing
+    assert out["perSpec"][0]["verdict"] == "pass"

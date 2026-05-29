@@ -102,6 +102,8 @@ export class ValidationService {
     specCode: string;
     narrativeText?: string;
     validationType?: 'auto_save' | 'manual_save' | 'submit';
+    /** Optional — the prior ValidationResult being revalidated (link only). */
+    previousValidationId?: string;
   }): Promise<{ result: IValidationResultData }> {
     const { submissionId, standardCode, specCode } = opts;
     const validationType = opts.validationType || 'submit';
@@ -179,7 +181,10 @@ export class ValidationService {
         validationType,
         validatedAt: new Date(),
         result,
-        attemptNumber: 1
+        attemptNumber: 1,
+        ...(opts.previousValidationId
+          ? { previousValidationId: new mongoose.Types.ObjectId(opts.previousValidationId) }
+          : {})
       });
     } catch {
       /* non-fatal */

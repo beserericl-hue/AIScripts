@@ -12,6 +12,7 @@ import {
   getFailedValidations,
   getSpecEvaluation,
   evaluateSpec,
+  recordSectionEvalOverride,
   markStandardComplete,
   listSubmissions,
   createSubmission
@@ -164,6 +165,14 @@ router.get('/:submissionId/standards/:standardCode/specs/:specCode/evaluation', 
  * @access  Private (Program Coordinator owner, Admin)
  */
 router.post('/:submissionId/standards/:standardCode/specs/:specCode/evaluate', evaluateSpec);
+
+/**
+ * @route   POST /api/submissions/:submissionId/standards/:standardCode/specs/:specCode/override
+ * @desc    CR-049 Phase 4b — reader overrides the AI verdict; feeds the
+ *          learning store (section_eval_override). Reader/lead/admin only.
+ * @access  Private (Reader, Lead Reader, Admin)
+ */
+router.post('/:submissionId/standards/:standardCode/specs/:specCode/override', recordSectionEvalOverride);
 
 /**
  * @route   POST /api/submissions/:submissionId/standards/:standardCode/complete

@@ -39,6 +39,7 @@ def _build_prompt(
     evidence_texts: list[str],
     files: list[dict],
     link_results: list[dict],
+    correction_hints: str = "",
 ) -> str:
     ev_block = "\n".join(f"- {t[:800]}" for t in evidence_texts if t) or "(none)"
     files_block = (
@@ -57,11 +58,13 @@ def _build_prompt(
         )
         or "(none)"
     )
+    hints_block = f"\n{correction_hints}\n" if correction_hints else ""
     return (
         "You are a CSHSE accreditation reader evaluating one specification of a "
         "self-study against the official rubric. Judge ONLY against the criteria.\n\n"
         f"Specification: Standard {standard_code}.{spec_code}\n"
-        f"Rubric criteria:\n{criteria or '(criteria not supplied)'}\n\n"
+        f"Rubric criteria:\n{criteria or '(criteria not supplied)'}\n"
+        f"{hints_block}\n"
         f"=== Narrative ===\n{(narrative or '(empty)')[:6000]}\n\n"
         f"=== Supporting evidence (text) ===\n{ev_block}\n\n"
         f"=== Submitted files ===\n{files_block}\n\n"
@@ -121,6 +124,7 @@ def _evaluate_one_spec(
     files: list[dict],
     link_results: list[dict],
     client: Optional[Anthropic],
+    correction_hints: str = "",
 ) -> dict:
     std = str(spec.get("standardCode", ""))
     sp = str(spec.get("specCode", ""))
@@ -150,6 +154,7 @@ def _evaluate_one_spec(
         evidence_texts=evidence_texts,
         files=files,
         link_results=link_results,
+        correction_hints=correction_hints,
     )
     if len(prompt) > _MAX_INPUT_CHARS:
         prompt = prompt[:_MAX_INPUT_CHARS]
@@ -183,6 +188,7 @@ def evaluate_section(
     anthropic: Optional[Anthropic] = None,
     settings: Optional[Settings] = None,
     scrape_fn: Callable[[str], Any] = scrape_link,
+    hints_fn: Optional[Callable[[str, str], str]] = None,
 ) -> dict:
     """Evaluate one or many specs of a section against the rubric criteria.
 
@@ -213,6 +219,17 @@ def evaluate_section(
     )
 
     narrative = narrative_html or ""
+
+    def _hints_for(spec: dict) -> str:
+        # CR-049 Phase 4b — pull prior reader-override hints for this spec so
+        # the evaluator learns from them. Best-effort: never fail the eval.
+        if hints_fn is None:
+            return ""
+        try:
+            return hints_fn(str(spec.get("standardCode", "")), str(spec.get("specCode", ""))) or ""
+        except Exception:  # noqa: BLE001
+            return ""
+
     per_spec = [
         _evaluate_one_spec(
             spec=spec,
@@ -221,6 +238,7 @@ def evaluate_section(
             files=files,
             link_results=link_results,
             client=client,
+            correction_hints=_hints_for(spec),
         )
         for spec in specs
     ]

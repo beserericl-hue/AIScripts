@@ -14,6 +14,10 @@ export interface IValidationResultData {
   verdict?: 'pass' | 'needs_improvement' | 'fail';
   rationale?: string;
   criteriaCoverage?: Array<{ criterion: string; met: boolean; note?: string }>;
+  // CR-049 Phase 4b — a reader can override the AI verdict; `verdict` then
+  // holds the reader's judgement and these record the override.
+  readerOverridden?: boolean;
+  readerOverrideNote?: string;
 }
 
 export interface IValidationResult extends Document {
@@ -54,7 +58,9 @@ const ValidationResultDataSchema = new Schema<IValidationResultData>({
     criterion: String,
     met: Boolean,
     note: String
-  }]
+  }],
+  readerOverridden: { type: Boolean, default: false },
+  readerOverrideNote: String
 }, { _id: false });
 
 const ValidationResultSchema = new Schema<IValidationResult>({

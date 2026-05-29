@@ -212,6 +212,31 @@ export async function evaluateSection(
   return res.body;
 }
 
+export interface CorrectionIngestRequest {
+  correctionId: string;
+  institutionId: string;
+  programLevel: string;
+  expectedStd: string;
+  expectedSpec: string;
+  expectedSectionType?: string;
+  sourceHeading?: string;
+  sourceText: string;
+  correctionType?: string;
+}
+
+/**
+ * CR-049 Phase 4b — feed a correction into the institution's RAG store so
+ * future evaluations learn from it (e.g. a reader's `section_eval_override`).
+ * Throws on non-2xx so the caller can treat learning as best-effort.
+ */
+export async function ingestCorrection(req: CorrectionIngestRequest): Promise<{ ok: boolean }> {
+  const res = await postSigned<{ ok?: boolean }>('/ai/corrections/ingest', req);
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`corrections/ingest returned HTTP ${res.status}`);
+  }
+  return { ok: true };
+}
+
 /**
  * Convenience predicate for call sites that want to gate on whether
  * Phase 2 has shipped. Wraps a recommend() call against an obviously
