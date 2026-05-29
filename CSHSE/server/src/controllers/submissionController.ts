@@ -6,7 +6,6 @@ import { ValidationService } from '../services/validationService';
 import { emailService } from '../services/emailService';
 import { recordAuditEvent } from '../services/auditLog';
 import { User } from '../models/User';
-import { Spec } from '../models/Spec';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
@@ -1031,17 +1030,23 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       return res.status(400).json({ error: 'Self-study has already been submitted' });
     }
 
-    // Get the active spec to determine all required standards/specs
-    const activeSpec = await Spec.findOne({ isActive: true });
-    if (!activeSpec) {
-      return res.status(400).json({ error: 'No active specification found' });
+    // S2A.0 — resolve the required standards/specs from the CSHSE rubric
+    // definitions in code (getAllStandards), same source the PC dashboard's
+    // workflow-summary uses. The previous `Spec.findOne({ isActive: true })`
+    // never matched — the Spec model has no `isActive` field (it uses
+    // `status`) — so final submit ALWAYS returned 400 "No active
+    // specification found" and a PC could never submit. `activeSpec.standards`
+    // was also undefined (Spec has no `standards` field).
+    const allStandards = getAllStandards();
+    if (!allStandards || allStandards.length === 0) {
+      return res.status(500).json({ error: 'Standards definitions unavailable' });
     }
 
     // Verify all specs are validated (pass)
     const standardsStatus = submission.standardsStatus || new Map();
     const missingValidations: string[] = [];
 
-    for (const standard of activeSpec.standards) {
+    for (const standard of allStandards) {
       for (const spec of standard.specifications || []) {
         const statusKey = `${standard.code}_${spec.code}`;
         const status = standardsStatus instanceof Map

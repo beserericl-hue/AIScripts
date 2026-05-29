@@ -63,6 +63,14 @@ The two 400s are legitimate gates: `submitReview` requires a complete review, an
 
 **Caveat:** the harness (`tests/setup.ts`) wipes all collections in `afterEach`, so reader smokes must seed within a single test — the first draft's `beforeAll` seeding got wiped and produced false 401s (a test-authoring bug, not an endpoint problem).
 
+## S2A.0 fix landed (2026-05-29) — Final Submit now functional
+
+Fixed the headline R.1 bug: `submitSelfStudy` now resolves the required specs via `getAllStandards()` (dropping `Spec.findOne({ isActive: true })` + `activeSpec.standards`). Regression coverage added to `submission-lockout.test.ts`:
+- Unvalidated submission → **400 "All specifications must be validated"** + `missingValidations[]` (reaches the readiness gate, no longer "no active spec").
+- Every spec `pass` → **200**, `status → submitted`, then a PC write is refused **403 LOCKED** — the end-to-end submit→lockout loop works.
+
+Remaining before CR-005/006 can ship: **CR-049** (so specs can actually reach `pass`) and **CR-050** (so intentionally-omitted specs count as satisfied).
+
 ## Artifacts
 
 - `server/tests/integration/submission-lockout.test.ts` — 13 tests; the WORKING ones are permanent regression coverage, the two characterization tests pin the broken behavior and will need updating when 2A.0/CR-049 land.

@@ -13,7 +13,8 @@ last_reviewed: 2026-05-29
 
 # CR-006 — Two-stage submission (per-section vs final)
 
-> **R.1 verification (2026-05-29, [[submission-stack-verification-2026-05-29]]):** `revertStandard` works (transition + audit). But both submit events are broken: per-section **submitStandard** validation is non-functional (missing `validateSection` → every spec marked fail, → CR-049), and **final submit (submitSelfStudy) ALWAYS 400s** — it queries `Spec.findOne({ isActive: true })` (`submissionController.ts:1035`) but the Spec model has no `isActive` field. Fix tracked as Sprint 2A **S2A.0** (resolve standards via `getAllStandards()` + correct the active-spec lookup). Stays `in-progress`.
+> **R.1 verification (2026-05-29, [[submission-stack-verification-2026-05-29]]):** `revertStandard` works (transition + audit). Both submit events were broken: per-section **submitStandard** validation is non-functional (missing `validateSection` → every spec marked fail, → CR-049, **still open**), and **final submit (submitSelfStudy) ALWAYS 400'd** — it queried `Spec.findOne({ isActive: true })` but the Spec model has no `isActive` field.
+> **S2A.0 FIXED (2026-05-29):** `submitSelfStudy` now resolves the required specs via `getAllStandards()` (dropping the broken Spec lookup + `activeSpec.standards`). Verified end-to-end — when every spec is validated `pass`, final submit succeeds (status → `submitted`) and the lockout then refuses PC writes (403); an unvalidated submission returns 400 *missingValidations* (the readiness gate, not "no active spec"). Final-submit is now functional. Remaining for CR-006 done: specs must be able to actually reach `pass` (CR-049) and intentionally-omitted specs must count as satisfied (CR-050). Stays `in-progress` until those land.
 
 ## Summary
 

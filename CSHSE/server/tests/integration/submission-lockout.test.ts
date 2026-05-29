@@ -27,8 +27,8 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
-import { Spec } from '../../src/models/Spec';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
+import { getAllStandards } from '../../src/data/standards';
 import { createUser, signTokenFor } from '../helpers/factories';
 
 let _c = 0;
@@ -159,24 +159,14 @@ describe('R.1 — submitSelfStudy preconditions', () => {
     expect(res.status).toBe(400);
   });
 
-  it('400 when there is no active spec', async () => {
-    // Ensure no active spec exists for this case.
-    await Spec.updateMany({ isActive: true }, { $set: { isActive: false } });
-    const { user } = await createUser({ role: 'program_coordinator' });
-    const sub = await seedSubmission({ submitterId: user._id, status: 'in_progress' });
-    const res = await request(app)
-      .post(`/api/submissions/${sub._id}/submit`)
-      .set('Authorization', `Bearer ${signTokenFor(user as any)}`)
-      .send({});
-    expect(res.status).toBe(400);
-    expect(String(res.body.error)).toMatch(/active specification/i);
-  });
+  // (The old "no active spec → 400" precondition is gone: S2A.0 removed the
+  // Spec.findOne({isActive:true}) lookup. The readiness gate is now covered
+  // by the S2A.0 tests below.)
 });
 
-// --- CHARACTERIZATION: known-broken submit paths --------------------------
-// These assert the CURRENT broken behavior. When the underlying bug is
-// fixed (CR-049 / CR-006 activeSpec bug / CR-050), the call stops throwing
-// and `it.fails` flips red — a built-in reminder to update the assertion.
+// --- CHARACTERIZATION + S2A.0 fix ----------------------------------------
+// submitStandard is still characterized as broken (CR-049). submitSelfStudy
+// is now FIXED by S2A.0 — the two tests below are real regression coverage.
 
 describe('R.1 — known-broken submit paths (characterization)', () => {
   // submitStandard does NOT crash — it catches the validateSection
@@ -202,19 +192,11 @@ describe('R.1 — known-broken submit paths (characterization)', () => {
     expect(fresh.standardsStatus.get('1')?.validationStatus).toBe('fail'); // never 'pass'
   });
 
-  // FINAL SUBMIT IS NON-FUNCTIONAL. submitSelfStudy queries
-  // `Spec.findOne({ isActive: true })` (submissionController.ts:1035), but
-  // the Spec model has NO `isActive` field (it uses `status`). So the query
-  // never matches → final submit ALWAYS returns 400 "No active
-  // specification found", regardless of validation state. (A second bug
-  // lurks downstream: `for (const standard of activeSpec.standards)` —
-  // Spec has no `standards` field either — but it's never reached.) Fix:
-  // resolve standards via getAllStandards() like CR-047, + the CR-050 N/A
-  // escape. When fixed this returns 400-missingValidations / 200 — update.
-  it('submitSelfStudy always 400s — queries Spec {isActive:true} but Spec has no isActive field (CR-006 bug)', async () => {
-    // Even with a "status: active" spec present, the {isActive:true} query
-    // can't match (strict mode strips the unknown field on create too).
-    await Spec.create({ name: 'R1 Spec', version: '1.0', status: 'active', standardsCount: 9, uploadedBy: new mongoose.Types.ObjectId() } as any);
+  // S2A.0 FIXED the "always 400 no-active-spec" bug. submitSelfStudy now
+  // resolves the required specs from getAllStandards() and reaches the
+  // readiness gate: an unvalidated submission returns 400 "All
+  // specifications must be validated" (NOT "no active specification").
+  it('submitSelfStudy reaches the readiness gate — 400 missingValidations when nothing passes (S2A.0)', async () => {
     const { user } = await createUser({ role: 'program_coordinator' });
     const sub = await seedSubmission({ submitterId: user._id, status: 'in_progress' });
     const res = await request(app)
@@ -222,6 +204,42 @@ describe('R.1 — known-broken submit paths (characterization)', () => {
       .set('Authorization', `Bearer ${signTokenFor(user as any)}`)
       .send({});
     expect(res.status).toBe(400);
-    expect(String(res.body.error)).toMatch(/active specification/i);
+    expect(String(res.body.error)).toMatch(/must be validated/i);
+    expect(Array.isArray(res.body.missingValidations)).toBe(true);
+    expect(res.body.missingValidations.length).toBeGreaterThan(0);
+  });
+
+  // S2A.0 — happy path is now REACHABLE: seed every spec as validated 'pass'
+  // and final submit succeeds (status → submitted, lock engaged). Proves the
+  // end-to-end submit→lockout loop works once specs pass (CR-049 will make
+  // them actually passable; CR-050 will let intentionally-omitted specs
+  // count as satisfied).
+  it('submitSelfStudy succeeds when every spec is validated pass (S2A.0)', async () => {
+    const allStandards = getAllStandards();
+    const standardsStatus: Record<string, any> = {};
+    for (const std of allStandards) {
+      for (const spec of std.specifications || []) {
+        standardsStatus[`${std.code}_${spec.code}`] = { status: 'validated', validationStatus: 'pass', completionPercentage: 100 };
+      }
+    }
+    const { user } = await createUser({ role: 'program_coordinator' });
+    const sub = await seedSubmission({ submitterId: user._id, status: 'in_progress', standardsStatus });
+    const res = await request(app)
+      .post(`/api/submissions/${sub._id}/submit`)
+      .set('Authorization', `Bearer ${signTokenFor(user as any)}`)
+      .send({});
+    expect(res.status).toBe(200);
+
+    const fresh: any = await Submission.findById(sub._id);
+    expect(fresh.status).toBe('submitted');
+    expect(fresh.submittedAt).toBeTruthy();
+
+    // …and the lockout now engages end-to-end: a PC write is refused 403.
+    const locked = await request(app)
+      .patch(`/api/submissions/${sub._id}/narrative`)
+      .set('Authorization', `Bearer ${signTokenFor(user as any)}`)
+      .send({ standardCode: '1', specCode: 'a', content: '<p>x</p>' });
+    expect(locked.status).toBe(403);
+    expect(locked.body.error).toBe('LOCKED');
   });
 });

@@ -1635,3 +1635,9 @@ Updated [[sprint-plan-2026-05-29]] (R.1 done + new S2A.0 active-spec fix, do-fir
 ## [2026-05-29] audit | Sprint R.2 — reader/lead-reader endpoints smoke (all functional)
 
 Walked the reader flow against the real endpoints (`server/tests/integration/reader-endpoints-smoke.test.ts`, green). **Verdict: the reader/lead-reader SERVER stack is functional, not dead scaffolding** — assign / getMyReviews / scores (0-3) / summary / getMyCompilations all 200; non-reader scoring 403s; the two 400s (submitReview, createOrGetCompilation) are legitimate preconditions (review-complete / submitted-review-exists). **Sprint 3 (reader client) greenlit.** Recorded the truth table in [[submission-stack-verification-2026-05-29]]; marked R.2 done in [[sprint-plan-2026-05-29]]. (Test-authoring note: the harness wipes collections per-test, so reader smokes seed within one test.)
+
+## [2026-05-29] update | S2A.0 — submitSelfStudy fixed (Final Submit now functional)
+
+Fixed the headline R.1 bug. `submitSelfStudy` queried `Spec.findOne({ isActive: true })` (Spec has no `isActive` field) → always 400 "No active specification found"; a PC could never final-submit. Now resolves the required specs via `getAllStandards()` (`submissionController.ts`), dropping the broken Spec lookup + the undefined `activeSpec.standards`. Removed the now-unused `Spec` import.
+
+Verified (`submission-lockout.test.ts`, full server suite green): unvalidated submission → 400 *missingValidations* (reaches the readiness gate); every spec `pass` → 200 + `status: submitted` + the lockout then refuses PC writes (403 LOCKED) — the end-to-end submit→lockout loop works. Updated [[cr-006-two-stage-submission]], [[submission-stack-verification-2026-05-29]], [[sprint-plan-2026-05-29]]. CR-006 stays `in-progress` (needs CR-049 so specs can reach `pass`, + CR-050 N/A escape).
