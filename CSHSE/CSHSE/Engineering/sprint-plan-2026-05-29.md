@@ -76,8 +76,9 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 
 # Sprint 2A — Submission lockout completion (2 weeks)
 
-**Goal:** Finish the submission/lockout layer to its CR acceptance. (Core middleware + endpoints exist per Sprint R; this closes the gaps.)
+**Goal:** Finish the submission/lockout layer to its CR acceptance. **Sprint R.1 verified ([[submission-stack-verification-2026-05-29]]) that the lockout *middleware* works but the submit *endpoints* are broken** — so this sprint is now bug-fix-led, not polish.
 
+- **S2A.0 — Fix `submitSelfStudy` (Final Submit is non-functional).** It queries `Spec.findOne({ isActive: true })` (`submissionController.ts:1035`) but the Spec model has no `isActive` field → **always 400 "No active specification found"**; a PC can never submit. Also fix the downstream `activeSpec.standards` reference (no such field) by resolving standards via `getAllStandards()` (as CR-047 does). **Do first — nothing else in the submit/reader loop is reachable until this works.**
 - **S2A.1 — Audit trail on every transition (CR-006, CR-020 server).** Ensure `recordAuditEvent` is called on submit/revert/final-submit/unlock with `actor`, `action`, `timestamp`, optional note. (`auditLog.ts` exists; wire any missing call sites.)
 - **S2A.2 — Pre-submission validation popup (CR-008, genuinely new).** New `GET /api/submissions/:id/preflight` returning `{ errors, warnings }` (specs that are neither passed nor N/A, short narratives, low-confidence matches). `FinalSubmitModal` consumes it; "fill it" or "mark N/A" inline; override requires a reason logged to audit.
 - **S2A.3 — Intentionally-omitted specs don't block submission (CR-050, bug fix).** Add a per-spec "Not applicable / excluded" state (PC-set, with reason). Both submit gates — server `submitSelfStudy` (~`submissionController.ts:1051`) and client `isSelfStudyReadyForSubmit` (`SelfStudyEditor.tsx:2108`) — change from "every spec `pass`" to "every spec `pass` OR `excluded`." Excluded specs render N/A (not fail) downstream and are skipped by the CR-049 on-submit eval. **This is a live blocker: today an intentionally-empty spec hard-blocks Final Submit.**
@@ -184,15 +185,21 @@ CR-019 stays **rejected** — no beta institution surfaced a JV need. Revive onl
 
 ## Logical starting point — what to do first
 
-The reconciliation already ran (this plan), and the CR tracker has been corrected: CR-003/005/006/007/009/012/013/020/022 flipped `proposed → in-progress`; the genuinely-greenfield CR-004/008/010/011/016/021/023 stay `proposed`; CR-018 stays `in-progress`. So **Sprint R is now down to verification, not status archaeology.** Start here:
+The reconciliation already ran (this plan), and the CR tracker has been corrected: CR-003/005/006/007/009/012/013/020/022 flipped `proposed → in-progress`; the genuinely-greenfield CR-004/008/010/011/016/021/023 stay `proposed`; CR-018 stays `in-progress`.
 
-### Step 1 — Prove the submission/lockout stack (½ day, no new code expected)
-This is the most-built, least-risky piece and it's the gate for the reader half. Seed a submission and exercise the real endpoints:
-- PC `submitStandard` → status flips, still editable; `revertStandard` → back to in_progress.
-- PC `submitSelfStudy` (final) → `submissionLockout` returns **403 LOCKED** on a subsequent PC narrative PATCH; admin PATCH → 200; print/read stays open.
-- Confirm an `AuditLogEntry` is written on each transition (`services/auditLog.ts:20`).
-- **Known bug R.1 will hit:** `submitStandard`/`revalidateFailed` call `validationService.validateSection` (`submissionController.ts:550,758`), which **does not exist** on `ValidationService` — the per-section validate path throws. This is fixed by **Sprint 2.5 / [[cr-049-ai-section-evaluation-against-reader-criteria]]**. For R.1, verify lockout mechanics independently of the validate step (submit-self-study → 403 LOCKED), and log the broken validate call as a CR-049 dependency rather than a lockout failure.
-- **If green:** mark CR-005 + CR-006 **shipped**. **If gaps:** they become the Sprint 2A backlog (most likely gap: audit-on-transition + the CR-008 preflight popup, which is genuinely missing).
+### Step 1 — Prove the submission/lockout stack ✅ DONE 2026-05-29 — see [[submission-stack-verification-2026-05-29]]
+13 integration tests (`server/tests/integration/submission-lockout.test.ts`). **Outcome: the lockout middleware works; the submit endpoints are broken.**
+- ✅ Lockout guard (CR-005): PC → 403 LOCKED on submitted/under_review/readers_assigned/review_complete; admin bypass; in_progress writable; unauth 401.
+- ✅ revertStandard (CR-006): transition + audit entry; 409 on validated.
+- ❌ `submitStandard` validation non-functional — calls the missing `validateSection` (caught per-spec → every spec marked fail). → fixed by **CR-049 / Sprint 2.5**.
+- ❌ `submitSelfStudy` (Final Submit) **always 400s** — queries `Spec.findOne({ isActive: true })` but Spec has no `isActive` field. → fixed by **S2A.0**.
+- **Verdict:** CR-005 + CR-006 stay `in-progress` (NOT shipped) — the end-to-end submit→lockout loop can't run until S2A.0 + CR-049 land.
+
+### Step 2 — Smoke the reader server endpoints (½ day) — NEXT
+Hit `reviewController`, `scores`, `leadReaderController`, `Assignment` with a seeded `submitted` submission. Record functional-vs-dead in a one-page truth table. (Note: producing a *real* `submitted` submission now requires S2A.0 first, or seeding `status: 'submitted'` directly as R.1 did.)
+
+### Step 3 — Begin the reader client (Sprint 3) — the first real build
+Unchanged: scaffold `features/reader/` + a role-gated `reader` route listing `submitted+` submissions, then the per-spec 0-3 score selector wired to the existing `Score` model.
 
 ### Step 2 — Smoke the reader server endpoints (½ day)
 Hit `reviewController`, `scores`, `leadReaderController`, `Assignment` with a seeded `submitted` submission. Record functional-vs-dead in a one-page truth table. This tells you whether Sprint 3 builds on solid endpoints or has to fix them first.

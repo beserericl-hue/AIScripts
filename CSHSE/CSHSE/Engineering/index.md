@@ -49,6 +49,7 @@ The catalog. One line per page. When answering a question, scan this first to fi
 - [[ai-import-stevenson-matrices-2026-05-19]] — smoke test for the matrix-as-first-class-entity slice (commit `5ad2efb`). Against the real 353 MB Stevenson HTML: 2 matrices, 437 cells, 0 leaks into spec cards. Pipeline + UI + apply flow + Standards-editor link all wired.
 - [[wizard-user-guide-2026-05-20]] — top-down user guide + test plan for the wizard as of commit `8ea57e6`. Walks every screen from the .docx drop to the Standards editor; includes a 12-step QA checklist and a troubleshooting table. Companion PowerPoint deck ships alongside.
 - [[webinar-action-items-2026-05-20]] — full discussion log + 23 timestamped action items from the 1h 42m Beta Group Training webinar (Julia, Yvonne, Paul, Monica, Nicole, Sara, AACC, Tracee). Every decision is anchored to a transcript timestamp. Source of the change-requests catalog.
+- [[submission-stack-verification-2026-05-29]] — **Sprint R.1.** Empirical verification (13 integration tests) of the PC submit → lockout stack. Verdict: the lockout middleware works, but the submit endpoints are broken — `submitStandard` validation is non-functional (missing `validateSection`, → CR-049) and `submitSelfStudy` always 400s (queries a non-existent `Spec.isActive` field, → new Sprint 2A S2A.0). CR-005 + CR-006 stay in-progress.
 
 ## Change requests
 

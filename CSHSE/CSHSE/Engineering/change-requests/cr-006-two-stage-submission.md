@@ -13,6 +13,8 @@ last_reviewed: 2026-05-29
 
 # CR-006 — Two-stage submission (per-section vs final)
 
+> **R.1 verification (2026-05-29, [[submission-stack-verification-2026-05-29]]):** `revertStandard` works (transition + audit). But both submit events are broken: per-section **submitStandard** validation is non-functional (missing `validateSection` → every spec marked fail, → CR-049), and **final submit (submitSelfStudy) ALWAYS 400s** — it queries `Spec.findOne({ isActive: true })` (`submissionController.ts:1035`) but the Spec model has no `isActive` field. Fix tracked as Sprint 2A **S2A.0** (resolve standards via `getAllStandards()` + correct the active-spec lookup). Stays `in-progress`.
+
 ## Summary
 
 Eric clarified that there are two distinct submission events:

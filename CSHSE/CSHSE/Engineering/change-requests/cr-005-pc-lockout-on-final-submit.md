@@ -13,6 +13,8 @@ last_reviewed: 2026-05-29
 
 # CR-005 — PC lockout on final submit (read-only + print)
 
+> **R.1 verification (2026-05-29, [[submission-stack-verification-2026-05-29]]):** the lockout *middleware* (`server/src/middleware/submissionLockout.ts`) is implemented and **verified working** (PC → 403 LOCKED on locked statuses; admin bypass; in_progress writable). But it's unreachable in practice because final submit is broken (always 400 — see [[cr-006-two-stage-submission]]). Stays `in-progress` until the submit endpoints work end-to-end.
+
 ## Summary
 
 After the PC clicks final submit, the self-study is locked. The PC can still view and print, but cannot edit narrative, add evidence, see reader comments, or see reader names. The lockout is the precondition that lets readers begin their work ([[cr-007-reader-access-after-submit]]).

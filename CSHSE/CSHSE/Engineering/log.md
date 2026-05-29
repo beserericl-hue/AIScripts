@@ -1616,3 +1616,18 @@ Two more CR-049 refinements from the user:
 - **Reader override → AI learning:** the AI verdict is a seed. On the reader review surface (CR-003 / Sprint 3) the reader can override it; the override becomes the report value AND is posted to the existing corrections RAG store (`/ai/corrections/ingest`, `ai-service/app/main.py:608`, `corrections/store.py`, `cshse_corrections_{env}`) with `correction_type: 'section_eval_override'`, so future evaluations learn from it. The override **UI** is Sprint 3 (reader client); CR-049 owns the learning ingest + RAG consumption.
 
 Updated [[cr-049-ai-section-evaluation-against-reader-criteria]] (Decision/Acceptance/OQ1/files/out-of-scope + revision_history) and [[sprint-plan-2026-05-29]] Sprint 3 (added S3.4 reader override + learning loop).
+
+## [2026-05-29] audit | Sprint R.1 — submission/lockout stack verified (lockout works; submit endpoints broken)
+
+Ran Sprint R.1 from [[sprint-plan-2026-05-29]]: 13 integration tests in `server/tests/integration/submission-lockout.test.ts` (all green). Findings in [[submission-stack-verification-2026-05-29]].
+
+**Verdict: the lockout *middleware* is correct and proven; the submit *endpoints* are broken.** A PC cannot final-submit today, so the end-to-end submit→lockout→reader loop does not work. **CR-005 + CR-006 stay `in-progress` (NOT shipped).**
+
+- ✅ CR-005 lockout guard: PC → 403 LOCKED on submitted/under_review/readers_assigned/review_complete; admin bypass; in_progress writable; 401 unauth.
+- ✅ CR-006 revertStandard: transition + audit entry; 409 on validated.
+- ❌ `submitStandard` validation non-functional — calls the missing `ValidationService.validateSection` (`submissionController.ts:550,758`); caught per-spec → every spec marked `fail`. → CR-049.
+- ❌ `submitSelfStudy` (Final Submit) **always 400s** — queries `Spec.findOne({ isActive: true })` (`:1035`) but the Spec model has no `isActive` field (`models/Spec.ts:15`). → new Sprint 2A story S2A.0.
+
+**Correction:** my earlier note that submitSelfStudy "500s on `activeSpec.standards`" was wrong — it 400s first on the `{isActive:true}` mismatch and never reaches that line. Corrected in the verification page + plan. (Exactly why R.1 runs before building.)
+
+Updated [[sprint-plan-2026-05-29]] (R.1 done + new S2A.0 active-spec fix, do-first) and added [[submission-stack-verification-2026-05-29]] to the index.
