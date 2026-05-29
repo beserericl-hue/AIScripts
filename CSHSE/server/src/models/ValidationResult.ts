@@ -1,12 +1,19 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IValidationResultData {
-  status: 'pass' | 'fail' | 'warning' | 'pending';
+  status: 'pass' | 'fail' | 'warning' | 'pending' | 'needs_improvement';
   score?: number;
   feedback?: string;
   suggestions?: string[];
   missingElements?: string[];
   processingTimeMs?: number;
+  // CR-049 — the AI evaluator's 3-level verdict + rationale + per-criterion
+  // coverage. `status` stays binary-ish for the submit gate; `verdict`
+  // carries the full pass/needs_improvement/fail for display + the reader
+  // report seed.
+  verdict?: 'pass' | 'needs_improvement' | 'fail';
+  rationale?: string;
+  criteriaCoverage?: Array<{ criterion: string; met: boolean; note?: string }>;
 }
 
 export interface IValidationResult extends Document {
@@ -27,7 +34,7 @@ export interface IValidationResult extends Document {
 const ValidationResultDataSchema = new Schema<IValidationResultData>({
   status: {
     type: String,
-    enum: ['pass', 'fail', 'warning', 'pending'],
+    enum: ['pass', 'fail', 'warning', 'pending', 'needs_improvement'],
     required: true,
     default: 'pending'
   },
@@ -39,7 +46,15 @@ const ValidationResultDataSchema = new Schema<IValidationResultData>({
   feedback: String,
   suggestions: [{ type: String }],
   missingElements: [{ type: String }],
-  processingTimeMs: Number
+  processingTimeMs: Number,
+  // CR-049 — AI evaluator verdict + rationale + per-criterion coverage.
+  verdict: { type: String, enum: ['pass', 'needs_improvement', 'fail'] },
+  rationale: String,
+  criteriaCoverage: [{
+    criterion: String,
+    met: Boolean,
+    note: String
+  }]
 }, { _id: false });
 
 const ValidationResultSchema = new Schema<IValidationResult>({

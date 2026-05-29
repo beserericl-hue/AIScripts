@@ -14,9 +14,20 @@ revision_history:
   - 2026-05-29 — OQ3 resolved: Final Submit auto-runs a full evaluation (re-evaluating every applicable spec, even ones already run) to seed the reader report; excluded/N-A specs ([[cr-050-intentionally-omitted-specs-do-not-block-submission]]) are skipped.
   - 2026-05-29 — OQ1 resolved (web scrape = raw text, strip HTML, no headless; unevaluable links flagged for human review, not auto-failed) + added the reader override→AI-learning loop (reuses the `/ai/corrections/ingest` RAG store).
   - 2026-05-29 — Phase 1 shipped (ai-service `/ai/section/evaluate` + `section_eval` module + 19 tests). Status → in-progress.
+  - 2026-05-29 — Phase 2 shipped (server `cshseAiClient.evaluateSection` + `ValidationService.validateSection` via AI replaces the broken n8n call; `ValidationResult` gains `needs_improvement` + `verdict`/`rationale`/`criteriaCoverage`; n8n superseded for submit).
 ---
 
 # CR-049 — AI section evaluation against reader-report criteria (replaces n8n validation)
+
+## Phase 2 shipped 2026-05-29 — server wiring (replaces the broken validateSection + n8n)
+
+- `server/src/services/cshseAiClient.ts` — `evaluateSection(req)` (HMAC-signed POST to `/ai/section/evaluate`; throws on non-2xx so the caller fail-softs).
+- `server/src/services/validationService.ts` — **new `validateSection(...)` method** (the one `submitStandard`/`revalidateFailed` were calling but that didn't exist — see [[submission-stack-verification-2026-05-29]]). Resolves the spec's rubric criteria from `getAllStandards()`, gathers institutionId + supporting-evidence text, calls `evaluateSection`, maps the 3-level verdict to the binary submit gate (`pass`→`pass`, else `fail`) while keeping `verdict`+`rationale`+`improvementSuggestions`, persists a `ValidationResult`, and **fail-softs to `fail` when cshse-ai is unreachable** so Final Submit stays usable. This is the fix that lets a spec actually reach `pass` (the last code blocker for CR-006).
+- `server/src/models/ValidationResult.ts` — `status` enum gains `needs_improvement`; data gains `verdict` / `rationale` / `criteriaCoverage` (the reader-report seed).
+- **n8n validation superseded for the submit path:** `validateSection` (AI) replaces the legacy `triggerValidation` (n8n webhook) for submit/revalidate. The old n8n `triggerValidation` + `/api/webhooks/n8n/callback` branch remain in the tree but are no longer on the submit path; a follow-on can delete them.
+- Tests: `server/tests/integration/validate-section.test.ts` (4 — verdict→status mapping pass/needs_improvement/fail + persistence + fail-soft, cshse-ai spied) + updated the `submission-lockout` characterization (submitStandard now fail-softs, doesn't crash). Full server suite green.
+
+**Remaining:** Phase 3 — editor surface (per-section "Evaluate" + verdict/rationale/suggestions). Phase 4 — Final-Submit auto-eval (seed the reader report) [server] + reader override → `/ai/corrections/ingest` learning loop [Sprint 3 reader client].
 
 ## Phase 1 shipped 2026-05-29 — ai-service section evaluator
 

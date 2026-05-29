@@ -4,6 +4,7 @@ import { WebhookSettings, IWebhookSettings } from '../models/WebhookSettings';
 import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getStandardByCode } from '../data/standards';
+import { evaluateSection } from './cshseAiClient';
 
 export interface ValidationRequest {
   submissionId: string;
@@ -41,6 +42,109 @@ export interface WebhookCallResult {
 }
 
 export class ValidationService {
+  /**
+   * CR-049 — evaluate a single spec's section against the reader-review
+   * criteria via cshse-ai. This is the method the submission controller
+   * calls on submit/revalidate; it REPLACES the legacy n8n
+   * `triggerValidation` path for that flow (n8n validation is superseded).
+   *
+   * Fail-soft: any AI/network error degrades to a `fail` verdict with a
+   * rationale rather than throwing, so Final Submit stays usable. Returns
+   * the shape the controller already expects:
+   * `{ result: { status, feedback, missingElements, verdict, rationale } }`.
+   */
+  async validateSection(opts: {
+    submissionId: string;
+    standardCode: string;
+    specCode: string;
+    narrativeText?: string;
+    validationType?: 'auto_save' | 'manual_save' | 'submit';
+  }): Promise<{ result: IValidationResultData }> {
+    const { submissionId, standardCode, specCode } = opts;
+    const validationType = opts.validationType || 'submit';
+
+    // Rubric criteria text for this spec.
+    const standard = getStandardByCode(standardCode);
+    const spec = standard?.specifications?.find((s) => s.code === specCode);
+    const criteria = spec?.text || '';
+
+    // institutionId + supporting-evidence text for the AI prompt (best-effort).
+    let institutionId = '';
+    let evidenceTexts: string[] = [];
+    try {
+      const submission: any = await Submission.findById(submissionId).select('institutionId').lean();
+      institutionId = submission?.institutionId?.toString() || '';
+      const ev: any[] = await SupportingEvidence.find({
+        submissionId,
+        standardCode,
+        specCode,
+        isDeleted: { $ne: true }
+      })
+        .select('description metadata.description')
+        .lean();
+      evidenceTexts = ev
+        .map((e) => e?.description || e?.metadata?.description || '')
+        .filter(Boolean);
+    } catch {
+      /* context is best-effort */
+    }
+
+    let verdict: 'pass' | 'needs_improvement' | 'fail' = 'needs_improvement';
+    let rationale = '';
+    let suggestions: string[] = [];
+    let criteriaCoverage: Array<{ criterion: string; met: boolean; note?: string }> = [];
+    try {
+      const out = await evaluateSection({
+        institutionId,
+        submissionId,
+        specs: [{ standardCode, specCode, criteria }],
+        narrativeHtml: opts.narrativeText || '',
+        supportingEvidenceText: evidenceTexts
+      });
+      const row = out?.perSpec?.[0];
+      if (row) {
+        verdict = row.verdict;
+        rationale = row.rationale || '';
+        suggestions = row.improvementSuggestions || [];
+        criteriaCoverage = row.criteriaCoverage || [];
+      }
+    } catch (err: any) {
+      // Fail-soft — keep submit usable when cshse-ai is unreachable.
+      verdict = 'fail';
+      rationale = `AI evaluation unavailable (${err?.message || 'error'})`;
+    }
+
+    // `status` stays binary for the submit gate (only `pass` validates a
+    // spec); `verdict` carries the full 3-level result for display + the
+    // reader-report seed.
+    const result: IValidationResultData = {
+      status: verdict === 'pass' ? 'pass' : 'fail',
+      verdict,
+      feedback: rationale,
+      rationale,
+      missingElements: suggestions,
+      suggestions,
+      criteriaCoverage
+    };
+
+    // Persist (best-effort) so the reader report can later consume it.
+    try {
+      await ValidationResult.create({
+        submissionId: new mongoose.Types.ObjectId(submissionId),
+        standardCode,
+        specCode,
+        validationType,
+        validatedAt: new Date(),
+        result,
+        attemptNumber: 1
+      });
+    } catch {
+      /* non-fatal */
+    }
+
+    return { result };
+  }
+
   /**
    * Trigger validation for a section via N8N webhook
    */

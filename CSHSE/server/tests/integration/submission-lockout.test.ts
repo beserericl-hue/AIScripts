@@ -173,10 +173,12 @@ describe('R.1 — known-broken submit paths (characterization)', () => {
   // TypeError per-spec and records every spec as a failure. So the request
   // completes (<500) but NO spec can ever pass: validation is
   // non-functional until CR-049 replaces validateSection with the real
-  // cshse-ai evaluator. When CR-049 lands, a genuinely-good section will
-  // pass and the `validationStatus === 'fail'` assertion below will need
-  // updating — that's the intended reminder.
-  it('submitStandard completes but marks every spec FAIL — validateSection is broken (CR-049)', async () => {
+  // CR-049 Phase 2: validateSection now EXISTS (AI evaluator). In the test
+  // env cshse-ai is unreachable, so it fail-softs to a 'fail' verdict and
+  // the standard is marked fail — submit completes (<500), never crashes.
+  // The verdict→status mapping when the AI IS reachable is covered by
+  // validate-section.test.ts (spied client).
+  it('submitStandard completes; fail-softs to FAIL when cshse-ai is unreachable (CR-049)', async () => {
     const { user } = await createUser({ role: 'program_coordinator' });
     const sub = await seedSubmission({ submitterId: user._id, status: 'in_progress' });
     await Submission.updateOne(
@@ -187,9 +189,9 @@ describe('R.1 — known-broken submit paths (characterization)', () => {
       .post(`/api/submissions/${sub._id}/standards/1/submit`)
       .set('Authorization', `Bearer ${signTokenFor(user as any)}`)
       .send({});
-    expect(res.status).toBeLessThan(500); // per-spec TypeError is caught, not fatal
+    expect(res.status).toBeLessThan(500); // fail-soft, not fatal
     const fresh: any = await Submission.findById(sub._id);
-    expect(fresh.standardsStatus.get('1')?.validationStatus).toBe('fail'); // never 'pass'
+    expect(fresh.standardsStatus.get('1')?.validationStatus).toBe('fail');
   });
 
   // S2A.0 FIXED the "always 400 no-active-spec" bug. submitSelfStudy now

@@ -147,6 +147,55 @@ export async function scoreEvidence(req: EvidenceScoreRequest) {
   }>(res);
 }
 
+// ---------------------------------------------------------------------------
+// CR-049 — section evaluation against the reader-review criteria.
+// ---------------------------------------------------------------------------
+
+export interface SectionEvaluateSpec {
+  standardCode: string;
+  specCode: string;
+  criteria: string;
+}
+
+export interface SectionEvaluateRequest {
+  institutionId: string;
+  submissionId: string;
+  specs: SectionEvaluateSpec[];
+  narrativeHtml?: string;
+  supportingEvidenceText?: string[];
+  files?: Array<{ s3Key?: string; filename?: string; mimeType?: string }>;
+  webLinks?: string[];
+}
+
+export interface SectionEvaluateVerdict {
+  standardCode: string;
+  specCode: string;
+  verdict: 'pass' | 'needs_improvement' | 'fail';
+  rationale: string;
+  criteriaCoverage: Array<{ criterion: string; met: boolean; note?: string }>;
+  improvementSuggestions: string[];
+  sourcesUsed: Record<string, unknown>;
+}
+
+export interface SectionEvaluateResponse {
+  perSpec: SectionEvaluateVerdict[];
+  links: Array<{ url: string; evaluable: boolean; reason?: string }>;
+}
+
+/**
+ * CR-049 — evaluate one or many specs of a section against the reader
+ * criteria. Throws on a non-2xx so the caller can fail-soft.
+ */
+export async function evaluateSection(
+  req: SectionEvaluateRequest
+): Promise<SectionEvaluateResponse> {
+  const res = await postSigned<SectionEvaluateResponse>('/ai/section/evaluate', req);
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`section/evaluate returned HTTP ${res.status}`);
+  }
+  return res.body;
+}
+
 /**
  * Convenience predicate for call sites that want to gate on whether
  * Phase 2 has shipped. Wraps a recommend() call against an obviously
