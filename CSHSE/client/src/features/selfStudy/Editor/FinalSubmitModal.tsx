@@ -1,5 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Lock, X, AlertCircle, Loader2 } from 'lucide-react';
+import { Send, Lock, X, AlertCircle, Loader2, ChevronRight } from 'lucide-react';
+
+export interface PreflightIssue {
+  code: string;
+  message: string;
+  standardCode?: string;
+  specCode?: string;
+}
+
+export interface PreflightResult {
+  submitDisabled: boolean;
+  errors: PreflightIssue[];
+  warnings: PreflightIssue[];
+  counts: {
+    totalSpecs: number;
+    passed: number;
+    excluded: number;
+    satisfied: number;
+    missing: number;
+  };
+}
 
 interface FinalSubmitModalProps {
   open: boolean;
@@ -8,6 +28,13 @@ interface FinalSubmitModalProps {
   validated: number;
   total: number;
   busy: boolean;
+  // CR-008 / S2A.2 — pre-submission preflight surfaces errors + warnings
+  // before the PC presses Submit. When `preflight` is provided and has
+  // errors, Submit is disabled and each error renders as a "jump to spec"
+  // row. The optional `onGoToSpec` lets the modal navigate the editor.
+  preflight?: PreflightResult | null;
+  preflightLoading?: boolean;
+  onGoToSpec?: (standardCode: string, specCode: string) => void;
 }
 
 /**
@@ -28,7 +55,10 @@ export function FinalSubmitModal({
   onConfirm,
   validated,
   total,
-  busy
+  busy,
+  preflight,
+  preflightLoading,
+  onGoToSpec
 }: FinalSubmitModalProps): JSX.Element | null {
   const [note, setNote] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -115,6 +145,61 @@ export function FinalSubmitModal({
             </div>
           </div>
 
+          {/* CR-008 / S2A.2 — preflight summary. Errors block submit and
+              link the PC straight to the offending spec. Warnings are
+              informational and do not block. */}
+          {preflightLoading && (
+            <div className="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              <span>Running pre-submission checks…</span>
+            </div>
+          )}
+          {!preflightLoading && preflight && preflight.errors.length > 0 && (
+            <div
+              role="alert"
+              data-testid="preflight-errors"
+              className="rounded-md border border-red-200 bg-red-50 p-3 text-sm"
+            >
+              <p className="mb-2 font-medium text-red-900">
+                {preflight.errors.length} item{preflight.errors.length === 1 ? '' : 's'} need attention before Submit:
+              </p>
+              <ul className="max-h-44 space-y-1 overflow-y-auto">
+                {preflight.errors.slice(0, 12).map((err, i) => (
+                  <li key={`${err.code}-${i}`} className="flex items-start justify-between gap-2 text-red-900">
+                    <span className="leading-snug">{err.message}</span>
+                    {onGoToSpec && err.standardCode && err.specCode && (
+                      <button
+                        type="button"
+                        data-testid={`preflight-goto-${err.standardCode}-${err.specCode}`}
+                        onClick={() => onGoToSpec(err.standardCode!, err.specCode!)}
+                        className="ml-2 inline-flex shrink-0 items-center gap-0.5 rounded border border-red-300 bg-white px-1.5 py-0.5 text-xs text-red-700 hover:bg-red-100"
+                      >
+                        Go to
+                        <ChevronRight className="h-3 w-3" aria-hidden />
+                      </button>
+                    )}
+                  </li>
+                ))}
+                {preflight.errors.length > 12 && (
+                  <li className="pt-1 text-xs text-red-700">…and {preflight.errors.length - 12} more.</li>
+                )}
+              </ul>
+            </div>
+          )}
+          {!preflightLoading && preflight && preflight.warnings.length > 0 && (
+            <div
+              data-testid="preflight-warnings"
+              className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+            >
+              <p className="mb-1 font-medium">Worth checking before you submit:</p>
+              <ul className="list-disc space-y-0.5 pl-5">
+                {preflight.warnings.map((w, i) => (
+                  <li key={`${w.code}-${i}`}>{w.message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div>
             <label
               htmlFor="submission-note"
@@ -149,8 +234,9 @@ export function FinalSubmitModal({
           </button>
           <button
             type="button"
+            data-testid="final-submit-confirm"
             onClick={handleConfirm}
-            disabled={busy}
+            disabled={busy || preflightLoading || (preflight ? preflight.submitDisabled : false)}
             className="flex items-center gap-2 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}

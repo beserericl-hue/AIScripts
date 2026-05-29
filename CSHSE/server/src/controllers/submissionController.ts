@@ -445,8 +445,16 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
     let specsTotal = 0;
     for (const s of allStandards) specsTotal += (s.specifications || []).length;
     let specsValidated = 0;
+    let specsExcluded = 0;
     if (submission.standardsStatus) {
       submission.standardsStatus.forEach((v: any) => {
+        // CR-050 — excluded specs drop out of the work-to-do; they count
+        // toward submit readiness (pass-OR-excluded) but not toward the
+        // "X / Y validated" narrative-completion gauge.
+        if (v?.excluded === true) {
+          specsExcluded++;
+          return;
+        }
         const vs = v?.validationStatus;
         const st = v?.status;
         if (vs === 'pass' || st === 'validated' || st === 'complete' || st === 'submitted') {
@@ -454,6 +462,7 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
         }
       });
     }
+    const specsRequired = Math.max(0, specsTotal - specsExcluded);
     // narratives written — count specs with non-empty content.
     let narrativesWritten = 0;
     const narr: any = submission.narratives;
@@ -492,15 +501,27 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
       deadline = inst?.accreditationDeadline ?? null;
     }
 
+    // CR-050 — submit readiness counts pass-OR-excluded; the gauge shows
+    // (validated + excluded) / total so the user sees credit for N/A.
+    const specsReady = specsValidated + specsExcluded;
     return res.json({
       import: importInfo,
       drafts: { cvs, syllabi, papers, introductions, specItems, bySpec },
-      selfStudy: { specsValidated, specsTotal, narrativesWritten, matrixRows, evidenceFiles },
+      selfStudy: {
+        specsValidated,
+        specsExcluded,
+        specsRequired,
+        specsTotal,
+        narrativesWritten,
+        matrixRows,
+        evidenceFiles
+      },
       submit: {
         deadline,
         validated: specsValidated,
+        excluded: specsExcluded,
         total: specsTotal,
-        ready: specsTotal > 0 && specsValidated === specsTotal
+        ready: specsTotal > 0 && specsReady === specsTotal
       }
     });
   } catch (error) {
@@ -1012,6 +1033,383 @@ export const markStandardComplete = async (req: AuthenticatedRequest, res: Respo
 };
 
 /**
+ * CR-008 / S2A.2 — pre-submission preflight.
+ *
+ * Returns the same checks the submit gate enforces, but as a structured
+ * "what's missing" + "what's worth knowing" payload the client renders in
+ * the FinalSubmitModal. The PC sees every gap before they press Submit,
+ * each tagged with where to go to fix it (standardCode + specCode).
+ *
+ *  - errors[]: gaps that will hard-block Final Submit (server submitSelfStudy
+ *    will refuse). These mirror the submit-gate predicate exactly so the
+ *    modal and the server agree on what "ready" means.
+ *  - warnings[]: things the PC might want to address but won't block submit
+ *    (e.g. a passed spec with no narrative content, an evaluation that
+ *    landed as needs_improvement).
+ *
+ * Server-side checks only — the client can't bypass them by skipping the
+ * popup; submitSelfStudy still enforces the same predicate.
+ */
+export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+
+    const submission: any = await Submission.findById(submissionId).lean();
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // Ownership: only the PC who owns this (or admin) can read preflight.
+    const isAdmin = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
+    if (!isAdmin && submission.submitterId?.toString() !== req.user!.id) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    const allStandards = getAllStandards();
+
+    // standardsStatus may be a Map (live model) or plain object (.lean()).
+    const ssRaw = submission.standardsStatus;
+    const getStatus = (key: string): any => {
+      if (!ssRaw) return undefined;
+      if (ssRaw instanceof Map) return ssRaw.get(key);
+      return ssRaw[key];
+    };
+
+    // narratives may also be a Map or plain object after .lean().
+    const narrativesRaw = submission.narratives;
+    const getNarrative = (std: string, spec: string): any => {
+      if (!narrativesRaw) return undefined;
+      const stdMap = narrativesRaw instanceof Map
+        ? narrativesRaw.get(std)
+        : narrativesRaw[std];
+      if (!stdMap) return undefined;
+      return stdMap instanceof Map ? stdMap.get(spec) : stdMap[spec];
+    };
+
+    const errors: Array<{
+      code: string;
+      message: string;
+      standardCode: string;
+      specCode: string;
+    }> = [];
+    const warnings: Array<{
+      code: string;
+      message: string;
+      standardCode?: string;
+      specCode?: string;
+    }> = [];
+
+    let totalSpecs = 0;
+    let passedCount = 0;
+    let excludedCount = 0;
+
+    for (const standard of allStandards) {
+      for (const spec of standard.specifications || []) {
+        totalSpecs++;
+        const key = `${standard.code}_${spec.code}`;
+        const status = getStatus(key);
+        const passed = status?.validationStatus === 'pass';
+        const excluded = status?.excluded === true;
+
+        if (passed) passedCount++;
+        if (excluded) excludedCount++;
+
+        if (!passed && !excluded) {
+          // Hard error — submit gate will refuse. Distinguish the common
+          // sub-cases so the modal can be actionable ("write narrative" vs
+          // "ask AI to re-evaluate" vs "mark N/A").
+          const narrative = getNarrative(standard.code, spec.code);
+          const html = narrative?.content || '';
+          const hasContent =
+            typeof html === 'string' && html.replace(/<[^>]*>/g, '').trim().length > 0;
+          if (!hasContent) {
+            errors.push({
+              code: 'NARRATIVE_MISSING',
+              message: `Standard ${standard.code}.${spec.code} has no narrative. Write content, or mark it Not Applicable.`,
+              standardCode: standard.code,
+              specCode: spec.code
+            });
+          } else if (status?.validationStatus === 'fail') {
+            errors.push({
+              code: 'VALIDATION_FAILED',
+              message: `Standard ${standard.code}.${spec.code} did not pass the AI evaluator. Address the rationale or mark it Not Applicable.`,
+              standardCode: standard.code,
+              specCode: spec.code
+            });
+          } else {
+            errors.push({
+              code: 'NOT_EVALUATED',
+              message: `Standard ${standard.code}.${spec.code} has not been evaluated yet. Run AI Review on it, or mark it Not Applicable.`,
+              standardCode: standard.code,
+              specCode: spec.code
+            });
+          }
+        }
+      }
+    }
+
+    // Warning: lots of excluded specs may mean the program scope is wrong.
+    if (excludedCount > totalSpecs * 0.25) {
+      warnings.push({
+        code: 'MANY_EXCLUDED',
+        message: `${excludedCount} of ${totalSpecs} specs are marked Not Applicable (${Math.round((excludedCount / totalSpecs) * 100)}%). Confirm this is intentional.`
+      });
+    }
+
+    // Warning: a needs_improvement verdict on the latest evaluation isn't a
+    // hard block (the submit gate is pass-OR-excluded) but the PC may want
+    // to address it before sending to readers. Cheap lookup using
+    // standardsStatus.validationStatus only — full coverage is the reader
+    // report's job.
+    // (left for the reader-report phase; not surfacing as warning today)
+
+    const submitDisabled = errors.length > 0;
+    return res.json({
+      submitDisabled,
+      errors,
+      warnings,
+      counts: {
+        totalSpecs,
+        passed: passedCount,
+        excluded: excludedCount,
+        satisfied: passedCount + excludedCount,
+        missing: errors.length
+      }
+    });
+  } catch (error) {
+    console.error('Preflight error:', error);
+    return res.status(500).json({ error: 'Failed to run preflight' });
+  }
+};
+
+/**
+ * CR-005 S2A.4 — Admin-only unlock. Reverses Final Submit so the PC can
+ * edit the submission again, AND clears any reader lock the submission
+ * may carry. The reader-side DELETE /api/submissions/:id/lock only
+ * clears a reader lock; it cannot lift the post-submit system lock that
+ * keeps a final-submitted submission read-only for the PC.
+ *
+ * Use cases:
+ *   - PC submitted in error; admin needs to roll back.
+ *   - Reader review hung; admin needs to release the lock for re-assignment.
+ *
+ * Writes a submission.unlock audit entry with the reason so the timeline
+ * shows the admin override.
+ */
+export const adminUnlockSubmission = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    const reasonRaw = req.body?.reason;
+    const reason = typeof reasonRaw === 'string'
+      ? reasonRaw.trim().slice(0, 2000)
+      : undefined;
+
+    const isAdmin = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Admin role required' });
+    }
+
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    const priorStatus = submission.status;
+    const priorReaderLock = submission.readerLock
+      ? {
+          isLocked: !!submission.readerLock.isLocked,
+          lockedByName: submission.readerLock.lockedByName,
+          lockReason: submission.readerLock.lockReason
+        }
+      : undefined;
+
+    // Revert status from any post-submit state back to in_progress so the
+    // PC can edit. Leave draft / in_progress untouched.
+    if (
+      submission.status === 'submitted' ||
+      submission.status === 'under_review' ||
+      submission.status === 'readers_assigned' ||
+      submission.status === 'review_complete'
+    ) {
+      submission.status = 'in_progress';
+      submission.submittedAt = undefined;
+    }
+
+    // Clear all lock state (final-submit system lock + any reader lock).
+    submission.readerLock = { isLocked: false };
+
+    await submission.save();
+
+    void recordAuditEvent({
+      action: 'submission.unlock',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: req.user!.name || req.user!.email
+      },
+      targetType: 'submission',
+      targetId: submissionId,
+      submissionId,
+      payload: { priorStatus, priorReaderLock },
+      reason
+    });
+
+    return res.json({
+      message: 'Submission unlocked by admin',
+      submission: {
+        _id: submission._id,
+        status: submission.status,
+        readerLock: submission.readerLock
+      }
+    });
+  } catch (error) {
+    console.error('Admin unlock error:', error);
+    return res.status(500).json({ error: 'Failed to unlock submission' });
+  }
+};
+
+/**
+ * CR-050 — Mark a single spec as "Not applicable / intentionally excluded".
+ * The PC declares intent (with an optional reason). Submit-readiness then
+ * treats this spec as satisfied (pass-OR-excluded), so empty-by-design
+ * specs no longer hard-block Final Submit. Reusing the dotted Map-key
+ * convention (`standardsStatus.${std}_${spec}.…`) and atomic $set the same
+ * way markStandardComplete does — Mongoose 8 Map subdoc updates only
+ * persist via $set on dotted paths.
+ */
+export const markSpecNotApplicable = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId, standardCode, specCode } = req.params;
+    const reasonRaw = req.body?.reason;
+    const reason = typeof reasonRaw === 'string'
+      ? reasonRaw.trim().slice(0, 2000)
+      : undefined;
+
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // Ownership — only the PC who owns this submission (or admin) can mark N/A.
+    const isAdmin = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
+    if (!isAdmin && submission.submitterId.toString() !== req.user!.id) {
+      return res.status(403).json({ error: 'Not authorized to modify this submission' });
+    }
+
+    // Refuse if the submission is locked (post-submit / reader review).
+    if (submission.readerLock?.isLocked && !isAdmin) {
+      return res.status(409).json({ error: 'Submission is locked' });
+    }
+
+    // Sanity-check the spec exists in the rubric so we don't create dead keys.
+    const allStandards = getAllStandards();
+    const std = allStandards.find((s) => String(s.code) === String(standardCode));
+    const spec = std?.specifications?.find((sp) => String(sp.code) === String(specCode));
+    if (!std || !spec) {
+      return res.status(404).json({ error: 'Spec not found in rubric' });
+    }
+
+    const key = `${standardCode}_${specCode}`;
+    const now = new Date();
+    await Submission.updateOne(
+      { _id: submission._id },
+      { $set: {
+        [`standardsStatus.${key}.excluded`]: true,
+        [`standardsStatus.${key}.excludedReason`]: reason || '',
+        [`standardsStatus.${key}.excludedAt`]: now,
+        [`standardsStatus.${key}.excludedBy`]: new mongoose.Types.ObjectId(req.user!.id),
+        [`standardsStatus.${key}.lastModified`]: now
+      }}
+    );
+
+    void recordAuditEvent({
+      action: 'submission.spec_marked_na',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: req.user!.name || req.user!.email
+      },
+      targetType: 'submission',
+      targetId: submissionId,
+      submissionId,
+      payload: { standardCode, specCode },
+      reason
+    });
+
+    return res.json({
+      message: `Spec ${standardCode}.${specCode} marked not applicable`,
+      excluded: true,
+      excludedReason: reason || '',
+      excludedAt: now
+    });
+  } catch (error) {
+    console.error('Mark spec N/A error:', error);
+    return res.status(500).json({ error: 'Failed to mark spec not applicable' });
+  }
+};
+
+/**
+ * CR-050 — Clear the "Not applicable" flag on a spec; the spec returns to
+ * the normal lifecycle (validation required to pass the submit gate).
+ */
+export const clearSpecNotApplicable = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId, standardCode, specCode } = req.params;
+
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    const isAdmin = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
+    if (!isAdmin && submission.submitterId.toString() !== req.user!.id) {
+      return res.status(403).json({ error: 'Not authorized to modify this submission' });
+    }
+    if (submission.readerLock?.isLocked && !isAdmin) {
+      return res.status(409).json({ error: 'Submission is locked' });
+    }
+
+    const key = `${standardCode}_${specCode}`;
+    const now = new Date();
+    await Submission.updateOne(
+      { _id: submission._id },
+      {
+        $unset: {
+          [`standardsStatus.${key}.excluded`]: '',
+          [`standardsStatus.${key}.excludedReason`]: '',
+          [`standardsStatus.${key}.excludedAt`]: '',
+          [`standardsStatus.${key}.excludedBy`]: ''
+        },
+        $set: {
+          [`standardsStatus.${key}.lastModified`]: now
+        }
+      }
+    );
+
+    void recordAuditEvent({
+      action: 'submission.spec_na_cleared',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: req.user!.name || req.user!.email
+      },
+      targetType: 'submission',
+      targetId: submissionId,
+      submissionId,
+      payload: { standardCode, specCode }
+    });
+
+    return res.json({
+      message: `Spec ${standardCode}.${specCode} N/A cleared`,
+      excluded: false
+    });
+  } catch (error) {
+    console.error('Clear spec N/A error:', error);
+    return res.status(500).json({ error: 'Failed to clear spec N/A' });
+  }
+};
+
+/**
  * List all submissions for current user
  */
 export const listSubmissions = async (req: AuthenticatedRequest, res: Response) => {
@@ -1177,7 +1575,10 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       return res.status(500).json({ error: 'Standards definitions unavailable' });
     }
 
-    // Verify all specs are validated (pass)
+    // Verify all specs are validated (pass) OR explicitly marked N/A (excluded).
+    // CR-050 — A spec is satisfied when validationStatus === 'pass' OR
+    // excluded === true. Specs that are neither (genuinely un-triaged gaps)
+    // still block submission so accidental omissions don't slip through.
     const standardsStatus = submission.standardsStatus || new Map();
     const missingValidations: string[] = [];
 
@@ -1188,7 +1589,9 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
           ? standardsStatus.get(statusKey)
           : standardsStatus[statusKey];
 
-        if (!status || status.validationStatus !== 'pass') {
+        const passed = status?.validationStatus === 'pass';
+        const excluded = status?.excluded === true;
+        if (!passed && !excluded) {
           missingValidations.push(`Standard ${standard.code}, Spec ${spec.code}`);
         }
       }

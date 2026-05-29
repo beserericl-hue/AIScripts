@@ -50,15 +50,27 @@ export class ValidationService {
    * per-standard. Per-spec failures are swallowed (best-effort seed).
    */
   async runReaderReportSeed(submissionId: string): Promise<{ evaluated: number; failed: number }> {
-    const submission = await Submission.findById(submissionId).select('narratives');
+    const submission = await Submission.findById(submissionId).select('narratives standardsStatus');
     let evaluated = 0;
     let failed = 0;
     if (!submission?.narratives) return { evaluated, failed };
+
+    // CR-050 — skip specs the PC has explicitly marked N/A; they have no
+    // verdict in the reader report.
+    const standardsStatus: any = submission.standardsStatus || new Map();
+    const isExcluded = (std: string, spec: string) => {
+      const key = `${std}_${spec}`;
+      const s = standardsStatus instanceof Map
+        ? standardsStatus.get(key)
+        : standardsStatus[key];
+      return s?.excluded === true;
+    };
 
     const tasks: Array<{ standardCode: string; specCode: string; content: string }> = [];
     submission.narratives.forEach((specMap: any, standardCode: string) => {
       if (specMap && typeof specMap.forEach === 'function') {
         specMap.forEach((data: any, specCode: string) => {
+          if (isExcluded(standardCode, specCode)) return;
           const content = data?.content || '';
           if (typeof content === 'string' && content.replace(/<[^>]*>/g, '').trim().length > 0) {
             tasks.push({ standardCode, specCode, content });

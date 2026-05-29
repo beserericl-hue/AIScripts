@@ -3,7 +3,7 @@ name: CR-050 — Intentionally-omitted specs must not block submission
 description: Not every CSHSE spec/subspec applies to every program — some are intentionally left out. Today Final Submit hard-requires EVERY spec to be validationStatus==='pass' (server submitSelfStudy ~submissionController.ts:1051 collects missingValidations for any non-pass spec → 400; client isSelfStudyReadyForSubmit at SelfStudyEditor.tsx:2108 requires every spec 'pass' → Submit CTA disabled). There is no "not applicable / intentionally excluded" state, so an empty-by-design spec blocks the whole submission. This CR adds an explicit per-spec N/A (excluded) state the PC sets with a reason, teaches both submit-readiness gates to treat pass-OR-excluded as satisfied, and surfaces excluded specs as "N/A" (not "fail") in the pre-submission popup, the AI evaluation, and the reader report.
 type: change-request
 cr_id: CR-050
-status: proposed
+status: shipped
 priority: P1
 source: User direction 2026-05-29 — "Not all specs and subspecs will have content. There are some left out intentionally. This should not block submission. Currently I think it does."
 sprint_target: Sprint 2A (submission lockout completion) — pairs with CR-006 (submit readiness) + CR-008 (pre-submission popup).
@@ -11,11 +11,12 @@ tags: [submission, validation, not-applicable, submit-gate, program-coordinator]
 last_reviewed: 2026-05-29
 revision_history:
   - 2026-05-29 — proposed (submit gate confirmed to hard-block on any non-pass spec; no N/A concept exists)
+  - 2026-05-29 — shipped (Submission.standardsStatus.excluded/excludedReason/excludedAt/excludedBy; markSpecNotApplicable + clearSpecNotApplicable endpoints; submitSelfStudy + isSelfStudyReadyForSubmit + workflow-summary denominator all share pass-OR-excluded; SpecNotApplicable view in editor; runReaderReportSeed skips excluded specs; 8 server integration tests + 5 client unit tests passing)
 ---
 
 # CR-050 — Intentionally-omitted specs must not block submission
 
-## Status: PROPOSED 2026-05-29
+## Status: SHIPPED 2026-05-29
 
 ## Source quote
 

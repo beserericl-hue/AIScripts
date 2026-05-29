@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Submission } from '../models/Submission';
+import { recordAuditEvent } from '../services/auditLog';
 import mongoose from 'mongoose';
 
 interface AuthenticatedRequest extends Request {
@@ -121,6 +122,23 @@ export const lockSubmission = async (req: AuthenticatedRequest, res: Response) =
 
     await submission.save();
 
+    // CR-006 S2A.1 — record the reader-lock transition.
+    void recordAuditEvent({
+      action: 'submission.reader_lock',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: req.user!.name
+      },
+      targetType: 'submission',
+      targetId: submissionId,
+      submissionId,
+      payload: {
+        lockReason: submission.readerLock.lockReason,
+        lockedByRole: submission.readerLock.lockedByRole
+      }
+    });
+
     return res.json({
       message: 'Submission locked successfully',
       readerLock: submission.readerLock
@@ -162,6 +180,10 @@ export const unlockSubmission = async (req: AuthenticatedRequest, res: Response)
       });
     }
 
+    // Capture the prior lock for the audit before clearing it.
+    const priorLockedByName = submission.readerLock.lockedByName;
+    const priorLockReason = submission.readerLock.lockReason;
+
     // Unlock
     submission.readerLock = {
       isLocked: false,
@@ -173,6 +195,23 @@ export const unlockSubmission = async (req: AuthenticatedRequest, res: Response)
     };
 
     await submission.save();
+
+    // CR-006 S2A.1 — record who released the reader lock + why.
+    void recordAuditEvent({
+      action: 'submission.reader_unlock',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: req.user!.name
+      },
+      targetType: 'submission',
+      targetId: submissionId,
+      submissionId,
+      payload: {
+        priorLockedByName,
+        priorLockReason
+      }
+    });
 
     return res.json({
       message: 'Submission unlocked successfully',
@@ -236,6 +275,22 @@ export const sendBackForCorrection = async (req: AuthenticatedRequest, res: Resp
 
     await submission.save();
 
+    // CR-006 S2A.1 — record send-back with the reason (the reason is the
+    // entire point of this transition; surface it on the audit).
+    void recordAuditEvent({
+      action: 'submission.send_back',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: req.user!.name
+      },
+      targetType: 'submission',
+      targetId: submissionId,
+      submissionId,
+      payload: { sentBackAt: submission.readerLock.sentBackAt },
+      reason
+    });
+
     // TODO: Send notification to program coordinator
 
     return res.json({
@@ -281,12 +336,29 @@ export const clearSentBack = async (req: AuthenticatedRequest, res: Response) =>
       });
     }
 
+    const priorSentBackReason = submission.readerLock?.sentBackReason;
+
     // Clear the sent back status
     submission.readerLock = {
       isLocked: false
     };
 
     await submission.save();
+
+    // CR-006 S2A.1 — record PC clearing the send-back so the timeline shows
+    // "reader sent back → PC re-submitted" as a clean round-trip.
+    void recordAuditEvent({
+      action: 'submission.sent_back_cleared',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: req.user!.name
+      },
+      targetType: 'submission',
+      targetId: submissionId,
+      submissionId,
+      payload: { priorSentBackReason }
+    });
 
     return res.json({
       message: 'Corrections submitted, sent back status cleared',

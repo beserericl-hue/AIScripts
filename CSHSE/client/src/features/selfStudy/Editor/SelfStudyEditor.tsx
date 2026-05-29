@@ -32,6 +32,7 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { IntroductionEditor } from './IntroductionEditor';
 import { SpecAIReview } from './SpecAIReview';
+import { SpecNotApplicable } from './SpecNotApplicable';
 import { ReviewSurface } from './Review/ReviewSurface';
 import { MatrixSurface } from './Review/MatrixSurface';
 import { FinalSubmitModal } from './FinalSubmitModal';
@@ -2042,6 +2043,36 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const handleSubmitSelfStudy = useCallback(() => {
     setFinalSubmitOpen(true);
   }, []);
+
+  // CR-008 / S2A.2 — pre-submission preflight. Fetched only while the
+  // modal is open so we don't poll the server on every dashboard render,
+  // and refetched on each open so the PC sees the latest gaps.
+  const preflightQuery = useQuery({
+    queryKey: ['submission-preflight', submissionId],
+    queryFn: async () => {
+      const r = await api.get(`/api/submissions/${submissionId}/preflight`);
+      return r.data as {
+        submitDisabled: boolean;
+        errors: Array<{ code: string; message: string; standardCode?: string; specCode?: string }>;
+        warnings: Array<{ code: string; message: string; standardCode?: string; specCode?: string }>;
+        counts: { totalSpecs: number; passed: number; excluded: number; satisfied: number; missing: number };
+      };
+    },
+    enabled: !!submissionId && finalSubmitOpen,
+    refetchOnWindowFocus: false,
+  });
+
+  // CR-008 — "Go to" from a preflight error row navigates to the spec in
+  // the editor and closes the modal so the PC lands on the fix surface.
+  const handleGoToSpec = useCallback(
+    (standardCode: string, specCode: string) => {
+      setSelectedStandard(standardCode);
+      setSelectedSpec(specCode);
+      setActiveView(null);
+      setFinalSubmitOpen(false);
+    },
+    []
+  );
   const handleFinalSubmitConfirm = useCallback(
     async (submissionNote: string) => {
       try {
@@ -2066,8 +2097,12 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
     for (const standard of standards) {
       for (const spec of standard.specifications || []) {
-        total++;
         const status = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
+        // CR-050 — excluded specs drop out of the denominator entirely;
+        // they're not "validated" but also not part of the work that needs
+        // doing. Keeps the X/Y counter honest.
+        if (status?.excluded === true) continue;
+        total++;
         if (status?.validationStatus === 'pass') {
           validated++;
         }
@@ -2101,15 +2136,18 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     [draftsBuckets, draftsTags, draftsCvs, draftsEvidenceDocs, draftsIntroductions, draftsApprovedIds, draftsDiscardedIds]
   );
 
-  // Check if entire self-study is ready for submission (all specs validated)
+  // Check if entire self-study is ready for submission.
+  // CR-050 — a spec is satisfied when validationStatus === 'pass' OR
+  // excluded === true (PC has explicitly marked it not applicable).
+  // Mirrors the server's submitSelfStudy gate so the CTA's enabled state
+  // matches what the server will actually accept.
   const isSelfStudyReadyForSubmit = React.useMemo(() => {
     if (!standards || !submission?.standardsStatus) return false;
 
-    // Check ALL specs across ALL standards
     return standards.every(standard =>
       (standard.specifications || []).every(spec => {
         const status = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
-        return status?.validationStatus === 'pass';
+        return status?.validationStatus === 'pass' || status?.excluded === true;
       })
     );
   }, [standards, submission?.standardsStatus]);
@@ -2691,6 +2729,23 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     standardCode={selectedStandard}
                     specCode={selectedSpec}
                     canEvaluate={isProgramCoordinator && !isReadOnly}
+                  />
+                )}
+                {selectedSpec && (
+                  /* CR-050 — PC may mark this spec Not Applicable so it
+                     does not block Final Submit. */
+                  <SpecNotApplicable
+                    submissionId={submissionId}
+                    standardCode={selectedStandard}
+                    specCode={selectedSpec}
+                    excluded={
+                      ((submission as any)?.standardsStatus?.[`${selectedStandard}_${selectedSpec}`]?.excluded) === true
+                    }
+                    excludedReason={
+                      (submission as any)?.standardsStatus?.[`${selectedStandard}_${selectedSpec}`]?.excludedReason
+                    }
+                    canToggle={isProgramCoordinator}
+                    disabled={isReadOnly}
                   />
                 )}
                 {!selectedSpec && (
@@ -4065,7 +4120,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         </div>
       )}
 
-      {/* CR-006 / S2A.5 — final-submit confirm modal */}
+      {/* CR-006 / S2A.5 — final-submit confirm modal.
+          CR-008 / S2A.2 — wired with preflight errors + warnings + "Go to". */}
       <FinalSubmitModal
         open={finalSubmitOpen}
         onClose={() => setFinalSubmitOpen(false)}
@@ -4073,6 +4129,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         validated={validationProgress.validated}
         total={validationProgress.total}
         busy={submitSelfStudyMutation.isPending}
+        preflight={preflightQuery.data ?? null}
+        preflightLoading={preflightQuery.isLoading}
+        onGoToSpec={handleGoToSpec}
       />
 
           </div>

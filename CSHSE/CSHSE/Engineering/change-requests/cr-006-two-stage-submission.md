@@ -3,12 +3,15 @@ name: CR-006 — Two-stage submission (per-section vs final)
 description: PC submits each section for review during editing; final-submit happens once when the whole self-study is ready and triggers the PC lockout.
 type: change-request
 cr_id: CR-006
-status: in-progress
+status: shipped
 priority: P0
 source: [[webinar-action-items-2026-05-20#1-13-05]]
-sprint_target: Sprint 2
+sprint_target: Sprint 2A (S2A.0/.1/.2/.3) — submit gate, audit on every transition, preflight popup, N/A escape.
 tags: [submission, workflow, pc, lockout]
 last_reviewed: 2026-05-29
+revision_history:
+  - 2026-05-20 — proposed
+  - 2026-05-29 — shipped: per-standard submit + revert (CR-006 core); FinalSubmitModal + audited final-submit; S2A.1 audit on reader-lock/unlock/send-back/sent_back_cleared/reader-assigned; S2A.2 preflight popup; S2A.3 (CR-050) N/A escape. CR-008 audited-override branch remains for Sprint 2B.
 ---
 
 # CR-006 — Two-stage submission (per-section vs final)

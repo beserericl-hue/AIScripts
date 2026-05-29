@@ -14,6 +14,10 @@ import {
   evaluateSpec,
   recordSectionEvalOverride,
   markStandardComplete,
+  markSpecNotApplicable,
+  clearSpecNotApplicable,
+  adminUnlockSubmission,
+  getSubmissionPreflight,
   listSubmissions,
   createSubmission
 } from '../controllers/submissionController';
@@ -116,11 +120,31 @@ router.get('/:submissionId/matrix-state', getMatrixState);
 router.post('/:submissionId/matrix-state', submissionLockout, setMatrixRowEdit);
 
 /**
+ * @route   GET /api/submissions/:submissionId/preflight
+ * @desc    CR-008 / S2A.2 — structured "what's missing" + "what's worth
+ *          knowing" for the FinalSubmitModal. Mirrors the server submit
+ *          gate so the popup and the server agree on readiness.
+ * @access  Private (PC owner, Admin)
+ */
+router.get('/:submissionId/preflight', getSubmissionPreflight);
+
+/**
  * @route   POST /api/submissions/:submissionId/submit
  * @desc    Submit the entire self-study for review (locks the submission)
  * @access  Private (Program Coordinator only - must be owner)
  */
 router.post('/:submissionId/submit', submitSelfStudy);
+
+/**
+ * @route   POST /api/submissions/:submissionId/unlock
+ * @desc    CR-005 S2A.4 — Admin-only override that reverts a final-submitted
+ *          submission to in_progress + clears any reader lock. Distinct
+ *          from the reader-side DELETE /api/submissions/:id/lock, which
+ *          only clears a reader lock (and cannot lift the system lock).
+ * @access  Private (Admin or superuser only)
+ * @body    { reason?: string }
+ */
+router.post('/:submissionId/unlock', adminUnlockSubmission);
 
 /**
  * @route   POST /api/submissions/:submissionId/standards/:standardCode/submit
@@ -180,5 +204,21 @@ router.post('/:submissionId/standards/:standardCode/specs/:specCode/override', r
  * @access  Private (Program Coordinator, Admin)
  */
 router.post('/:submissionId/standards/:standardCode/complete', submissionLockout, markStandardComplete);
+
+/**
+ * @route   POST /api/submissions/:submissionId/standards/:standardCode/specs/:specCode/not-applicable
+ * @desc    CR-050 — Mark a single spec as "not applicable / intentionally
+ *          omitted". The submit-readiness gate then treats it as satisfied.
+ * @access  Private (Program Coordinator owner, Admin)
+ * @body    { reason?: string }
+ */
+router.post('/:submissionId/standards/:standardCode/specs/:specCode/not-applicable', submissionLockout, markSpecNotApplicable);
+
+/**
+ * @route   DELETE /api/submissions/:submissionId/standards/:standardCode/specs/:specCode/not-applicable
+ * @desc    CR-050 — Clear the N/A flag on a spec.
+ * @access  Private (Program Coordinator owner, Admin)
+ */
+router.delete('/:submissionId/standards/:standardCode/specs/:specCode/not-applicable', submissionLockout, clearSpecNotApplicable);
 
 export default router;

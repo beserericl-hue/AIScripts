@@ -3,12 +3,15 @@ name: CR-008 — Pre-submission validation popup
 description: Final submit triggers an error/warning summary so the PC catches missing evidence, narrative, or standards before lockout.
 type: change-request
 cr_id: CR-008
-status: proposed
+status: in-progress
 priority: P1
 source: [[webinar-action-items-2026-05-20#1-08-47]], [[webinar-action-items-2026-05-20#1-12-45]]
-sprint_target: Sprint 2 or 3
+sprint_target: Sprint 2A (S2A.2) — server + modal landed; override + audit are Sprint 2B.
 tags: [validation, submission, ux, pc]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
+revision_history:
+  - 2026-05-20 — proposed
+  - 2026-05-29 — Phase 1 shipped: GET /api/submissions/:id/preflight + FinalSubmitModal wired (errors/warnings/Go-to). Override + audited override-reason capture still pending (Sprint 2B).
 ---
 
 # CR-008 — Pre-submission validation popup

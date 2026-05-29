@@ -9,6 +9,9 @@ export type AuditAction =
   | 'submission.lock'
   | 'submission.reader_lock'
   | 'submission.reader_unlock'
+  | 'submission.sent_back_cleared'  // CR-006 S2A.1 — PC re-submits after send-back
+  | 'submission.spec_marked_na'    // CR-050 — PC marks spec not applicable
+  | 'submission.spec_na_cleared'   // CR-050 — PC restores spec from N/A
   | 'reader.assigned'
   | 'reader.removed'
   | 'comment.relayed'

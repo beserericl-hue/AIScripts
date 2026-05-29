@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { Review, IReview, ComplianceStatus } from '../models/Review';
 import { Submission } from '../models/Submission';
 import { User } from '../models/User';
+import { recordAuditEvent } from '../services/auditLog';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -10,6 +11,8 @@ interface AuthenticatedRequest extends Request {
     role: string;
     firstName?: string;
     lastName?: string;
+    name?: string;
+    email?: string;
   };
 }
 
@@ -624,6 +627,28 @@ export const assignReaders = async (req: AuthenticatedRequest, res: Response) =>
     submission.assignedReaders = readerIds.map(id => new mongoose.Types.ObjectId(id));
     submission.status = 'readers_assigned';
     await submission.save();
+
+    // CR-006 S2A.1 — record reader assignment per reader (one entry each so
+    // the timeline shows who and when, not a single fan-out blob).
+    for (const r of readers) {
+      void recordAuditEvent({
+        action: 'reader.assigned',
+        actor: {
+          id: req.user!.id,
+          role: req.user!.role,
+          name: req.user!.name || req.user!.email || `${req.user!.firstName || ''} ${req.user!.lastName || ''}`.trim()
+        },
+        targetType: 'submission',
+        targetId: submissionId,
+        submissionId,
+        payload: {
+          readerId: (r as any)._id?.toString?.() || String((r as any)._id),
+          readerName: (r as any).name,
+          readerRole: (r as any).role,
+          totalReviewers
+        }
+      });
+    }
 
     return res.json({
       success: true,

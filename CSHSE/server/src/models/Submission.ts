@@ -45,6 +45,14 @@ export interface IStandardStatusInfo {
   lastModified: Date;
   submittedAt?: Date;
   validatedAt?: Date;
+  // CR-050 — per-spec "not applicable / intentionally excluded" state. The
+  // PC sets this with a reason; submit-readiness treats `excluded === true`
+  // as equivalent to `validationStatus === 'pass'` for the submit gate.
+  // Absent (undefined / false) means "not excluded" — no migration needed.
+  excluded?: boolean;
+  excludedReason?: string;
+  excludedAt?: Date;
+  excludedBy?: mongoose.Types.ObjectId;
 }
 
 export interface ISelfStudyProgress {
@@ -205,7 +213,12 @@ const StandardStatusInfoSchema = new Schema<IStandardStatusInfo>({
   },
   lastModified: { type: Date, default: Date.now },
   submittedAt: Date,
-  validatedAt: Date
+  validatedAt: Date,
+  // CR-050 — N/A flag + provenance
+  excluded: { type: Boolean, default: undefined },
+  excludedReason: { type: String, default: undefined },
+  excludedAt: { type: Date, default: undefined },
+  excludedBy: { type: Schema.Types.ObjectId, ref: 'User', default: undefined }
 }, { _id: false });
 
 const SelfStudyProgressSchema = new Schema<ISelfStudyProgress>({
