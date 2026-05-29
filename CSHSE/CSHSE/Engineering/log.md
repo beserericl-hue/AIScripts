@@ -1592,3 +1592,11 @@ Ran a reconciliation of the CR tracker + sprint plan against the actual `develop
 The new plan adds a **Logical starting point** section: (1) prove the lockout/submission stack (½ day) → promote CR-005/006 to shipped if green, (2) smoke the reader server endpoints (½ day), (3) begin the reader client (Sprint 3) — the highest-leverage first build that unblocks CR-018's finish, the compilation tab, and board decisions.
 
 Updated: [[sprint-plan-2026-05-20]] → `status: superseded` + banner; [[index]] plans section → 05-29 marked CURRENT.
+
+## [2026-05-29] update | CR-049 — AI section evaluation (replaces n8n); plan gains Sprint 2.5
+
+User reviewing the new plan flagged a missing capability: the **final AI review** of a self-study section — narrative + supporting-evidence list + submitted files + scraped web links → **pass / needs-improvement / fail + rationale**, judged against the reader-review criteria, to give the PC improvement feedback now and seed the reader report on submission. Not in any sprint.
+
+Reconciliation confirmed three things: (1) the feature is genuinely absent; (2) the existing per-section validate call is **broken** — `submissionController.ts:550,758` call `ValidationService.validateSection`, which doesn't exist on the class (`validationService.ts` has `triggerValidation:47`, `validateStandard:592`); (3) the real validation path is an **n8n webhook** (`triggerValidation` → `/api/webhooks/n8n/callback`), pass/fail only.
+
+Created [[cr-049-ai-section-evaluation-against-reader-criteria]] (P1, proposed): new cshse-ai `POST /ai/section/evaluate` reusing the CR-018 evidence blocks + a web-link scraper; server wiring replaces the broken call; `ValidationResult` gains `needs_improvement` + rationale; n8n validation webhook retired. Added **Sprint 2.5** to [[sprint-plan-2026-05-29]] (between submission-lockout completion and the reader client — it fixes a submit-path bug R.1 will hit and pre-populates the reader report). Horizon ~12 → ~13.5 weeks. Added CR-049 row to [[change-requests/index]].

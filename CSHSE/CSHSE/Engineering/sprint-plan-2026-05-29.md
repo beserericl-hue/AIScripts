@@ -4,7 +4,7 @@ description: Re-baselined roadmap after a code-vs-vault reconciliation on 2026-0
 type: plan
 tags: [sprint-plan, roadmap, reconciliation, post-import-wizard]
 plan_date: 2026-05-29
-horizon: ~12 weeks (Sprint R + 6 × 2-week sprints)
+horizon: ~13.5 weeks (Sprint R + Sprint 2.5 + 6 × 2-week sprints)
 status: proposed
 supersedes: sprint-plan-2026-05-20
 last_reviewed: 2026-05-29
@@ -86,6 +86,24 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 
 ---
 
+# Sprint 2.5 — AI section evaluation (replaces n8n) (1.5 weeks)
+
+**Source:** [[cr-049-ai-section-evaluation-against-reader-criteria]] (new, surfaced 2026-05-29).
+
+**Goal:** The "final AI review" of a section — narrative + supporting-evidence list + submitted files + scraped web links → **pass / needs-improvement / fail + rationale**, judged against the reader-review criteria. Feeds the PC's improvement loop now and pre-populates the reader report on submission. Built on cshse-ai (reusing the CR-018 evidence blocks); **retires the n8n validation webhook.**
+
+**Why here (not later):** it fixes a live bug — `submissionController.ts:550,758` call `ValidationService.validateSection`, which **does not exist** (the real path is the n8n `triggerValidation`). That broken call sits in the submit path Sprint R.1 verifies, so this is effectively blocking. Pulling it forward also discharges CR-018's n8n-archive precedent for the validation half.
+
+- **S2.5.1 — cshse-ai `POST /ai/section/evaluate`.** Compose narrative + evidence (reuse `ai-service/app/evidence/`) + files + a new web-link scraper → Haiku adjudication against the rubric criteria; per-spec verdict + rationale + criteria coverage + improvement suggestions. 1 spec or many.
+- **S2.5.2 — Server wiring + n8n removal.** `cshseAiClient.evaluateSection`; replace the broken `validateSection` calls; add `needs_improvement` + `rationale` to `ValidationResult`; drop the n8n validation webhook + callback branch.
+- **S2.5.3 — Editor surface.** Point the existing per-section "validate / Passed" affordance at the new endpoint; render verdict + rationale + suggestions; add "Evaluate all" for a standard / pre-submit.
+
+**Depends on:** CR-003 (rubric criteria text per spec), CR-018 (evidence blocks + n8n-archive pattern). **Feeds:** the reader-report generator (Sprint 5).
+
+**Estimate:** ~7 days.
+
+---
+
 # Sprint 3 — Reader review client (2 weeks, the big missing piece)
 
 **Goal:** Build the reader-facing app on top of the existing server endpoints. This is greenfield CLIENT work; the server (Score 0-3, reviewController, access gating) already exists.
@@ -148,9 +166,10 @@ CR-019 stays **rejected** — no beta institution surfaced a JV need. Revive onl
 
 ## Critical path & sequencing
 
-1. **Sprint R first, always.** Everything below assumes the server scaffolding works; verify it before estimating.
-2. **Sprint 3 (reader client) unblocks the most.** CR-018 finish (S4.1), the compilation tab (S5.1), and board decisions (S7.1) all need a reader app to exist.
-3. **The greenfield short-list** (CR-004, 008, 010, 011, 021, 023) is the only from-scratch work; everything else is client-over-existing-server or verification.
+1. **Sprint R first, always.** Everything below assumes the server scaffolding works; verify it before estimating. R.1 will surface the broken `validateSection` call → it's a CR-049 dependency, not a lockout failure.
+2. **Sprint 2.5 (CR-049) is effectively a blocker.** The submit path's per-section validate is broken and n8n-bound; fix it (on cshse-ai) before relying on the submit/review loop. It also pre-populates the reader report, so it precedes the reader client's review surface.
+3. **Sprint 3 (reader client) unblocks the most.** CR-018 finish (S4.1), the compilation tab (S5.1), and board decisions (S7.1) all need a reader app to exist.
+4. **The greenfield short-list** (CR-004, 008, 010, 011, 021, 023) plus CR-049 is the only from-scratch work; everything else is client-over-existing-server or verification.
 
 ## Risk register (delta from 05-20)
 
@@ -170,6 +189,7 @@ This is the most-built, least-risky piece and it's the gate for the reader half.
 - PC `submitStandard` → status flips, still editable; `revertStandard` → back to in_progress.
 - PC `submitSelfStudy` (final) → `submissionLockout` returns **403 LOCKED** on a subsequent PC narrative PATCH; admin PATCH → 200; print/read stays open.
 - Confirm an `AuditLogEntry` is written on each transition (`services/auditLog.ts:20`).
+- **Known bug R.1 will hit:** `submitStandard`/`revalidateFailed` call `validationService.validateSection` (`submissionController.ts:550,758`), which **does not exist** on `ValidationService` — the per-section validate path throws. This is fixed by **Sprint 2.5 / [[cr-049-ai-section-evaluation-against-reader-criteria]]**. For R.1, verify lockout mechanics independently of the validate step (submit-self-study → 403 LOCKED), and log the broken validate call as a CR-049 dependency rather than a lockout failure.
 - **If green:** mark CR-005 + CR-006 **shipped**. **If gaps:** they become the Sprint 2A backlog (most likely gap: audit-on-transition + the CR-008 preflight popup, which is genuinely missing).
 
 ### Step 2 — Smoke the reader server endpoints (½ day)
