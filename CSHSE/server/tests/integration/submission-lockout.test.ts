@@ -200,6 +200,31 @@ describe('R.1 — known-broken submit paths (characterization)', () => {
     expect(fresh.standardsStatus.get('1')?.validationStatus).toBe('fail');
   });
 
+  // CR-049 Phase 2 — SYSTEM test of the full submit→AI-eval→validated chain
+  // through the HTTP route, with the AI returning a 'pass' verdict.
+  it('submitStandard validates the standard (pass) when the AI returns pass (CR-049)', async () => {
+    vi.spyOn(cshseAiClient, 'evaluateSection').mockResolvedValue({
+      perSpec: [{
+        standardCode: '1', specCode: 'a', verdict: 'pass',
+        rationale: 'Meets the criteria.', criteriaCoverage: [], improvementSuggestions: [], sourcesUsed: {},
+      }],
+      links: [],
+    } as any);
+    const { user } = await createUser({ role: 'program_coordinator' });
+    const sub = await seedSubmission({ submitterId: user._id, status: 'in_progress' });
+    await Submission.updateOne(
+      { _id: sub._id },
+      { $set: { 'narratives.1.a': { content: '<p>We are regionally accredited by MSCHE.</p>', lastModified: new Date(), isComplete: false, linkedDocuments: [] } } }
+    );
+    const res = await request(app)
+      .post(`/api/submissions/${sub._id}/standards/1/submit`)
+      .set('Authorization', `Bearer ${signTokenFor(user as any)}`)
+      .send({});
+    expect(res.status).toBe(200);
+    const fresh: any = await Submission.findById(sub._id);
+    expect(fresh.standardsStatus.get('1')?.validationStatus).toBe('pass');
+  });
+
   // S2A.0 FIXED the "always 400 no-active-spec" bug. submitSelfStudy now
   // resolves the required specs from getAllStandards() and reaches the
   // readiness gate: an unvalidated submission returns 400 "All
