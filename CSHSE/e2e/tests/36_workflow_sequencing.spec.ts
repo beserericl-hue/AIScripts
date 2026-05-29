@@ -31,7 +31,37 @@ test.describe('Self-Study editor — workflow sequencing', () => {
   let seed: SeedResult | undefined;
 
   test.beforeEach(async () => {
-    seed = await seedFixture('wizard_review_minimal');
+    // wizard_review_minimal plants drafts in client localStorage (so the
+    // editor opens on Review) but does NOT persist Submission.aiReviewState
+    // server-side. The "Finish review" endpoint operates on the server
+    // state, so seed a matching reviewState block too (in production the
+    // review state is always persisted via CR-043 apply/merge).
+    seed = await seedFixture('wizard_review_minimal', {
+      reviewState: {
+        buckets: {
+          '1.a': {
+            standardCode: '1',
+            specCode: 'a',
+            narratives: [
+              { sectionId: 'rs-n1', heading: 'h', snippet: 's', wordCount: 1 },
+              { sectionId: 'rs-n2', heading: 'h', snippet: 's', wordCount: 1 },
+            ],
+            evidenceText: [],
+            evidenceFiles: [],
+            matrixCells: [],
+          },
+        },
+        tags: [],
+        cvs: [{ sectionId: 'rs-cv1', personName: 'Jane Doe' }],
+        evidenceDocs: [{ sectionId: 'rs-ed1', docSubKind: 'syllabus' }],
+        introductions: { document: { items: [{ sectionId: 'rs-in1' }] } },
+        placeholderSections: [],
+        approvedIds: [],
+        discardedIds: [],
+        itemSources: {},
+        mergeLog: [],
+      },
+    });
   });
 
   test.afterEach(async () => {

@@ -1562,3 +1562,19 @@ Two PC-reported sequencing bugs on the Self-Study editor, fixed in `client/src/f
 Tests: `e2e/tests/36_workflow_sequencing.spec.ts` (new, 2 tests) + fixed a pre-existing `/^Upload$/i` → `/Upload/` mismatch in `30_both_importers` (the Stepper labels the tab "1 Upload"). 12/12 green on cshse-develop (36 + 30 + 33 + 04); full client unit suite 191/191.
 
 Note for follow-up: the open-on-Review signal is *parsed-but-not-applied* drafts (Apply doesn't clear the in-memory buckets, so a plain "drafts > 0" would force Review forever). Loosen if the PC wants Review on every entry regardless of apply state.
+
+## [2026-05-29] update | CR-048 shipped — "Finish review" bookkeeping + un-triaged draft counts
+
+Built + shipped [[cr-048-finish-review-bookkeeping]] (commit `6ace428`), verified on cshse-develop. Supersedes the 2026-05-28 follow-up note above: the open-on-Review signal is now **un-triaged** drafts (total − approved − discarded), not "parsed-but-not-applied."
+
+User gap (2026-05-28): drafts only had two implicit end states (approved→applied / discarded); no "I've reviewed enough — the rest aren't included" action, so the count never reached zero and the editor kept auto-opening Review. Two decisions (2026-05-29): **Finish = discard the remainder**; **counts = un-triaged only**.
+
+Delivered:
+- **Server** — `POST /api/submissions/:id/review/finish` (`aiReviewController.finishReview`) discards every un-triaged sectionId (idempotent, owner-PC/admin). `getWorkflowSummary` draft counts now exclude approvedIds + discardedIds.
+- **Client** — `aiImportStore` tracks `discardedIds` (hydrate + partialize + kept in sync on approve/discard) + `finishReviewOnServer()`; `ReviewSurface` gets a "✓ Finish review — exclude remaining (N)" CTA (→ "Review complete" at 0); `SelfStudyEditor.computeDraftsCount` counts un-triaged, driving the DRAFTS badge + open-on-Review.
+- **Tests** — finishReview integration (discard / idempotent / 401) + workflow-summary unresolved-count test + e2e 36 finish-review flow. Server 45/45 in the two touched suites; client 191/191; e2e green on cshse-develop.
+
+Updated:
+- [[change-requests/index]] — CR-048 row → **shipped**.
+
+Status: **shipped**.
