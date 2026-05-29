@@ -41,6 +41,29 @@ On 2026-05-29 I wrote (in CR-049 + the plan) that `submitSelfStudy` "throws/500 
 - **2A.c — CR-050** N/A escape so intentionally-omitted specs don't block.
 - **2A.d — Re-run this verification** end-to-end (submit → locked → 403) once a-c land, then promote CR-005 + CR-006 to shipped.
 
+## R.2 — reader / lead-reader endpoint smoke (truth table)
+
+Walked the natural reader flow against the real endpoints (`server/tests/integration/reader-endpoints-smoke.test.ts`, 2 tests green). **Verdict: the reader/lead-reader server stack is FUNCTIONAL, not dead scaffolding — Sprint 3 (reader client) is greenlit to build on it.**
+
+| Endpoint | Status | Note |
+|---|---|---|
+| `POST /api/reviews/submissions/:id/assign` (admin) | **200** | assigns reader, creates Review |
+| `GET /api/reviews` (reader, getMyReviews) | **200** | returns assigned reviews |
+| `GET /api/reviews/submissions/:id` (lead) | **200** | |
+| `PUT /api/submissions/:id/scores` (reader, 0-3) | **200** | scoring works |
+| `GET /api/submissions/:id/scores` | **200** | |
+| `GET /api/submissions/:id/scores/summary` | **200** | |
+| `POST /api/reviews/:id/submit` (reader) | **400** | alive — precondition (review not complete); not dead |
+| `GET /api/lead-reviews` (lead, getMyCompilations) | **200** | |
+| `POST /api/lead-reviews/submissions/:id` (lead) | **400** | alive — "no submitted reviews" (chain depends on submit) |
+| `GET /api/lead-reviews/:id/comparison` | n/a | not reached (no compilation created) |
+| `PUT …/scores` as program_coordinator | **403** | role gate works |
+
+The two 400s are legitimate gates: `submitReview` requires a complete review, and `createOrGetCompilation` requires at least one submitted review. Both endpoints run — the reader client (Sprint 3) will satisfy the preconditions (score all specs → submit → compile).
+
+**Caveat:** the harness (`tests/setup.ts`) wipes all collections in `afterEach`, so reader smokes must seed within a single test — the first draft's `beforeAll` seeding got wiped and produced false 401s (a test-authoring bug, not an endpoint problem).
+
 ## Artifacts
 
-- `server/tests/integration/submission-lockout.test.ts` — 13 tests; the WORKING ones are permanent regression coverage, the two characterization tests pin the broken behavior and will need updating when 2A.a/2A.b land.
+- `server/tests/integration/submission-lockout.test.ts` — 13 tests; the WORKING ones are permanent regression coverage, the two characterization tests pin the broken behavior and will need updating when 2A.0/CR-049 land.
+- `server/tests/integration/reader-endpoints-smoke.test.ts` — 2 tests; the reader/lead-reader endpoint truth table above.

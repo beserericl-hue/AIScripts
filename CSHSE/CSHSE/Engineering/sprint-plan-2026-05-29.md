@@ -195,8 +195,8 @@ The reconciliation already ran (this plan), and the CR tracker has been correcte
 - ❌ `submitSelfStudy` (Final Submit) **always 400s** — queries `Spec.findOne({ isActive: true })` but Spec has no `isActive` field. → fixed by **S2A.0**.
 - **Verdict:** CR-005 + CR-006 stay `in-progress` (NOT shipped) — the end-to-end submit→lockout loop can't run until S2A.0 + CR-049 land.
 
-### Step 2 — Smoke the reader server endpoints (½ day) — NEXT
-Hit `reviewController`, `scores`, `leadReaderController`, `Assignment` with a seeded `submitted` submission. Record functional-vs-dead in a one-page truth table. (Note: producing a *real* `submitted` submission now requires S2A.0 first, or seeding `status: 'submitted'` directly as R.1 did.)
+### Step 2 — Smoke the reader server endpoints ✅ DONE 2026-05-29 — see [[submission-stack-verification-2026-05-29]]
+Truth table captured (`server/tests/integration/reader-endpoints-smoke.test.ts`). **Verdict: the reader/lead-reader server stack is FUNCTIONAL** — assign / getMyReviews / scores (0-3) / summary / getMyCompilations all 200; role gate 403s a non-reader; the two 400s (submitReview, createOrGetCompilation) are legitimate preconditions, not dead code. **Sprint 3 (reader client) is greenlit to build on these endpoints.**
 
 ### Step 3 — Begin the reader client (Sprint 3) — the first real build
 Unchanged: scaffold `features/reader/` + a role-gated `reader` route listing `submitted+` submissions, then the per-spec 0-3 score selector wired to the existing `Score` model.

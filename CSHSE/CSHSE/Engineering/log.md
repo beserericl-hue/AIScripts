@@ -1631,3 +1631,7 @@ Ran Sprint R.1 from [[sprint-plan-2026-05-29]]: 13 integration tests in `server/
 **Correction:** my earlier note that submitSelfStudy "500s on `activeSpec.standards`" was wrong — it 400s first on the `{isActive:true}` mismatch and never reaches that line. Corrected in the verification page + plan. (Exactly why R.1 runs before building.)
 
 Updated [[sprint-plan-2026-05-29]] (R.1 done + new S2A.0 active-spec fix, do-first) and added [[submission-stack-verification-2026-05-29]] to the index.
+
+## [2026-05-29] audit | Sprint R.2 — reader/lead-reader endpoints smoke (all functional)
+
+Walked the reader flow against the real endpoints (`server/tests/integration/reader-endpoints-smoke.test.ts`, green). **Verdict: the reader/lead-reader SERVER stack is functional, not dead scaffolding** — assign / getMyReviews / scores (0-3) / summary / getMyCompilations all 200; non-reader scoring 403s; the two 400s (submitReview, createOrGetCompilation) are legitimate preconditions (review-complete / submitted-review-exists). **Sprint 3 (reader client) greenlit.** Recorded the truth table in [[submission-stack-verification-2026-05-29]]; marked R.2 done in [[sprint-plan-2026-05-29]]. (Test-authoring note: the harness wipes collections per-test, so reader smokes seed within one test.)
