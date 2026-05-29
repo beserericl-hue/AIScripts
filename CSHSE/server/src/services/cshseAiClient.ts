@@ -36,20 +36,36 @@ function signOutgoing(body: string): { signature: string } {
   return { signature: `t=${ts},v1=${digest}` };
 }
 
-async function postSigned<T>(path: string, payload: object): Promise<{
+// Default per-call timeout so a stuck ai-service can't hang a caller
+// (e.g. the submit path's section evaluation). Overridable per call.
+const DEFAULT_TIMEOUT_MS = 60_000;
+
+async function postSigned<T>(
+  path: string,
+  payload: object,
+  timeoutMs: number = DEFAULT_TIMEOUT_MS
+): Promise<{
   status: number;
   body: T;
 }> {
   const body = JSON.stringify(payload);
   const { signature } = signOutgoing(body);
-  const res = await fetch(`${getAIServiceUrl()}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Service-Signature': signature
-    },
-    body
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${getAIServiceUrl()}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Service-Signature': signature
+      },
+      body,
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   const text = await res.text();
   let parsed: any = null;
   try {

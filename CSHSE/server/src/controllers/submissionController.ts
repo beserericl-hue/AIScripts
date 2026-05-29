@@ -846,6 +846,71 @@ export const getFailedValidations = async (req: AuthenticatedRequest, res: Respo
 };
 
 /**
+ * CR-049 Phase 3 — latest AI section evaluation for a spec (verdict +
+ * rationale + criteria coverage + improvement suggestions). Powers the
+ * editor's "AI Review" panel. Read-only.
+ */
+export const getSpecEvaluation = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId, standardCode, specCode } = req.params;
+    const submission = await Submission.findById(submissionId).select('institutionId').lean();
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+    const latest = await validationService.getLatestValidation(submissionId, standardCode, specCode);
+    return res.json({
+      evaluation: latest?.result ?? null,
+      validatedAt: latest?.validatedAt ?? null
+    });
+  } catch (error) {
+    console.error('Get spec evaluation error:', error);
+    return res.status(500).json({ error: 'Failed to get spec evaluation' });
+  }
+};
+
+/**
+ * CR-049 Phase 3 — run the AI evaluator for a single spec on demand
+ * ("Run AI Review" button). Evaluates the current narrative against the
+ * rubric criteria and returns + persists the verdict.
+ */
+export const evaluateSpec = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId, standardCode, specCode } = req.params;
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+    // Owner-PC or admin only.
+    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
+    if (
+      !isElevated &&
+      req.user?.role === 'program_coordinator' &&
+      (req.user as any).institutionId &&
+      submission.institutionId &&
+      submission.institutionId.toString() !== (req.user as any).institutionId
+    ) {
+      return res.status(403).json({ error: 'Forbidden: cross-institution access' });
+    }
+
+    const standardNarratives = submission.narratives?.get(standardCode);
+    const narrative = standardNarratives?.get(specCode);
+    const narrativeText = (narrative as any)?.content || '';
+
+    const { result } = await validationService.validateSection({
+      submissionId,
+      standardCode,
+      specCode,
+      narrativeText,
+      validationType: 'manual_save'
+    });
+    return res.json({ evaluation: result });
+  } catch (error) {
+    console.error('Evaluate spec error:', error);
+    return res.status(500).json({ error: 'Failed to evaluate spec' });
+  }
+};
+
+/**
  * Mark a standard as complete (manual)
  */
 export const markStandardComplete = async (req: AuthenticatedRequest, res: Response) => {

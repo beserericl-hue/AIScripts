@@ -31,6 +31,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { IntroductionEditor } from './IntroductionEditor';
+import { SpecAIReview } from './SpecAIReview';
 import { ReviewSurface } from './Review/ReviewSurface';
 import { MatrixSurface } from './Review/MatrixSurface';
 import { FinalSubmitModal } from './FinalSubmitModal';
@@ -2681,7 +2682,18 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     onSelectionChange={isReviewer ? setEditorSelection : undefined}
                     highlightedComment={highlightedComment}
                   />
-                ) : (
+                ) : null}
+                {selectedSpec && (
+                  /* CR-049 Phase 3 — AI Review of this section against the
+                     reader criteria (verdict + rationale + suggestions). */
+                  <SpecAIReview
+                    submissionId={submissionId}
+                    standardCode={selectedStandard}
+                    specCode={selectedSpec}
+                    canEvaluate={isProgramCoordinator && !isReadOnly}
+                  />
+                )}
+                {!selectedSpec && (
                   // CR-039 Phase 2c part 2 — when only a standard is
                   // selected (no spec yet), surface the document-level +
                   // standard-level Introductions so coordinators can

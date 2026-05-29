@@ -10,6 +10,8 @@ import {
   submitSelfStudy,
   revalidateFailed,
   getFailedValidations,
+  getSpecEvaluation,
+  evaluateSpec,
   markStandardComplete,
   listSubmissions,
   createSubmission
@@ -148,6 +150,20 @@ router.post('/:submissionId/revalidate', submissionLockout, revalidateFailed);
  * @query   standardCode - Optional: filter by standard
  */
 router.get('/:submissionId/failed', getFailedValidations);
+
+/**
+ * @route   GET /api/submissions/:submissionId/standards/:standardCode/specs/:specCode/evaluation
+ * @desc    CR-049 — latest AI section evaluation (verdict + rationale) for a spec
+ * @access  Private
+ */
+router.get('/:submissionId/standards/:standardCode/specs/:specCode/evaluation', getSpecEvaluation);
+
+/**
+ * @route   POST /api/submissions/:submissionId/standards/:standardCode/specs/:specCode/evaluate
+ * @desc    CR-049 — run the AI evaluator for one spec on demand ("Run AI Review")
+ * @access  Private (Program Coordinator owner, Admin)
+ */
+router.post('/:submissionId/standards/:standardCode/specs/:specCode/evaluate', evaluateSpec);
 
 /**
  * @route   POST /api/submissions/:submissionId/standards/:standardCode/complete

@@ -22,8 +22,9 @@
  *     not exist on the Spec model (only standardsCount). Throws. The readiness
  *     gate also needs the CR-050 "not applicable" escape.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import request from 'supertest';
+import * as cshseAiClient from '../../src/services/cshseAiClient';
 import mongoose from 'mongoose';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
@@ -48,6 +49,8 @@ async function seedSubmission(overrides: any = {}) {
 }
 
 const LOCKED_STATUSES = ['submitted', 'under_review', 'readers_assigned', 'review_complete'];
+
+afterEach(() => vi.restoreAllMocks());
 
 // recordAuditEvent is fire-and-forget (`void`) in the controllers, so the
 // write can land just after the HTTP response. Poll briefly for it.
@@ -179,6 +182,9 @@ describe('R.1 — known-broken submit paths (characterization)', () => {
   // The verdict→status mapping when the AI IS reachable is covered by
   // validate-section.test.ts (spied client).
   it('submitStandard completes; fail-softs to FAIL when cshse-ai is unreachable (CR-049)', async () => {
+    // Simulate cshse-ai unreachable WITHOUT a real network call (fast + no
+    // post-run unhandled rejection). validateSection catches this → 'fail'.
+    vi.spyOn(cshseAiClient, 'evaluateSection').mockRejectedValue(new Error('ECONNREFUSED'));
     const { user } = await createUser({ role: 'program_coordinator' });
     const sub = await seedSubmission({ submitterId: user._id, status: 'in_progress' });
     await Submission.updateOne(

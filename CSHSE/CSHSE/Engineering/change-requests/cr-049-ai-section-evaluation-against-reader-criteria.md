@@ -27,8 +27,12 @@ revision_history:
 - **n8n validation superseded for the submit path:** `validateSection` (AI) replaces the legacy `triggerValidation` (n8n webhook) for submit/revalidate. The old n8n `triggerValidation` + `/api/webhooks/n8n/callback` branch remain in the tree but are no longer on the submit path; a follow-on can delete them.
 - Tests: `server/tests/integration/validate-section.test.ts` (4 — verdict→status mapping pass/needs_improvement/fail + persistence + fail-soft, cshse-ai spied) + updated the `submission-lockout` characterization (submitStandard now fail-softs, doesn't crash). Full server suite green.
 
+**Phase 3 shipped 2026-05-29 — editor "AI Review" surface.**
+- Server: `GET /:id/standards/:std/specs/:spec/evaluation` (latest `ValidationResult` verdict/rationale/criteriaCoverage) + `POST .../evaluate` ("Run AI Review" — runs `validateSection` for one spec, owner-PC/admin, persists). Wired in `routes/submissions.ts`.
+- Client: `SpecAIReview.tsx` — a pure `SpecAIReviewView` (verdict badge pass/needs-improvement/fail + rationale + suggestions + criteria coverage; readers see the verdict, PCs get a "Run AI Review" button) + a query/mutation container; mounted under the narrative editor in `SelfStudyEditor` for the selected spec.
+- Tests: `client/.../SpecAIReview.test.tsx` (7 — verdict states, empty, suggestions, button fires/disabled/hidden-for-readers) + `server/.../spec-evaluation-endpoint.test.ts` (3 — null-before, run→verdict→GET reflects, cross-institution 403).
+
 **Remaining (scoped):**
-- **Phase 3 — editor surface.** A per-section "Evaluate" action + an "AI Review" panel showing verdict / rationale / improvement suggestions for the selected spec. Needs a small read endpoint (latest `ValidationResult` per spec, exposing `verdict`/`rationale`/`criteriaCoverage`) + a single-spec evaluate trigger, then the panel + query in `SelfStudyEditor`. (PC-facing value — the "feedback to improve the section.")
 - **Phase 4a — Final-Submit auto-eval (reader-report seed).** Must be a **background job**, NOT inline in `submitSelfStudy`: evaluating ~99 specs through the LLM synchronously would time the request out, and fire-and-forget in a Railway container is unreliable (process may be reaped after the response). Design: on final submit, enqueue a batch evaluation (cshse-ai `/ai/section/evaluate` accepts many specs per call); persist the per-spec verdicts as the reader-report seed; surface progress. Deferred to a queue/worker slice.
 - **Phase 4b — reader override → learning loop.** The override UI lives on the reader review surface (**Sprint 3 reader client**, not yet built). CR-049 owns the learning ingest (`section_eval_override` → `/ai/corrections/ingest`), wired when the reader client exists.
 
