@@ -12,6 +12,7 @@ last_reviewed: 2026-05-29
 revision_history:
   - 2026-05-29 — proposed (surfaced during the 2026-05-29 reconciliation as a gap not covered by any sprint)
   - 2026-05-29 — OQ3 resolved: Final Submit auto-runs a full evaluation (re-evaluating every applicable spec, even ones already run) to seed the reader report; excluded/N-A specs ([[cr-050-intentionally-omitted-specs-do-not-block-submission]]) are skipped.
+  - 2026-05-29 — OQ1 resolved (web scrape = raw text, strip HTML, no headless; unevaluable links flagged for human review, not auto-failed) + added the reader override→AI-learning loop (reuses the `/ai/corrections/ingest` RAG store).
 ---
 
 # CR-049 — AI section evaluation against reader-report criteria (replaces n8n validation)
@@ -64,7 +65,8 @@ POST /ai/section/evaluate
 ```
 
 - **Reuse, don't rebuild:** the CR-018 evidence pipeline (`ai-service/app/evidence/` — `extract.py`/`embed.py`/`score.py`, endpoints `/ai/evidence/extract|recommend|score` at `main.py:820/887/907`) already extracts + scores evidence against a spec. The section evaluator composes those + the narrative + a Haiku adjudication against the rubric criteria.
-- **Web-link scraping** is a new sub-component: fetch + extract readable text from each `webLink` (bounded size/time, allow-list-free but timeout-guarded), pass excerpts into the evaluation. (New capability — see Open questions.)
+- **Web-link scraping** is a new sub-component, used to judge whether a *linked page* meets the supporting-evidence criteria for the standard: fetch each `webLink`, **strip HTML to raw text**, and feed that text into the evaluation (bounded size + timeout; no headless render). The verdict treats a passing linked page as satisfied evidence.
+  - **Unevaluable links are flagged, not failed.** If a page can't be meaningfully read as text — an org chart, a diagram, an image-only page, a login-walled doc — the evaluator returns `linkVerdict: 'needs_human_review'` for that link (with the reason) rather than scoring it `fail`. The link is surfaced so a **reader can open it themselves** and judge visually. So a non-text evidence link never silently sinks an otherwise-good section.
 - **Criteria source:** the reader-review criteria = the CSHSE rubric (CR-003 0-3) per spec. The evaluator maps its verdict to the 4-level rubric so the reader report can consume it directly (pass ≈ Largely/Fully; needs-improvement ≈ Partial; fail ≈ Non).
 
 ### Server wiring
@@ -80,10 +82,19 @@ POST /ai/section/evaluate
 - Add a "Evaluate all" action for a whole standard / pre-submit (multiple sections).
 - The verdict + rationale persist so the **reader report generator** (Sprint 5 / report path) pre-populates reader feedback from the AI evaluation.
 
+### Reader override + learning loop (reader-client side, Sprint 3)
+
+The AI verdict is a *seed*, not the final word. On the reader review surface (CR-003 / Sprint 3):
+- The reader sees the AI verdict + rationale + each link's `linkVerdict` (including any `needs_human_review` links to open directly).
+- The reader can **override** the verdict (e.g. an org-chart link the AI couldn't read but the reader confirms is valid → reader marks pass). The override becomes the report's recorded verdict.
+- Each override is **submitted back to the AI for learning** — posted to the existing corrections RAG store via `POST /ai/corrections/ingest` (`ai-service/app/main.py:608`, `ai-service/app/corrections/store.py`, collection `cshse_corrections_{env}`, keyed by institution) with a new `correction_type: 'section_eval_override'` carrying {spec, AI verdict, reader verdict, reason, the link/evidence in question}. Future evaluations surface those overrides as RAG hints, so the evaluator improves on the same institution / similar evidence over time.
+
 ## Acceptance
 
 - `POST /ai/section/evaluate` returns per-spec `verdict ∈ {pass, needs_improvement, fail}` + rationale + criteria coverage, for 1 spec and for many.
-- Web links are fetched + summarized into the evaluation (timeout-guarded; failures degrade gracefully, noted in `sourcesUsed`).
+- Web links are fetched, **stripped to raw text**, and judged against the standard's evidence criteria (timeout-guarded; failures degrade gracefully, noted in `sourcesUsed`).
+- A non-text / unreadable link (org chart, image, login-walled) returns `linkVerdict: 'needs_human_review'` (not `fail`) and is surfaced for the reader to open directly.
+- The reader can **override** the AI verdict on the review surface; the override is recorded as the report verdict AND posted to `/ai/corrections/ingest` (`correction_type: 'section_eval_override'`) so it feeds future evaluations.
 - The in-editor per-section evaluation calls the new endpoint (not n8n) and renders verdict + rationale + improvement suggestions.
 - `submitStandard` + `revalidateFailed` no longer call the non-existent `validateSection`; they call `evaluateSection` and persist `ValidationResult` with the new `needs_improvement` status.
 - The n8n validation webhook path is removed; no validation traffic hits n8n.
@@ -95,8 +106,9 @@ POST /ai/section/evaluate
 ## Files affected
 
 **ai-service**
-- `ai-service/app/section_eval/` (new) — `scrape.py` (web-link text), `evaluate.py` (compose narrative + evidence + files + links → rubric adjudication).
+- `ai-service/app/section_eval/` (new) — `scrape.py` (fetch + strip HTML to text + classify text-evaluable vs needs-human-review), `evaluate.py` (compose narrative + evidence + files + links → rubric adjudication).
 - `ai-service/app/main.py` — `POST /ai/section/evaluate`.
+- `ai-service/app/corrections/store.py` — accept `correction_type: 'section_eval_override'` (reader override → RAG); surfaced as a hint in future `/ai/section/evaluate` calls.
 - `ai-service/tests/test_section_eval.py` (new).
 
 **server**
@@ -117,11 +129,11 @@ POST /ai/section/evaluate
 
 ## Open questions
 
-1. **Web-link scraping scope** — fetch raw text only, or render JS (headless)? Recommendation: raw fetch + readability extraction, timeout 10s/link, cap N links; no headless browser in v1.
+1. **Web-link scraping scope** — **RESOLVED 2026-05-29 (user):** raw fetch + strip HTML to text for evaluation; no headless render. Pages that aren't text-evaluable (org chart / image / diagram) are flagged `needs_human_review` for the reader to open, never auto-failed. Timeout 10s/link, cap N links.
 2. **Verdict ↔ rubric mapping** — is 3-level (pass / needs-improvement / fail) the PC-facing surface while the reader uses the full 4-level (Non/Partial/Largely/Fully)? Recommendation: yes — PC sees 3, stored value carries the 4-level mapping for the reader report.
 3. **Auto-evaluate on submit, or explicit button only?** **RESOLVED 2026-05-29 (user):** BOTH. Explicit "Evaluate" while editing, AND Final Submit **auto-runs a full evaluation** across every applicable spec — re-evaluating even ones already run individually — and seeds the reader report from the result. Excluded / N-A specs ([[cr-050-intentionally-omitted-specs-do-not-block-submission]]) are skipped. So the on-submit pass is the authoritative seed for the reader report, not a shortcut over prior per-section runs.
 
 ## Out of scope
 
 - The reader report generator itself (separate; this CR produces the data it consumes).
-- The reader's manual override of the AI verdict (reader-client work, CR-003 client / Sprint 3).
+- The reader-override **UI** lands on the reader review surface (CR-003 client / Sprint 3). This CR owns the **learning ingest** the override posts to (`section_eval_override` → `/ai/corrections/ingest`) and the evaluator's consumption of those hints; the button itself is built in Sprint 3.

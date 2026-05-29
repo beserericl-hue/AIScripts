@@ -112,6 +112,7 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 - **S3.1 — Reader route + dashboard.** New `features/reader/` + a `reader` route. Reader dashboard lists only submissions at `submitted+` (CR-007 client); "pending PC submission" group shows name only.
 - **S3.2 — Reader review screen + 0-3 score selector (CR-003 client).** Per-spec 4-level selector (Non/Partial/Largely/Fully) with helper text, wired to the `Score` model + `scores`/`reviews` routes. Persist + reload prior score.
 - **S3.3 — Reader access hardening + tests (CR-007).** Integration + E2E: reader on a `draft` submission → 403; on `submitted` → 200, no cross-institution leak.
+- **S3.4 — Reader override of the AI verdict + learning loop (CR-049 reader half).** The review surface shows the CR-049 AI verdict + rationale + per-link `linkVerdict` (with `needs_human_review` links the reader opens directly). The reader can override the verdict; the override becomes the report value AND posts to `/ai/corrections/ingest` (`section_eval_override`) so future evaluations learn from it.
 
 **Estimate:** ~8 days.
 
