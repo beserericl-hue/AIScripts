@@ -1148,6 +1148,15 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
 
     await submission.save();
 
+    // CR-049 Phase 4a — auto-run the AI section evaluation across all specs
+    // with content to seed the reader report. Detached (this is a persistent
+    // Express process, not serverless): the heavy per-spec work runs in the
+    // background so the submit response returns immediately. Best-effort —
+    // a seed failure never blocks the submission.
+    void validationService
+      .runReaderReportSeed(submissionId)
+      .catch((err) => console.error('[CR-049] reader-report seed failed', err));
+
     // CR-006 audit trail — record the final-submit event with the optional
     // submission note the PC enters in the confirm modal.
     const submissionNote = typeof req.body?.submissionNote === 'string'

@@ -32,8 +32,10 @@ revision_history:
 - Client: `SpecAIReview.tsx` — a pure `SpecAIReviewView` (verdict badge pass/needs-improvement/fail + rationale + suggestions + criteria coverage; readers see the verdict, PCs get a "Run AI Review" button) + a query/mutation container; mounted under the narrative editor in `SelfStudyEditor` for the selected spec.
 - Tests: `client/.../SpecAIReview.test.tsx` (7 — verdict states, empty, suggestions, button fires/disabled/hidden-for-readers) + `server/.../spec-evaluation-endpoint.test.ts` (3 — null-before, run→verdict→GET reflects, cross-institution 403).
 
+**Phase 4a shipped 2026-05-29 — Final-Submit auto-eval (reader-report seed).**
+`ValidationService.runReaderReportSeed(submissionId)` re-evaluates every spec that has narrative content (one `validateSection` per spec, each within the 60s client timeout) and persists a fresh `ValidationResult` — the authoritative reader-report seed, produced once at submission even for sections already evaluated per-standard. `submitSelfStudy` fires it **detached** (`void …`) after the save/audit, so the submit response returns immediately; best-effort (a seed failure never blocks the submission). Detached background work is reliable here because cshse-server is a **persistent Express container** (handles SSE/webhooks), not serverless. Test: `validate-section.test.ts` (`runReaderReportSeed` evaluates only content-bearing specs + persists each; full file 5 green; submitSelfStudy still 13/13).
+
 **Remaining (scoped):**
-- **Phase 4a — Final-Submit auto-eval (reader-report seed).** Must be a **background job**, NOT inline in `submitSelfStudy`: evaluating ~99 specs through the LLM synchronously would time the request out, and fire-and-forget in a Railway container is unreliable (process may be reaped after the response). Design: on final submit, enqueue a batch evaluation (cshse-ai `/ai/section/evaluate` accepts many specs per call); persist the per-spec verdicts as the reader-report seed; surface progress. Deferred to a queue/worker slice.
 - **Phase 4b — reader override → learning loop.** The override UI lives on the reader review surface (**Sprint 3 reader client**, not yet built). CR-049 owns the learning ingest (`section_eval_override` → `/ai/corrections/ingest`), wired when the reader client exists.
 
 ## Phase 1 shipped 2026-05-29 — ai-service section evaluator

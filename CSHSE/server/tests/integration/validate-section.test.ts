@@ -13,6 +13,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import mongoose from 'mongoose';
 import { ValidationService } from '../../src/services/validationService';
 import { ValidationResult } from '../../src/models/ValidationResult';
+import { Submission } from '../../src/models/Submission';
 import * as cshseAiClient from '../../src/services/cshseAiClient';
 
 const svc = new ValidationService();
@@ -89,5 +90,46 @@ describe('CR-049 — ValidationService.validateSection', () => {
     });
     expect(result.status).toBe('fail');
     expect(result.rationale).toMatch(/unavailable/i);
+  });
+});
+
+describe('CR-049 Phase 4a — runReaderReportSeed', () => {
+  it('evaluates only specs with content + persists a ValidationResult each', async () => {
+    vi.spyOn(cshseAiClient, 'evaluateSection').mockImplementation(async (req: any) => ({
+      perSpec: [{
+        standardCode: req.specs[0].standardCode,
+        specCode: req.specs[0].specCode,
+        verdict: 'pass',
+        rationale: 'seeded',
+        criteriaCoverage: [],
+        improvementSuggestions: [],
+        sourcesUsed: {},
+      }],
+      links: [],
+    }) as any);
+
+    // 2 specs with content, 1 empty (should be skipped).
+    const sub: any = await Submission.create({
+      submissionId: `SEED-${Date.now().toString(36)}`,
+      institutionName: 'Seed U',
+      institutionId: new mongoose.Types.ObjectId(),
+      programName: 'HS',
+      programLevel: 'bachelors',
+      submitterId: new mongoose.Types.ObjectId(),
+      type: 'initial',
+      status: 'submitted',
+      narratives: {
+        '1': { a: { content: '<p>Real content for 1.a</p>' }, b: { content: '<p></p>' } },
+        '2': { c: { content: 'Plain content for 2.c' } },
+      },
+    });
+
+    const out = await svc.runReaderReportSeed(String(sub._id));
+    expect(out.evaluated).toBe(2); // 1.a + 2.c; 1.b empty → skipped
+    expect(out.failed).toBe(0);
+
+    const saved = await ValidationResult.find({ submissionId: sub._id });
+    expect(saved.length).toBe(2);
+    expect(saved.every((v) => v.result.verdict === 'pass')).toBe(true);
   });
 });

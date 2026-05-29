@@ -43,6 +43,49 @@ export interface WebhookCallResult {
 
 export class ValidationService {
   /**
+   * CR-049 Phase 4a — re-evaluate every spec that has narrative content and
+   * persist a fresh ValidationResult, seeding the reader report. Called
+   * (detached) from Final Submit so the authoritative reader-facing verdicts
+   * are produced once at submission, even for sections already evaluated
+   * per-standard. Per-spec failures are swallowed (best-effort seed).
+   */
+  async runReaderReportSeed(submissionId: string): Promise<{ evaluated: number; failed: number }> {
+    const submission = await Submission.findById(submissionId).select('narratives');
+    let evaluated = 0;
+    let failed = 0;
+    if (!submission?.narratives) return { evaluated, failed };
+
+    const tasks: Array<{ standardCode: string; specCode: string; content: string }> = [];
+    submission.narratives.forEach((specMap: any, standardCode: string) => {
+      if (specMap && typeof specMap.forEach === 'function') {
+        specMap.forEach((data: any, specCode: string) => {
+          const content = data?.content || '';
+          if (typeof content === 'string' && content.replace(/<[^>]*>/g, '').trim().length > 0) {
+            tasks.push({ standardCode, specCode, content });
+          }
+        });
+      }
+    });
+
+    for (const t of tasks) {
+      try {
+        await this.validateSection({
+          submissionId,
+          standardCode: t.standardCode,
+          specCode: t.specCode,
+          narrativeText: t.content,
+          validationType: 'submit'
+        });
+        evaluated++;
+      } catch (err) {
+        failed++;
+        console.error(`[CR-049] reader-report seed: ${t.standardCode}.${t.specCode} failed`, err);
+      }
+    }
+    return { evaluated, failed };
+  }
+
+  /**
    * CR-049 — evaluate a single spec's section against the reader-review
    * criteria via cshse-ai. This is the method the submission controller
    * calls on submit/revalidate; it REPLACES the legacy n8n
