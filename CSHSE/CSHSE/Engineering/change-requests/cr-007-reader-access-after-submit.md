@@ -3,12 +3,12 @@ name: CR-007 — Reader access only after PC final submit
 description: Readers cannot see a self-study at all until the PC clicks final submit. No early access, no preview.
 type: change-request
 cr_id: CR-007
-status: proposed
+status: in-progress
 priority: P0
 source: [[webinar-action-items-2026-05-20#1-19-38]], [[webinar-action-items-2026-05-20#1-20-00]]
 sprint_target: Sprint 2
 tags: [readers, access-control, submission, lockout]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # CR-007 — Reader access only after PC final submit

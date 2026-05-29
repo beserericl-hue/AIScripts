@@ -161,6 +161,27 @@ CR-019 stays **rejected** — no beta institution surfaced a JV need. Revive onl
 | Reader client is larger than estimated (no existing UI patterns to copy) | Medium | Medium | Reuse the PC editor/dashboard component patterns; timebox S3.1 |
 | CR-018 stays blocked indefinitely | Medium | Medium | It is explicitly sequenced after the reader client (S4.1), not before |
 
+## Logical starting point — what to do first
+
+The reconciliation already ran (this plan), and the CR tracker has been corrected: CR-003/005/006/007/009/012/013/020/022 flipped `proposed → in-progress`; the genuinely-greenfield CR-004/008/010/011/016/021/023 stay `proposed`; CR-018 stays `in-progress`. So **Sprint R is now down to verification, not status archaeology.** Start here:
+
+### Step 1 — Prove the submission/lockout stack (½ day, no new code expected)
+This is the most-built, least-risky piece and it's the gate for the reader half. Seed a submission and exercise the real endpoints:
+- PC `submitStandard` → status flips, still editable; `revertStandard` → back to in_progress.
+- PC `submitSelfStudy` (final) → `submissionLockout` returns **403 LOCKED** on a subsequent PC narrative PATCH; admin PATCH → 200; print/read stays open.
+- Confirm an `AuditLogEntry` is written on each transition (`services/auditLog.ts:20`).
+- **If green:** mark CR-005 + CR-006 **shipped**. **If gaps:** they become the Sprint 2A backlog (most likely gap: audit-on-transition + the CR-008 preflight popup, which is genuinely missing).
+
+### Step 2 — Smoke the reader server endpoints (½ day)
+Hit `reviewController`, `scores`, `leadReaderController`, `Assignment` with a seeded `submitted` submission. Record functional-vs-dead in a one-page truth table. This tells you whether Sprint 3 builds on solid endpoints or has to fix them first.
+
+### Step 3 — Begin the reader client (Sprint 3) — the first real build
+This is the highest-leverage build: it unblocks CR-018's finish (S4.1), the compilation tab (S5.1), and board decisions (S7.1), none of which can be exercised without a reader app.
+- **First commit:** scaffold `client/src/features/reader/` + a `reader` route in `App.tsx`, gated to the reader/lead-reader roles, listing only `submitted+` submissions (CR-007 client).
+- **Then:** the per-spec 0-3 score selector (CR-003 client) wired to the existing `Score` model — confirm/correct, not build-from-scratch, on the server side.
+
+**One-line summary:** verify the lockout stack (½ day) → smoke the reader endpoints (½ day) → build the reader client, starting with the route + dashboard. The greenfield features (CR-004/008/010/011/021/023) slot into Sprints 2A/4/5 as called out above; **none of them is the right first move** — the reader client is.
+
 ## Provenance
 
 - Reconciliation performed 2026-05-29 against `developer` @ `f9e6706` (post-CR-048).

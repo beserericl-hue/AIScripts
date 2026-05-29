@@ -3,12 +3,12 @@ name: CR-005 — PC lockout on final submit (read-only + print)
 description: Once the PC clicks final submit, the self-study becomes read-only with print enabled. No edits, no comment view, no narrative changes until unlocked.
 type: change-request
 cr_id: CR-005
-status: proposed
+status: in-progress
 priority: P0
 source: [[webinar-action-items-2026-05-20#1-17-54]], [[webinar-action-items-2026-05-20#1-18-09]]
 sprint_target: Sprint 2
 tags: [lockout, submission, pc, readers, security]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # CR-005 — PC lockout on final submit (read-only + print)

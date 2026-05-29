@@ -3,7 +3,7 @@ name: Change Requests — Catalog
 description: Master index of every shippable behavior change request derived from the 2026-05-20 Beta Group Training webinar and follow-on conversations.
 type: overview
 tags: [change-requests, catalog, webinar, requirements]
-last_reviewed: 2026-05-27
+last_reviewed: 2026-05-29
 ---
 
 # Change Requests — Catalog
@@ -26,11 +26,11 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | CR | Title | Status | Source |
 |---|---|---|---|
 | [[cr-001-both-importers-required]] | Keep both AI wizard + legacy per-standard importer | **shipped** (2026-05-24 — code already in place: both buttons side-by-side on SelfStudyEditor toolbar with Legacy/AI badges; user-guide doc updated with "When to use each" matrix) | [[webinar-action-items-2026-05-20#28-25]] |
-| [[cr-005-pc-lockout-on-final-submit]] | PC locked to read-only + print after final submit | proposed | [[webinar-action-items-2026-05-20#1-17-54]] |
-| [[cr-006-two-stage-submission]] | Per-section submit-for-review vs final-submit | proposed | [[webinar-action-items-2026-05-20#1-13-05]] |
-| [[cr-007-reader-access-after-submit]] | Readers see nothing until PC clicks final submit | proposed | [[webinar-action-items-2026-05-20#1-19-38]] |
+| [[cr-005-pc-lockout-on-final-submit]] | PC locked to read-only + print after final submit | in-progress | [[webinar-action-items-2026-05-20#1-17-54]] |
+| [[cr-006-two-stage-submission]] | Per-section submit-for-review vs final-submit | in-progress | [[webinar-action-items-2026-05-20#1-13-05]] |
+| [[cr-007-reader-access-after-submit]] | Readers see nothing until PC clicks final submit | in-progress | [[webinar-action-items-2026-05-20#1-19-38]] |
 | [[cr-004-comment-threading-identity-redaction]] | Reader names hidden from PC + Julia relays | proposed | [[webinar-action-items-2026-05-20#1-18-28]] |
-| [[cr-003-zero-to-three-compliance-rubric]] | Non / Partial / Largely / Fully compliant rubric | proposed | [[webinar-action-items-2026-05-20#1-05-23]] |
+| [[cr-003-zero-to-three-compliance-rubric]] | Non / Partial / Largely / Fully compliant rubric | in-progress | [[webinar-action-items-2026-05-20#1-05-23]] |
 | [[cr-017-cross-institution-isolation-audit]] | Documented data-flow audit for cross-institution isolation | **shipped** (2026-05-24 — audit + Gap 1 negative-test suite + Gap 2 Qdrant payload-filter test; fixed two real leaks the tests exposed in listSubmissions/getSubmission) | [[webinar-action-items-2026-05-20#24-07]] |
 | [[cr-025-ai-matrix-column-inference]] | AI infers matrix column → course mapping; dropdown replaces free-text | proposed | User observation 2026-05-21 |
 | [[cr-026-matrix-correction-verify-in-context]] | Verify-in-context preview + per-row move/remove for AI matrix corrections | proposed | User observation 2026-05-21 |
@@ -66,11 +66,11 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 |---|---|---|---|
 | [[cr-002-multi-author-wizard-upload]] | Wizard accepts partial documents from multiple PCs | **superseded 2026-05-24** by [[cr-041-multi-file-drag-drop-with-batch-review]] | [[webinar-action-items-2026-05-20#44-07]] |
 | [[cr-008-pre-submission-validation-popup]] | Pre-submit validation popup + warnings | proposed | [[webinar-action-items-2026-05-20#1-08-47]] |
-| [[cr-009-compilation-tab-lead-reader]] | Side-by-side reader-scores compilation tab | proposed | [[webinar-action-items-2026-05-20#compilation-tab]] |
+| [[cr-009-compilation-tab-lead-reader]] | Side-by-side reader-scores compilation tab | in-progress | [[webinar-action-items-2026-05-20#compilation-tab]] |
 | [[cr-010-portal-direct-messaging]] | Reader-to-reader portal direct messaging | proposed | [[webinar-action-items-2026-05-20#1-25-52]] |
 | [[cr-011-suggestions-consolidation-doc]] | Consolidated suggestions doc per standard for VP for accreditation | proposed | [[webinar-action-items-2026-05-20#1-04-19]] |
-| [[cr-012-site-visit-partial-compliance-tracking]] | Partial-compliance carried into site-visit checklist | proposed | [[webinar-action-items-2026-05-20#1-05-53]] |
-| [[cr-013-site-visit-itinerary-builder]] | Itinerary builder for lead reader + PC | proposed | [[webinar-action-items-2026-05-20#1-26-47]] |
+| [[cr-012-site-visit-partial-compliance-tracking]] | Partial-compliance carried into site-visit checklist | in-progress | [[webinar-action-items-2026-05-20#1-05-53]] |
+| [[cr-013-site-visit-itinerary-builder]] | Itinerary builder for lead reader + PC | in-progress | [[webinar-action-items-2026-05-20#1-26-47]] |
 | [[cr-014-drag-drop-multi-file]] | Drag-and-drop multi-file upload to Supporting Evidence | **superseded 2026-05-24** by [[cr-041-multi-file-drag-drop-with-batch-review]] (scope fully absorbed) | [[webinar-action-items-2026-05-20#50-36]] |
 | [[cr-015-narrative-hyperlink-preservation]] | URLs in pasted narrative remain clickable | **shipped** (2026-05-24 — TipTap Link extension explicit autolink/linkOnPaste + apply path auto-linkifies plain-text URLs) | [[webinar-action-items-2026-05-20#56-14]] |
 | [[cr-018-ai-evidence-review-via-cshse-ai]] | Move evidence review off n8n into cshse-ai | **in-progress** (ai-service side built: extract/recommend/score endpoints + pypdf extraction live. NOT fully delivered — no production Reader-side caller, `cshse_evidence_{env}` Qdrant collection not bootstrapped, n8n nodes not archived. Blocked on the unbuilt Reader workflow, Sprints 4-5. Status corrected `shipped` → `in-progress` 2026-05-27.) | [[sprint-plan-2026-05-11#sprint-3]] |
@@ -87,9 +87,9 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 |---|---|---|---|
 | [[cr-016-in-app-bug-reporter]] | Screenshot + paragraph in-app bug report | proposed | [[webinar-action-items-2026-05-20#37-56]] |
 | [[cr-019-joint-venture-pull-forward]] | Consider pulling Joint Venture work earlier | rejected | [[sprint-plan-2026-05-11#sprint-7]] |
-| [[cr-020-account-lock-unlock-audit-trail]] | Admin lock/unlock audit-trail UI | proposed | [[webinar-action-items-2026-05-20#1-11-35]] |
+| [[cr-020-account-lock-unlock-audit-trail]] | Admin lock/unlock audit-trail UI | in-progress | [[webinar-action-items-2026-05-20#1-11-35]] |
 | [[cr-021-reader-uploaded-files]] | Readers can attach files to comments (partial relevant evidence) | proposed | new — implied by relay flow |
-| [[cr-022-reader-assignment-lockout]] | Only Admin can reassign readers post-lockout | proposed | new — implied by lockout flow |
+| [[cr-022-reader-assignment-lockout]] | Only Admin can reassign readers post-lockout | in-progress | new — implied by lockout flow |
 
 ## Retired CRs
 

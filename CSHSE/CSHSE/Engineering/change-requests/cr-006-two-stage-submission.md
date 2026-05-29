@@ -3,12 +3,12 @@ name: CR-006 — Two-stage submission (per-section vs final)
 description: PC submits each section for review during editing; final-submit happens once when the whole self-study is ready and triggers the PC lockout.
 type: change-request
 cr_id: CR-006
-status: proposed
+status: in-progress
 priority: P0
 source: [[webinar-action-items-2026-05-20#1-13-05]]
 sprint_target: Sprint 2
 tags: [submission, workflow, pc, lockout]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # CR-006 — Two-stage submission (per-section vs final)

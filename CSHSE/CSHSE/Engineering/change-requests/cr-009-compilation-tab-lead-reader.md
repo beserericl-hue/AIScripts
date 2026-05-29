@@ -3,12 +3,12 @@ name: CR-009 — Compilation tab (lead reader side-by-side)
 description: Lead reader sees per-spec side-by-side scores from each reader with disagreement highlighting and a Final-score field.
 type: change-request
 cr_id: CR-009
-status: proposed
+status: in-progress
 priority: P1
 source: [[webinar-action-items-2026-05-20#compilation-tab]], [[webinar-action-items-2026-05-20#1-25-52]]
 sprint_target: Sprint 5 or 6
 tags: [readers, lead-reader, compilation, scoring]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # CR-009 — Compilation tab (lead reader side-by-side)

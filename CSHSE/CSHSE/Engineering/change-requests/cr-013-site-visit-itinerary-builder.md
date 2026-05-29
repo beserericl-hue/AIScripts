@@ -3,12 +3,12 @@ name: CR-013 — Site visit itinerary builder
 description: Lead reader + PC collaborate on an itinerary inside the portal. Scheduling moves out of email.
 type: change-request
 cr_id: CR-013
-status: proposed
+status: in-progress
 priority: P1
 source: [[webinar-action-items-2026-05-20#1-26-47]]
 sprint_target: Sprint 6 or 7
 tags: [site-visit, itinerary, scheduling, lead-reader]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # CR-013 — Site visit itinerary builder

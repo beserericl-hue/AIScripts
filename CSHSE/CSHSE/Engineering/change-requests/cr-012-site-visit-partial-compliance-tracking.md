@@ -3,12 +3,12 @@ name: CR-012 — Site visit partial-compliance tracking
 description: Every spec scored "Partial" auto-flags into the site-visit checklist so the visit team verifies it in person.
 type: change-request
 cr_id: CR-012
-status: proposed
+status: in-progress
 priority: P1
 source: [[webinar-action-items-2026-05-20#1-05-53]], [[webinar-action-items-2026-05-20#1-06-03]]
 sprint_target: Sprint 6
 tags: [site-visit, scoring, partial-compliance, readers]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # CR-012 — Site visit partial-compliance tracking

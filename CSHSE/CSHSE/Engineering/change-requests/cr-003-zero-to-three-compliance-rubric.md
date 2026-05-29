@@ -3,12 +3,12 @@ name: CR-003 — 0-3 compliance score rubric
 description: Replace pass/fail with Non / Partial / Largely / Fully compliant (0-3). Partial scores carry to site-visit checklist.
 type: change-request
 cr_id: CR-003
-status: proposed
+status: in-progress
 priority: P0
 source: [[webinar-action-items-2026-05-20#1-05-23]], [[webinar-action-items-2026-05-20#1-06-03]]
 sprint_target: Sprint 2
 tags: [scoring, rubric, readers, reports]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # CR-003 — 0-3 compliance score rubric

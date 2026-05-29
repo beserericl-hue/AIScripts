@@ -3,12 +3,12 @@ name: CR-022 — Reader assignment lockout (Admin only)
 description: Once a self-study is locked, only Admin can change reader assignments. PCs and lead readers cannot.
 type: change-request
 cr_id: CR-022
-status: proposed
+status: in-progress
 priority: P2
 source: implied by [[webinar-action-items-2026-05-20#1-17-54]] lockout flow
 sprint_target: Sprint 3
 tags: [readers, assignments, admin, lockout]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # CR-022 — Reader assignment lockout (Admin only)

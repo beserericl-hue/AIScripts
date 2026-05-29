@@ -3,12 +3,12 @@ name: CR-020 — Admin lock/unlock audit-trail UI
 description: When admin (Julia) locks or unlocks a self-study, account, or reader assignment, the action shows up in a visible audit trail.
 type: change-request
 cr_id: CR-020
-status: proposed
+status: in-progress
 priority: P2
 source: [[webinar-action-items-2026-05-20#1-11-35]], [[security-audit-2026-05-10]]
 sprint_target: Sprint 3
 tags: [audit, admin, security, lockout]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # CR-020 — Admin lock/unlock audit-trail UI
