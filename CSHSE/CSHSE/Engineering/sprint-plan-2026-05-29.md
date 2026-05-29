@@ -79,8 +79,9 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 **Goal:** Finish the submission/lockout layer to its CR acceptance. (Core middleware + endpoints exist per Sprint R; this closes the gaps.)
 
 - **S2A.1 — Audit trail on every transition (CR-006, CR-020 server).** Ensure `recordAuditEvent` is called on submit/revert/final-submit/unlock with `actor`, `action`, `timestamp`, optional note. (`auditLog.ts` exists; wire any missing call sites.)
-- **S2A.2 — Pre-submission validation popup (CR-008, genuinely new).** New `GET /api/submissions/:id/preflight` returning `{ errors, warnings }` (empty specs, missing CSHSE-required specs, short narratives, low-confidence matches). `FinalSubmitModal` consumes it; override requires a reason logged to audit.
-- **S2A.3 — Unlock path + admin-only enforcement (CR-005).** Confirm/`add` an admin `unlock` endpoint; verify PC write → 403 LOCKED, admin write → 200, print endpoint stays open.
+- **S2A.2 — Pre-submission validation popup (CR-008, genuinely new).** New `GET /api/submissions/:id/preflight` returning `{ errors, warnings }` (specs that are neither passed nor N/A, short narratives, low-confidence matches). `FinalSubmitModal` consumes it; "fill it" or "mark N/A" inline; override requires a reason logged to audit.
+- **S2A.3 — Intentionally-omitted specs don't block submission (CR-050, bug fix).** Add a per-spec "Not applicable / excluded" state (PC-set, with reason). Both submit gates — server `submitSelfStudy` (~`submissionController.ts:1051`) and client `isSelfStudyReadyForSubmit` (`SelfStudyEditor.tsx:2108`) — change from "every spec `pass`" to "every spec `pass` OR `excluded`." Excluded specs render N/A (not fail) downstream and are skipped by the CR-049 on-submit eval. **This is a live blocker: today an intentionally-empty spec hard-blocks Final Submit.**
+- **S2A.4 — Unlock path + admin-only enforcement (CR-005).** Confirm/`add` an admin `unlock` endpoint; verify PC write → 403 LOCKED, admin write → 200, print endpoint stays open.
 
 **Estimate:** ~5 days.
 

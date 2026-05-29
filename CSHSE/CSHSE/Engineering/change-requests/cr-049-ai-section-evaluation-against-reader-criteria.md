@@ -11,6 +11,7 @@ tags: [ai-service, evaluation, reader-criteria, n8n-removal, validation, submit-
 last_reviewed: 2026-05-29
 revision_history:
   - 2026-05-29 — proposed (surfaced during the 2026-05-29 reconciliation as a gap not covered by any sprint)
+  - 2026-05-29 — OQ3 resolved: Final Submit auto-runs a full evaluation (re-evaluating every applicable spec, even ones already run) to seed the reader report; excluded/N-A specs ([[cr-050-intentionally-omitted-specs-do-not-block-submission]]) are skipped.
 ---
 
 # CR-049 — AI section evaluation against reader-report criteria (replaces n8n validation)
@@ -87,6 +88,7 @@ POST /ai/section/evaluate
 - `submitStandard` + `revalidateFailed` no longer call the non-existent `validateSection`; they call `evaluateSection` and persist `ValidationResult` with the new `needs_improvement` status.
 - The n8n validation webhook path is removed; no validation traffic hits n8n.
 - The stored evaluation is consumable by the reader-report generator (verdict + rationale mapped to the rubric).
+- **Final Submit auto-runs a full evaluation** across all applicable specs (re-running ones already evaluated) and writes the reader-report seed; excluded/N-A specs ([[cr-050-intentionally-omitted-specs-do-not-block-submission]]) are skipped, not failed.
 - Per-institution isolation honored (HMAC + institutionId payload filter, same as CR-018).
 - Tests: ai-service unit (prompt structure, web-scrape extraction, 1-spec vs many); server integration (evaluateSection client + submit-path persistence + `needs_improvement`); E2E (PC edits a thin section → Evaluate → "needs improvement" + rationale → improves → Evaluate → pass).
 
@@ -117,7 +119,7 @@ POST /ai/section/evaluate
 
 1. **Web-link scraping scope** — fetch raw text only, or render JS (headless)? Recommendation: raw fetch + readability extraction, timeout 10s/link, cap N links; no headless browser in v1.
 2. **Verdict ↔ rubric mapping** — is 3-level (pass / needs-improvement / fail) the PC-facing surface while the reader uses the full 4-level (Non/Partial/Largely/Fully)? Recommendation: yes — PC sees 3, stored value carries the 4-level mapping for the reader report.
-3. **Auto-evaluate on submit, or explicit button only?** Recommendation: explicit "Evaluate" while editing + an automatic pass on Final Submit that populates the reader-report seed.
+3. **Auto-evaluate on submit, or explicit button only?** **RESOLVED 2026-05-29 (user):** BOTH. Explicit "Evaluate" while editing, AND Final Submit **auto-runs a full evaluation** across every applicable spec — re-evaluating even ones already run individually — and seeds the reader report from the result. Excluded / N-A specs ([[cr-050-intentionally-omitted-specs-do-not-block-submission]]) are skipped. So the on-submit pass is the authoritative seed for the reader report, not a shortcut over prior per-section runs.
 
 ## Out of scope
 
