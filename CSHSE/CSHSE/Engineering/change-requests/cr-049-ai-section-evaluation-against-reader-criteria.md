@@ -3,7 +3,7 @@ name: CR-049 — AI section evaluation against reader-report criteria (replaces 
 description: At the end of editing a self-study section (and on submission), the PC needs an AI evaluation of the whole section — narrative + supporting-evidence list + submitted files + scraped web links — judged against the SAME criteria a reader uses, returning pass / needs-improvement / fail + a rationale. Today the per-section "validate" path calls ValidationService.validateSection which DOES NOT EXIST on the class (broken at runtime, submissionController.ts:550,758) and the real validation runs through an n8n webhook returning only pass/fail. This CR builds a real section evaluator on cshse-ai (reusing the CR-018 evidence building blocks), wires the existing per-section "validate" affordance + the submit path to it, and retires the n8n validation workflow. The output feeds the PC's improvement loop now and pre-populates the reader report on submission.
 type: change-request
 cr_id: CR-049
-status: proposed
+status: in-progress
 priority: P1
 source: User direction 2026-05-29 — "there is a final AI review that looks at the Reader Report as a guide to review a section ... narrative, supporting evidence list, files submitted for that spec, web links (scraping the weblink) ... returning the AI evaluation (pass, needs improvement, fail) and rationale ... This will give the PC the feedback to improve the section ... and will give the reader the feedback that should be in the reader report. ... The code for this should be in the AI Importer backend as a separate API call ... this should replace the N8N workflow. I don't see this in any of the sprints."
 sprint_target: Sprint 2.5 (between submission-lockout completion and the reader client). Fixes a broken submit-path call + removes the n8n validation dependency.
@@ -13,9 +13,20 @@ revision_history:
   - 2026-05-29 — proposed (surfaced during the 2026-05-29 reconciliation as a gap not covered by any sprint)
   - 2026-05-29 — OQ3 resolved: Final Submit auto-runs a full evaluation (re-evaluating every applicable spec, even ones already run) to seed the reader report; excluded/N-A specs ([[cr-050-intentionally-omitted-specs-do-not-block-submission]]) are skipped.
   - 2026-05-29 — OQ1 resolved (web scrape = raw text, strip HTML, no headless; unevaluable links flagged for human review, not auto-failed) + added the reader override→AI-learning loop (reuses the `/ai/corrections/ingest` RAG store).
+  - 2026-05-29 — Phase 1 shipped (ai-service `/ai/section/evaluate` + `section_eval` module + 19 tests). Status → in-progress.
 ---
 
 # CR-049 — AI section evaluation against reader-report criteria (replaces n8n validation)
+
+## Phase 1 shipped 2026-05-29 — ai-service section evaluator
+
+The cshse-ai core is built (`ai-service/app/section_eval/`):
+- `scrape.py` — `html_to_text` (strip HTML + nav/footer chrome → text), `classify_evaluable` (image/diagram/login-walled/short → `needs_human_review`, never auto-fail), `scrape_link` (httpx fetch, fail-soft → human-review on any error).
+- `evaluate.py` — `evaluate_section(...)` composes narrative + supporting-evidence text + file refs + scraped link text per spec, Haiku-adjudicates against the passed-in rubric `criteria`, returns `{ perSpec: [{ standardCode, specCode, verdict ∈ pass|needs_improvement|fail, rationale, criteriaCoverage, improvementSuggestions, sourcesUsed }], links }`. Injectable Anthropic client; strict-then-loose JSON parse; fail-soft (`needs_improvement`) on missing key / parse error / LLM error.
+- `POST /ai/section/evaluate` (`app/main.py`) — HMAC-verified, mirrors the evidence endpoints. Criteria are passed IN by the caller (server resolves them from the rubric), so the evaluator stays decoupled from rubric storage.
+- 19 unit tests (`tests/test_section_eval.py`) — html→text, evaluable classification (org-chart/image → review), scrape fail-soft, response parse + verdict defaulting, single/many-spec evaluation with an injected fake client, unevaluable-link surfaced (not failed), no-API-key degradation.
+
+**Remaining phases:** Phase 2 — server `cshseAiClient.evaluateSection` + replace the broken `validateSection` calls + `ValidationResult.needs_improvement` + retire the n8n validation webhook. Phase 3 — editor surface (per-section "Evaluate" + verdict/rationale). Phase 4 — Final-Submit auto-eval (seed the reader report) + reader override → `/ai/corrections/ingest` learning loop (Sprint 3 reader client).
 
 ## Status: PROPOSED 2026-05-29
 

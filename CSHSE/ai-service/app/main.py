@@ -770,6 +770,7 @@ from app.evidence import EVIDENCE_PHASE_NOT_IMPLEMENTED_BODY
 from app.evidence.extract import extract_evidence_text
 from app.evidence.recommend import recommend_evidence
 from app.evidence.score import score_evidence
+from app.section_eval import evaluate_section
 
 
 class EvidenceExtractRequest(BaseModel):
@@ -815,6 +816,17 @@ class EvidenceScoreRequest(BaseModel):
     specCode: str
     candidateChunks: list[dict]
     matrixRows: list[dict] | None = Field(default=None, description="CR-024 Sprint 4 — matrix rows for the spec, included in the Haiku prompt.")
+
+
+class SectionEvaluateRequest(BaseModel):
+    """CR-049 — evaluate a section against the reader-review criteria."""
+    institutionId: str
+    submissionId: str
+    specs: list[dict] = Field(description="One or many { standardCode, specCode, criteria }.")
+    narrativeHtml: str = ""
+    supportingEvidenceText: list[str] = Field(default_factory=list)
+    files: list[dict] = Field(default_factory=list)
+    webLinks: list[str] = Field(default_factory=list)
 
 
 @app.post("/ai/evidence/extract")
@@ -921,4 +933,30 @@ async def evidence_score(req: EvidenceScoreRequest, request: Request) -> dict:
         raise HTTPException(
             status_code=502,
             detail=f"evidence_score failed: {type(exc).__name__}: {exc}",
+        )
+
+
+@app.post("/ai/section/evaluate")
+async def section_evaluate(req: SectionEvaluateRequest, request: Request) -> dict:
+    """CR-049 — evaluate a section against the reader-review criteria.
+
+    Returns { perSpec: [{ standardCode, specCode, verdict, rationale,
+    criteriaCoverage, improvementSuggestions, sourcesUsed }], links: [...] }.
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    try:
+        return evaluate_section(
+            institution_id=req.institutionId,
+            submission_id=req.submissionId,
+            specs=req.specs,
+            narrative_html=req.narrativeHtml,
+            supporting_evidence_text=req.supportingEvidenceText,
+            files=req.files,
+            web_links=req.webLinks,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=f"section_evaluate failed: {type(exc).__name__}: {exc}",
         )
