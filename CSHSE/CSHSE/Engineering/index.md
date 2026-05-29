@@ -59,7 +59,8 @@ The catalog. One line per page. When answering a question, scan this first to fi
 - [[sprint-plan-2026-05-10]] — eight-sprint roadmap. **Superseded by [[sprint-plan-2026-05-11]].**
 - [[sprint-plan-2026-05-11]] — seven-sprint roadmap. **Superseded by [[sprint-plan-2026-05-16]].**
 - [[sprint-plan-2026-05-16]] — eight-sprint roadmap. **Superseded by [[sprint-plan-2026-05-20]].** Sprint 1 shipped. Stories S2.1, S4.1-S4.3+S4.5, S5.10, S7.3 are superseded by post-webinar CRs.
-- [[sprint-plan-2026-05-20]] — eight-sprint roadmap post-webinar. Sprint 1 done; Sprint 2 split into 2A (lockout + submission core: CR-001/005/006/007) and 2B (isolation audit + UX: CR-008/014/015/017). Full user stories for every sprint through 8. Includes start-tomorrow track plan + risk register.
+- [[sprint-plan-2026-05-20]] — eight-sprint roadmap post-webinar. **Superseded by [[sprint-plan-2026-05-29]].**
+- [[sprint-plan-2026-05-29]] — **CURRENT.** Re-baselined after a code-vs-vault reconciliation: the PC/authoring half (AI wizard → review → dashboard → submit) is shipped & polished (24 CRs); the reader/review/board half is SERVER-scaffolded but has NO client UI. Remaining work = reader-side client + wiring + verification, plus six greenfield features (CR-004/008/010/011/021/023) + finishing CR-018. Leads with Sprint R (reconcile & verify), then 6 sprints. Includes a full CR-by-CR reconciliation table with `path:line` evidence.
 - [[ai-import-deploy-runbook-2026-05-18]] — **sub-sprint 1.e deploy run-book.** Step-by-step Railway-develop promote, env-var setup, post-deploy smoke (Kennesaw State template + Stevenson self-study), rollback plan, UAT handoff. **Paused** before actual deploy — requires explicit go-ahead.
 - [[legacy-self-study-import]] — complete analysis of the current import flow + AI-augmented redesign that drives Sprint 1 of [[sprint-plan-2026-05-16]].
 

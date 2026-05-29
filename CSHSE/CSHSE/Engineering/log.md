@@ -1578,3 +1578,15 @@ Updated:
 - [[change-requests/index]] — CR-048 row → **shipped**.
 
 Status: **shipped**.
+
+## [2026-05-29] audit | Code-vs-vault reconciliation + re-baselined sprint plan
+
+Ran a reconciliation of the CR tracker + sprint plan against the actual `developer` codebase (@ `f9e6706`). Findings drove a new plan: [[sprint-plan-2026-05-29]] (supersedes [[sprint-plan-2026-05-20]]).
+
+**Key finding:** the product is two halves.
+- **PC/authoring half** — shipped & polished (24 CRs: the AI import wizard, persisted Review surface, workflow dashboard, editor, finish-review).
+- **Reader/review/board half** — **server-scaffolded, client-absent.** The server has models + controllers for reviews, 0-3 scores (`server/src/models/Score.ts:10`), lead-reader compilations (`models/LeadReaderCompilation.ts`), PC lockout (`middleware/submissionLockout.ts`), two-stage submission (`submissionController.ts` submit/revert/markComplete/submitSelfStudy + 8-state machine `Submission.ts:272`), audit log (`services/auditLog.ts:20`), assignments, and site visits — but the **client has no reader/lead-reader UI** (`client/src/App.tsx:78-81` routes only dashboard/self-study/admin; `client/src/features/` = admin, changeRequests, comments, dashboard, selfStudy, siteVisits). A reader cannot score a spec today.
+
+**Tracker correction needed (documented in the plan's reconciliation table):** CR-003/005/006/007/009/020 are marked `proposed` but have working server code; CR-012/013/022 are partial; only CR-004/008/010/011/021/023 are genuinely greenfield; CR-018 stays in-progress (blocked on the reader client). The new plan leads with **Sprint R** (smoke-test the reader server endpoints + correct the CR statuses) so estimates rest on verified ground.
+
+Updated: [[sprint-plan-2026-05-20]] → `status: superseded` + banner; [[index]] plans section → 05-29 marked CURRENT.

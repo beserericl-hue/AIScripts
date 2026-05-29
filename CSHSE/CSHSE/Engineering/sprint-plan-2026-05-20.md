@@ -5,12 +5,15 @@ type: plan
 tags: [sprint-plan, roadmap, webinar, post-beta]
 plan_date: 2026-05-20
 horizon: ~16 weeks (8 × 2-week sprints, plus Sprint 2.5)
-status: proposed
+status: superseded
+superseded_by: sprint-plan-2026-05-29
 supersedes: sprint-plan-2026-05-16
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-29
 ---
 
 # Sprint Plan — 2026-05-20
+
+> **SUPERSEDED 2026-05-29 by [[sprint-plan-2026-05-29]].** This plan predated ~24 shipped CRs and a code-vs-vault reconciliation that found much of the reader-side server stack was already scaffolded. See the newer plan for the verified picture and re-baselined sprints. Kept for history — do not plan from this page.
 
 **Supersedes [[sprint-plan-2026-05-16]].** Rewritten in response to the 2026-05-20 Beta Group Training webinar ([[webinar-action-items-2026-05-20]]). The webinar produced 23 change requests (CR-001..CR-023) catalogued at [[change-requests/index]].
 
