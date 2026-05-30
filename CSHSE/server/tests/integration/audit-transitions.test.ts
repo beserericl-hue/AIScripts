@@ -153,10 +153,14 @@ describe('S2A.1 — audit on reader assignment (CR-006)', () => {
     const { user: r2 } = await createUser({ role: 'reader' });
     const sub = await seedSubmission({ status: 'submitted' });
 
+    // CR-022 — a `submitted` submission is in the locked phase. Admins
+    // can assign but must pass a reason. (Pinned independently by
+    // reader-assignment-lockout.test.ts; this test stays on the per-reader
+    // fan-out invariant.)
     const res = await request(app)
       .post(`/api/reviews/submissions/${sub._id}/assign`)
       .set('Authorization', `Bearer ${signTokenFor(admin as any)}`)
-      .send({ readerIds: [String(r1._id), String(r2._id)] });
+      .send({ readerIds: [String(r1._id), String(r2._id)], reason: 'Initial assignment.' });
     expect(res.status).toBe(200);
 
     const entries = await AuditLogEntry.find({

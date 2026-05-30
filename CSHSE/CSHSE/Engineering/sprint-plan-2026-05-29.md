@@ -145,7 +145,7 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 
 - **S6.1 — Partial-compliance checklist (CR-012).** Verify/complete auto-population of a site-visit checklist from Final score 0/1; visit-team verify toggle + notes; export.
 - **S6.2 — Itinerary builder (CR-013).** Lead-reader + PC co-edit itinerary over the existing `SiteVisit` model; per-slot links to checklist items; DOCX export.
-- **S6.3 — Reader assignment lockout (CR-022).** Admin-only assignment changes once `submitted+`; reason required; audit-logged.
+- **S6.3 — Reader assignment lockout (CR-022). ✅ DONE 2026-05-30.** `assignReaders` adds the locked-phase gate (`status ∈ {submitted, under_review, readers_assigned, review_complete, compliant, non_compliant}`): non-admin → 403; admin without `reason` → 400; admin with `reason` → 200. Pre-submit phase keeps existing behavior (back-compat). Audit payload carries `reason` (when locked), `payload.submissionStatusAtChange` (priorStatus), `payload.lockedPhase`. 5 integration tests; two existing test files (audit-transitions, reader-endpoints-smoke) updated to thread the now-required `reason` when seeding `submitted` submissions. Lead-reader UI affordance ("Request change from admin") deferred — server contract is live.
 
 **Estimate:** ~8 days.
 

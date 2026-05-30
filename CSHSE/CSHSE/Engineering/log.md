@@ -1787,3 +1787,15 @@ Tests: server `tests/integration/direct-messages.test.ts` (9) — PC 403 on list
 Deferred: email + in-app notification, and an explicit `AuditLogEntry` mirror for compliance ('the conversation is a record'). DirectMessage being append-only is the same compliance property at the data layer; the audit layer can land alongside the next notification pass.
 
 Vault: CR-010 promoted to **shipped**; sprint plan S5.4 marked done; index updated.
+
+## [2026-05-30] update | Sprint 6.3 — CR-022 reader-assignment lockout shipped
+
+`POST /api/reviews/submissions/:id/assign` now gates the locked phase (`status ∈ {submitted, under_review, readers_assigned, review_complete, compliant, non_compliant}`): non-admin (lead_reader included) → 403 with "Reader assignments are locked after submission. Request a change from an administrator."; admin without a `reason` body field → 400; admin with `reason` → 200. Pre-submit phase keeps existing behavior — lead_reader can still assign without a reason, back-compat for existing flows.
+
+Server: `reviewController.assignReaders` widens its early gate and threads `reason` into `recordAuditEvent`. Audit payload also carries `payload.submissionStatusAtChange` (the prior status, captured BEFORE the assign mutates `submission.status` to `readers_assigned`) and `payload.lockedPhase` so the timeline reader can discriminate pre- and post-submit assignments at a glance. Superuser bypasses the role check (impersonation / break-glass) but still needs the reason — keeps the chain-of-custody requirement intact regardless of impersonation.
+
+Tests: `tests/integration/reader-assignment-lockout.test.ts` (5) pins: lead_reader 403 on submitted; admin 400 without reason; admin 200 with reason + audit carries reason + priorStatus + lockedPhase=true; lead_reader 200 on draft (back-compat) + audit lockedPhase=false; admin on under_review still needs reason. Two existing test files (`audit-transitions.test.ts`, `reader-endpoints-smoke.test.ts`) now thread `reason: '...'` because they seed `submitted` submissions — the per-reader fan-out invariant they pin is preserved.
+
+UI affordance change (lead reader sees "Request change from admin") deferred to the admin/lead-reader assignment-UI refresh that lands with CR-012 / CR-013 site-visit work.
+
+Vault: CR-022 promoted to **shipped**; sprint plan S6.3 marked done; index updated.

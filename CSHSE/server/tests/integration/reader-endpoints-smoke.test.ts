@@ -50,7 +50,8 @@ describe('R.2 — reader/lead-reader endpoint smoke (truth table)', () => {
     const assign = await request(app)
       .post(`/api/reviews/submissions/${sid}/assign`)
       .set('Authorization', `Bearer ${adminTok}`)
-      .send({ readerIds: [readerId] });
+      // CR-022 — `submitted` is in the locked phase; admin must pass a reason.
+      .send({ readerIds: [readerId], reason: 'R.2 smoke seed' });
     truth['POST /reviews/submissions/:id/assign'] = assign.status;
 
     const myReviews = await request(app).get('/api/reviews').set('Authorization', `Bearer ${readerTok}`);

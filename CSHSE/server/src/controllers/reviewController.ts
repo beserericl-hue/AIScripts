@@ -572,7 +572,7 @@ export const getReviewProgress = async (req: AuthenticatedRequest, res: Response
 export const assignReaders = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
-    const { readerIds } = req.body; // Array of user IDs
+    const { readerIds, reason } = req.body; // Array of user IDs
 
     if (req.user?.role !== 'admin' && req.user?.role !== 'lead_reader') {
       return res.status(403).json({ error: 'Not authorized to assign readers' });
@@ -581,6 +581,28 @@ export const assignReaders = async (req: AuthenticatedRequest, res: Response) =>
     const submission = await Submission.findById(submissionId);
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // CR-022 / Sprint 6 — assignment lockout after submit.
+    // Once a submission reaches `submitted` or further, only admin may
+    // change reader assignments, and the change requires a reason for
+    // the audit trail. Lead readers must request a change from an admin.
+    // Superuser bypasses the role check (impersonation/break-glass) but
+    // still requires the reason.
+    const LOCKED_STATUSES = ['submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant'];
+    const isLockedPhase = LOCKED_STATUSES.includes(submission.status);
+    if (isLockedPhase) {
+      const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
+      if (!isElevated) {
+        return res.status(403).json({
+          error: 'Reader assignments are locked after submission. Request a change from an administrator.'
+        });
+      }
+      if (!reason || typeof reason !== 'string' || !reason.trim()) {
+        return res.status(400).json({
+          error: 'A reason is required to change reader assignments on a submitted self-study.'
+        });
+      }
     }
 
     // Validate all readers exist and have reader role
@@ -624,12 +646,15 @@ export const assignReaders = async (req: AuthenticatedRequest, res: Response) =>
     }
 
     // Update submission
+    const priorStatus = submission.status;
     submission.assignedReaders = readerIds.map(id => new mongoose.Types.ObjectId(id));
     submission.status = 'readers_assigned';
     await submission.save();
 
     // CR-006 S2A.1 — record reader assignment per reader (one entry each so
     // the timeline shows who and when, not a single fan-out blob).
+    // CR-022 — on a locked-phase change, attach the required reason + the
+    // submission status at the moment of the change.
     for (const r of readers) {
       void recordAuditEvent({
         action: 'reader.assigned',
@@ -645,8 +670,11 @@ export const assignReaders = async (req: AuthenticatedRequest, res: Response) =>
           readerId: (r as any)._id?.toString?.() || String((r as any)._id),
           readerName: (r as any).name,
           readerRole: (r as any).role,
-          totalReviewers
-        }
+          totalReviewers,
+          submissionStatusAtChange: priorStatus,
+          lockedPhase: isLockedPhase
+        },
+        reason: isLockedPhase ? String(reason || '').trim() : undefined
       });
     }
 
