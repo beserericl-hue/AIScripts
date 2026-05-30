@@ -1,5 +1,20 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
+// CR-021 — Reader file attachments on comments.
+// Each attachment lives in S3 under `reader-attachments/{commentId}/{filename}`.
+// ACL follows the parent comment's relay state (PC may only see attachments
+// whose parent comment is `relayed === true`).
+export interface ICommentAttachment {
+  _id?: mongoose.Types.ObjectId;
+  s3Key: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedBy: mongoose.Types.ObjectId;
+  uploadedByName: string;
+  uploadedAt: Date;
+}
+
 // Reply interface
 export interface ICommentReply {
   _id?: mongoose.Types.ObjectId;
@@ -58,10 +73,24 @@ export interface IComment extends Document {
   relayedBy?: mongoose.Types.ObjectId;
   boardEscalated: boolean;
 
+  // CR-021 — reader-uploaded attachments. ACL follows relay state — see
+  // commentSerializer.
+  attachments: ICommentAttachment[];
+
   // Timestamps
   createdAt: Date;
   updatedAt: Date;
 }
+
+const CommentAttachmentSchema = new Schema<ICommentAttachment>({
+  s3Key: { type: String, required: true },
+  filename: { type: String, required: true },
+  mimeType: { type: String, required: true },
+  sizeBytes: { type: Number, required: true },
+  uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  uploadedByName: { type: String, required: true },
+  uploadedAt: { type: Date, default: Date.now }
+}, { _id: true });
 
 const CommentReplySchema = new Schema<ICommentReply>({
   authorId: {
@@ -164,7 +193,10 @@ const CommentSchema = new Schema<IComment>({
   originalReaderId: { type: Schema.Types.ObjectId, ref: 'User', default: undefined },
   relayedAt: { type: Date, default: undefined },
   relayedBy: { type: Schema.Types.ObjectId, ref: 'User', default: undefined },
-  boardEscalated: { type: Boolean, default: false, index: true }
+  boardEscalated: { type: Boolean, default: false, index: true },
+
+  // CR-021 — reader file attachments
+  attachments: { type: [CommentAttachmentSchema], default: [] }
 }, {
   timestamps: true
 });

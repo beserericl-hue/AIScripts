@@ -90,7 +90,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | [[cr-016-in-app-bug-reporter]] | Screenshot + paragraph in-app bug report | proposed | [[webinar-action-items-2026-05-20#37-56]] |
 | [[cr-019-joint-venture-pull-forward]] | Consider pulling Joint Venture work earlier | rejected | [[sprint-plan-2026-05-11#sprint-7]] |
 | [[cr-020-account-lock-unlock-audit-trail]] | Admin lock/unlock audit-trail UI | in-progress | [[webinar-action-items-2026-05-20#1-11-35]] |
-| [[cr-021-reader-uploaded-files]] | Readers can attach files to comments (partial relevant evidence) | proposed | new — implied by relay flow |
+| [[cr-021-reader-uploaded-files]] | Readers can attach files to comments (partial relevant evidence) | **shipped** (2026-05-30 — Sprint 5.3: `Comment.attachments[]` + `uploadCommentAttachment`/`downloadCommentAttachment`/`deleteCommentAttachment` + S3 `reader-attachments/` prefix + ACL follows relay state. 11 integration tests pin upload + download-ACL + delete role-gates. Composer paperclip UI deferred until the reader-comment surface lands.) | new — implied by relay flow |
 | [[cr-022-reader-assignment-lockout]] | Only Admin can reassign readers post-lockout | in-progress | new — implied by lockout flow |
 
 ## Retired CRs

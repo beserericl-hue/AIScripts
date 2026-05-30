@@ -3,7 +3,9 @@ import { Comment, IComment } from '../models/Comment';
 import { Submission } from '../models/Submission';
 import { serializeCommentsForViewer } from '../services/commentSerializer';
 import { recordAuditEvent } from '../services/auditLog';
+import { uploadFile, downloadFile, deleteFile } from '../services/s3Service';
 import mongoose from 'mongoose';
+import path from 'path';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -600,5 +602,159 @@ export const getRelayQueue = async (req: AuthenticatedRequest, res: Response) =>
   } catch (err) {
     console.error('getRelayQueue error:', err);
     return res.status(500).json({ error: 'Failed to load relay queue' });
+  }
+};
+
+// ============================================================================
+// CR-021 / Sprint 5.3 — reader file attachments on comments.
+//
+// POST /api/comments/:commentId/attachments   (multipart "file") — reader/lead-reader/admin
+// DELETE /api/comments/:commentId/attachments/:attachmentId — uploader/lead-reader/admin
+// GET /api/comments/:commentId/attachments/:attachmentId — same ACL as the parent
+//
+// ACL: matches the parent comment's relay state. PCs only see attachments
+// on comments they can see (relayed === true), and only the parent comment's
+// own attachments (no enumeration of unrelayed siblings).
+// ============================================================================
+
+const ATTACHMENT_MIME_ALLOWLIST = new Set<string>([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+]);
+
+const ATTACHMENT_MAX_BYTES = 25 * 1024 * 1024; // 25 MB per CR-021 decision.
+
+function _sanitizeAttachmentFilename(name: string): string {
+  const ext = path.extname(name).toLowerCase().slice(0, 8);
+  const base = path.basename(name, path.extname(name))
+    .replace(/[^a-z0-9_.-]+/gi, '_')
+    .slice(0, 64);
+  return `${base || 'attachment'}${ext}`;
+}
+
+function _commentS3Key(commentId: string, filename: string): string {
+  return `reader-attachments/${commentId}/${Date.now()}_${_sanitizeAttachmentFilename(filename)}`;
+}
+
+function _canReadAttachment(viewerRole: string, comment: IComment): boolean {
+  if (viewerRole === 'admin' || viewerRole === 'superuser') return true;
+  if (viewerRole === 'reader' || viewerRole === 'lead_reader') return true;
+  if (viewerRole === 'program_coordinator') return comment.relayed === true;
+  return false;
+}
+
+export const uploadCommentAttachment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { commentId } = req.params;
+    const role = req.user?.role || '';
+    if (!['reader', 'lead_reader', 'admin'].includes(role) && !req.user?.isSuperuser) {
+      return res.status(403).json({ error: 'Only readers, lead readers, and admins can upload attachments' });
+    }
+
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file) {
+      return res.status(400).json({ error: 'No file uploaded (field name "file")' });
+    }
+    if (!ATTACHMENT_MIME_ALLOWLIST.has(file.mimetype)) {
+      return res.status(400).json({ error: `File type not allowed: ${file.mimetype}. Allowed: PDF, DOCX, TXT.` });
+    }
+    if (file.size > ATTACHMENT_MAX_BYTES) {
+      return res.status(400).json({ error: 'File exceeds 25 MB limit' });
+    }
+
+    const comment = await Comment.findById(commentId);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+    const key = _commentS3Key(String(comment._id), file.originalname);
+    await uploadFile(key, file.buffer, file.mimetype);
+
+    const attachment = {
+      s3Key: key,
+      filename: _sanitizeAttachmentFilename(file.originalname),
+      mimeType: file.mimetype,
+      sizeBytes: file.size,
+      uploadedBy: new mongoose.Types.ObjectId(req.user!.id),
+      uploadedByName: req.user!.name || req.user!.role,
+      uploadedAt: new Date()
+    };
+
+    comment.attachments.push(attachment as any);
+    await comment.save();
+
+    const added = comment.attachments[comment.attachments.length - 1];
+
+    return res.status(201).json({
+      message: 'Attachment uploaded',
+      attachment: {
+        _id: added._id,
+        filename: added.filename,
+        mimeType: added.mimeType,
+        sizeBytes: added.sizeBytes,
+        uploadedByName: added.uploadedByName,
+        uploadedAt: added.uploadedAt
+      }
+    });
+  } catch (err) {
+    console.error('uploadCommentAttachment error:', err);
+    return res.status(500).json({ error: 'Failed to upload attachment' });
+  }
+};
+
+export const downloadCommentAttachment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { commentId, attachmentId } = req.params;
+    const comment = await Comment.findById(commentId);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+    const role = req.user?.role || '';
+    if (!_canReadAttachment(role, comment) && !req.user?.isSuperuser) {
+      return res.status(403).json({ error: 'Not allowed' });
+    }
+
+    const att = comment.attachments.find((a: any) => String(a._id) === String(attachmentId));
+    if (!att) return res.status(404).json({ error: 'Attachment not found' });
+
+    const { stream, contentType } = await downloadFile(att.s3Key);
+    res.setHeader('Content-Type', contentType || att.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${att.filename}"`);
+    stream.pipe(res);
+  } catch (err) {
+    console.error('downloadCommentAttachment error:', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to download attachment' });
+  }
+};
+
+export const deleteCommentAttachment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { commentId, attachmentId } = req.params;
+    const role = req.user?.role || '';
+
+    const comment = await Comment.findById(commentId);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+    const att = comment.attachments.find((a: any) => String(a._id) === String(attachmentId));
+    if (!att) return res.status(404).json({ error: 'Attachment not found' });
+
+    const isUploader = String(att.uploadedBy) === String(req.user!.id);
+    const isElevated = role === 'admin' || role === 'lead_reader' || req.user?.isSuperuser;
+    if (!isUploader && !isElevated) {
+      return res.status(403).json({ error: 'Only the uploader, lead readers, or admins can delete attachments' });
+    }
+
+    try {
+      await deleteFile(att.s3Key);
+    } catch (e) {
+      console.warn('S3 delete failed (continuing with DB cleanup):', (e as Error).message);
+    }
+
+    comment.attachments = comment.attachments.filter((a: any) => String(a._id) !== String(attachmentId)) as any;
+    await comment.save();
+
+    return res.json({ message: 'Attachment deleted' });
+  } catch (err) {
+    console.error('deleteCommentAttachment error:', err);
+    return res.status(500).json({ error: 'Failed to delete attachment' });
   }
 };

@@ -1757,3 +1757,17 @@ Tests: server `tests/integration/suggestions-doc.test.ts` (7) seeds an unrelayed
 Architecture note: redaction is **server-side** — the client never sees unrelayed comments or reader names in pc_facing mode because the buffer that crosses the wire has already had them stripped. This matches the CR-004 + CR-011 contract ("PC-facing mode strips reader identity server-side, not client filter").
 
 Vault: CR-011 promoted to **shipped**; sprint plan S5.2 marked done; index updated.
+
+## [2026-05-30] update | Sprint 5.3 — CR-021 Reader comment attachments (server) shipped
+
+Comment-level file attachments. Readers (and lead/admin) can attach PDF / DOCX / TXT files up to 25 MB to any comment via `POST /api/comments/:commentId/attachments` (multipart `file`). Files land in S3 under `reader-attachments/{commentId}/{ts}_{name}`. The attachment subdoc on `Comment.attachments[]` carries `{ s3Key, filename, mimeType, sizeBytes, uploadedBy, uploadedByName, uploadedAt }`.
+
+ACL deliberately mirrors CR-004's comment redaction: PC can read an attachment only when the parent `comment.relayed === true`. Reader / lead_reader / admin / superuser always read. Download endpoint enforces this server-side (`GET /api/comments/:commentId/attachments/:attachmentId` calls `_canReadAttachment` before streaming). Delete is uploader OR lead_reader OR admin OR superuser; the uploader can always pull their own file back.
+
+Server hardening: multer caps body at `25 MB + 1 KB`, controller re-checks (so the client sees a clean 400 message rather than multer's generic blob), MIME allowlist is enforced before any S3 PutObject, S3 delete failures are tolerated (DB cleanup still happens — orphaned S3 keys are preferable to a deletion deadlock).
+
+Tests: `tests/integration/comment-attachments.test.ts` (11). s3Service is spied per-test with `vi.spyOn(s3, 'uploadFile').mockResolvedValue(...)` (mirroring the §6 vitest-isolation pattern; no module-level `vi.mock` that would leak across files). Covers: reader upload PDF (201, attachment row persists); PC upload 403; bad MIME 400 (no S3 call); no-file 400; reader downloads unrelayed (200); PC downloads unrelayed (403 — `downloadFile` never called); PC downloads relayed (200); admin downloads any (200); uploader deletes (200 + S3 deleted); non-uploader reader cannot delete (403); lead_reader can delete any (200).
+
+Composer paperclip UI deferred — the reader-comment surface (the in-narrative comment pane) doesn't yet exist on the Sprint 3 reader client. The endpoint contract is stable, so the UI is a drop-in slot when the surface lands.
+
+Vault: CR-021 promoted to **shipped**; sprint plan S5.3 marked done (server slice); index updated.

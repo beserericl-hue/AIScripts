@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import {
   getComments,
   getCommentSummary,
@@ -12,11 +13,21 @@ import {
   relayComment,
   unrelayComment,
   escalateComment,
-  getRelayQueue
+  getRelayQueue,
+  uploadCommentAttachment,
+  downloadCommentAttachment,
+  deleteCommentAttachment
 } from '../controllers/commentController';
 import { authenticate } from '../middleware/auth';
 
 const router = Router();
+
+// CR-021 / Sprint 5.3 — reader file attachments on comments.
+// Multer memory storage; controller enforces MIME allowlist + 25 MB cap.
+const attachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 + 1024 }
+});
 
 // All routes require authentication
 router.use(authenticate);
@@ -120,5 +131,17 @@ router.delete('/comments/:commentId/relay', unrelayComment);
  * @access  Private (Lead Reader, Admin, Superuser)
  */
 router.post('/comments/:commentId/escalate', escalateComment);
+
+// ============================================
+// CR-021 — reader file attachments
+// ============================================
+
+router.post(
+  '/comments/:commentId/attachments',
+  attachmentUpload.single('file'),
+  uploadCommentAttachment
+);
+router.get('/comments/:commentId/attachments/:attachmentId', downloadCommentAttachment);
+router.delete('/comments/:commentId/attachments/:attachmentId', deleteCommentAttachment);
 
 export default router;
