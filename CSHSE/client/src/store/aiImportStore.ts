@@ -530,6 +530,12 @@ interface AIImportState {
   ) => void;
   // CR-032 — same, for an unplaced Tag's fullText.
   editTag: (tagId: string, newText: string) => void;
+  // CR-039 follow-on (UX feedback 2026-05-30) — edit + revert for an
+  // Introduction-bucket item by sectionId. The store walks every
+  // introduction bucket so the caller doesn't need to know which one
+  // owns the item (intro keys are e.g. `document` or `standard-3`).
+  editIntroductionItem: (sectionId: string, newSnippet: string) => void;
+  revertIntroductionItem: (sectionId: string) => void;
   // CR-032 — restore from originalSnippet; clears editedAt + originalSnippet.
   revertBucketItem: (
     specKey: string,
@@ -965,6 +971,73 @@ export const useAIImportStore = create<AIImportState>()(
           const newTags = [...s.tags];
           newTags[idx] = updated;
           return { tags: newTags, dirty: true };
+        }),
+
+      // CR-039 follow-on (UX feedback 2026-05-30) — inline edit an
+      // Introduction-bucket item. Walks every intro bucket since the
+      // caller only has the sectionId; first match wins. Mirrors
+      // editBucketItem's originalSnippet/editedAt bookkeeping so the
+      // existing "edited" badge + Revert button light up the same way.
+      editIntroductionItem: (sectionId, newSnippet) =>
+        set((s) => {
+          const intros = s.introductions;
+          for (const [key, bucket] of Object.entries(intros)) {
+            const idx = bucket.items.findIndex((i) => i.sectionId === sectionId);
+            if (idx < 0) continue;
+            const existing = bucket.items[idx];
+            const updated: BucketItem = {
+              ...existing,
+              snippet: newSnippet,
+              wordCount: newSnippet.trim() ? newSnippet.trim().split(/\s+/).length : 0,
+              originalSnippet:
+                existing.originalSnippet !== undefined
+                  ? existing.originalSnippet
+                  : existing.snippet,
+              editedAt: Date.now(),
+            };
+            const newItems = [...bucket.items];
+            newItems[idx] = updated;
+            return {
+              introductions: {
+                ...intros,
+                [key]: { ...bucket, items: newItems },
+              },
+              dirty: true,
+            };
+          }
+          return {} as Partial<AIImportState>;
+        }),
+
+      revertIntroductionItem: (sectionId) =>
+        set((s) => {
+          const intros = s.introductions;
+          for (const [key, bucket] of Object.entries(intros)) {
+            const idx = bucket.items.findIndex((i) => i.sectionId === sectionId);
+            if (idx < 0) continue;
+            const existing = bucket.items[idx];
+            if (existing.originalSnippet === undefined) {
+              return {} as Partial<AIImportState>;
+            }
+            const restored: BucketItem = {
+              ...existing,
+              snippet: existing.originalSnippet,
+              wordCount: existing.originalSnippet.trim()
+                ? existing.originalSnippet.trim().split(/\s+/).length
+                : 0,
+              originalSnippet: undefined,
+              editedAt: undefined,
+            };
+            const newItems = [...bucket.items];
+            newItems[idx] = restored;
+            return {
+              introductions: {
+                ...intros,
+                [key]: { ...bucket, items: newItems },
+              },
+              dirty: true,
+            };
+          }
+          return {} as Partial<AIImportState>;
         }),
 
       // CR-032 — restore originalSnippet on a bucket item. Clears editedAt

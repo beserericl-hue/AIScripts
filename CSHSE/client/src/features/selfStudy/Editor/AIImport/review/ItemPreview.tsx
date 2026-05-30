@@ -26,6 +26,7 @@ import {
   type Tag,
   type CVItem,
   type EvidenceDocItem,
+  type IntroductionBucket,
 } from '../../../../../store/aiImportStore';
 import { ItemKind } from './ItemCardList';
 
@@ -38,6 +39,12 @@ interface ItemPreviewProps {
   // is selected (clicked from CVsView / EvidenceDocsView).
   cvs?: CVItem[];
   evidenceDocs?: EvidenceDocItem[];
+  // CR-039 follow-on (UX feedback 2026-05-30) — same shape for
+  // Introduction items so clicking a Document/Standard Introduction
+  // card surfaces the AI evaluation in this pane. Without it, findItem
+  // returned null and the right pane stayed on "Select an item from the
+  // middle pane" forever for any intro selection.
+  introductions?: Record<string, IntroductionBucket>;
   onChangeKind: (sectionId: string, kind: ItemKind | 'discard') => void;
   onReassign: (sectionId: string) => void;
   onShowInSource: (sectionId: string) => void;
@@ -57,7 +64,8 @@ function findItem(
   tags: Tag[],
   sectionId: string | null,
   cvs?: CVItem[],
-  evidenceDocs?: EvidenceDocItem[]
+  evidenceDocs?: EvidenceDocItem[],
+  introductions?: Record<string, IntroductionBucket>
 ): { kind: ItemKind | 'tag' | 'cv' | 'evidenceDoc'; item: BucketItem | Tag | CVItem | EvidenceDocItem } | null {
   if (!sectionId) return null;
   if (bucket) {
@@ -78,6 +86,17 @@ function findItem(
   if (evidenceDocs) {
     const ed = evidenceDocs.find((d) => d.sectionId === sectionId);
     if (ed) return { kind: 'evidenceDoc', item: ed };
+  }
+  // CR-039 follow-on (UX feedback 2026-05-30) — Introduction items.
+  // Same BucketItem shape as narratives, so we render them as kind='text'
+  // so the existing rationale + acceptState + Show-in-source + edit
+  // affordances all light up. Without this branch, clicking a Document/
+  // Standard Introduction card stayed on the empty right-pane state.
+  if (introductions) {
+    for (const b of Object.values(introductions)) {
+      const hit = b.items.find((i) => i.sectionId === sectionId);
+      if (hit) return { kind: 'text', item: hit };
+    }
   }
   return null;
 }
@@ -112,6 +131,7 @@ export function ItemPreview({
   tags,
   cvs,
   evidenceDocs,
+  introductions,
   onChangeKind,
   onReassign,
   onShowInSource,
@@ -124,7 +144,7 @@ export function ItemPreview({
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const found = findItem(bucket, tags, selectedSectionId, cvs, evidenceDocs);
+  const found = findItem(bucket, tags, selectedSectionId, cvs, evidenceDocs, introductions);
   const isEditing = !!(selectedSectionId && editingSectionId === selectedSectionId);
 
   // Local controlled textarea state. Initialized from the item's current

@@ -298,29 +298,23 @@ function AIImportTabButton({
   return (
     <button
       onClick={() => {
-        // "Upload Files" means "start a NEW import". If a prior run has
-        // SETTLED — parsed / applied / finished / failed / canceled —
-        // clear the stale pipeline so the wizard opens on Upload instead
-        // of re-showing the old Parse / Review / Apply step (bug: sitting
-        // on the Review surface, clicking Upload Files jumped to the
-        // last run's "Parsing complete" screen). We intentionally reset
-        // from the parsed/review state too: CR-043 moved Review to a
-        // dedicated standalone surface (the "Review" toolbar button reads
-        // persisted Submission.aiReviewState), so Upload Files no longer
-        // needs to protect the wizard's internal review step. startOver()
-        // keeps submissionId and never touches persisted review items.
+        // "Upload Files" means "start a NEW import" — always land the
+        // coordinator on the Upload step with a clean form, regardless
+        // of any prior or in-flight run.
         //
-        // Skip the reset ONLY while a run is still in flight (queued /
-        // parsing) so live progress stays visible.
-        const settledRun =
-          status === 'parsed' ||
-          status === 'applied' ||
-          status === 'finished' ||
-          status === 'failed' ||
-          status === 'canceled';
-        if (settledRun) {
-          startOver();
-        }
+        // Earlier behavior reset only on SETTLED runs (parsed / applied /
+        // finished / failed / canceled) so live-progress views stayed
+        // visible mid-parse. UX feedback 2026-05-30: clicking Upload
+        // Files while a parse is still completing also opens stale
+        // "Parsing complete" data, which is confusing — the coordinator
+        // clicked Upload Files because they want to upload, not watch a
+        // run finish. The Parse step is still reachable via the
+        // wizard's sidebar step picker if they want to switch back.
+        //
+        // startOver() preserves submissionId + programLevel and never
+        // touches persisted review items (CR-043 moved Review to its own
+        // standalone surface backed by Submission.aiReviewState).
+        startOver();
         setActiveView('ai-import');
       }}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${

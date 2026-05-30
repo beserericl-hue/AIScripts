@@ -537,6 +537,10 @@ function FullReviewStep(): JSX.Element {
   // CR-032 — wire the store edit actions through the preview pane.
   const editBucketItem = useAIImportStore((s) => s.editBucketItem);
   const editTagAction = useAIImportStore((s) => s.editTag);
+  // CR-039 follow-on (UX feedback 2026-05-30) — edit + revert for
+  // Introduction-bucket items (Document / Standard intros).
+  const editIntroductionItem = useAIImportStore((s) => s.editIntroductionItem);
+  const revertIntroductionItem = useAIImportStore((s) => s.revertIntroductionItem);
   const revertBucketItem = useAIImportStore((s) => s.revertBucketItem);
   const revertTagAction = useAIImportStore((s) => s.revertTag);
 
@@ -556,11 +560,29 @@ function FullReviewStep(): JSX.Element {
   // The same Save handler covers both narratives/evidenceText in the active
   // bucket AND unplaced tags. We resolve which one based on whether the
   // sectionId belongs to a tag (Unplaced) or a bucket item (Review).
+  // Helper — does this sectionId live in any Introduction bucket?
+  // Used by the edit + revert handlers to route to the intro-bucket
+  // store actions instead of the spec-bucket ones.
+  const isIntroductionSection = useCallback(
+    (sectionId: string): boolean => {
+      if (!introductions) return false;
+      for (const b of Object.values(introductions)) {
+        if (b.items.some((i) => i.sectionId === sectionId)) return true;
+      }
+      return false;
+    },
+    [introductions]
+  );
+
   const handleEditSave = useCallback(
     (sectionId: string, newText: string) => {
       const tag = tags.find((t) => t.sectionId === sectionId);
       if (tag) {
         editTagAction(tag.tagId, newText);
+      } else if (isIntroductionSection(sectionId)) {
+        // CR-039 follow-on — intro items live outside the per-spec
+        // bucket; route to the intro-aware editor.
+        editIntroductionItem(sectionId, newText);
       } else if (activeBucket) {
         const inNarr = activeBucket.narratives.some((i) => i.sectionId === sectionId);
         const kind: 'narratives' | 'evidenceText' = inNarr ? 'narratives' : 'evidenceText';
@@ -569,7 +591,7 @@ function FullReviewStep(): JSX.Element {
       }
       setEditingSectionId(null);
     },
-    [tags, activeBucket, editTagAction, editBucketItem]
+    [tags, activeBucket, editTagAction, editBucketItem, isIntroductionSection, editIntroductionItem]
   );
 
   const handleEditRevert = useCallback(
@@ -579,13 +601,17 @@ function FullReviewStep(): JSX.Element {
         revertTagAction(tag.tagId);
         return;
       }
+      if (isIntroductionSection(sectionId)) {
+        revertIntroductionItem(sectionId);
+        return;
+      }
       if (!activeBucket) return;
       const inNarr = activeBucket.narratives.some((i) => i.sectionId === sectionId);
       const kind: 'narratives' | 'evidenceText' = inNarr ? 'narratives' : 'evidenceText';
       const specKey = `${activeBucket.standardCode}.${activeBucket.specCode}`;
       revertBucketItem(specKey, sectionId, kind);
     },
-    [tags, activeBucket, revertTagAction, revertBucketItem]
+    [tags, activeBucket, revertTagAction, revertBucketItem, isIntroductionSection, revertIntroductionItem]
   );
 
   const handleSinglePreviewReassign = useCallback(
@@ -935,6 +961,7 @@ function FullReviewStep(): JSX.Element {
           tags={tags}
           cvs={cvs}
           evidenceDocs={evidenceDocs}
+          introductions={introductions}
           onChangeKind={handleChangeKind}
           onReassign={handleSinglePreviewReassign}
           onShowInSource={handleShowInSource}

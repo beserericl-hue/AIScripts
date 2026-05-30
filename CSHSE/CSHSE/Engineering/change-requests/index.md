@@ -92,6 +92,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | [[cr-020-account-lock-unlock-audit-trail]] | Admin lock/unlock audit-trail UI | in-progress | [[webinar-action-items-2026-05-20#1-11-35]] |
 | [[cr-021-reader-uploaded-files]] | Readers can attach files to comments (partial relevant evidence) | **shipped** (2026-05-30 — Sprint 5.3: `Comment.attachments[]` + `uploadCommentAttachment`/`downloadCommentAttachment`/`deleteCommentAttachment` + S3 `reader-attachments/` prefix + ACL follows relay state. 11 integration tests pin upload + download-ACL + delete role-gates. Composer paperclip UI deferred until the reader-comment surface lands.) | new — implied by relay flow |
 | [[cr-022-reader-assignment-lockout]] | Only Admin can reassign readers post-lockout | **shipped** (2026-05-30 — Sprint 6.3: `assignReaders` gates locked-phase changes (status ∈ {submitted, under_review, readers_assigned, review_complete, compliant, non_compliant}) to admin-only with a required `reason`; lead_reader → 403; audit payload carries `reason` + `priorStatus` + `lockedPhase`. 5 integration tests; two existing test files updated to pass the reason. UI affordance change deferred.) | new — implied by lockout flow |
+| [[cr-051-inline-view-source-for-supporting-evidence-cards]] | Inline "View source" button on CV / Syllabus / Paper cards | proposed — Sprint 7 polish | user feedback 2026-05-30 |
 
 ## Retired CRs
 

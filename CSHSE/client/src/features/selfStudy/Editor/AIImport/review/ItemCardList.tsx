@@ -1217,7 +1217,11 @@ function ItemCard({
                 the preview pane. Disabled for table-bearing items (htmlSnippet)
                 because plain-textarea editing of an HTML table corrupts
                 structure; route those to the Standards editor post-Apply. */}
-            {onEditStart && (item.kind === 'text' || item.kind === 'evidenceText' || item.kind === 'tag') && (
+            {/* CR-039 follow-on — Introduction items are editable too. They
+                share the BucketItem shape with narratives, and the wizard's
+                edit-save handler now routes them to editIntroductionItem in
+                the store. */}
+            {onEditStart && (item.kind === 'text' || item.kind === 'evidenceText' || item.kind === 'tag' || item.kind === 'introduction') && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
