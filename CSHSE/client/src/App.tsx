@@ -12,6 +12,9 @@ import LeadReaderDashboardPage from './pages/LeadReaderDashboardPage';
 import LeadReaderCompilationPage from './pages/LeadReaderCompilationPage';
 import SiteVisitChecklistPage from './pages/SiteVisitChecklistPage';
 import Layout from './components/Layout';
+// CR-052 — Tour + Hint providers wrap the protected (logged-in) subtree.
+import { TourProvider } from './features/tour/TourProvider';
+import { HintProvider } from './features/tour/HintProvider';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, needsImpersonationSelection, user } = useAuthStore();
@@ -76,7 +79,14 @@ function App() {
         path="/"
         element={
           <ProtectedRoute>
-            <Layout />
+            {/* CR-052 — Help tour + Hint providers wrap the protected
+                subtree so every authenticated route can read useTour()
+                and useHint(). They are independent of one another. */}
+            <TourProvider>
+              <HintProvider>
+                <Layout />
+              </HintProvider>
+            </TourProvider>
           </ProtectedRoute>
         }
       >

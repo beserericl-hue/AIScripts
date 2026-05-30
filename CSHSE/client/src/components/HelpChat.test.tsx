@@ -1,11 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/msw-server';
 import { HelpChat } from './HelpChat';
+import { useHelpChatStore } from '../store/helpChatStore';
 
 describe('<HelpChat />', () => {
+  // CR-052 — HelpChat's open state lives in a singleton zustand store.
+  // Without an explicit reset between tests, the second test inherits an
+  // open chat panel from the first.
+  beforeEach(() => {
+    useHelpChatStore.getState().close();
+  });
+
   it('renders nothing when the help-chat webhook is not configured', async () => {
     server.use(
       http.get(/\/webhooks\/help\/status$/, () =>

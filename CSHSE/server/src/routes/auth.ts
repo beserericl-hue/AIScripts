@@ -261,8 +261,15 @@ router.get('/me', async (req: Request, res: Response) => {
         isSuperuser: user.isSuperuser,
         // CR-045 — per-user UI preferences. A missing field defaults to
         // the clean single-importer toolbar (hideLegacyImporter: true).
+        // CR-052 — tours map keyed by tour name. Empty object when absent.
         preferences: {
-          hideLegacyImporter: user.preferences?.hideLegacyImporter ?? true
+          hideLegacyImporter: user.preferences?.hideLegacyImporter ?? true,
+          tours: ((): Record<string, boolean> => {
+            const raw = (user.preferences as any)?.tours;
+            if (raw instanceof Map) return Object.fromEntries(raw);
+            if (raw && typeof raw === 'object') return raw as Record<string, boolean>;
+            return {};
+          })()
         }
       }
     });
@@ -308,19 +315,75 @@ router.patch('/me/preferences', async (req: Request, res: Response) => {
         .json({ error: 'hideLegacyImporter must be a boolean' });
     }
 
+    // CR-052 — `tours` is a small map { tourName: boolean }. Validate the
+    // shape strictly so a stale client can't smuggle arbitrary payloads.
+    if ('tours' in body) {
+      if (
+        typeof body.tours !== 'object' ||
+        body.tours === null ||
+        Array.isArray(body.tours)
+      ) {
+        return res.status(400).json({ error: 'tours must be an object' });
+      }
+      for (const [k, v] of Object.entries(body.tours as Record<string, unknown>)) {
+        if (typeof v !== 'boolean') {
+          return res
+            .status(400)
+            .json({ error: `tours.${k} must be a boolean` });
+        }
+        if (k.length > 64 || !/^[a-z0-9_-]+$/i.test(k)) {
+          return res
+            .status(400)
+            .json({ error: `tours key "${k}" is not a valid tour name` });
+        }
+      }
+    }
+
     if (!user.preferences) {
       user.preferences = {};
     }
     if ('hideLegacyImporter' in body) {
       user.preferences.hideLegacyImporter = body.hideLegacyImporter as boolean;
     }
+
+    // CR-052 — merge the inbound `tours` patch into the existing map.
+    // NEVER overwrite — preserve every other tour name the user has
+    // already completed. The preferences subdoc uses a Mongoose Map so
+    // we treat the .tours field as a Map at read/write time. When the
+    // existing prefs blob came back as a plain object (Map.toJSON or
+    // fresh insert), normalize it to a Map first.
+    if ('tours' in body) {
+      const incoming = body.tours as Record<string, boolean>;
+      const existingRaw = (user.preferences as any).tours;
+      let nextMap: Map<string, boolean>;
+      if (existingRaw instanceof Map) {
+        nextMap = new Map(existingRaw);
+      } else if (existingRaw && typeof existingRaw === 'object') {
+        nextMap = new Map(Object.entries(existingRaw));
+      } else {
+        nextMap = new Map();
+      }
+      for (const [k, v] of Object.entries(incoming)) {
+        nextMap.set(k, v);
+      }
+      (user.preferences as any).tours = nextMap;
+    }
+
     user.markModified('preferences');
     await user.save();
+
+    // Echo the full, defaulted blob so the client can sync local state.
+    const toursRaw = (user.preferences as any).tours;
+    const toursOut: Record<string, boolean> =
+      toursRaw instanceof Map
+        ? Object.fromEntries(toursRaw)
+        : (toursRaw as Record<string, boolean> | undefined) ?? {};
 
     return res.json({
       ok: true,
       preferences: {
-        hideLegacyImporter: user.preferences?.hideLegacyImporter ?? true
+        hideLegacyImporter: user.preferences?.hideLegacyImporter ?? true,
+        tours: toursOut
       }
     });
   } catch (error) {

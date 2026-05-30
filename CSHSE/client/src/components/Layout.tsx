@@ -3,6 +3,11 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { HelpChat } from './HelpChat';
+import { HelpMenu } from './HelpMenu';
+import { Toast } from './Toast';
+import { HintLayer } from '../features/tour/HintLayer';
+import { WelcomeTour } from '../features/tour/WelcomeTour';
+import { WelcomeTourAutoStart } from '../features/tour/WelcomeTourAutoStart';
 
 // Simple icon components
 const HomeIcon = () => (
@@ -120,8 +125,13 @@ export default function Layout() {
     ? impersonation.impersonatedUser
     : effectiveUser;
 
-  const navigation: Array<{ name: string; href: string; icon: any }> = [
-    { name: 'Home', href: '/dashboard', icon: HomeIcon },
+  // CR-052 — `tourStep` keys the data-tour-step attribute the welcome
+  // tour spotlights. `home`, `self-study`, `review-queue`, `compilations`,
+  // `settings`, `help` map to the TOUR_TARGETS constants in
+  // features/tour/welcomeTourSteps.tsx. Items without a tourStep stay
+  // off the tour.
+  const navigation: Array<{ name: string; href: string; icon: any; tourStep?: string }> = [
+    { name: 'Home', href: '/dashboard', icon: HomeIcon, tourStep: 'home' },
   ];
 
   // Sprint 3 — readers get a Review queue link. PCs still see Self-Study.
@@ -130,19 +140,19 @@ export default function Layout() {
   const isAdminLikeRole = effectiveRole === 'admin' || isCurrentlySuperuser;
   const isLeadOrAdmin = effectiveRole === 'lead_reader' || isAdminLikeRole;
   if (!isReaderRole || isAdminLikeRole) {
-    navigation.push({ name: 'Self-Study', href: '/self-study', icon: DocumentIcon });
+    navigation.push({ name: 'Self-Study', href: '/self-study', icon: DocumentIcon, tourStep: 'self-study' });
   }
   if (isReaderRole || isAdminLikeRole) {
-    navigation.push({ name: 'Review queue', href: '/reader', icon: DocumentIcon });
+    navigation.push({ name: 'Review queue', href: '/reader', icon: DocumentIcon, tourStep: 'review-queue' });
   }
   // Sprint 5.1 — Compilations tab for lead readers + admins (CR-009).
   if (isLeadOrAdmin) {
-    navigation.push({ name: 'Compilations', href: '/lead-reader', icon: DocumentIcon });
+    navigation.push({ name: 'Compilations', href: '/lead-reader', icon: DocumentIcon, tourStep: 'compilations' });
   }
 
   // Show Settings for admin role or superuser (not impersonating)
   if (showSettings) {
-    navigation.push({ name: 'Settings', href: '/admin', icon: CogIcon });
+    navigation.push({ name: 'Settings', href: '/admin', icon: CogIcon, tourStep: 'settings' });
   }
 
   const displayName = effectiveUser
@@ -208,6 +218,10 @@ export default function Layout() {
                     <Link
                       key={item.name}
                       to={item.href}
+                      // CR-052 — data-tour-step anchors the welcome tour
+                      // spotlight to the nav item. Optional; items
+                      // without a tourStep are simply not in the tour.
+                      data-tour-step={item.tourStep}
                       className={`nav-tab flex items-center space-x-2 ${
                         isActive ? 'nav-tab-active' : 'nav-tab-inactive'
                       }`}
@@ -239,6 +253,11 @@ export default function Layout() {
                   <span className="hidden sm:inline">Switch Role</span>
                 </button>
               )}
+              {/* CR-052 — Help menu lives next to the cog. Carries the
+                  data-tour-step="help" target the welcome tour spotlights
+                  in its final step + the id the post-completion hint
+                  anchors to. */}
+              <HelpMenu />
               <div className="relative" ref={menuRef}>
                 <button
                   onClick={() => setShowUserMenu(!showUserMenu)}
@@ -398,6 +417,15 @@ export default function Layout() {
       )}
 
       <HelpChat />
+
+      {/* CR-052 — Tour + Hint + Toast layers. Mounted at the layout root
+          so every authenticated route gets them. HintLayer + WelcomeTour
+          read from their context providers (mounted in App.tsx around
+          the protected route). */}
+      <WelcomeTourAutoStart />
+      <WelcomeTour />
+      <HintLayer />
+      <Toast />
     </div>
   );
 }

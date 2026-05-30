@@ -3,8 +3,11 @@ import { persist } from 'zustand/middleware';
 import { api } from '../services/api';
 
 // CR-045 — per-user UI preferences mirrored from GET /api/auth/me.
+// CR-052 — `tours` records per-tour completion (e.g. { welcome: true })
+// so tour status follows the user across devices.
 export interface UserPreferences {
   hideLegacyImporter?: boolean;
+  tours?: Record<string, boolean>;
 }
 
 interface User {
@@ -217,7 +220,15 @@ export const useAuthStore = create<AuthState>()(
         const { user } = get();
         if (!user) return;
         // Optimistic local update so the checkbox flips instantly.
+        // CR-052 — `tours` is a Record<string, boolean>; a partial patch
+        // must MERGE with the existing keys rather than replace them, so
+        // a second tour completion doesn't wipe the first. (The server
+        // also merges; this keeps the optimistic local state honest in
+        // between the request and the response.)
         const merged: UserPreferences = { ...(user.preferences ?? {}), ...prefs };
+        if (prefs.tours) {
+          merged.tours = { ...(user.preferences?.tours ?? {}), ...prefs.tours };
+        }
         set({ user: { ...user, preferences: merged } });
         try {
           const res = await api.patch('/api/auth/me/preferences', prefs);

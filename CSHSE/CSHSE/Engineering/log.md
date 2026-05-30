@@ -1828,3 +1828,41 @@ Root cause: `SelfStudyEditor.tsx:299` only reset to upload step when the prior r
 For the record: there is no literal commented-out View button anywhere in the current tree. The `ItemCardList.tsx:1517` comment ("placeholder 'View file' button") describes a CR-033 Phase 3 placeholder that ended up shipped as `📂 Download .docx`. The capability to view the source DOES exist — but only after clicking the card to select it: the right-pane `CVPreview` / `EvidenceDocPreview` components already render a "Show in source" button. An **inline** "View source" button directly on the card has never shipped. Promoted to **[[cr-051-inline-view-source-for-supporting-evidence-cards]]** (P2, Sprint 7 polish): inline `🔍 View source` on each CV / Syllabus / Paper card that fires `onShowInSource(sectionId)` — same handler the right pane already uses. ~1-2 LOC per view + threading `handleShowInSource` from `ReviewStep` into `CVsView` and `EvidenceDocsView`.
 
 Full client suite 279/279; no new test files (these are UI wiring fixes pinned by existing integration coverage); `tsc --noEmit` clean for every file touched (two pre-existing CR-050 type errors in `SelfStudyEditor.tsx` unrelated to this work).
+
+## [2026-05-30] update | CR-052 — Contextual in-app Help + Welcome Tour + Hint system shipped
+
+End-to-end onboarding system: first-time users get a Welcome Tour auto-fired on /dashboard; tour completion follows them across devices via User.preferences.tours; a Help dropdown next to the Layout cog gives "Chat with us" (the existing Help-RAG agent) + "(Re)start the welcome tour"; programmatic Hints (anchored balloons with auto-dismiss + click-outside + dedup-by-id) are available to every feature via `useHint()`.
+
+Repo realities vs spec — six deltas flagged, four resolved:
+1. NO existing i18n library; introduced minimal in-house typed registry `client/src/i18n/strings.ts` (object literal + `StringKey` literal-union; `t(key, vars?)` interpolates `{var}` via regex, ES2020-safe). Future migration to a real lib is a drop-in.
+2. NO UI primitive library actually in use (Radix declared but never imported); built every surface on Tailwind + lucide-react + raw HTML, matching the rest of the app.
+3. Home route is `/dashboard`, not `/home` — substituted throughout.
+4. NO existing toast system; added minimal Toast.tsx (~80 LOC) + toastStore.
+5. `HelpChat` already existed and self-managed open state — lifted into a tiny zustand store (`helpChatStore`) so HelpMenu can open it programmatically.
+6. NO Support Page item per user direction (Help RAG = HelpChat = the only help). Menu has exactly two items: Chat + Restart Tour.
+
+Server: widened `IUserPreferences.tours` (Mongoose Map<string, boolean>); widened `PATCH /api/auth/me/preferences` allowlist + strict shape validation (object only; boolean values; tour-name regex `^[a-z0-9_-]+$`, max 64 chars) + merge-in-place semantics (preserves `hideLegacyImporter` siblings AND every existing tour key); `GET /me` echoes `tours` defaulted to `{}`. 9 integration tests pin the round-trip and the merge contract.
+
+Client (additive):
+- `i18n/strings.ts` — typed registry with 5-year-old voice on every tour + hint copy. Lint-style test (`strings.test.ts`) checks the tour namespace for common jargon tokens (API/JSON/DOM/HTTP/etc.) and forbids them.
+- `store/toastStore.ts` + `components/Toast.tsx` — zustand-backed bottom-right toast with auto-dismiss + variants (info/error/success).
+- `store/helpChatStore.ts` — lifts HelpChat open-state; widened HelpChat to read from the store; behavior unchanged.
+- `store/authStore.ts` — UserPreferences widens to include `tours?: Record<string, boolean>`; `updatePreferences` now deep-merges `tours` so a partial patch doesn't wipe sibling tour keys.
+- `features/tour/TourProvider.tsx` — `useTour()` context: activeTour/tourStatus/isLoading/wasAutoStarted + startTour/endTour/completeTour/skipTour + `shouldAutoStartWelcomeTour(pathname)`. Persistence failures surface a toast via `useToastStore.getState().push(t('tour.errors.persistFailed'), 'error')` and close cleanly.
+- `features/tour/HintProvider.tsx` — independent of TourProvider; `useHint()` exposes showHint/dismissHint/hasHint/getHint with dedup-by-id.
+- `features/tour/HintBalloon.tsx` — 300ms fade-in, auto-dismiss after 8s, click-outside dismisses, click-inside does not, role=status + aria-live=polite.
+- `features/tour/HintLayer.tsx` — walks `activeHints` and anchors each balloon via getElementById + getBoundingClientRect (falls back to centered overlay when missing); re-measures on resize/scroll.
+- `features/tour/CshseTooltip.tsx` — custom Joyride tooltip with progress bar (((index+1)/size)*100%), Back hidden at index 0, Skip hidden on last step, Next/Finish label flip.
+- `features/tour/WelcomeTour.tsx` — wraps Joyride; reads activeTour/wasAutoStarted/role; STATUS.FINISHED → completeTour + (if wasAutoStarted) `showHint('welcome-tour-completed')` anchored to the Help trigger; STATUS.SKIPPED or ACTIONS.CLOSE → skipTour + same hint; STATUS.ERROR → endTour. Body-scroll lock with pre-mount overflow captured and restored on unmount/exit.
+- `features/tour/WelcomeTourAutoStart.tsx` — effect-only; on /dashboard render fires `startTour('welcome', { autoStarted: true })` once per page-load. Redirects to /dashboard when user is on a non-excluded non-dashboard route. Latched via `hasFiredRef`.
+- `features/tour/welcomeTourSteps.tsx` — TOUR_TARGETS, TOUR_TARGET_IDS, role-aware `getWelcomeTourSteps({ role, translate? })`. Core steps (intro, home, help, last) always shown; role-specific steps drop out when not applicable.
+- `features/tour/tourTheme.ts` — single TOUR_THEME constant.
+- `components/HelpMenu.tsx` — dropdown trigger (HelpCircle icon, id="cshse-help-trigger", data-tour-step="help"). Click outside closes (mirrors cog pattern). Opening dismisses the post-tour hint. Items: Chat (disabled when HelpChat backend not configured) + Tour (only on /dashboard; "Start ..." vs "Watch ... again" based on tourStatus.welcome).
+- `App.tsx` wraps protected subtree in `<TourProvider><HintProvider>`.
+- `Layout.tsx` adds `data-tour-step` attributes to nav links; mounts HelpMenu, Toast, HintLayer, WelcomeTour, WelcomeTourAutoStart.
+
+Dep: `react-joyride@2.9.3` added (single new third-party dep). v3 was tried and reverted — v3's API surface diverges from the spec (renamed CallBackProps, removed disableBeacon, etc.); v2 is widely-used and stable.
+
+Tests: 43 client unit (strings: 5; HintProvider: 7; TourProvider: 11; CshseTooltip: 8; HintBalloon: 5; HelpMenu: 7) + 9 server integration + 3 E2E specs (Finish path, Skip path, Restart label). HelpChat.test.tsx gains a `beforeEach(() => useHelpChatStore.getState().close())` because the singleton store would otherwise leak open-state across tests. Full client suite 322/322 (was 279, +43); `tsc --noEmit` clean for every CR-052 file. Server suite re-run after CR-052 changes — 380+ expected (was 373 + 9 new tests).
+
+Vault: CR-052 created + promoted to shipped; index updated; this log entry.

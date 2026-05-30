@@ -55,8 +55,12 @@ export interface IUser extends Document {
 // CR-045 — per-user UI preferences. `hideLegacyImporter` defaults true so
 // every PC sees the clean single-importer toolbar; PCs who still want the
 // legacy paste-and-tag flow uncheck it in the cogwheel → Preferences menu.
+// CR-052 — per-user tour-completion state. Keyed by tour name (today only
+// `welcome`); values are booleans (true == the user has finished or
+// skipped the tour at least once). Absent map == nothing completed.
 export interface IUserPreferences {
   hideLegacyImporter?: boolean;
+  tours?: Map<string, boolean> | Record<string, boolean>;
 }
 
 const UserSchema = new Schema<IUser>({
@@ -152,9 +156,12 @@ const UserSchema = new Schema<IUser>({
   // CR-045 — per-user UI preferences. `default: undefined` keeps the
   // subdoc absent until first write; the API + client treat a missing
   // `hideLegacyImporter` as `true` (clean single-importer toolbar).
+  // CR-052 — `tours` is a Mongoose Map keyed by tour name. Updates go
+  // through PATCH /api/auth/me/preferences with merge-in-place semantics.
   preferences: {
     type: {
-      hideLegacyImporter: { type: Boolean }
+      hideLegacyImporter: { type: Boolean },
+      tours: { type: Map, of: Boolean }
     },
     default: undefined
   }

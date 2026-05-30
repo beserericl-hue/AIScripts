@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Loader2, HelpCircle } from 'lucide-react';
 import { api } from '../services/api';
+import { useHelpChatStore } from '../store/helpChatStore';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -11,9 +12,29 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+/** Read-only helper: is the help-chat back end configured in this env? */
+export function useHelpChatAvailable(): boolean {
+  const [isAvailable, setIsAvailable] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    api.get(`${API_BASE}/webhooks/help/status`)
+      .then(res => { if (!cancelled) setIsAvailable(res.data.available); })
+      .catch(() => { if (!cancelled) setIsAvailable(false); });
+    return () => { cancelled = true; };
+  }, []);
+  return isAvailable;
+}
+
 export function HelpChat() {
   const [isAvailable, setIsAvailable] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
+  // CR-052 — open-state lifted to a tiny zustand store so the new HelpMenu
+  // dropdown can open the widget programmatically. Behavior unchanged.
+  const isOpen = useHelpChatStore((s) => s.isOpen);
+  const setIsOpen = (next: boolean | ((prev: boolean) => boolean)) => {
+    const { isOpen: cur, open, close } = useHelpChatStore.getState();
+    const value = typeof next === 'function' ? (next as (p: boolean) => boolean)(cur) : next;
+    if (value) open(); else close();
+  };
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
