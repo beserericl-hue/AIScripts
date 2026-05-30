@@ -169,7 +169,12 @@ describe('GET /api/auth/me — preferences (CR-045)', () => {
       .get('/api/auth/me')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.user.preferences).toEqual({ hideLegacyImporter: true });
+    // CR-052 widened the echoed preferences blob with `tours: {}` (empty
+    // by default). Defaults: hideLegacyImporter=true, tours={}.
+    expect(res.body.user.preferences).toEqual({
+      hideLegacyImporter: true,
+      tours: {},
+    });
   });
 });
 
@@ -184,7 +189,11 @@ describe('PATCH /api/auth/me/preferences (CR-045)', () => {
       .send({ hideLegacyImporter: false });
     expect(patch.status).toBe(200);
     expect(patch.body.ok).toBe(true);
-    expect(patch.body.preferences).toEqual({ hideLegacyImporter: false });
+    // CR-052 — echoed blob now includes `tours: {}` (empty by default).
+    expect(patch.body.preferences).toEqual({
+      hideLegacyImporter: false,
+      tours: {},
+    });
 
     const me = await request(app)
       .get('/api/auth/me')
@@ -232,7 +241,12 @@ describe('PATCH /api/auth/me/preferences (CR-045)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ hideLegacyImporter: false, somethingElse: 42 });
     expect(res.status).toBe(200);
-    expect(res.body.preferences).toEqual({ hideLegacyImporter: false });
+    // CR-052 — echoed blob also includes `tours: {}` (empty by default).
+    // Unknown keys like `somethingElse` still must not survive.
+    expect(res.body.preferences).toEqual({
+      hideLegacyImporter: false,
+      tours: {},
+    });
     expect(res.body.preferences.somethingElse).toBeUndefined();
   });
 });
