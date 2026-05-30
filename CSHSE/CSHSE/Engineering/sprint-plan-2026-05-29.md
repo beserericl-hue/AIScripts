@@ -132,7 +132,7 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 
 # Sprint 5 — Lead-reader workflow (2 weeks)
 
-- **S5.1 — Compilation tab client (CR-009 client).** Build `features/leadReader/CompilationTab/` over the existing `LeadReaderCompilation` server: all readers' scores side-by-side, disagreement/zero highlighting, editable final score (audit-logged).
+- **S5.1 — Compilation tab client (CR-009 client). ✅ DONE 2026-05-30.** New compilation surface on top of `Score` (0-3), not the legacy `LeadReaderCompilation` aggregator (which reads from `Review.assessments` compliance triplet — that flow is untouched but unused for this view). Server: `LeadFinalScore` model + `compilationController` (`getCompilation`, `setFinalScore`, `clearFinalScore`) + `routes/compilation.ts` mounted at `/api`. Endpoints role-gated to lead_reader + admin + superuser. Client: pure `CompilationTabView` + container; pure `LeadReaderDashboardView` + container. Routes `/lead-reader` + `/lead-reader/:submissionId`; layout nav adds "Compilations" for lead_reader + admin. Audit-logged transitions: `compilation.final_set` + `compilation.final_cleared` (with `priorScore`). Tests: 13 server integration + 16 client unit; full server 331/331, full client 259/259.
 - **S5.2 — Suggestions consolidation DOCX (CR-011, new).** `suggestionsDocx` + export endpoint with internal/PC-facing (anonymized) modes.
 - **S5.3 — Reader file attachments on comments (CR-021, new).** `Comment.attachments[]` + composer paperclip + S3 `reader-attachments/` prefix; ACL follows relay state.
 - **S5.4 — Portal direct messaging (CR-010, greenfield).** `DirectMessageThread`/`DirectMessage` models + controller + `features/reader/Messages/`; PC role has no access (tested).

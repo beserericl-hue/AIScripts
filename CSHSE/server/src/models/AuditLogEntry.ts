@@ -16,6 +16,8 @@ export type AuditAction =
   | 'reader.removed'
   | 'comment.relayed'
   | 'comment.unrelayed'
+  | 'compilation.final_set'        // CR-009 / S5.1 — lead reader stamps final 0-3 score per spec
+  | 'compilation.final_cleared'    // CR-009 / S5.1 — lead reader retracts a final score
   | 'account.locked'
   | 'account.unlocked';
 

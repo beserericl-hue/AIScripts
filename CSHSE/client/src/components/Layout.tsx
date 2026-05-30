@@ -128,11 +128,16 @@ export default function Layout() {
   // Admins + superusers see both (they may need either surface).
   const isReaderRole = effectiveRole === 'reader' || effectiveRole === 'lead_reader';
   const isAdminLikeRole = effectiveRole === 'admin' || isCurrentlySuperuser;
+  const isLeadOrAdmin = effectiveRole === 'lead_reader' || isAdminLikeRole;
   if (!isReaderRole || isAdminLikeRole) {
     navigation.push({ name: 'Self-Study', href: '/self-study', icon: DocumentIcon });
   }
   if (isReaderRole || isAdminLikeRole) {
     navigation.push({ name: 'Review queue', href: '/reader', icon: DocumentIcon });
+  }
+  // Sprint 5.1 — Compilations tab for lead readers + admins (CR-009).
+  if (isLeadOrAdmin) {
+    navigation.push({ name: 'Compilations', href: '/lead-reader', icon: DocumentIcon });
   }
 
   // Show Settings for admin role or superuser (not impersonating)

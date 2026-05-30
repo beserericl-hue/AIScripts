@@ -66,7 +66,7 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 |---|---|---|---|
 | [[cr-002-multi-author-wizard-upload]] | Wizard accepts partial documents from multiple PCs | **superseded 2026-05-24** by [[cr-041-multi-file-drag-drop-with-batch-review]] | [[webinar-action-items-2026-05-20#44-07]] |
 | [[cr-008-pre-submission-validation-popup]] | Pre-submit validation popup + warnings | proposed | [[webinar-action-items-2026-05-20#1-08-47]] |
-| [[cr-009-compilation-tab-lead-reader]] | Side-by-side reader-scores compilation tab | in-progress | [[webinar-action-items-2026-05-20#compilation-tab]] |
+| [[cr-009-compilation-tab-lead-reader]] | Side-by-side reader-scores compilation tab | **shipped** (2026-05-30 — Sprint 5.1: `LeadFinalScore` + `compilationController` + `/api/submissions/:id/compilation` + `CompilationTab` view/container + `/lead-reader` routes; Score 0-3 source-of-truth; audit-logged `compilation.final_set` + `final_cleared`. DOCX export deferred to S5.2.) | [[webinar-action-items-2026-05-20#compilation-tab]] |
 | [[cr-010-portal-direct-messaging]] | Reader-to-reader portal direct messaging | proposed | [[webinar-action-items-2026-05-20#1-25-52]] |
 | [[cr-011-suggestions-consolidation-doc]] | Consolidated suggestions doc per standard for VP for accreditation | proposed | [[webinar-action-items-2026-05-20#1-04-19]] |
 | [[cr-012-site-visit-partial-compliance-tracking]] | Partial-compliance carried into site-visit checklist | in-progress | [[webinar-action-items-2026-05-20#1-05-53]] |

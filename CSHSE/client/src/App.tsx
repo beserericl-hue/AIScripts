@@ -8,6 +8,8 @@ import AcceptInvitationPage from './pages/AcceptInvitationPage';
 import ImpersonationSelector from './pages/ImpersonationSelector';
 import ReaderDashboardPage from './pages/ReaderDashboardPage';
 import ReaderReviewPage from './pages/ReaderReviewPage';
+import LeadReaderDashboardPage from './pages/LeadReaderDashboardPage';
+import LeadReaderCompilationPage from './pages/LeadReaderCompilationPage';
 import Layout from './components/Layout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -83,6 +85,9 @@ function App() {
         {/* Sprint 3 — Reader review client. /reader is the queue; /reader/:id is the review screen. */}
         <Route path="reader" element={<ReaderDashboardPage />} />
         <Route path="reader/:submissionId" element={<ReaderReviewPage />} />
+        {/* Sprint 5.1 — Lead-reader compilation. /lead-reader lists submissions; /lead-reader/:id is the side-by-side tab. */}
+        <Route path="lead-reader" element={<LeadReaderDashboardPage />} />
+        <Route path="lead-reader/:submissionId" element={<LeadReaderCompilationPage />} />
         <Route path="admin/*" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

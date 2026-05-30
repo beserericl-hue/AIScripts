@@ -3,12 +3,12 @@ name: CR-009 — Compilation tab (lead reader side-by-side)
 description: Lead reader sees per-spec side-by-side scores from each reader with disagreement highlighting and a Final-score field.
 type: change-request
 cr_id: CR-009
-status: in-progress
+status: shipped
 priority: P1
 source: [[webinar-action-items-2026-05-20#compilation-tab]], [[webinar-action-items-2026-05-20#1-25-52]]
-sprint_target: Sprint 5 or 6
+sprint_target: Sprint 5.1
 tags: [readers, lead-reader, compilation, scoring]
-last_reviewed: 2026-05-29
+last_reviewed: 2026-05-30
 ---
 
 # CR-009 — Compilation tab (lead reader side-by-side)
@@ -47,26 +47,39 @@ The lead reader generates the **compilation report** (DOCX export) from this tab
 
 ## Acceptance
 
-- [ ] Compilation tab visible only to roles `lead-reader` and `admin`.
-- [ ] Every spec in the program shows on one virtualized table.
-- [ ] Disagreement highlighting matches the rules above.
-- [ ] Final score persists per spec; audit-logged.
-- [ ] Compilation DOCX export button generates a report mirroring the table + lead-reader comments.
-- [ ] E2E: three readers score the same spec differently → lead reader sees yellow row → sets Final → exports DOCX → DOCX matches.
+- [x] Compilation tab visible only to roles `lead_reader` and `admin` (server 403s readers + PCs; client nav hides the tab; server endpoints role-gated).
+- [x] Every spec with a reader score (or a Final score) shows on one table; columns are one per reader, plus Final.
+- [x] Disagreement highlighting matches the rules above — `hasZero` (red), `hasDisagreement` (yellow), `allAgree` (green), `excluded` (muted). Server returns the flags pre-computed.
+- [x] Final score persists per spec; audit-logged (`compilation.final_set` / `compilation.final_cleared` with priorScore + new score).
+- [ ] Compilation DOCX export button generates a report mirroring the table + lead-reader comments. **Deferred to Sprint 5.2 (CR-011 suggestions DOCX precedes it).**
+- [ ] E2E: three readers score the same spec differently → lead reader sees yellow row → sets Final → exports DOCX → DOCX matches. **Partial:** the side-by-side / yellow / Final round-trip is pinned by integration + unit tests; the DOCX leg lands with Sprint 5.2.
 
-## Files affected
+## Files affected (as shipped, Sprint 5.1, 2026-05-30)
 
-- `server/src/controllers/compilationController.ts` (new)
-- `server/src/services/compilationDocx.ts` (new) — uses same docx pipeline as reader-report (S5.10)
-- `client/src/features/reader/CompilationTab/` (new folder)
-- Routing: only lead reader + admin
+- `server/src/models/LeadFinalScore.ts` (new) — per-(submission, std, spec) Final-score collection, indexed unique.
+- `server/src/controllers/compilationController.ts` (new) — getCompilation / setFinalScore / clearFinalScore.
+- `server/src/routes/compilation.ts` (new) — `GET /api/submissions/:id/compilation` + `PUT|DELETE /compilation/final-score`.
+- `server/src/models/AuditLogEntry.ts` — AuditAction union widened (`compilation.final_set`, `compilation.final_cleared`).
+- `server/src/index.ts` — mounts the compilation router.
+- `client/src/features/leadReader/CompilationTab/CompilationTab.tsx` (new) — pure `CompilationTabView` + container with TanStack-Query wiring; Score4LevelSelector reused for the Final editor.
+- `client/src/features/leadReader/LeadReaderDashboard.tsx` (new) — pure view + container; lists compilations.
+- `client/src/pages/LeadReaderDashboardPage.tsx`, `client/src/pages/LeadReaderCompilationPage.tsx` (new).
+- `client/src/App.tsx` — adds `/lead-reader` + `/lead-reader/:submissionId` routes.
+- `client/src/components/Layout.tsx` — adds "Compilations" nav for lead_reader + admin + superuser.
+
+## Design notes (Sprint 5.1, 2026-05-30)
+
+- **Source of truth = `Score` (0-3), not legacy `Review.assessments` compliance triplet.** The pre-existing `LeadReaderCompilation` model aggregates from the latter, but Sprint 3 readers write into the former. To make the compilation actually reflect what readers wrote, the new compilation surface reads `Score` directly. Legacy `LeadReaderCompilation` is left intact (its endpoints still serve the older flow; nothing in Sprint 5.1 mutates them).
+- **Final scores live in a dedicated collection (`LeadFinalScore`), not on `Submission` or `LeadReaderCompilation`.** Avoids the Mongoose-8 Map dotted-key trap (see [[narrative-storage]]); per-spec upserts are trivial.
+- **Disagreement rule:** any non-equal pair in the same spec is disagreement (equivalent to "any two scores differ by ≥ 1" for integers 0-3). Single-voter rows are neither agreement nor disagreement.
+- **Audit payload** stores `priorScore` on update + clear so the timeline can reconstruct the path.
 
 ## Dependencies
 
-- [[cr-003-zero-to-three-compliance-rubric]] — defines the score values
-- [[cr-010-portal-direct-messaging]] — lead reader uses DM to ask a reader to clarify
-- Existing S5.10 work — reuse reader-report DOCX scaffolding
+- [[cr-003-zero-to-three-compliance-rubric]] — defines the score values (shipped Sprint 3).
+- [[cr-010-portal-direct-messaging]] — lead reader uses DM to ask a reader to clarify (Sprint 5.4).
+- [[cr-011-suggestions-consolidation-docx]] — DOCX export will land alongside Sprint 5.2.
 
 ## Open questions
 
-- Does Final-score override propagate back to individual reader views, or stay lead-reader-private? Default: visible to all readers (transparency).
+- Does Final-score override propagate back to individual reader views, or stay lead-reader-private? Default: visible to all readers (transparency). The compilation read endpoint exposes Final scores to lead_reader + admin only today; making it visible to readers requires a small read-gate change.

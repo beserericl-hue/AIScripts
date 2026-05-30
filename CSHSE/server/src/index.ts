@@ -42,6 +42,8 @@ import specsRouter from './routes/specs';
 import filesRouter from './routes/files';
 import standardsRouter from './routes/standards';
 import scoresRouter from './routes/scores';
+// CR-009 / Sprint 5.1 — lead-reader compilation (0-3 side-by-side + Final).
+import compilationRouter from './routes/compilation';
 // CR-034 — E2E seed router; only mounted when E2E_SEED_ENABLED=1 and never in production.
 import { buildTestRouter } from './routes/test';
 
@@ -175,6 +177,7 @@ app.use('/api/admin/error-logs', errorLogsRouter);
 app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
 app.use('/api', scoresRouter);
+app.use('/api', compilationRouter);
 // (test router moved up above the bare-`/api` catch-alls so /api/test/*
 // isn't swallowed by another router's authenticate middleware first.)
 
