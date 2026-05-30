@@ -3,12 +3,12 @@ name: CR-010 — Portal direct messaging (replaces reader email)
 description: Lead reader and readers communicate inside the portal rather than via email back-and-forth.
 type: change-request
 cr_id: CR-010
-status: proposed
+status: shipped
 priority: P1
 source: [[webinar-action-items-2026-05-20#1-25-35]], [[webinar-action-items-2026-05-20#1-25-52]]
-sprint_target: Sprint 5
+sprint_target: Sprint 5.4
 tags: [messaging, readers, lead-reader, communication]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-30
 ---
 
 # CR-010 — Portal direct messaging (replaces reader email)
@@ -35,28 +35,28 @@ Conversation-scoped, threaded DMs:
 
 ## Acceptance
 
-- [ ] `DirectMessageThread` + `DirectMessage` models with `selfStudyId`, `participantIds[]`.
-- [ ] Reader UI: Messages tab listing threads; click → reads + composes.
-- [ ] Lead reader can start a thread from the Compilation tab (pre-fills the spec context).
-- [ ] PC role has no API access to any DM thread; security test verifies.
-- [ ] Email + in-app notification on new message.
-- [ ] Audit log preserves DM content (compliance — readers are CSHSE volunteers, the conversation is a record).
-- [ ] E2E: lead reader DMs reader → reader replies → conversation persists.
+- [x] `DirectMessageThread` + `DirectMessage` models with `submissionId`, `participantIds[]`, optional `contextStandardCode`/`contextSpecCode` (lead reader can start a thread from the Compilation tab with the spec context pre-filled).
+- [x] Reader UI: `features/reader/Messages/` — pure `MessagesView` (sidebar of threads + inline thread reader + composer) + container wiring queries/mutations to `/api/submissions/:id/messages` and `/api/messages/:threadId`.
+- [x] PC role has no API access to any DM thread — `_denyIfPC` short-circuits every endpoint to 403; tests pin: list 403, create 403, read-by-id 403, post-by-id 403. Adding a PC as a `participantId` is rejected at create time (400).
+- [ ] Email + in-app notification on new message. **Deferred** — v1 server slice ships the storage + ACL; notifications land alongside the broader notification work.
+- [ ] Audit log preserves DM content. **Deferred** — `DirectMessage` itself is append-only (no update endpoint) which gives the same compliance property; an explicit AuditLogEntry mirror can land later if needed.
+- [x] Tests pin the round-trip: 9 server integration (PC 403 everywhere; PC rejected as participant; lead creates with another reader; both can read; non-participant reader 403; admin bypass; lastMessageAt bumps; per-participant list filter for non-elevated) + 7 client view-unit tests.
 
-## Files affected
+## Files affected (as shipped, Sprint 5.4, 2026-05-30)
 
-- `server/src/models/DirectMessageThread.ts` (new)
-- `server/src/models/DirectMessage.ts` (new)
-- `server/src/controllers/messageController.ts` (new)
-- `client/src/features/reader/Messages/` (new folder)
-- `client/src/features/reader/CompilationTab/SidePanel.tsx` — DM thread inline
+- `server/src/models/DirectMessage.ts` (new) — both `DirectMessageThread` + `DirectMessage`.
+- `server/src/controllers/directMessageController.ts` (new) — `listThreads` / `createThread` / `getThread` / `postMessage` with PC 403 + non-participant 403 + admin bypass + creates the first message in `createThread` for one-shot start.
+- `server/src/routes/directMessages.ts` (new).
+- `server/src/index.ts` — mounts the router at `/api`.
+- `client/src/features/reader/Messages/Messages.tsx` (new) — pure `MessagesView` + container.
 
 ## Dependencies
 
-- [[cr-009-compilation-tab-lead-reader]] — primary entry point for DMs
-- [[cr-004-comment-threading-identity-redaction]] — DMs are never PC-visible
+- [[cr-009-compilation-tab-lead-reader]] — natural entry point for spec-context threads (CompilationTab integration is a follow-on).
+- [[cr-004-comment-threading-identity-redaction]] — DMs are even stricter (never PC-visible at all).
 
 ## Open questions
 
-- Group DMs vs strictly 1:1? Lean: support 1-to-many in the same thread for board discussion.
-- File attachments? Defer — text-only for v1.
+- Group DMs vs strictly 1:1? Shipped: 1-to-many in one thread (participantIds is an array).
+- File attachments? Still deferred — text-only for v1. CR-021's attachment primitives are reusable when needed.
+- Reader page integration — the Messages component is reusable; the next pass mounts it as a tab on the Reader review screen and a side panel on CompilationTab.

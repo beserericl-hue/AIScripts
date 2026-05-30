@@ -44,6 +44,8 @@ import standardsRouter from './routes/standards';
 import scoresRouter from './routes/scores';
 // CR-009 / Sprint 5.1 — lead-reader compilation (0-3 side-by-side + Final).
 import compilationRouter from './routes/compilation';
+// CR-010 / Sprint 5.4 — Portal direct messaging.
+import directMessagesRouter from './routes/directMessages';
 // CR-034 — E2E seed router; only mounted when E2E_SEED_ENABLED=1 and never in production.
 import { buildTestRouter } from './routes/test';
 
@@ -178,6 +180,7 @@ app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
 app.use('/api', scoresRouter);
 app.use('/api', compilationRouter);
+app.use('/api', directMessagesRouter);
 // (test router moved up above the bare-`/api` catch-alls so /api/test/*
 // isn't swallowed by another router's authenticate middleware first.)
 

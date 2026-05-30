@@ -1771,3 +1771,19 @@ Tests: `tests/integration/comment-attachments.test.ts` (11). s3Service is spied 
 Composer paperclip UI deferred — the reader-comment surface (the in-narrative comment pane) doesn't yet exist on the Sprint 3 reader client. The endpoint contract is stable, so the UI is a drop-in slot when the surface lands.
 
 Vault: CR-021 promoted to **shipped**; sprint plan S5.3 marked done (server slice); index updated.
+
+## [2026-05-30] update | Sprint 5.4 — CR-010 Portal direct messaging shipped
+
+Reader / lead-reader DMs scoped to one submission, with strict PC exclusion. The pre-existing comment-relay flow (CR-004) lets the PC see *some* reader output post-relay; DMs are stricter — PCs can never see, post, or be added as a participant. This is the channel for the back-channel scoring/clarification conversations Julia called out as currently happening over email.
+
+Server: `models/DirectMessage.ts` exports both `DirectMessageThread` (per submission; subject + `participantIds[]` + optional spec context + `lastMessageAt`) and `DirectMessage` (per thread; append-only — there's no update endpoint). `directMessageController` exports `listThreads` / `createThread` / `getThread` / `postMessage`. ACL: `_denyIfPC` short-circuits PCs on every endpoint to 403; non-participant reader/lead → 403; admin/superuser bypass. Adding a PC as a `participantId` is rejected at create time (400). `createThread` is one-shot — it creates the thread AND posts the opening message in one round-trip so the client doesn't need to sequence two writes.
+
+Routes: `GET|POST /api/submissions/:submissionId/messages`, `GET|POST /api/messages/:threadId`. Mounted at `/api` in `index.ts`.
+
+Client: `features/reader/Messages/Messages.tsx` — pure `MessagesView` (left sidebar of threads + inline reader + composer) and a container that wires queries (`dm-threads`, `dm-thread`) + a `postMessage` mutation that invalidates both on success. The component is intentionally standalone — the next pass mounts it as a tab on the Reader review screen and as a side panel on CompilationTab; not coupled to either yet.
+
+Tests: server `tests/integration/direct-messages.test.ts` (9) — PC 403 on list/create/read-by-id/post-by-id; PC participantId rejected (400); subject + message validation; lead-creates-with-reader and both read it; non-participant reader 403 on read+post; admin can bypass to read; `lastMessageAt` bumps on POST; non-elevated list filters by participant (r1 sees A only, r2 sees B only, admin sees both). Client `features/reader/Messages/Messages.test.tsx` (7) — loading/error/empty, thread row click, thread-pane open/closed, composer disabled-on-empty + onPost on Send.
+
+Deferred: email + in-app notification, and an explicit `AuditLogEntry` mirror for compliance ('the conversation is a record'). DirectMessage being append-only is the same compliance property at the data layer; the audit layer can land alongside the next notification pass.
+
+Vault: CR-010 promoted to **shipped**; sprint plan S5.4 marked done; index updated.
