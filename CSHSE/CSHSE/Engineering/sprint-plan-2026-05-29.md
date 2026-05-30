@@ -122,11 +122,11 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 
 # Sprint 4 — Evidence AI finish + comments redaction + relay (2 weeks)
 
-- **S4.1 — Finish CR-018.** Wire the reader-side caller to `extractEvidence`/`recommendForSpec`/`scoreEvidenceAgainstSpec`; bootstrap `cshse_evidence_{env}` Qdrant collection with per-institution payload filter; archive the n8n evidence nodes; update [[cr-018-ai-evidence-review-via-cshse-ai]] → shipped.
-- **S4.2 — Comment threading + identity redaction (CR-004, new).** Add `relayed`, `relayedText`, `pcLabel`, `originalReaderId`, `boardEscalated` to `Comment.ts`; role-aware serializer so PC role never sees reader identity. ACL tests.
-- **S4.3 — Julia relay console (CR-023, new).** `relayController` (`relay`/`unrelay`/`escalate-to-board`) + `features/admin/RelayConsole/`. Edit relayed text without touching original; bulk relay; audit-logged.
+- **S4.1 — Finish CR-018 evidence loop.** Wire the reader-side caller to `extractEvidence` / `recommendForSpec` / `scoreEvidenceAgainstSpec`; bootstrap `cshse_evidence_{env}` Qdrant collection with per-institution payload filter; archive the n8n evidence nodes. **Pending** (couples to live Qdrant + reader workflow; safe follow-up after Sprint 5 starts using evidence at scale).
+- **S4.2 — Comment threading + identity redaction (CR-004). ✅ DONE 2026-05-30.** Comment model gains relayed/relayedText/pcLabel/originalReaderId/relayedAt/relayedBy/boardEscalated; `commentSerializer.ts` is the single redaction point; `getComments` funnels every PC response through it AND adds a query-level relayed: true filter (defence-in-depth); 11 unit + 9 integration tests pin "PC never sees reader name."
+- **S4.3 — Julia relay console (CR-023). ✅ DONE 2026-05-30.** Server: POST /relay (with sanitized text + pcLabel + reason), DELETE /relay, POST /escalate, GET /relay-queue — every transition writes a comment.relayed / comment.unrelayed audit entry. Client: `features/admin/RelayConsole/` (pure view + container; per-card sanitized-text / pcLabel / reason inputs + Relay/Un-relay/Escalate buttons; 7 view unit tests).
 
-**Estimate:** ~10 days.
+**Status:** mostly complete. CR-004 + CR-023 shipped 2026-05-30. CR-018 evidence-finish (S4.1) deferred until reader-side workflow has uses (not blocking).
 
 ---
 
