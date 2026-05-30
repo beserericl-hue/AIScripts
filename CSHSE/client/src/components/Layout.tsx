@@ -120,10 +120,20 @@ export default function Layout() {
     ? impersonation.impersonatedUser
     : effectiveUser;
 
-  const navigation = [
+  const navigation: Array<{ name: string; href: string; icon: any }> = [
     { name: 'Home', href: '/dashboard', icon: HomeIcon },
-    { name: 'Self-Study', href: '/self-study', icon: DocumentIcon },
   ];
+
+  // Sprint 3 — readers get a Review queue link. PCs still see Self-Study.
+  // Admins + superusers see both (they may need either surface).
+  const isReaderRole = effectiveRole === 'reader' || effectiveRole === 'lead_reader';
+  const isAdminLikeRole = effectiveRole === 'admin' || isCurrentlySuperuser;
+  if (!isReaderRole || isAdminLikeRole) {
+    navigation.push({ name: 'Self-Study', href: '/self-study', icon: DocumentIcon });
+  }
+  if (isReaderRole || isAdminLikeRole) {
+    navigation.push({ name: 'Review queue', href: '/reader', icon: DocumentIcon });
+  }
 
   // Show Settings for admin role or superuser (not impersonating)
   if (showSettings) {

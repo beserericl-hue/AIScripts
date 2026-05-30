@@ -6,6 +6,8 @@ import SelfStudyPage from './pages/SelfStudyPage';
 import AdminPage from './pages/AdminPage';
 import AcceptInvitationPage from './pages/AcceptInvitationPage';
 import ImpersonationSelector from './pages/ImpersonationSelector';
+import ReaderDashboardPage from './pages/ReaderDashboardPage';
+import ReaderReviewPage from './pages/ReaderReviewPage';
 import Layout from './components/Layout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -78,6 +80,9 @@ function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="self-study/:submissionId?" element={<SelfStudyPage />} />
+        {/* Sprint 3 — Reader review client. /reader is the queue; /reader/:id is the review screen. */}
+        <Route path="reader" element={<ReaderDashboardPage />} />
+        <Route path="reader/:submissionId" element={<ReaderReviewPage />} />
         <Route path="admin/*" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

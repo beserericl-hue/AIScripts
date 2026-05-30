@@ -1693,3 +1693,19 @@ Tests: `test_section_eval_endpoint.py` +4 — (1) the prompt carries the formatt
 Vault: CR-049 promotes its Remaining section — only the Sprint-3-coupled reader-override UI remains. Sprint 2.5 plan marked complete (S2.5.1/2/3/4 all done; n8n dead-code removal deferred as a discrete follow-up).
 
 **The learning loop is now end-to-end**: a reader override (Phase 4b → `/ai/corrections/ingest`) lands in `cshse_corrections_{env}` Qdrant; the next section evaluation (Phase 5 → `retrieve_for_section`) surfaces it as a soft Haiku hint, per-institution and per-programLevel, never cross-bleeding.
+
+## [2026-05-30] update | Sprint 3 complete — reader review client + CR-049 loop closed
+
+Greenfield reader-side client built on the pre-existing reader server endpoints. Components: `features/reader/{Score4LevelSelector,ReaderOverrideControl,ReaderDashboard,ReaderSpecRow,ReaderReviewScreen}.tsx` + pages `ReaderDashboardPage`/`ReaderReviewPage` + new `/reader` + `/reader/:submissionId` routes. Layout nav gains "Review queue" link for reader/lead_reader/admin.
+
+S3.1 (CR-007): `ReaderDashboard` lists `GET /api/submissions` — server-side CR-007 gating ensures readers only see status >= submitted. Status pills (Submitted / Under review / Review complete / Compliant / Non-compliant) link each row to `/reader/:id`.
+
+S3.2 (CR-003): `Score4LevelSelector` is the 0-3 rubric — Non/Partial/Largely/Fully with helper text and colour-coded cards. `ReaderSpecRow` mounts per (std, spec) with: narrative + supporting evidence (read-only summary), AI verdict + rationale + "links needing human review" chips, the 4-level selector wired to `PUT /api/submissions/:id/scores`, and the override control below. `ReaderReviewScreen` fetches the submission + active specs + the reader's prior scores once and walks every spec.
+
+S3.3 (CR-007 hardening): `tests/integration/reader-access-hardening.test.ts` (5) — listing filters drafts (3 statuses seeded; only submitted/under_review come back); direct draft read is 403/404; assigned-reader read is 200; cross-institution / PC enumeration guards verified.
+
+S3.4 (CR-049 reader half): `ReaderOverrideControl` (pass/needs_improvement/fail radio + optional note + Save) calls the Phase 4b `POST /standards/:std/specs/:spec/override` endpoint. That endpoint (shipped 2026-05-29) stamps the verdict + posts a `section_eval_override` to `cshse_corrections_{env}` Qdrant. The Phase 5 `hints_fn` (shipped 2026-05-30 AM) reads it back next evaluation. **The full reader-override → AI-learning loop now runs through a real UI end-to-end.**
+
+Tests: client +25 (Score4LevelSelector 4, ReaderOverrideControl 7, ReaderDashboard 4, ReaderSpecRow 6, ReaderReviewScreen 4) → 236/236 total. Server +5 reader-access-hardening → 318/318 total.
+
+Vault: CR-003, CR-007, CR-049 promoted to **shipped**. Sprint 3 plan section marked complete. (Server score model + routes were already shipped pre-2026; this sprint built only the client surface and the access-hardening regression coverage.)

@@ -3,12 +3,15 @@ name: CR-007 — Reader access only after PC final submit
 description: Readers cannot see a self-study at all until the PC clicks final submit. No early access, no preview.
 type: change-request
 cr_id: CR-007
-status: in-progress
+status: shipped
 priority: P0
 source: [[webinar-action-items-2026-05-20#1-19-38]], [[webinar-action-items-2026-05-20#1-20-00]]
-sprint_target: Sprint 2
+sprint_target: Sprint 3 (S3.1 + S3.3) — server status gating pre-existed; reader-dashboard + access-hardening tests landed 2026-05-30.
 tags: [readers, access-control, submission, lockout]
-last_reviewed: 2026-05-29
+last_reviewed: 2026-05-30
+revision_history:
+  - 2026-05-20 — proposed
+  - 2026-05-30 — shipped: `ReaderDashboard` + `/reader` route surface the CR-007-gated listing (`status >= submitted`); 5 access-hardening integration tests pin draft-403, draft-direct-read, cross-institution gate, assigned-200, and PC enumeration guard.
 ---
 
 # CR-007 — Reader access only after PC final submit

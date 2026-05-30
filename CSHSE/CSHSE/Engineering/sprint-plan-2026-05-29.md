@@ -111,12 +111,12 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 
 **Goal:** Build the reader-facing app on top of the existing server endpoints. This is greenfield CLIENT work; the server (Score 0-3, reviewController, access gating) already exists.
 
-- **S3.1 — Reader route + dashboard.** New `features/reader/` + a `reader` route. Reader dashboard lists only submissions at `submitted+` (CR-007 client); "pending PC submission" group shows name only.
-- **S3.2 — Reader review screen + 0-3 score selector (CR-003 client).** Per-spec 4-level selector (Non/Partial/Largely/Fully) with helper text, wired to the `Score` model + `scores`/`reviews` routes. Persist + reload prior score.
-- **S3.3 — Reader access hardening + tests (CR-007).** Integration + E2E: reader on a `draft` submission → 403; on `submitted` → 200, no cross-institution leak.
-- **S3.4 — Reader override of the AI verdict + learning loop (CR-049 reader half).** The review surface shows the CR-049 AI verdict + rationale + per-link `linkVerdict` (with `needs_human_review` links the reader opens directly). The reader can override the verdict; the override becomes the report value AND posts to `/ai/corrections/ingest` (`section_eval_override`) so future evaluations learn from it.
+- **S3.1 — Reader route + dashboard. ✅ DONE 2026-05-30.** New `features/reader/ReaderDashboard.tsx` + `/reader` route. Lists submissions returned by `GET /api/submissions` (server CR-007 gating filters drafts away for readers); empty / error / loading states; per-row link to `/reader/:submissionId`. Layout nav adds "Review queue" for reader/lead_reader/admin.
+- **S3.2 — Reader review screen + 0-3 score selector (CR-003 client). ✅ DONE 2026-05-30.** `Score4LevelSelector` (Non/Partial/Largely/Fully + helper text); `ReaderSpecRow` mounts narrative + AI verdict + score + override per spec; `ReaderReviewScreen` walks every (standard, spec) and persists scores via `PUT /scores`. Excluded specs (CR-050) render an N/A chip and skip score/override.
+- **S3.3 — Reader access hardening + tests (CR-007). ✅ DONE 2026-05-30.** `reader-access-hardening.test.ts` (5) pins: listing filters drafts; direct draft read is 403/404; assigned-reader read is 200; cross-institution + PC enumeration guards hold.
+- **S3.4 — Reader override of the AI verdict (CR-049 reader half). ✅ DONE 2026-05-30.** `ReaderOverrideControl` (pass/needs_improvement/fail + note + Save) calls the existing Phase 4b `POST .../override` endpoint, which ingests `section_eval_override` to Qdrant; the Phase 5 `hints_fn` reads it back next time. Loop is fully closed through a real UI. 7 unit tests on the view.
 
-**Estimate:** ~8 days.
+**Status:** ✅ Sprint 3 complete 2026-05-30. CR-003 + CR-007 + CR-049 all promoted to **shipped**. 25 new client unit tests + 5 new server integration tests; full client 236/236; full server 318/318.
 
 ---
 
