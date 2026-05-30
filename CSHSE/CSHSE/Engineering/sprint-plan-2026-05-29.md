@@ -96,13 +96,14 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 
 **Why here (not later):** it fixes a live bug — `submissionController.ts:550,758` call `ValidationService.validateSection`, which **does not exist** (the real path is the n8n `triggerValidation`). That broken call sits in the submit path Sprint R.1 verifies, so this is effectively blocking. Pulling it forward also discharges CR-018's n8n-archive precedent for the validation half.
 
-- **S2.5.1 — cshse-ai `POST /ai/section/evaluate`.** Compose narrative + evidence (reuse `ai-service/app/evidence/`) + files + a new web-link scraper → Haiku adjudication against the rubric criteria; per-spec verdict + rationale + criteria coverage + improvement suggestions. 1 spec or many.
-- **S2.5.2 — Server wiring + n8n removal.** `cshseAiClient.evaluateSection`; replace the broken `validateSection` calls; add `needs_improvement` + `rationale` to `ValidationResult`; drop the n8n validation webhook + callback branch.
-- **S2.5.3 — Editor surface.** Point the existing per-section "validate / Passed" affordance at the new endpoint; render verdict + rationale + suggestions; add "Evaluate all" for a standard / pre-submit.
+- **S2.5.1 — cshse-ai `POST /ai/section/evaluate`. ✅ DONE.** `app/section_eval/{scrape,evaluate}.py` + endpoint; 19 unit + 10 endpoint tests.
+- **S2.5.2 — Server wiring + n8n removal. ✅ DONE (wiring) / deferred (n8n cleanup).** `cshseAiClient.evaluateSection` + `ValidationService.validateSection` (AI) replace the broken `validateSection` and the n8n `triggerValidation` on the submit path. `ValidationResult` gains `needs_improvement` + `verdict` + `rationale` + `criteriaCoverage`. The n8n webhook + callback branch remain in the tree (dead code; not on any live path) — discrete dead-code-removal follow-up.
+- **S2.5.3 — Editor surface. ✅ DONE.** `SpecAIReview` panel + `GET/POST .../evaluation`/`evaluate`. "Evaluate all" for a standard / pre-submit is handled by Final-Submit's `runReaderReportSeed` (Phase 4a) which re-evaluates every content-bearing spec; a manual "Evaluate all" button is unnecessary now.
+- **S2.5.4 / Phase 5 — Hints_fn against live Qdrant. ✅ DONE 2026-05-30.** Closure in `main._build_section_hints_fn` wires `evaluate_section`'s `hints_fn` to `retrieve_for_section` from `corrections/store`, scoped per-institution + per-`programLevel`, filtered to the spec under evaluation, env-gated (`Settings.enable_section_eval_hints`), fail-soft on Qdrant outage. `programLevel` threaded through `SectionEvaluateRequest` + server callers. The learning loop is now closed end-to-end (reader override → ingest → next evaluation reads it). 4 endpoint integration tests pin hint wiring / opt-out / Qdrant-down / institution-scope.
 
 **Depends on:** CR-003 (rubric criteria text per spec), CR-018 (evidence blocks + n8n-archive pattern). **Feeds:** the reader-report generator (Sprint 5).
 
-**Estimate:** ~7 days.
+**Status:** ✅ Sprint 2.5 complete 2026-05-30. CR-049 substantively shipped (all server/ai/editor phases + learning-loop activation); only the reader-side **UI** button — Sprint 3 — remains.
 
 ---
 

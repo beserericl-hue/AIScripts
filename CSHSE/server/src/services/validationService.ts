@@ -125,12 +125,18 @@ export class ValidationService {
     const spec = standard?.specifications?.find((s) => s.code === specCode);
     const criteria = spec?.text || '';
 
-    // institutionId + supporting-evidence text for the AI prompt (best-effort).
+    // institutionId + programLevel + supporting-evidence text for the AI
+    // prompt (best-effort). programLevel scopes the corrections RAG so
+    // bachelors hints don't bleed into a masters run (CR-049 Sprint 2.5).
     let institutionId = '';
+    let programLevel: 'associate' | 'bachelors' | 'masters' = 'bachelors';
     let evidenceTexts: string[] = [];
     try {
-      const submission: any = await Submission.findById(submissionId).select('institutionId').lean();
+      const submission: any = await Submission.findById(submissionId)
+        .select('institutionId programLevel')
+        .lean();
       institutionId = submission?.institutionId?.toString() || '';
+      if (submission?.programLevel) programLevel = submission.programLevel;
       const ev: any[] = await SupportingEvidence.find({
         submissionId,
         standardCode,
@@ -154,6 +160,7 @@ export class ValidationService {
       const out = await evaluateSection({
         institutionId,
         submissionId,
+        programLevel,
         specs: [{ standardCode, specCode, criteria }],
         narrativeHtml: opts.narrativeText || '',
         supportingEvidenceText: evidenceTexts

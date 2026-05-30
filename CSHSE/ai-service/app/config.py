@@ -20,6 +20,12 @@ class Settings(BaseSettings):
 
     cross_institution_search_enabled: bool = False
 
+    # CR-049 Sprint 2.5 finish — gate the section-evaluator's hint lookup
+    # against the live cshse_corrections_{env} Qdrant collection. Default
+    # ON in prod/dev; tests flip it OFF via env or explicit Settings to
+    # avoid hitting Qdrant from the test pod.
+    enable_section_eval_hints: bool = True
+
     mongo_url: str = ""
 
     @property

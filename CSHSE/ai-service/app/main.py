@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from qdrant_client import QdrantClient
 
 from app.auth import verify_hmac_signature
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.import_jobs import cancel_job, enqueue_job, get_job
 
 GIT_SHA = os.environ.get("RAILWAY_GIT_COMMIT_SHA", "unknown")[:8]
@@ -822,6 +822,10 @@ class SectionEvaluateRequest(BaseModel):
     """CR-049 — evaluate a section against the reader-review criteria."""
     institutionId: str
     submissionId: str
+    # CR-049 Sprint 2.5 finish — programLevel is required to scope the
+    # corrections-RAG lookup (per-institution + per-program-level so
+    # bachelors corrections don't bleed into a masters run).
+    programLevel: str = Field(default="bachelors")
     specs: list[dict] = Field(description="One or many { standardCode, specCode, criteria }.")
     narrativeHtml: str = ""
     supportingEvidenceText: list[str] = Field(default_factory=list)
@@ -936,6 +940,64 @@ async def evidence_score(req: EvidenceScoreRequest, request: Request) -> dict:
         )
 
 
+def _build_section_hints_fn(
+    *,
+    institution_id: str,
+    program_level: str,
+    narrative_text: str,
+    settings: Settings,
+):
+    """CR-049 Sprint 2.5 finish — closure that retrieves prior
+    reader-override hints from the per-institution corrections RAG
+    (`cshse_corrections_{env}`) for the (institution, programLevel,
+    std, spec) tuple and renders them for the per-spec prompt.
+
+    The closure shape matches `evaluate_section`'s `hints_fn(std, spec)
+    → str` injection point so the section evaluator stays decoupled
+    from the corrections store.
+
+    Always fail-soft: any Qdrant / embedding / parsing failure returns
+    an empty hints block — the eval still completes. Returns ``None``
+    if hints are disabled (test/dev env opt-out), and the section
+    evaluator then runs without hints.
+    """
+    if not settings.enable_section_eval_hints:
+        return None
+    if not institution_id:
+        return None
+
+    from app.corrections.store import retrieve_for_section, format_examples_for_prompt
+
+    # Use the narrative as the semantic anchor for the corrections lookup —
+    # it's the largest free-text the PC wrote for this section, and the
+    # embedding similarity will line it up against prior overrides that
+    # touched similar narrative ground. Empty narrative → empty hints.
+    query_text = (narrative_text or "").strip()
+    if not query_text:
+        return None
+
+    def _hints(std: str, spec: str) -> str:
+        try:
+            examples = retrieve_for_section(
+                section_text=query_text,
+                institution_id=institution_id,
+                program_level=program_level,
+                settings=settings,
+            )
+            # Filter to hints touching THIS spec — section evaluator wants
+            # spec-scoped soft hints, not the full institution-wide stream.
+            filtered = [
+                e for e in examples
+                if (e.expected_std == std and e.expected_spec == spec)
+            ]
+            return format_examples_for_prompt(filtered)
+        except Exception:  # noqa: BLE001
+            # Best-effort — Qdrant down or embedding miss must never fail eval.
+            return ""
+
+    return _hints
+
+
 @app.post("/ai/section/evaluate")
 async def section_evaluate(req: SectionEvaluateRequest, request: Request) -> dict:
     """CR-049 — evaluate a section against the reader-review criteria.
@@ -945,6 +1007,18 @@ async def section_evaluate(req: SectionEvaluateRequest, request: Request) -> dic
     """
     body = await request.body()
     verify_hmac_signature(request, body)
+    settings = get_settings()
+    # Strip HTML for the corrections-lookup anchor (embeddings work on
+    # text, not markup). The section evaluator itself still gets the
+    # raw HTML for narrative context.
+    from app.section_eval.scrape import html_to_text
+    narrative_text = html_to_text(req.narrativeHtml or "")
+    hints_fn = _build_section_hints_fn(
+        institution_id=req.institutionId,
+        program_level=req.programLevel,
+        narrative_text=narrative_text,
+        settings=settings,
+    )
     try:
         return evaluate_section(
             institution_id=req.institutionId,
@@ -954,6 +1028,8 @@ async def section_evaluate(req: SectionEvaluateRequest, request: Request) -> dic
             supporting_evidence_text=req.supportingEvidenceText,
             files=req.files,
             web_links=req.webLinks,
+            hints_fn=hints_fn,
+            settings=settings,
         )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(

@@ -176,6 +176,10 @@ export interface SectionEvaluateSpec {
 export interface SectionEvaluateRequest {
   institutionId: string;
   submissionId: string;
+  // CR-049 Sprint 2.5 finish — programLevel is required by ai-service to
+  // scope the corrections-RAG hints lookup (per-institution AND
+  // per-program-level so bachelors corrections don't bleed into masters).
+  programLevel: 'associate' | 'bachelors' | 'masters';
   specs: SectionEvaluateSpec[];
   narrativeHtml?: string;
   supportingEvidenceText?: string[];

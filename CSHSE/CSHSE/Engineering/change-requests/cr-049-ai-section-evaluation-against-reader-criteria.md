@@ -41,7 +41,15 @@ revision_history:
 
 **Remaining (Sprint-3-coupled, not blocking):**
 - **Reader-override UI** — the button that calls `…/override` lives on the reader review surface (**Sprint 3 reader client**, not yet built).
-- **Endpoint hint activation** — wiring the `section_evaluate` endpoint's `hints_fn` to the live `retrieve_for_section` Qdrant query (thread `programLevel` through the request + an env gate). One step, deferred until overrides actually exist to retrieve. The mechanism is built + unit-tested.
+
+**Phase 5 shipped 2026-05-30 — Sprint 2.5 finish: hints_fn wired against live Qdrant.**
+- `ai-service/app/main.py` — `_build_section_hints_fn` closure injects a real `hints_fn(std, spec) → str` into `evaluate_section`. The closure: (1) checks `Settings.enable_section_eval_hints` (env-gated, default ON); (2) strips narrative HTML to text; (3) calls `retrieve_for_section(section_text, institution_id, program_level)` from `corrections/store`; (4) filters to hits whose `(expected_std, expected_spec)` matches the spec under evaluation; (5) renders via `format_examples_for_prompt`. Best-effort: any Qdrant / embedding / parsing failure returns `""` (the evaluation still completes, just without hints).
+- `SectionEvaluateRequest` gains `programLevel` (default `"bachelors"`); the per-institution + per-programLevel filter prevents bachelors hints bleeding into a masters run.
+- `cshseAiClient.evaluateSection` and `ValidationService.validateSection` thread `programLevel` through from the live submission.
+- `Settings.enable_section_eval_hints: bool = True` — tests flip it via `ENABLE_SECTION_EVAL_HINTS=false`.
+- Tests: `test_section_eval_endpoint.py` +4 — hint wiring asserts the prompt carries `Previously-corrected examples` + `section_eval_override` with per-institution scoping; disabled-env opt-out skips retrieval; Qdrant-down does not break eval; `institutionId=""` short-circuits. ai-service suite 404 passed / 5 skipped; server CR-049 files 33/33 green.
+
+**The learning loop is now closed end-to-end**: a reader override (Phase 4b ingest) lands in Qdrant; the next section evaluation (Phase 5 retrieval) surfaces it as a soft hint to Haiku. Both halves shipped on the same day.
 
 ## Phase 1 shipped 2026-05-29 — ai-service section evaluator
 

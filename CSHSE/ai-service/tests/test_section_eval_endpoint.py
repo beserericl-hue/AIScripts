@@ -147,6 +147,217 @@ def test_patched_llm_yields_pass_verdict_through_endpoint(client, monkeypatch):
     get_settings.cache_clear()
 
 
+# --- CR-049 Sprint 2.5 finish: hint activation ----------------------------
+
+def test_endpoint_wires_hints_fn_from_corrections_store(client, monkeypatch):
+    """The endpoint MUST build a hints_fn from retrieve_for_section + thread
+    it into evaluate_section. We patch the store retrieval to return one
+    canned example and assert it lands in the Haiku prompt."""
+    # Patch the corrections store the endpoint pulls from.
+    from app.corrections.store import CorrectionExample
+
+    captured: dict = {}
+
+    def fake_retrieve(*, section_text, institution_id, program_level, **kw):
+        captured["section_text"] = section_text
+        captured["institution_id"] = institution_id
+        captured["program_level"] = program_level
+        return [
+            CorrectionExample(
+                expected_std="1",
+                expected_spec="a",
+                source_heading="Section 1.a",
+                source_text="Reader override: regional accreditation met despite scanned PDF link.",
+                score=0.91,
+                correction_type="section_eval_override",
+            )
+        ]
+
+    import app.main as main_mod
+    monkeypatch.setattr(main_mod, "retrieve_for_section", fake_retrieve, raising=False)
+    # The endpoint imports retrieve_for_section + format_examples_for_prompt
+    # inside _build_section_hints_fn (lazy), so patch the module they live in.
+    import app.corrections.store as store_mod
+    monkeypatch.setattr(store_mod, "retrieve_for_section", fake_retrieve)
+
+    # Capture the prompt the LLM sees so we can assert hint injection.
+    seen_prompts: list[str] = []
+
+    class _FakeAnthropic:
+        def __init__(self, *a, **k):
+            self.messages = SimpleNamespace(create=self._create)
+
+        def _create(self, *, model, max_tokens, messages):
+            seen_prompts.append(messages[0]["content"])
+            payload = json.dumps({"verdict": "pass", "rationale": "ok", "criteriaCoverage": [], "improvementSuggestions": []})
+            return SimpleNamespace(content=[SimpleNamespace(text=payload)])
+
+    import app.section_eval.evaluate as ev_mod
+    monkeypatch.setattr(ev_mod, "Anthropic", _FakeAnthropic)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("ENABLE_SECTION_EVAL_HINTS", "true")
+    from app.config import get_settings
+    get_settings.cache_clear()
+
+    resp = _post(client, {
+        "institutionId": "stevenson",
+        "submissionId": "sub-1",
+        "programLevel": "bachelors",
+        "specs": [{"standardCode": "1", "specCode": "a", "criteria": "regionally accredited"}],
+        "narrativeHtml": "<p>The program is regionally accredited by MSCHE; see attached letter.</p>",
+    })
+    assert resp.status_code == 200
+    assert seen_prompts, "LLM was not called"
+    prompt = seen_prompts[0]
+    # The hint block from format_examples_for_prompt should appear in the prompt.
+    assert "Previously-corrected examples" in prompt
+    assert "section_eval_override" in prompt
+    # The retrieve call must be scoped per-institution + per-program-level.
+    assert captured["institution_id"] == "stevenson"
+    assert captured["program_level"] == "bachelors"
+    # And the section_text anchor must be the *stripped* narrative, not raw HTML.
+    assert "<p>" not in captured["section_text"]
+    assert "regionally accredited" in captured["section_text"]
+    get_settings.cache_clear()
+
+
+def test_endpoint_skips_hints_when_disabled(client, monkeypatch):
+    """ENABLE_SECTION_EVAL_HINTS=false must disable the hints lookup
+    entirely (no Qdrant call, no hint block in the prompt)."""
+    called = {"count": 0}
+
+    def fake_retrieve(**_kw):
+        called["count"] += 1
+        return []
+
+    import app.corrections.store as store_mod
+    monkeypatch.setattr(store_mod, "retrieve_for_section", fake_retrieve)
+
+    seen_prompts: list[str] = []
+
+    class _FakeAnthropic:
+        def __init__(self, *a, **k):
+            self.messages = SimpleNamespace(create=self._create)
+
+        def _create(self, *, model, max_tokens, messages):
+            seen_prompts.append(messages[0]["content"])
+            return SimpleNamespace(content=[SimpleNamespace(text=json.dumps({"verdict": "pass", "rationale": "ok", "criteriaCoverage": [], "improvementSuggestions": []}))])
+
+    import app.section_eval.evaluate as ev_mod
+    monkeypatch.setattr(ev_mod, "Anthropic", _FakeAnthropic)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("ENABLE_SECTION_EVAL_HINTS", "false")
+    from app.config import get_settings
+    get_settings.cache_clear()
+
+    resp = _post(client, {
+        "institutionId": "stevenson",
+        "submissionId": "sub-1",
+        "programLevel": "bachelors",
+        "specs": [{"standardCode": "1", "specCode": "a", "criteria": "x"}],
+        "narrativeHtml": "<p>real narrative content</p>",
+    })
+    assert resp.status_code == 200
+    assert called["count"] == 0, "retrieve_for_section must not be called when hints disabled"
+    assert "Previously-corrected examples" not in seen_prompts[0]
+    get_settings.cache_clear()
+
+
+def test_endpoint_hint_qdrant_failure_does_not_break_eval(client, monkeypatch):
+    """Qdrant going down inside the hint lookup must NOT take the
+    evaluation with it — the section evaluator still returns a verdict."""
+    def boom(**_kw):
+        raise RuntimeError("qdrant unreachable")
+
+    import app.corrections.store as store_mod
+    monkeypatch.setattr(store_mod, "retrieve_for_section", boom)
+
+    class _FakeAnthropic:
+        def __init__(self, *a, **k):
+            self.messages = SimpleNamespace(create=self._create)
+
+        def _create(self, *, model, max_tokens, messages):
+            return SimpleNamespace(content=[SimpleNamespace(text=json.dumps({"verdict": "pass", "rationale": "ok", "criteriaCoverage": [], "improvementSuggestions": []}))])
+
+    import app.section_eval.evaluate as ev_mod
+    monkeypatch.setattr(ev_mod, "Anthropic", _FakeAnthropic)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("ENABLE_SECTION_EVAL_HINTS", "true")
+    from app.config import get_settings
+    get_settings.cache_clear()
+
+    resp = _post(client, {
+        "institutionId": "stevenson",
+        "submissionId": "sub-1",
+        "programLevel": "bachelors",
+        "specs": [{"standardCode": "1", "specCode": "a", "criteria": "x"}],
+        "narrativeHtml": "<p>n</p>",
+    })
+    assert resp.status_code == 200
+    assert resp.json()["perSpec"][0]["verdict"] == "pass"
+    get_settings.cache_clear()
+
+
+def test_endpoint_skips_hints_when_no_institution(client, monkeypatch):
+    """An empty institutionId must short-circuit hint retrieval — better
+    no hints than cross-institution leakage."""
+    called = {"count": 0}
+
+    def fake_retrieve(**_kw):
+        called["count"] += 1
+        return []
+
+    import app.corrections.store as store_mod
+    monkeypatch.setattr(store_mod, "retrieve_for_section", fake_retrieve)
+
+    class _FakeAnthropic:
+        def __init__(self, *a, **k):
+            self.messages = SimpleNamespace(create=self._create)
+
+        def _create(self, *, model, max_tokens, messages):
+            return SimpleNamespace(content=[SimpleNamespace(text=json.dumps({"verdict": "pass", "rationale": "ok", "criteriaCoverage": [], "improvementSuggestions": []}))])
+
+    import app.section_eval.evaluate as ev_mod
+    monkeypatch.setattr(ev_mod, "Anthropic", _FakeAnthropic)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("ENABLE_SECTION_EVAL_HINTS", "true")
+    from app.config import get_settings
+    get_settings.cache_clear()
+
+    # Note: ai-service's _evaluate_one_spec normally requires a non-empty
+    # institution_id at evaluate_section level too — confirm that
+    # boundary at the hint layer here.
+    resp = _post(client, {
+        "institutionId": "x",  # evaluate_section requires it; we drop hints because the closure checks
+        "submissionId": "sub-1",
+        "programLevel": "bachelors",
+        "specs": [{"standardCode": "1", "specCode": "a", "criteria": "x"}],
+        "narrativeHtml": "<p>n</p>",
+    })
+    assert resp.status_code == 200
+    # institution_id was non-empty, so retrieval is allowed — confirm the
+    # control test is sound. The "no institution → no hints" branch is
+    # better exercised through the helper directly:
+    from app.main import _build_section_hints_fn
+    from app.config import Settings
+    hf = _build_section_hints_fn(
+        institution_id="",
+        program_level="bachelors",
+        narrative_text="x",
+        settings=Settings(enable_section_eval_hints=True),
+    )
+    assert hf is None
+    # And opt-out short-circuits regardless of institution_id:
+    hf2 = _build_section_hints_fn(
+        institution_id="stevenson",
+        program_level="bachelors",
+        narrative_text="x",
+        settings=Settings(enable_section_eval_hints=False),
+    )
+    assert hf2 is None
+    get_settings.cache_clear()
+
+
 # --- E2E (opt-in) — real LLM against a real spec --------------------------
 
 @pytest.mark.skipif(
