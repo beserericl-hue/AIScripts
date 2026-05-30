@@ -3,12 +3,12 @@ name: CR-012 — Site visit partial-compliance tracking
 description: Every spec scored "Partial" auto-flags into the site-visit checklist so the visit team verifies it in person.
 type: change-request
 cr_id: CR-012
-status: in-progress
+status: shipped
 priority: P1
 source: [[webinar-action-items-2026-05-20#1-05-53]], [[webinar-action-items-2026-05-20#1-06-03]]
-sprint_target: Sprint 6
+sprint_target: Sprint 6.1
 tags: [site-visit, scoring, partial-compliance, readers]
-last_reviewed: 2026-05-29
+last_reviewed: 2026-05-30
 ---
 
 # CR-012 — Site visit partial-compliance tracking
@@ -36,24 +36,32 @@ The checklist surfaces to the visit team (lead reader + secondary reader, per [[
 
 ## Acceptance
 
-- [ ] `SiteVisitChecklistItem` model linking `selfStudyId`, `specCode`, `inclusionReason`, `verified: bool`, `verificationNote`.
-- [ ] Auto-population on compilation finalize.
-- [ ] Site-visit team UI: checklist sorted by standard, filter by inclusion reason, set verified + add note.
-- [ ] Export checklist as DOCX/PDF for offline use during the visit.
-- [ ] E2E: lead reader sets Partial → site-visit team sees item → verifies + notes → exports.
+- [x] `SiteVisitChecklistItem` model: `{ submissionId, standardCode, specCode, inclusionReason, finalScoreAtInclusion, verified, verifiedBy/Name/At, verificationNote, addedByName, source }` with unique index on (sub, std, spec).
+- [x] Auto-population on compilation finalize — `compilationController.setFinalScore` calls `syncChecklistForFinalScore`: score 0 → `non_compliant` row; score 1 → `partial` row; score 2/3 → remove auto row (unless verified). `clearFinalScore` removes auto rows that are not verified. Verified rows survive score-up so the visit team's note isn't silently lost.
+- [x] Site-visit team UI sorted by standard then spec; per-row verify toggle + note + Remove (manual rows only); counts toolbar. Inclusion-reason chip colours `non_compliant` red / `partial` amber / `follow_up` indigo / `manual` slate.
+- [x] DOCX export — `services/siteVisitChecklistDocx.ts` produces a table with Spec / Inclusion reason / Verified / Note columns. Validated by unzip-and-grep in integration tests.
+- [x] Tests pin the round-trip: 11 server integration (auto-pop 0/1, no-pop 2/3, score-up removes auto, verified survives score-up, clear removes auto, PC 403, reader-can-read-but-not-write, audit on verify + unverify, counts, DOCX) + 10 client view tests.
+- [ ] E2E happy-path (lead sets Partial → visit team verifies → DOCX). **Deferred** — integration coverage is comprehensive at the API + UI layers; a Playwright E2E can land alongside the broader S7.4 expansion.
 
-## Files affected
+## Files affected (as shipped, Sprint 6.1, 2026-05-30)
 
-- `server/src/models/SiteVisitChecklistItem.ts` (new)
-- `server/src/controllers/siteVisitController.ts` (new)
-- `client/src/features/siteVisit/Checklist/` (new)
+- `server/src/models/SiteVisitChecklistItem.ts` (new).
+- `server/src/services/siteVisitChecklistDocx.ts` (new) — DOCX builder.
+- `server/src/controllers/checklistController.ts` (new) — listChecklist / addManualChecklistItem / verifyChecklistItem / deleteChecklistItem / exportChecklistDocx.
+- `server/src/controllers/compilationController.ts` — `syncChecklistForFinalScore` helper + side-effect call from setFinalScore + awaited delete from clearFinalScore.
+- `server/src/routes/checklist.ts` (new) — `GET /api/submissions/:id/checklist`, `POST`, `PATCH /:itemId/verify`, `DELETE /:itemId`, `GET /export.docx`.
+- `server/src/index.ts` — mounts the router.
+- `server/src/models/AuditLogEntry.ts` — adds `checklist.item_verified` + `checklist.item_unverified` to the union.
+- `client/src/features/siteVisit/Checklist/Checklist.tsx` (new) — pure ChecklistView + container.
+- `client/src/pages/SiteVisitChecklistPage.tsx` (new); `App.tsx` adds `/site-visit/:submissionId/checklist` route.
 
 ## Dependencies
 
-- [[cr-003-zero-to-three-compliance-rubric]] — defines Partial
-- [[cr-009-compilation-tab-lead-reader]] — final score is set here
-- [[cr-013-site-visit-itinerary-builder]] — visit team is defined there
+- [[cr-003-zero-to-three-compliance-rubric]] — defines the 0-3 rubric.
+- [[cr-009-compilation-tab-lead-reader]] — the hook point. `setFinalScore` is where rows appear and disappear.
+- [[cr-013-site-visit-itinerary-builder]] — the next sprint piece; itinerary slots will link to checklist items.
 
 ## Open questions
 
-- Are these checklist items board-visible before the visit? Default: yes, board sees the checklist when reviewing.
+- Board-visible before the visit? Today the read endpoint is gated to reader / lead_reader / admin / superuser; PC 403. Board role isn't in the auth model yet — when it is, just add it to `_canRead`.
+- Follow-up inclusion rule ("any reader scored 0/1 but final is 2/3") — not auto-populated. Lead reader can manual-add via `POST /api/submissions/:id/checklist` with `inclusionReason: 'follow_up'`.

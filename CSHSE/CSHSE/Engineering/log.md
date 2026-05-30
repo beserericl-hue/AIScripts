@@ -1799,3 +1799,17 @@ Tests: `tests/integration/reader-assignment-lockout.test.ts` (5) pins: lead_read
 UI affordance change (lead reader sees "Request change from admin") deferred to the admin/lead-reader assignment-UI refresh that lands with CR-012 / CR-013 site-visit work.
 
 Vault: CR-022 promoted to **shipped**; sprint plan S6.3 marked done; index updated.
+
+## [2026-05-30] update | Sprint 6.1 — CR-012 partial-compliance checklist shipped
+
+When the lead reader stamps a Final score of 0 or 1 on the Compilation tab (CR-009), a row appears in the site-visit checklist; when they bump it to 2 or 3, the auto row drops UNLESS the visit team has already verified it (in which case the team's note is sticky). The visit team uses the checklist UI during the in-person visit to mark each item verified + add notes, and can export a DOCX they can carry on paper.
+
+Server: new `models/SiteVisitChecklistItem.ts` (per-(submission, std, spec); unique index; carries `inclusionReason ∈ {partial, non_compliant, follow_up, manual}`, `source ∈ {auto, manual}`, `finalScoreAtInclusion`, verify metadata, `addedByName`). `services/siteVisitChecklistDocx.ts` builds a DOCX with a 4-column table (Spec / Inclusion reason / Verified / Visit-team note). `controllers/checklistController.ts` exports `listChecklist`/`addManualChecklistItem`/`verifyChecklistItem`/`deleteChecklistItem`/`exportChecklistDocx` with PC → 403, reader → read-only, lead/admin/superuser → full write. Verify writes a `checklist.item_verified` audit entry (un-verify writes `_unverified`); both clear verifier metadata on the unverify path.
+
+The hook lives in `compilationController.ts` — `syncChecklistForFinalScore` runs as a side effect of `setFinalScore` (fire-and-forget; failures never block the user-facing response). For `clearFinalScore`, the checklist delete is **awaited** so the test contract "after the 200, no auto row remains" holds cleanly; for the score-up path inside the helper, the upsert/delete is also awaited inside the helper but called via void from `setFinalScore`.
+
+Client: new `features/siteVisit/Checklist/Checklist.tsx` — pure `ChecklistView` (one card per item with inclusion-reason chip + Visit-team note textarea + Mark verified / Un-verify button; manual rows get a Remove button) + container that wires query + verify + delete + DOCX-as-Blob download via `URL.createObjectURL`. New `/site-visit/:submissionId/checklist` route + `SiteVisitChecklistPage` that gates `canWrite` via `useAuthStore().getEffectiveRole()`.
+
+Tests: server `tests/integration/site-visit-checklist.test.ts` (11) pins every transition: 0/1 auto-pop, 2/3 no-pop, score-up removes auto, verified survives score-up, clearFinalScore removes auto, PC 403, reader-can-read-not-write, audit on verify + unverify, counts shape, DOCX content (jszip + grep `word/document.xml` for institution + 'Partial' label). Client `features/siteVisit/Checklist/Checklist.test.tsx` (10) pins loading / error / empty + export-disabled / rows + chips / counts toolbar / verify fires / note fires / non-writers disabled / manual-only Remove / Export button. Full client suite **279/279** (was 269 + 10).
+
+Vault: CR-012 promoted to **shipped**; sprint plan S6.1 marked done; index updated.

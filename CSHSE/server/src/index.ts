@@ -46,6 +46,8 @@ import scoresRouter from './routes/scores';
 import compilationRouter from './routes/compilation';
 // CR-010 / Sprint 5.4 — Portal direct messaging.
 import directMessagesRouter from './routes/directMessages';
+// CR-012 / Sprint 6.1 — Site-visit partial-compliance checklist.
+import checklistRouter from './routes/checklist';
 // CR-034 — E2E seed router; only mounted when E2E_SEED_ENABLED=1 and never in production.
 import { buildTestRouter } from './routes/test';
 
@@ -181,6 +183,7 @@ app.use('/api/files', filesRouter);
 app.use('/api', scoresRouter);
 app.use('/api', compilationRouter);
 app.use('/api', directMessagesRouter);
+app.use('/api', checklistRouter);
 // (test router moved up above the bare-`/api` catch-alls so /api/test/*
 // isn't swallowed by another router's authenticate middleware first.)
 

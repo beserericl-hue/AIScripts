@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { Score } from '../models/Score';
 import { LeadFinalScore } from '../models/LeadFinalScore';
 import { Submission } from '../models/Submission';
+import { SiteVisitChecklistItem } from '../models/SiteVisitChecklistItem';
 import { recordAuditEvent } from '../services/auditLog';
 import { generateSuggestionsDocx, SuggestionsMode } from '../services/suggestionsDocx';
 
@@ -53,6 +54,64 @@ function actorName(req: AuthenticatedRequest): string {
   const last = req.user?.lastName || '';
   const full = `${first} ${last}`.trim();
   return full || req.user?.email || 'unknown';
+}
+
+/**
+ * CR-012 / Sprint 6.1 — checklist auto-population helper.
+ *
+ * Side effect of setFinalScore: keep a SiteVisitChecklistItem row in sync
+ * with whatever the lead reader just stamped:
+ *
+ *   newScore === 0 → upsert with inclusionReason='non_compliant'
+ *   newScore === 1 → upsert with inclusionReason='partial'
+ *   newScore in {2,3} → remove auto-populated rows that are NOT verified.
+ *                       Verified rows stay (visit team's note is sticky).
+ *
+ * Best-effort, fire-and-forget — failures must not break the user-facing
+ * setFinalScore response.
+ */
+async function syncChecklistForFinalScore(opts: {
+  submissionId: string;
+  standardCode: string;
+  specCode: string;
+  newScore: number;
+  addedByName: string;
+}): Promise<void> {
+  try {
+    const { submissionId, standardCode, specCode, newScore, addedByName } = opts;
+    const filter = { submissionId: new mongoose.Types.ObjectId(submissionId), standardCode, specCode };
+
+    if (newScore === 0 || newScore === 1) {
+      const inclusionReason = newScore === 0 ? 'non_compliant' : 'partial';
+      await SiteVisitChecklistItem.updateOne(
+        filter,
+        {
+          $set: {
+            inclusionReason,
+            finalScoreAtInclusion: newScore,
+            addedByName,
+            source: 'auto'
+          },
+          $setOnInsert: {
+            submissionId: filter.submissionId,
+            standardCode,
+            specCode,
+            verified: false
+          }
+        },
+        { upsert: true }
+      );
+    } else {
+      // Score moved up to 2/3 — remove the auto row IF it hasn't been verified.
+      await SiteVisitChecklistItem.deleteOne({
+        ...filter,
+        source: 'auto',
+        verified: false
+      });
+    }
+  } catch (err) {
+    console.error('[checklist] syncChecklistForFinalScore failed:', err);
+  }
 }
 
 /**
@@ -235,6 +294,18 @@ export const setFinalScore = async (req: AuthenticatedRequest, res: Response) =>
       }
     });
 
+    // CR-012 / Sprint 6.1 — auto-populate the site-visit checklist when
+    // the new final score is 0 or 1; remove auto-populated rows when the
+    // score moves to 2/3. Verified rows are preserved on score-up so the
+    // visit team's note isn't silently lost.
+    void syncChecklistForFinalScore({
+      submissionId: String(submissionId),
+      standardCode,
+      specCode,
+      newScore: score,
+      addedByName: actorName(req)
+    });
+
     return res.json({ finalScore: result });
   } catch (error) {
     console.error('Set final score error:', error);
@@ -275,6 +346,22 @@ export const clearFinalScore = async (req: AuthenticatedRequest, res: Response) 
         priorScore: existing ? existing.score : null
       }
     });
+
+    // CR-012 — clearing the Final score removes auto-populated checklist
+    // rows; verified rows are preserved (visit team's note shouldn't be
+    // silently lost). Awaited (not `void`) so the contract is "after this
+    // 200 returns, the auto row is gone."
+    try {
+      await SiteVisitChecklistItem.deleteOne({
+        submissionId: new mongoose.Types.ObjectId(submissionId),
+        standardCode,
+        specCode,
+        source: 'auto',
+        verified: false
+      });
+    } catch (e) {
+      console.error('[checklist] delete on clearFinalScore failed:', e);
+    }
 
     return res.json({ cleared: true });
   } catch (error) {

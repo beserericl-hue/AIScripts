@@ -10,6 +10,7 @@ import ReaderDashboardPage from './pages/ReaderDashboardPage';
 import ReaderReviewPage from './pages/ReaderReviewPage';
 import LeadReaderDashboardPage from './pages/LeadReaderDashboardPage';
 import LeadReaderCompilationPage from './pages/LeadReaderCompilationPage';
+import SiteVisitChecklistPage from './pages/SiteVisitChecklistPage';
 import Layout from './components/Layout';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -88,6 +89,8 @@ function App() {
         {/* Sprint 5.1 — Lead-reader compilation. /lead-reader lists submissions; /lead-reader/:id is the side-by-side tab. */}
         <Route path="lead-reader" element={<LeadReaderDashboardPage />} />
         <Route path="lead-reader/:submissionId" element={<LeadReaderCompilationPage />} />
+        {/* Sprint 6.1 — Site-visit partial-compliance checklist. */}
+        <Route path="site-visit/:submissionId/checklist" element={<SiteVisitChecklistPage />} />
         <Route path="admin/*" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
