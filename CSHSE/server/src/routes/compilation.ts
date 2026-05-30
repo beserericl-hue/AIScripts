@@ -2,7 +2,8 @@ import { Router } from 'express';
 import {
   getCompilation,
   setFinalScore,
-  clearFinalScore
+  clearFinalScore,
+  exportSuggestionsDoc
 } from '../controllers/compilationController';
 import { authenticate } from '../middleware/auth';
 
@@ -17,5 +18,8 @@ router.use(authenticate);
 router.get('/submissions/:submissionId/compilation', getCompilation);
 router.put('/submissions/:submissionId/compilation/final-score', setFinalScore);
 router.delete('/submissions/:submissionId/compilation/final-score', clearFinalScore);
+
+// CR-011 / Sprint 5.2 — consolidated suggestions DOCX export.
+router.get('/submissions/:submissionId/compilation/suggestions-doc', exportSuggestionsDoc);
 
 export default router;

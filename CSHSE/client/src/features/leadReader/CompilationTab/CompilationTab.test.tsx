@@ -20,6 +20,10 @@ const baseHandlers = {
   onChangePendingFinal: vi.fn(),
   onSaveFinal: vi.fn(),
   onClearFinal: vi.fn(),
+  // CR-011 export toolbar
+  exportMode: 'internal' as const,
+  onChangeExportMode: vi.fn(),
+  onExportSuggestions: vi.fn(),
 };
 
 const sample: CompilationPayload = {
@@ -244,6 +248,67 @@ describe('CompilationTabView', () => {
     );
     fireEvent.click(screen.getByTestId('compilation-final-clear-1_b'));
     expect(onClearFinal).toHaveBeenCalledWith('1', 'b');
+  });
+
+  it('CR-011 — export toolbar shows both mode radios + Generate button', () => {
+    render(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          data={sample}
+          isLoading={false}
+        />
+      )
+    );
+    expect(screen.getByTestId('compilation-toolbar')).toBeInTheDocument();
+    expect(screen.getByTestId('suggestions-mode-internal')).toBeChecked();
+    expect(screen.getByTestId('suggestions-mode-pc')).not.toBeChecked();
+    expect(screen.getByTestId('suggestions-export-btn')).toBeInTheDocument();
+  });
+
+  it('CR-011 — toggling PC-facing fires onChangeExportMode("pc_facing")', () => {
+    const onChangeExportMode = vi.fn();
+    render(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          onChangeExportMode={onChangeExportMode}
+          data={sample}
+          isLoading={false}
+        />
+      )
+    );
+    fireEvent.click(screen.getByTestId('suggestions-mode-pc'));
+    expect(onChangeExportMode).toHaveBeenCalledWith('pc_facing');
+  });
+
+  it('CR-011 — Generate button fires onExportSuggestions and disables while exporting', () => {
+    const onExportSuggestions = vi.fn();
+    const { rerender } = render(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          onExportSuggestions={onExportSuggestions}
+          data={sample}
+          isLoading={false}
+        />
+      )
+    );
+    fireEvent.click(screen.getByTestId('suggestions-export-btn'));
+    expect(onExportSuggestions).toHaveBeenCalled();
+    rerender(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          onExportSuggestions={onExportSuggestions}
+          data={sample}
+          isLoading={false}
+          exporting
+        />
+      )
+    );
+    expect(screen.getByTestId('suggestions-export-btn')).toBeDisabled();
+    expect(screen.getByText(/Generating/)).toBeInTheDocument();
   });
 
   it('legend renders all four highlight buckets', () => {

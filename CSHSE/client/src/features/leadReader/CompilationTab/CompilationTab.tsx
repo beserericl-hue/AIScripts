@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Loader2, ChevronLeft, Check, X } from 'lucide-react';
+import { Loader2, ChevronLeft, Check, X, FileDown } from 'lucide-react';
 import { api } from '../../../services/api';
 import { Score4LevelSelector, SCORE_LEVELS } from '../../reader/Score4LevelSelector';
 import type { ScoreValue } from '../../reader/Score4LevelSelector';
@@ -59,6 +59,8 @@ export interface CompilationPayload {
   rows: CompilationRow[];
 }
 
+export type SuggestionsExportMode = 'internal' | 'pc_facing';
+
 export interface CompilationTabViewProps {
   data: CompilationPayload | null;
   isLoading: boolean;
@@ -72,6 +74,11 @@ export interface CompilationTabViewProps {
   onChangePendingFinal: (next: ScoreValue) => void;
   onSaveFinal: (standardCode: string, specCode: string) => void;
   onClearFinal: (standardCode: string, specCode: string) => void;
+  // CR-011 export
+  exportMode: SuggestionsExportMode;
+  onChangeExportMode: (mode: SuggestionsExportMode) => void;
+  onExportSuggestions: () => void;
+  exporting?: boolean;
 }
 
 function rowClasses(row: CompilationRow): string {
@@ -106,6 +113,10 @@ export function CompilationTabView({
   onChangePendingFinal,
   onSaveFinal,
   onClearFinal,
+  exportMode,
+  onChangeExportMode,
+  onExportSuggestions,
+  exporting,
 }: CompilationTabViewProps): JSX.Element {
   if (isLoading) {
     return (
@@ -166,6 +177,44 @@ export function CompilationTabView({
           <span className="uppercase">{data.programLevel}</span>
         </p>
       </header>
+
+      <div data-testid="compilation-toolbar" className="mb-3 flex flex-wrap items-center gap-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+        <span className="font-medium uppercase tracking-wide text-slate-500">Suggestions doc</span>
+        <fieldset className="flex items-center gap-3">
+          <label className="inline-flex items-center gap-1">
+            <input
+              type="radio"
+              name="suggestions-mode"
+              data-testid="suggestions-mode-internal"
+              value="internal"
+              checked={exportMode === 'internal'}
+              onChange={() => onChangeExportMode('internal')}
+            />
+            <span>Internal (board / VP)</span>
+          </label>
+          <label className="inline-flex items-center gap-1">
+            <input
+              type="radio"
+              name="suggestions-mode"
+              data-testid="suggestions-mode-pc"
+              value="pc_facing"
+              checked={exportMode === 'pc_facing'}
+              onChange={() => onChangeExportMode('pc_facing')}
+            />
+            <span>PC-facing (anonymized)</span>
+          </label>
+        </fieldset>
+        <button
+          type="button"
+          data-testid="suggestions-export-btn"
+          onClick={onExportSuggestions}
+          disabled={exporting}
+          className="ml-auto inline-flex items-center gap-1 rounded bg-slate-800 px-3 py-1 text-xs font-medium text-white hover:bg-slate-900 disabled:opacity-50"
+        >
+          {exporting ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileDown className="h-3 w-3" />}
+          <span>{exporting ? 'Generating…' : 'Generate suggestions doc'}</span>
+        </button>
+      </div>
 
       <CompilationLegend />
 
@@ -339,6 +388,8 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
   const [editingKey, setEditingKey] = React.useState<string | null>(null);
   const [pendingFinal, setPendingFinal] = React.useState<ScoreValue | null>(null);
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
+  const [exportMode, setExportMode] = React.useState<SuggestionsExportMode>('internal');
+  const [exporting, setExporting] = React.useState<boolean>(false);
 
   const compilationQuery = useQuery({
     queryKey: ['compilation', submissionId],
@@ -399,6 +450,34 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
     clearFinal.mutate({ standardCode, specCode });
   };
 
+  const onExportSuggestions = async () => {
+    setExporting(true);
+    try {
+      const resp = await api.get(
+        `/api/submissions/${submissionId}/compilation/suggestions-doc`,
+        { params: { mode: exportMode }, responseType: 'blob' }
+      );
+      const blob = resp.data instanceof Blob
+        ? resp.data
+        : new Blob([resp.data], {
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const safeInst = (compilationQuery.data?.institutionName || 'submission').replace(/[^a-z0-9_.-]+/gi, '_');
+      a.href = url;
+      a.download = `suggestions_${safeInst}_${exportMode}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Suggestions export failed', err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <CompilationTabView
       data={compilationQuery.data ?? null}
@@ -412,6 +491,10 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
       onChangePendingFinal={(next) => setPendingFinal(next)}
       onSaveFinal={onSaveFinal}
       onClearFinal={onClearFinal}
+      exportMode={exportMode}
+      onChangeExportMode={(m) => setExportMode(m)}
+      onExportSuggestions={onExportSuggestions}
+      exporting={exporting}
     />
   );
 }

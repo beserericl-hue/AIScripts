@@ -4,6 +4,7 @@ import { Score } from '../models/Score';
 import { LeadFinalScore } from '../models/LeadFinalScore';
 import { Submission } from '../models/Submission';
 import { recordAuditEvent } from '../services/auditLog';
+import { generateSuggestionsDocx, SuggestionsMode } from '../services/suggestionsDocx';
 
 // ---------------------------------------------------------------------------
 // CR-009 / Sprint 5.1 — lead-reader compilation surface.
@@ -279,5 +280,47 @@ export const clearFinalScore = async (req: AuthenticatedRequest, res: Response) 
   } catch (error) {
     console.error('Clear final score error:', error);
     return res.status(500).json({ error: 'Failed to clear final score' });
+  }
+};
+
+/**
+ * GET /api/submissions/:submissionId/compilation/suggestions-doc?mode=internal|pc_facing
+ *
+ * CR-011 — consolidated reader-suggestions DOCX. Lead reader / admin only.
+ * Server-side redaction in pc_facing mode (PC may never see unrelayed
+ * reader comments or reader identities).
+ */
+export const exportSuggestionsDoc = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!isLeadOrAdmin(req)) {
+      return res.status(403).json({ error: 'Only lead readers and admins can export suggestions' });
+    }
+
+    const { submissionId } = req.params;
+    const rawMode = (req.query.mode as string) || 'internal';
+    const mode: SuggestionsMode = rawMode === 'pc_facing' ? 'pc_facing' : 'internal';
+
+    const submission = await Submission.findById(submissionId).lean();
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    const buffer = await generateSuggestionsDocx({ submissionId, mode });
+
+    const safeName = String(submission.institutionName || 'submission')
+      .replace(/[^a-zA-Z0-9_.-]+/g, '_')
+      .slice(0, 60);
+    const filename = `suggestions_${safeName}_${mode}_${new Date().toISOString().slice(0, 10)}.docx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('X-Suggestions-Mode', mode);
+    return res.send(buffer);
+  } catch (error) {
+    console.error('Export suggestions doc error:', error);
+    return res.status(500).json({ error: 'Failed to export suggestions document' });
   }
 };
