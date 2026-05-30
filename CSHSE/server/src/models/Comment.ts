@@ -7,6 +7,11 @@ export interface ICommentReply {
   authorName: string;
   authorRole: 'reader' | 'lead_reader' | 'program_coordinator';
   content: string;
+  // CR-004 — replies inherit the parent comment's relay state. A reply by
+  // a reader is only PC-visible once the parent is relayed; the PC's own
+  // replies are always visible to the PC themselves.
+  relayed?: boolean;
+  relayedText?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,6 +41,23 @@ export interface IComment extends Document {
   resolvedBy?: mongoose.Types.ObjectId;
   resolvedAt?: Date;
 
+  // CR-004 — identity-redacted relay state.
+  // `relayed === true` is the gate: only relayed comments cross the reader
+  // tier into the PC tier. `relayedText` is the optional sanitized text
+  // Julia edits (the PC sees relayedText if present, else the original
+  // content). `pcLabel` is an opt-in pseudonym ("Reader A") the PC sees
+  // in place of the reader's name; absent = fully stripped attribution.
+  // `originalReaderId` is the canonical author and is NEVER serialized
+  // to a PC viewer (server-side enforcement, not just UI-hiding).
+  // `boardEscalated` flags a comment the board needs to vote on.
+  relayed: boolean;
+  relayedText?: string;
+  pcLabel?: string;
+  originalReaderId?: mongoose.Types.ObjectId;
+  relayedAt?: Date;
+  relayedBy?: mongoose.Types.ObjectId;
+  boardEscalated: boolean;
+
   // Timestamps
   createdAt: Date;
   updatedAt: Date;
@@ -59,7 +81,11 @@ const CommentReplySchema = new Schema<ICommentReply>({
   content: {
     type: String,
     required: true
-  }
+  },
+  // CR-004 — replies inherit parent relay state; explicit fields allow
+  // future per-reply override (e.g. PC reply not relayed back to readers).
+  relayed: { type: Boolean, default: false },
+  relayedText: { type: String, default: undefined }
 }, {
   timestamps: true
 });
@@ -129,7 +155,16 @@ const CommentSchema = new Schema<IComment>({
   },
   resolvedAt: {
     type: Date
-  }
+  },
+
+  // CR-004 — relay state
+  relayed: { type: Boolean, default: false, index: true },
+  relayedText: { type: String, default: undefined },
+  pcLabel: { type: String, default: undefined },
+  originalReaderId: { type: Schema.Types.ObjectId, ref: 'User', default: undefined },
+  relayedAt: { type: Date, default: undefined },
+  relayedBy: { type: Schema.Types.ObjectId, ref: 'User', default: undefined },
+  boardEscalated: { type: Boolean, default: false, index: true }
 }, {
   timestamps: true
 });

@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { Comment, IComment } from '../models/Comment';
 import { Submission } from '../models/Submission';
+import { serializeCommentsForViewer } from '../services/commentSerializer';
+import { recordAuditEvent } from '../services/auditLog';
 import mongoose from 'mongoose';
 
 interface AuthenticatedRequest extends Request {
@@ -17,23 +19,29 @@ interface AuthenticatedRequest extends Request {
  */
 export const getComments = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    // Comments are never visible to program coordinators
-    if (req.user?.role === 'program_coordinator') {
-      return res.json({ comments: [], groupedComments: {}, pagination: { page: 1, limit: 50, total: 0, totalPages: 0 } });
-    }
-
+    // CR-004 — PC tier now sees RELAYED comments (with identity stripped +
+    // sanitized text). Reader/lead_reader/admin still see the raw list.
+    // The previous "blocked entirely" policy hid even Julia's relay back to
+    // the PC, breaking the comment-thread loop. The serializer below is the
+    // single redaction point — every PC-visible comment-returning path
+    // must funnel through it.
     const { submissionId } = req.params;
     const { standardCode, specCode, page = '1', limit = '50' } = req.query;
+    const role = req.user?.role || '';
+    const isPC = role === 'program_coordinator';
 
     const query: any = { submissionId };
     if (standardCode) query.standardCode = standardCode;
     if (specCode) query.specCode = specCode;
+    // PC viewers: only relayed comments come back. The serializer ALSO
+    // enforces this — the query-level filter is defence-in-depth.
+    if (isPC) query.relayed = true;
 
     const pageNum = parseInt(page as string, 10);
     const limitNum = parseInt(limit as string, 10);
     const skip = (pageNum - 1) * limitNum;
 
-    const [comments, total] = await Promise.all([
+    const [commentsRaw, total] = await Promise.all([
       Comment.find(query)
         .sort({ standardCode: 1, specCode: 1, selectionStart: 1, createdAt: 1 })
         .skip(skip)
@@ -41,6 +49,8 @@ export const getComments = async (req: AuthenticatedRequest, res: Response) => {
         .lean(),
       Comment.countDocuments(query)
     ]);
+
+    const comments = serializeCommentsForViewer(commentsRaw as any, role);
 
     // Group comments by standard/spec
     const groupedComments: Record<string, IComment[]> = {};
@@ -443,5 +453,152 @@ export const getCommentsForNavigation = async (req: AuthenticatedRequest, res: R
   } catch (error) {
     console.error('Get comments for navigation error:', error);
     return res.status(500).json({ error: 'Failed to get comments for navigation' });
+  }
+};
+
+// ============================================
+// CR-023 — Julia relay endpoints (also CR-004 Phase 2)
+// ============================================
+//
+// Three transitions Julia (or the board, via admin/lead_reader/superuser)
+// uses to manage the reader → PC relay:
+//
+//   POST   /api/comments/:commentId/relay        — mark relayed (with optional
+//                                                  sanitized text + pcLabel).
+//   DELETE /api/comments/:commentId/relay        — un-mark; PC loses visibility.
+//   POST   /api/comments/:commentId/escalate     — board-escalated flag.
+//
+// Every transition writes an audit entry so the timeline shows "comment
+// X relayed by Julia at T with reason R."
+
+function _canRelay(role?: string, isSuperuser?: boolean): boolean {
+  return role === 'admin' || role === 'lead_reader' || isSuperuser === true;
+}
+
+export const relayComment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!_canRelay(req.user?.role, req.user?.isSuperuser as any)) {
+      return res.status(403).json({ error: 'Only lead readers, admin, or the board can relay comments' });
+    }
+    const { commentId } = req.params;
+    const { relayedText, pcLabel, reason } = req.body || {};
+
+    const comment = await Comment.findById(commentId);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+    const sanitized = typeof relayedText === 'string' ? relayedText.trim().slice(0, 8000) : undefined;
+    const label = typeof pcLabel === 'string' ? pcLabel.trim().slice(0, 64) : undefined;
+
+    comment.relayed = true;
+    if (sanitized !== undefined) comment.relayedText = sanitized;
+    if (label !== undefined) comment.pcLabel = label;
+    comment.originalReaderId = (comment as any).authorId;
+    comment.relayedAt = new Date();
+    comment.relayedBy = new mongoose.Types.ObjectId(req.user!.id);
+    await comment.save();
+
+    void recordAuditEvent({
+      action: 'comment.relayed',
+      actor: { id: req.user!.id, role: req.user!.role, name: (req.user as any).name || '' },
+      targetType: 'comment',
+      targetId: String(comment._id),
+      submissionId: String(comment.submissionId),
+      payload: { pcLabel: comment.pcLabel },
+      reason: typeof reason === 'string' ? reason : undefined,
+    });
+
+    return res.json({
+      message: 'Comment relayed to program coordinator',
+      comment: { _id: comment._id, relayed: true, pcLabel: comment.pcLabel },
+    });
+  } catch (err) {
+    console.error('relayComment error:', err);
+    return res.status(500).json({ error: 'Failed to relay comment' });
+  }
+};
+
+export const unrelayComment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!_canRelay(req.user?.role, req.user?.isSuperuser as any)) {
+      return res.status(403).json({ error: 'Only lead readers, admin, or the board can unrelay comments' });
+    }
+    const { commentId } = req.params;
+    const comment = await Comment.findById(commentId);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+    comment.relayed = false;
+    comment.relayedAt = undefined;
+    comment.relayedBy = undefined;
+    await comment.save();
+
+    void recordAuditEvent({
+      action: 'comment.unrelayed',
+      actor: { id: req.user!.id, role: req.user!.role, name: (req.user as any).name || '' },
+      targetType: 'comment',
+      targetId: String(comment._id),
+      submissionId: String(comment.submissionId),
+      payload: {},
+    });
+
+    return res.json({ message: 'Comment unrelayed', comment: { _id: comment._id, relayed: false } });
+  } catch (err) {
+    console.error('unrelayComment error:', err);
+    return res.status(500).json({ error: 'Failed to unrelay comment' });
+  }
+};
+
+export const escalateComment = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!_canRelay(req.user?.role, req.user?.isSuperuser as any)) {
+      return res.status(403).json({ error: 'Only lead readers, admin, or the board can escalate' });
+    }
+    const { commentId } = req.params;
+    const { reason } = req.body || {};
+    const comment = await Comment.findById(commentId);
+    if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+    comment.boardEscalated = true;
+    await comment.save();
+
+    void recordAuditEvent({
+      // Reuse a generic audit action; we don't need a new union member
+      // for what is at root a relay state change.
+      action: 'comment.relayed',
+      actor: { id: req.user!.id, role: req.user!.role, name: (req.user as any).name || '' },
+      targetType: 'comment',
+      targetId: String(comment._id),
+      submissionId: String(comment.submissionId),
+      payload: { boardEscalated: true },
+      reason: typeof reason === 'string' ? reason : undefined,
+    });
+
+    return res.json({ message: 'Comment escalated to board', comment: { _id: comment._id, boardEscalated: true } });
+  } catch (err) {
+    console.error('escalateComment error:', err);
+    return res.status(500).json({ error: 'Failed to escalate comment' });
+  }
+};
+
+/**
+ * Julia / admin / lead_reader inbox of comments awaiting relay decisions
+ * for one submission. Returns the un-relayed reader/lead-reader comments
+ * (and any board-escalated comments) the board needs to triage.
+ */
+export const getRelayQueue = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!_canRelay(req.user?.role, req.user?.isSuperuser as any)) {
+      return res.status(403).json({ error: 'Only lead readers, admin, or the board can view the relay queue' });
+    }
+    const { submissionId } = req.params;
+    const comments = await Comment.find({
+      submissionId,
+      $or: [{ relayed: false }, { boardEscalated: true }],
+    })
+      .sort({ createdAt: 1 })
+      .lean();
+    return res.json({ comments });
+  } catch (err) {
+    console.error('getRelayQueue error:', err);
+    return res.status(500).json({ error: 'Failed to load relay queue' });
   }
 };

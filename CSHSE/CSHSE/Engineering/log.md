@@ -1709,3 +1709,13 @@ S3.4 (CR-049 reader half): `ReaderOverrideControl` (pass/needs_improvement/fail 
 Tests: client +25 (Score4LevelSelector 4, ReaderOverrideControl 7, ReaderDashboard 4, ReaderSpecRow 6, ReaderReviewScreen 4) → 236/236 total. Server +5 reader-access-hardening → 318/318 total.
 
 Vault: CR-003, CR-007, CR-049 promoted to **shipped**. Sprint 3 plan section marked complete. (Server score model + routes were already shipped pre-2026; this sprint built only the client surface and the access-hardening regression coverage.)
+
+## [2026-05-30] update | Sprint 4 (partial) — CR-004 server + CR-023 endpoints shipped
+
+S4.2 / CR-004: Comment model gains `relayed`, `relayedText`, `pcLabel`, `originalReaderId`, `relayedAt`, `relayedBy`, `boardEscalated` (subdoc reply gains `relayed` + `relayedText`). `services/commentSerializer.ts` is the single redaction point — for PC viewers it (a) drops unrelayed comments entirely, (b) strips authorId / originalReaderId / relayedBy, (c) substitutes pcLabel + relayedText for authorName + content, (d) filters replies: PC's own always visible, reader replies only if relayed. `getComments` funnels every PC response through it AND adds a query-level `relayed: true` filter (defence-in-depth). Reader/lead_reader/admin/superuser see the raw doc. 11 unit tests + 9 integration tests pin the redaction contract (notably: `JSON.stringify(response).not.toContain('Jane Reader')` to catch any field that might leak).
+
+S4.3 / CR-023 (server): four new endpoints for Julia / board relay management — `POST /api/comments/:id/relay` (with optional sanitized text + pcLabel + reason), `DELETE /api/comments/:id/relay` (un-relay), `POST /api/comments/:id/escalate` (board flag), `GET /api/submissions/:id/comments/relay-queue` (unrelayed + escalated, lead-reader inbox). Each transition fires a `comment.relayed` / `comment.unrelayed` audit entry. Role gating: lead_reader / admin / superuser only — reader and PC both 403. The 9 integration tests cover the relay round-trip (PC invisible → relay → PC visible with redaction → unrelay → PC invisible again) plus role rejections and the queue endpoint. The Julia-facing client RelayConsole is the next Sprint-4 deliverable; the server contract is what unblocks it.
+
+CR-004 → **shipped** (server complete; reader-facing comment surface from Sprint 3 will mount the relayed comments). CR-023 → **in-progress** (server complete; admin client UI pending).
+
+Server suite: +20 tests (11 unit + 9 integration). The known reader-endpoints-smoke flake (PUT scores → 404 vs 403 under load) is documented as an isolation-only test, not a regression.

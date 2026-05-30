@@ -3,12 +3,15 @@ name: CR-023 — Julia-as-relay workflow
 description: Admin (Julia) has a dedicated screen for relaying reader comments back to the PC with redaction and editing.
 type: change-request
 cr_id: CR-023
-status: proposed
+status: in-progress
 priority: P1
 source: [[webinar-action-items-2026-05-20#1-11-35]], [[webinar-action-items-2026-05-20#1-18-31]]
-sprint_target: Sprint 4
+sprint_target: Sprint 4 (S4.3) — server endpoints shipped 2026-05-30; admin/Julia RelayConsole UI is Sprint 4 follow-up.
 tags: [admin, julia, relay, comments, identity-redaction]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-30
+revision_history:
+  - 2026-05-20 — proposed
+  - 2026-05-30 — server endpoints shipped: POST /api/comments/:id/relay (with optional sanitized text + pcLabel + reason), DELETE /api/comments/:id/relay (un-relay), POST /api/comments/:id/escalate (board flag), GET /api/submissions/:id/comments/relay-queue (lead-reader inbox of unrelayed + escalated). Every transition writes a comment.relayed / comment.unrelayed audit entry. 6 integration tests pin role gating (reader/PC = 403; lead_reader = 200) and PC visibility flips on relay/unrelay.
 ---
 
 # CR-023 — Julia-as-relay workflow

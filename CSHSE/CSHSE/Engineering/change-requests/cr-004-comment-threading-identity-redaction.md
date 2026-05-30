@@ -3,12 +3,15 @@ name: CR-004 — Comment threading with identity redaction
 description: PC sees reader comments only after Julia relays them; reader names are never shown to the PC.
 type: change-request
 cr_id: CR-004
-status: proposed
+status: shipped
 priority: P0
 source: [[webinar-action-items-2026-05-20#1-18-28]], [[webinar-action-items-2026-05-20#1-15-35]]
-sprint_target: Sprint 2
+sprint_target: Sprint 4 (S4.2) — server shipped 2026-05-30; reader/Julia client UI mounts on the existing Sprint 3 reader surface.
 tags: [readers, comments, security, identity-redaction]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-30
+revision_history:
+  - 2026-05-20 — proposed
+  - 2026-05-30 — shipped (server): Comment model gains relayed/relayedText/pcLabel/originalReaderId/relayedAt/relayedBy/boardEscalated; commentSerializer.ts is the single redaction point (strips authorId/originalReaderId/relayedBy, substitutes pcLabel + relayedText for PC viewers); getComments funnels through it with query-level relayed: true filter for PC tier (defence-in-depth); 11 unit + 9 integration tests pin "PC never sees reader name" and "PC's own replies always visible to PC."
 ---
 
 # CR-004 — Comment threading with identity redaction

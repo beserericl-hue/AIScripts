@@ -8,7 +8,11 @@ import {
   addReply,
   deleteReply,
   toggleResolve,
-  getCommentsForNavigation
+  getCommentsForNavigation,
+  relayComment,
+  unrelayComment,
+  escalateComment,
+  getRelayQueue
 } from '../controllers/commentController';
 import { authenticate } from '../middleware/auth';
 
@@ -83,5 +87,38 @@ router.delete('/comments/:commentId/replies/:replyId', deleteReply);
  * @access  Private (Reader, Lead Reader)
  */
 router.post('/comments/:commentId/resolve', toggleResolve);
+
+// ============================================
+// CR-004 / CR-023 — relay endpoints
+// ============================================
+
+/**
+ * @route   GET /api/submissions/:submissionId/comments/relay-queue
+ * @desc    Lead-reader / admin / board inbox of comments awaiting relay.
+ * @access  Private (Lead Reader, Admin, Superuser)
+ */
+router.get('/submissions/:submissionId/comments/relay-queue', getRelayQueue);
+
+/**
+ * @route   POST /api/comments/:commentId/relay
+ * @desc    Mark a comment "relayed" so the PC sees it. Optional sanitized
+ *          relayedText + pcLabel. Writes a comment.relayed audit entry.
+ * @access  Private (Lead Reader, Admin, Superuser)
+ */
+router.post('/comments/:commentId/relay', relayComment);
+
+/**
+ * @route   DELETE /api/comments/:commentId/relay
+ * @desc    Un-mark relay; PC loses visibility.
+ * @access  Private (Lead Reader, Admin, Superuser)
+ */
+router.delete('/comments/:commentId/relay', unrelayComment);
+
+/**
+ * @route   POST /api/comments/:commentId/escalate
+ * @desc    Flag a comment for board review.
+ * @access  Private (Lead Reader, Admin, Superuser)
+ */
+router.post('/comments/:commentId/escalate', escalateComment);
 
 export default router;
