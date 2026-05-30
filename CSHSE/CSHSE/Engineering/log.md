@@ -1719,3 +1719,13 @@ S4.3 / CR-023 (server): four new endpoints for Julia / board relay management �
 CR-004 → **shipped** (server complete; reader-facing comment surface from Sprint 3 will mount the relayed comments). CR-023 → **in-progress** (server complete; admin client UI pending).
 
 Server suite: +20 tests (11 unit + 9 integration). The known reader-endpoints-smoke flake (PUT scores → 404 vs 403 under load) is documented as an isolation-only test, not a regression.
+
+## [2026-05-30] update | CR-023 client RelayConsole shipped
+
+Julia / lead-reader / admin RelayConsole UI: `client/src/features/admin/RelayConsole/RelayConsole.tsx`. Pure `RelayConsoleView` plus a thin container with three TanStack-Query mutations.
+
+Per queue item the user sees a card with: standard.spec context, original author + content, an "Escalated" / "Relayed" state chip, three inputs (sanitized text, PC pseudonym, audit reason), and three actions (Relay to PC, Un-relay, Escalate to board). Each action calls the matching CR-023 endpoint shipped earlier today; on success the queue refetches so the card moves out (or its chip updates).
+
+7 view-level unit tests pin: loading + empty + multiple cards rendered; correct buttons per state (Un-relay on already-relayed, Escalate on un-relayed); the three input changes call setDraft with the right patch; the Relay button fires with the comment id. The container's mutation wiring is exercised end-to-end by the existing 9 integration tests on the server endpoints.
+
+CR-023 → **shipped**.
