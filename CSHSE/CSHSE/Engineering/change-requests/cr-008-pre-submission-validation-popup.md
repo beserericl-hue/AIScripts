@@ -3,15 +3,16 @@ name: CR-008 — Pre-submission validation popup
 description: Final submit triggers an error/warning summary so the PC catches missing evidence, narrative, or standards before lockout.
 type: change-request
 cr_id: CR-008
-status: in-progress
+status: shipped
 priority: P1
 source: [[webinar-action-items-2026-05-20#1-08-47]], [[webinar-action-items-2026-05-20#1-12-45]]
-sprint_target: Sprint 2A (S2A.2) — server + modal landed; override + audit are Sprint 2B.
+sprint_target: Sprint 2A (S2A.2) preflight popup; Sprint 10 (S10.3) override-with-reason.
 tags: [validation, submission, ux, pc]
-last_reviewed: 2026-05-29
+last_reviewed: 2026-05-31
 revision_history:
   - 2026-05-20 — proposed
   - 2026-05-29 — Phase 1 shipped: GET /api/submissions/:id/preflight + FinalSubmitModal wired (errors/warnings/Go-to). Override + audited override-reason capture still pending (Sprint 2B).
+  - 2026-05-31 — Phase 2 (Sprint 10.3) shipped: override-with-reason control + server bypass + audit branch. CR closed shipped.
 ---
 
 # CR-008 — Pre-submission validation popup
@@ -70,3 +71,11 @@ The PC can:
 ## Verification (2026-05-31) — PARTIAL (status: in-progress)
 
 Code-verified during the 2026-05-31 sweep. **Shipped:** the pre-submit popup with errors + warnings is live — `FinalSubmitModal.tsx:157-201` renders `preflight-errors` (each with a "Go to" jump) + `preflight-warnings`, backed by `GET /api/submissions/:id/preflight` (`submissionController.ts:1053`, route `routes/submissions.ts:129`). **Gap (the catalog's "Sprint 2B"):** there is **no override-with-reason path** — when preflight has errors the modal just disables Submit (`FinalSubmitModal.tsx:239`) and the server unconditionally hard-blocks on `missingValidations` (`submissionController.ts:1600-1606`). The "Submission note" textarea is an optional always-on note, not a gated override. Remaining work: an override-with-reason control + server bypass + dedicated audit branch. Scheduled Sprint 10 in [[sprint-plan-2026-05-31]].
+
+## Closure (2026-05-31) — SHIPPED (Sprint 10.3)
+
+The Sprint-2B gap identified in the verification note above is now closed; CR-008 is **shipped**.
+
+- **Client** — `FinalSubmitModal.tsx` gained the override-with-reason control: a `preflight-override-checkbox` ("Submit anyway, despite the items above") that reveals a required `preflight-override-reason` textarea (≥10 chars). With errors present, Submit stays blocked until both are satisfied; the confirm button turns red and reads "Override & submit anyway", and `onConfirm` passes `{ reason }`.
+- **Server** — `submissionController.ts:1662-1684+` accepts `override === true` + `overrideReason` (trimmed, ≥10 chars, capped 2000). When `missingValidations` is non-empty the request now branches: no override → 422 hard-block (historical behaviour); override + valid reason → submit proceeds and a dedicated `submission.final_submit_override` audit event records the reason.
+- Closed under the Sprint 10 "submission-integrity hardening" pass ([[sprint-plan-2026-05-31]] S10.3).

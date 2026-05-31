@@ -106,6 +106,8 @@ Crucially, the path is **not broken when n8n is decommissioned**: `triggerValida
 
 **Decision: do NOT rip it out in S14.** A wholesale removal would force re-pointing the three live callers (most visibly the editor) onto the cshse-ai `validateSection` path — a **user-visible behavior migration**, not hygiene, and it touches working code. That deserves its own change-request with PC review (mirroring how [[cr-026-matrix-correction-verify-in-context|CR-026]] was closed-as-superseded rather than force-built under a sprint-hygiene banner). The S14 line is therefore reclassified **deferred-to-CR**, not done. The "archive external n8n evidence-node workflow definitions" sub-item remains a pure **ops task** on the n8n instance (no server code) and is unaffected by this decision. The unauthenticated-callback security findings above (critical #1) stay open and are the stronger reason to schedule that migration CR.
 
+**Scheduled (2026-05-31):** the migration CR now exists — [[cr-054-n8n-validation-migration-and-callback-security]] (`proposed`, P1). It sequences a Phase-1 security fix (authenticate/404 the callbacks, rotate the hardcoded spec-loader key, bind help-chat sessions to the authenticated user) that can ship independently of the Phase-2 editor-validation re-point and Phase-3 dead-code removal.
+
 ## Related
 
 - [[security-audit-2026-05-10]] — unauth'd callbacks, hardcoded API key, session hijack
