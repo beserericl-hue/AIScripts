@@ -3,6 +3,7 @@ import { useAuthStore } from '../store/authStore';
 import { SettingsPage } from '../features/admin/Settings/SettingsPage';
 import { BoardConsole } from '../features/admin/BoardConsole/BoardConsole';
 import { AuditTrail } from '../features/admin/AuditTrail/AuditTrail';
+import { JointVentureManagement } from '../features/admin/JointVentureManagement/JointVentureManagement';
 
 export default function AdminPage() {
   const { canAccessAdminSettings } = useAuthStore();
@@ -28,6 +29,7 @@ export default function AdminPage() {
       <Route path="settings" element={<SettingsPage />} />
       <Route path="board" element={<BoardConsole />} />
       <Route path="audit-trail" element={<AuditTrail />} />
+      <Route path="joint-ventures" element={<JointVentureManagement />} />
       <Route path="*" element={<Navigate to="settings" replace />} />
     </Routes>
   );

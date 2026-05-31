@@ -50,6 +50,12 @@ export interface IInstitution extends Document {
   status: InstitutionStatus;
   notes?: string;
 
+  // CR-019 / Sprint 8.1 — reverse pointer to the active JointVenture this
+  // institution belongs to (max one). Maintained by the JV controller
+  // (add member / remove member / archive). Indexed for fast dashboard
+  // grouping queries.
+  jointVentureId?: mongoose.Types.ObjectId;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -140,7 +146,14 @@ const InstitutionSchema = new Schema<IInstitution>({
     enum: ['active', 'inactive', 'archived'],
     default: 'active'
   },
-  notes: String
+  notes: String,
+  // CR-019 / Sprint 8.1 — reverse pointer to the active JV (max one).
+  jointVentureId: {
+    type: Schema.Types.ObjectId,
+    ref: 'JointVenture',
+    default: undefined,
+    index: true
+  }
 }, {
   timestamps: true
 });

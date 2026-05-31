@@ -22,6 +22,11 @@ export type AuditAction =
   | 'checklist.item_unverified'    // CR-012 / S6.1 — visit team un-verifies
   | 'itinerary.updated'            // CR-013 / S6.2 — agenda replaced (lead/PC co-edit)
   | 'board.decision_recorded'      // CR-053 / S7.1 — board accept/table/deny/suspend/revoke
+  | 'jv.created'                   // CR-019 / S8.1 — joint venture created
+  | 'jv.updated'                   // CR-019 / S8.1 — joint venture name/description edited
+  | 'jv.member_added'              // CR-019 / S8.1 — institution added to a JV
+  | 'jv.member_removed'            // CR-019 / S8.1 — institution removed from a JV
+  | 'jv.archived'                  // CR-019 / S8.1 — JV archived (manual or auto on <2 members)
   | 'account.locked'
   | 'account.unlocked';
 

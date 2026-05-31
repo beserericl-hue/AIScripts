@@ -1447,7 +1447,7 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
 
     const [submissions, total] = await Promise.all([
       Submission.find(filter)
-        .select('submissionId institutionName programName programLevel status createdAt updatedAt standardsStatus readerLock')
+        .select('submissionId institutionName institutionId programName programLevel status createdAt updatedAt standardsStatus readerLock')
         .sort({ createdAt: -1 })
         .skip(Number(offset))
         .limit(Number(limit)),

@@ -162,9 +162,15 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 
 ---
 
-# Sprint 8 — Joint Ventures (dormant)
+# Sprint 8 — Joint Ventures ✅ COMPLETE 2026-05-30
 
-CR-019 stays **rejected** — no beta institution surfaced a JV need. Revive only on demand.
+CR-019 was revived from `rejected` per user direction 2026-05-30 ("Sprint 8/CR-019 should not be dormant. This is an expected requirement."). Shipped same day following the original [[sprint-plan-2026-05-11#sprint-7]] spec.
+
+- **S8.1 — JointVenture model + REST API. ✅ DONE 2026-05-30.** `JointVenture` model with name/description/institutionIds (≥2)/archived/createdBy. `Institution.jointVentureId` reverse pointer. `jointVentureController` exports list / get / create / update / addMember / removeMember / archive / aggregateStats. RBAC: admin/superuser full CRUD; non-admin GETs only JVs whose member institution they belong to (non-member 404 — no leak). Invariants: name unique; min 2 members on create; single-JV-per-institution (409 on conflict); auto-archive when members drop <2 with audit `jv.archived`. 5 new AuditActions (`jv.created` / `jv.updated` / `jv.member_added` / `jv.member_removed` / `jv.archived`). 12 server integration tests.
+- **S8.2 — Admin JointVentureManagement UI. ✅ DONE 2026-05-30.** `features/admin/JointVentureManagement/` (pure view + container) at `/admin/joint-ventures`. List active / archived JVs; inline create form with institution multi-select filtered to non-JV-members; Archive button per active row. 11 client unit tests.
+- **S8.3 — Aggregate stats endpoint + JV badge. ✅ DONE 2026-05-30.** `GET /api/joint-ventures/:id/aggregate-stats` rolls submissions across members (`totalSubmissions` / `activeSubmissions` / `decidedSubmissions` / `upcomingSiteVisits`). New `JointVentureBadge` component (small inline chip "Joint Venture: {name}"; renders only when the viewer's JV-list response shows a match — server RBAC scopes the list). Mounted on the reader dashboard rows. `submissionController.listSubmissions` projection widened to include `institutionId` so the badge has its key. 4 client unit tests.
+
+**Deferred to a follow-on:** Dashboard JV grouping (admin / lead-reader section headers), JV reporting filter dropdown (`reportController?jointVentureId`), PC dashboard badge mount. The data + endpoints + badge component are live; these are discrete UI passes when product confirms the desired shapes.
 
 ---
 

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Loader2, FileText, ChevronRight } from 'lucide-react';
+import { JointVentureBadge } from '../../components/JointVentureBadge';
 
 // ---------------------------------------------------------------------------
 // S3.1 — Reader dashboard.
@@ -17,6 +18,8 @@ export interface ReaderDashboardSubmission {
   _id: string;
   submissionId: string;
   institutionName: string;
+  // CR-019 — server now projects institutionId so the JV badge can render.
+  institutionId?: string | null;
   programName: string;
   programLevel: string;
   status: string;
@@ -90,7 +93,13 @@ export function ReaderDashboardView({
                 className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-900">{sub.institutionName}</p>
+                  <p className="flex items-center gap-2 truncate text-sm font-medium text-slate-900">
+                    <span className="truncate">{sub.institutionName}</span>
+                    {/* CR-019 S8.3 — JV badge renders only when the
+                        institution belongs to an active joint venture
+                        the reader can see (server RBAC scopes the list). */}
+                    {sub.institutionId && <JointVentureBadge institutionId={sub.institutionId} />}
+                  </p>
                   <p className="truncate text-xs text-slate-600">
                     {sub.programName} <span className="text-slate-400">·</span>{' '}
                     <span className="uppercase">{sub.programLevel}</span> <span className="text-slate-400">·</span>{' '}
