@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { DirectMessageThread, DirectMessage, DmParticipantRole } from '../models/DirectMessage';
 import { User } from '../models/User';
+import { notifyMany } from '../services/notificationService';
 
 // ---------------------------------------------------------------------------
 // CR-010 / Sprint 5.4 — Portal direct messaging.
@@ -60,6 +61,37 @@ function _isParticipant(
   userId: string
 ): boolean {
   return participantIds.some((p) => String(p) === String(userId));
+}
+
+function _snippet(text: string, max = 140): string {
+  const t = text.trim();
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t;
+}
+
+/**
+ * Notify every participant except the sender that a new message landed.
+ * In-app + email, fail-soft — never blocks the message write.
+ */
+function _notifyParticipants(opts: {
+  participantIds: mongoose.Types.ObjectId[];
+  senderId: string;
+  senderName: string;
+  subject: string;
+  submissionId: string;
+  content: string;
+}): void {
+  const recipients = opts.participantIds
+    .map(String)
+    .filter((id) => id !== String(opts.senderId));
+  if (recipients.length === 0) return;
+  void notifyMany(recipients, {
+    type: 'dm.new_message',
+    title: `New message from ${opts.senderName}`,
+    body: `${opts.subject}: ${_snippet(opts.content)}`,
+    link: `/reader/${opts.submissionId}`,
+    submissionId: opts.submissionId,
+    email: true
+  });
 }
 
 /**
@@ -159,6 +191,15 @@ export const createThread = async (req: AuthenticatedRequest, res: Response) => 
       content: message.trim()
     });
 
+    _notifyParticipants({
+      participantIds: allParticipants,
+      senderId: req.user!.id,
+      senderName: _actorName(req),
+      subject: thread.subject,
+      submissionId: String(thread.submissionId),
+      content: firstMessage.content
+    });
+
     return res.status(201).json({ thread, message: firstMessage });
   } catch (err) {
     console.error('createThread error:', err);
@@ -223,6 +264,15 @@ export const postMessage = async (req: AuthenticatedRequest, res: Response) => {
 
     thread.lastMessageAt = stored.createdAt;
     await thread.save();
+
+    _notifyParticipants({
+      participantIds: thread.participantIds as any,
+      senderId: req.user!.id,
+      senderName: _actorName(req),
+      subject: thread.subject,
+      submissionId: String(thread.submissionId),
+      content: stored.content
+    });
 
     return res.status(201).json({ message: stored });
   } catch (err) {

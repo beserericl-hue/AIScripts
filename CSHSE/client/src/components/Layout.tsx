@@ -5,6 +5,7 @@ import { api } from '../services/api';
 import { HelpChat } from './HelpChat';
 import { BugReporter } from './BugReporter';
 import { HelpMenu } from './HelpMenu';
+import { NotificationBell } from './NotificationBell';
 import { Toast } from './Toast';
 import { HintLayer } from '../features/tour/HintLayer';
 import { WelcomeTour } from '../features/tour/WelcomeTour';
@@ -258,6 +259,8 @@ export default function Layout() {
                   data-tour-step="help" target the welcome tour spotlights
                   in its final step + the id the post-completion hint
                   anchors to. */}
+              {/* Notification pass — in-app notification bell with unread badge. */}
+              <NotificationBell />
               <HelpMenu />
               <div className="relative" ref={menuRef}>
                 <button

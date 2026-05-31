@@ -60,6 +60,8 @@ import bugReportsRouter from './routes/bugReports';
 import auditTrailRouter from './routes/auditTrail';
 // CR-019 / Sprint 8.1 — Joint Venture grouping.
 import jointVenturesRouter from './routes/jointVentures';
+// Notification pass — in-app notification inbox (CR-010 DM + CR-053 cycle).
+import notificationsRouter from './routes/notifications';
 // CR-034 — E2E seed router; only mounted when E2E_SEED_ENABLED=1 and never in production.
 import { buildTestRouter } from './routes/test';
 
@@ -202,6 +204,7 @@ app.use('/api', boardDecisionsRouter);
 app.use('/api', bugReportsRouter);
 app.use('/api', auditTrailRouter);
 app.use('/api/joint-ventures', jointVenturesRouter);
+app.use('/api', notificationsRouter);
 // (test router moved up above the bare-`/api` catch-alls so /api/test/*
 // isn't swallowed by another router's authenticate middleware first.)
 
