@@ -54,6 +54,8 @@ import evidenceRecommendationsRouter from './routes/evidenceRecommendations';
 import itineraryRouter from './routes/itinerary';
 // CR-053 / Sprint 7.1 — Board decisions + cycle scheduler.
 import boardDecisionsRouter from './routes/boardDecisions';
+// CR-016 / Sprint 7.2 — In-app bug reporter.
+import bugReportsRouter from './routes/bugReports';
 // CR-034 — E2E seed router; only mounted when E2E_SEED_ENABLED=1 and never in production.
 import { buildTestRouter } from './routes/test';
 
@@ -193,6 +195,7 @@ app.use('/api', checklistRouter);
 app.use('/api', evidenceRecommendationsRouter);
 app.use('/api', itineraryRouter);
 app.use('/api', boardDecisionsRouter);
+app.use('/api', bugReportsRouter);
 // (test router moved up above the bare-`/api` catch-alls so /api/test/*
 // isn't swallowed by another router's authenticate middleware first.)
 

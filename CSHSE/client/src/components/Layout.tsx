@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { HelpChat } from './HelpChat';
+import { BugReporter } from './BugReporter';
 import { HelpMenu } from './HelpMenu';
 import { Toast } from './Toast';
 import { HintLayer } from '../features/tour/HintLayer';
@@ -417,6 +418,9 @@ export default function Layout() {
       )}
 
       <HelpChat />
+
+      {/* CR-016 — In-app bug reporter floating trigger + modal. */}
+      <BugReporter />
 
       {/* CR-052 — Tour + Hint + Toast layers. Mounted at the layout root
           so every authenticated route gets them. HintLayer + WelcomeTour

@@ -3,12 +3,26 @@ name: CR-016 — In-app bug reporter
 description: One-click "Report an issue" surface inside the portal — auto-captures screenshot, route, browser, user context.
 type: change-request
 cr_id: CR-016
-status: proposed
+status: shipped
 priority: P2
 source: [[webinar-action-items-2026-05-20#37-56]]
-sprint_target: Backlog
+sprint_target: Sprint 7.2
 tags: [observability, support, ux]
-last_reviewed: 2026-05-20
+last_reviewed: 2026-05-30
+shipped_notes: |
+  Sprint 7.2 — landed as the friction-reduction MVP. Auto-screenshot
+  (html2canvas) intentionally deferred to a follow-on CR to keep the
+  bundle slim (~800 KB savings). Everything else from the original
+  acceptance is in place:
+    - server BugReport model + POST /api/bug-reports + admin GET/PATCH
+    - client BugReporter floating trigger + modal + console-error
+      capture (rolling buffer of last 10; window.onerror +
+      unhandledrejection too)
+    - server-side defence-in-depth scrub for Bearer / JWT / AWS keys /
+      password|secret|api[_-]?key shapes
+    - reporter receives a `reference` (the BugReport _id)
+    - admin can list + triage (status: new / triaged / resolved / dismissed)
+  7 server integration + 10 client unit tests.
 ---
 
 # CR-016 — In-app bug reporter

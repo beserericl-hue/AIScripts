@@ -1912,3 +1912,17 @@ Tests: server `tests/integration/board-decisions.test.ts` (8) — accept stamps 
 Deferred: email + in-app reminders that fire at `expiresAt`/`reconsiderAt` boundaries — same notification pass as CR-010 DM notifications. Re-accreditation **auto-spin-up** (when expiresAt is N months away, auto-create a new Submission of `type: 'reaccreditation'`) — discrete follow-on CR. Nav link to `/admin/board` (today admins use direct URL).
 
 Vault: CR-053 created + promoted to **shipped**; sprint plan S7.1 marked done; index updated.
+
+## [2026-05-30] update | Sprint 7.2 — CR-016 in-app bug reporter shipped
+
+Floating "Report issue" button on every authenticated route opens a modal where the user types what went wrong; the client auto-captures route + userAgent + buildSha + the last 10 console errors and posts to `POST /api/bug-reports`. Server scrubs Bearer / JWT / AWS / password|secret|api[_-]?key shapes before persisting, returns a reference id, and admins triage via `GET /api/admin/bug-reports` + `PATCH /admin/bug-reports/:id`.
+
+Server: `models/BugReport.ts` (description / route / userAgent / buildSha / reporter snapshot / recentConsoleErrors / status + triageNote, all bounded by maxlength). `controllers/bugReportController.ts` — `createBugReport` (any auth user; 400 on missing required fields; scrubs description + each console-error message before persisting; caps console errors at the last 10), `listBugReports` (admin-only; newest first; optional status filter; limit clamped to [1, 200]), `updateBugReport` (admin-only; flips status + sets triageNote). `routes/bugReports.ts` mounted at `/api`.
+
+Client: `components/BugReporter.tsx` — `installConsoleErrorCapture()` runs once at first BugReporter mount; wraps `console.error` (preserves original behavior), `window.addEventListener('error')`, and `window.addEventListener('unhandledrejection')` into a rolling 10-entry buffer. The modal is a Tailwind dialog (focus-trapped via `role="dialog"` + `aria-modal`); backdrop click closes; "Send report" disabled until description non-empty; success state shows the reference id with a "Thanks!" panel. Mounted in `Layout.tsx` next to HelpChat.
+
+Auto-screenshot intentionally deferred (would add `html2canvas` ~800 KB). The CR's friction-reduction value is mostly in lowering the bar to write the report at all; screenshot capture lands as a discrete follow-on.
+
+Tests: server `tests/integration/bug-reports.test.ts` (7) — submit + reference; 401 unauth; 400 on missing required fields; scrub strips Bearer + JWT + AWS keys from description AND console errors; cap to last 10; admin-only list (newest-first); admin-only PATCH (status flip + triageNote; 400 on bad status). Client `components/BugReporter.test.tsx` (10) — trigger always rendered; modal opens; description input fires onChangeDescription; Send disabled when empty + fires onSubmit when non-empty; Close fires onClose; thanks panel renders on reference; error banner renders on error; console capture buffers + caps at 10.
+
+Vault: CR-016 promoted to **shipped** (shipped_notes documents the html2canvas deferral); sprint plan S7.2 marked done; index updated.
