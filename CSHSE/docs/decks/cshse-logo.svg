@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect x="2" y="2" width="96" height="96" rx="8" ry="8" fill="#006B3F" stroke="#004D2C" stroke-width="3"/>
+  <!-- Snowflake/asterisk symbol -->
+  <g fill="white" transform="translate(50, 38)">
+    <!-- Vertical line -->
+    <rect x="-2" y="-18" width="4" height="36" rx="2"/>
+    <!-- Horizontal line -->
+    <rect x="-18" y="-2" width="36" height="4" rx="2"/>
+    <!-- Diagonal lines -->
+    <rect x="-2" y="-18" width="4" height="36" rx="2" transform="rotate(45)"/>
+    <rect x="-2" y="-18" width="4" height="36" rx="2" transform="rotate(-45)"/>
+    <!-- Center circles on each arm -->
+    <circle cx="0" cy="-14" r="3"/>
+    <circle cx="0" cy="14" r="3"/>
+    <circle cx="-14" cy="0" r="3"/>
+    <circle cx="14" cy="0" r="3"/>
+    <circle cx="-10" cy="-10" r="2.5"/>
+    <circle cx="10" cy="-10" r="2.5"/>
+    <circle cx="-10" cy="10" r="2.5"/>
+    <circle cx="10" cy="10" r="2.5"/>
+  </g>
+  <!-- CSHSE text -->
+  <text x="50" y="78" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="18" font-weight="bold">CSHSE</text>
+</svg>
