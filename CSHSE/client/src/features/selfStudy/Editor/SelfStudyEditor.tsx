@@ -860,9 +860,15 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // Accepts an optional submissionNote — the PC's confirm-modal message.
   // Persisted on the final-submit audit-log entry.
   const submitSelfStudyMutation = useMutation({
-    mutationFn: async (args?: { submissionNote?: string }) => {
+    mutationFn: async (args?: { submissionNote?: string; override?: { reason: string } }) => {
       const response = await api.post(`/api/submissions/${submissionId}/submit`, {
-        submissionNote: args?.submissionNote ?? ''
+        submissionNote: args?.submissionNote ?? '',
+        // CR-008 / S10.3 — override-with-reason. Only sent when the PC chose to
+        // submit despite blocking preflight errors; the server records a
+        // dedicated `submission.final_submit_override` audit event.
+        ...(args?.override
+          ? { override: true, overrideReason: args.override.reason }
+          : {})
       });
       return response.data;
     },
@@ -2068,9 +2074,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     []
   );
   const handleFinalSubmitConfirm = useCallback(
-    async (submissionNote: string) => {
+    async (submissionNote: string, override?: { reason: string }) => {
       try {
-        await submitSelfStudyMutation.mutateAsync({ submissionNote });
+        await submitSelfStudyMutation.mutateAsync({ submissionNote, override });
         setFinalSubmitOpen(false);
       } catch (err) {
         // Leave the modal open so the PC can read the error + retry.
@@ -2146,12 +2152,22 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     );
   }, [standards, submission?.standardsStatus]);
 
-  // Check if submission is already submitted or locked
+  // Check if submission is already submitted or locked.
+  // Status list mirrors server/src/middleware/submissionLockout.ts so the
+  // client disables inputs from the same source of truth the server enforces.
   const isSubmissionLocked = React.useMemo(() => {
     return submission?.status === 'submitted' ||
            submission?.status === 'under_review' ||
-           submission?.readerLock?.isLocked;
+           submission?.status === 'readers_assigned' ||
+           submission?.status === 'review_complete' ||
+           !!submission?.readerLock?.isLocked;
   }, [submission?.status, submission?.readerLock?.isLocked]);
+
+  // CR-005 — a program coordinator whose submission is locked must be unable to
+  // edit, not merely shown a banner. Fold the lock into the read-only flag so
+  // every editor input below is actually disabled (the server still rejects
+  // writes with 403 LOCKED, but the UI should never let them try).
+  const isEditingDisabled = isReadOnly || (isProgramCoordinator && isSubmissionLocked);
 
   // Navigate to next/prev spec
   const navigateSpec = useCallback(
@@ -2708,9 +2724,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     specTitle={getCurrentStandardData().specTitle}
                     standardText={getCurrentStandardData().specText}
                     onSave={handleSave}
-                    onSaveSupportingEvidence={isProgramCoordinator ? handleSaveSupportingEvidence : undefined}
+                    onSaveSupportingEvidence={isProgramCoordinator && !isEditingDisabled ? handleSaveSupportingEvidence : undefined}
                     onCancel={isProgramCoordinator ? () => navigate('/self-study') : undefined}
-                    readOnly={isReadOnly}
+                    readOnly={isEditingDisabled}
                     onSelectionChange={isReviewer ? setEditorSelection : undefined}
                     highlightedComment={highlightedComment}
                   />
@@ -2722,7 +2738,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     submissionId={submissionId}
                     standardCode={selectedStandard}
                     specCode={selectedSpec}
-                    canEvaluate={isProgramCoordinator && !isReadOnly}
+                    canEvaluate={isProgramCoordinator && !isEditingDisabled}
                   />
                 )}
                 {selectedSpec && (
@@ -2739,7 +2755,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       (submission as any)?.standardsStatus?.[`${selectedStandard}_${selectedSpec}`]?.excludedReason
                     }
                     canToggle={isProgramCoordinator}
-                    disabled={isReadOnly}
+                    disabled={isEditingDisabled}
                   />
                 )}
                 {!selectedSpec && (
@@ -2754,7 +2770,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       submissionId={submissionId}
                       scope="document"
                       initialContent={(submission as any)?.documentIntroduction ?? ''}
-                      readOnly={isReadOnly}
+                      readOnly={isEditingDisabled}
                     />
                     <IntroductionEditor
                       key={`std-intro-${selectedStandard}-${editorRefreshKey}`}
@@ -2766,7 +2782,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                           ? ((submission as any).standardIntroductions as Map<string, string>).get(selectedStandard)
                           : (submission as any)?.standardIntroductions?.[selectedStandard]) ?? ''
                       }
-                      readOnly={isReadOnly}
+                      readOnly={isEditingDisabled}
                     />
                     <div className="mt-2 flex flex-col items-center justify-center text-gray-500">
                       <FileUp className="w-10 h-10 mb-2" />
@@ -2828,7 +2844,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             <main className="flex-1 overflow-hidden">
               <FileLibrary
                 submissionId={submissionId}
-                readOnly={isReadOnly}
+                readOnly={isEditingDisabled}
               />
             </main>
           )}
@@ -2854,7 +2870,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   submissionId={submissionId}
                   scope="document"
                   initialContent={(submission as any)?.documentIntroduction ?? ''}
-                  readOnly={isReadOnly}
+                  readOnly={isEditingDisabled}
                 />
               </div>
             </main>

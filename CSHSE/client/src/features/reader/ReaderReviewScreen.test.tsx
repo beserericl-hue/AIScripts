@@ -87,4 +87,21 @@ describe('ReaderReviewScreenView', () => {
     );
     expect(screen.getByTestId('reader-review-empty')).toBeInTheDocument();
   });
+
+  it('CR-052 / S12.3 — score selectors carry the hint anchor id so the first-score hint can attach', () => {
+    const { container } = render(
+      wrap(
+        <ReaderReviewScreenView
+          submission={submission as any}
+          standards={standards}
+          scoresByKey={{}}
+          canScore
+          canOverride
+          isLoading={false}
+        />
+      )
+    );
+    // 1.a is scorable → its selector exposes the stable anchor id.
+    expect(container.querySelector('#score-selector-1-a')).not.toBeNull();
+  });
 });

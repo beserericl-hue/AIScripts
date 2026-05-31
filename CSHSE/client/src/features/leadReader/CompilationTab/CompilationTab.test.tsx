@@ -327,4 +327,76 @@ describe('CompilationTabView', () => {
     expect(legend).toHaveTextContent(/All agree/);
     expect(legend).toHaveTextContent(/Excluded/);
   });
+
+  // CR-022 / S13c — "Request change from admin" affordance.
+  it('CR-022 — does not show the assignment-change box when not locked', () => {
+    render(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          data={sample}
+          isLoading={false}
+        />
+      )
+    );
+    expect(screen.queryByTestId('assignment-change-box')).not.toBeInTheDocument();
+  });
+
+  it('CR-022 — shows the locked box and reveals the reason form on open', () => {
+    render(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          data={sample}
+          isLoading={false}
+          lockedPhase
+          requestState="idle"
+        />
+      )
+    );
+    expect(screen.getByTestId('assignment-change-box')).toBeInTheDocument();
+    // form not visible until opened
+    expect(screen.queryByTestId('assignment-change-reason')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('assignment-change-open'));
+    expect(screen.getByTestId('assignment-change-reason')).toBeInTheDocument();
+    // Send is disabled until a reason is typed
+    expect(screen.getByTestId('assignment-change-send')).toBeDisabled();
+  });
+
+  it('CR-022 — Send fires onRequestAssignmentChange with the trimmed reason', () => {
+    const onRequestAssignmentChange = vi.fn();
+    render(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          data={sample}
+          isLoading={false}
+          lockedPhase
+          requestState="idle"
+          onRequestAssignmentChange={onRequestAssignmentChange}
+        />
+      )
+    );
+    fireEvent.click(screen.getByTestId('assignment-change-open'));
+    fireEvent.change(screen.getByTestId('assignment-change-reason'), {
+      target: { value: '  swap reader Smith  ' },
+    });
+    fireEvent.click(screen.getByTestId('assignment-change-send'));
+    expect(onRequestAssignmentChange).toHaveBeenCalledWith('swap reader Smith');
+  });
+
+  it('CR-022 — confirms once the request is done', () => {
+    render(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          data={sample}
+          isLoading={false}
+          lockedPhase
+          requestState="done"
+        />
+      )
+    );
+    expect(screen.getByTestId('assignment-change-done')).toBeInTheDocument();
+  });
 });

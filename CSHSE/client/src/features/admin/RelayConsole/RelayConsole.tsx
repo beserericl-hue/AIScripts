@@ -2,6 +2,8 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import { Loader2, Send, Undo2, Flag, X } from 'lucide-react';
+import { useOnceHint } from '../../tour/useOnceHint';
+import { t } from '../../../i18n/strings';
 
 // ---------------------------------------------------------------------------
 // CR-023 — Julia / board Relay Console.
@@ -81,7 +83,7 @@ export function RelayConsoleView({
   return (
     <div data-testid="relay-console" className="mx-auto max-w-3xl space-y-4 p-6">
       <header className="flex items-baseline justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">Relay queue</h2>
+        <h2 id="relay-queue-header" className="text-lg font-semibold text-slate-900">Relay queue</h2>
         <span className="text-xs text-slate-500">
           {comments.length} comment{comments.length === 1 ? '' : 's'}
         </span>
@@ -207,6 +209,19 @@ export function RelayConsole({ submissionId }: RelayConsoleProps): JSX.Element {
     enabled: !!submissionId,
     refetchOnWindowFocus: false,
   });
+
+  // CR-052 / S12.3 — first time the relay queue renders with comments, explain
+  // what relaying does (the school sees the note, never the reader's name).
+  const { fireOnce } = useOnceHint();
+  const hasComments = (queueQuery.data?.length ?? 0) > 0;
+  React.useEffect(() => {
+    if (!hasComments) return;
+    fireOnce({
+      id: 'relay-first-queue',
+      message: t('hint.relay.firstQueue'),
+      targetId: 'relay-queue-header',
+    });
+  }, [hasComments, fireOnce]);
 
   const setDraft = React.useCallback(
     (id: string, patch: { relayedText?: string; pcLabel?: string; reason?: string }) => {

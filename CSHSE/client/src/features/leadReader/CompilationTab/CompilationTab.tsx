@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Loader2, ChevronLeft, Check, X, FileDown } from 'lucide-react';
+import { Loader2, ChevronLeft, Check, X, FileDown, Lock, Send } from 'lucide-react';
 import { api } from '../../../services/api';
 import { Score4LevelSelector, SCORE_LEVELS } from '../../reader/Score4LevelSelector';
 import type { ScoreValue } from '../../reader/Score4LevelSelector';
@@ -81,6 +81,112 @@ export interface CompilationTabViewProps {
   onChangeExportMode: (mode: SuggestionsExportMode) => void;
   onExportSuggestions: () => void;
   exporting?: boolean;
+  // CR-022 / S13c — reader assignments are locked after submit; the lead
+  // reader can't reassign, so they ask an admin from here.
+  lockedPhase?: boolean;
+  requestState?: 'idle' | 'pending' | 'done' | 'error';
+  onRequestAssignmentChange?: (reason: string) => void;
+}
+
+/**
+ * CR-022 / S13c — "Request change from admin" affordance.
+ *
+ * Rendered only in a locked phase, where the lead reader cannot reassign
+ * readers directly (server returns 403). Instead of a disabled reassign
+ * control, we give them a governed ask: a reason + Send. On success the box
+ * confirms the admin was notified.
+ */
+export function AssignmentChangeRequestBox({
+  requestState = 'idle',
+  onRequestAssignmentChange,
+}: {
+  requestState?: 'idle' | 'pending' | 'done' | 'error';
+  onRequestAssignmentChange?: (reason: string) => void;
+}): JSX.Element {
+  const [open, setOpen] = React.useState(false);
+  const [reason, setReason] = React.useState('');
+  const pending = requestState === 'pending';
+
+  if (requestState === 'done') {
+    return (
+      <div
+        data-testid="assignment-change-done"
+        className="mb-3 flex items-center gap-2 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+      >
+        <Check className="h-4 w-4" aria-hidden />
+        <span>Your note went to the admin. They will fix who is assigned.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-testid="assignment-change-box"
+      className="mb-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+    >
+      <div className="flex items-center gap-2">
+        <Lock className="h-4 w-4 text-slate-500" aria-hidden />
+        <span className="font-medium">Reader list is locked.</span>
+        <span className="text-slate-600">Only an admin can change who reads this self-study.</span>
+        {!open && (
+          <button
+            type="button"
+            data-testid="assignment-change-open"
+            onClick={() => setOpen(true)}
+            className="ml-auto inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-1 text-xs font-medium text-white hover:bg-slate-900"
+          >
+            Ask admin to change readers
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="mt-2 space-y-2">
+          <label htmlFor="assignment-change-reason" className="block text-xs font-medium text-slate-600">
+            Tell the admin what to change and why
+          </label>
+          <textarea
+            id="assignment-change-reason"
+            data-testid="assignment-change-reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={3}
+            placeholder="Example: Dr. Smith should not read this one — they used to work there."
+            className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
+          />
+          {requestState === 'error' && (
+            <p data-testid="assignment-change-error" className="text-xs text-red-700">
+              That did not send. Please try again.
+            </p>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              data-testid="assignment-change-cancel"
+              onClick={() => {
+                setOpen(false);
+                setReason('');
+              }}
+              disabled={pending}
+              className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            >
+              <X className="h-3 w-3" aria-hidden />
+              <span>Cancel</span>
+            </button>
+            <button
+              type="button"
+              data-testid="assignment-change-send"
+              onClick={() => onRequestAssignmentChange?.(reason.trim())}
+              disabled={pending || !reason.trim()}
+              className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-1 text-xs font-medium text-white hover:bg-slate-900 disabled:opacity-50"
+            >
+              {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+              <span>Send to admin</span>
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function rowClasses(row: CompilationRow): string {
@@ -119,6 +225,9 @@ export function CompilationTabView({
   onChangeExportMode,
   onExportSuggestions,
   exporting,
+  lockedPhase,
+  requestState,
+  onRequestAssignmentChange,
 }: CompilationTabViewProps): JSX.Element {
   if (isLoading) {
     return (
@@ -157,6 +266,12 @@ export function CompilationTabView({
             <span className="uppercase">{data.programLevel}</span>
           </p>
         </header>
+        {lockedPhase && (
+          <AssignmentChangeRequestBox
+            requestState={requestState}
+            onRequestAssignmentChange={onRequestAssignmentChange}
+          />
+        )}
         <div data-testid="compilation-no-rows" className="rounded border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
           No reader scores have been submitted yet.
         </div>
@@ -179,6 +294,13 @@ export function CompilationTabView({
           <span className="uppercase">{data.programLevel}</span>
         </p>
       </header>
+
+      {lockedPhase && (
+        <AssignmentChangeRequestBox
+          requestState={requestState}
+          onRequestAssignmentChange={onRequestAssignmentChange}
+        />
+      )}
 
       <div data-testid="compilation-toolbar" className="mb-3 flex flex-wrap items-center gap-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
         <span className="font-medium uppercase tracking-wide text-slate-500">Suggestions doc</span>
@@ -393,6 +515,7 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
   const [exportMode, setExportMode] = React.useState<SuggestionsExportMode>('internal');
   const [exporting, setExporting] = React.useState<boolean>(false);
+  const [requestState, setRequestState] = React.useState<'idle' | 'pending' | 'done' | 'error'>('idle');
   const { fireOnce } = useOnceHint();
 
   // CR-052 / Sprint 9.3 — first time the lead reader opens the Final-score
@@ -466,6 +589,25 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
     clearFinal.mutate({ standardCode, specCode });
   };
 
+  // CR-022 / S13c — once a self-study is locked, lead readers cannot reassign
+  // readers (server 403s the assign call). The compilation surface only ever
+  // loads at status >= submitted, so it is always a "locked phase" here, but
+  // we compute it explicitly to keep the affordance honest.
+  const LOCKED_STATUSES = ['submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant'];
+  const lockedPhase = !!compilationQuery.data && LOCKED_STATUSES.includes(compilationQuery.data.status);
+
+  const onRequestAssignmentChange = async (reason: string) => {
+    if (!reason) return;
+    setRequestState('pending');
+    try {
+      await api.post(`/api/reviews/submissions/${submissionId}/request-assignment-change`, { reason });
+      setRequestState('done');
+    } catch (err) {
+      console.error('Request assignment change failed', err);
+      setRequestState('error');
+    }
+  };
+
   const onExportSuggestions = async () => {
     setExporting(true);
     try {
@@ -511,6 +653,9 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
       onChangeExportMode={(m) => setExportMode(m)}
       onExportSuggestions={onExportSuggestions}
       exporting={exporting}
+      lockedPhase={lockedPhase}
+      requestState={requestState}
+      onRequestAssignmentChange={onRequestAssignmentChange}
     />
   );
 }

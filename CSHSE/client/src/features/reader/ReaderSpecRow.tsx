@@ -54,8 +54,18 @@ export interface ReaderSpecRowViewProps {
   scoreSaving?: boolean;
   canScore: boolean;
   canOverride: boolean;
+  /** CR-009 follow-on / S11.3 — lead reader's Final score; null if unset. */
+  finalScore?: ScoreValue | null;
   submissionId: string;
 }
+
+// CR-003 / CR-009 — shared 0-3 rubric labels for the read-only Final chip.
+const SCORE_LABELS: Record<number, string> = {
+  0: 'Non-compliant',
+  1: 'Partial',
+  2: 'Largely compliant',
+  3: 'Fully compliant',
+};
 
 export function ReaderSpecRowView(props: ReaderSpecRowViewProps): JSX.Element {
   const {
@@ -71,6 +81,7 @@ export function ReaderSpecRowView(props: ReaderSpecRowViewProps): JSX.Element {
     scoreSaving,
     canScore,
     canOverride,
+    finalScore,
     submissionId,
   } = props;
   const verdict = evaluation?.verdict;
@@ -151,7 +162,27 @@ export function ReaderSpecRowView(props: ReaderSpecRowViewProps): JSX.Element {
           {canScore ? (
             <div className="mt-3">
               <p className="mb-1 text-xs font-medium text-slate-700">Your compliance score</p>
-              <Score4LevelSelector value={score} onChange={onScoreChange} saving={scoreSaving} />
+              <Score4LevelSelector
+                value={score}
+                onChange={onScoreChange}
+                saving={scoreSaving}
+                anchorId={`score-selector-${standardCode}-${specCode}`}
+              />
+            </div>
+          ) : null}
+
+          {/* CR-009 follow-on / S11.3 — read-only Final score the lead reader
+              set on this spec. Transparency default: readers see the Final
+              verdict (not their peers' individual votes). */}
+          {finalScore !== null && finalScore !== undefined ? (
+            <div
+              data-testid={`reader-final-score-${standardCode}-${specCode}`}
+              className="mt-3 inline-flex items-center gap-2 rounded border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs text-indigo-900"
+            >
+              <span className="font-medium">Lead reader final score:</span>
+              <span className="rounded bg-white px-1.5 py-0.5 font-semibold">
+                {finalScore} — {SCORE_LABELS[finalScore] ?? 'Unknown'}
+              </span>
             </div>
           ) : null}
 
@@ -232,6 +263,8 @@ export interface ReaderSpecRowProps {
   canOverride: boolean;
   /** Initial score the reader has previously persisted; null if unscored. */
   initialScore: ScoreValue | null;
+  /** CR-009 follow-on / S11.3 — lead reader's Final score, read-only. */
+  finalScore?: ScoreValue | null;
 }
 
 export function ReaderSpecRow(props: ReaderSpecRowProps): JSX.Element {
@@ -289,6 +322,7 @@ export function ReaderSpecRow(props: ReaderSpecRowProps): JSX.Element {
       scoreSaving={scoreMutation.isPending}
       canScore={props.canScore}
       canOverride={props.canOverride}
+      finalScore={props.finalScore ?? null}
     />
   );
 }

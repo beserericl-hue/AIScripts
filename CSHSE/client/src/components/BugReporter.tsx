@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bug, X, Loader2 } from 'lucide-react';
 import { api } from '../services/api';
+import { captureScreenshot, isScreenshotEnabled } from './bugReporterScreenshot';
 
 // ---------------------------------------------------------------------------
 // CR-016 / Sprint 7.2 — In-app bug reporter.
@@ -18,8 +19,9 @@ import { api } from '../services/api';
 // and the server-side allowlist + regex strips known secret shapes
 // (Bearer / JWT / AWS keys / password|secret|api[_-]?key tokens).
 //
-// Auto-screenshot (html2canvas) intentionally deferred — left as a
-// follow-on CR to keep the bundle slim.
+// Auto-screenshot (html2canvas) is a FLAG-GATED follow-on (CR-016 / S13d):
+// off by default, loaded via a lazy dynamic import so the main bundle stays
+// slim, and fully fail-soft. See `bugReporterScreenshot.ts`.
 // ---------------------------------------------------------------------------
 
 const BUFFER_LIMIT = 10;
@@ -225,12 +227,16 @@ export function BugReporter(): JSX.Element {
     setError(null);
     try {
       const buildSha = (import.meta as any).env?.VITE_BUILD_SHA || 'dev';
+      // CR-016 / S13d — flag-gated auto-screenshot. Returns null when the flag
+      // is off or capture fails; the report sends regardless.
+      const screenshot = await captureScreenshot();
       const res = await api.post('/api/bug-reports', {
         description,
         route: window.location.pathname + window.location.search,
         userAgent: navigator.userAgent,
         buildSha,
-        recentConsoleErrors: recentConsoleErrors.slice(-BUFFER_LIMIT)
+        recentConsoleErrors: recentConsoleErrors.slice(-BUFFER_LIMIT),
+        ...(screenshot ? { screenshot } : {})
       });
       setReference(res.data?.reference || null);
     } catch (err) {

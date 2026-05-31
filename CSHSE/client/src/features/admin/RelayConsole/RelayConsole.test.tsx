@@ -92,6 +92,18 @@ describe('RelayConsoleView', () => {
     expect(screen.getByText('Escalated')).toBeInTheDocument();
   });
 
+  it('CR-052 / S12.3 — the queue header carries the hint anchor id', () => {
+    const { container } = render(
+      <RelayConsoleView
+        {...baseHandlers}
+        comments={sample as any}
+        isLoading={false}
+        draftsByComment={{}}
+      />
+    );
+    expect(container.querySelector('#relay-queue-header')).not.toBeNull();
+  });
+
   it('fires onRelay with the comment id when "Relay to PC" is clicked', () => {
     const onRelay = vi.fn();
     render(

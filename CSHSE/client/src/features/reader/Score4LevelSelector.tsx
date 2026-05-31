@@ -49,6 +49,8 @@ export interface Score4LevelSelectorProps {
   onChange: (next: ScoreValue) => void;
   disabled?: boolean;
   saving?: boolean;
+  /** Optional DOM id so a first-time hint balloon can anchor to this selector. */
+  anchorId?: string;
 }
 
 export function Score4LevelSelector({
@@ -56,9 +58,11 @@ export function Score4LevelSelector({
   onChange,
   disabled,
   saving,
+  anchorId,
 }: Score4LevelSelectorProps): JSX.Element {
   return (
     <div
+      id={anchorId}
       role="radiogroup"
       aria-label="Compliance score"
       data-testid="score-4-selector"

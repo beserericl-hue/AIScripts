@@ -24,7 +24,14 @@ export interface PreflightResult {
 interface FinalSubmitModalProps {
   open: boolean;
   onClose: () => void;
-  onConfirm: (submissionNote: string) => Promise<void> | void;
+  // CR-008 / S10.3 — when preflight has errors the PC may override by
+  // checking the override box and supplying a reason. The reason flows to
+  // the server which records a `submission.final_submit_override` audit
+  // event. A clean submit passes `override` undefined.
+  onConfirm: (
+    submissionNote: string,
+    override?: { reason: string }
+  ) => Promise<void> | void;
   validated: number;
   total: number;
   busy: boolean;
@@ -61,12 +68,20 @@ export function FinalSubmitModal({
   onGoToSpec
 }: FinalSubmitModalProps): JSX.Element | null {
   const [note, setNote] = useState('');
+  // CR-008 / S10.3 — override-with-reason state. Only relevant when preflight
+  // reports blocking errors.
+  const [overrideChecked, setOverrideChecked] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Reset the note each time the modal re-opens — a stale note from a
-  // prior aborted submit shouldn't appear on the next attempt.
+  // Reset the note + override each time the modal re-opens — stale state from
+  // a prior aborted submit shouldn't appear on the next attempt.
   useEffect(() => {
-    if (open) setNote('');
+    if (open) {
+      setNote('');
+      setOverrideChecked(false);
+      setOverrideReason('');
+    }
   }, [open]);
 
   // Esc-to-close (only when not busy, so we don't abandon an in-flight submit)
@@ -81,8 +96,22 @@ export function FinalSubmitModal({
 
   if (!open) return null;
 
+  const hasErrors = !!preflight && preflight.errors.length > 0;
+  const reasonOk = overrideReason.trim().length >= 10;
+  // The submit button is blocked while preflight is loading or busy. When
+  // preflight has errors, submit is only enabled if the PC has checked
+  // override AND supplied a >=10-char reason.
+  const submitBlocked =
+    busy ||
+    preflightLoading ||
+    (hasErrors && !(overrideChecked && reasonOk));
+
   const handleConfirm = async () => {
-    await onConfirm(note.trim());
+    if (hasErrors && overrideChecked) {
+      await onConfirm(note.trim(), { reason: overrideReason.trim() });
+    } else {
+      await onConfirm(note.trim());
+    }
   };
 
   return (
@@ -184,6 +213,49 @@ export function FinalSubmitModal({
                   <li className="pt-1 text-xs text-red-700">…and {preflight.errors.length - 12} more.</li>
                 )}
               </ul>
+
+              {/* CR-008 / S10.3 — override-with-reason. Lets the PC submit
+                  despite the blocking errors above, but only after explicitly
+                  acknowledging and recording why. The reason is mandatory
+                  (>= 10 chars) and persists in the audit trail. */}
+              <div className="mt-3 border-t border-red-200 pt-3">
+                <label className="flex items-start gap-2 text-red-900">
+                  <input
+                    type="checkbox"
+                    data-testid="preflight-override-checkbox"
+                    checked={overrideChecked}
+                    disabled={busy}
+                    onChange={(e) => setOverrideChecked(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-red-400 text-red-600 focus:ring-red-500"
+                  />
+                  <span className="text-sm font-medium">
+                    Submit anyway, despite the items above
+                  </span>
+                </label>
+                {overrideChecked && (
+                  <div className="mt-2">
+                    <label htmlFor="override-reason" className="mb-1 block text-xs font-medium text-red-900">
+                      Reason for overriding <span className="text-red-600">(required)</span>
+                    </label>
+                    <textarea
+                      id="override-reason"
+                      data-testid="preflight-override-reason"
+                      value={overrideReason}
+                      onChange={(e) => setOverrideReason(e.target.value)}
+                      disabled={busy}
+                      rows={2}
+                      maxLength={2000}
+                      placeholder="Explain why this self-study is being submitted with unresolved items…"
+                      className="w-full rounded-md border border-red-300 px-3 py-2 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500 disabled:bg-red-50"
+                    />
+                    <p className="mt-1 text-xs text-red-700">
+                      {overrideReason.trim().length < 10
+                        ? `At least 10 characters required (${overrideReason.trim().length}/10).`
+                        : 'This reason is recorded on the audit trail.'}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           )}
           {!preflightLoading && preflight && preflight.warnings.length > 0 && (
@@ -236,11 +308,19 @@ export function FinalSubmitModal({
             type="button"
             data-testid="final-submit-confirm"
             onClick={handleConfirm}
-            disabled={busy || preflightLoading || (preflight ? preflight.submitDisabled : false)}
-            className="flex items-center gap-2 rounded-md bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={submitBlocked}
+            className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+              hasErrors && overrideChecked
+                ? 'bg-red-600 hover:bg-red-700'
+                : 'bg-teal-600 hover:bg-teal-700'
+            }`}
           >
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Send className="h-4 w-4" aria-hidden />}
-            {busy ? 'Submitting…' : 'Submit for review'}
+            {busy
+              ? 'Submitting…'
+              : hasErrors && overrideChecked
+                ? 'Override & submit anyway'
+                : 'Submit for review'}
           </button>
         </footer>
       </div>

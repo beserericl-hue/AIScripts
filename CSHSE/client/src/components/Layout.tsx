@@ -24,10 +24,37 @@ const DocumentIcon = () => (
   </svg>
 );
 
+const InboxIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+  </svg>
+);
+
 const CogIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+  </svg>
+);
+
+// CR-053 / S13 — Board console (clipboard-check) icon.
+const BoardIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+  </svg>
+);
+
+// CR-019 / S13 — Joint Ventures (linked institutions) admin surface.
+const JointVentureIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-1.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a3 3 0 10-2.5-1.34M5 11a3 3 0 102.5-1.34" />
+  </svg>
+);
+
+// CR-020 / S13 — Audit trail admin surface.
+const AuditIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
   </svg>
 );
 
@@ -150,6 +177,25 @@ export default function Layout() {
   // Sprint 5.1 — Compilations tab for lead readers + admins (CR-009).
   if (isLeadOrAdmin) {
     navigation.push({ name: 'Compilations', href: '/lead-reader', icon: DocumentIcon, tourStep: 'compilations' });
+  }
+  // Sprint 11 / CR-023 — Relay console for lead readers + admins. Lets Julia
+  // (or a lead reader) triage + relay reader comments back to the PC.
+  if (isLeadOrAdmin) {
+    navigation.push({ name: 'Relay', href: '/relay', icon: InboxIcon, tourStep: 'relay' });
+  }
+
+  // CR-053 / S13 — Board console for admins + superusers (decision queue +
+  // upcoming re-accreditation cycles). Previously reachable only by direct URL.
+  if (isAdminLikeRole) {
+    navigation.push({ name: 'Board', href: '/admin/board', icon: BoardIcon, tourStep: 'board' });
+  }
+
+  // CR-019 / CR-020 / S13 — Joint Ventures + Audit trail admin surfaces were
+  // previously reachable only by typing the URL. Give admins/superusers a nav
+  // affordance so the whole admin area is discoverable from the sidebar.
+  if (isAdminLikeRole) {
+    navigation.push({ name: 'Joint Ventures', href: '/admin/joint-ventures', icon: JointVentureIcon, tourStep: 'joint-ventures' });
+    navigation.push({ name: 'Audit trail', href: '/admin/audit-trail', icon: AuditIcon, tourStep: 'audit-trail' });
   }
 
   // Show Settings for admin role or superuser (not impersonating)

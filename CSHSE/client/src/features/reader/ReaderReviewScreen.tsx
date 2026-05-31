@@ -2,9 +2,11 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
-import { Loader2, ChevronLeft } from 'lucide-react';
+import { Loader2, ChevronLeft, MessageSquare } from 'lucide-react';
 import { ReaderSpecRow } from './ReaderSpecRow';
 import type { ScoreValue } from './Score4LevelSelector';
+import { useOnceHint } from '../tour/useOnceHint';
+import { t } from '../../i18n/strings';
 
 // ---------------------------------------------------------------------------
 // S3.2 — Reader review screen. Walks every (standard, spec) of the
@@ -38,6 +40,8 @@ export interface ReaderReviewScreenViewProps {
   submission: SubmissionPayload | null;
   standards: StandardSpec[];
   scoresByKey: Record<string, ScoreValue>;
+  /** CR-009 follow-on / S11.3 — lead reader's Final score per spec, read-only. */
+  finalScoresByKey?: Record<string, ScoreValue>;
   canScore: boolean;
   canOverride: boolean;
   isLoading: boolean;
@@ -48,6 +52,7 @@ export function ReaderReviewScreenView({
   submission,
   standards,
   scoresByKey,
+  finalScoresByKey = {},
   canScore,
   canOverride,
   isLoading,
@@ -82,13 +87,24 @@ export function ReaderReviewScreenView({
         <ChevronLeft className="h-4 w-4" aria-hidden />
         <span>Back to review queue</span>
       </Link>
-      <header className="mb-4 border-b border-slate-200 pb-3">
-        <h1 className="text-xl font-semibold text-slate-900">{submission.institutionName}</h1>
-        <p className="text-sm text-slate-600">
-          {submission.programName} <span className="text-slate-400">·</span>{' '}
-          <span className="uppercase">{submission.programLevel}</span> <span className="text-slate-400">·</span>{' '}
-          {submission.submissionId}
-        </p>
+      <header className="mb-4 flex items-start justify-between border-b border-slate-200 pb-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">{submission.institutionName}</h1>
+          <p className="text-sm text-slate-600">
+            {submission.programName} <span className="text-slate-400">·</span>{' '}
+            <span className="uppercase">{submission.programLevel}</span> <span className="text-slate-400">·</span>{' '}
+            {submission.submissionId}
+          </p>
+        </div>
+        {/* CR-010 / S12.2 — Messages reachable from the reader workspace. */}
+        <Link
+          to={`/messages/${submission._id}`}
+          data-testid="reader-messages-link"
+          className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          <MessageSquare className="h-4 w-4" aria-hidden />
+          <span>Messages</span>
+        </Link>
       </header>
 
       <div className="space-y-4">
@@ -113,6 +129,7 @@ export function ReaderReviewScreenView({
                     canScore={canScore && !status?.excluded}
                     canOverride={canOverride && !status?.excluded}
                     initialScore={(scoresByKey[key] ?? null) as ScoreValue | null}
+                    finalScore={(finalScoresByKey[key] ?? null) as ScoreValue | null}
                   />
                 );
               })}
@@ -172,13 +189,49 @@ export function ReaderReviewScreen({ userRole }: ReaderReviewScreenProps): JSX.E
     refetchOnWindowFocus: false,
   });
 
+  // CR-009 follow-on / S11.3 — the lead reader's Final score per spec, shown
+  // read-only to readers (transparency default). Peers' raw votes are NOT
+  // returned by this endpoint.
+  const finalScoresQuery = useQuery({
+    queryKey: ['reader-final-scores', submissionId],
+    queryFn: async () => {
+      const r = await api.get(`/api/submissions/${submissionId}/final-scores`);
+      return (r.data?.rows || []) as Array<{ standardCode: string; specCode: string; finalScore: number }>;
+    },
+    enabled: !!submissionId,
+    refetchOnWindowFocus: false,
+    // A reader without an active assignment 403s here — never surface that
+    // as a page-level error; the chips just stay hidden.
+    retry: false,
+  });
+
   const scoresByKey: Record<string, ScoreValue> = {};
   for (const s of scoresQuery.data?.scores || []) {
     scoresByKey[`${s.standardCode}_${s.specCode}`] = s.score as ScoreValue;
   }
 
+  const finalScoresByKey: Record<string, ScoreValue> = {};
+  for (const f of finalScoresQuery.data || []) {
+    finalScoresByKey[`${f.standardCode}_${f.specCode}`] = f.finalScore as ScoreValue;
+  }
+
   const canScore = userRole === 'reader' || userRole === 'lead_reader';
   const canOverride = canScore || userRole === 'admin';
+
+  // CR-052 / S12.3 — first time a reader can score on this screen, nudge them
+  // on what the 0-3 scale means, anchored to the first spec's score selector.
+  const { fireOnce } = useOnceHint();
+  const standards = specsQuery.data ?? [];
+  const firstSpec = standards[0]?.specifications?.[0];
+  const firstAnchorId = firstSpec ? `score-selector-${standards[0].code}-${firstSpec.code}` : undefined;
+  React.useEffect(() => {
+    if (!canScore || !submissionQuery.data || !firstAnchorId) return;
+    fireOnce({
+      id: 'reader-first-score',
+      message: t('hint.reader.firstScore'),
+      targetId: firstAnchorId,
+    });
+  }, [canScore, submissionQuery.data, firstAnchorId, fireOnce]);
 
   const isLoading = submissionQuery.isLoading || specsQuery.isLoading;
   const error = submissionQuery.error
@@ -190,8 +243,9 @@ export function ReaderReviewScreen({ userRole }: ReaderReviewScreenProps): JSX.E
   return (
     <ReaderReviewScreenView
       submission={submissionQuery.data ?? null}
-      standards={specsQuery.data ?? []}
+      standards={standards}
       scoresByKey={scoresByKey}
+      finalScoresByKey={finalScoresByKey}
       canScore={canScore}
       canOverride={canOverride}
       isLoading={isLoading}

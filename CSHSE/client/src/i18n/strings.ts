@@ -61,6 +61,10 @@ const STRINGS = {
     "This is the final score for this part. You pick one number from all the readers' scores. The schools see this number.",
   'hint.checklist.firstVerify':
     "Click here when you have checked this part in person. It turns the row to \"Yes\" so everyone knows it is done.",
+  'hint.reader.firstScore':
+    "Pick one number for how well this part is done. 0 means not done, 3 means fully done. Your score is saved right away.",
+  'hint.relay.firstQueue':
+    "These are reader notes waiting for you. When you share one, the school can read it — but never who wrote it.",
 
   // ============================================================
   // help.* — Help dropdown menu + chat affordances.

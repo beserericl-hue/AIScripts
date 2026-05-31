@@ -26,6 +26,7 @@ import {
 import { format, formatDistanceToNow, isWithinInterval, addDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { JointVentureBadge } from '../../components/JointVentureBadge';
 import { WorkflowSummary, type WorkflowSummaryData } from './WorkflowSummary';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -460,9 +461,14 @@ export function Dashboard() {
                   <h1 className="text-2xl font-bold text-gray-900">
                     {myInstitution?.name || effectiveUser?.institutionName || 'My Dashboard'}
                   </h1>
-                  <p className="text-sm text-gray-500">
-                    Self-Study Progress Dashboard
-                  </p>
+                  {/* CR-019 / S13 — JV badge on the PC dashboard header. Renders
+                      only when this institution belongs to a JV the viewer can see. */}
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm text-gray-500">
+                      Self-Study Progress Dashboard
+                    </p>
+                    <JointVentureBadge institutionId={myInstitution?._id || effectiveUser?.institutionId} />
+                  </div>
                 </div>
               </div>
               <button

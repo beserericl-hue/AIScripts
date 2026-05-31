@@ -96,6 +96,37 @@ describe('ReaderSpecRowView', () => {
     expect(screen.getByText(/\(reader\)/)).toBeInTheDocument();
   });
 
+  it('renders the lead reader Final-score chip when finalScore is set (CR-009 S11.3)', () => {
+    render(
+      wrap(
+        <ReaderSpecRowView
+          {...baseProps}
+          narrativeHtml="<p>n</p>"
+          evaluation={{ verdict: 'pass' }}
+          finalScore={1}
+        />
+      )
+    );
+    const chip = screen.getByTestId('reader-final-score-1-a');
+    expect(chip).toBeInTheDocument();
+    expect(chip).toHaveTextContent(/Lead reader final score/i);
+    expect(chip).toHaveTextContent(/1 — Partial/);
+  });
+
+  it('hides the Final-score chip when finalScore is null', () => {
+    render(
+      wrap(
+        <ReaderSpecRowView
+          {...baseProps}
+          narrativeHtml="<p>n</p>"
+          evaluation={{ verdict: 'pass' }}
+          finalScore={null}
+        />
+      )
+    );
+    expect(screen.queryByTestId('reader-final-score-1-a')).not.toBeInTheDocument();
+  });
+
   it('hides score + override sections when the viewer lacks capability', () => {
     render(
       wrap(
