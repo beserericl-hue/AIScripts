@@ -8,7 +8,19 @@ priority: P1
 source: sprint-plan-2026-05-29 S7.1
 sprint_target: Sprint 7.1
 tags: [board, decisions, accreditation, admin, audit]
-last_reviewed: 2026-05-30
+last_reviewed: 2026-05-31
+shipped_notes: |
+  Sprint 9.2 (2026-05-31) — the deferred cycle-reminder PUSH shipped on top of
+  the 9.1 notification core. New admin-only `POST /api/board/run-cycle-reminders?withinDays=N`
+  (default 180, clamp [1, 1825]) scans accept decisions whose `expiresAt` lands
+  in the window + tabled decisions whose `reconsiderAt` lands in the window, then
+  notifies every admin/superuser (in-app + fail-soft email) via `notify`.
+  Idempotent — each notification's `dedupeKey` embeds the relevant date, so
+  re-runs never double-notify and a re-decided submission with a new expiresAt
+  yields a fresh reminder. No in-process cron on this server; the endpoint is
+  meant for an external scheduler or a manual Board-Console trigger. 3 server
+  integration tests. Commit `f9bda21`. Still deferred: reaccreditation
+  auto-spin-up of a new `type: 'reaccreditation'` submission.
 ---
 
 # CR-053 — Board decisions + cycle scheduler

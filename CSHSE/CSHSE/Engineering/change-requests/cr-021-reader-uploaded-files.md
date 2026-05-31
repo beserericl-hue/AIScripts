@@ -8,7 +8,19 @@ priority: P2
 source: implied by [[webinar-action-items-2026-05-20#1-04-19]] relay flow
 sprint_target: Sprint 5.3
 tags: [readers, evidence, uploads]
-last_reviewed: 2026-05-30
+last_reviewed: 2026-05-31
+shipped_notes: |
+  Sprint 9.4 (2026-05-31) — the deferred composer paperclip UI shipped onto
+  the already-live attachment backend. `client/src/features/comments/CommentableText.tsx`
+  gains a "Attach file" paperclip in the comment modal: files are staged,
+  validated client-side against the server allowlist (PDF/DOC/DOCX/TXT, 25 MB)
+  via a new pure `attachmentValidation` helper, then uploaded to the new
+  comment's id AFTER create (the endpoint is keyed by commentId, so create must
+  come first). Staged-file list with size + remove; an upload failure keeps the
+  modal open with an error so the user can retry (comment already saved). No
+  backend changes — server stays source of truth. 5 client unit tests. Commit
+  `4f1e89d`. Note: verified via unit tests + typecheck, not driven live in a
+  browser (reader-auth + text-selection flow).
 ---
 
 # CR-021 — Reader-uploaded files

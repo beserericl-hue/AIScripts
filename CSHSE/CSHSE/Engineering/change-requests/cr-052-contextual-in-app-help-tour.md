@@ -8,7 +8,19 @@ priority: P2
 source: user direction 2026-05-30 ("Create a CR and implement a contextual in-app Help feature for this application.")
 sprint_target: Sprint 7
 tags: [ux, onboarding, help, tour, hints, accessibility]
-last_reviewed: 2026-05-30
+last_reviewed: 2026-05-31
+shipped_notes: |
+  Sprint 9.3 (2026-05-31) — first real per-feature Hint wirings on top of the
+  Sprint 7 HintProvider. HintProvider is in-memory and dedupes only within a
+  session, so added `client/src/features/tour/useOnceHint.ts`: a localStorage
+  "seen" ledger (`cshse:hint-seen:{id}`, fail-soft on quota/private-mode) that
+  fires a hint once-ever per browser. Wired two nudges: first time a lead reader
+  opens the Final-score editor (CompilationTab — fired from an effect on
+  `editingKey` so the Save-button anchor is committed before the balloon
+  measures it), and first time a visit-team member marks a checklist item
+  verified (not un-verify). Real `id` attributes added to both anchor buttons
+  (getElementById needs a true id, not just data-testid). Two new strings in the
+  `hint.*` namespace (five-year-old voice). 4 client unit tests. Commit `de5da94`.
 ---
 
 # CR-052 — Contextual in-app Help + Welcome Tour + Hint system

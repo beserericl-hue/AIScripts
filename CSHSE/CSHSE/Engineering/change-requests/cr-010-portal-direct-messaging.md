@@ -8,7 +8,19 @@ priority: P1
 source: [[webinar-action-items-2026-05-20#1-25-35]], [[webinar-action-items-2026-05-20#1-25-52]]
 sprint_target: Sprint 5.4
 tags: [messaging, readers, lead-reader, communication]
-last_reviewed: 2026-05-30
+last_reviewed: 2026-05-31
+shipped_notes: |
+  Sprint 9.1 (2026-05-31) — notification pass. The deferred email/in-app
+  mirror landed as a shared notification foundation that several CRs build
+  on: new in-app `Notification` model (recipient inbox, `read`/`readAt`,
+  `dedupeKey` partial-unique index for idempotent producers) +
+  `notificationService` (`notify`/`notifyMany`: in-app row + fail-soft email
+  twin via the existing emailService) + per-recipient inbox controller/routes
+  (list / unread-count / mark-read / mark-all-read) + client `NotificationBell`
+  in the Layout user-menu (unread badge, 30s poll, click marks read + navigates).
+  DM `createThread` + `postMessage` now fan out to every OTHER participant
+  (never the sender), in-app + email. 10 server integration + 8 client view-unit
+  tests. Commits `6496aba` (core + DM) / `ca35031` (server inbox suite).
 ---
 
 # CR-010 — Portal direct messaging (replaces reader email)
