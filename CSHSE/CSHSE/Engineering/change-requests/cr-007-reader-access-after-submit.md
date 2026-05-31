@@ -59,3 +59,7 @@ The reader dashboard shows assignments grouped:
 ## Open questions
 
 - Should readers see the PC name + institution before submission? Default: **yes, name + institution only** (they need to know who they're assigned to even if the doc is hidden).
+
+## Verification (2026-05-31) — PARTIAL
+
+Code-verified during the 2026-05-31 sweep. **Working:** `getSubmission` returns 403 for reader/lead_reader when status is `draft`/`in_progress` (`server/src/controllers/submissionController.ts:84-94`); `listSubmissions` restricts readers to submitted-or-later statuses (`:1433-1441`); reader review content is assignment-scoped via `Review` ownership (`reviewController.ts:84,112`). **Two gaps:** (1) **SECURITY** — an explicit `?status=draft` query param **substitutes** for the reader allow-list filter (`submissionController.ts:1444-1446` runs after the role filter), so a reader can enumerate draft submissions' metadata (the single-record gate still blocks opening them). Fix: intersect, don't replace. See [[sprint-plan-2026-05-31]] §2 BUG-A. (2) the read gate is **permissive, not assigned-only** — any reader can read any non-draft submission by id; neither path checks `assignedReaders`/`leadReader`. Product call to flip to assigned-only. Both scheduled Sprint 10 in [[sprint-plan-2026-05-31]].

@@ -62,6 +62,15 @@ Minimal admin client surface: `features/admin/BoardConsole/BoardConsole.tsx` wit
 
 ## Deferred
 
-- Email / in-app **reminders** that fire on `reconsiderAt` / `expiresAt` boundaries. Today the data is queryable via `/board/upcoming-reaccreditations`; pushing notifications lives in the same notification-pass that covers CR-010 (DM notifications). Discrete follow-on CR.
-- Re-accreditation **workflow auto-creation** (when `expiresAt` is N months away, spin up a new `Submission` of `type: 'reaccreditation'` and notify the PC). Also a follow-on.
-- Board UI link in the Layout nav (today admins navigate via direct URL `/admin/board`).
+- ~~Email / in-app **reminders** that fire on `reconsiderAt` / `expiresAt` boundaries.~~ **SHIPPED Sprint 9.2** (`POST /api/board/run-cycle-reminders`).
+- ~~Re-accreditation **workflow auto-creation**.~~ **SHIPPED Sprint 12.1** — see Resolution below.
+- Board UI link in the Layout nav (today admins navigate via direct URL `/admin/board`). Picked up in Sprint 13 nav-link pass.
+
+## Resolution (2026-05-31, Sprint 12 / S12.1) — reaccreditation auto-spin-up SHIPPED
+
+The last deferred CR-053 item (workflow auto-creation) is closed.
+- **New admin endpoint** `POST /api/board/spin-up-reaccreditations?withinDays=N` (default 365, clamp [1, 1825]) — `server/src/controllers/boardDecisionController.ts` (`spinUpReaccreditations`), `server/src/routes/boardDecisions.ts:19-20`. Scans `accept` decisions whose `expiresAt` lands inside the window and, for each prior cycle with no reaccreditation child yet, creates a fresh `type: 'reaccreditation'` self-study in `draft` (same institution / program / coordinator, 21-standard status map seeded like `createSubmission`), links it via the new `Submission.reaccreditationOf` field, audit-logs `submission.reaccreditation_spun_up`, and notifies the PC (prior submitter) with a new `reaccreditation.opened` notification linking to `/self-study/:newId`.
+- **Idempotency:** `reaccreditationOf` is the dedupe key (one child per prior cycle) — re-runs create nothing new. The PC notification additionally carries `dedupeKey = reaccreditation:<priorId>`.
+- **Model:** `server/src/models/Submission.ts` adds the optional indexed `reaccreditationOf` link; `server/src/models/Notification.ts` adds the `reaccreditation.opened` type; `server/src/models/AuditLogEntry.ts` adds the `submission.reaccreditation_spun_up` action.
+- No in-process cron — driven by an external scheduler or a manual Board-Console trigger (mirrors `run-cycle-reminders`).
+- Tests: `server/tests/integration/reaccreditation-spinup.test.ts` (3 — admin-only 403; in-window accept spins up a linked draft + notifies PC + audits, far-future skipped; idempotent re-run) — green. Existing `board-decisions` + `cycle-reminders` (11) unaffected.

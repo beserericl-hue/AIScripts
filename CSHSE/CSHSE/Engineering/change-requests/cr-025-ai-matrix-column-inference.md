@@ -142,3 +142,7 @@ Replace the free-text inputs on the Matrix step with a dropdown chooser:
 - Should the program catalog be a first-class entity (institution-owned, editable by PC) — answer: **defer to a separate CR.** For now, the catalog is implicit (assembled from AI suggestions + coordinator overrides + history). When a PC explicitly wants to manage their catalog, that's CR-026.
 - What if mammoth has lost the merged-cell headers entirely and the surrounding narrative also lacks course mentions — answer: **the endpoint returns 0 suggestions with a clear "no signal" rationale.** The coordinator falls back to free-text entry; the system still records their entry for next time.
 - Should the AI also try to infer matrix rows that were dropped (matrix completeness check) — answer: **defer to CR-027.** This CR is scoped to columns only.
+
+## S13 decision (2026-05-31) — closed, no separate action
+
+Reviewed in the Sprint 13 "CR-025 decision" slot. CR-025 was already `superseded_by: CR-029`, and [[cr-029-matrix-step-redesign-simple]] is **shipped**. The matrix-column inference + catalog-confirm UX that CR-025 proposed is delivered under CR-029, so CR-025 needs no independent implementation and is **not** a WON'T-DO — it is closed-as-superseded. No code change in S13; this note records the confirmation.

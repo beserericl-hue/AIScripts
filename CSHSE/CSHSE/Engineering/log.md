@@ -1981,3 +1981,54 @@ Cohesive multi-CR sprint chosen from the [[sprint-plan-2026-05-29]] §4 follow-o
 **S9.4 — CR-021 composer paperclip UI (`4f1e89d`).** Deferred composer UI shipped onto the already-live attachment backend (`POST/GET/DELETE /api/comments/:id/attachments`). `CommentableText` comment modal gains a paperclip "Attach file": files staged in the composer, validated client-side (new pure `attachmentValidation` helper mirroring the server allowlist PDF/DOC/DOCX/TXT + 25 MB cap), uploaded to the NEW comment id AFTER create (endpoint is keyed by commentId). Staged list with size + remove; upload failure keeps the modal open with an error for retry (comment already saved). No backend changes. 5 client unit tests. Full client suite 391/391. Caveat: verified via unit tests + typecheck, not driven live in a browser.
 
 Net new tests this pass: 13 server integration + 17 client unit. Full client suite 391/391; touched server suites green (notifications 10/10, cycle-reminders 3/3, board-decisions 8/8).
+
+## [2026-05-31] audit | CR verification sweep + portal-completion plan
+
+User asked to verify which CRs are actually complete (vs. carrying deferred work) and to produce a single plan to finish the portal. Ran three parallel read-only code investigations across `server/src`, `client/src`, `ai-service/app` against the stale-looking CRs.
+
+**Status corrections (catalog `index.md` was stale, `last_reviewed` 2026-05-29):**
+- **Confirmed SHIPPED** (catalog still said proposed/in-progress): CR-004 (commentSerializer single redaction point), CR-006 (submitStandard/revertStandard + submitSelfStudy both live), CR-049 (`/ai/section/evaluate` + `cshseAiClient.evaluateSection` + `submitSelfStudy` fires `runReaderReportSeed`; broken `ValidationService.validateSection` gone), CR-050 (pass-OR-excluded readiness, server + client).
+- **Superseded:** CR-025 (column→course dropdown deliberately removed by the CR-029 one-row redesign), CR-026 (verify-in-context + remove shipped via CR-029; only per-row move/reassign remains).
+- **In-progress:** CR-008 (preflight popup + warnings shipped via FinalSubmitModal; override-with-reason "Sprint 2B" branch still open).
+
+**Code-confirmed PARTIAL gaps** (files said "shipped" but verification found remaining work) — appended a `## Verification (2026-05-31)` note with `path:line` evidence to each:
+- CR-003 — 0–3 capture shipped (`Score.ts:10,35-44`, `Score4LevelSelector.tsx`), but reader PDF/DOCX report still renders pass/fail (`pdfGenerator.ts:163-167,218-262,738-745`).
+- CR-005 — lockout live for narrative/intro/review/matrix (`submissionLockout.ts:52-75`), but **evidence routes unlocked** (`routes/evidence.ts:112-166`) + client inputs not disabled (`SelfStudyEditor.tsx:485`).
+- CR-007 — gate is permissive not assigned-only; **`?status=draft` substitutes for the reader allow-list** (`submissionController.ts:1444-1446`) → reader can enumerate drafts.
+- CR-023 — relay/un-relay/escalate/queue endpoints + `RelayConsole` UI all built, but **RelayConsole is never mounted** (dead UI) so Julia can't reach it.
+
+**Two latent bugs surfaced** (folded into the plan): BUG-A `?status` reader-enumeration leak (P1 security), BUG-B unlocked evidence mutation routes for a locked PC (P1 integrity).
+
+**New plan:** [[sprint-plan-2026-05-31]] (supersedes [[sprint-plan-2026-05-29]]) — verified status matrix, full deferred-task inventory (Tracks A–D: partial-CR gaps, follow-ons of shipped CRs, n8n cleanup, tests/QA), and a phased **Sprint 10 (integrity hardening) → 11 (report fidelity + relay) → 12 (board/notification completion) → 13 (admin/JV polish) → 14 (cleanup + test hardening)** schedule. After Sprint 11 there are no open P0/P1 correctness gaps. Vault-only change; no code touched.
+
+## [2026-05-31] update | Concept-page refresh — architecture + definitions brought current with Sprint 4–9 code
+
+Reviewed current server/client/ai-service code against the three durable concept pages (all stale at `last_reviewed: 2026-05-10`) and edited them in place per the wiki's "concept pages are durable" rule.
+
+- **[[system-architecture]]** — new tier diagram adds the `cshse-ai` FastAPI service (Qdrant + Claude Haiku + OpenAI embeddings, HMAC-SHA256 link), MemberClick SSO (`/sso/v1/*`), and notes the two-service / two-env Railway topology; n8n demoted to legacy help-chat-only. Auth roles corrected to underscores (`program_coordinator`, `lead_reader`). Added a "Subsystems added Sprints 4–9" section (AI import, reader 0–3 review, lead compilation, board decisions, site visit, notifications, DMs/relay, joint ventures, audit trail, bug reports/versioning, onboarding) and the `submissionLockout` middleware (+ BUG-B note).
+- **[[glossary]]** — removed the duplicated "App roles" block; corrected role enum to underscores; reconciled the Handbook "5 and 10 year" reaccreditation language against CR-053's 7-year reminder cadence. Added Review/scoring/decision terms (0–3 rubric, reader override, compilation, relay/escalate, board outcomes, N/A spec, preflight, lockout), site-visit terms (checklist, itinerary), notifications/messaging (Notification, dedupeKey, DM, hint/tour), org/audit (Joint Venture, Audit Log, Bug Report, Document Version), and refreshed External services (cshse-ai, FastAPI, Qdrant, Claude Haiku, OpenAI embeddings, MemberClick/SSO; n8n + Supabase marked legacy).
+- **[[module-catalog]]** — kept the original 2026-05-10 tables as a historical layer; added a dated "Added since the 2026-05-10 baseline (Sprints 4–9)" section cataloguing the cshse-ai integration (Node + Python packages), 11 new models, 16 new controllers, new services + 2 middleware, the new route mounts (incl. API v1 / OpenAPI + SSO), and the new client features (reader, leadReader, siteVisit, admin/{BoardConsole,AuditTrail,JointVentureManagement,RelayConsole}, tour). Current totals noted: 32 models / 39 controllers / 21 services / 37 routes / 4 middleware.
+- **[[n8n-integration]]** — added a "LARGELY SUPERSEDED" banner pointing at cshse-ai + `/preflight`; security findings retained until dead code is removed.
+- **[[index]]** — refreshed the one-liners for system-architecture, module-catalog, and n8n-integration.
+
+Vault-only change; no application code touched.
+
+## [2026-05-31] update | S12.2 CR-010 — notification producers widened + Messages mounted
+
+## [2026-05-31] update | S12.3 CR-052 — reader-score + relay-queue first-time hints wired
+
+## [2026-05-31] update | S13 — Board nav link added; CR-025 confirmed closed-as-superseded (CR-029 shipped)
+
+## [2026-05-31] update | CR-019 S13 follow-ons — ?jointVentureId reporting filter + PC dashboard JV badge
+
+## [2026-05-31] update | CR-022 S13c — lead-reader "Request change from admin" affordance shipped (server endpoint + notify + audit + compilation-surface UI)
+
+## [2026-05-31] update | CR-016 S13d — flag-gated html2canvas auto-screenshot (lazy chunk) + server screenshot field
+## [2026-05-31] update | CR-026 S13d — closed-as-superseded by CR-029 (per-row controls UX intentionally replaced)
+
+## [2026-05-31] update | S13 nav links — Joint Ventures + Audit trail sidebar links for admins (were direct-URL-only)
+
+## [2026-05-31] audit | S14 green-run baseline — client 408/408 (fixed RelayConsolePage HintProvider test wrapper), server 517/517 (1 ECONNRESET flake, green in isolation), ai-service 404 passed / 5 skipped
+## [2026-05-31] update | S14 n8n decision — triggerValidation is NOT dead code (live interactive-editor + revalidate-failed paths; self-degrades when no webhook active); rip-out deferred to a dedicated migration CR (n8n-integration.md)
+## [2026-05-31] audit | S14 triage — all 14 critical-error-processing-review findings dispositioned; P0 demo-killers (1,2,10,12) resolved via CR-036/037, residuals are P1/P2 polish + observability
+## [2026-05-31] update | S14 promote/retire — two 2026-05-22 draft E2E docs marked superseded by completed CR-043/044 plan + shipped 36-spec suite; deeper reader→lead→board UI E2E recorded as env-dependent forward enhancement

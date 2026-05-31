@@ -18,17 +18,17 @@ The catalog. One line per page. When answering a question, scan this first to fi
 
 ## Architecture & systems (concept pages — durable)
 
-- [[system-architecture]] — tier diagram, server layering, auth model, build/deploy, observability.
+- [[system-architecture]] — tier diagram, server layering, auth model, build/deploy, observability. **Refreshed 2026-05-31** — adds the `cshse-ai` FastAPI service, SSO, notifications, the Sprints 4–9 subsystems, and underscored role names; demotes n8n to legacy.
 - [[storage-layer]] — Mongo / GridFS / S3 split; marker insertion/restore; memory pitfalls.
 - [[import-pipeline]] — DOCX/PDF upload → manual tagging → extract → finish; state machine + gaps.
 - [[narrative-storage]] — `Map<std, Map<spec, INarrativeContent>>` shape, Mongoose-8 Map persistence trap, edit lifecycle, AI packaging.
-- [[n8n-integration]] — five workflows, four callback endpoints, doc-vs-code drift.
+- [[n8n-integration]] — **LEGACY** (banner added 2026-05-31): the five AI workflows are retired — import/eval moved to `cshse-ai`, validation to `/preflight`; only help-chat RAG may still route here. Callback-endpoint security findings remain relevant.
 - [[frontend-architecture]] — routing, role gating, TipTap editor, DocumentViewer, bundle.
 - [[evidence-document-review-pipeline]] — design for the AI workflow that should pull S3 evidence and review it alongside the narrative.
 - [[evidence-file-storage]] — how supporting-evidence files are uploaded, indexed by Standard / Sub-standard, displayed in three different UI surfaces. Reconciles the user's "EC3 folders" terminology with the code.
 - [[import-marker-mechanism]] — deep mechanical companion to import-pipeline: how the GridFS HTML physically shortens via `<!-- EXTRACTED:... -->` comment markers, table-frag wrappers, two-pass streaming restore, three-tier repair, /tmp lifecycle, and what's stored where.
 - [[repo-docs-reference]] — index of the four `/docs/*.md` files in the application repo (IMPORT_PROCESS_REFERENCE, api, n8n integration guide, claude-code prompt) with drift tracking against current code.
-- [[module-catalog]] — every server route ↔ controller ↔ service ↔ model and every client page ↔ feature ↔ component, one-line each.
+- [[module-catalog]] — every server route ↔ controller ↔ service ↔ model and every client page ↔ feature ↔ component, one-line each. **Refreshed 2026-05-31** — original 2026-05-10 tables kept as a historical layer; a new "Added since the 2026-05-10 baseline (Sprints 4–9)" section catalogues the cshse-ai integration, 11 new models, 16 new controllers, new services/middleware/routes, and the reader/leadReader/siteVisit/admin/tour client features.
 - [[railway-deployment-topology]] — two-env Railway topology (production/main, develop/developer), isolated MongoDBs, shared Tigris S3 bucket. GraphQL ops cookbook for branch-swap and env-creation.
 - [[db-migration-strategy]] — how every DB-touching sprint story flows develop → prod without breaking live readers. Forward-only migration runner, expand-contract for S2.10/S4.6 breaking changes, develop-from-prod refresh script, `dev/` prefix isolation for the shared S3 bucket.
 
@@ -61,7 +61,8 @@ The catalog. One line per page. When answering a question, scan this first to fi
 - [[sprint-plan-2026-05-11]] — seven-sprint roadmap. **Superseded by [[sprint-plan-2026-05-16]].**
 - [[sprint-plan-2026-05-16]] — eight-sprint roadmap. **Superseded by [[sprint-plan-2026-05-20]].** Sprint 1 shipped. Stories S2.1, S4.1-S4.3+S4.5, S5.10, S7.3 are superseded by post-webinar CRs.
 - [[sprint-plan-2026-05-20]] — eight-sprint roadmap post-webinar. **Superseded by [[sprint-plan-2026-05-29]].**
-- [[sprint-plan-2026-05-29]] — **CURRENT.** Re-baselined after a code-vs-vault reconciliation: the PC/authoring half (AI wizard → review → dashboard → submit) is shipped & polished (24 CRs); the reader/review/board half is SERVER-scaffolded but has NO client UI. Remaining work = reader-side client + wiring + verification, plus six greenfield features (CR-004/008/010/011/021/023) + finishing CR-018. Leads with Sprint R (reconcile & verify), then 6 sprints. Includes a full CR-by-CR reconciliation table with `path:line` evidence.
+- [[sprint-plan-2026-05-29]] — Re-baselined after a code-vs-vault reconciliation; drove Sprints 4–9 to completion (lead-reader workflow, site visit, board, audit UI, JV grouping, notification pass). **Superseded by [[sprint-plan-2026-05-31]].**
+- [[sprint-plan-2026-05-31]] — **CURRENT.** Portal-completion plan. Built on a 2026-05-31 code-verification sweep of every stale-looking CR: corrects drifted statuses (CR-004/006/049/050 → shipped; CR-025/026 → superseded), pins four code-confirmed PARTIAL gaps (CR-003/005/007/023) + two latent bugs (a `?status` reader-enumeration leak and unlocked evidence routes), and lays out the full deferred-task inventory + phased **Sprint 10–14** schedule to finish the portal. Sprints 10–11 are the true beta-ready bar.
 - [[ai-import-deploy-runbook-2026-05-18]] — **sub-sprint 1.e deploy run-book.** Step-by-step Railway-develop promote, env-var setup, post-deploy smoke (Kennesaw State template + Stevenson self-study), rollback plan, UAT handoff. **Paused** before actual deploy — requires explicit go-ahead.
 - [[legacy-self-study-import]] — complete analysis of the current import flow + AI-augmented redesign that drives Sprint 1 of [[sprint-plan-2026-05-16]].
 

@@ -245,6 +245,29 @@ A coordinator running an end-to-end import:
 
 Until those five conditions hold, the importer is not ready for general use.
 
+## S14 triage (2026-05-31) — all 14 findings dispositioned
+
+Performed in the Sprint 14 "triage the 14 critical-error-review findings" slot ([[sprint-plan-2026-05-31]] line 125). Each finding re-checked against current `developer` code. The two P0 demo-killers are **resolved and verified in code**; the remainder are P1/P2 polish, observability, or config — none blocking a supervised reader cycle.
+
+| # | Finding | Disposition | Evidence |
+|---|---------|-------------|----------|
+| 1 | Empty buckets accepted silently | ✅ **RESOLVED** | CR-037 *shipped*; three-layer guard present across `ai-service/app/import_jobs.py`, `server/src/controllers/aiImportController.ts`, `client/.../ReviewStep.tsx` |
+| 2 | ai-service handshake no retry | ✅ **RESOLVED** | CR-036 *shipped*; `postToAIService` retry helper — 5 attempts, exponential backoff + jitter, per-attempt `AbortController` timeout (`aiImportController.ts:202-341`) |
+| 3 | Anthropic rate-limit cascade silent | 🟠 **PARTIAL** | Worst symptom (empty/degraded buckets) now caught by CR-037. The proposed *per-section matcher-quality panel* on Parse + dedicated 429 backoff schedule are **not** shipped → residual OPEN, tracked here; no longer demo-killing because the empty-bucket guard fails loudly |
+| 4 | Unrelated pushes redeploy cshse-ai | ⛔ **RETIRED** | CR-038 *retired* 2026-05-23; runtime case covered by CR-036 |
+| 5 | ai-service→server webhook not retried | ☑️ **ACCEPTED** | Good-mitigated by the 3s client poll fallback (`ParseStep.tsx`); webhook retry not added — cosmetic/telemetry only |
+| 6 | Multi-error shows only the last | 🟠 **OPEN (P1, UX)** | Single-message banner state unchanged; error-list deferred |
+| 7 | GridFS large-doc no resume | 📝 **DEFERRED (v1 limit)** | Documented limit; resumable-upload would be its own CR |
+| 8 | No request-id tracing | 🔭 **OPEN (observability)** | `X-Cshse-Request-Id` propagation not built; deferred to a telemetry CR |
+| 9 | Mongo drop mid-write | ⚙️ **CONFIG** | Require transactions in prod (deploy runbook); not a code change |
+| 10 | "Start import" idempotency | ✅ **RESOLVED** | CR-036 idempotency — `start_job` returns the existing job for a live importId |
+| 11 | Error text truncated to 300 chars | 🟡 **OPEN (P2)** | Minor; bump-to-4000 not done |
+| 12 | No `fetch` timeout | ✅ **RESOLVED** | CR-036 `AbortController` per-attempt timeout (default 30s) |
+| 13 | Polling fallback no backoff | 🟡 **OPEN (P2)** | Fixed 3s interval unchanged |
+| 14 | Tableizer masks flattening bugs | 🟡 **OPEN (P2, diagnostic)** | `console.warn` on render-time path not added |
+
+**Go-live bar (the five conditions below):** #1 (CR-037) ✅, #2 (CR-036) ✅, #5 idempotency (CR-036) ✅ all hold. Condition #3 (per-section quality panel) and #4 (request-id) remain Finding-3 / Finding-8 work — desirable observability, not correctness blockers. Net: **no open P0 correctness gap**; the residual items are a single P1 UX nicety (Finding 6) plus P2 polish + observability, suitable for a post-go-live enhancement CR rather than S14 code churn against working paths.
+
 ## Related
 
 - [[change-requests/cr-036-ai-service-handshake-retries]]

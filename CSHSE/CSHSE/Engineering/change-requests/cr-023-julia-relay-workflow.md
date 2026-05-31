@@ -68,3 +68,16 @@ A "Send to Board" flag separately escalates a comment to the board's review queu
 
 - Should Julia be able to bulk-relay? Probably yes for efficiency.
 - Does the board need its own console, or does Julia handle board actions on their behalf? Lean: dedicated board view in v2, Julia-only for v1.
+
+## Verification (2026-05-31) — PARTIAL
+
+Code-verified during the 2026-05-31 sweep. **Backend + UI both built:** relay / un-relay / escalate / relay-queue endpoints exist (`server/src/controllers/commentController.ts:480-606`, `routes/comments.ts:111-133`, mounted `index.ts:187`), each writes an audit event; and a full `RelayConsole` client is wired to all of them (`client/src/features/admin/RelayConsole/RelayConsole.tsx`). **Gap:** `RelayConsole` is **never imported or mounted** anywhere (a repo-wide search finds no reference outside its own file/test) — it is dead UI, so Julia cannot reach the relay workflow in the running app. Also: suggestions only flow through relay at the **comment** level; the consolidated suggestions DOCX gates reader override notes / AI suggestions by `mode` rather than an explicit per-suggestion relay step. Remaining work: mount `RelayConsole` into an admin/lead route; decide whether suggestions need their own relay control. Scheduled Sprint 11 in [[sprint-plan-2026-05-31]]. (Note: relay role gate is admin OR lead_reader OR superuser — confirm lead readers relaying matches CR-004's "admin/Julia" intent.)
+
+## Resolution (2026-05-31, Sprint 11 / S11.2) — SHIPPED
+
+The orphaned-UI gap is closed: `RelayConsole` is now reachable in the running app.
+- **Host page** `client/src/pages/RelayConsolePage.tsx` (new) — two modes: `/relay` shows a picker that lists submissions in review statuses (`submitted | under_review | readers_assigned | review_complete`; drafts/in-progress hidden), and `/relay/:submissionId` embeds the existing `RelayConsole` queue with a back link. Access is gated in-page (`admin || lead_reader || superuser`); PCs and plain readers get an Access Denied card — mirrors the server relay role gate (`commentController.ts:480-606`).
+- **Routes** `client/src/App.tsx` — `<Route path="relay">` and `<Route path="relay/:submissionId">` mounted inside the protected `Layout` subtree.
+- **Nav** `client/src/components/Layout.tsx` — a "Relay" inbox link surfaces for lead-reader/admin (`isLeadOrAdmin`).
+- Tests: `client/src/pages/RelayConsolePage.test.tsx` (5) — access guard (PC + plain reader denied, lead_reader allowed), picker filters to review statuses (draft hidden), per-submission route renders the embedded queue and hits `/api/submissions/:id/comments/relay-queue`. Existing `RelayConsole.test.tsx` (7) still green.
+- Open question (lead-reader relay vs CR-004 "admin/Julia" intent): kept lead_reader in the gate to match the pre-existing server gate; no behavior change. Bulk-relay / suggestion-level relay remain deferred to v2 per Open questions above.

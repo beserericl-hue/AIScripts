@@ -140,3 +140,9 @@ These flow into the same `cshse_corrections_{env}` Qdrant collection that alread
 - Can the PC drag-and-drop rows to re-tag? **Decision: no, dropdown only for v1.** Drag-and-drop adds DnD library scope without a meaningful UX win — the dropdown is two clicks, the drag would be one. Defer.
 - What about bulk accept of all high-confidence AI suggestions? **Decision: yes, add an "Accept all green" button at the top of the column-inputs pane.** Lets PC fly through the 8-10 columns the AI got right at >0.85 with one click, then verify the yellow/red ones individually.
 - Does removing a row in the wizard also remove it from the post-apply CurriculumMatrix doc? **Decision: yes.** Removal is a PC-authoritative decision. Source document still has the row; the PC can re-add via the standards editor matrix editor (already exists) if they change their mind.
+
+## S13 decision (2026-05-31) — closed, no separate action
+
+Reviewed in the Sprint 13 "CR-026 finish" slot. CR-026 is `superseded_by: CR-029`, and [[cr-029-matrix-step-redesign-simple]] is **shipped**. CR-029 explicitly states it *replaces, not iterates on* the Matrix step, and its `supersedes:` frontmatter names **CR-026 (per-row controls UX)** directly — the verify-in-context drawer and the per-row Edit/Move/Remove column that CR-026 proposed were deliberately removed in favour of CR-029's one-row-at-a-time "Keep or Remove against the source document" form. The user's underlying per-row need (see this row in context; remove it if it can't be matched) is satisfied by CR-029's design.
+
+So the sprint-plan line "CR-026 finish — per-row move/reassign in the Matrix step" is moot: that UX is intentionally not being built. CR-026 is **closed-as-superseded** (mirroring [[cr-025-ai-matrix-column-inference]]'s S13 closure), **not** a WON'T-DO of a still-wanted capability. No code change in S13d; this note records the confirmation.

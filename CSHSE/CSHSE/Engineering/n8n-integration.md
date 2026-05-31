@@ -2,13 +2,15 @@
 name: N8N Integration
 description: The five n8n workflows the portal calls into, the four public callback endpoints they call back to, and the documented-vs-actual retry behavior.
 type: concept
-tags: [n8n, webhooks, ai, async, integration]
-last_reviewed: 2026-05-10
+tags: [n8n, webhooks, ai, async, integration, legacy]
+last_reviewed: 2026-05-31
 ---
 
 # N8N Integration
 
-All AI is offloaded to **n8n** workflows. The portal triggers them via HTTPS POST and receives results on public callback endpoints.
+> **⚠️ LARGELY SUPERSEDED (2026-05-31).** This page documents the original "all AI runs in n8n" design. That is **no longer how the portal works**. The AI **import/matcher/spec-loader/validation** workflows have been replaced by the in-process [[legacy-self-study-import|cshse-ai FastAPI service]] (Standard/Spec tagging, matrix extraction, coverage, evidence scoring, section evaluation) and, for pre-submission checks, the server-side `GET /api/submissions/:id/preflight` endpoint (CR-008). The only path that may still route through n8n is the **help-chat RAG**. The four public callback endpoints described below still exist in the codebase but the import/validation callers no longer fire. Treat the workflow descriptions here as **historical**; for current architecture see [[system-architecture]] and [[module-catalog]]. This page is retained because the callback-endpoint security findings (hardcoded keys, unauthenticated callbacks) are still relevant until the dead code is removed.
+
+All AI was originally offloaded to **n8n** workflows. The portal triggered them via HTTPS POST and received results on public callback endpoints.
 
 ## The five workflows
 
@@ -91,6 +93,18 @@ Useful when looking up runs in the n8n UI or filing tickets against a specific w
 | Subspecs labeled `a` through `f` | Matches `server/src/data/standards.ts` (only `a`–`f` defined) | Code is right, but [EvidenceViewer.tsx:300](../../../../client/src/features/selfStudy/EvidenceManager/EvidenceViewer.tsx) hardcodes `['a'..'h']` (UI bug, see [[evidence-file-storage]]) |
 
 Cross-referenced in [[repo-docs-reference]].
+
+## S14 decision (2026-05-31) — `triggerValidation` is NOT dead code; rip-out deferred to a dedicated CR
+
+The Sprint 14 plan ([[sprint-plan-2026-05-31]] line 124) listed "n8n dead-code removal (validation webhook + `triggerValidation`)" as a ~600-LOC hygiene cut, on the premise it is "no longer on the submit path since CR-049." That premise is **half-right and the conclusion is wrong**: CR-049's `validationService.validateSection` (cshse-ai) replaced only the **submit-gate** flow — its own doc-comment says so verbatim (`server/src/services/validationService.ts:104`: "REPLACES the legacy n8n `triggerValidation` path **for that flow**"). `triggerValidation` still backs three **live** callers:
+
+1. **Interactive editor validation** — `client/src/features/selfStudy/Editor/NarrativeEditor.tsx:373` → `useValidationStatus.triggerValidation` (`client/src/hooks/useValidationStatus.ts:121`) → `POST /api/webhooks/n8n/validate` → `webhookController.triggerValidation` (`server/src/controllers/webhookController.ts:16`) → `validationService.triggerValidation` (`server/src/services/validationService.ts:218`).
+2. **`validateStandard`** — `server/src/services/validationService.ts:783`.
+3. **`revalidateFailedSections`** — `server/src/services/validationService.ts:806`, surfaced by `client/src/features/selfStudy/SubmissionWorkflow/FailedValidations.tsx` ("Revalidate" button).
+
+Crucially, the path is **not broken when n8n is decommissioned**: `triggerValidation` does a `WebhookSettings.findOne({settingType:'n8n_validation', isActive:true})` lookup and, when none is active, **gracefully degrades** to a `pending` / "No validation webhook configured. Manual review required." result (`server/src/services/validationService.ts:278-287`) rather than throwing. So with n8n off, the editor's validate action is inert-but-safe — exactly the kind of working code the project's standing rule says not to disturb.
+
+**Decision: do NOT rip it out in S14.** A wholesale removal would force re-pointing the three live callers (most visibly the editor) onto the cshse-ai `validateSection` path — a **user-visible behavior migration**, not hygiene, and it touches working code. That deserves its own change-request with PC review (mirroring how [[cr-026-matrix-correction-verify-in-context|CR-026]] was closed-as-superseded rather than force-built under a sprint-hygiene banner). The S14 line is therefore reclassified **deferred-to-CR**, not done. The "archive external n8n evidence-node workflow definitions" sub-item remains a pure **ops task** on the n8n instance (no server code) and is unaffected by this decision. The unauthenticated-callback security findings above (critical #1) stay open and are the stronger reason to schedule that migration CR.
 
 ## Related
 

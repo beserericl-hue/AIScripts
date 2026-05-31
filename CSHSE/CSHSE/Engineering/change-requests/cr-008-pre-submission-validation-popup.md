@@ -66,3 +66,7 @@ The PC can:
 ## Open questions
 
 - Should the popup also flag per-standard `in-progress` (not yet submitted-for-review)? Yes, as a blocking error.
+
+## Verification (2026-05-31) — PARTIAL (status: in-progress)
+
+Code-verified during the 2026-05-31 sweep. **Shipped:** the pre-submit popup with errors + warnings is live — `FinalSubmitModal.tsx:157-201` renders `preflight-errors` (each with a "Go to" jump) + `preflight-warnings`, backed by `GET /api/submissions/:id/preflight` (`submissionController.ts:1053`, route `routes/submissions.ts:129`). **Gap (the catalog's "Sprint 2B"):** there is **no override-with-reason path** — when preflight has errors the modal just disables Submit (`FinalSubmitModal.tsx:239`) and the server unconditionally hard-blocks on `missingValidations` (`submissionController.ts:1600-1606`). The "Submission note" textarea is an optional always-on note, not a gated override. Remaining work: an override-with-reason control + server bypass + dedicated audit branch. Scheduled Sprint 10 in [[sprint-plan-2026-05-31]].

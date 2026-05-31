@@ -84,3 +84,25 @@ Cosmetic / organizational layer above institutions. JV is a named grouping with 
 ## Open questions
 
 - None — all acceptance criteria met. Future product asks land as discrete follow-ons.
+
+## S13 Resolution (2026-05-31) — two of three follow-ons shipped
+
+Picked up two of the three "Deferred" follow-ons in the Sprint 13 JV slot. Both are additive; no RBAC change (per the original CR invariant — JV adds NO permission shifts).
+
+### Shipped
+
+- **JV reporting filter `?jointVentureId`** on `GET /api/submissions/`. `listSubmissions` (`server/src/controllers/submissionController.ts`, ~line 1432) now accepts a `jointVentureId` query param, gated to elevated viewers (`isElevated_`). It resolves the JV's `institutionIds` and intersects them into the existing `filter.institutionId`:
+  - no prior institution filter → `filter.institutionId = { $in: memberIds }`;
+  - an existing institution filter that is NOT a JV member → forced to a non-matching ObjectId (empty result), so the param can only ever *narrow* scope.
+  - A non-elevated reader passing the param gets nothing widened — their scope stays assignment+status gated. Verified by `server/tests/integration/submission-jv-filter.test.ts` (2 tests, both green): admin scopes the list to JV members only (`['Alpha U','Beta U']`, excludes `Outside U`); non-member submissions excluded.
+- **PC dashboard JV badge** — the existing `JointVentureBadge` component is now mounted on the PC dashboard header (`client/src/features/dashboard/Dashboard.tsx`), next to the "Self-Study Progress Dashboard" subtitle, keyed on the PC's own institution id. Renders only when that institution is a visible JV member (same null-safe behavior as the reader-surface mount).
+
+### Still deferred (product-gated UI)
+
+- **Dashboard JV section grouping** for admin / lead-reader dashboards (original S7.3). The data + badge + reporting filter are all live now; the section-header *grouping layout* remains a discrete UI pass pending product confirmation of the desired dashboard shape. No code change in S13 — this is a layout/UX decision, not a missing capability.
+
+### Files touched (S13, additive)
+
+- `server/src/controllers/submissionController.ts` — `jointVentureId` filter branch + `JointVenture` import.
+- `server/tests/integration/submission-jv-filter.test.ts` (new) — 2 tests.
+- `client/src/features/dashboard/Dashboard.tsx` — `JointVentureBadge` mount on the PC header.

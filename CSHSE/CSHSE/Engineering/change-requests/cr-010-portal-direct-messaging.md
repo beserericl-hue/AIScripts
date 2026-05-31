@@ -72,3 +72,16 @@ Conversation-scoped, threaded DMs:
 - Group DMs vs strictly 1:1? Shipped: 1-to-many in one thread (participantIds is an array).
 - File attachments? Still deferred — text-only for v1. CR-021's attachment primitives are reusable when needed.
 - Reader page integration — the Messages component is reusable; the next pass mounts it as a tab on the Reader review screen and a side panel on CompilationTab.
+
+## Resolution (2026-05-31, Sprint 12 / S12.2) — notification producers widened + Messages mounted
+
+The two deferred CR-010 items (in-app/email notification on new message; Messages reachable in the workspace) are closed for the producer/surface scope. The notification core itself shipped Sprint 9.1; this pass wires the remaining producers and mounts the view.
+
+- **Three new notification producers** (all fire-and-forget + fail-soft via the shared `notify`, each idempotent with a `dedupeKey`):
+  - `comment.relayed` → the PC (submission submitter) on relay — `server/src/controllers/commentController.ts` `relayComment`; dedupeKey `comment.relayed:<commentId>` (un-relay/re-relay never double-pings), link `/self-study/<submissionId>`.
+  - `board.decision` → the PC on a recorded board decision — `server/src/controllers/boardDecisionController.ts` `recordBoardDecision`; dedupeKey `board.decision:<submissionId>:<decidedAt ISO>` (a re-decide yields a fresh ping), link `/self-study/<submissionId>`.
+  - `reader.assignment` → each assigned reader — `server/src/controllers/reviewController.ts` `assignReaders`; dedupeKey `reader.assignment:<submissionId>:<readerId>`, link `/reader/<submissionId>`.
+- **New `NotificationType` values** `comment.relayed | board.decision | reader.assignment` — `server/src/models/Notification.ts`.
+- **Messages view mounted** — new `client/src/pages/MessagesPage.tsx` (reads `:submissionId`, renders the existing `features/reader/Messages/Messages`), route `messages/:submissionId` in `client/src/App.tsx`, and a role-appropriate "Messages" link in the reader review header (`client/src/features/reader/ReaderReviewScreen.tsx`, `data-testid="reader-messages-link"` → `/messages/<submissionId>`).
+- **Tests:** `server/tests/integration/notification-producers.test.ts` (4 — relay notifies PC; re-relay dedupes; decision notifies PC; assignment notifies reader) — green. Existing `comment-relay` (9), `board-decisions` (8), `reaccreditation-spinup` (3), `ReaderReviewScreen` client (4) all unaffected.
+- Still text-only (no DM attachments); the AuditLogEntry mirror for DM content remains deferred (DirectMessage is append-only, which preserves the compliance property).

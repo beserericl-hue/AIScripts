@@ -362,3 +362,12 @@ Merge-in-place — never overwrite. Response echoes the full preferences blob wi
 - **Hint API public** — ✅ confirmed YES; this CR ships the plumbing; per-feature wirings land in follow-on CRs. All hint copy must follow the five-year-old voice rule.
 - **Impersonation tour status** — ✅ DROPPED ("not needed"). The provider reads `user.preferences.tours` directly off the authenticated user with no special-casing for impersonated sessions.
 - **Five-year-old voice** — ✅ enforced. Every tour + hint string in `client/src/i18n/strings.ts` is plain English describing what each surface IS, not what to do. A lint-style test (`strings.test.ts`) checks the tour namespace for common computer-jargon tokens.
+
+## Resolution (2026-05-31, Sprint 12 / S12.3) — additional first-time hints wired
+
+Two more high-traffic surfaces now fire a once-ever `useOnceHint` nudge (joining `compilation-first-final` and `checklist-first-verify` from S9.3). All copy follows the five-year-old voice rule.
+
+- **Reader scoring** — `reader-first-score`, fired from `client/src/features/reader/ReaderReviewScreen.tsx` (container effect, gated on `canScore` + loaded submission), anchored to the first spec's score selector. The anchor is a new optional `anchorId` on `Score4LevelSelector` (`client/src/features/reader/Score4LevelSelector.tsx`), passed by `ReaderSpecRow` as `score-selector-<std>-<spec>`. String `hint.reader.firstScore` in `client/src/i18n/strings.ts`.
+- **Relay queue** — `relay-first-queue`, fired from `client/src/features/admin/RelayConsole/RelayConsole.tsx` (container effect, gated on the queue having ≥1 comment), anchored to the new `#relay-queue-header`. String `hint.relay.firstQueue`.
+- **Tests:** structural anchors pinned — `ReaderReviewScreen.test.tsx` (`#score-selector-1-a` present when scorable) and `RelayConsole.test.tsx` (`#relay-queue-header` present). The `useOnceHint` fire-once/persist/reset/fail-soft behavior remains covered by `useOnceHint.test.tsx`. All green (25 across the touched suites).
+- The hint primitive is the reusable point; further surfaces can be wired the same way without new infrastructure.

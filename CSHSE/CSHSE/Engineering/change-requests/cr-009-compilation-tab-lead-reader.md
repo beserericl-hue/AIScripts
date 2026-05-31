@@ -83,3 +83,10 @@ The lead reader generates the **compilation report** (DOCX export) from this tab
 ## Open questions
 
 - Does Final-score override propagate back to individual reader views, or stay lead-reader-private? Default: visible to all readers (transparency). The compilation read endpoint exposes Final scores to lead_reader + admin only today; making it visible to readers requires a small read-gate change.
+
+## Resolution (2026-05-31, Sprint 11 / S11.3) — Final-score visibility to readers SHIPPED
+
+The CR-009 "transparency" Open question is resolved in favor of **Final scores visible to readers** (peers' raw 0-3 votes stay lead/admin-only).
+- **New read endpoint** `GET /api/submissions/:submissionId/final-scores` (`server/src/routes/compilation.ts:18-22`, `server/src/controllers/compilationController.ts` `getFinalScoresForReader`) returns ONLY the lead reader's Final score per (std, spec) plus the requesting reader's OWN score for context. The side-by-side `getCompilation` is unchanged and remains lead/admin-only — no peer votes leak through `final-scores` (response carries no `scores[]` array). Access: lead/admin/superuser always; reader/lead_reader only with an ACTIVE `Assignment` (CR-007 parity); PCs 403.
+- **Reader review client** now fetches `final-scores` and renders a read-only "Lead reader final score: N — <label>" chip per spec (`client/src/features/reader/ReaderReviewScreen.tsx` `finalScoresQuery` + `finalScoresByKey`, `client/src/features/reader/ReaderSpecRow.tsx` `finalScore` prop + chip with testid `reader-final-score-<std>-<spec>`). The query uses `retry:false` so an unassigned reader's 403 silently hides the chips rather than erroring the page.
+- Tests: `server/tests/integration/compilation-endpoint.test.ts` (+5 CR-009 follow-on cases: assigned reader sees Final + own score but no peer votes; unassigned reader 403; PC 403; lead reads without assignment; 404) — 18 green. `client/src/features/reader/ReaderSpecRow.test.tsx` (+2: chip shown when finalScore set, hidden when null) — 8 green.

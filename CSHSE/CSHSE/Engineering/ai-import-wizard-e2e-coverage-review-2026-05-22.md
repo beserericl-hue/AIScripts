@@ -2,11 +2,12 @@
 name: E2E Coverage Review — Pre Go-Live
 description: Complete inventory of test coverage across the CSHSE codebase (E2E, unit, integration), gap analysis against the user-facing feature surface, the role matrix (Coordinator / Reader / Lead Reader / Admin), and a prioritized list of tests that must exist before go-live. Companion to the earlier regression plan; this one focuses on "what's actually testable today" and "what blocks our ability to test the rest."
 type: review
-status: draft
+status: superseded
+superseded_by: "[[test-plan-cr043-cr044-regression-2026-05-25]]"
 priority: P0
 source: User direction 2026-05-22 — "do a review of the E2E testing and make sure that we have developed a suite of tests that can test all functionality in the system. This is required before go live."
 tags: [review, testing, e2e, playwright, go-live]
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-31
 related:
   - "[[ai-import-wizard-e2e-regression-plan-2026-05-22]]"
   - "[[change-requests/cr-034-e2e-seed-endpoint]]"
@@ -305,8 +306,13 @@ The remaining 26 P0 specs are scaffolded as TODO-marked stubs so the structure i
 - [ ] Test environment (`cshse-e2e.up.railway.app`) provisioned separately from `cshse-develop`.
 - [ ] A failing spec blocks the deploy (configurable per-spec via flake bucket).
 
+## S14 disposition (2026-05-31) — SUPERSEDED; the "3 specs total" snapshot is obsolete
+
+Promote-or-retire decision from the Sprint 14 "promote/retire the two draft E2E plans" slot ([[sprint-plan-2026-05-31]] line 125). This page is a **dated review snapshot**; per vault rules its body is not rewritten — but the headline finding ("3 Playwright specs total") is now historical. As of 2026-05-31 the suite is **36 specs** under `e2e/tests/` (`00_health.spec.ts` → `36_workflow_sequencing.spec.ts`), the CR-034 seed endpoint shipped (removing the blocking dependency this review called out), and the bundle-string-grep anti-pattern (`discard_button.spec.ts`) is superseded by real behavioral specs (`14_review_discard`, `13_review_edit_pencil`). The execution arm — [[test-plan-cr043-cr044-regression-2026-05-25]] — is `complete`. Remaining real gaps are the *deeper multi-role UI walkthrough* (reader→lead→board) noted in [[sprint-plan-2026-05-31]]: today `35_pc_dashboard_workflow` + `36_workflow_sequencing` + the S7.4 API smoke cover the PC + sequencing surface; a full UI-driven reader→lead→board E2E remains a forward enhancement (env-dependent: needs deployed `cshse-develop` + `E2E_SSO_KEY`, and must not run during a live wizard run per the standing rule). Marked superseded; not a live work item.
+
 ## Related
 
-- [[ai-import-wizard-e2e-regression-plan-2026-05-22]] — the earlier, more abstract plan.
-- [[change-requests/cr-034-e2e-seed-endpoint]] — blocking dependency.
+- [[ai-import-wizard-e2e-regression-plan-2026-05-22]] — the earlier, more abstract plan (also superseded).
+- [[test-plan-cr043-cr044-regression-2026-05-25]] — the completed execution arm.
+- [[change-requests/cr-034-e2e-seed-endpoint]] — blocking dependency (shipped).
 - [[critical-error-processing-review-2026-05-22]] — companion review for error handling.

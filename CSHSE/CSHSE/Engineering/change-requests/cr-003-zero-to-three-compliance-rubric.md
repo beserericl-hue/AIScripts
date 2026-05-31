@@ -65,3 +65,14 @@ Each spec gets a score from each reader. The compilation tab ([[cr-009-compilati
 ## Open questions
 
 - Do we expose the score to the PC after relay, or only the comment? Currently leaning **score yes, names no** (consistent with [[cr-004-comment-threading-identity-redaction]]).
+
+## Verification (2026-05-31) — PARTIAL
+
+Code-verified during the 2026-05-31 sweep. **Capture is shipped end-to-end:** `Score` is constrained to 0–3 (`server/src/models/Score.ts:10,35-44`), the scoring API enforces it, and the reader UI renders Non/Partial/Largely/Fully (`client/src/features/reader/Score4LevelSelector.tsx:23-41`). **Gap:** the reader-facing **report still renders the legacy pass/fail compliance ternary** — the reader PDF reads `Review.assessments[].compliance` and emits `✓ Y / ✗ N / — N/A` (`server/src/services/pdfGenerator.ts:163-167,218-262,738-745`), never the `Score` collection; the suggestions DOCX (`suggestionsDocx.ts`) likewise omits the 0–3 score. Remaining work: render the 0–3 rubric in the reader PDF/DOCX. Scheduled Sprint 11 in [[sprint-plan-2026-05-31]].
+
+## Resolution (2026-05-31, Sprint 11 / S11.1) — SHIPPED
+
+The reporting gap is closed.
+- **Reader PDF** now renders the 0–3 score per spec next to the compliance verdict, plus a "Compliance Score Rubric (0-3)" legend. The score map is loaded from the `Score` collection by the controller and passed into the generator: `server/src/services/pdfGenerator.ts` (`SCORE_RUBRIC`, `generateReaderReport(review, reader, scoresByKey?)`, `addReaderInstructions` legend, `addSpecificationRow`), `server/src/controllers/reportController.ts` (`buildReaderScoreMap`, both `generateReaderReport` call sites).
+- **Suggestions DOCX** now leads each spec block with a "Compliance score (0-3)" section; specs that have *only* a score (no comment) still surface. PC-facing mode keeps the numeric score but redacts the reviewer name to "Reader N" ("score yes, names no"). `server/src/services/suggestionsDocx.ts` (`SCORE_LABELS`, `SpecBucket.scores`, `loadBuckets` Score fetch, `buildSpecParagraphs`).
+- Tests: `server/tests/unit/readerPdfScores.test.ts` (3) + `server/tests/integration/suggestions-doc.test.ts` (2 new CR-003 cases) — all green.

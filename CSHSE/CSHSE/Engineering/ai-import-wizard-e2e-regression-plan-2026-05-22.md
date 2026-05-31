@@ -2,11 +2,12 @@
 name: AI Import Wizard — E2E Regression Plan
 description: The complete Playwright-based regression suite for the AI Import Wizard. Covers every wizard step, every recovery path, every kind of card (Narrative / Evidence / Tag / File / Matrix / CV), the standalone-CV upload flow, and a deploy-verification protocol. Consumes the seed endpoint from CR-034. Replaces the ad-hoc "check the bundle string" pattern with a real regression gate.
 type: test-plan
-status: draft
+status: superseded
+superseded_by: "[[test-plan-cr043-cr044-regression-2026-05-25]]"
 priority: P0
 source: User direction 2026-05-22 — "I also want you to plan the entire regression test E2E and add E2E seed endpoints so that you can do what is needed. The entire UI needs to be planned out."
 tags: [testing, e2e, playwright, regression, ai-import, wizard]
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-31
 related:
   - "[[change-requests/cr-034-e2e-seed-endpoint]]"
   - "[[change-requests/cr-033-cv-supporting-evidence]]"
@@ -334,3 +335,7 @@ Runs on every push to `developer`. Fails the deploy if any spec fails. Artifacts
 - [[change-requests/cr-031-unplaced-neighbor-context]]
 - [[change-requests/cr-032-inline-edit-review-cards]]
 - [[change-requests/cr-027-stale-error-on-wizard-step-back]]
+
+## S14 disposition (2026-05-31) — SUPERSEDED / promoted-and-realized
+
+Promote-or-retire decision from the Sprint 14 "promote/retire the two draft E2E plans" slot ([[sprint-plan-2026-05-31]] line 125). **Outcome: superseded — its vision was realized, not abandoned.** This abstract plan's prerequisite ([[change-requests/cr-034-e2e-seed-endpoint]]) shipped, and the concrete execution arm — [[test-plan-cr043-cr044-regression-2026-05-25]] — is `status: complete` (Section 1 35/35, Section 2 35/35, Section 3 9/9, Section 4 5/5, Section 4B 11/11, regression sweep green, 14 production bugs fixed). The Playwright suite this plan envisioned now exists as **36 specs** under `e2e/tests/` (`00_health` → `36_workflow_sequencing`), covering every wizard step, recovery paths, both importers, cross-institution isolation, matrix↔spec link, multifile/Stevenson integration, and the PC dashboard workflow. There is nothing actionable left here that the completed CR-043/044 plan + the shipped suite don't already cover. Retained for history; not a live work item.

@@ -60,3 +60,11 @@ Two output modes:
 
 - Should the AI matcher suggest additional remediation language inline? Defer.
 - CSHSE-branded header/footer template — picked up in the next docx-export pass.
+
+## Resolution (2026-05-31, Sprint 11 / S11.4) — DOCX branding SHIPPED
+
+The deferred "DOCX matches CSHSE branding (header/footer + logo)" acceptance item is closed.
+- **Shared branding module** `server/src/services/docxBranding.ts` (new) — `buildBrandedHeader()` (CSHSE logo left + "Council for Standards in Human Service Education" right, with a bottom rule), `buildBrandedFooter()` ("CSHSE — Confidential accreditation document" + Word PAGE/NUMPAGES fields), and `brandedSectionChrome()` which returns the `headers`/`footers` section options. Degrades to a text-only header if the logo asset is missing (`hasBrandLogo()` exposed for tests).
+- **Logo asset** bundled at `server/src/assets/cshse-logo.png` (400×400 PNG) and mirrored to `dist/assets` by `server/build.js` (new copy step) so the path resolves in both ts-node and compiled trees. Loaded once at module init via `path.join(__dirname, '..', 'assets', 'cshse-logo.png')`.
+- **Both DOCX generators** now spread `...brandedSectionChrome()` into their section: `server/src/services/suggestionsDocx.ts` (consolidated suggestions) and `server/src/services/siteVisitChecklistDocx.ts` (CR-012 site-visit checklist).
+- Tests: `server/tests/integration/suggestions-doc.test.ts` (+3 S11.4 cases — header carries the org name, footer carries the confidentiality line + page-number fields, `word/media/` holds the embedded logo; the checklist DOCX is branded identically; `hasBrandLogo()` true) — 12 green. Existing suggestions + checklist + redaction tests unaffected.

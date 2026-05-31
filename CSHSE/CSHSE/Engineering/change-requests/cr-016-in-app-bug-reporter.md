@@ -65,3 +65,29 @@ A floating "Report issue" button (or keyboard shortcut). Click opens a modal:
 ## Open questions
 
 - Github-issue integration vs internal-only collection? Lean internal for now (PII concerns).
+
+## S13d Resolution (2026-05-31) — auto-screenshot follow-on shipped (flag-gated)
+
+The one deferred acceptance item — "Modal captures screenshot client-side" — is now delivered, behind a flag so the original bundle-size concern is preserved.
+
+### How it's gated (zero default bundle cost)
+
+- **Off by default.** Enabled either at build time (`VITE_ENABLE_BUG_SCREENSHOT=true`) or per-browser via a localStorage opt-in (`cshse:bug-screenshot` = `"on"`) — support can ask a user to flip it without a redeploy.
+- **Lazy chunk.** `html2canvas@1.4.1` is loaded with a dynamic `import()` inside `captureScreenshot()`, so Vite code-splits it into its own chunk. The main bundle pays nothing unless the flag is on AND the user opens the reporter. (`html2canvas` is now a client dependency, but it never enters the entry bundle.)
+- **Fail-soft.** Any capture error (missing chunk, tainted canvas, disabled flag) returns `null`; the report still sends without a screenshot.
+- **Bounded.** Capture is the visible viewport only (`scale: 1`, JPEG q0.7). The server accepts the `screenshot` only when it matches `data:image/(png|jpeg|webp);base64,` and is ≤ 3 MB; otherwise it's silently dropped and the report still saves.
+
+### Acceptance delta
+
+- [x] Modal captures screenshot client-side (flag-gated; off by default). The "redact before submit" sub-clause is **not** in this pass — capture is opt-in and viewport-only; a redaction editor stays deferred (would need a canvas-draw UI). Recorded here, not silently skipped.
+
+### Files touched (S13d, additive)
+
+- `client/src/components/bugReporterScreenshot.ts` (new) — `isScreenshotEnabled()` + `captureScreenshot()` (lazy html2canvas).
+- `client/src/components/BugReporter.tsx` — calls `captureScreenshot()` in `onSubmit`, attaches `screenshot` when present.
+- `client/package.json` — `html2canvas@1.4.1` dependency (lazy-loaded only).
+- `server/src/models/BugReport.ts` — optional bounded `screenshot` field.
+- `server/src/controllers/bugReportController.ts` — validates + stores the data-URL, drops malformed/oversized.
+- `client/src/components/bugReporterScreenshot.test.ts` (new, 4) + `server/tests/integration/bug-reports.test.ts` (+3) — flag gating + accept/reject/oversize.
+
+Admin triage remains out-of-band (no client admin list view exists by design); the stored screenshot is returned by the existing admin `GET /api/admin/bug-reports`.

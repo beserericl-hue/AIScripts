@@ -3,7 +3,7 @@ name: Module Catalog
 description: Every server route + controller + service + model + middleware, and every client page + feature folder + component + store + hook + service, with one-line descriptions and UI/backend cross-references.
 type: concept
 tags: [reference, modules, server, client, catalog]
-last_reviewed: 2026-05-10
+last_reviewed: 2026-05-31
 ---
 
 # Module Catalog
@@ -11,6 +11,8 @@ last_reviewed: 2026-05-10
 Quick lookup of every code module in the project. Pair with [[system-architecture]] for the layering view, [[import-pipeline]] / [[narrative-storage]] / [[evidence-document-review-pipeline]] for end-to-end flows.
 
 Filename next to each entry is the path relative to repo root, with line counts indicating relative complexity.
+
+> **2026-05-31 update.** The tables below through "Test infrastructure" are the **original 2026-05-10 inventory** and are still accurate for the modules they list. Sprints 4–9 added a large number of new modules (review/compilation, board decisions, site-visit checklist/itinerary, notifications, direct messages, joint ventures, audit trail, bug reports, the `cshse-ai` integration, SSO, the API v1 surface). Those are catalogued in the new **"Added since the 2026-05-10 baseline (Sprints 4–9)"** section near the bottom of this page, so the original tables read as a historical layer and the additions read as a clearly-dated delta. Current server totals: 32 models, 39 controllers, 21 services, 37 routes, 4 middleware.
 
 ## Server entry & infrastructure
 
@@ -237,9 +239,92 @@ Each `routes/*.ts` is a thin Express router; the heavy lifting is in the matchin
 | [e2e/tests/health.spec.ts](../../../../e2e/tests/health.spec.ts) | `/health` 200 + `/api/auth/me` no-token 401. |
 | [e2e/tests/login.spec.ts](../../../../e2e/tests/login.spec.ts) | Login renders + bad creds error; happy-path `.skip`-ped pending seed endpoint. |
 
+## Added since the 2026-05-10 baseline (Sprints 4–9)
+
+Modules introduced after the original inventory above. Grouped by layer. CR references point at the driving change request.
+
+### New `cshse-ai` integration (Node side)
+
+| Module | Role |
+|--------|------|
+| [services/cshseAiClient.ts](../../../../server/src/services/cshseAiClient.ts) | HMAC-SHA256 client to the FastAPI `cshse-ai` service — start import jobs, poll status, evidence extract/recommend/score, section evaluate. See [[system-architecture]], [[legacy-self-study-import]]. |
+| [controllers/aiImportController.ts](../../../../server/src/controllers/aiImportController.ts) | Drives the AI import wizard: kicks off jobs, surfaces detection/coverage/gap results. |
+| [controllers/aiReviewController.ts](../../../../server/src/controllers/aiReviewController.ts) | AI-assisted review actions on the reader side. |
+| [controllers/importBatchController.ts](../../../../server/src/controllers/importBatchController.ts) | Batch import orchestration (`ImportBatch` model). |
+| [services/batchAdvancer.ts](../../../../server/src/services/batchAdvancer.ts) | Advances import batches through their states. |
+| [services/aiReviewMerge.ts](../../../../server/src/services/aiReviewMerge.ts) | Merges AI suggestions into reader review state. |
+
+The Python service itself lives in `ai-service/` (FastAPI). Key packages: `app/splitter`, `app/matcher`, `app/matrix`, `app/coverage`, `app/gap_filling`, `app/evidence`, `app/section_eval`, `app/corrections`, `app/vector`, `app/embeddings`, `app/export`, `app/standards`. Entry `app/main.py` exposes `/ai/import/*`, `/ai/matrix/*`, `/ai/evidence/*`, `/ai/section/evaluate`, `/ai/corrections/ingest`, and `/health/*`.
+
+### New server models
+
+| Model | What it represents | CR |
+|-------|---------------------|----|
+| [AuditLogEntry](../../../../server/src/models/AuditLogEntry.ts) | Append-only audit event. Pre-save/update/delete hooks throw to enforce immutability. `AuditAction` union covers submit/lock/relay/compilation/checklist/itinerary/board/jv/account. | CR-006/050/009/012/013/053/019 |
+| [LeadFinalScore](../../../../server/src/models/LeadFinalScore.ts) | Lead reader's final 0–3 score per Spec. | CR-009 |
+| [Notification](../../../../server/src/models/Notification.ts) | In-app notification with `dedupeKey` idempotency. Types: `dm.new_message`, `board.cycle_reminder`, `board.reconsider_reminder`. | CR-010/053 |
+| [DirectMessage](../../../../server/src/models/DirectMessage.ts) | Reader ↔ admin threaded DM. Participant roles `reader \| lead_reader \| admin`. | CR-010 |
+| [SiteVisitChecklistItem](../../../../server/src/models/SiteVisitChecklistItem.ts) | Per-item site-visit verification entry. | CR-012 |
+| [JointVenture](../../../../server/src/models/JointVenture.ts) | Multi-institution accreditation grouping; auto-archives below 2 members. | CR-019 |
+| [BugReport](../../../../server/src/models/BugReport.ts) | In-app user bug report. | — |
+| [DocumentVersion](../../../../server/src/models/DocumentVersion.ts) | Versioned document snapshot. | — |
+| [ImportBatch](../../../../server/src/models/ImportBatch.ts) | A batch of AI import work. | — |
+| [ImportCorrection](../../../../server/src/models/ImportCorrection.ts) | Captured user corrections fed back to `cshse-ai`. | — |
+| [ProgramCourse](../../../../server/src/models/ProgramCourse.ts) | Course in the program's curriculum (matrix rows). | — |
+
+### New server controllers
+
+| Controller | Route(s) | What it does | CR |
+|------------|----------|--------------|----|
+| [compilationController.ts](../../../../server/src/controllers/compilationController.ts) | `/api` (compilation) | Lead-reader final 0–3 stamping, `compilation.final_*` audit. | CR-009 |
+| [boardDecisionController.ts](../../../../server/src/controllers/boardDecisionController.ts) | `/api` (boardDecisions) | Record accept/table/deny/suspend/revoke + reconsider date. | CR-053 |
+| [checklistController.ts](../../../../server/src/controllers/checklistController.ts) | `/api` (checklist) | Site-visit checklist verify/unverify + DOCX. | CR-012 |
+| [itineraryController.ts](../../../../server/src/controllers/itineraryController.ts) | `/api` (itinerary) | Co-edited site-visit agenda. | CR-013 |
+| [notificationController.ts](../../../../server/src/controllers/notificationController.ts) | `/api` (notifications) | List/mark-read in-app notifications. | CR-010/053 |
+| [directMessageController.ts](../../../../server/src/controllers/directMessageController.ts) | `/api` (directMessages) | Reader ↔ admin DM threads. | CR-010 |
+| [jointVentureController.ts](../../../../server/src/controllers/jointVentureController.ts) | `/api/joint-ventures` | JV CRUD + membership + archive. | CR-019 |
+| [auditTrailController.ts](../../../../server/src/controllers/auditTrailController.ts) | `/api` (auditTrail) | Read-only audit-log query surface. | — |
+| [bugReportController.ts](../../../../server/src/controllers/bugReportController.ts) | `/api` (bugReports) | Submit/list bug reports. | — |
+| [evidenceRecommendationsController.ts](../../../../server/src/controllers/evidenceRecommendationsController.ts) | `/api` (evidenceRecommendations) | AI evidence recommendations for a Spec. | — |
+| [programCoursesController.ts](../../../../server/src/controllers/programCoursesController.ts) | `/api/program-courses` | Curriculum course CRUD feeding the matrix. | — |
+| [ssoController.ts](../../../../server/src/controllers/ssoController.ts) + [ssoTicketController.ts](../../../../server/src/controllers/ssoTicketController.ts) | `/sso` | MemberClick browser SSO ticket exchange. | — |
+| Comment relay endpoints in [commentController.ts](../../../../server/src/controllers/commentController.ts) | `/api/comments/:id/relay`, `/escalate`, `/relay-queue` | Admin relay/escalate (`comment.relayed`). UI not yet mounted. | CR-023 |
+
+### New server services & middleware
+
+| Module | Role | CR |
+|--------|------|----|
+| [services/notificationService.ts](../../../../server/src/services/notificationService.ts) | Fan-out for DM + board-cycle reminders; honours `dedupeKey`. | CR-010/053 |
+| [services/auditLog.ts](../../../../server/src/services/auditLog.ts) | Append-only audit writer. | — |
+| [services/documentVersionService.ts](../../../../server/src/services/documentVersionService.ts) | Document version snapshots. | — |
+| [services/siteVisitChecklistDocx.ts](../../../../server/src/services/siteVisitChecklistDocx.ts) | Renders the checklist to DOCX. | CR-012 |
+| [services/suggestionsDocx.ts](../../../../server/src/services/suggestionsDocx.ts) | Consolidated suggestions DOCX export. | — |
+| [services/commentSerializer.ts](../../../../server/src/services/commentSerializer.ts) | Serializes comment threads for relay/PC views. | CR-023 |
+| [middleware/submissionLockout.ts](../../../../server/src/middleware/submissionLockout.ts) | `403 LOCKED` for PC writes on submitted/locked submissions. **Gap:** not yet on evidence routes — [[sprint-plan-2026-05-31]] §2 BUG-B. | CR-005 |
+| [middleware/apiKeyRateLimit.ts](../../../../server/src/middleware/apiKeyRateLimit.ts) | Rate-limits the API-key callback surface. | — |
+
+### New routes (mounts in `index.ts`)
+
+`authV1` (`/api/v1/auth`), `openapi` (`/api/v1` — OpenAPI/Swagger surface), `programCourses` (`/api/program-courses`), `compilation`, `directMessages`, `checklist`, `evidenceRecommendations`, `itinerary`, `boardDecisions`, `bugReports`, `auditTrail`, `notifications` (all mounted at `/api`), `jointVentures` (`/api/joint-ventures`), `ssoBrowser` (`/sso`), and a `test` router mounted only under `NODE_ENV=test`.
+
+### New client features
+
+| Folder | Files | Role | CR |
+|--------|-------|------|----|
+| `reader/` | `ReaderDashboard`, `ReaderReviewScreen`, `ReaderSpecRow`, `Score4LevelSelector`, `ReaderOverrideControl`, `EvidenceRecommendations`, `Messages/` | The full reader review workspace: assignment-gated dashboard, per-Spec 0–3 scoring + AI-override, evidence recommendations, DMs. | CR-003/007/010 |
+| `leadReader/` | `LeadReaderDashboard`, `CompilationTab/` | Lead-reader dashboard + final-score compilation. | CR-009 |
+| `admin/BoardConsole/` | — | Record board decisions. | CR-053 |
+| `admin/AuditTrail/` | — | Browse the audit log. | — |
+| `admin/JointVentureManagement/` | — | JV CRUD UI. | CR-019 |
+| `admin/RelayConsole/` | `RelayConsole.tsx` | Julia-as-relay console. **Built but not mounted** — dead UI, see [[cr-023-julia-relay-workflow]]. | CR-023 |
+| `siteVisit/` | `Checklist/`, `Itinerary/` | Site-visit checklist + itinerary. | CR-012/013 |
+| `tour/` | — | Onboarding overlay + per-feature hints. | CR-052 |
+
 ## Related
 
 - [[system-architecture]] — layering view of the same modules
 - [[import-pipeline]] / [[narrative-storage]] / [[evidence-document-review-pipeline]] — flow-oriented views
+- [[legacy-self-study-import]] — the `cshse-ai` AI import redesign
+- [[sprint-plan-2026-05-31]] — remaining work, with file:line gaps
 - [[security-audit-2026-05-10]] — flagged modules
-- [[incomplete-features-2026-05-10]] — module-by-module gaps
+- [[incomplete-features-2026-05-11]] — module-by-module gaps (supersedes the 2026-05-10 audit)
