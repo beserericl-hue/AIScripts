@@ -1882,3 +1882,17 @@ n8n evidence workflow nodes live on the external n8n instance, not in this serve
 Tests: server `tests/integration/evidence-recommendations.test.ts` (7) — reader/lead/admin 200; PC 403 with ai-service NOT called; topK parsing + clamp; 404 unknown sub; 400 no institutionId; 502 on ai-service throw. Client `EvidenceRecommendations.test.tsx` (5) — loading/error/empty (all three render "No recommendations available." for graceful fail-soft); rows with match-% + source label; long-text truncation. Full client suite **326/326** (was 321 + 5).
 
 Vault: CR-018 promoted to **shipped**; revision_history entry added; sprint plan S4.1 marked done; index updated.
+
+## [2026-05-30] update | Sprint 6.2 — CR-013 itinerary builder shipped
+
+Lead-reader + PC can now co-edit a site-visit itinerary inside the portal; other readers see read-only; DOCX export packages the itinerary for offline use during the visit.
+
+Server: `SiteVisit.agenda` widened additively with `location` / `attendees` / `specCodes` / `checklistItemIds` (FK into the Sprint 6.1 `SiteVisitChecklistItem` collection) / `notes` — all optional so the existing scheduler controller and tests keep working. New `itineraryController`: `getItinerary` returns `{ siteVisit, canCoEdit }` with role-aware access (admin/superuser bypass; lead reader assigned to the visit OR PC = submission.submitterId → co-edit; other readers on the visit + post-submit readers → read-only; everyone else 403). `replaceAgenda` validates the agenda strictly (per-slot time + activity required; checklistItemIds must be valid ObjectIds; attendees/specCodes must be string arrays) and audit-logs `itinerary.updated` with priorAgendaLen + newAgendaLen + siteVisitId. `exportItineraryDocx` resolves linked checklist items inline ("Verify during this slot: Standard X.y — reason — verified?") and builds a printable cover + per-slot section docx.
+
+Client: `features/siteVisit/Itinerary/Itinerary.tsx` — pure ItineraryView (one card per agenda slot with time/activity/location/attendees/specs/notes fields; Add/Remove slot; Save + Export buttons) + container that hydrates the draft from the server on first load, runs the save mutation, and triggers DOCX-as-Blob download. Read-only mode disables every input and hides the Save/Add/Remove affordances. New `/site-visit/:submissionId/itinerary` route. The route isn't in the global nav yet — accessed by direct URL or from a future site-visit dashboard (same pattern as the Sprint 6.1 checklist).
+
+Tests: server `tests/integration/itinerary.test.ts` (13) covers GET role gating (lead 200 + canCoEdit; PC submitter 200 + canCoEdit; other PC 403; reader 200 read-only; no-visit 200 with siteVisit=null; 404 unknown sub), PUT (lead + PC co-edit; reader 403; missing/malformed agenda 400; invalid checklistItemId 400; no visit 404; audit fires), and DOCX (jszip-validated word/document.xml contains institution + agenda items + linked checklist items). Client `Itinerary.test.tsx` (10) — loading/error/no-visit; rows + Save/Add visibility; field-typing fires setDraft with the patched slot; CSV-style fields round-trip; Add/Remove slot; read-only mode disables everything; Save+Export fire.
+
+Co-edit semantics intentionally simple per the CR — last-writer-wins, no merge, no conflict detection beyond the audit-log diff (priorAgendaLen → newAgendaLen). Good enough for the lead-reader/PC pair; a future CR can layer optimistic locking if real conflicts emerge.
+
+Vault: CR-013 promoted to **shipped**; sprint plan S6.2 marked done; index updated.

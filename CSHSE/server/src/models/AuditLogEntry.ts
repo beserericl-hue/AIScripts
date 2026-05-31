@@ -20,6 +20,7 @@ export type AuditAction =
   | 'compilation.final_cleared'    // CR-009 / S5.1 — lead reader retracts a final score
   | 'checklist.item_verified'      // CR-012 / S6.1 — visit team verifies a partial-compliance item
   | 'checklist.item_unverified'    // CR-012 / S6.1 — visit team un-verifies
+  | 'itinerary.updated'            // CR-013 / S6.2 — agenda replaced (lead/PC co-edit)
   | 'account.locked'
   | 'account.unlocked';
 

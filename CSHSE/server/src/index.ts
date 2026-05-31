@@ -50,6 +50,8 @@ import directMessagesRouter from './routes/directMessages';
 import checklistRouter from './routes/checklist';
 // CR-018 / Sprint 4.1 finish — reader evidence recommendations.
 import evidenceRecommendationsRouter from './routes/evidenceRecommendations';
+// CR-013 / Sprint 6.2 — Site-visit itinerary co-edit.
+import itineraryRouter from './routes/itinerary';
 // CR-034 — E2E seed router; only mounted when E2E_SEED_ENABLED=1 and never in production.
 import { buildTestRouter } from './routes/test';
 
@@ -187,6 +189,7 @@ app.use('/api', compilationRouter);
 app.use('/api', directMessagesRouter);
 app.use('/api', checklistRouter);
 app.use('/api', evidenceRecommendationsRouter);
+app.use('/api', itineraryRouter);
 // (test router moved up above the bare-`/api` catch-alls so /api/test/*
 // isn't swallowed by another router's authenticate middleware first.)
 

@@ -34,6 +34,15 @@ export interface ISiteVisit extends Document {
     time: string;
     activity: string;
     participants?: string;
+    // CR-013 Sprint 6.2 — co-edit itinerary additions. Each slot can
+    // optionally carry a location override, an attendees list, the spec
+    // codes the slot addresses, and links into the partial-compliance
+    // checklist (CR-012) for the visit team to verify those items.
+    location?: string;
+    attendees?: string[];
+    specCodes?: string[];
+    checklistItemIds?: mongoose.Types.ObjectId[];
+    notes?: string;
   }[];
 
   notes?: string;
@@ -122,7 +131,15 @@ const SiteVisitSchema = new Schema<ISiteVisit>({
   agenda: [{
     time: { type: String, required: true },
     activity: { type: String, required: true },
-    participants: String
+    participants: String,
+    // CR-013 Sprint 6.2 — additive co-edit fields. All optional so the
+    // existing scheduler controller keeps working with `{ time, activity,
+    // participants }` shaped agenda inputs.
+    location: { type: String, default: undefined },
+    attendees: { type: [String], default: undefined },
+    specCodes: { type: [String], default: undefined },
+    checklistItemIds: { type: [Schema.Types.ObjectId], ref: 'SiteVisitChecklistItem', default: undefined },
+    notes: { type: String, default: undefined }
   }],
 
   notes: String,

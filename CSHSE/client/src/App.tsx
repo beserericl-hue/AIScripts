@@ -11,6 +11,7 @@ import ReaderReviewPage from './pages/ReaderReviewPage';
 import LeadReaderDashboardPage from './pages/LeadReaderDashboardPage';
 import LeadReaderCompilationPage from './pages/LeadReaderCompilationPage';
 import SiteVisitChecklistPage from './pages/SiteVisitChecklistPage';
+import SiteVisitItineraryPage from './pages/SiteVisitItineraryPage';
 import Layout from './components/Layout';
 // CR-052 — Tour + Hint providers wrap the protected (logged-in) subtree.
 import { TourProvider } from './features/tour/TourProvider';
@@ -101,6 +102,8 @@ function App() {
         <Route path="lead-reader/:submissionId" element={<LeadReaderCompilationPage />} />
         {/* Sprint 6.1 — Site-visit partial-compliance checklist. */}
         <Route path="site-visit/:submissionId/checklist" element={<SiteVisitChecklistPage />} />
+        {/* Sprint 6.2 — Site-visit itinerary co-edit. */}
+        <Route path="site-visit/:submissionId/itinerary" element={<SiteVisitItineraryPage />} />
         <Route path="admin/*" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

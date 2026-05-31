@@ -3,12 +3,12 @@ name: CR-013 — Site visit itinerary builder
 description: Lead reader + PC collaborate on an itinerary inside the portal. Scheduling moves out of email.
 type: change-request
 cr_id: CR-013
-status: in-progress
+status: shipped
 priority: P1
 source: [[webinar-action-items-2026-05-20#1-26-47]]
-sprint_target: Sprint 6 or 7
+sprint_target: Sprint 6.2
 tags: [site-visit, itinerary, scheduling, lead-reader]
-last_reviewed: 2026-05-29
+last_reviewed: 2026-05-30
 ---
 
 # CR-013 — Site visit itinerary builder
@@ -39,12 +39,22 @@ Export: DOCX itinerary for the visit team to carry offline.
 
 ## Acceptance
 
-- [ ] `SiteVisit` model + CRUD endpoints.
-- [ ] UI for lead reader + PC to co-edit; conflict resolution via last-writer-wins with audit-log diff.
-- [ ] Secondary reader read-only view.
-- [ ] Per-slot link to relevant `SiteVisitChecklistItem`s.
-- [ ] DOCX export.
-- [ ] E2E: lead reader creates visit → PC adds details → both confirm → secondary reader views → export DOCX.
+- [x] `SiteVisit` model + CRUD endpoints (model existed pre-2026; agenda subdoc widened with `location` / `attendees` / `specCodes` / `checklistItemIds` / `notes` — all optional / additive).
+- [x] UI for lead reader + PC to co-edit; last-writer-wins (no merge); audit-log entry `itinerary.updated` records `priorAgendaLen` + `newAgendaLen` per save.
+- [x] Secondary reader read-only view (canCoEdit flag on the GET response; UI disables every input + hides Save/Add/Remove for non-editors).
+- [x] Per-slot link to relevant `SiteVisitChecklistItem`s — `checklistItemIds[]` on each agenda slot; DOCX export resolves them inline and shows verified status.
+- [x] DOCX export — `GET /api/submissions/:id/itinerary/export.docx` builds a printable .docx (cover + per-slot heading + location + attendees + specs + notes + linked checklist items).
+- [ ] E2E: lead reader creates visit → PC adds details → both confirm → secondary reader views → export DOCX. **Deferred to S7.4 E2E expansion** — integration coverage is comprehensive at the API + UI layers (13 server + 10 client).
+
+## Files affected (as shipped, Sprint 6.2, 2026-05-30)
+
+- `server/src/models/SiteVisit.ts` — agenda subdoc widened with `location` / `attendees` / `specCodes` / `checklistItemIds` / `notes` (all additive; existing scheduler still works).
+- `server/src/controllers/itineraryController.ts` (new) — `getItinerary` / `replaceAgenda` / `exportItineraryDocx`.
+- `server/src/routes/itinerary.ts` (new) — GET / PUT / GET-DOCX.
+- `server/src/index.ts` — mounts the router.
+- `server/src/models/AuditLogEntry.ts` — adds `itinerary.updated` to the AuditAction union.
+- `client/src/features/siteVisit/Itinerary/Itinerary.tsx` (new) — pure ItineraryView + container with TanStack-Query.
+- `client/src/pages/SiteVisitItineraryPage.tsx` (new); `App.tsx` adds `/site-visit/:submissionId/itinerary` route.
 
 ## Files affected
 
