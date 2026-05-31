@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { SettingsPage } from '../features/admin/Settings/SettingsPage';
 import { BoardConsole } from '../features/admin/BoardConsole/BoardConsole';
+import { AuditTrail } from '../features/admin/AuditTrail/AuditTrail';
 
 export default function AdminPage() {
   const { canAccessAdminSettings } = useAuthStore();
@@ -26,6 +27,7 @@ export default function AdminPage() {
     <Routes>
       <Route path="settings" element={<SettingsPage />} />
       <Route path="board" element={<BoardConsole />} />
+      <Route path="audit-trail" element={<AuditTrail />} />
       <Route path="*" element={<Navigate to="settings" replace />} />
     </Routes>
   );

@@ -1926,3 +1926,15 @@ Auto-screenshot intentionally deferred (would add `html2canvas` ~800 KB). The CR
 Tests: server `tests/integration/bug-reports.test.ts` (7) — submit + reference; 401 unauth; 400 on missing required fields; scrub strips Bearer + JWT + AWS keys from description AND console errors; cap to last 10; admin-only list (newest-first); admin-only PATCH (status flip + triageNote; 400 on bad status). Client `components/BugReporter.test.tsx` (10) — trigger always rendered; modal opens; description input fires onChangeDescription; Send disabled when empty + fires onSubmit when non-empty; Close fires onClose; thanks panel renders on reference; error banner renders on error; console capture buffers + caps at 10.
 
 Vault: CR-016 promoted to **shipped** (shipped_notes documents the html2canvas deferral); sprint plan S7.2 marked done; index updated.
+
+## [2026-05-30] update | Sprint 7.3 — CR-020 admin audit-trail UI shipped
+
+Closes CR-020. The `AuditLogEntry` collection has been accumulating governance-relevant events since Sprint 2A (locks, send-backs, reader assignments, etc.) — admins now have a real surface to read + export them.
+
+Server: new `controllers/auditTrailController.ts` exports `listAuditEntries` (admin/superuser only; filters by action [single or comma-list], actorId, targetId, submissionId, since, until; newest-first; limit clamped to [1, 500]; offset for paging; bad ObjectId → 400) and `exportAuditCsv` (same filters; streams a comma-escaped CSV with header + rows; max 10k rows). Append-only invariant lives at the model layer — no update / delete endpoint here.
+
+Client: `features/admin/AuditTrail/AuditTrail.tsx` — pure AuditTrailView (5-column filter bar + 5-column table with When / Action / Actor (+ role chip) / Target / Reason+Payload; pretty-printed payload JSON in a small `<pre>`; Refresh + CSV buttons) + container with TanStack-Query + Blob-download for the CSV. Mounted at `/admin/audit-trail` via `AdminPage`.
+
+Tests: server `tests/integration/audit-trail.test.ts` (5) — admin lists newest-first; non-admin 403; action filter (single + comma); submissionId filter + 400 on invalid id; limit clamp to 500 + offset; CSV export header + role gate. Client `AuditTrail.test.tsx` (6) — filters render; empty state; rows include payload; filter input fires onChangeFilter; Refresh + CSV fire handlers; error banner.
+
+Vault: CR-020 promoted to **shipped** (shipped_notes documents the surface + clamps); sprint plan S7.3 marked done; index updated.

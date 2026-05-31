@@ -56,6 +56,8 @@ import itineraryRouter from './routes/itinerary';
 import boardDecisionsRouter from './routes/boardDecisions';
 // CR-016 / Sprint 7.2 — In-app bug reporter.
 import bugReportsRouter from './routes/bugReports';
+// CR-020 / Sprint 7.3 — Admin audit-trail.
+import auditTrailRouter from './routes/auditTrail';
 // CR-034 — E2E seed router; only mounted when E2E_SEED_ENABLED=1 and never in production.
 import { buildTestRouter } from './routes/test';
 
@@ -196,6 +198,7 @@ app.use('/api', evidenceRecommendationsRouter);
 app.use('/api', itineraryRouter);
 app.use('/api', boardDecisionsRouter);
 app.use('/api', bugReportsRouter);
+app.use('/api', auditTrailRouter);
 // (test router moved up above the bare-`/api` catch-alls so /api/test/*
 // isn't swallowed by another router's authenticate middleware first.)
 

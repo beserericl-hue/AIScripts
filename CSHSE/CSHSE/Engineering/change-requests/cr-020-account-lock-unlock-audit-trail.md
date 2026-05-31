@@ -3,12 +3,22 @@ name: CR-020 — Admin lock/unlock audit-trail UI
 description: When admin (Julia) locks or unlocks a self-study, account, or reader assignment, the action shows up in a visible audit trail.
 type: change-request
 cr_id: CR-020
-status: in-progress
+status: shipped
 priority: P2
 source: [[webinar-action-items-2026-05-20#1-11-35]], [[security-audit-2026-05-10]]
-sprint_target: Sprint 3
+sprint_target: Sprint 7.3
 tags: [audit, admin, security, lockout]
-last_reviewed: 2026-05-29
+last_reviewed: 2026-05-30
+shipped_notes: |
+  Sprint 7.3 — admin audit-trail UI on top of the existing
+  AuditLogEntry collection. Server: new `auditTrailController`
+  (listAuditEntries + exportAuditCsv) gated admin/superuser; filters
+  by action (single or comma-list), actorId, targetId, submissionId,
+  since/until; newest-first; limit clamped to [1, 500] for paged
+  reads and [1, 10000] for CSV. Append-only invariant lives at the
+  model layer (no update/delete endpoint). Client AuditTrail at
+  /admin/audit-trail (filter bar + table + CSV export). 5 server
+  integration + 6 client unit tests.
 ---
 
 # CR-020 — Admin lock/unlock audit-trail UI
