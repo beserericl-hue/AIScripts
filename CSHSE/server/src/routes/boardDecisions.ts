@@ -2,7 +2,8 @@ import { Router } from 'express';
 import {
   recordBoardDecision,
   upcomingReaccreditations,
-  boardQueue
+  boardQueue,
+  runCycleReminders
 } from '../controllers/boardDecisionController';
 import { authenticate } from '../middleware/auth';
 
@@ -14,5 +15,6 @@ router.use(authenticate);
 router.post('/submissions/:submissionId/decision', recordBoardDecision);
 router.get('/board/queue', boardQueue);
 router.get('/board/upcoming-reaccreditations', upcomingReaccreditations);
+router.post('/board/run-cycle-reminders', runCycleReminders);
 
 export default router;

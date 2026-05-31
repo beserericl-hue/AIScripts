@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Submission, BoardDecisionOutcome } from '../models/Submission';
+import { User } from '../models/User';
 import { recordAuditEvent } from '../services/auditLog';
+import { notify } from '../services/notificationService';
 
 // ---------------------------------------------------------------------------
 // CR-053 / Sprint 7.1 — Board decisions + simple cycle-reminder scheduler.
@@ -229,5 +231,111 @@ export const boardQueue = async (req: AuthenticatedRequest, res: Response) => {
   } catch (err) {
     console.error('boardQueue error:', err);
     return res.status(500).json({ error: 'Failed to load board queue' });
+  }
+};
+
+/**
+ * POST /api/board/run-cycle-reminders?withinDays=N
+ *
+ * Scans for accreditations expiring (`accept` decisions whose `expiresAt`
+ * lands inside the window) and tabled decisions due for reconsideration
+ * (`reconsiderAt` inside the window), then notifies every admin / superuser.
+ *
+ * Idempotent: each notification carries a dedupeKey that embeds the relevant
+ * date, so re-running never double-notifies — and a re-decided submission
+ * with a new expiresAt produces a fresh reminder (different date → new key).
+ *
+ * Admin / superuser only. This server has no in-process cron; the endpoint is
+ * meant to be driven by an external scheduler or fired by an admin from the
+ * Board Console (CR-053 deferred: the data was queryable; this pushes it).
+ */
+export const runCycleReminders = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!_isElevated(req)) {
+      return res.status(403).json({ error: 'Only admins can run cycle reminders.' });
+    }
+    const within = Math.min(
+      Math.max(parseInt(String(req.query.withinDays || '180'), 10) || 180, 1),
+      365 * 5
+    );
+    const now = new Date();
+    const horizon = new Date();
+    horizon.setDate(horizon.getDate() + within);
+
+    const [expiring, tabled, admins] = await Promise.all([
+      Submission.find({
+        'decision.outcome': 'accept',
+        'decision.expiresAt': { $lte: horizon, $gte: now }
+      })
+        .select('submissionId institutionName programName decision')
+        .lean(),
+      Submission.find({
+        'decision.outcome': 'table',
+        'decision.reconsiderAt': { $lte: horizon, $gte: now }
+      })
+        .select('submissionId institutionName programName decision')
+        .lean(),
+      User.find({ $or: [{ role: 'admin' }, { isSuperuser: true }] })
+        .select('_id')
+        .lean()
+    ]);
+
+    let notificationsCreated = 0;
+
+    const fanOut = async (
+      rows: any[],
+      type: 'board.cycle_reminder' | 'board.reconsider_reminder',
+      dateField: 'expiresAt' | 'reconsiderAt',
+      keyPrefix: string,
+      title: string,
+      verb: string
+    ) => {
+      for (const s of rows) {
+        const when = s.decision?.[dateField];
+        if (!when) continue;
+        const dateKey = new Date(when).toISOString().slice(0, 10);
+        const body = `${s.institutionName} — ${s.programName} ${verb} ${dateKey}.`;
+        for (const a of admins) {
+          const created = await notify({
+            recipientId: String(a._id),
+            type,
+            title,
+            body,
+            link: '/admin/board',
+            submissionId: String(s._id),
+            dedupeKey: `${keyPrefix}:${String(s._id)}:${dateKey}`,
+            email: true
+          });
+          if (created) notificationsCreated++;
+        }
+      }
+    };
+
+    await fanOut(
+      expiring,
+      'board.cycle_reminder',
+      'expiresAt',
+      'cycle',
+      'Accreditation expiring soon',
+      'expires'
+    );
+    await fanOut(
+      tabled,
+      'board.reconsider_reminder',
+      'reconsiderAt',
+      'reconsider',
+      'Tabled decision due for reconsideration',
+      'is due for reconsideration'
+    );
+
+    return res.json({
+      withinDays: within,
+      scanned: { expiring: expiring.length, tabled: tabled.length },
+      adminRecipients: admins.length,
+      notificationsCreated
+    });
+  } catch (err) {
+    console.error('runCycleReminders error:', err);
+    return res.status(500).json({ error: 'Failed to run cycle reminders' });
   }
 };
