@@ -163,6 +163,11 @@ export interface ISubmission extends Document {
   programLevel: 'associate' | 'bachelors' | 'masters';
   submitterId: mongoose.Types.ObjectId;
   type: 'initial' | 'reaccreditation' | 'extension';
+  // CR-053 / S12.1 — when this submission was auto-spun-up as the next
+  // accreditation cycle, this points back to the prior cycle's submission.
+  // Used as the idempotency key for the reaccreditation auto-spin-up scan
+  // (one reaccreditation per prior cycle).
+  reaccreditationOf?: mongoose.Types.ObjectId;
   status: SubmissionStatus;
   narratives: Map<string, Map<string, INarrativeContent>>;
   documents: IDocumentRef[];
@@ -309,6 +314,14 @@ const SubmissionSchema = new Schema<ISubmission>({
     type: String,
     enum: ['initial', 'reaccreditation', 'extension'],
     required: true
+  },
+  // CR-053 / S12.1 — link from an auto-spun-up reaccreditation back to the
+  // prior cycle's submission. Indexed for the idempotency lookup.
+  reaccreditationOf: {
+    type: Schema.Types.ObjectId,
+    ref: 'Submission',
+    default: undefined,
+    index: true
   },
   status: {
     type: String,

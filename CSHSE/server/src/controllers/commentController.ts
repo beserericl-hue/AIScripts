@@ -3,6 +3,7 @@ import { Comment, IComment } from '../models/Comment';
 import { Submission } from '../models/Submission';
 import { serializeCommentsForViewer } from '../services/commentSerializer';
 import { recordAuditEvent } from '../services/auditLog';
+import { notify } from '../services/notificationService';
 import { uploadFile, downloadFile, deleteFile } from '../services/s3Service';
 import mongoose from 'mongoose';
 import path from 'path';
@@ -508,6 +509,33 @@ export const relayComment = async (req: AuthenticatedRequest, res: Response) => 
       payload: { pcLabel: comment.pcLabel },
       reason: typeof reason === 'string' ? reason : undefined,
     });
+
+    // CR-010 / S12.2 — notify the PC (submission submitter) that a reader
+    // comment was relayed to them. Fire-and-forget + fail-soft (never breaks
+    // the relay). dedupeKey is per-comment so an un-relay/re-relay of the same
+    // comment doesn't re-spam, but each distinct comment yields its own ping.
+    void (async () => {
+      try {
+        const sub = await Submission.findById(comment.submissionId)
+          .select('submitterId institutionName programName')
+          .lean();
+        const submitterId = (sub as any)?.submitterId;
+        if (submitterId) {
+          await notify({
+            recipientId: String(submitterId),
+            type: 'comment.relayed',
+            title: 'A reviewer comment was shared with you',
+            body: `${(sub as any).institutionName} — ${(sub as any).programName}: a reviewer comment is now visible in your self-study.`,
+            link: `/self-study/${String(comment.submissionId)}`,
+            submissionId: String(comment.submissionId),
+            dedupeKey: `comment.relayed:${String(comment._id)}`,
+            email: true,
+          });
+        }
+      } catch (e) {
+        console.error('relayComment notify (non-fatal):', e);
+      }
+    })();
 
     return res.json({
       message: 'Comment relayed to program coordinator',

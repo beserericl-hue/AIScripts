@@ -137,6 +137,29 @@ export const recordBoardDecision = async (req: AuthenticatedRequest, res: Respon
       }
     });
 
+    // CR-010 / S12.2 — notify the PC (submitter) that the board ruled on their
+    // submission. Fail-soft. dedupeKey embeds decidedAt so a re-decide produces
+    // a fresh ping while a duplicate request for the same decision doesn't.
+    void (async () => {
+      try {
+        const submitterId = (submission as any).submitterId;
+        if (submitterId) {
+          await notify({
+            recipientId: String(submitterId),
+            type: 'board.decision',
+            title: `Board decision: ${outcome}`,
+            body: `${submission.institutionName} — ${submission.programName}: the board recorded a decision of "${outcome}".`,
+            link: `/self-study/${String(submissionId)}`,
+            submissionId: String(submissionId),
+            dedupeKey: `board.decision:${String(submissionId)}:${now.toISOString()}`,
+            email: true,
+          });
+        }
+      } catch (e) {
+        console.error('recordBoardDecision notify (non-fatal):', e);
+      }
+    })();
+
     return res.json({ decision: submission.decision, status: submission.status });
   } catch (err) {
     console.error('recordBoardDecision error:', err);
@@ -337,5 +360,151 @@ export const runCycleReminders = async (req: AuthenticatedRequest, res: Response
   } catch (err) {
     console.error('runCycleReminders error:', err);
     return res.status(500).json({ error: 'Failed to run cycle reminders' });
+  }
+};
+
+/**
+ * POST /api/board/spin-up-reaccreditations?withinDays=N
+ *
+ * CR-053 / S12.1 — reaccreditation workflow auto-creation.
+ *
+ * Scans accept decisions whose `expiresAt` lands inside the window (default
+ * 365 days; a CSHSE cycle is 7y so a year's notice is the sane default) and,
+ * for each prior cycle that does NOT yet have a reaccreditation child, spins
+ * up a fresh `type: 'reaccreditation'` self-study in `draft` for the same
+ * institution / program / coordinator, links it back via `reaccreditationOf`,
+ * and notifies the PC (the prior submitter) to begin the new cycle.
+ *
+ * Idempotent: `reaccreditationOf` is the dedupe key — a prior cycle yields at
+ * most one reaccreditation child, so re-running the scan never duplicates.
+ *
+ * Admin / superuser only. No in-process cron; driven by an external scheduler
+ * or a manual Board Console trigger (mirrors runCycleReminders).
+ */
+export const spinUpReaccreditations = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!_isElevated(req)) {
+      return res.status(403).json({ error: 'Only admins can spin up reaccreditations.' });
+    }
+    const within = Math.min(
+      Math.max(parseInt(String(req.query.withinDays || '365'), 10) || 365, 1),
+      365 * 5
+    );
+    const now = new Date();
+    const horizon = new Date();
+    horizon.setDate(horizon.getDate() + within);
+
+    const expiring = await Submission.find({
+      'decision.outcome': 'accept',
+      'decision.expiresAt': { $lte: horizon, $gte: now }
+    })
+      .select('submissionId institutionId institutionName programName programLevel submitterId decision')
+      .lean();
+
+    // Pre-compute the running submissionId counter once so multiple
+    // creations in a single run don't collide on the unique index.
+    const year = now.getFullYear();
+    let yearCount = await Submission.countDocuments({ submissionId: new RegExp(`^${year}-`) });
+
+    const created: Array<{ priorId: string; newId: string; submissionId: string }> = [];
+    let skippedExisting = 0;
+    let notificationsCreated = 0;
+
+    for (const prior of expiring) {
+      const priorId = (prior as any)._id;
+
+      // Idempotency: one reaccreditation child per prior cycle.
+      const already = await Submission.exists({ reaccreditationOf: priorId });
+      if (already) {
+        skippedExisting++;
+        continue;
+      }
+
+      yearCount += 1;
+      const submissionId = `${year}-${String(yearCount).padStart(3, '0')}`;
+
+      // Initialize the 21-standard status map (mirrors createSubmission).
+      const standardsStatus: Record<string, any> = {};
+      for (let i = 1; i <= 21; i++) {
+        standardsStatus[String(i)] = {
+          status: 'not_started',
+          completionPercentage: 0,
+          lastModified: now
+        };
+      }
+
+      const child = await Submission.create({
+        submissionId,
+        institutionId: (prior as any).institutionId,
+        institutionName: (prior as any).institutionName,
+        programName: (prior as any).programName,
+        programLevel: (prior as any).programLevel || 'bachelors',
+        submitterId: (prior as any).submitterId,
+        type: 'reaccreditation',
+        reaccreditationOf: priorId,
+        status: 'draft',
+        standardsStatus,
+        selfStudyProgress: {
+          totalSections: 21,
+          completedSections: 0,
+          validatedSections: 0,
+          passedSections: 0,
+          failedSections: 0,
+          lastActivity: now
+        }
+      });
+
+      created.push({
+        priorId: String(priorId),
+        newId: String(child._id),
+        submissionId
+      });
+
+      void recordAuditEvent({
+        action: 'submission.reaccreditation_spun_up',
+        actor: { id: req.user!.id, role: req.user!.role, name: _actorName(req) },
+        targetType: 'submission',
+        targetId: String(child._id),
+        submissionId: String(child._id),
+        payload: {
+          reaccreditationOf: String(priorId),
+          institutionName: (prior as any).institutionName,
+          programName: (prior as any).programName,
+          priorExpiresAt: (prior as any).decision?.expiresAt
+            ? new Date((prior as any).decision.expiresAt).toISOString()
+            : null
+        }
+      });
+
+      // Notify the PC (prior submitter) to begin the new cycle.
+      if ((prior as any).submitterId) {
+        const expKey = (prior as any).decision?.expiresAt
+          ? new Date((prior as any).decision.expiresAt).toISOString().slice(0, 10)
+          : 'soon';
+        const notified = await notify({
+          recipientId: String((prior as any).submitterId),
+          type: 'reaccreditation.opened',
+          title: 'Time to begin your reaccreditation self-study',
+          body: `${(prior as any).institutionName} — ${(prior as any).programName}: your accreditation expires ${expKey}. A new reaccreditation self-study (${submissionId}) has been opened for you.`,
+          link: `/self-study/${String(child._id)}`,
+          submissionId: String(child._id),
+          dedupeKey: `reaccreditation:${String(priorId)}`,
+          email: true
+        });
+        if (notified) notificationsCreated++;
+      }
+    }
+
+    return res.json({
+      withinDays: within,
+      scanned: expiring.length,
+      created: created.length,
+      skippedExisting,
+      notificationsCreated,
+      submissions: created
+    });
+  } catch (err) {
+    console.error('spinUpReaccreditations error:', err);
+    return res.status(500).json({ error: 'Failed to spin up reaccreditations' });
   }
 };

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { Score } from '../models/Score';
 import { LeadFinalScore } from '../models/LeadFinalScore';
 import { Submission } from '../models/Submission';
+import { Assignment } from '../models/Assignment';
 import { SiteVisitChecklistItem } from '../models/SiteVisitChecklistItem';
 import { recordAuditEvent } from '../services/auditLog';
 import { generateSuggestionsDocx, SuggestionsMode } from '../services/suggestionsDocx';
@@ -230,6 +231,99 @@ export const getCompilation = async (req: AuthenticatedRequest, res: Response) =
   } catch (error) {
     console.error('Get compilation error:', error);
     return res.status(500).json({ error: 'Failed to get compilation' });
+  }
+};
+
+/**
+ * GET /api/submissions/:submissionId/final-scores
+ *
+ * CR-009 follow-on / Sprint 11.3 — final-score visibility to readers.
+ *
+ * The compilation surface (`getCompilation`) deliberately stays lead/admin
+ * only: readers must never see other readers' raw 0-3 votes. But the CR-009
+ * "transparency" default says the lead reader's *Final* score per spec
+ * should be visible to the readers who reviewed the study. This endpoint is
+ * that read-only, redacted view:
+ *   - lead_reader / admin / superuser: always allowed.
+ *   - reader / lead_reader (non-elevated): allowed only with an ACTIVE
+ *     assignment to the submission (same gate as getSubmission, CR-007).
+ *   - program_coordinator: 403 (PCs see relayed comments, not raw scores).
+ *
+ * Returns ONLY the Final score per (std, spec) plus the requesting reader's
+ * OWN score (their own data) for side-by-side context. Peers' votes are
+ * never included.
+ */
+export const getFinalScoresForReader = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const role = req.user?.role;
+    const elevated = isLeadOrAdmin(req);
+
+    // PCs never see raw/final scores here.
+    if (role === 'program_coordinator') {
+      return res.status(403).json({ error: 'Program coordinators cannot view reader scores' });
+    }
+    if (!elevated && role !== 'reader' && role !== 'lead_reader') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const { submissionId } = req.params;
+
+    const submission = await Submission.findById(submissionId).lean();
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // Non-elevated readers must hold an active assignment (CR-007 parity).
+    if (!elevated) {
+      const assigned = await Assignment.exists({
+        submissionId: submission._id,
+        userId: req.user!.id,
+        status: 'active'
+      });
+      if (!assigned) {
+        return res.status(403).json({ error: 'Forbidden: you are not assigned to this self-study' });
+      }
+    }
+
+    const finals = await LeadFinalScore.find({ submissionId }).lean();
+
+    // The requester's own scores (own data only — never peers').
+    const ownScores = elevated
+      ? []
+      : await Score.find({ submissionId, reviewerId: req.user!.id }).lean();
+    const ownByKey = new Map<string, number>();
+    for (const s of ownScores) ownByKey.set(`${s.standardCode}_${s.specCode}`, s.score);
+
+    const rows = finals
+      .map((f) => ({
+        standardCode: f.standardCode,
+        specCode: f.specCode,
+        finalScore: f.score,
+        finalSetByName: f.setByName,
+        finalSetAt: f.updatedAt,
+        finalNote: f.note,
+        ownScore: ownByKey.has(`${f.standardCode}_${f.specCode}`)
+          ? ownByKey.get(`${f.standardCode}_${f.specCode}`)
+          : null
+      }))
+      .sort((a, b) => {
+        if (a.standardCode !== b.standardCode) {
+          return a.standardCode.localeCompare(b.standardCode, undefined, { numeric: true });
+        }
+        return a.specCode.localeCompare(b.specCode, undefined, { numeric: true });
+      });
+
+    return res.json({
+      submissionId: String(submission._id),
+      institutionName: submission.institutionName,
+      programName: submission.programName,
+      programLevel: submission.programLevel,
+      status: submission.status,
+      rows
+    });
+  } catch (error) {
+    console.error('Get final scores (reader) error:', error);
+    return res.status(500).json({ error: 'Failed to get final scores' });
   }
 };
 

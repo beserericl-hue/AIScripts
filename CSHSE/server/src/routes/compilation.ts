@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getCompilation,
+  getFinalScoresForReader,
   setFinalScore,
   clearFinalScore,
   exportSuggestionsDoc
@@ -16,6 +17,10 @@ router.use(authenticate);
 // /api/lead-reviews (LeadReaderCompilation, compliance triplet, legacy).
 
 router.get('/submissions/:submissionId/compilation', getCompilation);
+// CR-009 follow-on / Sprint 11.3 — readers (assigned) + lead/admin can read
+// the lead reader's Final scores (transparency default). Raw peer votes stay
+// lead/admin-only via getCompilation.
+router.get('/submissions/:submissionId/final-scores', getFinalScoresForReader);
 router.put('/submissions/:submissionId/compilation/final-score', setFinalScore);
 router.delete('/submissions/:submissionId/compilation/final-score', clearFinalScore);
 

@@ -14,6 +14,7 @@ import {
   getEvidenceStats
 } from '../controllers/evidenceController';
 import { authenticate } from '../middleware/auth';
+import { submissionLockout } from '../middleware/submissionLockout';
 
 const router = Router();
 
@@ -111,6 +112,7 @@ router.get('/submissions/:submissionId/evidence/:evidenceId', getEvidence);
  */
 router.post(
   '/submissions/:submissionId/evidence/upload',
+  submissionLockout,
   upload.single('file'),
   uploadEvidence
 );
@@ -120,21 +122,21 @@ router.post(
  * @desc    Add URL evidence (web links to supporting documents)
  * @access  Private (Program Coordinator, Admin)
  */
-router.post('/submissions/:submissionId/evidence/url', addUrlEvidence);
+router.post('/submissions/:submissionId/evidence/url', submissionLockout, addUrlEvidence);
 
 /**
  * @route   PATCH /api/submissions/:submissionId/evidence/:evidenceId
  * @desc    Update evidence metadata
  * @access  Private (Program Coordinator, Admin)
  */
-router.patch('/submissions/:submissionId/evidence/:evidenceId', updateEvidence);
+router.patch('/submissions/:submissionId/evidence/:evidenceId', submissionLockout, updateEvidence);
 
 /**
  * @route   DELETE /api/submissions/:submissionId/evidence/:evidenceId
  * @desc    Delete evidence (soft delete)
  * @access  Private (Uploader, Admin)
  */
-router.delete('/submissions/:submissionId/evidence/:evidenceId', deleteEvidence);
+router.delete('/submissions/:submissionId/evidence/:evidenceId', submissionLockout, deleteEvidence);
 
 /**
  * @route   GET /api/submissions/:submissionId/evidence/:evidenceId/preview
@@ -156,13 +158,13 @@ router.get('/submissions/:submissionId/evidence/:evidenceId/download', downloadE
  * @desc    Link evidence to a specification
  * @access  Private (Program Coordinator, Admin)
  */
-router.post('/submissions/:submissionId/evidence/:evidenceId/link', linkEvidence);
+router.post('/submissions/:submissionId/evidence/:evidenceId/link', submissionLockout, linkEvidence);
 
 /**
  * @route   POST /api/submissions/:submissionId/evidence/:evidenceId/unlink
  * @desc    Unlink evidence from a specification
  * @access  Private (Program Coordinator, Admin)
  */
-router.post('/submissions/:submissionId/evidence/:evidenceId/unlink', unlinkEvidence);
+router.post('/submissions/:submissionId/evidence/:evidenceId/unlink', submissionLockout, unlinkEvidence);
 
 export default router;

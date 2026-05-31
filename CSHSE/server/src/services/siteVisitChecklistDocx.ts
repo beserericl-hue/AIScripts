@@ -13,6 +13,7 @@ import {
 } from 'docx';
 import { Submission } from '../models/Submission';
 import { SiteVisitChecklistItem } from '../models/SiteVisitChecklistItem';
+import { brandedSectionChrome } from './docxBranding';
 
 // ---------------------------------------------------------------------------
 // CR-012 / Sprint 6.1 — Site-visit partial-compliance checklist DOCX.
@@ -138,7 +139,14 @@ export async function generateChecklistDocx(submissionId: string): Promise<Buffe
     creator: 'CSHSE Self-Study Portal',
     title: 'CSHSE Site-Visit Checklist',
     description: `Site-visit checklist for ${submission.institutionName}`,
-    sections: [{ properties: {}, children: [...cover, ...body] }]
+    sections: [
+      {
+        properties: {},
+        // CR-011 / S11.4 — shared CSHSE-branded header + footer.
+        ...brandedSectionChrome(),
+        children: [...cover, ...body]
+      }
+    ]
   });
 
   return Packer.toBuffer(doc);

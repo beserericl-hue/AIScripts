@@ -28,12 +28,26 @@ interface ReaderInfo {
   credentials?: string;
 }
 
+// CR-003 / S11.1 — the 0-3 compliance rubric readers actually score with.
+// The reader report historically rendered only the pass/fail compliance
+// ternary; these labels surface the captured Score (Score model: 0-3).
+const SCORE_RUBRIC: Record<number, { label: string; color: string }> = {
+  0: { label: 'Non-compliant (0)', color: '#dc2626' },
+  1: { label: 'Partial (1)', color: '#d97706' },
+  2: { label: 'Largely compliant (2)', color: '#2563eb' },
+  3: { label: 'Fully compliant (3)', color: '#059669' }
+};
+
 export class PDFGeneratorService {
   private doc: PDFKit.PDFDocument;
   private pageWidth: number;
   private pageHeight: number;
   private margin: number;
   private contentWidth: number;
+  // CR-003 — per-spec reader scores keyed by `${standardCode}.${specCode}`.
+  // Populated from the Score collection by the controller. Optional so the
+  // legacy callers (which never had scores) keep working unchanged.
+  private readerScores: Record<string, number> = {};
 
   constructor() {
     this.doc = new PDFDocument({
@@ -49,7 +63,14 @@ export class PDFGeneratorService {
   /**
    * Generate Reader Report PDF
    */
-  async generateReaderReport(review: IReview, reader: ReaderInfo): Promise<Buffer> {
+  async generateReaderReport(
+    review: IReview,
+    reader: ReaderInfo,
+    scoresByKey?: Record<string, number>
+  ): Promise<Buffer> {
+    // CR-003 / S11.1 — capture the per-spec 0-3 scores so the assessment rows
+    // can render the rubric label alongside the compliance verdict.
+    this.readerScores = scoresByKey ?? {};
     return new Promise((resolve, reject) => {
       try {
         const chunks: Buffer[] = [];
@@ -167,6 +188,19 @@ export class PDFGeneratorService {
     this.doc.fillColor(COLORS.notApplicable).text('— Not Applicable (N/A) - This requirement does not apply');
 
     this.doc.fillColor(COLORS.text);
+    this.doc.moveDown(0.5);
+
+    // CR-003 / S11.1 — 0-3 compliance score rubric legend. Shown so readers
+    // (and the board) can interpret the per-spec score that now appears in
+    // each assessment row.
+    this.doc.font(FONTS.bold).fillColor(COLORS.text).text('Compliance Score Rubric (0-3):');
+    this.doc.font(FONTS.regular);
+    this.doc.fillColor(SCORE_RUBRIC[3].color).text('3 - Fully compliant: standard met without reservation');
+    this.doc.fillColor(SCORE_RUBRIC[2].color).text('2 - Largely compliant: most evidence present, minor gaps');
+    this.doc.fillColor(SCORE_RUBRIC[1].color).text('1 - Partial: some evidence; site visit must verify');
+    this.doc.fillColor(SCORE_RUBRIC[0].color).text('0 - Non-compliant: standard not met');
+
+    this.doc.fillColor(COLORS.text);
     this.doc.moveDown(1);
   }
 
@@ -234,16 +268,35 @@ export class PDFGeneratorService {
       .fillColor(this.getComplianceColor(spec.compliance))
       .text(this.getComplianceSymbol(spec.compliance), complianceX, startY, { width: 30 });
 
-    // Comments
+    // Comments column (also carries the CR-003 score label, stacked above
+    // the comment text so both flow within the same column width).
     const commentsX = this.margin + 90;
     const commentsWidth = this.contentWidth - 90;
+
+    // CR-003 / S11.1 — render the captured 0-3 reader score for this spec on
+    // the row's first line; comments (if any) flow underneath in the same
+    // column. `commentsY` tracks where the comment text should start.
+    const scoreKey = `${standardCode}.${spec.specCode}`;
+    const score = this.readerScores[scoreKey];
+    let commentsY = startY;
+    if (typeof score === 'number' && SCORE_RUBRIC[score]) {
+      this.doc
+        .fillColor(SCORE_RUBRIC[score].color)
+        .font(FONTS.bold)
+        .fontSize(9)
+        .text(`Score: ${SCORE_RUBRIC[score].label}`, commentsX, startY, {
+          width: commentsWidth,
+          align: 'left'
+        });
+      commentsY = this.doc.y; // below the score line
+    }
 
     if (spec.comments) {
       this.doc
         .fillColor(COLORS.text)
         .font(FONTS.regular)
         .fontSize(9)
-        .text(spec.comments, commentsX, startY, {
+        .text(spec.comments, commentsX, commentsY, {
           width: commentsWidth,
           align: 'left'
         });

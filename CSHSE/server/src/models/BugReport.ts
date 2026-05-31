@@ -24,6 +24,9 @@ export interface IBugReport extends Document {
   reporterEmail?: string;
   // Last ~10 console error lines, scrubbed of obvious secrets.
   recentConsoleErrors?: Array<{ message: string; ts?: Date }>;
+  // CR-016 / S13d — optional flag-gated auto-screenshot, stored as a JPEG
+  // data URL. Bounded server-side; absent when the capture flag is off.
+  screenshot?: string;
   // Resolution-tracking is intentionally minimal; admins triage out-of-band.
   status: 'new' | 'triaged' | 'resolved' | 'dismissed';
   triageNote?: string;
@@ -47,6 +50,10 @@ const BugReportSchema = new Schema<IBugReport>(
         ts: { type: Date }
       }
     ],
+    // ~3 MB cap: a viewport JPEG at scale 1 / q0.7 is comfortably under this;
+    // the controller rejects anything larger so a malformed/huge payload can't
+    // bloat the collection.
+    screenshot: { type: String, maxlength: 3_000_000 },
     status: { type: String, enum: ['new', 'triaged', 'resolved', 'dismissed'], default: 'new', index: true },
     triageNote: { type: String, maxlength: 2048 }
   },

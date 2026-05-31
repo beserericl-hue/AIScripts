@@ -4,6 +4,7 @@ import { Review, IReview, ComplianceStatus } from '../models/Review';
 import { Submission } from '../models/Submission';
 import { User } from '../models/User';
 import { recordAuditEvent } from '../services/auditLog';
+import { notify } from '../services/notificationService';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -678,6 +679,27 @@ export const assignReaders = async (req: AuthenticatedRequest, res: Response) =>
       });
     }
 
+    // CR-010 / S12.2 — notify each assigned reader. Fail-soft; dedupeKey is
+    // per (submission, reader) so a re-assign of the same reader doesn't spam.
+    void (async () => {
+      for (const r of readers) {
+        try {
+          await notify({
+            recipientId: String((r as any)._id),
+            type: 'reader.assignment',
+            title: 'You were assigned to a review',
+            body: `${submission.institutionName} — ${submission.programName}: you were assigned as a reviewer.`,
+            link: `/reader/${submissionId}`,
+            submissionId,
+            dedupeKey: `reader.assignment:${submissionId}:${String((r as any)._id)}`,
+            email: true,
+          });
+        } catch (e) {
+          console.error('assignReaders notify (non-fatal):', e);
+        }
+      }
+    })();
+
     return res.json({
       success: true,
       assignedCount: createdReviews.length,
@@ -686,6 +708,90 @@ export const assignReaders = async (req: AuthenticatedRequest, res: Response) =>
   } catch (error) {
     console.error('Assign readers error:', error);
     return res.status(500).json({ error: 'Failed to assign readers' });
+  }
+};
+
+/**
+ * CR-022 / S13c — lead-reader "Request change from admin" affordance.
+ *
+ * Once a submission is in a locked phase, lead readers cannot re-assign
+ * readers (see `assignReaders` — they get a 403). The governed path is to
+ * ask an admin. This endpoint records that ask: it audit-logs the request
+ * and notifies every active admin. It performs NO assignment mutation — the
+ * admin acts on the request via the normal (reason-gated) assign flow.
+ */
+export const requestAssignmentChange = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    const { reason } = req.body;
+
+    // Only lead readers use this affordance. Admins don't need to ask
+    // themselves; plain readers have no assignment authority to begin with.
+    if (req.user?.role !== 'lead_reader') {
+      return res.status(403).json({ error: 'Only a lead reader can request an assignment change.' });
+    }
+
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return res.status(400).json({ error: 'A reason is required to request an assignment change.' });
+    }
+
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    const requesterName =
+      req.user!.name || req.user!.email || `${req.user!.firstName || ''} ${req.user!.lastName || ''}`.trim();
+    const trimmedReason = String(reason).trim();
+
+    // Append-only audit entry so the timeline shows who asked, when, and why.
+    void recordAuditEvent({
+      action: 'reader.assignment_change_requested',
+      actor: {
+        id: req.user!.id,
+        role: req.user!.role,
+        name: requesterName,
+      },
+      targetType: 'submission',
+      targetId: submissionId,
+      submissionId,
+      payload: {
+        submissionStatusAtRequest: submission.status,
+      },
+      reason: trimmedReason,
+    });
+
+    // Notify every active admin. Fail-soft; dedupeKey is per (admin,
+    // submission, requester) so repeated asks from the same lead reader on the
+    // same submission don't spam — admins see one actionable nudge.
+    void (async () => {
+      try {
+        const admins = await User.find({ role: 'admin', isActive: true }).select('_id').lean();
+        for (const a of admins) {
+          try {
+            await notify({
+              recipientId: String((a as any)._id),
+              type: 'reader.assignment_change_requested',
+              title: 'A lead reader requested an assignment change',
+              body: `${submission.institutionName} — ${submission.programName}: ${requesterName} asked you to change reader assignments. Reason: ${trimmedReason}`,
+              link: `/admin/submissions/${submissionId}`,
+              submissionId,
+              dedupeKey: `reader.assignment_change_requested:${submissionId}:${req.user!.id}`,
+              email: true,
+            });
+          } catch (e) {
+            console.error('requestAssignmentChange notify (non-fatal):', e);
+          }
+        }
+      } catch (e) {
+        console.error('requestAssignmentChange admin lookup (non-fatal):', e);
+      }
+    })();
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Request assignment change error:', error);
+    return res.status(500).json({ error: 'Failed to request an assignment change' });
   }
 };
 

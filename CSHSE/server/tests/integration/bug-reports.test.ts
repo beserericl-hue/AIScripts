@@ -113,6 +113,42 @@ describe('CR-016 — POST /api/bug-reports', () => {
     expect(stored?.recentConsoleErrors?.[0].message).toBe('err-10');
     expect(stored?.recentConsoleErrors?.[9].message).toBe('err-19');
   });
+
+  // CR-016 / S13d — optional flag-gated auto-screenshot.
+  it('stores a valid image data-URL screenshot when provided', async () => {
+    const { pcTok } = await seed();
+    const dataUrl = 'data:image/jpeg;base64,' + 'A'.repeat(64);
+    const res = await request(app)
+      .post('/api/bug-reports')
+      .set('Authorization', `Bearer ${pcTok}`)
+      .send({ ...BASE_BODY, screenshot: dataUrl });
+    expect(res.status).toBe(201);
+    const stored = await BugReport.findById(res.body.reference);
+    expect(stored?.screenshot).toBe(dataUrl);
+  });
+
+  it('drops a non-image-data-URL screenshot but still saves the report', async () => {
+    const { pcTok } = await seed();
+    const res = await request(app)
+      .post('/api/bug-reports')
+      .set('Authorization', `Bearer ${pcTok}`)
+      .send({ ...BASE_BODY, screenshot: 'javascript:alert(1)' });
+    expect(res.status).toBe(201);
+    const stored = await BugReport.findById(res.body.reference);
+    expect(stored?.screenshot).toBeUndefined();
+  });
+
+  it('drops an oversized screenshot but still saves the report', async () => {
+    const { pcTok } = await seed();
+    const huge = 'data:image/png;base64,' + 'A'.repeat(3_000_001);
+    const res = await request(app)
+      .post('/api/bug-reports')
+      .set('Authorization', `Bearer ${pcTok}`)
+      .send({ ...BASE_BODY, screenshot: huge });
+    expect(res.status).toBe(201);
+    const stored = await BugReport.findById(res.body.reference);
+    expect(stored?.screenshot).toBeUndefined();
+  });
 });
 
 describe('CR-016 — GET /api/admin/bug-reports', () => {

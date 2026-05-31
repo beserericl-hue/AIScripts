@@ -12,6 +12,7 @@ import {
   submitReview,
   getReviewProgress,
   assignReaders,
+  requestAssignmentChange,
   getSubmissionReviews
 } from '../controllers/reviewController';
 import { authenticate } from '../middleware/auth';
@@ -112,6 +113,13 @@ router.post('/:reviewId/submit', submitReview);
  * @access  Private (Admin, Lead Reader)
  */
 router.post('/submissions/:submissionId/assign', assignReaders);
+
+/**
+ * @route   POST /api/reviews/submissions/:submissionId/request-assignment-change
+ * @desc    Lead reader requests an admin change a locked reader assignment (CR-022)
+ * @access  Private (Lead Reader)
+ */
+router.post('/submissions/:submissionId/request-assignment-change', requestAssignmentChange);
 
 /**
  * @route   GET /api/reviews/submissions/:submissionId

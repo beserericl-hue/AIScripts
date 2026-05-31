@@ -9,6 +9,8 @@ import { User } from '../models/User';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
+import { Assignment } from '../models/Assignment';
+import { JointVenture } from '../models/JointVenture';
 import { getAllStandards } from '../data/standards';
 import { ingestCorrection } from '../services/cshseAiClient';
 import mongoose from 'mongoose';
@@ -89,6 +91,22 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
         return res.status(403).json({
           error: 'This self-study has not yet been submitted for review',
           status: submission.status
+        });
+      }
+
+      // CR-007 part 2 (assigned-only, product decision 2026-05-31): a reader
+      // may only open a submission they hold an ACTIVE assignment to. Without
+      // this, any reader could read any submitted study by id. Assignment is
+      // the single source of truth (Assignment model), role-agnostic so a
+      // lead_reader assigned as either type still qualifies.
+      const assigned = await Assignment.exists({
+        submissionId: submission._id,
+        userId: req.user.id,
+        status: 'active'
+      });
+      if (!assigned) {
+        return res.status(403).json({
+          error: 'Forbidden: you are not assigned to this self-study'
         });
       }
     }
@@ -1414,7 +1432,7 @@ export const clearSpecNotApplicable = async (req: AuthenticatedRequest, res: Res
  */
 export const listSubmissions = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { status, limit = 10, offset = 0, institutionId } = req.query;
+    const { status, limit = 10, offset = 0, institutionId, jointVentureId } = req.query;
 
     const filter: any = {};
 
@@ -1430,19 +1448,63 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
       filter.institutionId = institutionId;
     }
 
+    // CR-019 / S13 — reporting filter: admins/superusers can scope the list to a
+    // joint venture's member institutions via `?jointVentureId=`. Intersects with
+    // any institutionId already set (a JV + institution filter narrows to that
+    // institution only if it's a member). Non-elevated callers are unaffected
+    // (PCs are pinned to their own institution; readers to their assignments).
+    if (jointVentureId && isElevated_) {
+      const jv = await JointVenture.findById(String(jointVentureId)).select('institutionIds').lean();
+      const memberIds = (jv?.institutionIds || []).map((id) => String(id));
+      if (filter.institutionId) {
+        // Keep the explicit institution only when it is a JV member; otherwise
+        // the combined filter matches nothing (sentinel).
+        if (!memberIds.includes(String(filter.institutionId))) {
+          filter.institutionId = new mongoose.Types.ObjectId();
+        }
+      } else {
+        filter.institutionId = { $in: memberIds.length ? memberIds : [new mongoose.Types.ObjectId()] };
+      }
+    }
+
     // CR-007: readers + lead readers only see submissions whose status has
     // progressed beyond draft. Draft submissions are PC-only.
     // Admin + superuser are exempt.
     const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
-    if (!isElevated && (req.user?.role === 'reader' || req.user?.role === 'lead_reader')) {
-      filter.status = {
-        $in: ['submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant']
-      };
+    const isReaderRole = req.user?.role === 'reader' || req.user?.role === 'lead_reader';
+    const READER_VISIBLE_STATUSES = [
+      'submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant'
+    ];
+
+    // BUG-A fix (CR-007): the explicit `?status=` param must INTERSECT with the
+    // reader allow-list, never REPLACE it. The previous code applied the
+    // allow-list then unconditionally overwrote `filter.status = status`, so a
+    // reader could pass `?status=draft` to enumerate draft submissions'
+    // metadata. Now: for a reader, any requested status is filtered down to the
+    // allow-list (an out-of-list request yields an empty result, not a leak).
+    if (status) {
+      const requested = (Array.isArray(status) ? status : [status]).map((s) => String(s));
+      if (!isElevated && isReaderRole) {
+        const allowed = requested.filter((s) => READER_VISIBLE_STATUSES.includes(s));
+        // Sentinel that matches nothing if the reader asked only for disallowed statuses.
+        filter.status = { $in: allowed.length ? allowed : ['__forbidden__'] };
+      } else {
+        filter.status = requested.length === 1 ? requested[0] : { $in: requested };
+      }
+    } else if (!isElevated && isReaderRole) {
+      filter.status = { $in: READER_VISIBLE_STATUSES };
     }
 
-    // Filter by status (explicit query param overrides the role-based default)
-    if (status) {
-      filter.status = status;
+    // CR-007 part 2 (assigned-only, product decision 2026-05-31): a reader's
+    // list is restricted to the submissions they hold an ACTIVE assignment to.
+    // Combined with the status allow-list above, a reader can never enumerate
+    // submissions they aren't working on.
+    if (!isElevated && isReaderRole) {
+      const assignments = await Assignment.find({
+        userId: req.user?.id,
+        status: 'active'
+      }).select('submissionId').lean();
+      filter._id = { $in: assignments.map((a) => a.submissionId) };
     }
 
     const [submissions, total] = await Promise.all([
@@ -1597,12 +1659,36 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       }
     }
 
+    // CR-008 / S10.3 — override-with-reason. When preflight errors remain
+    // (missingValidations non-empty) the PC may still submit, but only by
+    // explicitly overriding AND supplying a free-text reason. Without an
+    // override the server hard-blocks (the historical behaviour). The reason
+    // is mandatory (>= 10 chars) so the audit trail records *why* an
+    // incomplete self-study was submitted — this is the auditable bypass the
+    // CR's "Sprint 2B" gap called for.
+    const overrideRequested = req.body?.override === true || req.body?.override === 'true';
+    const overrideReason = typeof req.body?.overrideReason === 'string'
+      ? String(req.body.overrideReason).trim().slice(0, 2000)
+      : '';
+    let didOverride = false;
+
     if (missingValidations.length > 0) {
-      return res.status(400).json({
-        error: 'All specifications must be validated before submitting',
-        missingValidations: missingValidations.slice(0, 10), // Show first 10
-        totalMissing: missingValidations.length
-      });
+      if (!overrideRequested) {
+        return res.status(400).json({
+          error: 'All specifications must be validated before submitting',
+          missingValidations: missingValidations.slice(0, 10), // Show first 10
+          totalMissing: missingValidations.length,
+          canOverride: true
+        });
+      }
+      if (overrideReason.length < 10) {
+        return res.status(400).json({
+          error: 'OVERRIDE_REASON_REQUIRED',
+          message: 'A reason of at least 10 characters is required to submit with unresolved items.',
+          totalMissing: missingValidations.length
+        });
+      }
+      didOverride = true;
     }
 
     // Update submission status
@@ -1636,7 +1722,10 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       ? String(req.body.submissionNote).trim().slice(0, 2000)
       : undefined;
     void recordAuditEvent({
-      action: 'submission.final_submit',
+      // CR-008 — a forced submit (unresolved preflight errors) is recorded as
+      // a distinct, more visible audit action so admins/lead readers can find
+      // every overridden submission. Clean submits keep the prior action name.
+      action: didOverride ? 'submission.final_submit_override' : 'submission.final_submit',
       actor: {
         id: req.user!.id,
         role: req.user!.role,
@@ -1648,9 +1737,18 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       payload: {
         institutionName: submission.institutionName,
         programLevel: submission.programLevel,
-        submittedAt: submission.submittedAt
+        submittedAt: submission.submittedAt,
+        override: didOverride,
+        ...(didOverride
+          ? {
+              unresolvedCount: missingValidations.length,
+              unresolved: missingValidations.slice(0, 50)
+            }
+          : {})
       },
-      reason: submissionNote
+      // On an override the reason field carries the mandatory override reason;
+      // otherwise it carries the optional submission note as before.
+      reason: didOverride ? overrideReason : submissionNote
     });
 
     // Notify lead reader if assigned
@@ -1678,7 +1776,10 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
     }
 
     return res.json({
-      message: 'Self-study submitted successfully',
+      message: didOverride
+        ? 'Self-study submitted with unresolved items (override recorded)'
+        : 'Self-study submitted successfully',
+      override: didOverride,
       submission: {
         _id: submission._id,
         status: submission.status,

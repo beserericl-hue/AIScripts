@@ -3,7 +3,8 @@ import {
   recordBoardDecision,
   upcomingReaccreditations,
   boardQueue,
-  runCycleReminders
+  runCycleReminders,
+  spinUpReaccreditations
 } from '../controllers/boardDecisionController';
 import { authenticate } from '../middleware/auth';
 
@@ -16,5 +17,7 @@ router.post('/submissions/:submissionId/decision', recordBoardDecision);
 router.get('/board/queue', boardQueue);
 router.get('/board/upcoming-reaccreditations', upcomingReaccreditations);
 router.post('/board/run-cycle-reminders', runCycleReminders);
+// CR-053 / S12.1 — reaccreditation workflow auto-creation.
+router.post('/board/spin-up-reaccreditations', spinUpReaccreditations);
 
 export default router;

@@ -48,6 +48,14 @@ async function build() {
     console.log(`Copied ${fixturesCopied} test fixture(s) to dist/test/fixtures`);
   }
 
+  // CR-011 / S11.4 — DOCX branding assets (CSHSE logo) are non-TS; mirror
+  // them so docxBranding.ts (`path.join(__dirname, '..', 'assets', ...)`)
+  // resolves in the built dist/ tree.
+  const assetsCopied = copyDirSync('src/assets', 'dist/assets');
+  if (assetsCopied > 0) {
+    console.log(`Copied ${assetsCopied} asset(s) to dist/assets`);
+  }
+
   console.log('Build complete!');
 }
 

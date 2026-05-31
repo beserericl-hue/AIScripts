@@ -79,6 +79,14 @@ export const createBugReport = async (req: AuthenticatedRequest, res: Response) 
           }))
       : undefined;
 
+    // CR-016 / S13d — optional flag-gated auto-screenshot. Accept only a
+    // bounded image data URL; silently drop anything that doesn't look like
+    // one or is too big (the report still saves without it).
+    let screenshot: string | undefined;
+    if (typeof b.screenshot === 'string' && /^data:image\/(png|jpeg|webp);base64,/.test(b.screenshot) && b.screenshot.length <= 3_000_000) {
+      screenshot = b.screenshot;
+    }
+
     const report = await BugReport.create({
       description: _scrub(b.description).slice(0, 4096),
       route: String(b.route).slice(0, 1024),
@@ -89,6 +97,7 @@ export const createBugReport = async (req: AuthenticatedRequest, res: Response) 
       reporterRole: req.user.role,
       reporterEmail: req.user.email,
       recentConsoleErrors: errs,
+      screenshot,
       status: 'new'
     });
 

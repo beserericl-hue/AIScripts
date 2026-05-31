@@ -4,6 +4,7 @@ export type AuditAction =
   | 'submission.submit_standard'
   | 'submission.revert_standard'
   | 'submission.final_submit'
+  | 'submission.final_submit_override'  // CR-008 / S10.3 — PC forced submit past unresolved preflight errors (reason mandatory)
   | 'submission.unlock'
   | 'submission.send_back'
   | 'submission.lock'
@@ -14,6 +15,7 @@ export type AuditAction =
   | 'submission.spec_na_cleared'   // CR-050 — PC restores spec from N/A
   | 'reader.assigned'
   | 'reader.removed'
+  | 'reader.assignment_change_requested'  // CR-022 / S13c — lead reader asks an admin to change a locked assignment
   | 'comment.relayed'
   | 'comment.unrelayed'
   | 'compilation.final_set'        // CR-009 / S5.1 — lead reader stamps final 0-3 score per spec
@@ -22,6 +24,7 @@ export type AuditAction =
   | 'checklist.item_unverified'    // CR-012 / S6.1 — visit team un-verifies
   | 'itinerary.updated'            // CR-013 / S6.2 — agenda replaced (lead/PC co-edit)
   | 'board.decision_recorded'      // CR-053 / S7.1 — board accept/table/deny/suspend/revoke
+  | 'submission.reaccreditation_spun_up' // CR-053 / S12.1 — auto-created next-cycle reaccreditation self-study
   | 'jv.created'                   // CR-019 / S8.1 — joint venture created
   | 'jv.updated'                   // CR-019 / S8.1 — joint venture name/description edited
   | 'jv.member_added'              // CR-019 / S8.1 — institution added to a JV

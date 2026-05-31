@@ -15,7 +15,12 @@ import mongoose, { Schema, Document } from 'mongoose';
 export type NotificationType =
   | 'dm.new_message'           // CR-010 — new direct message in a thread
   | 'board.cycle_reminder'     // CR-053 — accreditation expiring within window
-  | 'board.reconsider_reminder'; // CR-053 — tabled decision reconsider date near
+  | 'board.reconsider_reminder' // CR-053 — tabled decision reconsider date near
+  | 'reaccreditation.opened'   // CR-053 / S12.1 — a new reaccreditation self-study was auto-created
+  | 'comment.relayed'          // CR-010 / S12.2 — a reader comment was relayed to the PC
+  | 'board.decision'           // CR-010 / S12.2 — the board recorded a decision on the PC's submission
+  | 'reader.assignment'        // CR-010 / S12.2 — a reader was assigned to a submission
+  | 'reader.assignment_change_requested'; // CR-022 / S13c — a lead reader asked an admin to change a locked assignment
 
 export interface INotification extends Document {
   recipientId: mongoose.Types.ObjectId;

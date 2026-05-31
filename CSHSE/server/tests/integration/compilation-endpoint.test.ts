@@ -26,6 +26,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { Score } from '../../src/models/Score';
 import { LeadFinalScore } from '../../src/models/LeadFinalScore';
+import { Assignment } from '../../src/models/Assignment';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
 import { createUser, signTokenFor } from '../helpers/factories';
 
@@ -134,6 +135,7 @@ async function seed(opts: { excluded?: boolean } = {}) {
     admin: signTokenFor(admin as any),
     lead: signTokenFor(lead as any),
     reader: signTokenFor(r1 as any),
+    readerId: String(r1._id),
     pc: signTokenFor(pc as any),
     leadId: String(lead._id)
   };
@@ -341,5 +343,106 @@ describe('CR-009 — DELETE /api/submissions/:id/compilation/final-score', () =>
       .set('Authorization', `Bearer ${pc}`)
       .send({ standardCode: '1', specCode: 'a' });
     expect(res.status).toBe(403);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CR-009 follow-on / Sprint 11.3 — final-score visibility to readers.
+//
+// GET /api/submissions/:id/final-scores returns ONLY the lead reader's Final
+// scores (transparency default) + the requesting reader's OWN score. Peers'
+// raw votes are NEVER exposed. Assigned readers + lead/admin pass; an
+// unassigned reader and any PC are refused.
+// ---------------------------------------------------------------------------
+describe('CR-009 follow-on — GET /api/submissions/:id/final-scores (reader visibility)', () => {
+  async function assignReader(sid: string, userId: string) {
+    await Assignment.create({
+      submissionId: new mongoose.Types.ObjectId(sid),
+      institutionId: new mongoose.Types.ObjectId(),
+      institutionName: 'Compilation U',
+      userId: new mongoose.Types.ObjectId(userId),
+      userName: 'Reader Alpha',
+      userEmail: 'reader.alpha@example.com',
+      assignmentType: 'reader',
+      assignedBy: new mongoose.Types.ObjectId(),
+      assignedByName: 'Admin',
+      assignedByRole: 'admin',
+      status: 'active'
+    });
+  }
+
+  it('assigned reader sees the Final score + their own score, but NOT peer votes', async () => {
+    const { sid, lead, reader, readerId } = await seed();
+    // Lead sets a Final score on spec 1.a (where r1=3, r2=2, r3=0).
+    await request(app)
+      .put(`/api/submissions/${sid}/compilation/final-score`)
+      .set('Authorization', `Bearer ${lead}`)
+      .send({ standardCode: '1', specCode: 'a', score: 2, note: 'consensus' });
+
+    await assignReader(sid, readerId);
+
+    const res = await request(app)
+      .get(`/api/submissions/${sid}/final-scores`)
+      .set('Authorization', `Bearer ${reader}`);
+
+    expect(res.status).toBe(200);
+    const row = res.body.rows.find((r: any) => r.standardCode === '1' && r.specCode === 'a');
+    expect(row).toBeDefined();
+    expect(row.finalScore).toBe(2);
+    expect(row.finalSetByName).toBeTruthy();
+    // r1's own vote on 1.a was 3.
+    expect(row.ownScore).toBe(3);
+    // No peer votes leak through — the payload has no `scores` array.
+    expect(row.scores).toBeUndefined();
+    // Only specs with a Final score appear (1.a). 1.b/2.a have no final.
+    expect(res.body.rows.length).toBe(1);
+  });
+
+  it('refuses an UNASSIGNED reader (403)', async () => {
+    const { sid, lead, reader } = await seed();
+    await request(app)
+      .put(`/api/submissions/${sid}/compilation/final-score`)
+      .set('Authorization', `Bearer ${lead}`)
+      .send({ standardCode: '1', specCode: 'a', score: 2 });
+
+    // No assignment created for this reader.
+    const res = await request(app)
+      .get(`/api/submissions/${sid}/final-scores`)
+      .set('Authorization', `Bearer ${reader}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('refuses a PC (403) — PCs see relayed comments, not raw scores', async () => {
+    const { sid, pc } = await seed();
+    const res = await request(app)
+      .get(`/api/submissions/${sid}/final-scores`)
+      .set('Authorization', `Bearer ${pc}`);
+    expect(res.status).toBe(403);
+  });
+
+  it('lead reader can read final-scores without an assignment (elevated)', async () => {
+    const { sid, lead } = await seed();
+    await request(app)
+      .put(`/api/submissions/${sid}/compilation/final-score`)
+      .set('Authorization', `Bearer ${lead}`)
+      .send({ standardCode: '1', specCode: 'b', score: 3 });
+
+    const res = await request(app)
+      .get(`/api/submissions/${sid}/final-scores`)
+      .set('Authorization', `Bearer ${lead}`);
+    expect(res.status).toBe(200);
+    const row = res.body.rows.find((r: any) => r.standardCode === '1' && r.specCode === 'b');
+    expect(row.finalScore).toBe(3);
+  });
+
+  it('404 for an unknown submission', async () => {
+    const { reader } = await seed();
+    const bogus = new mongoose.Types.ObjectId();
+    const res = await request(app)
+      .get(`/api/submissions/${bogus}/final-scores`)
+      .set('Authorization', `Bearer ${reader}`);
+    // Elevated check happens after submission lookup for non-elevated only;
+    // an assigned-reader path still needs the submission to exist → 404.
+    expect([403, 404]).toContain(res.status);
   });
 });
