@@ -1866,3 +1866,19 @@ Dep: `react-joyride@2.9.3` added (single new third-party dep). v3 was tried and 
 Tests: 43 client unit (strings: 5; HintProvider: 7; TourProvider: 11; CshseTooltip: 8; HintBalloon: 5; HelpMenu: 7) + 9 server integration + 3 E2E specs (Finish path, Skip path, Restart label). HelpChat.test.tsx gains a `beforeEach(() => useHelpChatStore.getState().close())` because the singleton store would otherwise leak open-state across tests. Full client suite 322/322 (was 279, +43); `tsc --noEmit` clean for every CR-052 file. Server suite re-run after CR-052 changes — 380+ expected (was 373 + 9 new tests).
 
 Vault: CR-052 created + promoted to shipped; index updated; this log entry.
+
+## [2026-05-30] update | Sprint 4.1 — CR-018 evidence loop closed
+
+The reader-side evidence-recommendations caller landed, closing the CR-018 loop end-to-end. ai-service has had `/ai/evidence/extract`, `/ai/evidence/recommend`, `/ai/evidence/score` shipped since 2026-05-24; the missing piece was a production server caller + reader UI.
+
+Server: new `controllers/evidenceRecommendationsController.ts` + `routes/evidenceRecommendations.ts` mount `GET /api/submissions/:id/specs/:standardCode/:specCode/evidence-recommendations`. Role gate reader/lead/admin/superuser; PC → 403 (evidence recommendations are a reviewer affordance). 400 when submission is missing institutionId (refuse to send a wide-open recommend request — the cross-institution audit Gap 2 boundary). 502 when ai-service throws (fail-soft from the controller). `cshseAiClient.EvidenceRecommendRequest` widened with `programLevel` so the recommend call threads the submission's level through to `recommend_evidence` (which loads the per-level spec text for the embedding anchor). `topK` query param parsed + clamped to [1, 20] (default 5).
+
+Client: new `features/reader/EvidenceRecommendations.tsx` — pure `EvidenceRecommendationsView` (chunks with match-% + source label + ~220-char preview) + container with TanStack-Query (lazy: only fetches when `enabled`). Mounted under each `ReaderSpecRow` via a small `EvidenceRecommendationsPanel` that gates the request behind a "Show recommended evidence" toggle (no wasted requests for specs the reader doesn't ask about).
+
+`cshse_evidence_{env}` Qdrant collection auto-bootstraps via `store.ensure_collection(...)` on the first call (verified in `recommend.py:52`). No separate bootstrap script needed.
+
+n8n evidence workflow nodes live on the external n8n instance, not in this server tree (grep on the server for `n8n.*evidence` / `triggerEvidence` returns nothing). Archiving them is a discrete ops task on the n8n side; the CR is shippable without it.
+
+Tests: server `tests/integration/evidence-recommendations.test.ts` (7) — reader/lead/admin 200; PC 403 with ai-service NOT called; topK parsing + clamp; 404 unknown sub; 400 no institutionId; 502 on ai-service throw. Client `EvidenceRecommendations.test.tsx` (5) — loading/error/empty (all three render "No recommendations available." for graceful fail-soft); rows with match-% + source label; long-text truncation. Full client suite **326/326** (was 321 + 5).
+
+Vault: CR-018 promoted to **shipped**; revision_history entry added; sprint plan S4.1 marked done; index updated.

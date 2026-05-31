@@ -3,16 +3,17 @@ name: CR-018 — Move AI evidence review off n8n into cshse-ai
 description: Sprint 4 evidence-review stories (S4.1/S4.2/S4.3/S4.5) targeted n8n; the cshse-ai Python service is now the canonical AI surface. Re-target evidence review there.
 type: change-request
 cr_id: CR-018
-status: in-progress
+status: shipped
 priority: P1
 source: [[sprint-plan-2026-05-11#sprint-3]], [[sprint-plan-2026-05-16]] (S4.x)
 supersedes: S4.1, S4.2, S4.3, S4.5
-sprint_target: Sprint 4 or 5
+sprint_target: Sprint 4.1
 tags: [ai-service, evidence-review, n8n, deprecation]
-last_reviewed: 2026-05-27
+last_reviewed: 2026-05-30
 revision_history:
   - 2026-05-24 — Phase 1 (stubs) + Phase 2 (real extract/recommend/score) + Phase 2b (pypdf) shipped on the ai-service side
   - 2026-05-27 — status corrected `shipped` → `in-progress`. The ai-service endpoints are live, but the CR is NOT fully delivered: no production Reader-side caller is wired, the `cshse_evidence_{env}` Qdrant collection is not bootstrapped, and the n8n nodes are not archived. The CR's own body still reads "CR stays in-progress until Phase 2 ships." Blocked on the unbuilt Reader workflow (Sprints 4-5).
+  - 2026-05-30 — Phase 3 (Reader-side caller) shipped: server `evidenceRecommendationsController` + `GET /api/submissions/:id/specs/:std/:spec/evidence-recommendations` (institution + submission + programLevel scoped per the cross-institution audit Gap 2 boundary); `cshseAiClient.EvidenceRecommendRequest` widened with `programLevel`; reader UI `EvidenceRecommendations` lazy-mounted under each ReaderSpecRow via expandable toggle. The `cshse_evidence_{env}` Qdrant collection auto-bootstraps via `store.ensure_collection(...)` on first call — no separate bootstrap script needed. The n8n evidence workflow definitions live on the external n8n instance, not in this server tree; archiving them is a discrete ops task on the n8n side. Status promoted `in-progress` → `shipped`.
 ---
 
 # CR-018 — Move AI evidence review off n8n into cshse-ai

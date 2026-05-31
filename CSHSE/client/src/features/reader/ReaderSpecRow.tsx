@@ -1,9 +1,10 @@
 import React from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
-import { CheckCircle2, AlertTriangle, XCircle, ExternalLink, Ban } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, ExternalLink, Ban, Sparkles } from 'lucide-react';
 import { Score4LevelSelector, type ScoreValue } from './Score4LevelSelector';
 import { ReaderOverrideControl, type OverrideVerdict } from './ReaderOverrideControl';
+import { EvidenceRecommendations } from './EvidenceRecommendations';
 
 // ---------------------------------------------------------------------------
 // S3.2 + S3.4 — Per-spec review surface.
@@ -166,9 +167,55 @@ export function ReaderSpecRowView(props: ReaderSpecRowViewProps): JSX.Element {
               />
             </div>
           ) : null}
+
+          {/* CR-018 Sprint 4.1 finish — lazy reader-side evidence
+              recommendations. Reader expands the panel; the request
+              only fires once they ask. Renders "No recommendations
+              available." on 502 / empty so the row stays calm if
+              ai-service or Qdrant is unavailable. */}
+          <EvidenceRecommendationsPanel
+            submissionId={submissionId}
+            standardCode={standardCode}
+            specCode={specCode}
+          />
         </>
       )}
     </section>
+  );
+}
+
+interface EvidenceRecommendationsPanelProps {
+  submissionId: string;
+  standardCode: string;
+  specCode: string;
+}
+
+function EvidenceRecommendationsPanel({
+  submissionId,
+  standardCode,
+  specCode,
+}: EvidenceRecommendationsPanelProps): JSX.Element {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        data-testid={`evrec-toggle-${standardCode}-${specCode}`}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1 rounded border border-indigo-200 bg-white px-2 py-1 text-xs text-indigo-800 hover:bg-indigo-50"
+      >
+        <Sparkles className="h-3 w-3" aria-hidden />
+        <span>{open ? 'Hide recommended evidence' : 'Show recommended evidence'}</span>
+      </button>
+      {open && (
+        <EvidenceRecommendations
+          submissionId={submissionId}
+          standardCode={standardCode}
+          specCode={specCode}
+          enabled={open}
+        />
+      )}
+    </div>
   );
 }
 

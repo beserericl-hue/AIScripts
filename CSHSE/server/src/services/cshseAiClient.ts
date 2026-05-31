@@ -126,6 +126,12 @@ export interface EvidenceRecommendRequest {
   standardCode: string;
   specCode: string;
   topK?: number;
+  // CR-018 Sprint 4 finish — programLevel scopes the spec-text lookup
+  // in `recommend_evidence` (bachelors / masters / associate text varies).
+  // ai-service defaults to 'bachelors' if absent; the server caller now
+  // threads the submission's programLevel through so retrieval reads the
+  // right spec text.
+  programLevel?: 'associate' | 'bachelors' | 'masters';
 }
 
 export interface EvidenceScoreRequest {
