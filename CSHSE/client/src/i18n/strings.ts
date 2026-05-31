@@ -55,6 +55,13 @@ const STRINGS = {
   'tour.hint.afterComplete':
     "You can come back here anytime to watch the tour again.",
 
+  // hint.* — per-feature first-time nudges (CR-052 / Sprint 9.3). Fire once
+  // ever via useOnceHint; five-year-old voice, describe what the thing IS.
+  'hint.compilation.firstFinal':
+    "This is the final score for this part. You pick one number from all the readers' scores. The schools see this number.",
+  'hint.checklist.firstVerify':
+    "Click here when you have checked this part in person. It turns the row to \"Yes\" so everyone knows it is done.",
+
   // ============================================================
   // help.* — Help dropdown menu + chat affordances.
   // ============================================================

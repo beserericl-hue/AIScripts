@@ -2,6 +2,8 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import { Loader2, FileDown, Check, X, ClipboardList, Trash2 } from 'lucide-react';
+import { useOnceHint } from '../../tour/useOnceHint';
+import { t } from '../../../i18n/strings';
 
 // ---------------------------------------------------------------------------
 // CR-012 / Sprint 6.1 — partial-compliance checklist surface.
@@ -226,6 +228,7 @@ export function ChecklistView({
                   )}
                   <button
                     type="button"
+                    id={`checklist-verify-${item._id}`}
                     data-testid={`checklist-verify-${item._id}`}
                     onClick={() => onToggleVerify(item)}
                     disabled={isSaving}
@@ -266,6 +269,7 @@ export function Checklist({ submissionId, canWrite }: ChecklistProps): JSX.Eleme
   const [draftNotes, setDraftNotes] = React.useState<Record<string, string>>({});
   const [savingId, setSavingId] = React.useState<string | null>(null);
   const [exporting, setExporting] = React.useState(false);
+  const { fireOnce } = useOnceHint();
 
   const query = useQuery({
     queryKey: ['site-visit-checklist', submissionId],
@@ -312,7 +316,17 @@ export function Checklist({ submissionId, canWrite }: ChecklistProps): JSX.Eleme
 
   const onToggleVerify = (item: ChecklistItem) => {
     const note = draftNotes[item._id] ?? item.verificationNote ?? '';
-    verifyMutation.mutate({ item, verified: !item.verified, note });
+    const nextVerified = !item.verified;
+    // CR-052 / Sprint 9.3 — nudge on the first verify only (not un-verify).
+    // The button stays mounted across the toggle, so anchoring is immediate.
+    if (nextVerified) {
+      fireOnce({
+        id: 'checklist-first-verify',
+        message: t('hint.checklist.firstVerify'),
+        targetId: `checklist-verify-${item._id}`,
+      });
+    }
+    verifyMutation.mutate({ item, verified: nextVerified, note });
   };
 
   const onDelete = (item: ChecklistItem) => {

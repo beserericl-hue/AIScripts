@@ -5,6 +5,8 @@ import { Loader2, ChevronLeft, Check, X, FileDown } from 'lucide-react';
 import { api } from '../../../services/api';
 import { Score4LevelSelector, SCORE_LEVELS } from '../../reader/Score4LevelSelector';
 import type { ScoreValue } from '../../reader/Score4LevelSelector';
+import { useOnceHint } from '../../tour/useOnceHint';
+import { t } from '../../../i18n/strings';
 
 // ---------------------------------------------------------------------------
 // CR-009 / Sprint 5.1 — Compilation tab (lead reader side-by-side).
@@ -298,6 +300,7 @@ export function CompilationTabView({
                           </button>
                           <button
                             type="button"
+                            id={`final-save-${key}`}
                             data-testid={`compilation-final-save-${key}`}
                             onClick={() => onSaveFinal(row.standardCode, row.specCode)}
                             disabled={saving || pendingFinalScore == null}
@@ -390,6 +393,19 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
   const [exportMode, setExportMode] = React.useState<SuggestionsExportMode>('internal');
   const [exporting, setExporting] = React.useState<boolean>(false);
+  const { fireOnce } = useOnceHint();
+
+  // CR-052 / Sprint 9.3 — first time the lead reader opens the Final-score
+  // editor, nudge them on what the Final score means. Fired from an effect so
+  // the save button (the anchor) is committed to the DOM before we measure it.
+  React.useEffect(() => {
+    if (!editingKey) return;
+    fireOnce({
+      id: 'compilation-first-final',
+      message: t('hint.compilation.firstFinal'),
+      targetId: `final-save-${editingKey}`,
+    });
+  }, [editingKey, fireOnce]);
 
   const compilationQuery = useQuery({
     queryKey: ['compilation', submissionId],
