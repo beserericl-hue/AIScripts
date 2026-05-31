@@ -1938,3 +1938,16 @@ Client: `features/admin/AuditTrail/AuditTrail.tsx` — pure AuditTrailView (5-co
 Tests: server `tests/integration/audit-trail.test.ts` (5) — admin lists newest-first; non-admin 403; action filter (single + comma); submissionId filter + 400 on invalid id; limit clamp to 500 + offset; CSV export header + role gate. Client `AuditTrail.test.tsx` (6) — filters render; empty state; rows include payload; filter input fires onChangeFilter; Refresh + CSV fire handlers; error banner.
 
 Vault: CR-020 promoted to **shipped** (shipped_notes documents the surface + clamps); sprint plan S7.3 marked done; index updated.
+
+## [2026-05-30] update | Sprint 7 polish + S7.4 — CR-051 inline View source + E2E smoke shipped
+
+**CR-051 (Inline View source button) — shipped.** Added an `Eye`-icon "View source" button to every card in `CVsView` + `EvidenceDocsView` (CV / Syllabus / Paper) in the AI Import Review step. Click fires `onShowInSource(sectionId)` — the same handler the right-pane preview already uses — opening `ShowInSourceModal` against the section's source HTML fragment. `ReviewStep` threads `handleShowInSource` through `ItemCardList`. `e.stopPropagation()` on the inline button so it doesn't conflict with the card-click selection. ~30 LOC across 2 files (ItemCardList signature + 2 button blocks; ReviewStep prop pass-through). Full client suite 359/359.
+
+**S7.4 — E2E smoke for Sprint 7 surfaces.** `e2e/tests/19_sprint7_smoke.spec.ts` — API-level Playwright spec following the lightweight `00_health.spec.ts` pattern (no browser navigation; just request contexts hitting endpoints). Tests:
+  - **CR-053 board console + CR-020 audit trail round-trip** — POST decision → GET /board/queue + /admin/audit-log + CSV export all respond cleanly with the right shape.
+  - **CR-016 bug reporter** — POST report (201 + reference) → admin GET /admin/bug-reports lists.
+  - **CR-012 checklist + CR-013 itinerary** — GET both endpoints respond < 5xx; on 200 verify the counts/siteVisit shape.
+  - **CR-018 evidence recommendations** — GET returns 200 (ai-service reachable), 400 (no institutionId on the seeded sub), or 502 (fail-soft). Never any other 5xx.
+Skips gracefully when `E2E_SEED_TOKEN` is unset. Heavy UI-driven E2E (wizard flows) stays in the existing 02..17 specs. Deeper per-feature UI E2Es deferred — the API smokes catch endpoint regressions; the full reader → lead → board UI walkthrough lands when product asks for it.
+
+Vault: CR-051 promoted to **shipped** (shipped_notes documents the polish); sprint plan S7.4 marked done; index updated.

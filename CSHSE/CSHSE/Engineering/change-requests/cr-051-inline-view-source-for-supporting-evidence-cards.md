@@ -3,12 +3,21 @@ name: CR-051 — Inline "View source" on CV / Syllabus / Paper cards
 description: Add an inline "View source" button on each standalone Supporting Evidence card (CV / Syllabus / Paper) in the Review step, mirroring the existing "Show in source" button that the right-pane preview already exposes.
 type: change-request
 cr_id: CR-051
-status: proposed
+status: shipped
 priority: P2
 source: user feedback 2026-05-30 (raised inline during Sprint 6 review)
 sprint_target: Sprint 7
 tags: [ai-import, review, ux-polish, evidence]
 last_reviewed: 2026-05-30
+shipped_notes: |
+  Sprint 7 polish — landed exactly as scoped. Added an `Eye` icon
+  "View source" button to each card in `CVsView` + `EvidenceDocsView`
+  (CV / Syllabus / Paper). Click fires `onShowInSource(sectionId)`,
+  the same handler the right pane uses, opening `ShowInSourceModal`
+  against the section's source fragment. ReviewStep threads
+  `handleShowInSource` through `ItemCardList`. Click handlers
+  `e.stopPropagation()` so the inline button doesn't conflict with
+  the card-click selection.
 ---
 
 # CR-051 — Inline "View source" on CV / Syllabus / Paper cards

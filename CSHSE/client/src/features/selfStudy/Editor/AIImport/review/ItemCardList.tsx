@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2 } from 'lucide-react';
+import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye } from 'lucide-react';
 import {
   useAIImportStore,
   type BucketItem,
@@ -117,6 +117,11 @@ interface ItemCardListProps {
   // CR-033 / CR-040 Phase 2c — detector outputs surfaced in the rail.
   cvs?: CVItem[];
   evidenceDocs?: EvidenceDocItem[];
+  // CR-051 Sprint 7 polish — inline "View source" button on each
+  // CV / Syllabus / Paper card. ReviewStep wires this to
+  // handleShowInSource so clicking the inline button opens
+  // ShowInSourceModal against the section's source fragment.
+  onShowInSource?: (sectionId: string) => void;
 }
 
 // Headings like "b.", "c.", "1)", "(a)", "i.", or "x." are non-descriptive —
@@ -275,7 +280,8 @@ export function ItemCardList({
   introductions,
   onMoveToIntroduction,
   cvs,
-  evidenceDocs
+  evidenceDocs,
+  onShowInSource
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
@@ -561,7 +567,7 @@ export function ItemCardList({
   // surface that the detector ran.
   if (selectedKey === CVS_KEY) {
     return (
-      <CVsView cvs={cvs || []} />
+      <CVsView cvs={cvs || []} onShowInSource={onShowInSource} />
     );
   }
 
@@ -571,15 +577,15 @@ export function ItemCardList({
   // routes here showing the combined list — kept for back-compat with
   // any persisted selectedSpecKey from before the split.
   if (selectedKey === EVIDENCE_DOCS_KEY) {
-    return <EvidenceDocsView docs={evidenceDocs || []} />;
+    return <EvidenceDocsView docs={evidenceDocs || []} onShowInSource={onShowInSource} />;
   }
   if (selectedKey === SYLLABI_KEY) {
     const syllabi = (evidenceDocs || []).filter((d) => d.docSubKind === 'syllabus');
-    return <EvidenceDocsView docs={syllabi} />;
+    return <EvidenceDocsView docs={syllabi} onShowInSource={onShowInSource} />;
   }
   if (selectedKey === PAPERS_KEY) {
     const papers = (evidenceDocs || []).filter((d) => d.docSubKind !== 'syllabus');
-    return <EvidenceDocsView docs={papers} />;
+    return <EvidenceDocsView docs={papers} onShowInSource={onShowInSource} />;
   }
 
   return (
@@ -1523,9 +1529,11 @@ function MatricesView({
 
 interface CVsViewProps {
   cvs: CVItem[];
+  /** CR-051 Sprint 7 polish — inline "View source" button on each card. */
+  onShowInSource?: (sectionId: string) => void;
 }
 
-function CVsView({ cvs }: CVsViewProps): JSX.Element {
+function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
   // CR-040 follow-on (post-release UX feedback) — clicking a CV card
   // selects it so the right-pane AI evaluation (confidence + heuristic
   // rationale + "show in source document") reads the same sectionId.
@@ -1590,6 +1598,25 @@ function CVsView({ cvs }: CVsViewProps): JSX.Element {
                     → Spec {cv.resolvedStd}.{cv.resolvedSpec}
                   </span>
                 )}
+                {/* CR-051 Sprint 7 polish — inline "View source"
+                    button. Fires the same handler the right pane uses
+                    via `onShowInSource(sectionId)` so the coordinator
+                    doesn't have to click the card → hunt in the right
+                    pane to see the original. */}
+                {onShowInSource && (
+                  <button
+                    type="button"
+                    data-testid={`cv-view-source-${cv.sectionId}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShowInSource(cv.sectionId);
+                    }}
+                    title="Open the source-document fragment for this CV"
+                    className="ml-auto inline-flex items-center gap-1 rounded border border-indigo-300 bg-white px-2 py-0.5 text-[10px] font-medium text-indigo-700 hover:bg-indigo-50"
+                  >
+                    <Eye className="h-3 w-3" aria-hidden /> View source
+                  </button>
+                )}
                 {/* CR-040 follow-on — File button mirrors evidenceDocs.
                     Once Apply has packaged the CV as a .docx the button
                     becomes the download anchor; pre-Apply it's disabled. */}
@@ -1600,7 +1627,7 @@ function CVsView({ cvs }: CVsViewProps): JSX.Element {
                     rel="noopener noreferrer"
                     download={cv.fileName}
                     onClick={(e) => e.stopPropagation()}
-                    className="ml-auto rounded border border-cshse-300 bg-white px-2 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50"
+                    className={`${onShowInSource ? '' : 'ml-auto'} rounded border border-cshse-300 bg-white px-2 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50`}
                   >
                     📂 Download .docx
                   </a>
@@ -1609,7 +1636,7 @@ function CVsView({ cvs }: CVsViewProps): JSX.Element {
                     type="button"
                     disabled
                     title="The CV file is generated when you Apply the import. Until then, the download isn't available."
-                    className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
+                    className={`${onShowInSource ? '' : 'ml-auto'} rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500`}
                     onClick={(e) => e.stopPropagation()}
                   >
                     📂 Download .docx (pending Apply)
@@ -1630,9 +1657,11 @@ function CVsView({ cvs }: CVsViewProps): JSX.Element {
 
 interface EvidenceDocsViewProps {
   docs: EvidenceDocItem[];
+  /** CR-051 Sprint 7 polish — inline "View source" button on each card. */
+  onShowInSource?: (sectionId: string) => void;
 }
 
-function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
+function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.Element {
   // CR-040 Phase 2c — submissionId from the store is required to build
   // the download URL for the View-file button. The same id powers the
   // ReviewSurface + MatrixSurface.
@@ -1716,6 +1745,21 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
                   → Spec {d.resolvedStd}.{d.resolvedSpec}
                 </span>
               )}
+              {/* CR-051 Sprint 7 polish — inline "View source" button. */}
+              {onShowInSource && (
+                <button
+                  type="button"
+                  data-testid={`evdoc-view-source-${d.sectionId}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onShowInSource(d.sectionId);
+                  }}
+                  title="Open the source-document fragment for this evidence doc"
+                  className="ml-auto inline-flex items-center gap-1 rounded border border-indigo-300 bg-white px-2 py-0.5 text-[10px] font-medium text-indigo-700 hover:bg-indigo-50"
+                >
+                  <Eye className="h-3 w-3" aria-hidden /> View source
+                </button>
+              )}
               {/* CR-040 Phase 2c — View-file button. Enabled once the
                   server has packaged the evidenceDoc into a
                   SupportingEvidence record at Apply time and stamped
@@ -1731,7 +1775,7 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
                   download={d.fileName}
                   title={`Download ${d.fileName || d.title || 'evidence file'} (.docx — opens in Word)`}
                   onClick={(e) => e.stopPropagation()}
-                  className="ml-auto rounded border border-cshse-300 bg-white px-2 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50"
+                  className={`${onShowInSource ? '' : 'ml-auto'} rounded border border-cshse-300 bg-white px-2 py-0.5 text-[10px] font-medium text-cshse-700 hover:bg-cshse-50`}
                 >
                   📂 Download .docx
                 </a>
@@ -1741,7 +1785,7 @@ function EvidenceDocsView({ docs }: EvidenceDocsViewProps): JSX.Element {
                   disabled
                   title="Download becomes available once you Apply the import — the server packages the evidence as a .docx file at that point."
                   onClick={(e) => e.stopPropagation()}
-                  className="ml-auto rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500"
+                  className={`${onShowInSource ? '' : 'ml-auto'} rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500`}
                 >
                   📂 Download .docx (pending Apply)
                 </button>

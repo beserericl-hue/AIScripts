@@ -952,6 +952,7 @@ function FullReviewStep(): JSX.Element {
               onMoveToIntroduction={moveItemToIntroduction}
               cvs={cvs}
               evidenceDocs={evidenceDocs}
+              onShowInSource={handleShowInSource}
             />
           )}
         </main>
