@@ -21,6 +21,7 @@ export type AuditAction =
   | 'checklist.item_verified'      // CR-012 / S6.1 — visit team verifies a partial-compliance item
   | 'checklist.item_unverified'    // CR-012 / S6.1 — visit team un-verifies
   | 'itinerary.updated'            // CR-013 / S6.2 — agenda replaced (lead/PC co-edit)
+  | 'board.decision_recorded'      // CR-053 / S7.1 — board accept/table/deny/suspend/revoke
   | 'account.locked'
   | 'account.unlocked';
 

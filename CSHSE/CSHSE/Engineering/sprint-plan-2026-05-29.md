@@ -153,7 +153,7 @@ Evidence cited as `path:line`. "True state" is the honest status; several CRs ma
 
 # Sprint 7 — Board decisions + bug reporter + audit UI + E2E (2 weeks)
 
-- **S7.1 — Board decisions + cycle scheduler** (carryover): Accept/Table/Deny/Suspend/Revoke + re-accreditation reminders.
+- **S7.1 — Board decisions + cycle scheduler (CR-053). ✅ DONE 2026-05-30.** IDecision outcome widened to five (accept/table/deny/suspend/revoke; legacy approve/conditional preserved). `POST /api/submissions/:id/decision` admin-only with strict validation (reconsiderAt required for table; comments required; outcome whitelist) + audit `board.decision_recorded` (priorOutcome on re-decide) + status auto-flip (accept→compliant; deny/suspend/revoke→non_compliant; table no-op) + default 7y cycle on accept. `/board/queue` lists review_complete + no decision; `/board/upcoming-reaccreditations` lists expiring + tabled within a window. Admin `BoardConsole` client at `/admin/board`. 8 server integration + 7 client unit tests. Email/in-app reminders + reaccreditation auto-spin-up deferred to a follow-on notification CR.
 - **S7.2 — In-app bug reporter (CR-016).** `features/components/BugReporter/` (screenshot via html2canvas + route + build SHA + console errors) + `BugReport` model. (Distinct from `ErrorLog`.)
 - **S7.3 — Admin audit-trail UI (CR-020 client).** `features/admin/AuditTrail/` over the existing `AuditLogEntry` + `auditController` (filter, CSV export, append-only).
 - **S7.4 — E2E coverage expansion** across the new reader/review/board flows.

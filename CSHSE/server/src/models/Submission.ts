@@ -64,11 +64,33 @@ export interface ISelfStudyProgress {
   lastActivity: Date;
 }
 
+// CR-053 / Sprint 7.1 — Board decisions. The board reviews the lead-
+// reader's compilation + reader scores + site-visit verification and
+// stamps one of these outcomes. The legacy 3-outcome enum
+// (approve / deny / conditional) is preserved for back-compat with
+// pre-Sprint-7 records; new decisions use one of the five values
+// below.
+export type BoardDecisionOutcome =
+  | 'accept'    // Full accreditation
+  | 'table'     // Defer the decision to a future board meeting
+  | 'deny'      // Deny accreditation
+  | 'suspend'   // Suspend an existing accreditation
+  | 'revoke'    // Revoke an existing accreditation
+  | 'approve'   // legacy alias for 'accept' — kept for old records only
+  | 'conditional'; // legacy
+
 export interface IDecision {
-  outcome: 'approve' | 'deny' | 'conditional';
+  outcome: BoardDecisionOutcome;
   decidedBy: mongoose.Types.ObjectId;
+  decidedByName?: string; // CR-053 — snapshot of the deciding admin name.
   decidedAt: Date;
   comments: string;
+  // CR-053 — for `table`, the date the board plans to revisit.
+  reconsiderAt?: Date;
+  // CR-053 — for `accept`, the effective date of accreditation + the
+  // cycle expiry (typically `effectiveAt + 7y` for CSHSE).
+  effectiveAt?: Date;
+  expiresAt?: Date;
 }
 
 /**
@@ -233,12 +255,18 @@ const SelfStudyProgressSchema = new Schema<ISelfStudyProgress>({
 const DecisionSchema = new Schema<IDecision>({
   outcome: {
     type: String,
-    enum: ['approve', 'deny', 'conditional'],
+    // CR-053 / Sprint 7.1 — five board-decision outcomes + two legacy
+    // values kept for back-compat with pre-Sprint-7 records.
+    enum: ['accept', 'table', 'deny', 'suspend', 'revoke', 'approve', 'conditional'],
     required: true
   },
   decidedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  decidedByName: { type: String, default: undefined },
   decidedAt: { type: Date, required: true },
-  comments: { type: String, default: '' }
+  comments: { type: String, default: '' },
+  reconsiderAt: { type: Date, default: undefined },
+  effectiveAt: { type: Date, default: undefined },
+  expiresAt: { type: Date, default: undefined }
 }, { _id: false });
 
 const ReaderLockSchema = new Schema<IReaderLock>({

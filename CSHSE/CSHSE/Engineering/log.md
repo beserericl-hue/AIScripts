@@ -1896,3 +1896,19 @@ Tests: server `tests/integration/itinerary.test.ts` (13) covers GET role gating 
 Co-edit semantics intentionally simple per the CR — last-writer-wins, no merge, no conflict detection beyond the audit-log diff (priorAgendaLen → newAgendaLen). Good enough for the lead-reader/PC pair; a future CR can layer optimistic locking if real conflicts emerge.
 
 Vault: CR-013 promoted to **shipped**; sprint plan S6.2 marked done; index updated.
+
+## [2026-05-30] update | Sprint 7.1 — CR-053 board decisions + cycle scheduler shipped
+
+The board can now stamp Accept / Table / Deny / Suspend / Revoke decisions through the portal with audit + status auto-flip + a default 7-year accreditation cycle. Admins get a Board Console at `/admin/board` with two sections: the decision queue (review_complete submissions with no decision yet) and upcoming cycles (expiring accept + tabled within a configurable window).
+
+Server: `IDecision` outcome widened — the new five-outcome union is the authoritative shape; `approve` + `conditional` stay in the enum for pre-Sprint-7 back-compat. New optional fields on `IDecision`: `decidedByName` (snapshot for audit), `reconsiderAt` (required for table), `effectiveAt` + `expiresAt` (default to now / now+7y on accept). `boardDecisionController` exports `recordBoardDecision` (admin/superuser only; strict outcome whitelist; comments required; reconsiderAt required for table), `boardQueue` (review_complete with no decision yet), and `upcomingReaccreditations` (within window; default 365 days, capped at 1825). Audit `board.decision_recorded` carries `priorOutcome` so re-decides have a full trail.
+
+Client: `features/admin/BoardConsole/BoardConsole.tsx` — pure BoardConsoleView (queue cards with inline decision form: outcome dropdown + comments + conditional reconsiderAt date for table + conditional effectiveAt/expiresAt dates for accept; submit fires `POST .../decision`; upcoming-cycles list below grouped expiring vs tabled with date chips). Mounted at `/admin/board` via `AdminPage`.
+
+Status auto-flip semantics: accept → compliant; deny/suspend/revoke → non_compliant; table leaves status alone (it's literally "decide later"). The CSHSE-canonical 7-year cycle is hardcoded as the default expiresAt (effectiveAt + 7y); the admin can override via body fields.
+
+Tests: server `tests/integration/board-decisions.test.ts` (8) — accept stamps cycle (verifies expiresAt is ~7y past effectiveAt); deny/suspend/revoke flip status to non_compliant; table requires reconsiderAt (400 if missing); 403 for non-admin (PC + reader); 400 for bad outcome + missing comments; re-decide carries priorOutcome; queue filters correctly + admin-only; upcoming-reaccreditations includes both expiring and tabled within window. Client `BoardConsole.test.tsx` (7) — loading/error/empty; queue/upcoming row rendering; outcome dropdown surfaces conditional date inputs (table → reconsiderAt; accept → effectiveAt/expiresAt); Record disabled until comments non-empty; comment input fires setDraft.
+
+Deferred: email + in-app reminders that fire at `expiresAt`/`reconsiderAt` boundaries — same notification pass as CR-010 DM notifications. Re-accreditation **auto-spin-up** (when expiresAt is N months away, auto-create a new Submission of `type: 'reaccreditation'`) — discrete follow-on CR. Nav link to `/admin/board` (today admins use direct URL).
+
+Vault: CR-053 created + promoted to **shipped**; sprint plan S7.1 marked done; index updated.
