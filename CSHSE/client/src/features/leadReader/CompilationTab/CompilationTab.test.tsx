@@ -355,6 +355,9 @@ describe('CompilationTabView', () => {
       )
     );
     expect(screen.getByTestId('assignment-change-box')).toBeInTheDocument();
+    // CR-052 / S12.3 — the box carries the DOM id the first-time hint balloon
+    // anchors to; lock it so a refactor can't silently un-anchor the hint.
+    expect(document.getElementById('assignment-change-box')).not.toBeNull();
     // form not visible until opened
     expect(screen.queryByTestId('assignment-change-reason')).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('assignment-change-open'));

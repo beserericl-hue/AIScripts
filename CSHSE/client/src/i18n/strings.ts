@@ -65,6 +65,10 @@ const STRINGS = {
     "Pick one number for how well this part is done. 0 means not done, 3 means fully done. Your score is saved right away.",
   'hint.relay.firstQueue':
     "These are reader notes waiting for you. When you share one, the school can read it — but never who wrote it.",
+  'hint.messages.firstThread':
+    "This is where you talk with the other people working on this school. Pick a chat to read it, or write a new note here.",
+  'hint.assignment.firstRequest':
+    "The list of readers is locked now. You cannot change it yourself. Use this to ask the boss to add or take away a reader.",
 
   // ============================================================
   // help.* — Help dropdown menu + chat affordances.

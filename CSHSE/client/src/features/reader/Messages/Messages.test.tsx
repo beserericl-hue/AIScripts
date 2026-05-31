@@ -60,6 +60,14 @@ describe('MessagesView', () => {
     expect(screen.getByTestId('messages-empty')).toBeInTheDocument();
   });
 
+  // CR-052 / Sprint 12.3 — the Conversations header carries the DOM id the
+  // first-time hint balloon anchors to. Lock the anchor so a refactor that
+  // drops the id breaks loudly instead of silently un-anchoring the hint.
+  it('Conversations header exposes the hint anchor id', () => {
+    render(<MessagesView {...handlers} threads={sampleThreads} isLoading={false} selectedThreadId={null} messages={[]} threadLoading={false} draft="" />);
+    expect(document.getElementById('messages-conversations-header')).not.toBeNull();
+  });
+
   it('renders a row per thread; clicking calls onSelectThread', () => {
     const onSelectThread = vi.fn();
     render(

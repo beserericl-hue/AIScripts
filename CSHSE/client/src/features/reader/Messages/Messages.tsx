@@ -2,6 +2,8 @@ import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import { Loader2, Send, MessageSquare } from 'lucide-react';
+import { useOnceHint } from '../../tour/useOnceHint';
+import { t } from '../../../i18n/strings';
 
 // ---------------------------------------------------------------------------
 // CR-010 / Sprint 5.4 — Messages tab for reader / lead-reader.
@@ -81,7 +83,10 @@ export function MessagesView({
   return (
     <div data-testid="messages-shell" className="grid grid-cols-1 gap-4 p-4 md:grid-cols-[260px_1fr]">
       <aside className="rounded border border-slate-200 bg-white">
-        <header className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+        <header
+          id="messages-conversations-header"
+          className="flex items-center justify-between border-b border-slate-200 px-3 py-2"
+        >
           <h2 className="text-sm font-semibold text-slate-800">Conversations</h2>
           <span className="text-xs text-slate-500">{threads.length}</span>
         </header>
@@ -187,6 +192,7 @@ export function Messages({ submissionId }: MessagesProps): JSX.Element {
   const qc = useQueryClient();
   const [selectedThreadId, setSelectedThreadId] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState('');
+  const { fireOnce } = useOnceHint();
 
   const threadsQuery = useQuery({
     queryKey: ['dm-threads', submissionId],
@@ -197,6 +203,19 @@ export function Messages({ submissionId }: MessagesProps): JSX.Element {
     enabled: !!submissionId,
     refetchOnWindowFocus: false,
   });
+
+  // CR-052 / Sprint 12.3 — first time the Messages surface loads, nudge the
+  // reader on what conversations are for. Fired from an effect so the
+  // Conversations header (the anchor) is committed to the DOM first.
+  const messagesReady = !threadsQuery.isLoading && !threadsQuery.error;
+  React.useEffect(() => {
+    if (!messagesReady) return;
+    fireOnce({
+      id: 'messages-first-thread',
+      message: t('hint.messages.firstThread'),
+      targetId: 'messages-conversations-header',
+    });
+  }, [messagesReady, fireOnce]);
 
   const threadQuery = useQuery({
     queryKey: ['dm-thread', selectedThreadId],

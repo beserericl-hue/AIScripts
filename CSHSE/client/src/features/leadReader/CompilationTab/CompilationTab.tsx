@@ -121,6 +121,7 @@ export function AssignmentChangeRequestBox({
 
   return (
     <div
+      id="assignment-change-box"
       data-testid="assignment-change-box"
       className="mb-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
     >
@@ -595,6 +596,19 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
   // we compute it explicitly to keep the affordance honest.
   const LOCKED_STATUSES = ['submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant'];
   const lockedPhase = !!compilationQuery.data && LOCKED_STATUSES.includes(compilationQuery.data.status);
+
+  // CR-052 / Sprint 12.3 — first time the locked-phase "ask admin to change
+  // readers" box is on screen, nudge the lead reader on why reassignment is
+  // not theirs to do and what the box is for. The box (`assignment-change-box`)
+  // is rendered whenever `lockedPhase` is true, so the anchor is present.
+  React.useEffect(() => {
+    if (!lockedPhase) return;
+    fireOnce({
+      id: 'assignment-first-request',
+      message: t('hint.assignment.firstRequest'),
+      targetId: 'assignment-change-box',
+    });
+  }, [lockedPhase, fireOnce]);
 
   const onRequestAssignmentChange = async (reason: string) => {
     if (!reason) return;
