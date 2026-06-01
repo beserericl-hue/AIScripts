@@ -64,8 +64,9 @@ Four coupled pieces:
   the public auth router, inline `jwt.verify` like its siblings) write the
   append-only audit entry naming the true SU actor + the impersonated identity.
   On `start` an identity (role or user) is required (400 otherwise); a
-  non-superuser is rejected (403); the impersonated user's name is resolved
-  server-side from the id when not supplied.
+  non-superuser is rejected (403); the impersonated user's name is always
+  re-resolved server-side from the id (a client-supplied label is ignored when
+  an id is present, as defence against a stale/spoofed name).
 - Client `startImpersonation` / `stopImpersonation` fire these fire-and-forget
   (a logging hiccup must never block the SU from assuming/leaving an identity).
 
@@ -126,5 +127,6 @@ Four coupled pieces:
   `AsyncLocalStorage` so `recordAuditEvent` auto-reads it; zero caller churn.
 - ~~Send the impersonated user identity how?~~ Request headers
   (`X-Impersonated-User-Id` + URI-encoded `-Name`), mirroring the existing
-  `X-Impersonated-Role` mechanism; the server re-resolves the name from the id
-  on the start/stop endpoints as defence against a stale/spoofed label.
+  `X-Impersonated-Role` mechanism; the server always re-resolves the name from
+  the id on the start/stop endpoints (ignoring any client-supplied label when an
+  id is present) as defence against a stale/spoofed label.
