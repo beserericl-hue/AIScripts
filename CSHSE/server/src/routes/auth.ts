@@ -456,10 +456,12 @@ async function handleImpersonationEvent(
     const actorName =
       `${actor.firstName || ''} ${actor.lastName || ''}`.trim() || actor.email;
 
-    // Resolve the impersonated user's name server-side when an id is given but
-    // the client didn't pass a name (defence against a stale/spoofed label).
+    // Always re-resolve the impersonated user's name server-side from the id
+    // (defence against a stale/spoofed label): the authoritative name is the
+    // one stored on the user record, not whatever the client sent. Fall back to
+    // the client-supplied label only if the id doesn't resolve to a user.
     let resolvedUserName = impersonatedUserName;
-    if (impersonatedUserId && !resolvedUserName) {
+    if (impersonatedUserId) {
       const target = await User.findById(impersonatedUserId).select('firstName lastName email');
       if (target) {
         resolvedUserName =

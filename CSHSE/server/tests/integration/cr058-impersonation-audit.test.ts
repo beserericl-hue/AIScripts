@@ -31,7 +31,13 @@ describe('CR-058 — impersonation audit endpoints', () => {
     const res = await request(app)
       .post('/api/auth/impersonation/start')
       .set('Authorization', `Bearer ${signTokenFor(su as any)}`)
-      .send({ impersonatedRole: 'program_coordinator', impersonatedUserId: String(pc._id) });
+      // Send a deliberately spoofed name — the server must ignore it and
+      // re-resolve the authoritative name from the user id.
+      .send({
+        impersonatedRole: 'program_coordinator',
+        impersonatedUserId: String(pc._id),
+        impersonatedUserName: 'Totally Spoofed',
+      });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
 
