@@ -153,11 +153,34 @@ export const useAuthStore = create<AuthState>()(
           },
           needsImpersonationSelection: false,
         });
+
+        // CR-058 — record the impersonation start in the append-only audit
+        // trail. Fire-and-forget: a logging hiccup must never block the SU
+        // from assuming the identity they just selected.
+        const impName = impersonatedUser
+          ? `${impersonatedUser.firstName || ''} ${impersonatedUser.lastName || ''}`.trim() ||
+            impersonatedUser.email
+          : undefined;
+        Promise.resolve(
+          api.post('/api/auth/impersonation/start', {
+            impersonatedRole: role,
+            impersonatedUserId: impersonatedUser?.id,
+            impersonatedUserName: impName,
+          })
+        ).catch((err) => console.warn('[CR-058] impersonation start audit failed:', err));
       },
 
       stopImpersonation: () => {
         const { impersonation } = get();
         if (!impersonation.isImpersonating) return;
+
+        // Capture what we're ending BEFORE clearing state, so the audit entry
+        // names the identity that was active.
+        const endingRole = impersonation.impersonatedRole;
+        const endingUser = impersonation.impersonatedUser;
+        const endingName = endingUser
+          ? `${endingUser.firstName || ''} ${endingUser.lastName || ''}`.trim() || endingUser.email
+          : undefined;
 
         set({
           impersonation: {
@@ -168,6 +191,15 @@ export const useAuthStore = create<AuthState>()(
           },
           needsImpersonationSelection: true, // Return to selection screen
         });
+
+        // CR-058 — record the impersonation stop (fire-and-forget).
+        Promise.resolve(
+          api.post('/api/auth/impersonation/stop', {
+            impersonatedRole: endingRole,
+            impersonatedUserId: endingUser?.id,
+            impersonatedUserName: endingName,
+          })
+        ).catch((err) => console.warn('[CR-058] impersonation stop audit failed:', err));
       },
 
       skipImpersonation: () => {

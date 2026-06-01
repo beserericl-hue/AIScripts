@@ -124,6 +124,53 @@ describe('AuditTrailView', () => {
     expect(onExport).toHaveBeenCalled();
   });
 
+  it('CR-058 — surfaces the impersonation flag naming the true actor', () => {
+    const impersonated: AuditEntry[] = [
+      {
+        _id: 'imp1',
+        action: 'submission.reader_lock',
+        actorName: 'Lead Person',
+        actorRole: 'lead_reader',
+        targetType: 'submission',
+        targetId: 'sub-xyz',
+        submissionId: 'sub-xyz',
+        timestamp: '2026-06-01T09:00:00.000Z',
+        impersonation: {
+          actualName: 'Sue Super',
+          actualRole: 'admin',
+          impersonatedRole: 'lead_reader',
+          impersonatedUserName: 'Lead Person',
+        },
+      },
+    ];
+    render(
+      <AuditTrailView
+        {...handlers}
+        entries={impersonated}
+        total={1}
+        isLoading={false}
+        filter={{}}
+      />
+    );
+    const flag = screen.getByTestId('audit-impersonation-imp1');
+    expect(flag).toHaveTextContent(/impersonated/);
+    expect(flag).toHaveTextContent(/Sue Super/);
+    expect(flag).toHaveTextContent(/Lead Person/);
+  });
+
+  it('does NOT render the impersonation flag for ordinary entries', () => {
+    render(
+      <AuditTrailView
+        {...handlers}
+        entries={sample}
+        total={2}
+        isLoading={false}
+        filter={{}}
+      />
+    );
+    expect(screen.queryByTestId('audit-impersonation-a1')).not.toBeInTheDocument();
+  });
+
   it('error banner renders when error is set', () => {
     render(
       <AuditTrailView

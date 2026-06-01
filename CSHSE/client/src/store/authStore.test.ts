@@ -135,7 +135,13 @@ import { vi } from 'vitest';
 import { api } from '../services/api';
 
 vi.mock('../services/api', () => ({
-  api: { patch: vi.fn(), get: vi.fn().mockRejectedValue(new Error('no-op')) },
+  // CR-058 — start/stopImpersonation fire a fire-and-forget POST to the
+  // impersonation audit endpoints; mock it so the store calls resolve.
+  api: {
+    patch: vi.fn(),
+    get: vi.fn().mockRejectedValue(new Error('no-op')),
+    post: vi.fn().mockResolvedValue({ data: { ok: true } }),
+  },
 }));
 
 describe('authStore — updatePreferences (CR-045)', () => {

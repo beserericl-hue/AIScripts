@@ -131,11 +131,18 @@ export const exportAuditCsv = async (req: AuthenticatedRequest, res: Response) =
       'targetId',
       'submissionId',
       'reason',
+      // CR-058 — true actor when the entry was produced while impersonating.
+      'impersonatedBy',
+      'impersonatedAs',
       'payload'
     ].join(',');
 
-    const body = rows.map((r: any) =>
-      [
+    const body = rows.map((r: any) => {
+      const imp = r.impersonation;
+      const impersonatedAs = imp
+        ? imp.impersonatedUserName || imp.impersonatedRole || ''
+        : '';
+      return [
         r.timestamp ? new Date(r.timestamp).toISOString() : '',
         r.action,
         r.actorName,
@@ -144,9 +151,11 @@ export const exportAuditCsv = async (req: AuthenticatedRequest, res: Response) =
         r.targetId,
         r.submissionId || '',
         r.reason || '',
+        imp ? imp.actualName : '',
+        impersonatedAs,
         r.payload ? JSON.stringify(r.payload) : ''
-      ].map(_csvEscape).join(',')
-    );
+      ].map(_csvEscape).join(',');
+    });
 
     const csv = [header, ...body].join('\n');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');

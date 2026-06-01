@@ -19,6 +19,17 @@ api.interceptors.request.use((config) => {
       // Send impersonated role so server can override for superusers
       if (state?.impersonation?.isImpersonating && state.impersonation.impersonatedRole) {
         config.headers['X-Impersonated-Role'] = state.impersonation.impersonatedRole;
+        // CR-058 — when impersonating a *specific* user, forward their identity
+        // so the server-side audit trail names them (not just the role). Names
+        // are URI-encoded because HTTP header values must be ASCII-safe.
+        const impUser = state.impersonation.impersonatedUser;
+        if (impUser?.id) {
+          config.headers['X-Impersonated-User-Id'] = impUser.id;
+          const fullName = `${impUser.firstName || ''} ${impUser.lastName || ''}`.trim() || impUser.email || '';
+          if (fullName) {
+            config.headers['X-Impersonated-User-Name'] = encodeURIComponent(fullName);
+          }
+        }
       }
     } catch {
       // Ignore parse errors

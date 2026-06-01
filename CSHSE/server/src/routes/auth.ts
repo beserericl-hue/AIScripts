@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { Request, Response } from 'express';
 import { User } from '../models/User';
 import { verifyInvitation, acceptInvitation } from '../controllers/invitationController';
+import { recordAuditEvent } from '../services/auditLog';
+import { ImpersonationContext } from '../middleware/requestContext';
 import jwt from 'jsonwebtoken';
 
 const router = Router();
@@ -391,5 +393,126 @@ router.patch('/me/preferences', async (req: Request, res: Response) => {
     return res.status(401).json({ error: 'Invalid token' });
   }
 });
+
+// ============================================
+// CR-058 — IMPERSONATION AUDIT (superuser only)
+// ============================================
+//
+// The client calls these when a superuser starts / stops impersonating a role
+// or a specific user. They write an append-only audit entry naming the true
+// superuser actor + the impersonated identity, so the admin Audit Trail shows
+// exactly who assumed which identity and when. Individual governance actions
+// taken *during* the session are separately flagged by `recordAuditEvent` via
+// the request-scoped impersonation context (see middleware/requestContext.ts).
+//
+// These live in the public auth router (inline jwt.verify, like the other
+// routes here) and enforce superuser themselves.
+
+const VALID_IMPERSONATION_ROLES = ['admin', 'program_coordinator', 'lead_reader', 'reader'];
+
+async function handleImpersonationEvent(
+  req: Request,
+  res: Response,
+  action: 'auth.impersonation_start' | 'auth.impersonation_stop'
+) {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+    const token = authHeader.slice(7);
+    const jwtSecret = process.env.JWT_SECRET || 'development-secret-key';
+    const decoded = jwt.verify(token, jwtSecret) as any;
+
+    const actor = await User.findById(decoded.id).select(
+      'role firstName lastName email isSuperuser'
+    );
+    if (!actor) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    if (!actor.isSuperuser) {
+      return res.status(403).json({ error: 'Superuser access required' });
+    }
+
+    const { impersonatedRole, impersonatedUserId, impersonatedUserName } = (req.body || {}) as {
+      impersonatedRole?: string;
+      impersonatedUserId?: string;
+      impersonatedUserName?: string;
+    };
+
+    // On *start* an identity is required; on *stop* it's optional (we record
+    // whatever the client knew it was ending).
+    if (action === 'auth.impersonation_start') {
+      if (!impersonatedRole && !impersonatedUserId) {
+        return res
+          .status(400)
+          .json({ error: 'impersonatedRole or impersonatedUserId is required' });
+      }
+      if (impersonatedRole && !VALID_IMPERSONATION_ROLES.includes(impersonatedRole)) {
+        return res.status(400).json({ error: 'invalid impersonatedRole' });
+      }
+    }
+
+    const actorName =
+      `${actor.firstName || ''} ${actor.lastName || ''}`.trim() || actor.email;
+
+    // Resolve the impersonated user's name server-side when an id is given but
+    // the client didn't pass a name (defence against a stale/spoofed label).
+    let resolvedUserName = impersonatedUserName;
+    if (impersonatedUserId && !resolvedUserName) {
+      const target = await User.findById(impersonatedUserId).select('firstName lastName email');
+      if (target) {
+        resolvedUserName =
+          `${target.firstName || ''} ${target.lastName || ''}`.trim() || target.email;
+      }
+    }
+
+    const impersonation: ImpersonationContext = {
+      actualUserId: actor._id.toString(),
+      actualName: actorName,
+      actualRole: actor.role,
+      impersonatedRole: impersonatedRole || undefined,
+      impersonatedUserId: impersonatedUserId || undefined,
+      impersonatedUserName: resolvedUserName || undefined
+    };
+
+    await recordAuditEvent({
+      action,
+      actor: { id: actor._id.toString(), role: actor.role, name: actorName },
+      targetType: 'user',
+      // Target the specific user when known, else the role label.
+      targetId: impersonatedUserId || impersonatedRole || 'unknown',
+      payload: {
+        impersonatedRole: impersonatedRole || null,
+        impersonatedUserId: impersonatedUserId || null,
+        impersonatedUserName: resolvedUserName || null
+      },
+      impersonation
+    });
+
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error('Impersonation audit error:', error);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+/**
+ * @route   POST /api/auth/impersonation/start
+ * @desc    Record that a superuser began impersonating a role / specific user.
+ * @access  Private (superuser only)
+ */
+router.post('/impersonation/start', (req: Request, res: Response) =>
+  handleImpersonationEvent(req, res, 'auth.impersonation_start')
+);
+
+/**
+ * @route   POST /api/auth/impersonation/stop
+ * @desc    Record that a superuser ended an impersonation session.
+ * @access  Private (superuser only)
+ */
+router.post('/impersonation/stop', (req: Request, res: Response) =>
+  handleImpersonationEvent(req, res, 'auth.impersonation_stop')
+);
 
 export default router;

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
+import { runWithRequestContext, ImpersonationContext } from './requestContext';
 
 /**
  * Extended Request interface with user information from JWT
@@ -16,7 +17,21 @@ export interface AuthenticatedRequest extends Request {
     name: string;
     institutionId?: string;
     isSuperuser?: boolean;
+    // CR-058 — present only when a superuser is acting through an
+    // impersonation session. `role` above is the *effective* (impersonated)
+    // role; this captures the true actor + the chosen identity.
+    impersonation?: ImpersonationContext;
   };
+}
+
+/** Decode a header value the client URI-encoded (names may contain spaces/unicode). */
+function decodeHeader(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  try {
+    return decodeURIComponent(v);
+  } catch {
+    return v;
+  }
 }
 
 interface JWTPayload {
@@ -56,11 +71,28 @@ export const authenticate = async (
         return res.status(401).json({ error: 'User not found' });
       }
 
-      // For superusers, allow role override via X-Impersonated-Role header
+      // For superusers, allow role override via X-Impersonated-Role header.
+      // CR-058 — the client also forwards the specific impersonated user (when
+      // one was chosen) so the audit trail can name them, not just the role.
       const impersonatedRole = req.headers['x-impersonated-role'] as string | undefined;
+      const impersonatedUserId = req.headers['x-impersonated-user-id'] as string | undefined;
+      const impersonatedUserName = decodeHeader(req.headers['x-impersonated-user-name'] as string | undefined);
+      const isImpersonating = !!(user.isSuperuser && (impersonatedRole || impersonatedUserId));
       const effectiveRole = (user.isSuperuser && impersonatedRole)
         ? impersonatedRole
         : user.role;
+
+      const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+      const impersonation: ImpersonationContext | undefined = isImpersonating
+        ? {
+            actualUserId: user._id.toString(),
+            actualName: actorName,
+            actualRole: user.role,
+            impersonatedRole: impersonatedRole || undefined,
+            impersonatedUserId: impersonatedUserId || undefined,
+            impersonatedUserName: impersonatedUserName || undefined
+          }
+        : undefined;
 
       // Populate req.user with user information
       req.user = {
@@ -70,11 +102,18 @@ export const authenticate = async (
         role: effectiveRole,
         firstName: user.firstName,
         lastName: user.lastName,
-        name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
+        name: actorName,
         institutionId: user.institutionId?.toString(),
-        isSuperuser: user.isSuperuser
+        isSuperuser: user.isSuperuser,
+        impersonation
       };
 
+      // CR-058 — bind the impersonation context for the request's async
+      // lifetime so `recordAuditEvent` auto-flags every governance action
+      // taken while impersonating, without threading it through controllers.
+      if (impersonation) {
+        return runWithRequestContext({ impersonation }, () => next());
+      }
       next();
     } catch (jwtError) {
       return res.status(401).json({ error: 'Invalid or expired token' });

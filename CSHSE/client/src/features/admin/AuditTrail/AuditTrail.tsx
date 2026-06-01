@@ -13,6 +13,13 @@ import { Loader2, Download, RefreshCw } from 'lucide-react';
 // affordances at all.
 // ---------------------------------------------------------------------------
 
+export interface AuditImpersonation {
+  actualName: string;
+  actualRole: string;
+  impersonatedRole?: string;
+  impersonatedUserName?: string;
+}
+
 export interface AuditEntry {
   _id: string;
   action: string;
@@ -23,6 +30,9 @@ export interface AuditEntry {
   submissionId?: string;
   reason?: string;
   payload?: Record<string, unknown>;
+  // CR-058 — present when the action was taken by a superuser while
+  // impersonating. Names the true actor + the assumed identity.
+  impersonation?: AuditImpersonation;
   timestamp: string;
 }
 
@@ -168,6 +178,23 @@ export function AuditTrailView({
                   <td className="px-2 py-1 text-slate-700">
                     {e.actorName}
                     <span className="ml-1 rounded bg-slate-100 px-1 py-0.5 text-[10px] text-slate-600">{e.actorRole}</span>
+                    {e.impersonation && (
+                      <div
+                        data-testid={`audit-impersonation-${e._id}`}
+                        className="mt-0.5 inline-flex flex-wrap items-center gap-1 rounded bg-amber-50 px-1 py-0.5 text-[10px] text-amber-800 ring-1 ring-amber-200"
+                        title="Action taken by a superuser while impersonating"
+                      >
+                        <span className="font-semibold">impersonated</span>
+                        <span>
+                          by {e.impersonation.actualName}
+                          {e.impersonation.impersonatedUserName
+                            ? ` as ${e.impersonation.impersonatedUserName}`
+                            : e.impersonation.impersonatedRole
+                            ? ` as ${e.impersonation.impersonatedRole.replace('_', ' ')}`
+                            : ''}
+                        </span>
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-1 text-slate-700">
                     <div className="font-mono text-[10px]">{e.targetType}</div>

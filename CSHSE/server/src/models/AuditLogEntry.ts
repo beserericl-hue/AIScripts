@@ -32,7 +32,9 @@ export type AuditAction =
   | 'jv.member_removed'            // CR-019 / S8.1 — institution removed from a JV
   | 'jv.archived'                  // CR-019 / S8.1 — JV archived (manual or auto on <2 members)
   | 'account.locked'
-  | 'account.unlocked';
+  | 'account.unlocked'
+  | 'auth.impersonation_start'      // CR-058 — superuser began impersonating a role / specific user
+  | 'auth.impersonation_stop';     // CR-058 — superuser ended an impersonation session
 
 export type AuditTargetType =
   | 'submission'
@@ -40,6 +42,20 @@ export type AuditTargetType =
   | 'reader'
   | 'comment'
   | 'user';
+
+// CR-058 — when an action is taken by a superuser while impersonating, this
+// block records who *really* did it. Absent on ordinary (non-impersonated)
+// entries. `actorId`/`actorName`/`actorRole` on the parent entry continue to
+// reflect the *effective* identity (e.g. the impersonated user/role), so
+// existing dashboards read unchanged; the truth lives here.
+export interface IAuditImpersonation {
+  actualUserId: mongoose.Types.ObjectId;
+  actualName: string;
+  actualRole: string;
+  impersonatedRole?: string;
+  impersonatedUserId?: mongoose.Types.ObjectId;
+  impersonatedUserName?: string;
+}
 
 export interface IAuditLogEntry extends Document {
   action: AuditAction;
@@ -51,6 +67,7 @@ export interface IAuditLogEntry extends Document {
   submissionId?: mongoose.Types.ObjectId;
   payload?: Record<string, unknown>;
   reason?: string;
+  impersonation?: IAuditImpersonation;
   timestamp: Date;
 }
 
@@ -65,6 +82,23 @@ const AuditLogEntrySchema = new Schema<IAuditLogEntry>(
     submissionId: { type: Schema.Types.ObjectId, ref: 'Submission', index: true },
     payload: { type: Schema.Types.Mixed },
     reason: { type: String },
+    // CR-058 — true-actor record for actions taken while impersonating.
+    impersonation: {
+      type: new Schema<IAuditImpersonation>(
+        {
+          actualUserId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+          actualName: { type: String, required: true },
+          actualRole: { type: String, required: true },
+          impersonatedRole: { type: String },
+          impersonatedUserId: { type: Schema.Types.ObjectId, ref: 'User' },
+          impersonatedUserName: { type: String }
+        },
+        { _id: false }
+      ),
+      required: false,
+      default: undefined,
+      index: true
+    },
     timestamp: { type: Date, default: Date.now, index: true }
   },
   { capped: false }

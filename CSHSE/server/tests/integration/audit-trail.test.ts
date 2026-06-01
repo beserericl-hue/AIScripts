@@ -110,7 +110,7 @@ describe('CR-020 — GET /api/admin/audit-log/export.csv', () => {
     expect(res.headers['content-type']).toMatch(/text\/csv/);
     expect(res.headers['content-disposition']).toMatch(/audit-log/);
     const text = res.text;
-    expect(text.split('\n')[0]).toBe('timestamp,action,actorName,actorRole,targetType,targetId,submissionId,reason,payload');
+    expect(text.split('\n')[0]).toBe('timestamp,action,actorName,actorRole,targetType,targetId,submissionId,reason,impersonatedBy,impersonatedAs,payload');
     expect(text).toContain('board.decision_recorded');
     expect(text).toContain('Alex Admin');
 
