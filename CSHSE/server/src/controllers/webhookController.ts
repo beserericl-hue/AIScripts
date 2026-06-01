@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
-import { validationService, ValidationResponse } from '../services/validationService';
+import { validationService } from '../services/validationService';
 import { WebhookSettings } from '../models/WebhookSettings';
 
 interface AuthenticatedRequest extends Request {
@@ -11,94 +11,51 @@ interface AuthenticatedRequest extends Request {
 }
 
 /**
- * Trigger validation via N8N webhook
+ * CR-054 — validate a single section in-process via cshse-ai (`validateSection`),
+ * replacing the legacy async n8n trigger+callback. The call is synchronous, so
+ * the persisted ValidationResult already carries its final verdict; the client
+ * still polls /validation/latest by `validationId` and resolves on first poll.
  */
-export const triggerValidation = async (req: AuthenticatedRequest, res: Response) => {
+export const runSectionValidation = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { submissionId, standardCode, specCode, evidenceText } = req.body;
-
-    console.log('[Validation] Trigger request received:', {
-      submissionId,
-      standardCode,
-      specCode,
-      evidenceTextLength: evidenceText?.length || 0,
-      userId: req.user?.id
-    });
+    const { submissionId, standardCode, specCode, narrativeText } = req.body;
 
     if (!submissionId || !standardCode || !specCode) {
-      console.log('[Validation] Missing required fields');
       return res.status(400).json({
         error: 'Missing required fields: submissionId, standardCode, specCode'
       });
     }
 
-    const result = await validationService.triggerValidation(
+    const out = await validationService.validateSection({
       submissionId,
       standardCode,
       specCode,
-      'manual_save',
-      evidenceText || ''
-    );
-
-    console.log('[Validation] Validation triggered successfully:', {
-      validationId: result._id,
-      status: result.result.status
+      narrativeText: narrativeText || undefined,
+      validationType: 'manual_save'
     });
 
-    return res.json({
-      validationId: result._id,
-      status: result.result.status,
-      message: 'Validation triggered successfully'
-    });
-  } catch (error) {
-    console.error('[Validation] Trigger validation error:', error);
-    return res.status(500).json({ error: 'Failed to trigger validation' });
-  }
-};
-
-/**
- * Receive validation callback from N8N
- */
-export const receiveCallback = async (req: Request, res: Response) => {
-  try {
-    console.log('[Validation Callback] Received body:', JSON.stringify(req.body));
-
-    const callback = req.body as ValidationResponse;
-
-    if (!callback.executionId && !callback.submissionId) {
-      console.log('[Validation Callback] Missing execution ID or submission ID');
-      return res.status(400).json({ error: 'Missing execution ID or submission ID' });
+    // Mirror the legacy n8n callback: reflect the verdict onto the submission's
+    // standardsStatus so the editor's validated counter / submit gate update.
+    try {
+      await validationService.updateSubmissionValidationStatus(
+        submissionId,
+        standardCode,
+        specCode,
+        out.result.status === 'pass' ? 'pass' : 'fail'
+      );
+    } catch (statusErr) {
+      console.error('[Validation] standardsStatus update failed (non-fatal):', statusErr);
     }
 
-    console.log('[Validation Callback] Processing callback:', {
-      executionId: callback.executionId,
-      submissionId: callback.submissionId,
-      standardCode: callback.standardCode,
-      specCode: callback.specCode,
-      resultStatus: callback.result?.status
-    });
-
-    const result = await validationService.processCallback(callback);
-
-    if (!result) {
-      console.log('[Validation Callback] No pending validation found for this callback');
-      return res.status(404).json({ error: 'No pending validation found for this callback' });
-    }
-
-    console.log('[Validation Callback] Callback processed successfully:', {
-      validationId: result._id,
-      status: result.result.status,
-      score: result.result.score
-    });
-
     return res.json({
-      success: true,
-      validationId: result._id,
-      status: result.result.status
+      validationId: out.validation?._id,
+      status: out.result.status,
+      verdict: out.result.verdict,
+      message: 'Validation complete'
     });
   } catch (error) {
-    console.error('[Validation Callback] Error processing callback:', error);
-    return res.status(500).json({ error: 'Failed to process callback' });
+    console.error('[Validation] runSectionValidation error:', error);
+    return res.status(500).json({ error: 'Failed to validate section' });
   }
 };
 
@@ -371,30 +328,3 @@ export const getFailedSections = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Revalidate failed sections
- */
-export const revalidateFailedSections = async (req: Request, res: Response) => {
-  try {
-    const { submissionId } = req.params;
-    const { standardCodes } = req.body;
-
-    const results = await validationService.revalidateFailedSections(
-      submissionId,
-      standardCodes
-    );
-
-    return res.json({
-      revalidatedCount: results.length,
-      results: results.map(r => ({
-        validationId: r._id,
-        standardCode: r.standardCode,
-        specCode: r.specCode,
-        status: r.result.status
-      }))
-    });
-  } catch (error) {
-    console.error('Revalidate error:', error);
-    return res.status(500).json({ error: 'Failed to revalidate sections' });
-  }
-};

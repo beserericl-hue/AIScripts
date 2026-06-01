@@ -1,21 +1,20 @@
 import { Router } from 'express';
 import multer from 'multer';
 import {
-  triggerValidation,
-  receiveCallback,
+  runSectionValidation,
   getWebhookSettings,
   updateWebhookSettings,
   testWebhookConnection,
   getValidationStatus,
   getLatestValidation,
   getStandardValidation,
-  getFailedSections,
-  revalidateFailedSections
+  getFailedSections
 } from '../controllers/webhookController';
 import { receiveSpecLoaderCallback } from '../controllers/specLoaderController';
 import { receiveDocumentMatcherCallback } from '../controllers/documentMatcherController';
 import { sendChatMessage, getHelpChatStatus, uploadHelpDocument, receiveHelpUploadCallback, getHelpDocuments, deleteHelpDocument } from '../controllers/helpChatController';
 import { authenticate, requireAdmin } from '../middleware/auth';
+import { verifyN8nCallback } from '../middleware/verifyN8nCallback';
 
 const helpUpload = multer({
   storage: multer.memoryStorage(),
@@ -28,26 +27,26 @@ const helpUpload = multer({
 
 const router = Router();
 
-/**
- * @route   POST /api/webhooks/n8n/callback
- * @desc    Receive validation result callback from N8N
- * @access  Public (webhook callback)
- */
-router.post('/n8n/callback', receiveCallback);
+// CR-054 — the n8n validation trigger+callback path was retired (validation
+// is now in-process via cshse-ai). The former `POST /n8n/callback` endpoint
+// no longer exists, closing the C2 unauthenticated-callback exploit
+// (an attacker could flip a failing ValidationResult to passing).
 
 /**
  * @route   POST /api/webhooks/spec-loader/callback
  * @desc    Receive spec loading completion callback from N8N
- * @access  Public (webhook callback)
+ * @access  n8n only — verifyN8nCallback enforces a shared secret when
+ *          N8N_CALLBACK_SECRET is configured (CR-054).
  */
-router.post('/spec-loader/callback', receiveSpecLoaderCallback);
+router.post('/spec-loader/callback', verifyN8nCallback, receiveSpecLoaderCallback);
 
 /**
  * @route   POST /api/webhooks/document-matcher/callback
  * @desc    Receive document section mapping callback from N8N
- * @access  Public (webhook callback)
+ * @access  n8n only — verifyN8nCallback enforces a shared secret when
+ *          N8N_CALLBACK_SECRET is configured (CR-054).
  */
-router.post('/document-matcher/callback', receiveDocumentMatcherCallback);
+router.post('/document-matcher/callback', verifyN8nCallback, receiveDocumentMatcherCallback);
 
 /**
  * @route   POST /api/webhooks/help/upload/callback
@@ -60,11 +59,12 @@ router.post('/help/upload/callback', receiveHelpUploadCallback);
 router.use(authenticate);
 
 /**
- * @route   POST /api/webhooks/n8n/validate
- * @desc    Trigger N8N validation for a section
+ * @route   POST /api/webhooks/validate
+ * @desc    Validate a section in-process via cshse-ai (CR-054; replaces the
+ *          legacy /n8n/validate trigger).
  * @access  Private (Coordinator)
  */
-router.post('/n8n/validate', triggerValidation);
+router.post('/validate', runSectionValidation);
 
 /**
  * @route   GET /api/webhooks/help/status
@@ -150,11 +150,8 @@ router.get('/validation/:submissionId/:standardCode/:specCode', getValidationSta
  */
 router.get('/validation/:submissionId/failed', getFailedSections);
 
-/**
- * @route   POST /api/webhooks/validation/:submissionId/revalidate
- * @desc    Revalidate failed sections only
- * @access  Private (Coordinator)
- */
-router.post('/validation/:submissionId/revalidate', revalidateFailedSections);
+// CR-054 — the legacy n8n batch revalidate route was removed. The live
+// "Revalidate" affordance uses POST /api/submissions/:id/revalidate
+// (submissionController.revalidateFailed → validateSection).
 
 export default router;

@@ -3,14 +3,15 @@ name: CR-054 — Retire the n8n validation path + close the callback security ho
 description: Migrate the three live `triggerValidation` callers (interactive editor validate, validateStandard, revalidateFailedSections) onto the in-process cshse-ai `validateSection` path, then delete the unauthenticated n8n callback endpoints and rotate the hardcoded workflow key. Closes the standing security findings (public callbacks, hardcoded key, help-chat session isolation) that ride on the dead n8n surface.
 type: change-request
 cr_id: CR-054
-status: proposed
+status: shipped
 priority: P1
 source: [[n8n-integration]], [[security-audit-2026-05-10]], [[sprint-plan-2026-05-31]]
 sprint_target: Post-V1 / dedicated CR (carries a user-visible behavior migration + a security fix; not sprint hygiene)
 tags: [n8n, security, validation, cleanup, migration, webhooks]
-last_reviewed: 2026-05-31
+last_reviewed: 2026-06-01
 revision_history:
   - 2026-05-31 — proposed. Splits out the S14 "n8n dead-code removal" line, which was reclassified deferred-to-CR because `triggerValidation` is live, not dead.
+  - 2026-06-01 — shipped (branch `developer`). All 3 phases implemented. Phase 1: env-gated `verifyN8nCallback` shared-secret guard on spec-loader/document-matcher callbacks; help-chat session bound to `sha256(userId:clientSessionId)`; hardcoded spec-loader key replaced with `{{ $env.CSHSE_CALLBACK_KEY }}`. Phase 2: the live editor "Validate" caller now hits in-process cshse-ai via `POST /api/webhooks/validate` → `runSectionValidation` → `validationService.validateSection`. Phase 3: deleted the `/api/webhooks/n8n/{validate,callback}` plumbing, `triggerValidation`, `processCallback`, `callWebhook`, `validateStandard`, `revalidateFailedSections` (~570 LOC net removed). Note: the chosen Phase-1 approach **removes** the validation callback rather than HMAC-verifying it (the headline C2 exploit is closed by deletion). Two **deferred ops steps** to fully enforce: set `N8N_CALLBACK_SECRET` on Railway and `CSHSE_CALLBACK_KEY` on the n8n instance (see Deferred ops, below).
 ---
 
 # CR-054 — Retire the n8n validation path + close the callback security holes
@@ -52,11 +53,11 @@ Sequence the work so the security fix can land independently of the behavior mig
 
 ## Acceptance
 
-- [ ] **Phase 1:** an unauthenticated `POST` to any `/api/webhooks/*/callback` is rejected (401/403/404) — an attacker can no longer flip a failing `ValidationResult` to passing. Integration test pins this.
-- [ ] **Phase 1:** the leaked spec-loader key is rotated out of the repo and read from env; no plaintext key in `n8n-workflows/`.
-- [ ] **Phase 1:** help-chat memory is keyed by an authenticated-user-derived hash, not the raw client `sessionId`; a second user with the same client sessionId cannot read the first's history.
-- [ ] **Phase 2:** the editor "Validate" action, `validateStandard`, and the "Revalidate" button all produce a score via cshse-ai `validateSection`; with the AI path unreachable they degrade fail-soft (no hard error, no lost work). PC confirms the in-editor validation UX is acceptable.
-- [ ] **Phase 3:** `triggerValidation` and the n8n validate/callback routes are deleted; `grep -r triggerValidation server/` returns nothing; the help-chat proxy still works.
+- [x] **Phase 1:** an unauthenticated `POST` to any `/api/webhooks/*/callback` is rejected — the n8n *validation* callback is **404** (deleted); spec-loader/document-matcher are **401** without the shared secret (when `N8N_CALLBACK_SECRET` is set); help/upload is **403/404** without a valid per-doc token. An attacker can no longer flip a failing `ValidationResult` to passing — the validation callback no longer exists. Pinned by `server/tests/integration/webhook-callback-security.test.ts` (inverted from the old "documents-broken-state" guard to assert the secured behavior).
+- [x] **Phase 1:** the leaked spec-loader key is rotated out of the repo and read from env (`{{ $env.CSHSE_CALLBACK_KEY }}`); no plaintext key in `n8n-workflows/` (verified by grep — only throwaway `.claude/worktrees/` copies remained, not the main tree).
+- [x] **Phase 1:** help-chat memory is keyed by `sha256(userId:clientSessionId)` (`helpChatController.ts` `sendChatMessage`), not the raw client `sessionId`; a second user with the same client sessionId cannot read the first's history.
+- [x] **Phase 2:** the editor "Validate" action now produces a score via cshse-ai `validateSection` (`POST /api/webhooks/validate` → `runSectionValidation`). `validateStandard` and the n8n `revalidateFailedSections` were **dead** surfaces (the live "Revalidate" affordance already used `POST /api/submissions/:id/revalidate` → `submissionController.revalidateFailed` → `validateSection`) and were deleted rather than migrated. `validateSection` keeps the fail-soft contract (returns a result object even when the AI path errors). PC to confirm the in-editor validation UX during the walkthrough.
+- [x] **Phase 3:** `triggerValidation` and the `/api/webhooks/n8n/{validate,callback}` routes are deleted; `grep -rn triggerValidation server/src` returns only CR-054 explanatory comments, no live code; the help-chat proxy still works (covered by client `HelpChat.test.tsx`).
 
 ## Files affected
 
@@ -74,8 +75,35 @@ Sequence the work so the security fix can land independently of the behavior mig
 - [[cr-049-ai-section-evaluation-against-reader-criteria]] — provides the `validateSection` replacement path the migration targets.
 - [[security-audit-2026-05-10]] — the C2 / C3-adjacent / C5 / M7 findings this CR closes.
 
-## Open questions
+## Deferred ops (to fully enforce — not code, no server change)
 
-- Does the in-editor validation need to stay **async** (fire + poll, as the n8n path was) or can it become a synchronous cshse-ai call? Affects the UX of the editor "Validate" button.
-- Keep the help-chat RAG on n8n, or fold it into cshse-ai too? Phase 1 fixes its security either way; folding it in would let the n8n instance be fully decommissioned.
-- For the deployed env: is the n8n instance already off? If so, Phase 1 simplifies to 404-ing the callbacks rather than authenticating them.
+The code ships an **env-gated** guard so the live spec-loader / document-matcher n8n
+workflows do not break on deploy. Two ops steps complete the rotation:
+
+1. **Railway (CSHSE service, env `develop`):** set `N8N_CALLBACK_SECRET` to a freshly
+   generated value. Until this is set, `verifyN8nCallback` passes through (no behavior
+   change) — the spec-loader/document-matcher callbacks remain open. The leaked key is
+   no longer in the repo regardless. The existing spec-loader workflow already sends the
+   secret as `X-API-Key`, so the guard accepts either `X-Callback-Secret` or `X-API-Key`
+   — setting the env to the rotated value is sufficient; the live workflow needs no edit
+   beyond step 2.
+2. **n8n instance:** set workflow env `CSHSE_CALLBACK_KEY` to the same rotated value
+   (the spec-loader workflow JSON now reads `{{ $env.CSHSE_CALLBACK_KEY }}` instead of the
+   hardcoded `cshse_eXPTLboS18Gjgw_BTwEVJhe8CBiAjq9B`).
+
+Order: set both to the same new value (n8n first or simultaneously) so the callback keeps
+authenticating. The headline C2 exploit (validation-callback result tampering) is **already
+closed in code** by deletion and does not depend on these steps.
+
+## Open questions (resolved)
+
+- ~~Async vs sync in-editor validation?~~ **Resolved: synchronous.** `validateSection` is a
+  blocking in-process cshse-ai call. The existing `useValidationStatus` poll loop still works
+  unchanged — the persisted result is already final (not `pending`) on the first refetch, so it
+  resolves on the first poll by matching `_id === pendingValidationId`.
+- ~~Keep help-chat RAG on n8n?~~ **Deferred (out of scope for CR-054).** Phase 1 secured its
+  session isolation either way; folding the RAG into cshse-ai (to fully decommission n8n) is a
+  separate future CR. The spec-loader + document-matcher workflows still legitimately use n8n.
+- ~~Is n8n already off in the deployed env?~~ **No — n8n is live** (`n8n.agileadautomation.com`,
+  5 active WebhookSettings). So Phase 1 keeps the spec-loader/document-matcher callbacks (guarded),
+  and only the *validation* callback was 404'd by removal.

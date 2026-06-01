@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { WebhookSettings } from '../models/WebhookSettings';
 import { HelpDocument } from '../models/HelpDocument';
 
@@ -237,12 +238,25 @@ export const sendChatMessage = async (req: AuthenticatedRequest, res: Response) 
       headers['Authorization'] = `Bearer ${webhookSettings.authentication.bearerToken}`;
     }
 
+    // CR-054 (audit C5) — the n8n help-chat agent keys its Redis chat memory on
+    // the sessionId we forward. Previously the raw client-supplied sessionId was
+    // passed straight through, so anyone reusing/guessing another user's
+    // sessionId could read their chat history. Bind the forwarded session to the
+    // authenticated user: a per-user hash of (userId + client sessionId). The
+    // client sessionId still scopes separate conversations within one user, but
+    // it can never cross the user boundary.
+    const clientSession = typeof sessionId === 'string' && sessionId.trim() ? sessionId.trim() : 'default';
+    const boundSessionId = crypto
+      .createHash('sha256')
+      .update(`${req.user?.id || 'anon'}:${clientSession}`)
+      .digest('hex');
+
     const response = await fetch(webhookSettings.webhookUrl, {
       method: 'POST',
       headers,
       body: JSON.stringify({
         question: question.trim(),
-        sessionId: sessionId || `${req.user?.id}-${Date.now()}`,
+        sessionId: boundSessionId,
         userId: req.user?.id,
         userRole: req.user?.role,
         userName: `${req.user?.firstName || ''} ${req.user?.lastName || ''}`.trim()

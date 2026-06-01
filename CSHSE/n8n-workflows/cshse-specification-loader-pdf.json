@@ -99,7 +99,7 @@
                     "parameters": [
                         {
                             "name": "X-API-Key",
-                            "value": "cshse_eXPTLboS18Gjgw_BTwEVJhe8CBiAjq9B"
+                            "value": "={{ $env.CSHSE_CALLBACK_KEY }}"
                         }
                     ]
                 },
@@ -399,7 +399,7 @@
                         "parameters": [
                             {
                                 "name": "X-API-Key",
-                                "value": "cshse_eXPTLboS18Gjgw_BTwEVJhe8CBiAjq9B"
+                                "value": "={{ $env.CSHSE_CALLBACK_KEY }}"
                             }
                         ]
                     },

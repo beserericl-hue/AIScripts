@@ -15,8 +15,5 @@ export type {
   MappingSuggestion
 } from './sectionMapper';
 
-export type {
-  ValidationRequest,
-  ValidationResponse,
-  WebhookCallResult
-} from './validationService';
+// CR-054 — the n8n validation request/response/webhook-call shapes were
+// removed with the legacy triggerValidation path.

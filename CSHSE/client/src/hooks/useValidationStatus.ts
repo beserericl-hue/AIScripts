@@ -118,7 +118,10 @@ export function useValidationStatus({
   const validateMutation = useMutation({
     mutationFn: async ({ narrativeText, validationType, evidenceText }: TriggerValidationParams) => {
       setIsValidating(true);
-      const response = await api.post(`${API_BASE}/webhooks/n8n/validate`, {
+      // CR-054 — validation is now in-process (cshse-ai). The call is
+      // synchronous; the polling below still resolves it on the first refetch
+      // since the persisted result is already final, not pending.
+      const response = await api.post(`${API_BASE}/webhooks/validate`, {
         submissionId,
         standardCode,
         specCode,

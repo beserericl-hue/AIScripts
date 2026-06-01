@@ -1,45 +1,15 @@
 import mongoose from 'mongoose';
 import { ValidationResult, IValidationResult, IValidationResultData } from '../models/ValidationResult';
-import { WebhookSettings, IWebhookSettings } from '../models/WebhookSettings';
 import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getStandardByCode } from '../data/standards';
 import { evaluateSection } from './cshseAiClient';
 
-export interface ValidationRequest {
-  submissionId: string;
-  programLevel: 'associate' | 'bachelors' | 'masters';
-  standardCode: string;
-  specCode: string;
-  narrativeText: string;
-  evidenceText: string;
-  standardText: string;
-  specificationText: string;
-  standardTitle: string;
-  standardDescription: string;
-  specTitle: string;
-  specText: string;
-  supportingEvidence: {
-    documents: Array<{ filename: string; type: string; size?: number }>;
-    urls: Array<{ href: string; title: string; description?: string }>;
-  };
-  callbackUrl: string;
-}
-
-export interface ValidationResponse {
-  executionId: string;
-  submissionId: string;
-  standardCode: string;
-  specCode: string;
-  result: IValidationResultData;
-}
-
-export interface WebhookCallResult {
-  success: boolean;
-  executionId?: string;
-  error?: string;
-  responseTimeMs: number;
-}
+// CR-054 — the legacy n8n `triggerValidation` path (and its
+// ValidationRequest/ValidationResponse/WebhookCallResult shapes + the
+// processCallback/callWebhook plumbing) was removed once all callers moved
+// onto the in-process cshse-ai `validateSection` path. The four
+// /api/webhooks/*/callback endpoints for validation no longer exist.
 
 export class ValidationService {
   /**
@@ -116,7 +86,7 @@ export class ValidationService {
     validationType?: 'auto_save' | 'manual_save' | 'submit';
     /** Optional — the prior ValidationResult being revalidated (link only). */
     previousValidationId?: string;
-  }): Promise<{ result: IValidationResultData }> {
+  }): Promise<{ result: IValidationResultData; validation: IValidationResult | null }> {
     const { submissionId, standardCode, specCode } = opts;
     const validationType = opts.validationType || 'submit';
 
@@ -131,12 +101,22 @@ export class ValidationService {
     let institutionId = '';
     let programLevel: 'associate' | 'bachelors' | 'masters' = 'bachelors';
     let evidenceTexts: string[] = [];
+    // CR-054 — the editor/validateStandard/revalidate callers may not pass the
+    // narrative; fall back to the stored section content so the in-process
+    // evaluator has the same input the legacy n8n path pulled from the DB.
+    let narrativeText = opts.narrativeText || '';
     try {
       const submission: any = await Submission.findById(submissionId)
-        .select('institutionId programLevel')
+        .select('institutionId programLevel narratives')
         .lean();
       institutionId = submission?.institutionId?.toString() || '';
       if (submission?.programLevel) programLevel = submission.programLevel;
+      if (!narrativeText && submission?.narratives) {
+        const narr: any = submission.narratives;
+        const stdNarr = narr instanceof Map ? narr.get(standardCode) : narr?.[standardCode];
+        const specNarr = stdNarr instanceof Map ? stdNarr.get(specCode) : stdNarr?.[specCode];
+        narrativeText = specNarr?.content || '';
+      }
       const ev: any[] = await SupportingEvidence.find({
         submissionId,
         standardCode,
@@ -162,7 +142,7 @@ export class ValidationService {
         submissionId,
         programLevel,
         specs: [{ standardCode, specCode, criteria }],
-        narrativeHtml: opts.narrativeText || '',
+        narrativeHtml: narrativeText,
         supportingEvidenceText: evidenceTexts
       });
       const row = out?.perSpec?.[0];
@@ -191,452 +171,50 @@ export class ValidationService {
       criteriaCoverage
     };
 
-    // Persist (best-effort) so the reader report can later consume it.
+    // Persist so the client poll + reader report can consume it. We capture
+    // the created doc and return it so the editor caller can hand the client a
+    // `validationId` (the client polls /validation/latest until that id is no
+    // longer pending — synchronous here, so it resolves on the first poll).
+    let created: IValidationResult | null = null;
     try {
-      await ValidationResult.create({
+      // Resolve attempt chaining: an explicit previousValidationId wins,
+      // otherwise link to the most recent prior result for this section.
+      let previousId = opts.previousValidationId
+        ? new mongoose.Types.ObjectId(opts.previousValidationId)
+        : undefined;
+      let attemptNumber = 1;
+      if (!previousId) {
+        const prior = await ValidationResult.findOne({
+          submissionId: new mongoose.Types.ObjectId(submissionId),
+          standardCode,
+          specCode
+        }).sort({ validatedAt: -1 });
+        if (prior) {
+          previousId = prior._id as mongoose.Types.ObjectId;
+          attemptNumber = (prior.attemptNumber || 1) + 1;
+        }
+      }
+      created = await ValidationResult.create({
         submissionId: new mongoose.Types.ObjectId(submissionId),
         standardCode,
         specCode,
         validationType,
         validatedAt: new Date(),
         result,
-        attemptNumber: 1,
-        ...(opts.previousValidationId
-          ? { previousValidationId: new mongoose.Types.ObjectId(opts.previousValidationId) }
-          : {})
+        attemptNumber,
+        ...(previousId ? { previousValidationId: previousId } : {})
       });
     } catch {
       /* non-fatal */
     }
 
-    return { result };
-  }
-
-  /**
-   * Trigger validation for a section via N8N webhook
-   */
-  async triggerValidation(
-    submissionId: string,
-    standardCode: string,
-    specCode: string,
-    validationType: 'auto_save' | 'manual_save' | 'submit' = 'manual_save',
-    evidenceText: string = ''
-  ): Promise<IValidationResult> {
-    console.log('[ValidationService] triggerValidation called:', {
-      submissionId,
-      standardCode,
-      specCode,
-      validationType
-    });
-
-    // Create pending validation result
-    const previousValidation = await ValidationResult.findOne({
-      submissionId: new mongoose.Types.ObjectId(submissionId),
-      standardCode,
-      specCode
-    }).sort({ validatedAt: -1 });
-
-    console.log('[ValidationService] Previous validation:', previousValidation ? {
-      id: previousValidation._id,
-      attemptNumber: previousValidation.attemptNumber,
-      status: previousValidation.result?.status
-    } : 'none');
-
-    const validationResult = new ValidationResult({
-      submissionId: new mongoose.Types.ObjectId(submissionId),
-      standardCode,
-      specCode,
-      validationType,
-      result: { status: 'pending' },
-      attemptNumber: previousValidation ? previousValidation.attemptNumber + 1 : 1,
-      previousValidationId: previousValidation?._id
-    });
-
-    await validationResult.save();
-    console.log('[ValidationService] Created validation result:', {
-      validationId: validationResult._id,
-      attemptNumber: validationResult.attemptNumber
-    });
-
-    // Get the submission data
-    const submission = await Submission.findById(submissionId);
-    if (!submission) {
-      console.error('[ValidationService] Submission not found:', submissionId);
-      throw new Error('Submission not found');
-    }
-    console.log('[ValidationService] Found submission:', {
-      submissionId: submission._id,
-      programLevel: submission.programLevel
-    });
-
-    // Get webhook settings
-    const webhookSettings = await WebhookSettings.findOne({
-      settingType: 'n8n_validation',
-      isActive: true
-    });
-
-    if (!webhookSettings) {
-      console.log('[ValidationService] No active validation webhook configured');
-      // No webhook configured - mark as pending for manual review
-      validationResult.result = {
-        status: 'pending',
-        feedback: 'No validation webhook configured. Manual review required.'
-      };
-      await validationResult.save();
-      return validationResult;
-    }
-    console.log('[ValidationService] Found webhook settings:', {
-      webhookUrl: webhookSettings.webhookUrl,
-      isActive: webhookSettings.isActive,
-      hasAuth: !!webhookSettings.authentication?.type
-    });
-
-    // Get narrative content
-    const narratives = submission.narratives;
-    const standardNarratives = narratives?.get(standardCode);
-    const narrative = standardNarratives?.get(specCode);
-
-    if (!narrative || !narrative.content) {
-      console.log('[ValidationService] No narrative content found for:', { standardCode, specCode });
-      validationResult.result = {
-        status: 'fail',
-        score: 0,
-        feedback: 'No narrative content found for this section.',
-        missingElements: ['Narrative content']
-      };
-      await validationResult.save();
-      return validationResult;
-    }
-    console.log('[ValidationService] Found narrative content:', {
-      standardCode,
-      specCode,
-      contentLength: narrative.content.length
-    });
-
-    // Build the validation request
-    // Priority: APP_URL > RAILWAY_PUBLIC_DOMAIN > localhost fallback
-    const baseUrl = process.env.APP_URL
-      || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null)
-      || `http://localhost:${process.env.PORT || 8080}`;
-    const callbackUrl = `${baseUrl}/api/webhooks/n8n/callback`;
-
-    console.log('[ValidationService] Callback URL:', callbackUrl);
-
-    // Look up standard and specification text
-    const standardDef = getStandardByCode(standardCode);
-    const specDef = standardDef?.specifications.find(sp => sp.code === specCode);
-
-    const standardTextFull = standardDef
-      ? `Standard ${standardDef.code}: ${standardDef.title}\n${standardDef.description}`
-      : '';
-    const specTextFull = specDef
-      ? `Specification ${specDef.code}: ${specDef.title}\n${specDef.text}`
-      : '';
-
-    console.log('[ValidationService] Standard text:', standardTextFull ? 'found' : 'not found');
-    console.log('[ValidationService] Spec text:', specTextFull ? 'found' : 'not found');
-
-    // Fetch supporting evidence from MongoDB
-    const evidenceDocs: Array<{ filename: string; type: string; size?: number }> = [];
-    const evidenceUrls: Array<{ href: string; title: string; description?: string }> = [];
-
-    try {
-      const evidence = await SupportingEvidence.find({
-        submissionId: new mongoose.Types.ObjectId(submissionId),
-        standardCode,
-        specCode,
-        isDeleted: false
-      });
-
-      for (const item of evidence) {
-        if (item.evidenceType === 'url' && item.url) {
-          evidenceUrls.push({
-            href: item.url.href,
-            title: item.url.title || item.url.href,
-            description: item.url.description
-          });
-        } else if (item.evidenceType === 'document' && item.file) {
-          evidenceDocs.push({
-            filename: item.file.originalName || item.file.filename,
-            type: item.file.mimeType,
-            size: item.file.size
-          });
-        }
-      }
-
-      console.log('[ValidationService] Found evidence:', {
-        urls: evidenceUrls.length,
-        documents: evidenceDocs.length
-      });
-    } catch (err) {
-      console.log('[ValidationService] Error fetching evidence (continuing):', err);
-    }
-
-    const request: ValidationRequest = {
-      submissionId,
-      programLevel: submission.programLevel,
-      standardCode,
-      specCode,
-      narrativeText: narrative.content,
-      evidenceText,
-      standardText: standardTextFull,
-      specificationText: specTextFull,
-      standardTitle: standardDef?.title || '',
-      standardDescription: standardDef?.description || '',
-      specTitle: specDef?.title || '',
-      specText: specDef?.text || '',
-      supportingEvidence: {
-        documents: evidenceDocs,
-        urls: evidenceUrls
-      },
-      callbackUrl
-    };
-
-    console.log('[ValidationService] Sending webhook request:', {
-      submissionId: request.submissionId,
-      programLevel: request.programLevel,
-      standardCode: request.standardCode,
-      specCode: request.specCode,
-      narrativeLength: request.narrativeText.length,
-      evidenceTextLength: request.evidenceText.length,
-      standardText: request.standardText ? 'present' : 'empty',
-      specText: request.specificationText ? 'present' : 'empty',
-      evidenceUrls: request.supportingEvidence.urls.length,
-      evidenceDocs: request.supportingEvidence.documents.length,
-      callbackUrl: request.callbackUrl
-    });
-
-    // Call the webhook
-    try {
-      const webhookResult = await this.callWebhook(webhookSettings, request);
-
-      console.log('[ValidationService] Webhook call result:', webhookResult);
-
-      if (webhookResult.success) {
-        if (webhookResult.executionId) {
-          validationResult.n8nExecutionId = webhookResult.executionId;
-        }
-        await validationResult.save();
-        console.log('[ValidationService] Webhook accepted, executionId:', webhookResult.executionId || 'none (async callback)');
-      } else {
-        console.log('[ValidationService] Webhook call failed:', webhookResult.error);
-        validationResult.result = {
-          status: 'pending',
-          feedback: webhookResult.error || 'Webhook call failed. Will retry.'
-        };
-        await validationResult.save();
-      }
-    } catch (error) {
-      console.error('[ValidationService] Exception calling webhook:', error);
-      validationResult.result = {
-        status: 'pending',
-        feedback: error instanceof Error ? error.message : 'Unknown error'
-      };
-      await validationResult.save();
-    }
-
-    console.log('[ValidationService] triggerValidation complete:', {
-      validationId: validationResult._id,
-      status: validationResult.result.status
-    });
-
-    return validationResult;
-  }
-
-  /**
-   * Process callback from N8N webhook
-   */
-  async processCallback(response: ValidationResponse): Promise<IValidationResult | null> {
-    console.log('[ValidationService] processCallback called:', {
-      executionId: response.executionId,
-      submissionId: response.submissionId,
-      standardCode: response.standardCode,
-      specCode: response.specCode,
-      resultStatus: response.result?.status,
-      resultScore: response.result?.score
-    });
-
-    // Find the pending validation
-    const validation = await ValidationResult.findOne({
-      n8nExecutionId: response.executionId
-    });
-
-    console.log('[ValidationService] Lookup by executionId:', validation ? {
-      validationId: validation._id,
-      status: validation.result?.status
-    } : 'not found');
-
-    if (!validation) {
-      console.log('[ValidationService] Trying fallback lookup by submission/section');
-      // Try to find by submission and section
-      const validation2 = await ValidationResult.findOne({
-        submissionId: new mongoose.Types.ObjectId(response.submissionId),
-        standardCode: response.standardCode,
-        specCode: response.specCode,
-        'result.status': 'pending'
-      }).sort({ validatedAt: -1 });
-
-      if (!validation2) {
-        console.error('[ValidationService] No pending validation found for callback:', {
-          executionId: response.executionId,
-          submissionId: response.submissionId,
-          standardCode: response.standardCode,
-          specCode: response.specCode
-        });
-        return null;
-      }
-
-      console.log('[ValidationService] Found validation via fallback:', {
-        validationId: validation2._id,
-        previousStatus: validation2.result?.status
-      });
-
-      validation2.n8nExecutionId = response.executionId;
-      validation2.result = response.result;
-      validation2.validatedAt = new Date();
-      await validation2.save();
-
-      console.log('[ValidationService] Updated validation (fallback):', {
-        validationId: validation2._id,
-        newStatus: validation2.result?.status,
-        score: validation2.result?.score
-      });
-
-      // Update submission status
-      await this.updateSubmissionValidationStatus(
-        response.submissionId,
-        response.standardCode,
-        response.specCode,
-        response.result.status === 'pass' ? 'pass' : 'fail'
-      );
-
-      console.log('[ValidationService] Submission status updated');
-
-      return validation2;
-    }
-
-    console.log('[ValidationService] Found validation by executionId:', {
-      validationId: validation._id,
-      previousStatus: validation.result?.status
-    });
-
-    validation.result = response.result;
-    validation.validatedAt = new Date();
-    await validation.save();
-
-    console.log('[ValidationService] Updated validation:', {
-      validationId: validation._id,
-      newStatus: validation.result?.status,
-      score: validation.result?.score
-    });
-
-    // Update submission status
-    await this.updateSubmissionValidationStatus(
-      response.submissionId,
-      response.standardCode,
-      response.specCode,
-      response.result.status === 'pass' ? 'pass' : 'fail'
-    );
-
-    console.log('[ValidationService] processCallback complete:', {
-      validationId: validation._id,
-      finalStatus: validation.result?.status
-    });
-
-    return validation;
-  }
-
-  /**
-   * Call N8N webhook
-   */
-  private async callWebhook(
-    settings: IWebhookSettings,
-    request: ValidationRequest
-  ): Promise<WebhookCallResult> {
-    const startTime = Date.now();
-
-    console.log('[ValidationService] callWebhook starting:', {
-      webhookUrl: settings.webhookUrl,
-      authType: settings.authentication?.type || 'none',
-      timeoutMs: settings.timeoutMs || 30000
-    });
-
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json'
-      };
-
-      // Add authentication
-      if (settings.authentication?.type === 'api_key' && settings.authentication.apiKey) {
-        headers['X-API-Key'] = settings.authentication.apiKey;
-        console.log('[ValidationService] Using API key authentication');
-      } else if (settings.authentication?.type === 'bearer' && settings.authentication.bearerToken) {
-        headers['Authorization'] = `Bearer ${settings.authentication.bearerToken}`;
-        console.log('[ValidationService] Using Bearer token authentication');
-      }
-
-      // Add custom headers
-      if (settings.headers) {
-        const headerMap = settings.headers as unknown as Map<string, string>;
-        if (headerMap.forEach) {
-          headerMap.forEach((value, key) => {
-            headers[key] = value;
-          });
-        }
-        console.log('[ValidationService] Added custom headers');
-      }
-
-      console.log('[ValidationService] Sending POST to:', settings.webhookUrl);
-
-      const response = await fetch(settings.webhookUrl, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(request),
-        signal: AbortSignal.timeout(settings.timeoutMs || 30000)
-      });
-
-      const responseTimeMs = Date.now() - startTime;
-
-      console.log('[ValidationService] Webhook response:', {
-        status: response.status,
-        statusText: response.statusText,
-        responseTimeMs
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[ValidationService] Webhook error response:', errorText);
-        return {
-          success: false,
-          error: `Webhook returned ${response.status}: ${response.statusText}`,
-          responseTimeMs
-        };
-      }
-
-      const data = await response.json() as { executionId?: string; id?: string };
-
-      console.log('[ValidationService] Webhook success response:', data);
-
-      return {
-        success: true,
-        executionId: data.executionId || data.id,
-        responseTimeMs
-      };
-    } catch (error) {
-      const responseTimeMs = Date.now() - startTime;
-      console.error('[ValidationService] Webhook exception:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        responseTimeMs
-      };
-    }
+    return { result, validation: created };
   }
 
   /**
    * Update submission validation status
    */
-  private async updateSubmissionValidationStatus(
+  async updateSubmissionValidationStatus(
     submissionId: string,
     standardCode: string,
     specCode: string,
@@ -753,64 +331,6 @@ export class ValidationService {
       { $match: { 'latestValidation.result.status': 'fail' } },
       { $replaceRoot: { newRoot: '$latestValidation' } }
     ]);
-
-    return results;
-  }
-
-  /**
-   * Validate an entire standard (all specifications)
-   */
-  async validateStandard(
-    submissionId: string,
-    standardCode: string
-  ): Promise<IValidationResult[]> {
-    // Get all specs for this standard from the submission
-    const submission = await Submission.findById(submissionId);
-    if (!submission) {
-      throw new Error('Submission not found');
-    }
-
-    const narratives = submission.narratives;
-    const standardNarratives = narratives?.get(standardCode);
-
-    if (!standardNarratives) {
-      return [];
-    }
-
-    const results: IValidationResult[] = [];
-
-    for (const [specCode] of standardNarratives) {
-      const result = await this.triggerValidation(
-        submissionId,
-        standardCode,
-        specCode,
-        'submit'
-      );
-      results.push(result);
-    }
-
-    return results;
-  }
-
-  /**
-   * Revalidate only failed sections
-   */
-  async revalidateFailedSections(
-    submissionId: string,
-    standardCodes?: string[]
-  ): Promise<IValidationResult[]> {
-    const failedSections = await this.getFailedSections(submissionId, standardCodes);
-    const results: IValidationResult[] = [];
-
-    for (const failed of failedSections) {
-      const result = await this.triggerValidation(
-        submissionId,
-        failed.standardCode,
-        failed.specCode,
-        'submit'
-      );
-      results.push(result);
-    }
 
     return results;
   }
