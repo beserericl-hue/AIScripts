@@ -20,7 +20,8 @@ export type NotificationType =
   | 'comment.relayed'          // CR-010 / S12.2 — a reader comment was relayed to the PC
   | 'board.decision'           // CR-010 / S12.2 — the board recorded a decision on the PC's submission
   | 'reader.assignment'        // CR-010 / S12.2 — a reader was assigned to a submission
-  | 'reader.assignment_change_requested'; // CR-022 / S13c — a lead reader asked an admin to change a locked assignment
+  | 'reader.assignment_change_requested' // CR-022 / S13c — a lead reader asked an admin to change a locked assignment
+  | 'board.ready';             // CR-056 — a review was sent to the board and awaits a decision
 
 export interface INotification extends Document {
   recipientId: mongoose.Types.ObjectId;

@@ -86,6 +86,108 @@ export interface CompilationTabViewProps {
   lockedPhase?: boolean;
   requestState?: 'idle' | 'pending' | 'done' | 'error';
   onRequestAssignmentChange?: (reason: string) => void;
+  // CR-056 — "Complete review & send to board": flips the submission to
+  // review_complete so it lands in the board queue.
+  onFinalizeToBoard?: () => void;
+  finalizing?: boolean;
+  finalizeError?: string | null;
+}
+
+/**
+ * CR-056 — "Complete review & send to board".
+ *
+ * The board queue (admin BoardConsole) reads submissions in `review_complete`.
+ * Nothing in the Score-based compilation surface advanced a submission to that
+ * status, so the reader → lead-reader → board chain dead-ended here. This
+ * panel gives the lead reader (or admin) the governed hand-off: a two-step
+ * confirm that flips the status. Once sent, it shows the post-hand-off state.
+ */
+export function SendToBoardPanel({
+  status,
+  onFinalizeToBoard,
+  finalizing = false,
+  finalizeError = null,
+}: {
+  status: string;
+  onFinalizeToBoard?: () => void;
+  finalizing?: boolean;
+  finalizeError?: string | null;
+}): JSX.Element {
+  const [confirming, setConfirming] = React.useState(false);
+  const ADVANCEABLE = ['submitted', 'readers_assigned', 'under_review'];
+
+  if (status === 'review_complete') {
+    return (
+      <div
+        data-testid="send-to-board-done"
+        className="mb-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800"
+      >
+        Sent to the board — this review is in the board queue awaiting a decision.
+      </div>
+    );
+  }
+  if (status === 'compliant' || status === 'non_compliant') {
+    return (
+      <div
+        data-testid="send-to-board-decided"
+        className="mb-3 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700"
+      >
+        The board has recorded a decision on this self-study.
+      </div>
+    );
+  }
+  if (!ADVANCEABLE.includes(status)) {
+    return <></>;
+  }
+
+  return (
+    <div
+      data-testid="send-to-board-box"
+      className="mb-3 flex flex-wrap items-center gap-3 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900"
+    >
+      <span className="font-medium">
+        Finished compiling? Send this review to the board for a decision.
+      </span>
+      {finalizeError && (
+        <span data-testid="send-to-board-error" className="text-xs text-red-700">
+          {finalizeError}
+        </span>
+      )}
+      {!confirming ? (
+        <button
+          type="button"
+          data-testid="send-to-board-open"
+          onClick={() => setConfirming(true)}
+          className="ml-auto inline-flex items-center gap-1 rounded bg-indigo-700 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-800"
+        >
+          Complete review &amp; send to board
+        </button>
+      ) : (
+        <div className="ml-auto inline-flex items-center gap-2">
+          <span className="text-xs">Send to the board now? Readers can no longer change scores after this.</span>
+          <button
+            type="button"
+            data-testid="send-to-board-cancel"
+            onClick={() => setConfirming(false)}
+            disabled={finalizing}
+            className="rounded border border-indigo-300 bg-white px-3 py-1 text-xs font-medium text-indigo-800 hover:bg-indigo-100 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            data-testid="send-to-board-confirm"
+            onClick={() => onFinalizeToBoard?.()}
+            disabled={finalizing}
+            className="inline-flex items-center gap-1 rounded bg-indigo-700 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-800 disabled:opacity-50"
+          >
+            {finalizing ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+            <span>{finalizing ? 'Sending…' : 'Yes, send to board'}</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -229,6 +331,9 @@ export function CompilationTabView({
   lockedPhase,
   requestState,
   onRequestAssignmentChange,
+  onFinalizeToBoard,
+  finalizing,
+  finalizeError,
 }: CompilationTabViewProps): JSX.Element {
   if (isLoading) {
     return (
@@ -340,6 +445,13 @@ export function CompilationTabView({
           <span>{exporting ? 'Generating…' : 'Generate suggestions doc'}</span>
         </button>
       </div>
+
+      <SendToBoardPanel
+        status={data.status}
+        onFinalizeToBoard={onFinalizeToBoard}
+        finalizing={finalizing}
+        finalizeError={finalizeError}
+      />
 
       <CompilationLegend />
 
@@ -517,6 +629,8 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
   const [exportMode, setExportMode] = React.useState<SuggestionsExportMode>('internal');
   const [exporting, setExporting] = React.useState<boolean>(false);
   const [requestState, setRequestState] = React.useState<'idle' | 'pending' | 'done' | 'error'>('idle');
+  const [finalizing, setFinalizing] = React.useState<boolean>(false);
+  const [finalizeError, setFinalizeError] = React.useState<string | null>(null);
   const { fireOnce } = useOnceHint();
 
   // CR-052 / Sprint 9.3 — first time the lead reader opens the Final-score
@@ -622,6 +736,27 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
     }
   };
 
+  // CR-056 — lead-reader "Complete review & send to board": flip the
+  // submission to review_complete so it lands in the board queue. Server
+  // gates lead/admin + advanceable status; we surface its errors inline.
+  const onFinalizeToBoard = async () => {
+    setFinalizing(true);
+    setFinalizeError(null);
+    try {
+      await api.post(`/api/submissions/${submissionId}/compilation/finalize`);
+      invalidate();
+      void qc.invalidateQueries({ queryKey: ['board', 'queue'] });
+    } catch (err) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        (err as Error)?.message ||
+        'Failed to send review to the board';
+      setFinalizeError(msg);
+    } finally {
+      setFinalizing(false);
+    }
+  };
+
   const onExportSuggestions = async () => {
     setExporting(true);
     try {
@@ -670,6 +805,9 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
       lockedPhase={lockedPhase}
       requestState={requestState}
       onRequestAssignmentChange={onRequestAssignmentChange}
+      onFinalizeToBoard={onFinalizeToBoard}
+      finalizing={finalizing}
+      finalizeError={finalizeError}
     />
   );
 }

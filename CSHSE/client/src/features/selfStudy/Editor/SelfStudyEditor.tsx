@@ -72,6 +72,10 @@ interface SubmissionData {
   standardsStatus: Record<string, {
     status: 'not_started' | 'in_progress' | 'complete' | 'submitted' | 'validated';
     validationStatus?: 'pending' | 'pass' | 'fail';
+    // CR-050 — PC can mark a spec not-applicable; excluded specs drop out of
+    // the validation denominator and satisfy the submit gate.
+    excluded?: boolean;
+    excludedReason?: string;
   }>;
   readerLock?: {
     isLocked: boolean;

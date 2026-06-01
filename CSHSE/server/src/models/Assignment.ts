@@ -56,11 +56,15 @@ const AssignmentSchema = new Schema<IAssignment>({
   institutionId: {
     type: Schema.Types.ObjectId,
     ref: 'Institution',
-    required: true
+    // CR-055 — optional: assignReaders now creates Assignment docs and a
+    // submission may legitimately have no linked institution yet. The field
+    // is only used for JV-scoped filtering, never for access control.
+    required: false
   },
   institutionName: {
     type: String,
-    required: true
+    required: false,
+    default: ''
   },
 
   userId: {

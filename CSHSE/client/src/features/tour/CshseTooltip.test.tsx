@@ -23,6 +23,7 @@ function makeProps(overrides: Partial<any> = {}) {
     skipProps: { 'aria-label': 'skip', onClick: skip } as any,
     tooltipProps: { 'data-test': 'wrap' } as any,
     step: { target: 'body', content: 'Hello there.' } as any,
+    continuous: true,
     index: 0,
     size: 3,
     isLastStep: false,

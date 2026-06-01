@@ -4,7 +4,8 @@ import {
   getFinalScoresForReader,
   setFinalScore,
   clearFinalScore,
-  exportSuggestionsDoc
+  exportSuggestionsDoc,
+  finalizeCompilation
 } from '../controllers/compilationController';
 import { authenticate } from '../middleware/auth';
 
@@ -26,5 +27,10 @@ router.delete('/submissions/:submissionId/compilation/final-score', clearFinalSc
 
 // CR-011 / Sprint 5.2 — consolidated suggestions DOCX export.
 router.get('/submissions/:submissionId/compilation/suggestions-doc', exportSuggestionsDoc);
+
+// CR-056 — lead-reader "Complete review & send to board": flips the
+// submission to `review_complete` so it lands in the board queue. Lead/admin
+// only; gated inside the controller.
+router.post('/submissions/:submissionId/compilation/finalize', finalizeCompilation);
 
 export default router;

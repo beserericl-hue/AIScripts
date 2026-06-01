@@ -4,8 +4,10 @@ import { Score } from '../models/Score';
 import { LeadFinalScore } from '../models/LeadFinalScore';
 import { Submission } from '../models/Submission';
 import { Assignment } from '../models/Assignment';
+import { User } from '../models/User';
 import { SiteVisitChecklistItem } from '../models/SiteVisitChecklistItem';
 import { recordAuditEvent } from '../services/auditLog';
+import { notify } from '../services/notificationService';
 import { generateSuggestionsDocx, SuggestionsMode } from '../services/suggestionsDocx';
 
 // ---------------------------------------------------------------------------
@@ -503,5 +505,95 @@ export const exportSuggestionsDoc = async (req: AuthenticatedRequest, res: Respo
   } catch (error) {
     console.error('Export suggestions doc error:', error);
     return res.status(500).json({ error: 'Failed to export suggestions document' });
+  }
+};
+
+/**
+ * POST /api/submissions/:submissionId/compilation/finalize
+ *
+ * CR-056 — lead-reader "Complete review & send to board". Flips a submission
+ * whose reader review is done into `review_complete`, the status the board
+ * queue (GET /api/board/queue) reads. Before this, nothing in the modern
+ * (Score-based) compilation UI advanced a submission past `readers_assigned`,
+ * so the board step was unreachable through the product — the reader →
+ * lead-reader → board chain dead-ended at compilation.
+ *
+ * Lead reader / admin / superuser only. A lead reader finalizing claims the
+ * compilation (stamps submission.leadReader). Idempotent: re-finalizing an
+ * already-complete submission is a no-op success. Audit-logged; notifies the
+ * board (active admins) fail-soft.
+ */
+export const finalizeCompilation = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!isLeadOrAdmin(req)) {
+      return res.status(403).json({ error: 'Only lead readers and admins can send a review to the board' });
+    }
+
+    const { submissionId } = req.params;
+    const submission = await Submission.findById(submissionId);
+    if (!submission) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // Idempotent — already at (or past) the board hand-off.
+    if (submission.status === 'review_complete') {
+      return res.json({ ok: true, status: 'review_complete', alreadyComplete: true });
+    }
+    if (submission.status === 'compliant' || submission.status === 'non_compliant') {
+      return res.status(409).json({
+        error: `This self-study already has a board decision (status "${submission.status}").`
+      });
+    }
+
+    const ADVANCEABLE = ['submitted', 'readers_assigned', 'under_review'];
+    if (!ADVANCEABLE.includes(submission.status)) {
+      return res.status(409).json({
+        error: `Cannot send to the board from status "${submission.status}". The self-study must be submitted and under reader review first.`
+      });
+    }
+
+    const priorStatus = submission.status;
+    // A lead reader who finalizes claims the compilation; admins/superusers
+    // leave any existing lead reader in place.
+    if (req.user?.role === 'lead_reader' && req.user?.id) {
+      submission.leadReader = new mongoose.Types.ObjectId(req.user.id);
+    }
+    submission.status = 'review_complete';
+    await submission.save();
+
+    void recordAuditEvent({
+      action: 'compilation.finalized',
+      actor: { id: req.user!.id, role: req.user!.role, name: actorName(req) },
+      targetType: 'submission',
+      targetId: String(submissionId),
+      submissionId: String(submissionId),
+      payload: { priorStatus, newStatus: 'review_complete' }
+    });
+
+    // Notify the board (active admins) that a review is ready to decide.
+    void (async () => {
+      try {
+        const admins = await User.find({ role: 'admin', isActive: true }).select('_id').lean();
+        for (const a of admins) {
+          await notify({
+            recipientId: String(a._id),
+            type: 'board.ready',
+            title: 'A review is ready for a board decision',
+            body: `${submission.institutionName} — ${submission.programName}: reader review is complete and awaiting a board decision.`,
+            link: `/admin/board`,
+            submissionId: String(submissionId),
+            dedupeKey: `board.ready:${submissionId}`,
+            email: true
+          });
+        }
+      } catch (e) {
+        console.error('finalizeCompilation notify (non-fatal):', e);
+      }
+    })();
+
+    return res.json({ ok: true, status: 'review_complete' });
+  } catch (error) {
+    console.error('Finalize compilation error:', error);
+    return res.status(500).json({ error: 'Failed to send review to the board' });
   }
 };

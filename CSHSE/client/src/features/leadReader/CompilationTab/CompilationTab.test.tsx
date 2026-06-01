@@ -7,7 +7,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { CompilationTabView } from './CompilationTab';
+import { CompilationTabView, SendToBoardPanel } from './CompilationTab';
 import type { CompilationPayload } from './CompilationTab';
 
 function wrap(children: React.ReactNode) {
@@ -401,5 +401,88 @@ describe('CompilationTabView', () => {
       )
     );
     expect(screen.getByTestId('assignment-change-done')).toBeInTheDocument();
+  });
+
+  // CR-056 — the "send to board" panel renders inside the view.
+  it('CR-056 — shows the done banner when the submission is review_complete', () => {
+    render(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          data={sample}
+          isLoading={false}
+        />
+      )
+    );
+    // sample.status === 'review_complete'
+    expect(screen.getByTestId('send-to-board-done')).toBeInTheDocument();
+    expect(screen.queryByTestId('send-to-board-box')).not.toBeInTheDocument();
+  });
+
+  it('CR-056 — shows the send box on an advanceable submission', () => {
+    render(
+      wrap(
+        <CompilationTabView
+          {...baseHandlers}
+          data={{ ...sample, status: 'readers_assigned' }}
+          isLoading={false}
+        />
+      )
+    );
+    expect(screen.getByTestId('send-to-board-box')).toBeInTheDocument();
+    expect(screen.queryByTestId('send-to-board-done')).not.toBeInTheDocument();
+  });
+});
+
+// CR-056 — "Complete review & send to board" panel (pure).
+describe('SendToBoardPanel', () => {
+  it('renders the done banner for review_complete', () => {
+    render(<SendToBoardPanel status="review_complete" />);
+    expect(screen.getByTestId('send-to-board-done')).toBeInTheDocument();
+  });
+
+  it('renders the decided banner for compliant / non_compliant', () => {
+    const { rerender } = render(<SendToBoardPanel status="compliant" />);
+    expect(screen.getByTestId('send-to-board-decided')).toBeInTheDocument();
+    rerender(<SendToBoardPanel status="non_compliant" />);
+    expect(screen.getByTestId('send-to-board-decided')).toBeInTheDocument();
+  });
+
+  it('renders nothing for a non-advanceable status (draft)', () => {
+    const { container } = render(<SendToBoardPanel status="draft" />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('two-step confirm: open reveals confirm/cancel, confirm fires onFinalizeToBoard', () => {
+    const onFinalizeToBoard = vi.fn();
+    render(<SendToBoardPanel status="under_review" onFinalizeToBoard={onFinalizeToBoard} />);
+    // Step 1 — only the open button is visible.
+    expect(screen.getByTestId('send-to-board-open')).toBeInTheDocument();
+    expect(screen.queryByTestId('send-to-board-confirm')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('send-to-board-open'));
+    // Step 2 — confirm + cancel appear.
+    expect(screen.getByTestId('send-to-board-confirm')).toBeInTheDocument();
+    expect(screen.getByTestId('send-to-board-cancel')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('send-to-board-confirm'));
+    expect(onFinalizeToBoard).toHaveBeenCalled();
+  });
+
+  it('cancel returns to the single-button state without firing', () => {
+    const onFinalizeToBoard = vi.fn();
+    render(<SendToBoardPanel status="submitted" onFinalizeToBoard={onFinalizeToBoard} />);
+    fireEvent.click(screen.getByTestId('send-to-board-open'));
+    fireEvent.click(screen.getByTestId('send-to-board-cancel'));
+    expect(screen.getByTestId('send-to-board-open')).toBeInTheDocument();
+    expect(screen.queryByTestId('send-to-board-confirm')).not.toBeInTheDocument();
+    expect(onFinalizeToBoard).not.toHaveBeenCalled();
+  });
+
+  it('disables the confirm button and surfaces the error while finalizing', () => {
+    render(
+      <SendToBoardPanel status="submitted" finalizing finalizeError="Boom from server" />
+    );
+    fireEvent.click(screen.getByTestId('send-to-board-open'));
+    expect(screen.getByTestId('send-to-board-confirm')).toBeDisabled();
+    expect(screen.getByTestId('send-to-board-error')).toHaveTextContent('Boom from server');
   });
 });

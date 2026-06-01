@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { Review, IReview, ComplianceStatus } from '../models/Review';
 import { Submission } from '../models/Submission';
 import { User } from '../models/User';
+import { Assignment } from '../models/Assignment';
 import { recordAuditEvent } from '../services/auditLog';
 import { notify } from '../services/notificationService';
 
@@ -650,7 +651,72 @@ export const assignReaders = async (req: AuthenticatedRequest, res: Response) =>
     const priorStatus = submission.status;
     submission.assignedReaders = readerIds.map(id => new mongoose.Types.ObjectId(id));
     submission.status = 'readers_assigned';
+    // CR-055 — record the lead reader on the submission when one is in the
+    // batch (drives the submit-time notification + the compilation lead id).
+    const leadUser = readers.find((r) => r.role === 'lead_reader');
+    if (leadUser) {
+      submission.leadReader = leadUser._id as mongoose.Types.ObjectId;
+    }
     await submission.save();
+
+    // CR-055 — Assignment is the access source-of-truth: listSubmissions,
+    // getSubmission and getFinalScoresForReader all gate reader-shaped roles
+    // on an ACTIVE Assignment record. assignReaders historically created only
+    // Review docs + submission.assignedReaders, so an assigned reader still
+    // 403'd on every read path (empty dashboard, "not assigned" on open).
+    // Reconcile Assignment docs to the new reader set here: mark dropped
+    // readers removed, then activate/refresh one Assignment per assigned user.
+    const assignerName =
+      req.user!.name || req.user!.email || `${req.user!.firstName || ''} ${req.user!.lastName || ''}`.trim();
+    const leadName = leadUser ? `${leadUser.firstName} ${leadUser.lastName}`.trim() : undefined;
+    await Assignment.updateMany(
+      {
+        submissionId: submission._id,
+        status: 'active',
+        userId: { $nin: readers.map((r) => r._id) }
+      },
+      {
+        $set: {
+          status: 'removed',
+          removedAt: new Date(),
+          removedBy: new mongoose.Types.ObjectId(req.user!.id),
+          removalReason: isLockedPhase ? String(reason || '').trim() || 'reassigned' : 'reassigned'
+        }
+      }
+    );
+    for (const r of readers) {
+      const assignmentType = r.role === 'lead_reader' ? 'lead_reader' : 'reader';
+      const userName = `${r.firstName} ${r.lastName}`.trim();
+      const existing = await Assignment.findOne({
+        submissionId: submission._id,
+        userId: r._id,
+        status: 'active'
+      });
+      if (existing) {
+        existing.assignmentType = assignmentType;
+        if (leadUser) {
+          existing.leadReaderId = leadUser._id as mongoose.Types.ObjectId;
+          existing.leadReaderName = leadName;
+        }
+        await existing.save();
+        continue;
+      }
+      await Assignment.create({
+        submissionId: submission._id,
+        institutionId: submission.institutionId,
+        institutionName: submission.institutionName,
+        userId: r._id,
+        userName,
+        userEmail: r.email,
+        assignmentType,
+        assignedBy: new mongoose.Types.ObjectId(req.user!.id),
+        assignedByName: assignerName,
+        assignedByRole: req.user!.role,
+        status: 'active',
+        leadReaderId: leadUser ? (leadUser._id as mongoose.Types.ObjectId) : undefined,
+        leadReaderName: leadName
+      });
+    }
 
     // CR-006 S2A.1 — record reader assignment per reader (one entry each so
     // the timeline shows who and when, not a single fan-out blob).
