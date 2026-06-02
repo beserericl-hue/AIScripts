@@ -2,25 +2,33 @@ import React from 'react';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
 import { t } from '../../i18n/strings';
+import {
+  TOUR_NAMES,
+  TOUR_REGISTRY,
+  resolveTourForRoute as resolveTourForRouteFromRegistry,
+  type TourName,
+} from './tourRegistry';
 
 // ---------------------------------------------------------------------------
-// CR-052 / Sprint 7 — TourProvider.
+// CR-052 / Sprint 7 (+ per-screen follow-on) — TourProvider.
 //
 // State semantics:
 //   - `activeTour`, `wasAutoStarted`, `isLoading` are in-memory React state.
 //   - `tourStatus` is derived from the authenticated user's
 //     `preferences.tours` blob (CR-052 server schema), so completion
-//     follows the user across devices.
+//     follows the user across devices. Each tour in the registry tracks
+//     its OWN completion flag — finishing the welcome tour does not mark
+//     the self-study tour seen, and vice-versa.
 //   - `completeTour` / `skipTour` go through `authStore.updatePreferences`
 //     which already does optimistic-update + server-merge + rollback per
 //     the CR-045 pattern. On rollback we surface a toast and close the
 //     tour cleanly — no UI strand.
 //   - This provider is intentionally decoupled from HintProvider; callers
 //     that want a post-completion hint pass an `onCompletionHint` callback
-//     to `<WelcomeTour>` rather than reaching into the hint context here.
+//     to <TourRunner> rather than reaching into the hint context here.
 // ---------------------------------------------------------------------------
 
-export type TourName = 'welcome';
+export type { TourName };
 
 export const TOUR_EXCLUDED_ROUTES: ReadonlyArray<string> = [
   '/login',
@@ -40,9 +48,22 @@ export interface TourContextValue {
   /**
    * Pure predicate (safe to call any number of times). Returns true only
    * when the welcome tour should auto-start for the current viewer on
-   * the current path.
+   * the current path. (Kept for the welcome-tour redirect behaviour.)
    */
   shouldAutoStartWelcomeTour: (pathname: string) => boolean;
+  /**
+   * Which tour, if any, OWNS the current route — used by the help menu to
+   * offer "Show me around this screen". Pure lookup, independent of
+   * completion state.
+   */
+  resolveTourForRoute: (pathname: string) => TourName | null;
+  /**
+   * Which tour, if any, should AUTO-START for the current viewer on this
+   * path right now — accounts for auth, the preferences blob, excluded
+   * routes, and per-tour completion. Welcome takes priority as the global
+   * first-run tour; otherwise the route's own tour (when unseen).
+   */
+  resolveAutoStartTour: (pathname: string) => TourName | null;
 }
 
 const TourContext = React.createContext<TourContextValue | null>(null);
@@ -64,10 +85,12 @@ export function TourProvider({ children }: TourProviderProps): JSX.Element {
   const updatePreferences = useAuthStore((s) => s.updatePreferences);
 
   const tourStatus: Record<TourName, boolean> = React.useMemo(() => {
-    const raw = user?.preferences?.tours ?? {};
-    return {
-      welcome: raw.welcome === true,
-    };
+    const raw = (user?.preferences?.tours ?? {}) as Record<string, boolean>;
+    const out = {} as Record<TourName, boolean>;
+    for (const name of TOUR_NAMES) {
+      out[name] = raw[name] === true;
+    }
+    return out;
   }, [user?.preferences?.tours]);
 
   const startTour = React.useCallback(
@@ -144,6 +167,32 @@ export function TourProvider({ children }: TourProviderProps): JSX.Element {
     [isAuthenticated, user, tourStatus.welcome]
   );
 
+  const resolveTourForRoute = React.useCallback(
+    (pathname: string): TourName | null => resolveTourForRouteFromRegistry(pathname),
+    []
+  );
+
+  const resolveAutoStartTour = React.useCallback(
+    (pathname: string): TourName | null => {
+      if (!isAuthenticated) return null;
+      if (!user) return null;
+      // Partial profile — preferences haven't loaded yet. Bail silently.
+      if (user.preferences === undefined) return null;
+      if (TOUR_EXCLUDED_ROUTES.includes(pathname)) return null;
+      // Welcome is the global first-run tour and takes priority everywhere
+      // (the auto-start component redirects to /dashboard to run it).
+      if (!tourStatus.welcome) return 'welcome';
+      // Otherwise: the tour that owns this screen, if the user hasn't seen
+      // it yet and it opts into auto-start.
+      const owner = TOUR_REGISTRY.find(
+        (d) => d.name !== 'welcome' && d.autoStart && d.matchRoute(pathname)
+      );
+      if (owner && !tourStatus[owner.name]) return owner.name;
+      return null;
+    },
+    [isAuthenticated, user, tourStatus]
+  );
+
   const value: TourContextValue = React.useMemo(
     () => ({
       activeTour,
@@ -155,6 +204,8 @@ export function TourProvider({ children }: TourProviderProps): JSX.Element {
       completeTour,
       skipTour,
       shouldAutoStartWelcomeTour,
+      resolveTourForRoute,
+      resolveAutoStartTour,
     }),
     [
       activeTour,
@@ -166,6 +217,8 @@ export function TourProvider({ children }: TourProviderProps): JSX.Element {
       completeTour,
       skipTour,
       shouldAutoStartWelcomeTour,
+      resolveTourForRoute,
+      resolveAutoStartTour,
     ]
   );
 

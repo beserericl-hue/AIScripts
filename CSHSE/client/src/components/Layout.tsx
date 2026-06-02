@@ -8,8 +8,8 @@ import { HelpMenu } from './HelpMenu';
 import { NotificationBell } from './NotificationBell';
 import { Toast } from './Toast';
 import { HintLayer } from '../features/tour/HintLayer';
-import { WelcomeTour } from '../features/tour/WelcomeTour';
-import { WelcomeTourAutoStart } from '../features/tour/WelcomeTourAutoStart';
+import { TourRunner } from '../features/tour/TourRunner';
+import { TourAutoStart } from '../features/tour/TourAutoStart';
 
 // Simple icon components
 const HomeIcon = () => (
@@ -471,12 +471,13 @@ export default function Layout() {
       {/* CR-016 — In-app bug reporter floating trigger + modal. */}
       <BugReporter />
 
-      {/* CR-052 — Tour + Hint + Toast layers. Mounted at the layout root
-          so every authenticated route gets them. HintLayer + WelcomeTour
-          read from their context providers (mounted in App.tsx around
-          the protected route). */}
-      <WelcomeTourAutoStart />
-      <WelcomeTour />
+      {/* CR-052 (+ per-screen follow-on) — Tour + Hint + Toast layers.
+          Mounted at the layout root so every authenticated route gets them.
+          TourAutoStart fires the first-visit tour for the current screen;
+          TourRunner renders whichever tour is active. Both read from the
+          TourProvider mounted in App.tsx around the protected route. */}
+      <TourAutoStart />
+      <TourRunner />
       <HintLayer />
       <Toast />
     </div>

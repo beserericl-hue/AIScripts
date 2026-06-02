@@ -215,4 +215,99 @@ describe('CR-052 — TourProvider', () => {
       expect(result.current.shouldAutoStartWelcomeTour('/dashboard')).toBe(true);
     });
   });
+
+  describe('multi-tour status + resolvers', () => {
+    it('tourStatus tracks each tour independently', () => {
+      setUser({
+        id: 'u',
+        email: 'x@y.com',
+        firstName: 'X',
+        lastName: 'Y',
+        role: 'program_coordinator',
+        preferences: {
+          hideLegacyImporter: true,
+          tours: { welcome: true, 'self-study': false },
+        },
+      });
+      const { result } = renderHook(() => useTour(), { wrapper });
+      expect(result.current.tourStatus.welcome).toBe(true);
+      expect(result.current.tourStatus['self-study']).toBe(false);
+      expect(result.current.tourStatus['reader-review']).toBe(false);
+    });
+
+    it('resolveTourForRoute is a pure lookup independent of completion', () => {
+      setUser(null);
+      const { result } = renderHook(() => useTour(), { wrapper });
+      expect(result.current.resolveTourForRoute('/self-study/x')).toBe('self-study');
+      expect(result.current.resolveTourForRoute('/messages/x')).toBeNull();
+    });
+
+    it('resolveAutoStartTour prioritizes the unseen welcome tour anywhere', () => {
+      setUser({
+        id: 'u',
+        email: 'x@y.com',
+        firstName: 'X',
+        lastName: 'Y',
+        role: 'program_coordinator',
+        preferences: { hideLegacyImporter: true, tours: {} },
+      });
+      const { result } = renderHook(() => useTour(), { wrapper });
+      // Even on a non-dashboard screen, welcome (the global first-run) wins.
+      expect(result.current.resolveAutoStartTour('/self-study')).toBe('welcome');
+    });
+
+    it('resolveAutoStartTour returns the screen tour once welcome is done', () => {
+      setUser({
+        id: 'u',
+        email: 'x@y.com',
+        firstName: 'X',
+        lastName: 'Y',
+        role: 'program_coordinator',
+        preferences: { hideLegacyImporter: true, tours: { welcome: true } },
+      });
+      const { result } = renderHook(() => useTour(), { wrapper });
+      expect(result.current.resolveAutoStartTour('/self-study')).toBe('self-study');
+    });
+
+    it('resolveAutoStartTour returns null when the screen tour is already seen', () => {
+      setUser({
+        id: 'u',
+        email: 'x@y.com',
+        firstName: 'X',
+        lastName: 'Y',
+        role: 'program_coordinator',
+        preferences: {
+          hideLegacyImporter: true,
+          tours: { welcome: true, 'self-study': true },
+        },
+      });
+      const { result } = renderHook(() => useTour(), { wrapper });
+      expect(result.current.resolveAutoStartTour('/self-study')).toBeNull();
+    });
+
+    it('resolveAutoStartTour returns null on excluded routes + partial profiles', () => {
+      setUser({
+        id: 'u',
+        email: 'x@y.com',
+        firstName: 'X',
+        lastName: 'Y',
+        role: 'program_coordinator',
+        preferences: { hideLegacyImporter: true, tours: { welcome: true } },
+      });
+      const { result } = renderHook(() => useTour(), { wrapper });
+      for (const route of TOUR_EXCLUDED_ROUTES) {
+        expect(result.current.resolveAutoStartTour(route)).toBeNull();
+      }
+      // Partial profile (no preferences blob) → null.
+      setUser({
+        id: 'u',
+        email: 'x@y.com',
+        firstName: 'X',
+        lastName: 'Y',
+        role: 'program_coordinator',
+      });
+      const { result: r2 } = renderHook(() => useTour(), { wrapper });
+      expect(r2.current.resolveAutoStartTour('/self-study')).toBeNull();
+    });
+  });
 });

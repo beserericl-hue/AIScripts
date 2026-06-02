@@ -75,11 +75,23 @@ describe('CR-052 — HelpMenu', () => {
     expect(screen.getByTestId('help-menu-dropdown')).toBeInTheDocument();
   });
 
-  it('shows the Tour item ONLY on /dashboard', () => {
+  it('shows a per-screen Tour item on a screen that owns a tour', () => {
     renderHelpMenu('/self-study');
     fireEvent.click(screen.getByTestId('help-menu-trigger'));
-    expect(screen.queryByTestId('help-menu-tour')).not.toBeInTheDocument();
+    // Self-Study has its own tour, so the item appears with the generic
+    // per-screen label (not the welcome label).
+    expect(screen.getByTestId('help-menu-tour')).toHaveTextContent(
+      'Show me around this screen'
+    );
     // chat item is always present
+    expect(screen.getByTestId('help-menu-chat')).toBeInTheDocument();
+  });
+
+  it('hides the Tour item on a screen with no registered tour', () => {
+    // /messages/:id is owned by no tour in the registry.
+    renderHelpMenu('/messages/abc123');
+    fireEvent.click(screen.getByTestId('help-menu-trigger'));
+    expect(screen.queryByTestId('help-menu-tour')).not.toBeInTheDocument();
     expect(screen.getByTestId('help-menu-chat')).toBeInTheDocument();
   });
 
@@ -122,6 +134,30 @@ describe('CR-052 — HelpMenu', () => {
     fireEvent.click(screen.getByTestId('help-menu-trigger'));
     fireEvent.click(screen.getByTestId('help-menu-tour'));
     expect(observed).toBe('welcome');
+  });
+
+  it('clicking the tour item starts the CURRENT screen\'s tour', () => {
+    let observed: string | null = 'noop';
+    function Probe() {
+      const { activeTour } = useTour();
+      React.useEffect(() => {
+        observed = activeTour;
+      });
+      return null;
+    }
+    render(
+      <MemoryRouter initialEntries={['/self-study']}>
+        <TourProvider>
+          <HintProvider>
+            <Probe />
+            <HelpMenu />
+          </HintProvider>
+        </TourProvider>
+      </MemoryRouter>
+    );
+    fireEvent.click(screen.getByTestId('help-menu-trigger'));
+    fireEvent.click(screen.getByTestId('help-menu-tour'));
+    expect(observed).toBe('self-study');
   });
 
   it('clicking the chat item opens the help-chat store', () => {

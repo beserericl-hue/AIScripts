@@ -40,6 +40,73 @@ const STRINGS = {
   'tour.welcome.lastStep':
     "That's it! You can come back to this tour anytime from the help button.",
 
+  // ------------------------------------------------------------
+  // Per-screen tours (CR-052 follow-on — "help objects on every
+  // screen"). Each main screen has its own short walk-through that
+  // auto-starts the first time the user lands there, and can be
+  // replayed from the help button. Same five-year-old voice.
+  // ------------------------------------------------------------
+
+  // tour.selfStudy.* — the Self-Study Editor (the writing screen).
+  'tour.selfStudy.intro':
+    "This is the screen where you write your school's story. Want a quick look around?",
+  'tour.selfStudy.phases':
+    "These are the four steps. You go left to right: bring in your file, check the drafts, write your story, then send it in.",
+  'tour.selfStudy.import':
+    "Step one. Bring in your school's paper here and let the helper read it for you.",
+  'tour.selfStudy.drafts':
+    "Step two. The helper makes drafts from your paper. You look at each one and say yes or no.",
+  'tour.selfStudy.write':
+    "Step three. This is where you write and fix your story, part by part, until each part is done.",
+  'tour.selfStudy.submit':
+    "Step four. When every part is done, you send your story in for someone to read.",
+  'tour.selfStudy.lastStep':
+    "That's the whole screen! Click the help button anytime to see this again.",
+
+  // tour.readerReview.* — the Reader review queue + review screen.
+  'tour.readerReview.intro':
+    "This is where you read other schools' stories and say how well they did. Want a quick look?",
+  'tour.readerReview.queue':
+    "These are the schools waiting for you to read. Click one to open it.",
+  'tour.readerReview.screen':
+    "Here is one school's story. You read each part and give it a score.",
+  'tour.readerReview.messages':
+    "Need to ask a question? Click here to talk with the other people working on this school.",
+  'tour.readerReview.lastStep':
+    "That's it! Click the help button anytime to see this again.",
+
+  // tour.leadCompilation.* — the Lead-Reader compilation screen.
+  'tour.leadCompilation.intro':
+    "This is where all the readers' scores come together so you can pick the final one. Want a quick look?",
+  'tour.leadCompilation.toolbar':
+    "Use these buttons to choose what you see and how you share it.",
+  'tour.leadCompilation.export':
+    "Click here to save all the scores as a file you can print or send.",
+  'tour.leadCompilation.sendBoard':
+    "When the scores are all set, click here to send this school to the board.",
+  'tour.leadCompilation.lastStep':
+    "That's it! Click the help button anytime to see this again.",
+
+  // tour.adminSettings.* — the Admin settings screen.
+  'tour.adminSettings.intro':
+    "This is where you set up the people and rules for the portal. Want a quick look?",
+  'tour.adminSettings.nav':
+    "Pick a part here to change it. Each one opens its own page on the right.",
+  'tour.adminSettings.lastStep':
+    "That's it! Click the help button anytime to see this again.",
+
+  // tour.siteVisit.* — the Site-Visit checklist + itinerary screens.
+  'tour.siteVisit.intro':
+    "This is your screen for the school visit. Want a quick look?",
+  'tour.siteVisit.checklist':
+    "This is your list of things to check while you are there. Tick each one off as you go.",
+  'tour.siteVisit.itinerary':
+    "This is the plan for your day — where you go and when. You can change the times here.",
+  'tour.siteVisit.toolbar':
+    "Use these buttons to save your work or to make a file you can print.",
+  'tour.siteVisit.lastStep':
+    "That's it! Click the help button anytime to see this again.",
+
   // tour.controls.* — the custom tooltip's buttons.
   'tour.controls.back': '← Back',
   'tour.controls.skip': 'Skip',
@@ -79,6 +146,10 @@ const STRINGS = {
     "The help chat is not turned on right now. Please try again later.",
   'help.menu.startTour': 'Start the welcome tour',
   'help.menu.restartTour': 'Watch the welcome tour again',
+  // Generic per-screen tour labels — shown when the current screen has its
+  // own walk-through (anything other than the home/welcome tour).
+  'help.menu.tourScreen': 'Show me around this screen',
+  'help.menu.tourScreenAgain': 'Show me around this screen again',
   'help.menu.closed': 'Close help menu',
 
   // ============================================================

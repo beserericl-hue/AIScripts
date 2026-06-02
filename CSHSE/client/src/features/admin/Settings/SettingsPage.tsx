@@ -179,7 +179,11 @@ export function SettingsPage() {
         <div className="flex gap-8">
           {/* Navigation Sidebar */}
           <div className="w-72 flex-shrink-0">
-            <nav className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+            {/* data-tour-step anchors the admin-settings guided tour. */}
+            <nav
+              data-tour-step="admin-settings-nav"
+              className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden"
+            >
               {navItems.map((item) => (
                 <button
                   key={item.id}
