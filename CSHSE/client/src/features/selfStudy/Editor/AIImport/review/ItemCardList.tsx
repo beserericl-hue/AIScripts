@@ -44,6 +44,105 @@ import {
 } from './SpecRail';
 import { nearestPlacedNeighborFor } from './nearestPlacedNeighbor';
 import { tableizeIfBareRows } from './tableizeHtml';
+import { useStandardsCatalog } from './useStandardsCatalog';
+
+// ------------------------------------------------------ SpecAssignControls
+//
+// Shared Standard + cascading Spec dropdown pair used by CVsView and
+// EvidenceDocsView so the coordinator can assign (or override) which spec a
+// CV / syllabus / appendix paper supports. The selection persists into the
+// store (updateCvRouting / updateEvidenceDocRouting) and rides along to the
+// server at Apply time, where it stamps SupportingEvidence.standardCode/
+// specCode — the field readers use to find evidence per spec.
+
+interface SpecAssignControlsProps {
+  std: string | undefined;
+  spec: string | undefined;
+  onChange: (std: string, spec: string) => void;
+  /** Compact layout for dense card lists. */
+  idPrefix: string;
+}
+
+function SpecAssignControls({
+  std,
+  spec,
+  onChange,
+  idPrefix
+}: SpecAssignControlsProps): JSX.Element {
+  const { standards, error } = useStandardsCatalog();
+  const stdEntry = standards.find((s) => s.std === std);
+  const specOptions = stdEntry?.specsForStd ?? [];
+
+  return (
+    <div
+      className="mt-2 grid grid-cols-2 gap-2"
+      // Don't let clicks inside the dropdowns bubble up to the card's
+      // select-on-click handler.
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <div>
+        <label
+          htmlFor={`${idPrefix}-std`}
+          className="block text-[10px] font-medium uppercase tracking-wide text-gray-500"
+        >
+          Standard
+        </label>
+        <select
+          id={`${idPrefix}-std`}
+          data-testid={`${idPrefix}-std`}
+          value={std ?? ''}
+          onChange={(e) => {
+            const newStd = e.target.value;
+            // Reset the spec when the standard changes — spec letters belong
+            // to a specific standard. Default to the first spec of the new
+            // standard so the pair is never half-set.
+            const firstSpec = standards.find((s) => s.std === newStd)
+              ?.specsForStd[0]?.spec;
+            onChange(newStd, firstSpec ?? '');
+          }}
+          className="mt-0.5 w-full rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500"
+        >
+          <option value="">— standard —</option>
+          {standards.map((s) => (
+            <option key={s.std} value={s.std}>
+              {s.std} — {s.title}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label
+          htmlFor={`${idPrefix}-spec`}
+          className="block text-[10px] font-medium uppercase tracking-wide text-gray-500"
+        >
+          Substandard
+        </label>
+        <select
+          id={`${idPrefix}-spec`}
+          data-testid={`${idPrefix}-spec`}
+          value={spec ?? ''}
+          onChange={(e) => onChange(std ?? '', e.target.value)}
+          disabled={!std || specOptions.length === 0}
+          className="mt-0.5 w-full rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500 disabled:bg-gray-100"
+        >
+          <option value="">— substandard —</option>
+          {specOptions.map((opt) => (
+            <option key={opt.spec} value={opt.spec}>
+              {std}.{opt.spec}
+              {opt.title ? ` — ${opt.title}` : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+      {error && (
+        <p className="col-span-2 text-[10px] text-amber-700">
+          Couldn{"'"}t load the standards list ({error}). Reload to assign.
+        </p>
+      )}
+    </div>
+  );
+}
 
 export type ItemKind =
   | 'text'
@@ -1542,6 +1641,7 @@ function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
   const selectSection = useAIImportStore((s) => s.selectSection);
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
   const submissionId = useAIImportStore((s) => s.submissionId);
+  const updateCvRouting = useAIImportStore((s) => s.updateCvRouting);
 
   if (cvs.length === 0) {
     return (
@@ -1593,9 +1693,13 @@ function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
                 <p className="mt-1 text-xs text-gray-700 line-clamp-3">{cv.snippet}</p>
               )}
               <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
-                {cv.resolvedStd && cv.resolvedSpec && (
+                {cv.resolvedStd && cv.resolvedSpec ? (
                   <span className="font-mono text-cshse-700">
                     → Spec {cv.resolvedStd}.{cv.resolvedSpec}
+                  </span>
+                ) : (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                    Unassigned
                   </span>
                 )}
                 {/* CR-051 Sprint 7 polish — inline "View source"
@@ -1643,6 +1747,15 @@ function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
                   </button>
                 )}
               </div>
+              {/* Assign this CV to the standard / substandard it supports.
+                  Persists via updateCvRouting and rides to the server at
+                  Apply (SupportingEvidence.standardCode/specCode). */}
+              <SpecAssignControls
+                idPrefix={`cv-assign-${cv.sectionId}`}
+                std={cv.resolvedStd}
+                spec={cv.resolvedSpec}
+                onChange={(std, spec) => updateCvRouting(cv.sectionId, std, spec)}
+              />
             </li>
           );
         })}
@@ -1670,6 +1783,7 @@ function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.
   // shows the detector heuristics + source location for the picked doc.
   const selectSection = useAIImportStore((s) => s.selectSection);
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
+  const updateEvidenceDocRouting = useAIImportStore((s) => s.updateEvidenceDocRouting);
   if (docs.length === 0) {
     return (
       <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
@@ -1740,9 +1854,13 @@ function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.
               <p className="mt-2 text-xs text-gray-700 line-clamp-3">{d.summary}</p>
             )}
             <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
-              {d.resolvedStd && d.resolvedSpec && (
+              {d.resolvedStd && d.resolvedSpec ? (
                 <span className="font-mono text-cshse-700">
                   → Spec {d.resolvedStd}.{d.resolvedSpec}
+                </span>
+              ) : (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                  Unassigned
                 </span>
               )}
               {/* CR-051 Sprint 7 polish — inline "View source" button. */}
@@ -1791,6 +1909,16 @@ function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.
                 </button>
               )}
             </div>
+            {/* Assign this syllabus / paper to the standard / substandard it
+                supports. Persists via updateEvidenceDocRouting and rides to
+                the server at Apply (SupportingEvidence.standardCode/specCode
+                from routing.std/spec). */}
+            <SpecAssignControls
+              idPrefix={`evdoc-assign-${d.sectionId}`}
+              std={d.resolvedStd}
+              spec={d.resolvedSpec}
+              onChange={(std, spec) => updateEvidenceDocRouting(d.sectionId, std, spec)}
+            />
           </li>
           );
         })}

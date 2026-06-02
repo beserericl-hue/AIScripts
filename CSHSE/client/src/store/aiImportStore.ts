@@ -172,6 +172,11 @@ export type EvidenceDocItem = {
   fileSize?: number;
   resolvedStd?: string;
   resolvedSpec?: string;
+  // Routing the server consumes at Apply time. aiImportController stamps
+  // SupportingEvidence.standardCode/specCode from `routing.std` / `routing.spec`
+  // (line ~1508). The detector leaves this unset; the coordinator fills it in
+  // via the Evidence-Docs rail dropdowns (updateEvidenceDocRouting).
+  routing?: { std?: string; spec?: string; source?: string };
   // CR-040 Phase 2c — populated at Apply time when the server packages
   // the evidenceDoc as a SupportingEvidence record. The "View file"
   // button uses `fileId` to hit
@@ -499,6 +504,12 @@ interface AIImportState {
   // CR-033 Phase 2c part 2 — coordinator picks a different (std, spec)
   // for a CV on the standalone-CV Review screen.
   updateCvRouting: (sectionId: string, std: string, spec: string) => void;
+  // Coordinator assigns a (std, spec) to a syllabus / appendix paper from
+  // the Review wizard's Evidence-Docs rail. Mirrors updateCvRouting; sets
+  // both the display fields (resolvedStd/resolvedSpec) and routing.{std,spec}
+  // which the server's apply path reads to stamp SupportingEvidence
+  // standardCode/specCode (aiImportController.ts ~1508).
+  updateEvidenceDocRouting: (sectionId: string, std: string, spec: string) => void;
   // CR-041 user story 1
   enqueueFiles: (files: File[]) => void;
   popNextPendingFile: () => File | null;
@@ -785,6 +796,23 @@ export const useAIImportStore = create<AIImportState>()(
                   routing: { ...(c.routing || { source: 'matcher' }), source: 'matcher' as const }
                 }
               : c
+          ),
+          dirty: true
+        })),
+      updateEvidenceDocRouting: (sectionId, std, spec) =>
+        set((s) => ({
+          evidenceDocs: s.evidenceDocs.map((d) =>
+            d.sectionId === sectionId
+              ? {
+                  ...d,
+                  resolvedStd: std,
+                  resolvedSpec: spec,
+                  // routing.{std,spec} is the field the server reads when it
+                  // packages the doc into a SupportingEvidence record at Apply.
+                  // source:'coordinator' records that this was a manual pick.
+                  routing: { ...(d.routing || {}), std, spec, source: 'coordinator' }
+                }
+              : d
           ),
           dirty: true
         })),

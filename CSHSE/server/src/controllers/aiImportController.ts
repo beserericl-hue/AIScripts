@@ -1547,7 +1547,97 @@ async function _runApplyBody(args: {
       (importRecord as any).markModified('aiEvidenceDocs');
     }
     if (Array.isArray(payload.cvs)) {
-      (importRecord as any).aiCVs = payload.cvs;
+      // Package each ASSIGNED CV as a SupportingEvidence record so the faculty
+      // CV shows up under the standard/substandard the coordinator routed it
+      // to (the same reader-facing linkage evidenceDocs get above). A CV is
+      // "assigned" once it carries a resolved (std, spec) — set in the Review
+      // wizard's CV rail via updateCvRouting. Unassigned CVs are stored as-is
+      // (aiCVs) with no SupportingEvidence yet; assigning them later + re-Apply
+      // packages them then. Idempotent: a CV that already has fileId is skipped.
+      try {
+        const { SupportingEvidence } = await import('../models/SupportingEvidence');
+        const {
+          Document,
+          Packer,
+          Paragraph,
+          TextRun,
+          HeadingLevel,
+        } = await import('docx');
+        const stampedCvs = await Promise.all(
+          (payload.cvs as any[]).map(async (cv) => {
+            const std = cv.resolvedStd || cv.routing?.std;
+            const spec = cv.resolvedSpec || cv.routing?.spec;
+            // Only package CVs the coordinator has routed to a spec. Skip
+            // already-packaged CVs (re-apply / idempotent replay).
+            if (cv.fileId || !std || !spec) return cv;
+
+            const faculty = cv.facultyName || 'Faculty CV';
+            const safeName =
+              String(faculty).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) ||
+              'cv';
+            const children: any[] = [];
+            children.push(
+              new Paragraph({ text: faculty, heading: HeadingLevel.HEADING_1 })
+            );
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({ text: `Faculty CV — supports Spec ${std}.${spec}`, italics: true }),
+                ],
+              })
+            );
+            children.push(
+              new Paragraph({ text: 'Curriculum Vitae', heading: HeadingLevel.HEADING_2 })
+            );
+            const bodyText = String(cv.snippet || '(no captured body — see source document)');
+            for (const p of bodyText.split(/\n\s*\n/)) {
+              children.push(new Paragraph({ text: p.trim() }));
+            }
+
+            const docx = new Document({
+              creator: 'CSHSE AI Importer',
+              title: `${faculty} — CV`,
+              description: `Faculty CV supporting Spec ${std}.${spec}`,
+              sections: [{ properties: {}, children }],
+            });
+            const buffer = await Packer.toBuffer(docx);
+            const filename = `${safeName}-CV.docx`;
+            const evidence = await SupportingEvidence.create({
+              institutionId: submission.institutionId,
+              submissionId: submission._id,
+              uploadedBy: userId || importRecord.uploadedBy,
+              standardCode: std,
+              specCode: spec,
+              evidenceType: 'document',
+              file: {
+                filename,
+                originalName: cv.sourceFilename || filename,
+                mimeType:
+                  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                size: buffer.byteLength,
+                data: buffer.toString('base64'),
+                encoding: 'base64',
+                storageType: 'base64',
+                uploadedAt: new Date(),
+                uploadedBy: userId || importRecord.uploadedBy,
+              } as any,
+              description: `${faculty} — Curriculum Vitae`,
+              versionNumber: 1,
+              isCurrentVersion: true,
+              isDeleted: false,
+              linkedNarratives: [],
+              tags: ['ai-import', 'kind:cv'],
+            });
+            counts.evidenceFiles += 1;
+            return { ...cv, fileId: String(evidence._id), fileName: filename };
+          })
+        );
+        (importRecord as any).aiCVs = stampedCvs;
+      } catch (err) {
+        // Non-fatal: keep the un-stamped CVs so the rail still shows the cards.
+        (importRecord as any).aiCVs = payload.cvs;
+        console.warn('[CV-assign] CV → SupportingEvidence packaging failed:', err);
+      }
       (importRecord as any).markModified('aiCVs');
     }
     if (idempotencyKey) {
