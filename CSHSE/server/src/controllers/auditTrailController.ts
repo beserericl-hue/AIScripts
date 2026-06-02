@@ -30,7 +30,10 @@ function _isElevated(req: AuthenticatedRequest): boolean {
   return req.user?.role === 'admin' || req.user?.isSuperuser === true;
 }
 
-function _buildFilter(req: AuthenticatedRequest): { ok: true; query: any } | { ok: false; error: string } {
+// Returns either a built query or a validation error. Uses optional fields
+// (rather than a discriminated `ok` union) so callers can branch on `error`
+// without relying on control-flow narrowing of the return type.
+function _buildFilter(req: AuthenticatedRequest): { query?: any; error?: string } {
   const q: any = {};
   const action = typeof req.query.action === 'string' ? req.query.action : undefined;
   if (action) {
@@ -40,7 +43,7 @@ function _buildFilter(req: AuthenticatedRequest): { ok: true; query: any } | { o
   const actorId = typeof req.query.actorId === 'string' ? req.query.actorId : undefined;
   if (actorId) {
     if (!mongoose.Types.ObjectId.isValid(actorId)) {
-      return { ok: false, error: 'actorId is not a valid ObjectId' };
+      return { error: 'actorId is not a valid ObjectId' };
     }
     q.actorId = new mongoose.Types.ObjectId(actorId);
   }
@@ -49,7 +52,7 @@ function _buildFilter(req: AuthenticatedRequest): { ok: true; query: any } | { o
   const submissionId = typeof req.query.submissionId === 'string' ? req.query.submissionId : undefined;
   if (submissionId) {
     if (!mongoose.Types.ObjectId.isValid(submissionId)) {
-      return { ok: false, error: 'submissionId is not a valid ObjectId' };
+      return { error: 'submissionId is not a valid ObjectId' };
     }
     q.submissionId = new mongoose.Types.ObjectId(submissionId);
   }
@@ -63,7 +66,7 @@ function _buildFilter(req: AuthenticatedRequest): { ok: true; query: any } | { o
     q.timestamp = q.timestamp || {};
     q.timestamp.$lte = until;
   }
-  return { ok: true, query: q };
+  return { query: q };
 }
 
 export const listAuditEntries = async (req: AuthenticatedRequest, res: Response) => {
@@ -72,18 +75,19 @@ export const listAuditEntries = async (req: AuthenticatedRequest, res: Response)
       return res.status(403).json({ error: 'Not authorized' });
     }
     const f = _buildFilter(req);
-    if (!f.ok) return res.status(400).json({ error: f.error });
+    if (f.error) return res.status(400).json({ error: f.error });
+    const filterQuery = f.query ?? {};
 
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || '100'), 10) || 100, 1), 500);
     const offset = Math.max(parseInt(String(req.query.offset || '0'), 10) || 0, 0);
 
     const [rows, total] = await Promise.all([
-      AuditLogEntry.find(f.query)
+      AuditLogEntry.find(filterQuery)
         .sort({ timestamp: -1 })
         .skip(offset)
         .limit(limit)
         .lean(),
-      AuditLogEntry.countDocuments(f.query)
+      AuditLogEntry.countDocuments(filterQuery)
     ]);
 
     return res.json({
@@ -114,10 +118,11 @@ export const exportAuditCsv = async (req: AuthenticatedRequest, res: Response) =
       return res.status(403).json({ error: 'Not authorized' });
     }
     const f = _buildFilter(req);
-    if (!f.ok) return res.status(400).json({ error: f.error });
+    if (f.error) return res.status(400).json({ error: f.error });
+    const filterQuery = f.query ?? {};
 
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || '10000'), 10) || 10000, 1), 10000);
-    const rows = await AuditLogEntry.find(f.query)
+    const rows = await AuditLogEntry.find(filterQuery)
       .sort({ timestamp: -1 })
       .limit(limit)
       .lean();
