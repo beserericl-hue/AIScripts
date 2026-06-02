@@ -116,7 +116,35 @@ export async function apiKeyRateLimit(req: Request, res: Response, next: NextFun
     }
     next();
   } catch (err) {
-    // Non-fatal — if the limiter blows up we still serve the request.
+    // Non-fatal — if the key lookup blows up (e.g. a transient DB hiccup
+    // under load) we still serve the request, but DON'T silently disable
+    // throttling AND drop the X-RateLimit-* headers the contract promises
+    // on every response. Fall back to the anonymous IP bucket so the
+    // limiter degrades to "treat as anonymous" rather than "unlimited +
+    // headerless". Without this, a transient findOne failure produced a
+    // headerless 200 — the source of the cr042-rate-limit flake under
+    // full-suite load.
+    try {
+      const bk = _bucketKey(req, null);
+      const { allowed, remaining, resetAt } = _tick(bk, 10);
+      res.setHeader('X-RateLimit-Limit', '10');
+      res.setHeader('X-RateLimit-Remaining', String(remaining));
+      res.setHeader('X-RateLimit-Reset', String(Math.floor(resetAt / 1000)));
+      if (!allowed) {
+        const retryAfter = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000));
+        res.setHeader('Retry-After', String(retryAfter));
+        res.status(429).json({
+          type: 'https://docs.cshse.org/sso/errors/rate-limit-exceeded',
+          title: 'Rate limit exceeded',
+          status: 429,
+          detail: 'Limit is 10 requests per minute.',
+          retryAfter,
+        });
+        return;
+      }
+    } catch {
+      /* never block the request on the limiter */
+    }
     next();
   }
 }

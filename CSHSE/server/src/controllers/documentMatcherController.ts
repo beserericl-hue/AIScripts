@@ -89,8 +89,12 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
       return res.status(400).json({ error: 'Missing documentId in callback' });
     }
 
-    // Find the import record by documentId (which is our importId)
-    const importRecord = await SelfStudyImport.findById(payload.documentId);
+    // Find the import record by documentId (which is our importId). Read-only
+    // (.lean()) — every mutation below goes through atomic operators so the
+    // concurrent section callbacks n8n fires for one import never clobber one
+    // another (the old findById→mutate→save path threw VersionError / lost
+    // sections under that load).
+    const importRecord = await SelfStudyImport.findById(payload.documentId).lean();
     if (!importRecord) {
       console.error('[DocumentMatcherCallback] Import not found:', payload.documentId);
       return res.status(404).json({ error: 'Import not found' });
@@ -105,34 +109,54 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
     // Handle error type
     if (payload.type === 'error' || payload.error) {
       console.error('[DocumentMatcherCallback] Error from n8n:', payload.error);
-      importRecord.status = 'failed';
-      importRecord.error = payload.error || 'Document matching failed';
-      importRecord.processingCompletedAt = new Date();
-      await importRecord.save();
+      await SelfStudyImport.findByIdAndUpdate(payload.documentId, {
+        $set: {
+          status: 'failed',
+          error: payload.error || 'Document matching failed',
+          processingCompletedAt: new Date()
+        }
+      });
 
       return res.json({
         success: true,
-        documentId: importRecord._id,
+        documentId: payload.documentId,
         status: 'failed'
       });
     }
 
-    // Update job tracking info on first callback
-    // Only reset if this is truly a new job (different jobId or first callback for this document)
+    // Concurrency-safe job initialization — runs exactly ONCE per job even when
+    // every section callback arrives at the same instant. The guard
+    // `n8nJobId != payload.jobId` (which also matches a missing/null field) means
+    // only the first callback to reach this updateOne claims the job and performs
+    // the reset; concurrent siblings see the now-claimed jobId and no-op. Because
+    // each request awaits this init before its own $inc below, the received=0
+    // reset always lands before any increment, so no section count is ever lost.
     const isNewJob = !importRecord.n8nJobId || importRecord.n8nJobId !== payload.jobId;
-    if (payload.sectionIndex === 0 || isNewJob) {
-      importRecord.n8nJobId = payload.jobId;
-      importRecord.n8nTotalSections = payload.totalSections;
-      importRecord.n8nReceivedSections = 0;
+    if (isNewJob) {
+      await SelfStudyImport.updateOne(
+        { _id: payload.documentId, n8nJobId: { $ne: payload.jobId } },
+        [
+          {
+            $set: {
+              n8nJobId: payload.jobId,
+              n8nTotalSections: payload.totalSections,
+              n8nReceivedSections: 0,
+              // Preserve manual mappings; n8n is authoritative for auto ones.
+              mappedSections: {
+                $filter: {
+                  input: { $ifNull: ['$mappedSections', []] },
+                  as: 'm',
+                  cond: { $eq: ['$$m.mappedBy', 'manual'] }
+                }
+              },
+              unmappedContent: [],
+              'extractedContent.sections': []
+            }
+          }
+        ]
+      );
 
-      // Clear existing auto-mappings on first section (preserve manual mappings)
-      importRecord.mappedSections = importRecord.mappedSections.filter(m => m.mappedBy === 'manual');
-      importRecord.unmappedContent = [];
-
-      // Clear extracted sections since n8n provides the authoritative sections
-      importRecord.extractedContent.sections = [];
-
-      debugLog('Initialized job tracking (first callback)', {
+      debugLog('Initialized job tracking (atomic, set-once)', {
         jobId: payload.jobId,
         totalSections: payload.totalSections,
         isNewJob
@@ -175,7 +199,7 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
       });
 
       // Create extracted section from the callback data
-      const extractedSection = {
+      const extractedSection: any = {
         id: sectionId,
         pageNumber: payload.sectionIndex + 1, // Use index as page approximation
         startPosition: 0,
@@ -192,8 +216,10 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
         extractedSection.endPosition = extractedSection.content.length;
       }
 
-      // Add to extracted sections
-      importRecord.extractedContent.sections.push(extractedSection);
+      // Determine the mapped / unmapped entry for this section (built in memory,
+      // then persisted atomically below — no read-modify-write of the array).
+      let mappedEntry: any = null;
+      let unmappedEntry: any = null;
 
       // Process based on match status
       // Get standard and subspecification codes, treating empty strings as missing
@@ -206,14 +232,14 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
 
         if (subspecificationCode && confidence >= 0.5) {
           // Full match with sufficient confidence - add to mapped sections
-          importRecord.mappedSections.push({
+          mappedEntry = {
             extractedSectionId: sectionId,
             standardCode: standardCode,
             specCode: subspecificationCode,
             fieldType: 'narrative',
             mappedBy: 'auto',
             mappedAt: new Date()
-          });
+          };
 
           debugLog('Section mapped', {
             sectionId,
@@ -224,14 +250,14 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
         } else if (subspecificationCode && confidence < 0.5) {
           // Has subspecification but low confidence - add to unmapped for review
           // Include suggested match info so user can approve it
-          importRecord.unmappedContent.push({
+          unmappedEntry = {
             extractedSectionId: sectionId,
             reason: section.match.rationale || `Low confidence match (${section.match.confidence}%) to Standard ${standardCode}${subspecificationCode}`,
             suggestedStandardCode: standardCode,
             suggestedSpecCode: subspecificationCode,
             suggestedConfidence: section.match.confidence,
             action: 'pending'
-          });
+          };
 
           debugLog('Section added to unmapped (low confidence)', {
             sectionId,
@@ -242,13 +268,13 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
           });
         } else {
           // Has standard but no subspecification - add to unmapped with partial match info
-          importRecord.unmappedContent.push({
+          unmappedEntry = {
             extractedSectionId: sectionId,
             reason: section.match.rationale || `Matched to Standard ${standardCode} but no subspecification identified`,
             suggestedStandardCode: standardCode,
             suggestedConfidence: section.match.confidence,
             action: 'pending'
-          });
+          };
 
           debugLog('Section added to unmapped (no subspecification)', {
             sectionId,
@@ -259,11 +285,11 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
         }
       } else if (section.match?.status === 'unmatched') {
         // Unmatched section - add to unmapped
-        importRecord.unmappedContent.push({
+        unmappedEntry = {
           extractedSectionId: sectionId,
           reason: section.match.rationale || 'No matching standard found',
           action: 'pending'
-        });
+        };
 
         debugLog('Section unmatched', {
           sectionId,
@@ -271,11 +297,11 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
         });
       } else if (section.match?.status === 'error') {
         // Error processing section
-        importRecord.unmappedContent.push({
+        unmappedEntry = {
           extractedSectionId: sectionId,
           reason: section.match.error || 'Error processing section',
           action: 'pending'
-        });
+        };
 
         debugLog('Section had error', {
           sectionId,
@@ -283,41 +309,73 @@ export const receiveDocumentMatcherCallback = async (req: Request, res: Response
         });
       }
 
-      // Update received sections count
-      importRecord.n8nReceivedSections = (importRecord.n8nReceivedSections || 0) + 1;
-    }
+      // Persist this section ATOMICALLY: $push appends to each array and $inc
+      // bumps the received counter in a single document update, so concurrent
+      // callbacks for the same import never overwrite one another. The terminal
+      // callback (moreData=false) also flips status to completed in the same op.
+      const pushOps: any = { 'extractedContent.sections': extractedSection };
+      if (mappedEntry) pushOps.mappedSections = mappedEntry;
+      if (unmappedEntry) pushOps.unmappedContent = unmappedEntry;
 
-    // Check if this is the final callback
-    if (!payload.moreData) {
-      importRecord.status = 'completed';
-      importRecord.processingCompletedAt = new Date();
+      const update: any = {
+        $push: pushOps,
+        $inc: { n8nReceivedSections: 1 }
+      };
+      if (!payload.moreData) {
+        update.$set = { status: 'completed', processingCompletedAt: new Date() };
+      }
 
-      debugLog('Processing complete', {
-        totalSectionsReceived: importRecord.n8nReceivedSections,
-        mappedCount: importRecord.mappedSections.length,
-        unmappedCount: importRecord.unmappedContent.filter(u => u.action === 'pending').length
+      const updated = await SelfStudyImport.findByIdAndUpdate(payload.documentId, update, { new: true });
+      const unmappedPending = updated?.unmappedContent.filter(u => u.action === 'pending').length ?? 0;
+
+      if (!payload.moreData) {
+        console.log(`[DocumentMatcherCallback] Import ${payload.documentId} completed: ${updated?.mappedSections.length ?? 0} mapped, ${unmappedPending} unmapped`);
+      }
+
+      // Return response
+      return res.json({
+        success: true,
+        documentId: payload.documentId,
+        jobId: payload.jobId,
+        status: updated?.status,
+        sectionIndex: payload.sectionIndex,
+        totalSections: payload.totalSections,
+        receivedSections: updated?.n8nReceivedSections,
+        mappedCount: updated?.mappedSections.length ?? 0,
+        unmappedCount: unmappedPending,
+        moreExpected: payload.moreData
       });
-
-      console.log(`[DocumentMatcherCallback] Import ${importRecord._id} completed: ${importRecord.mappedSections.length} mapped, ${importRecord.unmappedContent.filter(u => u.action === 'pending').length} unmapped`);
     }
 
-    // Save the updated import record
-    importRecord.markModified('extractedContent');
-    importRecord.markModified('mappedSections');
-    importRecord.markModified('unmappedContent');
-    await importRecord.save();
+    // No section payload. If this is the terminal callback, flip to completed.
+    if (!payload.moreData) {
+      const updated = await SelfStudyImport.findByIdAndUpdate(
+        payload.documentId,
+        { $set: { status: 'completed', processingCompletedAt: new Date() } },
+        { new: true }
+      );
+      return res.json({
+        success: true,
+        documentId: payload.documentId,
+        jobId: payload.jobId,
+        status: updated?.status,
+        sectionIndex: payload.sectionIndex,
+        totalSections: payload.totalSections,
+        receivedSections: updated?.n8nReceivedSections,
+        mappedCount: updated?.mappedSections.length ?? 0,
+        unmappedCount: updated?.unmappedContent.filter(u => u.action === 'pending').length ?? 0,
+        moreExpected: payload.moreData
+      });
+    }
 
-    // Return response
+    // Non-terminal callback with no section to process — acknowledge.
     return res.json({
       success: true,
-      documentId: importRecord._id,
+      documentId: payload.documentId,
       jobId: payload.jobId,
       status: importRecord.status,
       sectionIndex: payload.sectionIndex,
       totalSections: payload.totalSections,
-      receivedSections: importRecord.n8nReceivedSections,
-      mappedCount: importRecord.mappedSections.length,
-      unmappedCount: importRecord.unmappedContent.filter(u => u.action === 'pending').length,
       moreExpected: payload.moreData
     });
   } catch (error: any) {

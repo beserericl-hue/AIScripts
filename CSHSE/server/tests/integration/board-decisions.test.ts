@@ -145,15 +145,29 @@ describe('CR-053 — POST board decision', () => {
       .post(`/api/submissions/${sub._id}/decision`)
       .set('Authorization', `Bearer ${adminTok}`)
       .send({ outcome: 'deny', comments: 'second' });
-    // Latest audit row (descending timestamp).
-    const latest = await AuditLogEntry.find({
-      action: 'board.decision_recorded',
-      targetId: String(sub._id)
-    })
-      .sort({ timestamp: -1 })
-      .limit(1);
-    expect(latest[0].payload?.outcome).toBe('deny');
-    expect(latest[0].payload?.priorOutcome).toBe('accept');
+    // The decision controller records the audit row via `void
+    // recordAuditEvent(...)` (fire-and-forget — it intentionally doesn't
+    // block the HTTP response on audit logging). So the second (deny) row
+    // can still be flushing when the response returns; poll for it rather
+    // than reading once. Without this the read races the write under
+    // full-suite load and `latest[0]` is occasionally undefined.
+    let latestDeny: any = null;
+    for (let i = 0; i < 60; i++) {
+      const rows = await AuditLogEntry.find({
+        action: 'board.decision_recorded',
+        targetId: String(sub._id)
+      })
+        .sort({ timestamp: -1 })
+        .limit(1);
+      if (rows[0]?.payload?.outcome === 'deny') {
+        latestDeny = rows[0];
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    expect(latestDeny, 'deny audit row never appeared').toBeTruthy();
+    expect(latestDeny.payload?.outcome).toBe('deny');
+    expect(latestDeny.payload?.priorOutcome).toBe('accept');
   });
 });
 

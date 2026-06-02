@@ -562,27 +562,39 @@ export async function receiveAIEventWebhook(req: AuthenticatedRequest, res: Resp
     return;
   }
   const payload = req.body || {};
-  const importRecord = await SelfStudyImport.findById(importId);
-  if (!importRecord) {
+
+  // Scalability fix (task #41) — ai-events are PROGRESS SNAPSHOTS (status,
+  // queue position, stage list), and cshse-ai can post several in quick
+  // succession while one is still being persisted. The old
+  // findById → mutate → save() read-modify-write threw a Mongoose
+  // VersionError (→ HTTP 500, dropped event) whenever two events for the
+  // same import raced on the optimistic-concurrency __v guard. These are
+  // snapshot fields where last-writer-wins is the correct semantic and
+  // there is no accumulating array to clobber, so a single atomic $set is
+  // both race-free and correct. Mirrors the document-matcher callback fix.
+  const setOps: Record<string, any> = {};
+  if (payload.status) setOps.aiStatus = payload.status;
+  if ('queuePosition' in payload) setOps.aiQueuePosition = payload.queuePosition;
+  if ('queueDepth' in payload) setOps.aiQueueDepth = payload.queueDepth;
+  if ('etaSeconds' in payload) setOps.aiEtaSeconds = payload.etaSeconds;
+  if (payload.format) setOps.aiFormat = payload.format;
+  if (Array.isArray(payload.stages)) setOps.aiStages = payload.stages;
+  if (Array.isArray(payload.errors) && payload.errors.length > 0) {
+    setOps.aiErrors = payload.errors;
+  }
+
+  const updated = await SelfStudyImport.findByIdAndUpdate(
+    importId,
+    Object.keys(setOps).length > 0 ? { $set: setOps } : {},
+    { new: true }
+  );
+  if (!updated) {
     res.status(404).json({ error: 'Import not found' });
     return;
   }
 
-  // Persist whatever the AI service sent us so polling fallback + page
-  // reload both see consistent state.
-  if (payload.status) importRecord.aiStatus = payload.status;
-  if ('queuePosition' in payload) importRecord.aiQueuePosition = payload.queuePosition;
-  if ('queueDepth' in payload) importRecord.aiQueueDepth = payload.queueDepth;
-  if ('etaSeconds' in payload) importRecord.aiEtaSeconds = payload.etaSeconds;
-  if (payload.format) importRecord.aiFormat = payload.format;
-  if (Array.isArray(payload.stages)) importRecord.aiStages = payload.stages;
-  if (Array.isArray(payload.errors) && payload.errors.length > 0) {
-    importRecord.aiErrors = payload.errors;
-  }
-  await importRecord.save();
-
   // Fan out to any connected SSE clients.
-  broadcastSSE(importId, buildSnapshotFromImport(importRecord));
+  broadcastSSE(importId, buildSnapshotFromImport(updated));
   res.json({ ok: true });
 }
 

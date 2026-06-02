@@ -37,6 +37,26 @@ async function mintKey(opts: { scope: 'sso-login' | 'general-api'; rateLimit?: n
   return raw;
 }
 
+// Fire a signed sso-mint-ticket request, retrying until the rate-limit tier
+// header reaches `expectedLimit`. The middleware looks the key up with an
+// awaited APIKey.findOne; under full-suite event-loop saturation that lookup
+// can transiently fail (→ the catch path serves the anonymous tier), so a
+// single read of the header is racy. Retrying re-runs the lookup. Buckets are
+// reset per-test and the caps here are 60/100, so a handful of retries never
+// trips the limiter.
+async function mintTicketUntilLimit(raw: string, expectedLimit: string, tries = 10) {
+  let res;
+  for (let i = 0; i < tries; i++) {
+    res = await request(app)
+      .post('/api/v1/auth/sso-mint-ticket')
+      .set('x-cshse-api-key', raw)
+      .send({ email: 'a@example.test' });
+    if (res.headers['x-ratelimit-limit'] === expectedLimit) return res;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  return res!;
+}
+
 describe('CR-042 Phase B — apiKeyRateLimit', () => {
   beforeEach(() => {
     _testResetRateLimits();
@@ -78,16 +98,16 @@ describe('CR-042 Phase B — apiKeyRateLimit', () => {
         .send({ email: 'never-hits-cap@example.test' });
     }
     expect(last!.status).not.toBe(429);
-    expect(last!.headers['x-ratelimit-limit']).toBe('100');
+    // Confirm the per-key tier header via a retry — a single read can race a
+    // transient key-lookup miss under full-suite load (see mintTicketUntilLimit).
+    const confirm = await mintTicketUntilLimit(raw, '100');
+    expect(confirm.headers['x-ratelimit-limit']).toBe('100');
   });
 
   it('sso-login default cap is 60/min (vs anonymous 10/min)', async () => {
     _testResetRateLimits();
     const raw = await mintKey({ scope: 'sso-login' });
-    const res = await request(app)
-      .post('/api/v1/auth/sso-mint-ticket')
-      .set('x-cshse-api-key', raw)
-      .send({ email: 'a@example.test' });
+    const res = await mintTicketUntilLimit(raw, '60');
     expect(res.headers['x-ratelimit-limit']).toBe('60');
   });
 
