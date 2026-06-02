@@ -57,7 +57,18 @@ export const submissionLockout = async (
 
     const isReaderLocked = !!submission.readerLock?.isLocked;
 
-    if (!isFinalSubmitted && !isReaderLocked) {
+    // Sent back for correction: a reader / lead reader has unlocked the
+    // submission and explicitly handed it back to the PC to add or fix items.
+    // The submission's status legitimately stays in the review band
+    // (under_review / readers_assigned / ...) — the editability signal is the
+    // lockReason, not the status. Mirror getLockStatus / clearSentBack, which
+    // already treat this state as PC-editable, so the status check below does
+    // not re-lock the PC the reviewer just freed.
+    const isSentBackForCorrection =
+      !isReaderLocked &&
+      submission.readerLock?.lockReason === 'sent_back_for_correction';
+
+    if ((!isFinalSubmitted && !isReaderLocked) || isSentBackForCorrection) {
       return next();
     }
 

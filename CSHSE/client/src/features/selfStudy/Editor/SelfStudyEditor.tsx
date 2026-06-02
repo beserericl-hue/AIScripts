@@ -2160,12 +2160,22 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // Status list mirrors server/src/middleware/submissionLockout.ts so the
   // client disables inputs from the same source of truth the server enforces.
   const isSubmissionLocked = React.useMemo(() => {
+    // Sent back for correction: a reader / lead reader explicitly handed the
+    // submission back to the PC to add or fix items. The status stays in the
+    // review band, but the PC IS allowed to edit (mirrors the server's
+    // submissionLockout carve-out). Editability follows the lockReason here.
+    if (
+      submission?.readerLock?.lockReason === 'sent_back_for_correction' &&
+      !submission?.readerLock?.isLocked
+    ) {
+      return false;
+    }
     return submission?.status === 'submitted' ||
            submission?.status === 'under_review' ||
            submission?.status === 'readers_assigned' ||
            submission?.status === 'review_complete' ||
            !!submission?.readerLock?.isLocked;
-  }, [submission?.status, submission?.readerLock?.isLocked]);
+  }, [submission?.status, submission?.readerLock?.isLocked, submission?.readerLock?.lockReason]);
 
   // CR-005 — a program coordinator whose submission is locked must be unable to
   // edit, not merely shown a banner. Fold the lock into the read-only flag so
