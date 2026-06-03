@@ -182,6 +182,7 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
               via aiReviewMerge dedupe-by-sectionId. */}
           <button
             onClick={handleRedetect}
+            data-tour="review-redetect"
             disabled={redetectState.kind === 'running' || !importId}
             title={
               !importId
@@ -214,6 +215,7 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
           </button>
           <button
             onClick={onClose}
+            data-tour="review-back-to-editor"
             className="rounded border border-gray-300 bg-white px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
           >
             ◂ Back to editor

@@ -76,6 +76,7 @@ function SpecAssignControls({
   return (
     <div
       className="mt-2 grid grid-cols-2 gap-2"
+      data-tour="review-assign"
       // Don't let clicks inside the dropdowns bubble up to the card's
       // select-on-click handler.
       onClick={(e) => e.stopPropagation()}
@@ -688,9 +689,9 @@ export function ItemCardList({
   }
 
   return (
-    <div className="flex h-full flex-1 flex-col bg-gray-50">
+    <div className="flex h-full flex-1 flex-col bg-gray-50" data-tour="review-cards">
       {/* Bulk-action toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-2 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-2 text-sm" data-tour="review-bulk-toolbar">
         <div className="flex items-center gap-2">
           <label className="flex cursor-pointer items-center gap-2 text-gray-700">
             <input

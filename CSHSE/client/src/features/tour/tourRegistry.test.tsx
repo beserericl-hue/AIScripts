@@ -76,6 +76,41 @@ describe('tourRegistry — definitions', () => {
     expect(getTourDefinition('nope' as TourName)).toBeUndefined();
   });
 
+  it('self-study tour covers the Drafts → Review surface (every arrowed object)', () => {
+    const steps = getTourDefinition('self-study')!.getSteps({ role: 'program_coordinator' });
+    const targets = steps
+      .map((s) => (typeof s.target === 'string' ? s.target : ''))
+      .filter(Boolean);
+    // Each Review-surface anchor the coordinator can point at must have a step.
+    const requiredAnchors = [
+      '[data-tour="review-summary"]',
+      '[data-tour="review-rail"]',
+      '[data-tour="review-doc-intro"]',
+      '[data-tour="review-matrices"]',
+      '[data-tour="review-supporting-evidence"]',
+      '[data-tour="review-standards"]',
+      '[data-tour="review-cards"]',
+      '[data-tour="review-bulk-toolbar"]',
+      '[data-tour="review-assign"]',
+      '[aria-label^="AI evaluation"]',
+      '[data-tour="review-place-as"]',
+      '[data-tour="review-apply"]',
+      '[data-tour="review-next"]',
+      '[data-tour="review-redetect"]',
+      '[data-testid="finish-review-cta"]',
+      '[data-tour="review-back-to-editor"]',
+    ];
+    for (const anchor of requiredAnchors) {
+      expect(targets, `missing tour step for ${anchor}`).toContain(anchor);
+    }
+    // Every Review step resolves to real, non-empty copy (no raw key leak).
+    for (const step of steps) {
+      if (typeof step.content === 'string') {
+        expect(step.content.startsWith('tour.')).toBe(false);
+      }
+    }
+  });
+
   it('welcome steps are role-aware (PC vs admin differ)', () => {
     const welcome = getTourDefinition('welcome')!;
     const pc = welcome.getSteps({ role: 'program_coordinator' });

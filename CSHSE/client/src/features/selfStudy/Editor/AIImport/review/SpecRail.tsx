@@ -149,13 +149,13 @@ export function SpecRail({
         </label>
       </div>
 
-      <nav role="tablist" aria-orientation="vertical" className="flex-1 overflow-auto p-2 text-sm">
+      <nav role="tablist" aria-orientation="vertical" data-tour="review-rail" className="flex-1 overflow-auto p-2 text-sm">
         {/* CR-039 — Document-level Introduction sits at the very top so
             coordinators routing intro material always have a target with
             zero scrolling. Only render if the bucket exists; ItemCardList
             handles the empty state. */}
         {introductions?.document && (
-          <div className="mb-2 flex items-center gap-1">
+          <div className="mb-2 flex items-center gap-1" data-tour="review-doc-intro">
             <button
               role="tab"
               aria-selected={selectedKey === INTRO_DOC_KEY}
@@ -197,7 +197,7 @@ export function SpecRail({
           // scrolls into the 21-standard rail. Without this, the entry
           // disappears off the top as soon as the user reaches Standard 3
           // and they reasonably think we removed the feature.
-          <div className="sticky top-0 z-10 -mx-2 mb-3 border-b border-gray-200 bg-gray-50 px-2 pb-3 pt-1 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]">
+          <div className="sticky top-0 z-10 -mx-2 mb-3 border-b border-gray-200 bg-gray-50 px-2 pb-3 pt-1 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]" data-tour="review-matrices">
             <button
               role="tab"
               aria-selected={selectedKey === MATRICES_KEY}
@@ -228,7 +228,7 @@ export function SpecRail({
             Empty tiles render with a gray "0" badge; populated tiles
             use the cshse accent. Clicking any sub-tile opens its filtered
             list in the middle pane. */}
-        <div className="mb-3">
+        <div className="mb-3" data-tour="review-supporting-evidence">
           <div className="px-2 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
             Supporting Evidence
           </div>
@@ -345,7 +345,7 @@ export function SpecRail({
           // Reassign material in.
           const intro = introductions?.[`standard-${std}`];
           return (
-            <div key={std} className="mb-2">
+            <div key={std} className="mb-2" data-tour="review-standards">
               <div className="px-2 py-1 text-xs font-semibold uppercase tracking-wide text-gray-500">
                 Standard {std}
               </div>

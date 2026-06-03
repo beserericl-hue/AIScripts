@@ -790,7 +790,7 @@ function FullReviewStep(): JSX.Element {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
-        <div>
+        <div data-tour="review-summary">
           <h2 className="text-lg font-semibold text-gray-900">Review recommendations</h2>
           <p className="text-xs text-gray-500">
             {applyTotals.narratives} narratives · {applyTotals.evidenceText} evidence text ·
@@ -830,6 +830,7 @@ function FullReviewStep(): JSX.Element {
           </button>
           <button
             onClick={() => setStep(matrices.length > 0 ? 'matrix' : 'apply')}
+            data-tour="review-next"
             className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
             title="Walk through the matrix-column mapping and merge settings before applying"
           >
@@ -837,6 +838,7 @@ function FullReviewStep(): JSX.Element {
           </button>
           <button
             onClick={() => setConfirmApplyOpen(true)}
+            data-tour="review-apply"
             disabled={isApplying || isApplied || applyBlockedByMissing}
             className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
             title={

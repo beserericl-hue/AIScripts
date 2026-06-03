@@ -417,7 +417,7 @@ export function ItemPreview({
       {/* Action footer — hidden in edit mode; the textarea's own Save/Cancel
           are the only actions while editing. */}
       {!isEditing && (
-      <div className="border-t border-gray-200 bg-gray-50 p-4 space-y-2">
+      <div className="border-t border-gray-200 bg-gray-50 p-4 space-y-2" data-tour="review-place-as">
         <label className="block text-xs font-medium text-gray-700">Place this item as:</label>
         <select
           value={kind}

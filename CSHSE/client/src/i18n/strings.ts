@@ -63,6 +63,42 @@ const STRINGS = {
   'tour.selfStudy.lastStep':
     "That's the whole screen! Click the help button anytime to see this again.",
 
+  // tour.review.* — the Drafts → Review surface (where the helper's drafts
+  // are triaged before they go into the story). These steps only show up
+  // when the Review screen is open; on the writing screen they stay hidden.
+  'tour.review.summary':
+    "You're on the Drafts screen. This line at the top counts everything the helper pulled out of your paper: stories, proof, files, and tables.",
+  'tour.review.rail':
+    "This left-hand list is your menu. Each row is one part of your story. Click a row and its drafts show up in the middle.",
+  'tour.review.docIntro':
+    "This is the opening for your whole school — the part that comes before any numbered standard. Drafts dropped here introduce the school.",
+  'tour.review.matrices':
+    "These are your big charts (the curriculum tables). Click here to check the rows the helper found inside them.",
+  'tour.review.supportingEvidence':
+    "Three kinds of extra proof live here: faculty CVs, course Syllabi, and Papers or Projects. Click one to see what the helper found — and to tell it which Standard and Substandard each one belongs to.",
+  'tour.review.standards':
+    "Every numbered standard and its parts (like 1.a, 1.b) lives here. The little dot tells you if that part is ready (green), close (yellow), or still empty (red).",
+  'tour.review.cards':
+    "The middle shows the drafts for whatever you clicked on the left. Read each card, then keep it or skip it.",
+  'tour.review.bulkToolbar':
+    "Handle lots of cards at once: check some and use Approve selected, or use Approve all for the whole page. Clear approvals starts the checkmarks over.",
+  'tour.review.assign':
+    "Pick the Standard and Substandard this CV, syllabus, or paper supports. That's how it gets filed under the right part for the readers.",
+  'tour.review.aiEval':
+    "Click any card and the helper explains itself here: how sure it is, how many words, and why it picked this spot. “Show in source” opens the exact place in your original paper.",
+  'tour.review.placeAs':
+    "Tell the helper what a draft really is — a Narrative, Evidence, or a File — or send it to a different Standard and Substandard if it landed in the wrong place.",
+  'tour.review.apply':
+    "When the drafts look right, this sends everything you approved into your story so you can write with it.",
+  'tour.review.next':
+    "Move on to the next step — the charts (Matrix) — before you finish.",
+  'tour.review.redetect':
+    "Ask the helper to read your paper again and look for more CVs, syllabi, and papers. Anything you already approved stays safe.",
+  'tour.review.finish':
+    "Done looking? This sets aside any drafts you didn't pick so nothing is left hanging. You can always get them back.",
+  'tour.review.backToEditor':
+    "Go back to writing your story. Nothing here gets lost.",
+
   // tour.readerReview.* — the Reader review queue + review screen.
   'tour.readerReview.intro':
     "This is where you read other schools' stories and say how well they did. Want a quick look?",

@@ -94,6 +94,27 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-phase="drafts"]', 'tour.selfStudy.drafts', translate),
       anchorStep('[data-phase="self-study"]', 'tour.selfStudy.write', translate),
       anchorStep('[data-phase="submit"]', 'tour.selfStudy.submit', translate),
+      // Drafts → Review surface. These anchors only exist while the Review
+      // screen is open, so the DOM-presence filter drops every one of them on
+      // the writing screen and keeps them on the Review screen — one tour that
+      // adapts to whichever sub-screen the coordinator is looking at. Authored
+      // top-left → middle → right → top toolbar, matching how the eye reads it.
+      anchorStep('[data-tour="review-summary"]', 'tour.review.summary', translate),
+      anchorStep('[data-tour="review-rail"]', 'tour.review.rail', translate, 'right'),
+      anchorStep('[data-tour="review-doc-intro"]', 'tour.review.docIntro', translate, 'right'),
+      anchorStep('[data-tour="review-matrices"]', 'tour.review.matrices', translate, 'right'),
+      anchorStep('[data-tour="review-supporting-evidence"]', 'tour.review.supportingEvidence', translate, 'right'),
+      anchorStep('[data-tour="review-standards"]', 'tour.review.standards', translate, 'right'),
+      anchorStep('[data-tour="review-cards"]', 'tour.review.cards', translate),
+      anchorStep('[data-tour="review-bulk-toolbar"]', 'tour.review.bulkToolbar', translate),
+      anchorStep('[data-tour="review-assign"]', 'tour.review.assign', translate),
+      anchorStep('[aria-label^="AI evaluation"]', 'tour.review.aiEval', translate, 'left'),
+      anchorStep('[data-tour="review-place-as"]', 'tour.review.placeAs', translate, 'left'),
+      anchorStep('[data-tour="review-apply"]', 'tour.review.apply', translate),
+      anchorStep('[data-tour="review-next"]', 'tour.review.next', translate),
+      anchorStep('[data-tour="review-redetect"]', 'tour.review.redetect', translate),
+      anchorStep('[data-testid="finish-review-cta"]', 'tour.review.finish', translate),
+      anchorStep('[data-tour="review-back-to-editor"]', 'tour.review.backToEditor', translate),
       centerStep('tour.selfStudy.lastStep', translate),
     ],
     autoStart: true,
