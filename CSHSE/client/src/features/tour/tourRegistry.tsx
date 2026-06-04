@@ -110,8 +110,14 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-tour="review-cards"]', 'tour.review.cards', translate),
       anchorStep('[data-tour="review-bulk-toolbar"]', 'tour.review.bulkToolbar', translate),
       anchorStep('[aria-label^="AI evaluation"]', 'tour.review.aiEval', translate, 'left'),
-      anchorStep('[data-tour="review-place-as"]', 'tour.review.placeAs', translate, 'left'),
-      anchorStep('[data-tour="review-assign"]', 'tour.review.assign', translate, 'left'),
+      // "Place this item as" + the assignment dropdowns sit in the right-pane
+      // FOOTER, at the very bottom of the screen. A left/centered tooltip there
+      // pushes its Next/Back buttons below the fold — and the tour locks page
+      // scroll, so the user is stuck. Anchor these ABOVE the control ('top') so
+      // the whole tooltip (and its buttons) stays on screen. Guarded by the
+      // viewport-bounds check in e2e/tests/37_review_tour_coverage.spec.ts.
+      anchorStep('[data-tour="review-place-as"]', 'tour.review.placeAs', translate, 'top'),
+      anchorStep('[data-tour="review-assign"]', 'tour.review.assign', translate, 'top'),
       anchorStep('[data-tour="review-apply"]', 'tour.review.apply', translate),
       anchorStep('[data-tour="review-next"]', 'tour.review.next', translate),
       anchorStep('[data-tour="review-redetect"]', 'tour.review.redetect', translate),

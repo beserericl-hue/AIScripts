@@ -48,23 +48,50 @@ const REQUIRED_STOPS: Array<[string, RegExp]> = [
   ['Back to editor', /Go back to writing your story/i],
 ];
 
-/** Walk the live Joyride tour, returning the copy shown at every step. */
-async function walkTour(page: Page): Promise<string[]> {
+type WalkResult = { seen: string[]; offscreen: string[] };
+
+/**
+ * Walk the live Joyride tour. Returns the copy shown at every step AND a list
+ * of any steps whose Next/Back buttons fell outside the viewport — the bug a
+ * real user hits when the tooltip renders below the fold and can't be scrolled
+ * to. (Playwright auto-scrolls before a .click(), which masks the overflow, so
+ * we must check the bounding box BEFORE clicking.)
+ */
+async function walkTour(page: Page): Promise<WalkResult> {
   const tooltip = page.getByTestId('tour-tooltip');
   await expect(tooltip).toBeVisible({ timeout: 8000 });
+  const vp = page.viewportSize() ?? { width: 1280, height: 720 };
 
   const seen: string[] = [];
+  const offscreen: string[] = [];
   for (let i = 0; i < 40; i++) {
     const content = await page.getByTestId('tour-tooltip-content').textContent();
-    if (content) seen.push(content.trim());
+    const stepText = (content ?? '').trim();
+    if (stepText) seen.push(stepText);
     const primary = page.getByTestId('tour-tooltip-primary');
+
+    // The primary (Next/Finish) button must be inside the viewport — if it
+    // isn't, a real user can't advance or dismiss the tour.
+    const box = await primary.boundingBox();
+    if (
+      !box ||
+      box.y < 0 ||
+      box.x < 0 ||
+      box.y + box.height > vp.height ||
+      box.x + box.width > vp.width
+    ) {
+      offscreen.push(
+        `step ${i + 1} (button at ${box ? `${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)}` : 'no-box'}, viewport ${vp.width}x${vp.height}): ${stepText.slice(0, 60)}`
+      );
+    }
+
     const label = (await primary.textContent()) ?? '';
     await primary.click();
     if (/finish|done/i.test(label)) break;
     // eslint-disable-next-line no-await-in-loop
     await page.waitForTimeout(120);
   }
-  return seen;
+  return { seen, offscreen };
 }
 
 test.describe('Review surface — guided tour covers every object', () => {
@@ -77,6 +104,10 @@ test.describe('Review surface — guided tour covers every object', () => {
 
   test('the screen tour walks all Review stops (not a 7-step stub)', async ({ page }) => {
     test.setTimeout(120_000);
+    // Use a real, large desktop viewport (the size the coordinator runs at) so
+    // a tooltip anchored to a bottom-of-screen control would overflow below the
+    // fold instead of being masked by Playwright's auto-scroll-before-click.
+    await page.setViewportSize({ width: 1920, height: 1080 });
 
     seed = await seedFixture('wizard_review_minimal', {
       // Suppress first-visit auto-start so we launch deterministically from
@@ -136,7 +167,7 @@ test.describe('Review surface — guided tour covers every object', () => {
     await page.getByTestId('help-menu-trigger').click();
     await page.getByTestId('help-menu-tour').click();
 
-    const stops = await walkTour(page);
+    const { seen: stops, offscreen } = await walkTour(page);
     const joined = stops.join('\n---\n');
 
     // Surface the live tour copy in the test log so coverage is auditable.
@@ -146,6 +177,14 @@ test.describe('Review surface — guided tour covers every object', () => {
         stops.map((s, i) => `  ${i + 1}. ${s}`).join('\n') +
         '\n'
     );
+
+    // 0) Every step's Next/Back buttons must be reachable — inside the
+    //    viewport. A tooltip anchored to a bottom-of-screen control must not
+    //    push its controls below the fold (the user can't scroll during a tour).
+    expect(
+      offscreen,
+      `tour steps with off-screen controls (user can't advance):\n${offscreen.join('\n')}`
+    ).toEqual([]);
 
     // 1) Not the stub: the old build showed intro + 5 phase chips + outro = 7.
     //    The Review deep-dive must add well beyond that.
