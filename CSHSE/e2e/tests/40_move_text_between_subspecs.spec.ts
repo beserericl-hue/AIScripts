@@ -90,8 +90,11 @@ test.describe('Move text between subspecs', () => {
     await page.getByTestId('move-text-std').selectOption('2');
     await page.getByTestId('move-text-spec').selectOption('b');
 
-    // Select the middle paragraph and move it.
-    await modalBody.locator('p', { hasText: 'MOVE BRAVO' }).selectText();
+    // Select the middle paragraph and move it. A triple-click selects the whole
+    // paragraph AND fires real mouse events (mousedown/up), the way a user
+    // would — Playwright's selectText() sets the DOM selection without emitting
+    // the mouse events the modal listens for.
+    await modalBody.locator('p', { hasText: 'MOVE BRAVO' }).click({ clickCount: 3 });
     await expect(page.getByTestId('move-text-selection')).toContainText('MOVE BRAVO', {
       timeout: 5000,
     });
