@@ -7,7 +7,7 @@
  * Substandard, and clicks Move. The selection is split off the source and added
  * as a new item in the target spec (persisted via moveSelectionToSpec).
  */
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Move, X } from 'lucide-react';
 import { useStandardsCatalog } from './useStandardsCatalog';
 import { splitSelection } from './splitSelection';
@@ -62,6 +62,14 @@ export function MoveTextModal({
     }
     setSelectedText(sel.toString().trim());
   }, []);
+
+  // Track selection via the document event too, so ANY selection (mouse drag,
+  // keyboard, or programmatic) refreshes the preview + enables Move — not just
+  // a mouseup landing on the body.
+  useEffect(() => {
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => document.removeEventListener('selectionchange', onSelectionChange);
+  }, [onSelectionChange]);
 
   const handleMove = useCallback(() => {
     setWarn(null);
