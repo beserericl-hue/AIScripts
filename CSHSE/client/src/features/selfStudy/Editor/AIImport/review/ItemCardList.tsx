@@ -1755,10 +1755,12 @@ function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
                     <Eye className="h-3 w-3" aria-hidden /> View source
                   </button>
                 )}
-                {/* CR-040 follow-on — File button mirrors evidenceDocs.
-                    Once Apply has packaged the CV as a .docx the button
-                    becomes the download anchor; pre-Apply it's disabled. */}
-                {cv.fileId && submissionId ? (
+                {/* Download appears ONLY once Apply has packaged the CV as a
+                    .docx (fileId set). The pre-Apply disabled "pending Apply"
+                    button was removed — it confused coordinators who expected a
+                    working download. Use "View source" to read the CV now; the
+                    file becomes downloadable after Apply to editor. */}
+                {cv.fileId && submissionId && (
                   <a
                     href={`/api/submissions/${submissionId}/evidence/${cv.fileId}/download`}
                     target="_blank"
@@ -1769,16 +1771,6 @@ function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
                   >
                     📂 Download .docx
                   </a>
-                ) : (
-                  <button
-                    type="button"
-                    disabled
-                    title="The CV file is generated when you Apply the import. Until then, the download isn't available."
-                    className={`${onShowInSource ? '' : 'ml-auto'} rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500`}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    📂 Download .docx (pending Apply)
-                  </button>
                 )}
               </div>
               {/* Assign this CV to the standard / substandard it supports.
@@ -1920,7 +1912,10 @@ function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.
                   target=_blank so the browser opens the captured
                   evidence in a new tab. Pre-Apply or if packaging
                   failed: stays disabled with a tooltip explaining why. */}
-              {d.fileId && submissionId ? (
+              {/* Download appears ONLY after Apply packages the .docx (fileId
+                  set). The confusing pre-Apply "pending Apply" button was
+                  removed — use "View source" to read the doc now. */}
+              {d.fileId && submissionId && (
                 <a
                   href={`/api/submissions/${submissionId}/evidence/${d.fileId}/download`}
                   target="_blank"
@@ -1932,16 +1927,6 @@ function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.
                 >
                   📂 Download .docx
                 </a>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  title="Download becomes available once you Apply the import — the server packages the evidence as a .docx file at that point."
-                  onClick={(e) => e.stopPropagation()}
-                  className={`${onShowInSource ? '' : 'ml-auto'} rounded border border-gray-300 bg-gray-100 px-2 py-0.5 text-[10px] text-gray-500`}
-                >
-                  📂 Download .docx (pending Apply)
-                </button>
               )}
             </div>
             {/* Assign this syllabus / paper to the standard / substandard it
