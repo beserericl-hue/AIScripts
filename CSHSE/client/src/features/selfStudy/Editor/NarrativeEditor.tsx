@@ -545,7 +545,7 @@ export function NarrativeEditor({
       </div>
 
       {/* Toolbar - Two rows for better organization (hidden in readOnly/reviewer mode) */}
-      {!readOnly && <div className="editor-toolbar bg-gray-100 rounded-t-lg border border-gray-200 border-b-0">
+      {!readOnly && <div data-tour="ss-toolbar" className="editor-toolbar bg-gray-100 rounded-t-lg border border-gray-200 border-b-0">
         {/* Primary toolbar row */}
         <div className="flex flex-wrap items-center gap-1 p-2 border-b border-gray-200">
           {/* Text formatting */}
@@ -788,6 +788,7 @@ export function NarrativeEditor({
           {!readOnly && (
             <div className="flex items-center gap-2">
               <button
+                data-tour="ss-clear"
                 onClick={() => setShowClearConfirm(true)}
                 disabled={isSaving || isValidating}
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-red-300 bg-red-50 text-red-600 text-sm rounded-md hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -806,6 +807,7 @@ export function NarrativeEditor({
                 </button>
               )}
               <button
+                data-tour="ss-save"
                 onClick={handleSaveOnly}
                 disabled={isSaving || isValidating}
                 className="flex items-center gap-2 px-3 py-1.5 border border-gray-300 bg-white text-gray-700 text-sm rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -818,6 +820,7 @@ export function NarrativeEditor({
                 Save
               </button>
               <button
+                data-tour="ss-validate"
                 onClick={handleSaveAndValidate}
                 disabled={isSaving || isValidating || (validationStatus === 'pass' && !contentChangedSinceValidation)}
                 className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white text-sm rounded-md hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
@@ -945,7 +948,7 @@ export function NarrativeEditor({
 
       {/* Supporting Evidence Section - visible to all roles when content exists or when editable */}
       {(onSaveSupportingEvidence || initialSupportingEvidence) && (
-        <div className="mt-4 border border-blue-200 rounded-lg overflow-hidden">
+        <div data-tour="ss-evidence-text" className="mt-4 border border-blue-200 rounded-lg overflow-hidden">
           {/* Header - Collapsible */}
           <button
             onClick={() => setSupportingEvidenceCollapsed(!supportingEvidenceCollapsed)}

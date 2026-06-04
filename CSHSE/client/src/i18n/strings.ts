@@ -105,6 +105,33 @@ const STRINGS = {
   'tour.review.backToEditor':
     "Go back to writing your story. Nothing here gets lost.",
 
+  // tour.ss.* — the Self-Study editor (the writing screen for each standard).
+  // These only show while the Standards editor is open.
+  'tour.ss.tabIntroduction':
+    "The Introduction is the opening of your whole self-study — your mission and program description. Click here to write it.",
+  'tour.ss.tabStandards':
+    "Standards is where you answer each part, one at a time. You're looking at it now.",
+  'tour.ss.tabCurriculum':
+    "The Curriculum Matrix is the big table that maps your courses to the standards. Click here to fill it in.",
+  'tour.ss.tabFiles':
+    "Supporting File Library holds every file you uploaded — CVs, syllabi, papers. Click here to see them.",
+  'tour.ss.rail':
+    "This left list is every standard and its parts. The little circle shows which parts are done. Click one to work on it.",
+  'tour.ss.editor':
+    "This is your writing space for the part you picked. Type your school's answer right here.",
+  'tour.ss.toolbar':
+    "These buttons style your writing — bold, headings, lists, and tables — like a word processor.",
+  'tour.ss.evidenceText':
+    "Below your answer you can add Supporting Evidence Text — extra proof that backs up what you wrote.",
+  'tour.ss.clear':
+    "Clear wipes everything in this part so you can start over. It asks first.",
+  'tour.ss.save':
+    "Save keeps your work without checking it yet. Use it often.",
+  'tour.ss.validate':
+    "Validate saves AND checks this part against the rules. When it passes it turns green and counts toward finishing.",
+  'tour.ss.submit':
+    "When every part is green, this sends your whole self-study in for review — and locks the document.",
+
   // tour.readerReview.* — the Reader review queue + review screen.
   'tour.readerReview.intro':
     "This is where you read other schools' stories and say how well they did. Want a quick look?",

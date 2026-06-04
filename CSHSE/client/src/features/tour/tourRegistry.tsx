@@ -123,6 +123,23 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-tour="review-redetect"]', 'tour.review.redetect', translate),
       anchorStep('[data-testid="finish-review-cta"]', 'tour.review.finish', translate),
       anchorStep('[data-tour="review-back-to-editor"]', 'tour.review.backToEditor', translate),
+      // Self-Study (3.) — the writing editor. Same adaptive design: these
+      // anchors live in the standards-editor view (+ the shared SELF-STUDY tab
+      // row), so the DOM-presence filter shows them when the coordinator is
+      // writing and drops them elsewhere. Authored tabs → rail → editor →
+      // toolbar → evidence → actions → submit, matching the eye's path.
+      anchorStep('[data-tour="ss-tab-introduction"]', 'tour.ss.tabIntroduction', translate),
+      anchorStep('[data-tour="ss-tab-standards"]', 'tour.ss.tabStandards', translate),
+      anchorStep('[data-tour="ss-tab-curriculum"]', 'tour.ss.tabCurriculum', translate),
+      anchorStep('[data-tour="ss-tab-files"]', 'tour.ss.tabFiles', translate),
+      anchorStep('[data-tour="ss-rail"]', 'tour.ss.rail', translate, 'right'),
+      anchorStep('[data-tour="ss-editor"]', 'tour.ss.editor', translate, 'top'),
+      anchorStep('[data-tour="ss-toolbar"]', 'tour.ss.toolbar', translate, 'bottom'),
+      anchorStep('[data-tour="ss-evidence-text"]', 'tour.ss.evidenceText', translate, 'top'),
+      anchorStep('[data-tour="ss-clear"]', 'tour.ss.clear', translate, 'top'),
+      anchorStep('[data-tour="ss-save"]', 'tour.ss.save', translate, 'top'),
+      anchorStep('[data-tour="ss-validate"]', 'tour.ss.validate', translate, 'top'),
+      anchorStep('[data-testid="submit-self-study-cta"]', 'tour.ss.submit', translate, 'bottom'),
       centerStep('tour.selfStudy.lastStep', translate),
     ],
     autoStart: true,

@@ -101,6 +101,19 @@ describe('tourRegistry — definitions', () => {
       '[data-tour="review-redetect"]',
       '[data-testid="finish-review-cta"]',
       '[data-tour="review-back-to-editor"]',
+      // Self-Study editor stops
+      '[data-tour="ss-tab-introduction"]',
+      '[data-tour="ss-tab-standards"]',
+      '[data-tour="ss-tab-curriculum"]',
+      '[data-tour="ss-tab-files"]',
+      '[data-tour="ss-rail"]',
+      '[data-tour="ss-editor"]',
+      '[data-tour="ss-toolbar"]',
+      '[data-tour="ss-evidence-text"]',
+      '[data-tour="ss-clear"]',
+      '[data-tour="ss-save"]',
+      '[data-tour="ss-validate"]',
+      '[data-testid="submit-self-study-cta"]',
     ];
     for (const anchor of requiredAnchors) {
       expect(targets, `missing tour step for ${anchor}`).toContain(anchor);

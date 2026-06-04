@@ -2422,6 +2422,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       button just makes the document-level introduction
                       discoverable instead of buried in the no-spec sub-state. */}
                   <button
+                    data-tour="ss-tab-introduction"
                     onClick={() => setActiveView('introduction')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                       activeView === 'introduction'
@@ -2434,6 +2435,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     Introduction
                   </button>
                   <button
+                    data-tour="ss-tab-standards"
                     onClick={() => setActiveView('standards')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                       activeView === 'standards'
@@ -2445,6 +2447,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     Standards
                   </button>
                   <button
+                    data-tour="ss-tab-curriculum"
                     onClick={() => setActiveView('curriculum')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                       activeView === 'curriculum'
@@ -2456,6 +2459,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     Curriculum Matrix
                   </button>
                   <button
+                    data-tour="ss-tab-files"
                     onClick={() => setActiveView('files')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                       activeView === 'files'
@@ -2622,6 +2626,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             <>
               {/* Sidebar Navigation */}
               <aside
+                data-tour="ss-rail"
                 className={`flex-shrink-0 transition-all duration-300 ${
                   sidebarCollapsed ? 'w-0' : 'w-72'
                 }`}
@@ -2724,7 +2729,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
               </div>
 
               {/* Editor Content */}
-              <div className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-auto p-4">
+              <div data-tour="ss-editor" className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-auto p-4">
                 {selectedSpec ? (
                   <NarrativeEditor
                     key={`${selectedStandard}-${selectedSpec}-${editorRefreshKey}`}
