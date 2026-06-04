@@ -487,6 +487,10 @@ interface AIImportState {
   // ---------- actions ----------
   setStep: (s: WizardStep) => void;
   setApprovedIds: (ids: string[]) => void;
+  // Set the approved-id set AND persist it to the server (Review surface). The
+  // local set updates instantly; the DB write means the "Reviewed" marks
+  // survive reload / Re-run detectors. No-op persistence in a wizard-only run.
+  persistApprovedIds: (ids: string[]) => Promise<boolean>;
   setMatrixScrollSpec: (specKey: string | null) => void;
   // CR-039
   setIntroductions: (introductions: Record<string, IntroductionBucket>) => void;
@@ -784,6 +788,27 @@ export const useAIImportStore = create<AIImportState>()(
         set({ step: s });
       },
       setApprovedIds: (ids) => set({ approvedIds: ids }),
+      persistApprovedIds: async (ids) => {
+        const unique = [...new Set(ids)];
+        set({ approvedIds: unique }); // optimistic — instant checkmarks
+        const { submissionId } = get();
+        if (!submissionId) return false; // wizard-only run — nothing to persist
+        try {
+          const res = await api.post(
+            `/api/submissions/${submissionId}/review/set-approved`,
+            { approvedIds: unique }
+          );
+          // Mirror the server's authoritative set (also drops any discards it
+          // cleared).
+          if (Array.isArray(res.data?.approvedIds)) {
+            set({ approvedIds: res.data.approvedIds });
+          }
+          return true;
+        } catch (err) {
+          console.warn('[set-approved] persist failed:', err);
+          return false;
+        }
+      },
       setMatrixScrollSpec: (specKey) => set({ matrixScrollSpec: specKey }),
       setIntroductions: (introductions) => set({ introductions, dirty: true }),
       setEvidenceDocs: (docs) => set({ evidenceDocs: docs, dirty: true }),

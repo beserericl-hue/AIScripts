@@ -105,6 +105,7 @@ import {
   clearItem,
   routeEvidence,
   splitReviewItem,
+  setApprovedIds,
   finishReview,
   applyReviewState,
   getMatrixState,
@@ -120,6 +121,8 @@ router.post('/:submissionId/review/clear-item', submissionLockout, clearItem);
 router.post('/:submissionId/review/route-evidence', submissionLockout, routeEvidence);
 // Move part of a mis-parsed card into another subspec (split source + add new).
 router.post('/:submissionId/review/split-item', submissionLockout, splitReviewItem);
+// Persist the whole approved-id set (Approve / Approve-all / Clear).
+router.post('/:submissionId/review/set-approved', submissionLockout, setApprovedIds);
 // CR-048 — "I'm done reviewing": discard all remaining un-triaged drafts.
 router.post('/:submissionId/review/finish', submissionLockout, finishReview);
 router.post('/:submissionId/review/apply', submissionLockout, applyReviewState);

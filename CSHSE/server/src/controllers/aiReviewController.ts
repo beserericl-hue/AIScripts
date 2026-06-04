@@ -249,6 +249,37 @@ export async function routeEvidence(req: AuthenticatedRequest, res: Response): P
 }
 
 /**
+ * POST /api/submissions/:submissionId/review/set-approved
+ *
+ * Replace the whole approved-id set in one shot. Backs the Review surface's
+ * Approve / Approve-all / Clear actions so a coordinator's "Reviewed" marks are
+ * persisted to the DB (they previously lived only in the browser store and were
+ * wiped on reload). Idempotent; dedups; clears with an empty array.
+ */
+export async function setApprovedIds(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const { approvedIds } = req.body || {};
+  if (!Array.isArray(approvedIds)) {
+    res.status(400).json({ error: 'approvedIds must be an array' });
+    return;
+  }
+  const state = (submission as any).aiReviewState;
+  if (!state) {
+    res.status(409).json({ error: 'aiReviewState is empty' });
+    return;
+  }
+  const clean = [...new Set(approvedIds.filter((x: unknown) => typeof x === 'string'))];
+  state.approvedIds = clean;
+  // Approving overrides a prior discard for the same id.
+  state.discardedIds = (state.discardedIds || []).filter((id: string) => !clean.includes(id));
+  state.lastUpdatedAt = new Date();
+  (submission as any).markModified('aiReviewState');
+  await submission.save();
+  res.json({ ok: true, approvedIds: state.approvedIds });
+}
+
+/**
  * POST /api/submissions/:submissionId/review/split-item
  *
  * Move part of a card into another subspec. The parser sometimes dumps a whole

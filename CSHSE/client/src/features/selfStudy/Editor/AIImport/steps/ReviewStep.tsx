@@ -259,7 +259,10 @@ function FullReviewStep(): JSX.Element {
   // preserves the coordinator's review progress. Stored as an array of
   // ids (Set is not JSON-serializable); rehydrated into a Set for use.
   const approvedIdsArr = useAIImportStore((s) => s.approvedIds);
-  const setApprovedIdsArr = useAIImportStore((s) => s.setApprovedIds);
+  // persistApprovedIds updates the local set AND writes it to the DB so the
+  // "Reviewed" marks survive a reload / Re-run detectors. (The old
+  // setApprovedIds was browser-only — an hour of approvals vanished on reset.)
+  const persistApprovedIds = useAIImportStore((s) => s.persistApprovedIds);
   const approvedIds = useMemo(
     () => new Set(approvedIdsArr ?? []),
     [approvedIdsArr]
@@ -274,21 +277,21 @@ function FullReviewStep(): JSX.Element {
       const next = new Set(approvedIds);
       if (next.has(rowId)) next.delete(rowId);
       else next.add(rowId);
-      setApprovedIdsArr(Array.from(next));
+      void persistApprovedIds(Array.from(next));
     },
-    [approvedIds, setApprovedIdsArr]
+    [approvedIds, persistApprovedIds]
   );
   const approveAll = useCallback(
     (rowIds: string[]) => {
       const next = new Set(approvedIds);
       for (const id of rowIds) next.add(id);
-      setApprovedIdsArr(Array.from(next));
+      void persistApprovedIds(Array.from(next));
     },
-    [approvedIds, setApprovedIdsArr]
+    [approvedIds, persistApprovedIds]
   );
   const clearApprovals = useCallback(() => {
-    setApprovedIdsArr([]);
-  }, [setApprovedIdsArr]);
+    void persistApprovedIds([]);
+  }, [persistApprovedIds]);
 
   // One-click apply — counts the items waiting to be applied so the
   // confirm dialog tells the coordinator exactly what's going to land in

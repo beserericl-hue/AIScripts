@@ -756,6 +756,7 @@ export function ItemCardList({
                 <Check className="h-3 w-3" aria-hidden /> Approve selected
               </button>
               <button
+                data-testid="approve-all"
                 onClick={() => onApproveAll(items.map((r) => r.rowId))}
                 disabled={items.length === 0 || isPlaceholder}
                 className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1456,6 +1457,8 @@ function ItemCard({
             )}
             {onToggleApproval && (
               <button
+                data-testid={`approve-toggle-${item.sectionId}`}
+                data-approved={approved ? 'true' : 'false'}
                 onClick={(e) => {
                   e.stopPropagation();
                   onToggleApproval();
