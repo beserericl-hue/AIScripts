@@ -103,6 +103,7 @@ import {
   approveItem,
   discardItem,
   clearItem,
+  routeEvidence,
   finishReview,
   applyReviewState,
   getMatrixState,
@@ -113,6 +114,9 @@ router.get('/:submissionId/review', getReviewState);
 router.post('/:submissionId/review/approve', submissionLockout, approveItem);
 router.post('/:submissionId/review/discard', submissionLockout, discardItem);
 router.post('/:submissionId/review/clear-item', submissionLockout, clearItem);
+// Persist a CV/Syllabi/Paper Standard+Substandard assignment so it survives
+// reload + Re-run detectors (lived only in the browser store before).
+router.post('/:submissionId/review/route-evidence', submissionLockout, routeEvidence);
 // CR-048 — "I'm done reviewing": discard all remaining un-triaged drafts.
 router.post('/:submissionId/review/finish', submissionLockout, finishReview);
 router.post('/:submissionId/review/apply', submissionLockout, applyReviewState);

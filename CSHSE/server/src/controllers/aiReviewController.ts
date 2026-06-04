@@ -191,6 +191,64 @@ export async function clearItem(req: AuthenticatedRequest, res: Response): Promi
 }
 
 /**
+ * POST /api/submissions/:submissionId/review/route-evidence
+ *
+ * Persist a coordinator's Standard/Substandard assignment for a CV, syllabus,
+ * or paper directly onto aiReviewState (so it survives reload AND Re-run
+ * detectors, which merges with reimport:false and keeps existing items). The
+ * client's assignment dropdowns call this on change — without it the routing
+ * lived only in the browser store and was lost the moment the rail refetched.
+ *
+ * Sets resolvedStd/resolvedSpec (the display fields) AND routing.{std,spec}
+ * (what apply-ai reads to stamp SupportingEvidence.standardCode/specCode).
+ * Passing empty std/spec clears the assignment back to "Unassigned".
+ */
+export async function routeEvidence(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const { sectionId, std, spec } = req.body || {};
+  if (!sectionId || typeof sectionId !== 'string') {
+    res.status(400).json({ error: 'sectionId is required' });
+    return;
+  }
+  const state = (submission as any).aiReviewState;
+  if (!state) {
+    res.status(409).json({ error: 'aiReviewState is empty' });
+    return;
+  }
+
+  const stdVal = typeof std === 'string' && std ? std : undefined;
+  const specVal = typeof spec === 'string' && spec ? spec : undefined;
+
+  const apply = (item: any): boolean => {
+    if (!item || item.sectionId !== sectionId) return false;
+    item.resolvedStd = stdVal;
+    item.resolvedSpec = specVal;
+    item.routing = {
+      ...(item.routing || {}),
+      std: stdVal,
+      spec: specVal,
+      source: 'coordinator',
+    };
+    return true;
+  };
+
+  let found = false;
+  for (const c of state.cvs || []) if (apply(c)) found = true;
+  for (const e of state.evidenceDocs || []) if (apply(e)) found = true;
+
+  if (!found) {
+    res.status(404).json({ error: 'No CV or evidence doc with that sectionId' });
+    return;
+  }
+
+  state.lastUpdatedAt = new Date();
+  (submission as any).markModified('aiReviewState');
+  await submission.save();
+  res.json({ ok: true, sectionId, resolvedStd: stdVal, resolvedSpec: specVal });
+}
+
+/**
  * POST /api/submissions/:submissionId/review/finish
  *
  * CR-048 — "I've reviewed enough." Mark every still-untriaged draft

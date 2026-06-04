@@ -510,6 +510,10 @@ interface AIImportState {
   // which the server's apply path reads to stamp SupportingEvidence
   // standardCode/specCode (aiImportController.ts ~1508).
   updateEvidenceDocRouting: (sectionId: string, std: string, spec: string) => void;
+  // Persist a CV/evidence-doc Standard+Substandard assignment to the server so
+  // it survives reload + Re-run detectors. No-op when there's no submissionId
+  // (wizard-only run). Resolves to true on success, false on failure.
+  persistEvidenceRouting: (sectionId: string, std: string, spec: string) => Promise<boolean>;
   // CR-041 user story 1
   enqueueFiles: (files: File[]) => void;
   popNextPendingFile: () => File | null;
@@ -816,6 +820,20 @@ export const useAIImportStore = create<AIImportState>()(
           ),
           dirty: true
         })),
+      persistEvidenceRouting: async (sectionId, std, spec) => {
+        const submissionId = get().submissionId;
+        if (!submissionId) return false; // wizard-only run — nothing to persist
+        try {
+          await api.post(
+            `/api/submissions/${submissionId}/review/route-evidence`,
+            { sectionId, std, spec }
+          );
+          return true;
+        } catch (err) {
+          console.warn('[route-evidence] persist failed:', err);
+          return false;
+        }
+      },
       // CR-041 user story 1 — multi-file queue. First file in `files`
       // promotes into `uploadFile` (the single-file pipeline's input);
       // the rest queue. If `uploadFile` is already set the entire batch

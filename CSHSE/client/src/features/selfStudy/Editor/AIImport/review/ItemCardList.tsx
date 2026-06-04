@@ -56,22 +56,44 @@ import { useStandardsCatalog } from './useStandardsCatalog';
 // specCode — the field readers use to find evidence per spec.
 
 interface SpecAssignControlsProps {
+  sectionId: string;
   std: string | undefined;
   spec: string | undefined;
+  /** Local store update (updateCvRouting / updateEvidenceDocRouting). */
   onChange: (std: string, spec: string) => void;
   /** Compact layout for dense card lists. */
   idPrefix: string;
 }
 
+type SaveState = 'idle' | 'saving' | 'saved' | 'error';
+
 function SpecAssignControls({
+  sectionId,
   std,
   spec,
   onChange,
   idPrefix
 }: SpecAssignControlsProps): JSX.Element {
   const { standards, error } = useStandardsCatalog();
+  const persistEvidenceRouting = useAIImportStore((s) => s.persistEvidenceRouting);
+  const [saveState, setSaveState] = React.useState<SaveState>('idle');
   const stdEntry = standards.find((s) => s.std === std);
   const specOptions = stdEntry?.specsForStd ?? [];
+
+  // Update the local store immediately (snappy UI) AND persist to the server so
+  // the assignment survives reload + Re-run detectors. The save chip reflects
+  // the server round-trip so the coordinator knows it stuck — no separate Save
+  // button needed.
+  const commit = React.useCallback(
+    (nextStd: string, nextSpec: string) => {
+      onChange(nextStd, nextSpec);
+      setSaveState('saving');
+      persistEvidenceRouting(sectionId, nextStd, nextSpec).then((ok) =>
+        setSaveState(ok ? 'saved' : 'error')
+      );
+    },
+    [onChange, persistEvidenceRouting, sectionId]
+  );
 
   return (
     <div
@@ -100,7 +122,7 @@ function SpecAssignControls({
             // standard so the pair is never half-set.
             const firstSpec = standards.find((s) => s.std === newStd)
               ?.specsForStd[0]?.spec;
-            onChange(newStd, firstSpec ?? '');
+            commit(newStd, firstSpec ?? '');
           }}
           className="mt-0.5 w-full rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500"
         >
@@ -115,15 +137,26 @@ function SpecAssignControls({
       <div>
         <label
           htmlFor={`${idPrefix}-spec`}
-          className="block text-[10px] font-medium uppercase tracking-wide text-gray-500"
+          className="flex items-center justify-between text-[10px] font-medium uppercase tracking-wide text-gray-500"
         >
-          Substandard
+          <span>Substandard</span>
+          {/* Save chip — reflects the server round-trip so the coordinator
+              knows the assignment persisted (survives reload + re-detect). */}
+          {saveState === 'saving' && (
+            <span data-testid={`${idPrefix}-savestate`} className="normal-case text-gray-400">Saving…</span>
+          )}
+          {saveState === 'saved' && (
+            <span data-testid={`${idPrefix}-savestate`} className="normal-case font-medium text-emerald-600">✓ Saved</span>
+          )}
+          {saveState === 'error' && (
+            <span data-testid={`${idPrefix}-savestate`} className="normal-case font-medium text-red-600">Couldn{"'"}t save</span>
+          )}
         </label>
         <select
           id={`${idPrefix}-spec`}
           data-testid={`${idPrefix}-spec`}
           value={spec ?? ''}
-          onChange={(e) => onChange(std ?? '', e.target.value)}
+          onChange={(e) => commit(std ?? '', e.target.value)}
           disabled={!std || specOptions.length === 0}
           className="mt-0.5 w-full rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500 disabled:bg-gray-100"
         >
@@ -1753,6 +1786,7 @@ function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
                   Apply (SupportingEvidence.standardCode/specCode). */}
               <SpecAssignControls
                 idPrefix={`cv-assign-${cv.sectionId}`}
+                sectionId={cv.sectionId}
                 std={cv.resolvedStd}
                 spec={cv.resolvedSpec}
                 onChange={(std, spec) => updateCvRouting(cv.sectionId, std, spec)}
@@ -1916,6 +1950,7 @@ function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.
                 from routing.std/spec). */}
             <SpecAssignControls
               idPrefix={`evdoc-assign-${d.sectionId}`}
+              sectionId={d.sectionId}
               std={d.resolvedStd}
               spec={d.resolvedSpec}
               onChange={(std, spec) => updateEvidenceDocRouting(d.sectionId, std, spec)}

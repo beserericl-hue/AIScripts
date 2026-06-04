@@ -19,9 +19,10 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 
-// The assignment dropdowns fetch the standards catalog on mount.
+// The assignment dropdowns fetch the standards catalog on mount and POST the
+// routing to the server on change.
 vi.mock('../../../../../services/api', () => ({
-  api: { get: vi.fn() },
+  api: { get: vi.fn(), post: vi.fn() },
 }));
 
 import { api } from '../../../../../services/api';
@@ -61,6 +62,8 @@ describe('Review spec-assignment dropdowns', () => {
     __resetStandardsCatalogCache();
     (api.get as any).mockReset();
     (api.get as any).mockResolvedValue({ data: STANDARDS_CATALOG });
+    (api.post as any).mockReset();
+    (api.post as any).mockResolvedValue({ data: { ok: true } });
   });
 
   it('CV: shows Unassigned + dropdowns, and picking a standard routes it (defaults spec)', async () => {
@@ -89,6 +92,40 @@ describe('Review spec-assignment dropdowns', () => {
     const stored = useAIImportStore.getState().cvs[0];
     expect(stored.resolvedStd).toBe('1');
     expect(stored.resolvedSpec).toBe('a');
+  });
+
+  it('CV: assignment is PERSISTED to the server and shows "Saved"', async () => {
+    // submissionId set → Review surface → routing must persist server-side so
+    // it survives reload + Re-run detectors (the reported bug).
+    useAIImportStore.getState().setSubmissionId('sub-123');
+    const cv: any = {
+      sectionId: 'cv-9',
+      facultyName: 'Dr. Persist',
+      snippet: 'PhD ...',
+      confidence: 0.9,
+      routing: { source: 'matcher' as const },
+    };
+    useAIImportStore.getState().setCVs([cv]);
+
+    render(<ItemCardList {...baseProps({ cvs: [cv] })} />);
+
+    const stdSelect = await screen.findByTestId('cv-assign-cv-9-std');
+    await waitFor(() =>
+      expect(within(stdSelect).getByText('2 — Governance')).toBeInTheDocument()
+    );
+    await userEvent.selectOptions(stdSelect, '2');
+
+    // The routing was POSTed to the route-evidence endpoint with the section id.
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith(
+        '/api/submissions/sub-123/review/route-evidence',
+        { sectionId: 'cv-9', std: '2', spec: 'a' }
+      );
+    });
+    // And the coordinator sees the save confirmation.
+    await waitFor(() =>
+      expect(screen.getByTestId('cv-assign-cv-9-savestate')).toHaveTextContent(/saved/i)
+    );
   });
 
   it('CV: picking a substandard records the full (std, spec) pair', async () => {
