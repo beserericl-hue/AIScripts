@@ -76,6 +76,12 @@ const STRINGS = {
     "These are your big charts (the curriculum tables). Click here to check the rows the helper found inside them.",
   'tour.review.supportingEvidence':
     "Three kinds of extra proof live here: faculty CVs, course Syllabi, and Papers or Projects. Click one to see what the helper found — and to tell it which Standard and Substandard each one belongs to.",
+  'tour.review.cvs':
+    "Faculty CVs the helper found. Click here to see each one — and to say which Standard and Substandard that teacher's CV helps prove.",
+  'tour.review.syllabi':
+    "Course syllabi the helper pulled out. Open this to look them over and file each syllabus under the right Standard and Substandard.",
+  'tour.review.papers':
+    "Papers and student projects go here. Open it to check each one and tell the helper which Standard and Substandard it supports.",
   'tour.review.standards':
     "Every numbered standard and its parts (like 1.a, 1.b) lives here. The little dot tells you if that part is ready (green), close (yellow), or still empty (red).",
   'tour.review.cards':
