@@ -249,6 +249,135 @@ export async function routeEvidence(req: AuthenticatedRequest, res: Response): P
 }
 
 /**
+ * POST /api/submissions/:submissionId/review/split-item
+ *
+ * Move part of a card into another subspec. The parser sometimes dumps a whole
+ * Standard's prose into its first subspec; the coordinator selects the text
+ * that belongs elsewhere and moves it. This:
+ *   1. trims the SOURCE item's content to the remainder (selection removed),
+ *   2. creates a NEW item (the moved selection) in the target spec bucket.
+ * Both halves live in aiReviewState, so the split survives reload + apply.
+ *
+ * body: { sourceSectionId, kind ('narratives'|'evidenceText'|'evidenceFiles'),
+ *         remainderHtml, movedHtml, targetStd, targetSpec, newSectionId, heading }
+ */
+const BUCKET_KINDS = ['narratives', 'evidenceText', 'evidenceFiles'] as const;
+type BucketKind = (typeof BUCKET_KINDS)[number];
+
+function htmlToText(html: string): string {
+  return String(html || '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export async function splitReviewItem(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const {
+    sourceSectionId,
+    kind,
+    remainderHtml,
+    movedHtml,
+    targetStd,
+    targetSpec,
+    newSectionId,
+    heading,
+  } = req.body || {};
+
+  if (!sourceSectionId || typeof sourceSectionId !== 'string') {
+    res.status(400).json({ error: 'sourceSectionId is required' });
+    return;
+  }
+  if (!BUCKET_KINDS.includes(kind)) {
+    res.status(400).json({ error: `kind must be one of ${BUCKET_KINDS.join(', ')}` });
+    return;
+  }
+  if (!targetStd || !targetSpec) {
+    res.status(400).json({ error: 'targetStd and targetSpec are required' });
+    return;
+  }
+  if (!newSectionId || typeof newSectionId !== 'string') {
+    res.status(400).json({ error: 'newSectionId is required' });
+    return;
+  }
+  if (typeof movedHtml !== 'string' || !htmlToText(movedHtml)) {
+    res.status(400).json({ error: 'movedHtml must contain text' });
+    return;
+  }
+
+  const state = (submission as any).aiReviewState;
+  if (!state || !state.buckets) {
+    res.status(409).json({ error: 'aiReviewState is empty' });
+    return;
+  }
+
+  // 1) Trim the source item to the remainder, wherever it lives.
+  let sourceItem: any = null;
+  for (const specKey of Object.keys(state.buckets)) {
+    const bucket = state.buckets[specKey];
+    if (!bucket) continue;
+    for (const k of BUCKET_KINDS) {
+      const hit = (bucket[k] || []).find((it: any) => it.sectionId === sourceSectionId);
+      if (hit) {
+        sourceItem = hit;
+        hit.htmlSnippet = typeof remainderHtml === 'string' ? remainderHtml : hit.htmlSnippet;
+        hit.snippet = htmlToText(remainderHtml ?? hit.snippet ?? '');
+        hit.wordCount = hit.snippet ? hit.snippet.split(' ').length : 0;
+        break;
+      }
+    }
+    if (sourceItem) break;
+  }
+  if (!sourceItem) {
+    res.status(404).json({ error: 'source item not found' });
+    return;
+  }
+
+  // 2) Ensure the target bucket exists, then add the moved selection as a new item.
+  const targetKey = `${targetStd}.${targetSpec}`;
+  if (!state.buckets[targetKey]) {
+    state.buckets[targetKey] = {
+      standardCode: String(targetStd),
+      specCode: String(targetSpec),
+      standardTitle: '',
+      specPrompt: '',
+      narratives: [],
+      evidenceText: [],
+      evidenceFiles: [],
+      matrixCells: [],
+    };
+  }
+  const target = state.buckets[targetKey];
+  const movedText = htmlToText(movedHtml);
+  const newItem = {
+    sectionId: newSectionId,
+    heading: heading || `Moved from ${sourceSectionId}`,
+    snippet: movedText,
+    htmlSnippet: movedHtml,
+    wordCount: movedText ? movedText.split(' ').length : 0,
+    confidence: typeof sourceItem.confidence === 'number' ? sourceItem.confidence : 1,
+    acceptState: 'pending',
+    rationale: 'Moved here from another subspec by the coordinator.',
+    sourceImportId: sourceItem.sourceImportId,
+    sourceFilename: sourceItem.sourceFilename,
+  };
+  target[kind as BucketKind] = [...(target[kind as BucketKind] || []), newItem];
+
+  // Provenance breadcrumb for the new item.
+  state.itemSources = state.itemSources || {};
+  if (state.itemSources[sourceSectionId]) {
+    state.itemSources[newSectionId] = { ...state.itemSources[sourceSectionId] };
+  }
+
+  state.lastUpdatedAt = new Date();
+  (submission as any).markModified('aiReviewState');
+  await submission.save();
+  res.json({ ok: true, newSectionId, targetKey });
+}
+
+/**
  * POST /api/submissions/:submissionId/review/finish
  *
  * CR-048 — "I've reviewed enough." Mark every still-untriaged draft

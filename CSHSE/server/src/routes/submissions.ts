@@ -104,6 +104,7 @@ import {
   discardItem,
   clearItem,
   routeEvidence,
+  splitReviewItem,
   finishReview,
   applyReviewState,
   getMatrixState,
@@ -117,6 +118,8 @@ router.post('/:submissionId/review/clear-item', submissionLockout, clearItem);
 // Persist a CV/Syllabi/Paper Standard+Substandard assignment so it survives
 // reload + Re-run detectors (lived only in the browser store before).
 router.post('/:submissionId/review/route-evidence', submissionLockout, routeEvidence);
+// Move part of a mis-parsed card into another subspec (split source + add new).
+router.post('/:submissionId/review/split-item', submissionLockout, splitReviewItem);
 // CR-048 — "I'm done reviewing": discard all remaining un-triaged drafts.
 router.post('/:submissionId/review/finish', submissionLockout, finishReview);
 router.post('/:submissionId/review/apply', submissionLockout, applyReviewState);

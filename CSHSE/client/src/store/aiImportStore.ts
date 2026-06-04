@@ -514,6 +514,18 @@ interface AIImportState {
   // it survives reload + Re-run detectors. No-op when there's no submissionId
   // (wizard-only run). Resolves to true on success, false on failure.
   persistEvidenceRouting: (sectionId: string, std: string, spec: string) => Promise<boolean>;
+  // Move a selected portion of a card into another subspec. Splits the source
+  // item to `remainderHtml` and adds the `movedHtml` as a new item in
+  // buckets[`${targetStd}.${targetSpec}`]. Updates the store immediately and
+  // persists to the server. Resolves false on persistence failure.
+  moveSelectionToSpec: (args: {
+    sourceSectionId: string;
+    kind: 'narratives' | 'evidenceText' | 'evidenceFiles';
+    movedHtml: string;
+    remainderHtml: string;
+    targetStd: string;
+    targetSpec: string;
+  }) => Promise<boolean>;
   // CR-041 user story 1
   enqueueFiles: (files: File[]) => void;
   popNextPendingFile: () => File | null;
@@ -831,6 +843,93 @@ export const useAIImportStore = create<AIImportState>()(
           return true;
         } catch (err) {
           console.warn('[route-evidence] persist failed:', err);
+          return false;
+        }
+      },
+      moveSelectionToSpec: async ({
+        sourceSectionId,
+        kind,
+        movedHtml,
+        remainderHtml,
+        targetStd,
+        targetSpec,
+      }) => {
+        const wordCount = (html: string) => {
+          const t = html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+          return t ? t.split(' ').length : 0;
+        };
+        const text = (html: string) =>
+          html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+        const newSectionId = `${sourceSectionId}::split-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+
+        let sourceItem: any = null;
+        set((s) => {
+          const buckets: Record<string, any> = { ...s.buckets };
+          // Trim the source item wherever it lives.
+          for (const key of Object.keys(buckets)) {
+            const b = { ...buckets[key] };
+            for (const k of ['narratives', 'evidenceText', 'evidenceFiles'] as const) {
+              const arr = b[k] || [];
+              const idx = arr.findIndex((it: any) => it.sectionId === sourceSectionId);
+              if (idx >= 0) {
+                sourceItem = arr[idx];
+                const updated = { ...arr[idx], htmlSnippet: remainderHtml, snippet: text(remainderHtml), wordCount: wordCount(remainderHtml) };
+                b[k] = [...arr.slice(0, idx), updated, ...arr.slice(idx + 1)];
+              }
+            }
+            buckets[key] = b;
+          }
+          // Ensure the target bucket exists, then add the moved item.
+          const targetKey = `${targetStd}.${targetSpec}`;
+          const target = buckets[targetKey]
+            ? { ...buckets[targetKey] }
+            : {
+                standardCode: targetStd,
+                specCode: targetSpec,
+                standardTitle: '',
+                specPrompt: '',
+                narratives: [],
+                evidenceText: [],
+                evidenceFiles: [],
+                matrixCells: [],
+                coverageScore: null,
+                coverageCovered: null,
+                coverageGaps: [],
+                coverageStrengths: [],
+              };
+          const newItem = {
+            sectionId: newSectionId,
+            heading: 'Moved here from another subspec',
+            snippet: text(movedHtml),
+            htmlSnippet: movedHtml,
+            wordCount: wordCount(movedHtml),
+            confidence: typeof sourceItem?.confidence === 'number' ? sourceItem.confidence : 1,
+            acceptState: 'pending',
+            rationale: 'Moved here from another subspec by the coordinator.',
+            sourceImportId: sourceItem?.sourceImportId,
+            sourceFilename: sourceItem?.sourceFilename,
+          };
+          target[kind] = [...(target[kind] || []), newItem];
+          buckets[targetKey] = target;
+          return { buckets, dirty: true } as any;
+        });
+
+        const submissionId = get().submissionId;
+        if (!submissionId) return false;
+        try {
+          await api.post(`/api/submissions/${submissionId}/review/split-item`, {
+            sourceSectionId,
+            kind,
+            remainderHtml,
+            movedHtml,
+            targetStd,
+            targetSpec,
+            newSectionId,
+            heading: 'Moved here from another subspec',
+          });
+          return true;
+        } catch (err) {
+          console.warn('[split-item] persist failed:', err);
           return false;
         }
       },

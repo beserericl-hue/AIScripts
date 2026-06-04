@@ -45,6 +45,7 @@ import {
 import { nearestPlacedNeighborFor } from './nearestPlacedNeighbor';
 import { tableizeIfBareRows } from './tableizeHtml';
 import { useStandardsCatalog } from './useStandardsCatalog';
+import { MoveTextModal } from './MoveTextModal';
 
 // ------------------------------------------------------ SpecAssignControls
 //
@@ -1242,6 +1243,16 @@ function ItemCard({
   const band = confBand(item.confidence);
   const hasHtmlTable = !!(item.htmlSnippet && item.htmlSnippet.includes('<table'));
   const tabular = !hasHtmlTable && looksTabular(item.snippet);
+  const moveSelectionToSpec = useAIImportStore((s) => s.moveSelectionToSpec);
+  const [moveOpen, setMoveOpen] = React.useState(false);
+  // "Move text" only makes sense for prose-bearing items (narratives / evidence
+  // text). Map the card kind to the bucket-array kind the store/server expect.
+  const moveBucketKind: 'narratives' | 'evidenceText' | null =
+    item.kind === 'text' ? 'narratives' : item.kind === 'evidenceText' ? 'evidenceText' : null;
+  const moveHtml =
+    item.htmlSnippet && item.htmlSnippet.trim()
+      ? item.htmlSnippet
+      : `<p>${(item.snippet || '').replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`;
   // The kind chips only make sense for items that live in a real spec bucket
   // (text / evidenceText / file). Tag-list items + matrix cells can't be
   // re-typed in place.
@@ -1377,6 +1388,22 @@ function ItemCard({
                 <Pencil className="h-3 w-3" aria-hidden /> Edit
               </button>
             )}
+            {/* Move part of this card into another subspec. The parser
+                sometimes dumps a whole Standard into its first subspec; this
+                lets the coordinator select prose and move it where it belongs. */}
+            {moveBucketKind && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMoveOpen(true);
+                }}
+                data-testid={`move-text-open-${item.sectionId}`}
+                title="Select part of this card and move it into another subspec"
+                className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-0.5 text-xs font-medium text-cshse-700 hover:bg-cshse-50"
+              >
+                <Move className="h-3 w-3" aria-hidden /> Move text…
+              </button>
+            )}
             {/* CR-039 — Move-to-Introduction. Two-click flow: click → pick
                 Document or Standard-N. Hidden on intro cards and on
                 non-text kinds (matrices / files / tags don't go into
@@ -1478,6 +1505,26 @@ function ItemCard({
           )}
         </div>
       </div>
+      {moveOpen && moveBucketKind && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <MoveTextModal
+            html={moveHtml}
+            currentStd={bucketStandardCode}
+            onCancel={() => setMoveOpen(false)}
+            onMove={({ movedHtml, remainderHtml, targetStd, targetSpec }) => {
+              void moveSelectionToSpec({
+                sourceSectionId: item.sectionId,
+                kind: moveBucketKind,
+                movedHtml,
+                remainderHtml,
+                targetStd,
+                targetSpec,
+              });
+              setMoveOpen(false);
+            }}
+          />
+        </div>
+      )}
     </li>
   );
 }
