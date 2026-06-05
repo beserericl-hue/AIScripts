@@ -1323,50 +1323,49 @@ export const useAIImportStore = create<AIImportState>()(
         const { submissionId } = get();
         if (!submissionId) return;
         try {
+          // Snapshot the buckets reference BEFORE the await. The Review cards
+          // render instantly from the localStorage Zustand seed, so the PC can
+          // flip a kind / move an item WHILE this GET is in flight. zustand
+          // replaces the `buckets` object on every such edit, so an identity
+          // change here means "the user edited during this fetch" — in which
+          // case the in-memory buckets are NEWER than the server response and
+          // must NOT be clobbered (otherwise the debounced autosave then
+          // re-saves the reverted copy and the edit vanishes on reload).
+          //
+          // This is intentionally scoped to `buckets` and to THIS fetch window
+          // (object identity, fresh every mount) rather than the persisted
+          // `dirty` flag — a blanket dirty-guard wrongly kept stale local state
+          // on seeded reloads and broke the approve/assign/move specs.
+          const bucketsBefore = get().buckets;
           const res = await api.get(`/api/submissions/${submissionId}/review`);
           const state = res.data?.aiReviewState;
           const matrixState = res.data?.aiMatrixState;
-          // CR-059 follow-on — split the hydration by who "owns" each field:
-          //
-          //  • Server-authoritative fields (approvedIds / discardedIds /
-          //    coverageReport / placeholderSections) are persisted via their
-          //    own endpoints, so a reload must always reflect the latest DB
-          //    truth — applied unconditionally.
-          //
-          //  • Local-edit fields (buckets / tags / cvs / evidenceDocs /
-          //    introductions / matrices / matrixRowEdits) carry the
-          //    coordinator's un-applied rail edits. The cards render instantly
-          //    from the localStorage Zustand seed, so the PC can flip a kind /
-          //    move an item BEFORE this GET resolves. If the store is `dirty`
-          //    (unsaved edits exist), keep the in-memory copy — a late server
-          //    response must NOT revert an edit and let the debounced autosave
-          //    re-save the stale copy. When clean, hydrate from the server.
-          //
-          // (An earlier blanket `if (dirty) return` skipped the WHOLE load,
-          //  which also dropped the server-authoritative approvedIds and broke
-          //  the approve/assign/move specs — hence the field-level split.)
-          const localDirty = get().dirty === true;
+          const bucketsEditedDuringFetch = get().buckets !== bucketsBefore;
           if (state) {
+            // CR-043 follow-on — conservative merge: if the server omits a
+            // field, keep the in-memory value rather than clobbering with `{}`
+            // (matters when hydrated from a localStorage seed before the
+            // server-side merge has run).
             const current = get();
             set({
-              // server-authoritative — always sync
-              approvedIds: state.approvedIds || [],
-              discardedIds: state.discardedIds || [],
-              coverageReport: state.coverageReport ?? current.coverageReport,
+              buckets: bucketsEditedDuringFetch
+                ? current.buckets
+                : (state.buckets ?? current.buckets),
+              tags: state.tags ?? current.tags,
+              cvs: state.cvs ?? current.cvs,
+              evidenceDocs: state.evidenceDocs ?? current.evidenceDocs,
+              introductions: state.introductions ?? current.introductions,
               placeholderSections: state.placeholderSections || [],
-              // local-edit — keep local when dirty, else hydrate from server
-              buckets: localDirty ? current.buckets : (state.buckets ?? current.buckets),
-              tags: localDirty ? current.tags : (state.tags ?? current.tags),
-              cvs: localDirty ? current.cvs : (state.cvs ?? current.cvs),
-              evidenceDocs: localDirty ? current.evidenceDocs : (state.evidenceDocs ?? current.evidenceDocs),
-              introductions: localDirty ? current.introductions : (state.introductions ?? current.introductions),
+              coverageReport: state.coverageReport ?? get().coverageReport,
+              approvedIds: state.approvedIds || [],
+              discardedIds: state.discardedIds || []
             });
           }
           if (matrixState) {
             const current = get();
             set({
-              matrices: localDirty ? current.matrices : (matrixState.matrices ?? current.matrices),
-              matrixRowEdits: localDirty ? current.matrixRowEdits : (matrixState.matrixRowEdits ?? current.matrixRowEdits),
+              matrices: matrixState.matrices ?? current.matrices,
+              matrixRowEdits: matrixState.matrixRowEdits ?? current.matrixRowEdits
             });
           }
         } catch (err) {
