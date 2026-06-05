@@ -1409,7 +1409,10 @@ async function _runApplyBody(args: {
       // S3 is wired in production the FileData.storageType flips to
       // 's3' without touching the wizard UI.
       try {
-        const { SupportingEvidence } = await import('../models/SupportingEvidence');
+        // require(), not await import() — a relative ESM specifier fails with
+        // ERR_MODULE_NOT_FOUND in the dist build.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SupportingEvidence } = require('../models/SupportingEvidence');
         const {
           Document,
           Packer,
@@ -1555,7 +1558,10 @@ async function _runApplyBody(args: {
       // (aiCVs) with no SupportingEvidence yet; assigning them later + re-Apply
       // packages them then. Idempotent: a CV that already has fileId is skipped.
       try {
-        const { SupportingEvidence } = await import('../models/SupportingEvidence');
+        // require(), not await import() — a relative ESM specifier fails with
+        // ERR_MODULE_NOT_FOUND in the dist build.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { SupportingEvidence } = require('../models/SupportingEvidence');
         const {
           Document,
           Packer,

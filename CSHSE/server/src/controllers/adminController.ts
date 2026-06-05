@@ -260,11 +260,17 @@ export const getSystemStats = async (req: AuthenticatedRequest, res: Response) =
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    // Import models dynamically to avoid circular dependencies
-    const { Submission } = await import('../models/Submission');
-    const { User } = await import('../models/User');
-    const { Review } = await import('../models/Review');
-    const { ValidationResult } = await import('../models/ValidationResult');
+    // Require models lazily to avoid circular dependencies. NOTE: must be
+    // require(), not await import() — the latter compiles to a native ESM
+    // specifier that fails with ERR_MODULE_NOT_FOUND in the dist build.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Submission } = require('../models/Submission');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { User } = require('../models/User');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { Review } = require('../models/Review');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { ValidationResult } = require('../models/ValidationResult');
 
     const [
       totalSubmissions,
