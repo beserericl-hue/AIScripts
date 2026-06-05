@@ -469,15 +469,15 @@ function FullReviewStep(): JSX.Element {
         { std: activeBucket.standardCode, spec: activeBucket.specCode },
         { std: activeBucket.standardCode, spec: activeBucket.specCode, kind: newKind }
       );
-      // Persist this discrete one-click change immediately rather than waiting
-      // for the 1.2s debounced autosave — a quick reload/navigation would
-      // otherwise cancel the pending write and the kind flip would silently
-      // vanish on reload. moveItem's zustand setState is synchronous, so this
-      // reads the just-updated buckets. (Scoped to kind flips only; bulk moves
-      // keep the batched debounce.)
-      void saveReviewStateToServer();
+      // Persistence is handled by the ReviewSurface debounced autosave (which
+      // also drives the "Saving…/Saved" chip). The kind flip survives reload
+      // because the late-load buckets guard (loadPersistedReviewState) no longer
+      // clobbers the in-flight edit, so the autosave writes the correct buckets.
+      // (An earlier immediate saveReviewStateToServer() here raced that effect —
+      // it cleared `dirty` before the debounce fired, leaving the chip stuck on
+      // "Saving…".)
     },
-    [activeBucket, moveItem, saveReviewStateToServer]
+    [activeBucket, moveItem]
   );
 
   const handleBulkAction = useCallback(
