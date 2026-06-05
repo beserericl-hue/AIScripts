@@ -1324,6 +1324,13 @@ export const useAIImportStore = create<AIImportState>()(
         if (!submissionId) return;
         try {
           const res = await api.get(`/api/submissions/${submissionId}/review`);
+          // Race guard (2026-06-05): the Review cards render instantly from the
+          // localStorage Zustand seed, so a coordinator can edit (flip a kind,
+          // move an item) BEFORE this server GET resolves. Applying the server
+          // copy now would silently revert that unsaved edit AND cancel the
+          // pending autosave. If the store went dirty while we were awaiting,
+          // the in-memory state is newer — keep it and let the autosave persist.
+          if (get().dirty) return;
           const state = res.data?.aiReviewState;
           const matrixState = res.data?.aiMatrixState;
           if (state) {
