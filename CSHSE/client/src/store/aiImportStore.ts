@@ -767,6 +767,24 @@ function _clearTransport(): void {
   }
 }
 
+/**
+ * Persist a single matrix per-row edit to the DB via the existing
+ * POST /matrix-state endpoint. `edit: null` removes the persisted edit
+ * (restore). Fire-and-forget — the local store already updated optimistically.
+ */
+function _persistMatrixEdit(
+  get: () => { submissionId: string | null },
+  matrixSlug: string,
+  rowAnchor: string,
+  edit: unknown
+): void {
+  const submissionId = get().submissionId;
+  if (!submissionId) return; // wizard-only run
+  api
+    .post(`/api/submissions/${submissionId}/matrix-state`, { matrixSlug, rowAnchor, edit })
+    .catch((err) => console.warn('[matrix-state] persist failed:', err));
+}
+
 // ---------------------------------------------------------------- store
 
 export const useAIImportStore = create<AIImportState>()(
@@ -1087,28 +1105,35 @@ export const useAIImportStore = create<AIImportState>()(
       // The apply() action reads matrixRowEdits and forwards the edited
       // layout to applyAIImport (S2B.8 follow-on). dirty=true so a hard
       // refresh + _applySnapshot preserves the row decisions.
-      retagMatrixRow: (matrixSlug, rowAnchor, newStd, newSpec) =>
+      retagMatrixRow: (matrixSlug, rowAnchor, newStd, newSpec) => {
         set((s) => ({
           matrixRowEdits: {
             ...s.matrixRowEdits,
             [`${matrixSlug}|${rowAnchor}`]: { kind: 'retag', newStd, newSpec }
           },
           dirty: true
-        })),
-      removeMatrixRow: (matrixSlug, rowAnchor) =>
+        }));
+        _persistMatrixEdit(get, matrixSlug, rowAnchor, { kind: 'retag', newStd, newSpec });
+      },
+      removeMatrixRow: (matrixSlug, rowAnchor) => {
         set((s) => ({
           matrixRowEdits: {
             ...s.matrixRowEdits,
             [`${matrixSlug}|${rowAnchor}`]: { kind: 'remove' }
           },
           dirty: true
-        })),
-      restoreMatrixRow: (matrixSlug, rowAnchor) =>
+        }));
+        _persistMatrixEdit(get, matrixSlug, rowAnchor, { kind: 'remove' });
+      },
+      restoreMatrixRow: (matrixSlug, rowAnchor) => {
         set((s) => {
           const next = { ...s.matrixRowEdits };
           delete next[`${matrixSlug}|${rowAnchor}`];
           return { matrixRowEdits: next, dirty: true };
-        }),
+        });
+        // edit:null tells the server to drop the persisted row edit.
+        _persistMatrixEdit(get, matrixSlug, rowAnchor, null);
+      },
 
       // CR-032 — inline edit bucket item snippet. The first edit copies
       // the AI's current snippet into originalSnippet so a later

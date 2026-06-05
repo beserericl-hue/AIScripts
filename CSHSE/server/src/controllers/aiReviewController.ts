@@ -321,10 +321,14 @@ function escapeHtml(s: string): string {
  * Library as SupportingEvidence, deduped by a `rev:<sectionId>` tag so repeated
  * runs don't create duplicate files.
  */
-async function materializeApprovedToEditor(submission: any, userId: any): Promise<void> {
+async function materializeApprovedToEditor(
+  submission: any,
+  userId: any
+): Promise<Array<{ std: string; spec: string }>> {
   const state = submission.aiReviewState;
-  if (!state || !state.buckets) return;
+  if (!state || !state.buckets) return [];
   const approved = new Set<string>(state.approvedIds || []);
+  const affected: Array<{ std: string; spec: string }> = [];
 
   // --- 1) narratives + supporting-evidence text → submission.narratives (Map) ---
   const bySpec = new Map<string, { std: string; spec: string; narr: string[]; ev: string[] }>();
@@ -361,6 +365,7 @@ async function materializeApprovedToEditor(submission: any, userId: any): Promis
       linkedDocuments: existing?.linkedDocuments || [],
     });
     submission.narratives.set(std, stdMap);
+    affected.push({ std, spec });
   }
   submission.markModified('narratives');
 
@@ -383,7 +388,7 @@ async function materializeApprovedToEditor(submission: any, userId: any): Promis
       fileItems.push({ sectionId: e.sectionId, std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec, title: e.title || 'Evidence document', body: e.snippet || e.summary || '', kind: e.docSubKind || 'paper' });
     }
   }
-  if (fileItems.length === 0) return;
+  if (fileItems.length === 0) return affected;
 
   try {
     const { SupportingEvidence } = await import('../models/SupportingEvidence');
@@ -420,6 +425,50 @@ async function materializeApprovedToEditor(submission: any, userId: any): Promis
   } catch (err) {
     console.warn('[materializeApprovedToEditor] evidence packaging failed (non-fatal):', err);
   }
+  return affected;
+}
+
+/**
+ * Auto-run the AI evaluation for the specs whose editor content just changed,
+ * so the final-editing step already has verdicts/suggestions — no manual
+ * "Validate" click per spec. Fire-and-forget with a small concurrency cap so a
+ * big "Approve all" doesn't flood the AI service; failures are swallowed (the
+ * coordinator can still Validate manually).
+ */
+function autoEvaluateAffectedSpecs(
+  submissionId: string,
+  affected: Array<{ std: string; spec: string }>
+): void {
+  if (!affected || affected.length === 0) return;
+  void (async () => {
+    try {
+      const { ValidationService } = await import('../services/validationService');
+      const svc = new ValidationService();
+      const { Submission } = await import('../models/Submission');
+      const sub: any = await Submission.findById(submissionId).select('narratives').lean();
+      const getContent = (std: string, spec: string) => {
+        const n = sub?.narratives?.[std]?.[spec] ?? sub?.narratives?.get?.(std)?.get?.(spec);
+        return n?.content || '';
+      };
+      const CONCURRENCY = 3;
+      for (let i = 0; i < affected.length; i += CONCURRENCY) {
+        const batch = affected.slice(i, i + CONCURRENCY);
+        await Promise.allSettled(
+          batch.map(({ std, spec }) =>
+            svc.validateSection({
+              submissionId,
+              standardCode: std,
+              specCode: spec,
+              narrativeText: getContent(std, spec),
+              validationType: 'manual_save',
+            })
+          )
+        );
+      }
+    } catch (err) {
+      console.warn('[autoEvaluateAffectedSpecs] failed (non-fatal):', err);
+    }
+  })();
 }
 
 export async function setApprovedIds(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -443,9 +492,12 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   (submission as any).markModified('aiReviewState');
   // Auto-apply: approving moves the text straight into the editor (replaces the
   // old separate "Apply to editor" button). Idempotent — safe on every call.
-  await materializeApprovedToEditor(submission, req.user?.id);
+  const affected = await materializeApprovedToEditor(submission, req.user?.id);
   await submission.save();
   res.json({ ok: true, approvedIds: state.approvedIds });
+  // Fire the AI evaluation for the affected specs in the background so the final
+  // editor already has the verdicts — saves the coordinator a manual step.
+  autoEvaluateAffectedSpecs(String(submission._id), affected);
 }
 
 /**
@@ -830,13 +882,24 @@ export async function setMatrixRowEdit(
     state.matrices = [];
   }
   const key = `${matrixSlug}|${rowAnchor}`;
+  // Build a brand-new plain edits object (handling Map-or-object) and assign a
+  // FRESH aiMatrixState. Mutating-in-place on a Mixed path isn't reliably
+  // change-tracked by Mongoose — a restore (edit:null) silently failed to
+  // persist until we replaced the whole subtree.
+  const edits: Record<string, unknown> =
+    state.matrixRowEdits instanceof Map
+      ? Object.fromEntries(state.matrixRowEdits)
+      : { ...(state.matrixRowEdits || {}) };
   if (edit === null || edit === undefined) {
-    delete state.matrixRowEdits[key];
+    delete edits[key];
   } else {
-    state.matrixRowEdits[key] = edit;
+    edits[key] = edit;
   }
-  state.lastUpdatedAt = new Date();
-  (submission as any).aiMatrixState = state;
+  (submission as any).aiMatrixState = {
+    matrices: Array.isArray(state.matrices) ? state.matrices : [],
+    matrixRowEdits: edits,
+    lastUpdatedAt: new Date(),
+  };
   (submission as any).markModified('aiMatrixState');
   await submission.save();
   res.json({ ok: true });

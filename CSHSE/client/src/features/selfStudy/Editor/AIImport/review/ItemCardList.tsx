@@ -234,6 +234,8 @@ interface ItemCardListProps {
   approvedIds?: Set<string>;
   onToggleApproval?: (rowId: string) => void;
   onApproveAll?: (rowIds: string[]) => void;
+  /** Approve + move EVERY item in the whole review (all specs, CVs, files, …). */
+  onApproveEverything?: () => void;
   onClearApprovals?: () => void;
   /** CR-024: jump to the matrix view scrolled to this spec's row. ReviewStep
    *  resolves the row anchor and dispatches selectMatrixRow. */
@@ -407,6 +409,7 @@ export function ItemCardList({
   approvedIds,
   onToggleApproval,
   onApproveAll,
+  onApproveEverything,
   onClearApprovals,
   onJumpToMatrix,
   onAppendUnplacedToSpec,
@@ -757,10 +760,10 @@ export function ItemCardList({
               </button>
               <button
                 data-testid="approve-all"
-                onClick={() => onApproveAll(items.map((r) => r.rowId))}
-                disabled={items.length === 0 || isPlaceholder}
+                onClick={() => (onApproveEverything ? onApproveEverything() : onApproveAll(items.map((r) => r.rowId)))}
+                disabled={isPlaceholder}
                 className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Mark every item on this spec page as reviewed"
+                title="Approve every item in the whole review (all standards, CVs, syllabi, papers, files) and move them to the editor"
               >
                 <Check className="h-3 w-3" aria-hidden /> Approve all
               </button>
