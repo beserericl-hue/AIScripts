@@ -17,6 +17,11 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '../services/api';
 
+// Serializes Review save-state POSTs so a later write can't be overtaken by an
+// earlier in-flight one (see saveReviewStateToServer). Module-level: the store
+// is a singleton, so one shared chain is correct.
+let _reviewSaveQueue: Promise<boolean> = Promise.resolve(true);
+
 // ---------------------------------------------------------------- types
 
 export type WizardStep = 'upload' | 'parse' | 'review' | 'matrix' | 'apply' | 'tags';
@@ -811,23 +816,34 @@ export const useAIImportStore = create<AIImportState>()(
       },
       setApprovedIds: (ids) => set({ approvedIds: ids }),
       saveReviewStateToServer: async () => {
-        const s = get();
-        if (!s.submissionId) return false; // wizard-only run
-        try {
-          await api.post(`/api/submissions/${s.submissionId}/review/save-state`, {
-            buckets: s.buckets,
-            tags: s.tags,
-            cvs: s.cvs,
-            evidenceDocs: s.evidenceDocs,
-            introductions: s.introductions,
-            placeholderSections: s.placeholderSections,
-          });
-          set({ dirty: false });
-          return true;
-        } catch (err) {
-          console.warn('[save-state] autosave failed:', err);
-          return false;
-        }
+        // Serialize every save-state write. A debounced autosave fired at mount
+        // (the localStorage seed carries dirty=true) and a later one fired by a
+        // user edit must NOT race on the network — if the earlier (stale) POST
+        // landed last it would persist the pre-edit buckets and the edit would
+        // vanish on reload. Chaining means each run starts only after the prior
+        // settles and reads get() at RUN time, so the server always ends with
+        // the latest state regardless of which timer fired first.
+        const run = async (): Promise<boolean> => {
+          const s = get();
+          if (!s.submissionId) return false; // wizard-only run
+          try {
+            await api.post(`/api/submissions/${s.submissionId}/review/save-state`, {
+              buckets: s.buckets,
+              tags: s.tags,
+              cvs: s.cvs,
+              evidenceDocs: s.evidenceDocs,
+              introductions: s.introductions,
+              placeholderSections: s.placeholderSections,
+            });
+            set({ dirty: false });
+            return true;
+          } catch (err) {
+            console.warn('[save-state] autosave failed:', err);
+            return false;
+          }
+        };
+        _reviewSaveQueue = _reviewSaveQueue.then(run, run);
+        return _reviewSaveQueue;
       },
       persistApprovedIds: async (ids) => {
         const unique = [...new Set(ids)];
