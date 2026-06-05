@@ -18,7 +18,11 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 
+import { Document, Packer, Paragraph, HeadingLevel } from 'docx';
+
 import { Submission } from '../models/Submission';
+import { SupportingEvidence } from '../models/SupportingEvidence';
+import { ValidationService } from '../services/validationService';
 import { applyAIImportCore } from './aiImportController';
 
 interface AuthenticatedRequest extends Request {
@@ -391,12 +395,6 @@ async function materializeApprovedToEditor(
   if (fileItems.length === 0) return affected;
 
   try {
-    // runtime require — the bundled CJS build can't resolve a dynamic ESM
-    // import() of an extensionless local path (ERR_MODULE_NOT_FOUND).
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { SupportingEvidence } = require('../models/SupportingEvidence');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Document, Packer, Paragraph, HeadingLevel } = require('docx');
     for (const fi of fileItems) {
       const tag = `rev:${fi.sectionId}`;
       const exists = await SupportingEvidence.findOne({ submissionId: submission._id, tags: tag, isDeleted: false }).select('_id').lean();
@@ -449,10 +447,6 @@ async function runAutoEvaluations(
   const MAX_SYNC = 24;
   const todo = affected.slice(0, MAX_SYNC);
   try {
-    // runtime require — see note above (bundled CJS can't dynamic-import a
-    // local extensionless path).
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { ValidationService } = require('../services/validationService');
     const svc = new ValidationService();
     const getContent = (std: string, spec: string) => {
       const stdMap = submission.narratives?.get?.(std);

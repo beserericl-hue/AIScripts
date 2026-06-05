@@ -4,6 +4,8 @@ import { Submission } from '../models/Submission';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { ValidationResult } from '../models/ValidationResult';
+import { User } from '../models/User';
+import { Review } from '../models/Review';
 import * as gridFsService from '../services/gridFsService';
 import axios from 'axios';
 
@@ -260,17 +262,6 @@ export const getSystemStats = async (req: AuthenticatedRequest, res: Response) =
       return res.status(403).json({ error: 'Admin access required' });
     }
 
-    // Require models lazily to avoid circular dependencies. NOTE: must be
-    // require(), not await import() — the latter compiles to a native ESM
-    // specifier that fails with ERR_MODULE_NOT_FOUND in the dist build.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Submission } = require('../models/Submission');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { User } = require('../models/User');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { Review } = require('../models/Review');
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { ValidationResult } = require('../models/ValidationResult');
 
     const [
       totalSubmissions,

@@ -19,6 +19,11 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission, INarrativeContent } from '../models/Submission';
+// Static import (was runtime require() / await import()) — both dynamic forms
+// fail to resolve the relative TS/JS path in one of the two runtimes (vitest vs
+// the compiled dist build), silently no-op'ing the evidence packaging in a
+// swallowing try/catch. A static import resolves correctly in BOTH.
+import { SupportingEvidence } from '../models/SupportingEvidence';
 // Static import (was runtime require() — esbuild compiles to CJS just
 // fine here and vitest's TS resolver picks it up under test, whereas
 // the dynamic require missed the .ts extension in the test env and
@@ -1409,10 +1414,6 @@ async function _runApplyBody(args: {
       // S3 is wired in production the FileData.storageType flips to
       // 's3' without touching the wizard UI.
       try {
-        // require(), not await import() — a relative ESM specifier fails with
-        // ERR_MODULE_NOT_FOUND in the dist build.
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { SupportingEvidence } = require('../models/SupportingEvidence');
         const {
           Document,
           Packer,
@@ -1558,10 +1559,6 @@ async function _runApplyBody(args: {
       // (aiCVs) with no SupportingEvidence yet; assigning them later + re-Apply
       // packages them then. Idempotent: a CV that already has fileId is skipped.
       try {
-        // require(), not await import() — a relative ESM specifier fails with
-        // ERR_MODULE_NOT_FOUND in the dist build.
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const { SupportingEvidence } = require('../models/SupportingEvidence');
         const {
           Document,
           Packer,
