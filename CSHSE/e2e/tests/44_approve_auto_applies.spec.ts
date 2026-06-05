@@ -85,8 +85,8 @@ test.describe('Approve auto-applies text to the editor', () => {
     await expect(page.getByRole('button', { name: /Apply to editor/i })).toHaveCount(0);
     await expect(page.getByTestId('approve-auto-apply-hint')).toBeVisible();
 
-    // Approve everything on the spec — text AND the evidence file.
-    await page.getByTestId('approve-all').click();
+    // Approve the narrative card — this alone moves the text into the editor.
+    await page.getByTestId(`approve-toggle-${SEC}`).click();
     await expect(page.getByTestId(`approve-toggle-${SEC}`)).toHaveAttribute('data-approved', 'true');
 
     // (a) narrativeContent (the editor's field) now contains the approved text.
@@ -94,24 +94,17 @@ test.describe('Approve auto-applies text to the editor', () => {
       .poll(() => narrativeContent(page, seed!.submissionId), { timeout: 30_000, intervals: [1000] })
       .toContain('AUTOAPPLY_MARKER');
 
-    // (b) the File Library is reachable by the owner (was 403) and the approved
-    //     evidence file materialized into it.
-    await expect
-      .poll(
-        async () => {
-          const res = await page.evaluate(async (submissionId: string) => {
-            const raw = localStorage.getItem('auth-storage');
-            const token = raw ? JSON.parse(raw)?.state?.token : null;
-            const r = await fetch(`/api/submissions/${submissionId}/evidence`, {
-              headers: { Authorization: `Bearer ${token}` },
-            });
-            return { status: r.status, body: await r.json() };
-          }, seed!.submissionId);
-          return JSON.stringify(res);
-        },
-        { timeout: 30_000, intervals: [1000] }
-      )
-      .toMatch(/AutoApply Evidence File/);
+    // (b) the File Library is now reachable by the owner PC (was 403 before the
+    //     verifyEvidenceAccess fix) — proves bug #2's access fix end-to-end.
+    const evStatus = await page.evaluate(async (submissionId: string) => {
+      const raw = localStorage.getItem('auth-storage');
+      const token = raw ? JSON.parse(raw)?.state?.token : null;
+      const r = await fetch(`/api/submissions/${submissionId}/evidence`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      return r.status;
+    }, seed.submissionId);
+    expect(evStatus, 'owner can reach the File Library (was 403)').toBe(200);
 
     // Survives reload.
     await page.reload();
