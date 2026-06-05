@@ -56,6 +56,11 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
   const approvedIds = useAIImportStore((s) => s.approvedIds);
   const discardedIds = useAIImportStore((s) => s.discardedIds);
   const finishReviewOnServer = useAIImportStore((s) => s.finishReviewOnServer);
+  // Autosave: every review-rail mutation flips `dirty`; persist the content to
+  // the DB after a short idle so nothing lives only in the browser.
+  const dirty = useAIImportStore((s) => s.dirty);
+  const saveReviewStateToServer = useAIImportStore((s) => s.saveReviewStateToServer);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   const unresolvedCount = React.useMemo(() => {
     const approved = new Set(approvedIds || []);
@@ -106,6 +111,19 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
     setSubmissionId(submissionId);
     loadPersistedReviewState();
   }, [submissionId, setSubmissionId, loadPersistedReviewState]);
+
+  // Debounced autosave — when the store goes dirty, persist the rail content to
+  // the DB after 1.2s of quiet. Resets the timer on each further change so
+  // rapid edits batch into one write.
+  useEffect(() => {
+    if (!dirty) return;
+    setSaveState('saving');
+    const t = setTimeout(async () => {
+      const ok = await saveReviewStateToServer();
+      setSaveState(ok ? 'saved' : 'idle');
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [dirty, saveReviewStateToServer]);
 
   const handleRedetect = async () => {
     if (!importId) {
@@ -175,6 +193,15 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Autosave indicator — proves to the coordinator that every change is
+              being written to the database (not just the browser). */}
+          <span
+            data-testid="review-save-state"
+            data-state={saveState}
+            className={`text-xs ${saveState === 'saving' ? 'text-gray-400' : saveState === 'saved' ? 'text-emerald-600' : 'text-transparent'}`}
+          >
+            {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ All changes saved' : 'saved'}
+          </span>
           {/* CR-040 follow-on — Re-run detectors button. Pulls the
               persisted DOCX from S3 and re-runs cv_detector +
               appendix_paper_detector + introduction_detector only.

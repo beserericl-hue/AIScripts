@@ -249,6 +249,52 @@ export async function routeEvidence(req: AuthenticatedRequest, res: Response): P
 }
 
 /**
+ * POST /api/submissions/:submissionId/review/save-state
+ *
+ * Autosave the review-rail CONTENT so every coordinator action on the Review
+ * screen (change-kind, reassign, inline edit, revert, move-to-introduction,
+ * bulk moves, standalone-CV routing) is persisted to the DB immediately —
+ * instead of surviving only in browser localStorage until "Apply to editor".
+ * Only the content fields are replaced; approvedIds / discardedIds /
+ * itemSources / aiMatrixState are owned by their dedicated endpoints and left
+ * untouched.
+ */
+const SAVEABLE_FIELDS = [
+  'buckets',
+  'tags',
+  'cvs',
+  'evidenceDocs',
+  'introductions',
+  'placeholderSections',
+] as const;
+
+export async function saveReviewState(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const state = (submission as any).aiReviewState;
+  if (!state) {
+    res.status(409).json({ error: 'aiReviewState is empty' });
+    return;
+  }
+  const body = req.body || {};
+  let touched = 0;
+  for (const f of SAVEABLE_FIELDS) {
+    if (body[f] !== undefined) {
+      state[f] = body[f];
+      touched += 1;
+    }
+  }
+  if (touched === 0) {
+    res.status(400).json({ error: `provide at least one of: ${SAVEABLE_FIELDS.join(', ')}` });
+    return;
+  }
+  state.lastUpdatedAt = new Date();
+  (submission as any).markModified('aiReviewState');
+  await submission.save();
+  res.json({ ok: true, saved: touched });
+}
+
+/**
  * POST /api/submissions/:submissionId/review/set-approved
  *
  * Replace the whole approved-id set in one shot. Backs the Review surface's

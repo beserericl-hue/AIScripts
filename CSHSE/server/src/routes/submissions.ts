@@ -106,6 +106,7 @@ import {
   routeEvidence,
   splitReviewItem,
   setApprovedIds,
+  saveReviewState,
   finishReview,
   applyReviewState,
   getMatrixState,
@@ -123,6 +124,8 @@ router.post('/:submissionId/review/route-evidence', submissionLockout, routeEvid
 router.post('/:submissionId/review/split-item', submissionLockout, splitReviewItem);
 // Persist the whole approved-id set (Approve / Approve-all / Clear).
 router.post('/:submissionId/review/set-approved', submissionLockout, setApprovedIds);
+// Autosave review-rail content (change-kind, reassign, edit, move, etc.).
+router.post('/:submissionId/review/save-state', submissionLockout, saveReviewState);
 // CR-048 — "I'm done reviewing": discard all remaining un-triaged drafts.
 router.post('/:submissionId/review/finish', submissionLockout, finishReview);
 router.post('/:submissionId/review/apply', submissionLockout, applyReviewState);

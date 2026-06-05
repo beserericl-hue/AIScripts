@@ -491,6 +491,10 @@ interface AIImportState {
   // local set updates instantly; the DB write means the "Reviewed" marks
   // survive reload / Re-run detectors. No-op persistence in a wizard-only run.
   persistApprovedIds: (ids: string[]) => Promise<boolean>;
+  // Autosave the review-rail content (buckets/tags/cvs/evidenceDocs/intros) to
+  // the DB so every change persists without waiting for "Apply to editor".
+  // No-op in a wizard-only run (no submissionId). Clears `dirty` on success.
+  saveReviewStateToServer: () => Promise<boolean>;
   setMatrixScrollSpec: (specKey: string | null) => void;
   // CR-039
   setIntroductions: (introductions: Record<string, IntroductionBucket>) => void;
@@ -788,6 +792,25 @@ export const useAIImportStore = create<AIImportState>()(
         set({ step: s });
       },
       setApprovedIds: (ids) => set({ approvedIds: ids }),
+      saveReviewStateToServer: async () => {
+        const s = get();
+        if (!s.submissionId) return false; // wizard-only run
+        try {
+          await api.post(`/api/submissions/${s.submissionId}/review/save-state`, {
+            buckets: s.buckets,
+            tags: s.tags,
+            cvs: s.cvs,
+            evidenceDocs: s.evidenceDocs,
+            introductions: s.introductions,
+            placeholderSections: s.placeholderSections,
+          });
+          set({ dirty: false });
+          return true;
+        } catch (err) {
+          console.warn('[save-state] autosave failed:', err);
+          return false;
+        }
+      },
       persistApprovedIds: async (ids) => {
         const unique = [...new Set(ids)];
         set({ approvedIds: unique }); // optimistic — instant checkmarks

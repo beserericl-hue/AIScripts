@@ -985,7 +985,7 @@ export function ItemCardList({
           <div className="space-y-6">
             <KindSection
               title="Narratives"
-              subtitle="Auto-applied as Submission.narratives[std][spec].content"
+              subtitle='Written into the standard editor when you click "Apply to editor"'
               icon="📝"
               items={groups.narratives}
               startIdx={1}
