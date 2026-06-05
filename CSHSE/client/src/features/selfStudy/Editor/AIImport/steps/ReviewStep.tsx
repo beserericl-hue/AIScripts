@@ -469,8 +469,14 @@ function FullReviewStep(): JSX.Element {
         { std: activeBucket.standardCode, spec: activeBucket.specCode },
         { std: activeBucket.standardCode, spec: activeBucket.specCode, kind: newKind }
       );
+      // Persist immediately. A kind flip is a discrete one-click action; relying
+      // on the 1.2s debounced autosave meant a quick reload/navigation cancelled
+      // the pending write and the change silently vanished on reload. moveItem's
+      // zustand setState is synchronous, so saveReviewStateToServer reads the
+      // just-updated buckets.
+      void saveReviewStateToServer();
     },
-    [activeBucket, moveItem]
+    [activeBucket, moveItem, saveReviewStateToServer]
   );
 
   const handleBulkAction = useCallback(
