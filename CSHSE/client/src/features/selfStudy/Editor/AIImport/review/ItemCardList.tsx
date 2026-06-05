@@ -1310,6 +1310,8 @@ function ItemCard({
                 ] as Array<{ k: ItemKind; label: string }>).map((opt, i) => (
                   <button
                     key={opt.k}
+                    data-testid={`kind-${opt.k}-${item.sectionId}`}
+                    data-active={item.kind === opt.k ? 'true' : 'false'}
                     onClick={() => onChangeKind?.(item.sectionId, opt.k)}
                     title={`Mark this item as ${opt.label}`}
                     className={`${i > 0 ? 'border-l border-gray-300' : ''} px-2 py-0.5 ${
