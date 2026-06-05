@@ -435,55 +435,49 @@ async function materializeApprovedToEditor(
  * big "Approve all" doesn't flood the AI service; failures are swallowed (the
  * coordinator can still Validate manually).
  */
-function autoEvaluateAffectedSpecs(
-  submissionId: string,
+async function runAutoEvaluations(
+  submission: any,
   affected: Array<{ std: string; spec: string }>
-): void {
-  if (!affected || affected.length === 0) return;
-  void (async () => {
-    const { Submission } = await import('../models/Submission');
-    const dbg = async (msg: string) => {
-      try {
-        await Submission.updateOne(
-          { _id: submissionId },
-          { $set: { 'aiReviewState.__autoEvalDebug': { at: new Date().toISOString(), msg, affected } } }
-        );
-      } catch { /* */ }
+): Promise<{ requested: number; evaluated: number; error?: string }> {
+  if (!affected || affected.length === 0) return { requested: 0, evaluated: 0 };
+  // Bound how many we evaluate synchronously so a giant "Approve all" can't
+  // hang the request indefinitely; the rest get evaluated on the next approve.
+  const MAX_SYNC = 24;
+  const todo = affected.slice(0, MAX_SYNC);
+  try {
+    const { ValidationService } = await import('../services/validationService');
+    const svc = new ValidationService();
+    const getContent = (std: string, spec: string) => {
+      const stdMap = submission.narratives?.get?.(std);
+      const entry = stdMap?.get?.(spec);
+      return entry?.content || '';
     };
-    try {
-      await dbg(`start: ${affected.length} specs`);
-      const { ValidationService } = await import('../services/validationService');
-      const svc = new ValidationService();
-      const sub: any = await Submission.findById(submissionId).select('narratives').lean();
-      const getContent = (std: string, spec: string) => {
-        const n = sub?.narratives?.[std]?.[spec] ?? sub?.narratives?.get?.(std)?.get?.(spec);
-        return n?.content || '';
-      };
-      let done = 0;
-      const CONCURRENCY = 3;
-      for (let i = 0; i < affected.length; i += CONCURRENCY) {
-        const batch = affected.slice(i, i + CONCURRENCY);
-        const results = await Promise.allSettled(
-          batch.map(({ std, spec }) =>
+    let evaluated = 0;
+    const CONCURRENCY = 3;
+    const PER_CALL_MS = 30_000;
+    for (let i = 0; i < todo.length; i += CONCURRENCY) {
+      const batch = todo.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(({ std, spec }) =>
+          Promise.race([
             svc.validateSection({
-              submissionId,
+              submissionId: String(submission._id),
               standardCode: std,
               specCode: spec,
               narrativeText: getContent(std, spec),
               validationType: 'manual_save',
-            })
-          )
-        );
-        done += results.filter((r) => r.status === 'fulfilled').length;
-        const firstErr = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
-        if (firstErr) await dbg(`batch err: ${String(firstErr.reason).slice(0, 200)}`);
-      }
-      await dbg(`done: ${done}/${affected.length} evaluated`);
-    } catch (err) {
-      await dbg(`threw: ${String(err).slice(0, 200)}`);
-      console.warn('[autoEvaluateAffectedSpecs] failed (non-fatal):', err);
+            }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('eval-timeout')), PER_CALL_MS)),
+          ])
+        )
+      );
+      evaluated += results.filter((r) => r.status === 'fulfilled').length;
     }
-  })();
+    return { requested: todo.length, evaluated };
+  } catch (err) {
+    console.warn('[runAutoEvaluations] failed (non-fatal):', err);
+    return { requested: todo.length, evaluated: 0, error: String(err).slice(0, 200) };
+  }
 }
 
 export async function setApprovedIds(req: AuthenticatedRequest, res: Response): Promise<void> {
@@ -509,10 +503,12 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   // old separate "Apply to editor" button). Idempotent — safe on every call.
   const affected = await materializeApprovedToEditor(submission, req.user?.id);
   await submission.save();
-  res.json({ ok: true, approvedIds: state.approvedIds });
-  // Fire the AI evaluation for the affected specs in the background so the final
-  // editor already has the verdicts — saves the coordinator a manual step.
-  autoEvaluateAffectedSpecs(String(submission._id), affected);
+  // Run the AI evaluation for the affected specs so the final editor already has
+  // the verdicts — saves the coordinator a manual "Validate" per spec. Awaited
+  // (post-response fire-and-forget gets torn down on Railway), but the client
+  // approve call is itself fire-and-forget so the UI never blocks on this.
+  const evalSummary = await runAutoEvaluations(submission, affected);
+  res.json({ ok: true, approvedIds: state.approvedIds, autoEval: evalSummary });
 }
 
 /**
