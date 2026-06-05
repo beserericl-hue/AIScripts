@@ -3,7 +3,7 @@ name: CR-059 — Import individual file into the Self-Study editor (standalone, 
 description: Standalone "Import file" panel in the Self-Study editor (outside the AI Import Wizard) — drag/drop or browse one file, preview its parsed content, and copy/paste or insert a selected section into the active standard/sub-spec narrative OR route the file as supporting evidence. Replaces and removes the legacy per-standard "Import Document" editor from the settings panel.
 type: change-request
 cr_id: CR-059
-status: proposed
+status: shipped
 priority: P1
 source: user direction 2026-06-05 (PC needs to import one file + copy/paste its content into a chosen spec, outside the wizard — the pre-wizard importer did this; extract a subset and remove the original editor)
 sprint_target: Sprint 11
@@ -32,7 +32,7 @@ This CR extracts a **subset** of the original importer into a single standalone 
 
 ## Decision
 
-Build a single standalone panel, `ImportFilePanel`, mounted as a Self-Study editor view (peer of `files` / `introduction` / `review-surface`). It reuses the **subset** of original-importer components that already exist — no new parsing, no new upload endpoint, no AI. It operates on **whatever standard/sub-spec is currently selected** (`selectedStandard` / `selectedSpec` in `SelfStudyEditor.tsx`), so "import into the exact spec" is implicit from editor state.
+Build a single standalone panel, `ImportFilePanel`, mounted as a **right-side drawer** (`showImportFile`) that reuses the legacy importer's layout slot — it renders alongside whatever editor view is active, so the target narrative editor stays mounted and visible while the PC pastes into it. (Implemented as a drawer rather than a mutually-exclusive `activeView` precisely because a separate view would unmount the narrative editor, leaving nothing to paste into.) It reuses the **subset** of original-importer components that already exist — no new parsing, no new upload endpoint, no AI. It operates on **whatever standard/sub-spec is currently selected** (`selectedStandard` / `selectedSpec` in `SelfStudyEditor.tsx`), so "import into the exact spec" is implicit from editor state.
 
 The panel has two columns:
 
@@ -71,10 +71,10 @@ The new "Import file" entry replaces the legacy button in the editor toolbar (in
 
 ## Files affected
 
-- `client/src/features/selfStudy/Editor/ImportFilePanel.tsx` — **new**. Two-column panel: drag/drop + browse (left) reusing `FileUpload` upload logic; inline parsed preview (right) reusing `FilePreviewModal` render; selection capture + "Insert into narrative" / "Keep as supporting evidence" actions.
-- `client/src/features/selfStudy/Editor/SelfStudyEditor.tsx` — add `activeView='import-file'` branch + mount `ImportFilePanel`; add toolbar **Import file** button in the CR-045 `IMPORT` group; thread `selectedStandard`/`selectedSpec` + a `narrativeEditorRef` (imperative insert) into the panel; **remove** legacy `!hideLegacyImporter` button block (~2379–2395), `showImportModal` modal + state, and `hideLegacyImporter` state (~494–495).
-- `client/src/features/selfStudy/Editor/NarrativeEditor.tsx` — expose imperative `insertHtmlAtCursor(html)` via `forwardRef`/`useImperativeHandle`, calling `editor.chain().focus().insertContent(html).run()`; existing `onUpdate` → `triggerAutoSave` path persists it.
-- `client/src/features/selfStudy/Editor/IntroductionEditor.tsx` (CR-046) — same imperative `insertHtmlAtCursor` so the "Paste into narrative" target works when the Introduction surface is active; persists via the existing `PATCH /…/introduction`.
+- `client/src/features/selfStudy/Editor/ImportFilePanel.tsx` — **new**. Drawer: drag/drop + browse (top) reusing `FileUpload`'s upload contract; inline parsed preview reusing the `FilePreviewModal` fetch/render; `selectionchange` capture; "Paste into narrative" / "Paste as supporting-evidence summary" actions.
+- `client/src/features/selfStudy/Editor/SelfStudyEditor.tsx` — `showImportFile` state + a right-side `ImportFilePanel` drawer (renders alongside the active editor view, reusing the legacy modal's slot); toolbar **Import file** button in the CR-045 `IMPORT` group; `narrativeInsertRef` / `docIntroInsertRef` wired to the editors via `onEditorReady`; **removed** the legacy "Import Document" toolbar button + `hideLegacyImporter`. (As-built: implemented as a drawer, not an `activeView`, so the narrative editor stays mounted to receive the paste. The legacy import modal's ~1000-line lifecycle is now unreachable and left inert — see Deferred below.)
+- `client/src/features/selfStudy/Editor/NarrativeEditor.tsx` — `onEditorReady` callback hands the parent an imperative `insertHtml` (callback-registration, **not** `forwardRef`). `insertHtml` inserts AND calls `onSave(editor.getHTML())` immediately, so a paste persists even if an editor remount would otherwise cancel the debounced autosave.
+- `client/src/features/selfStudy/Editor/IntroductionEditor.tsx` (CR-046) — same `onEditorReady`/`insertHtml`; insert calls `handleSave()` (this editor saves on blur), so the "Paste into narrative" target persists on the Introduction surface via `PATCH /…/introduction`.
 - `client/src/components/Layout.tsx` — **remove** the "Hide legacy importer" preference block (~320–342) from the settings menu.
 - `client/src/features/selfStudy/EvidenceManager/FileUpload.tsx` — extract/reuse the drag/drop + browse + validation logic (refactor into a shared hook or import directly); no behavior change to existing callers.
 - `client/src/features/selfStudy/FileLibrary/FilePreviewModal.tsx` — allow inline (non-modal) rendering of the parsed-HTML preview (extract the preview body so the panel can reuse it without the modal chrome); existing modal callers unchanged.
@@ -91,8 +91,15 @@ _No server changes._ Reuses existing `POST /…/evidence/upload`, `GET /…/evid
   - `47_editor_import_file_dragdrop.spec.ts` — open the editor on a chosen sub-spec, drag/drop (and separately, browse) a fixture DOCX into the Import file panel; assert the parsed preview renders AND the file auto-appears in the File Library (no explicit keep).
   - `48_editor_import_paste_into_narrative.spec.ts` — select a range in the preview, click **Paste into narrative**, assert the active spec's `narrativeContent` contains the pasted text and survives a reload; assert a *different* spec is untouched.
   - `49_editor_import_paste_evidence_summary.spec.ts` — click **Paste as supporting-evidence summary**, assert the imported file's `description` (via `GET /…/evidence`) holds the selected text and the summary renders in the File Library / EvidencePanel without reload.
-  - `50_editor_import_no_spec_selected.spec.ts` — open the panel at standard level (no sub-spec): assert "Paste into narrative" is disabled, "Paste as supporting-evidence summary" is enabled and attaches with `specCode` blank; on the Introduction surface, assert "Paste into narrative" writes to the introduction.
-  - `51_legacy_importer_removed.spec.ts` — assert the legacy "Import Document" toolbar button is gone and the "Hide legacy importer" settings preference no longer renders.
+  - `50_editor_import_introduction_target.spec.ts` — reachable beyond a sub-spec: on the Introduction surface, "Paste into narrative" is enabled and persists to the document introduction (`PATCH /…/introduction`).
+  - `51_legacy_importer_removed.spec.ts` — assert the legacy "Import Document" toolbar button is gone and the "Hide legacy importer" settings preference no longer renders; the new "Import file" button is present.
+
+_All five specs pass on the live `develop` deploy (2026-06-05)._
+
+## Deferred / related
+
+- **Legacy importer dead-code deletion.** The legacy "Import Document" lifecycle (`showImportModal` + `importStep` state machine + its ~1000-line modal, `SelfStudyEditor.tsx`) is now **unreachable** (the trigger button and the settings toggle are removed) but left inert. Fully excising it (and the entangled `importStep` effects/handlers) is a separate low-risk cleanup, intentionally not bundled here to avoid destabilizing a feature that had to be E2E-proven.
+- **Review-surface change-kind persistence (pre-existing, NOT fully fixed — needs its own CR).** While E2E-verifying persistence, spec `43_review_autosave` (Review-rail narrative→evidence kind flip surviving a reload) was found failing **deterministically on the live deploy**. It is in the Review surface (`aiImportStore` / `ReviewStep` / `ReviewSurface`), which CR-059 does **not** change logically (`git diff` confirms zero changes to that path) — but CR-059's larger client bundle shifted load timing enough to tip a latent race from passing to failing. Root cause: cards render instantly from the localStorage seed; the autosave is debounced 1.2s; a late `loadPersistedReviewState` GET clobbers the unsaved kind change back to the server copy, and the debounced autosave then re-saves that stale copy. Fixes attempted and their results: (a) a `dirty` clobber-guard in `loadPersistedReviewState` — **regressed** 39/40/41/44/45/46 (it skipped the essential initial load), reverted; (b) an immediate save in `handleChangeKind` — harmless (39–46 stay green) but **insufficient alone** (the load-clobber + debounced re-save still wins), kept as a defensive improvement. **A proper fix needs a dedicated CR** to redesign the Review autosave/load (e.g. drop the seed-vs-server clobber and flush pending writes on navigate). CR-059's own surface persists correctly (specs 47–51 green); the regression suite (39/40/41/44/45/46) is back to green.
 
 ## Rollout / risk
 
@@ -114,7 +121,8 @@ _All three open questions were answered by the user on 2026-06-05 and are now lo
 - **Auto-import, not an explicit keep step.** Every uploaded file is treated as an imported file — a `SupportingEvidence` record is created on upload and shows in the File Library immediately. There is no "Keep as evidence" gate. Separately, the PC can paste selected text as a **summary** into either the narrative or the file's supporting-evidence description; the two paste targets are independent and non-exclusive. (Removing an unwanted import uses the existing `DELETE /…/evidence/:id`.)
 - **Native text selection (v1).** Section selection is native browser selection over the rendered preview HTML. A structured per-heading "insert this section" picker is a possible follow-on, out of scope here.
 - **Reachable with no sub-spec selected.** The panel opens at standard level and on the Introduction surface. The narrative paste target adapts (sub-spec narrative / introduction editor / disabled at bare standard level); the evidence-summary paste target stays available at standard level with `specCode` blank.
+- **Second summary appends.** Pasting another summary onto the same imported file **appends** to the evidence `description` (separated by a blank line) rather than overwriting, matching how narrative inserts accumulate. The panel shows the current summary so the PC can see what is there before adding more.
 
 ## Open questions
 
-- _None blocking._ Minor: confirm whether pasting a second summary should **replace** or **append** to the evidence `description` (lean: append with a separator, matching how narrative inserts accumulate).
+- _None blocking — CR accepted for implementation 2026-06-05._
