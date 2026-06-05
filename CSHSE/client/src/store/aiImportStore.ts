@@ -1326,39 +1326,47 @@ export const useAIImportStore = create<AIImportState>()(
           const res = await api.get(`/api/submissions/${submissionId}/review`);
           const state = res.data?.aiReviewState;
           const matrixState = res.data?.aiMatrixState;
+          // CR-059 follow-on — split the hydration by who "owns" each field:
+          //
+          //  • Server-authoritative fields (approvedIds / discardedIds /
+          //    coverageReport / placeholderSections) are persisted via their
+          //    own endpoints, so a reload must always reflect the latest DB
+          //    truth — applied unconditionally.
+          //
+          //  • Local-edit fields (buckets / tags / cvs / evidenceDocs /
+          //    introductions / matrices / matrixRowEdits) carry the
+          //    coordinator's un-applied rail edits. The cards render instantly
+          //    from the localStorage Zustand seed, so the PC can flip a kind /
+          //    move an item BEFORE this GET resolves. If the store is `dirty`
+          //    (unsaved edits exist), keep the in-memory copy — a late server
+          //    response must NOT revert an edit and let the debounced autosave
+          //    re-save the stale copy. When clean, hydrate from the server.
+          //
+          // (An earlier blanket `if (dirty) return` skipped the WHOLE load,
+          //  which also dropped the server-authoritative approvedIds and broke
+          //  the approve/assign/move specs — hence the field-level split.)
+          const localDirty = get().dirty === true;
           if (state) {
-            // Hydrate the existing store fields so the UI keeps reading
-            // from the same selectors. approvedIds is merged from the
-            // server set.
-            //
-            // CR-043 follow-on — conservative merge: if the server's
-            // aiReviewState is missing a field (e.g. `buckets: undefined`),
-            // keep the in-memory value rather than clobbering it with `{}`.
-            // This matters when the page is hydrated from a localStorage
-            // Zustand seed BEFORE the server-side merge has run (E2E seeds,
-            // pre-CR-043 imports, etc.). Without this guard, opening the
-            // Review surface on a fresh seed wipes the data.
             const current = get();
             set({
-              buckets: state.buckets ?? current.buckets,
-              tags: state.tags ?? current.tags,
-              cvs: state.cvs ?? current.cvs,
-              evidenceDocs: state.evidenceDocs ?? current.evidenceDocs,
-              introductions: state.introductions ?? current.introductions,
-              placeholderSections: state.placeholderSections || [],
-              coverageReport: state.coverageReport ?? get().coverageReport,
+              // server-authoritative — always sync
               approvedIds: state.approvedIds || [],
-              discardedIds: state.discardedIds || []
+              discardedIds: state.discardedIds || [],
+              coverageReport: state.coverageReport ?? current.coverageReport,
+              placeholderSections: state.placeholderSections || [],
+              // local-edit — keep local when dirty, else hydrate from server
+              buckets: localDirty ? current.buckets : (state.buckets ?? current.buckets),
+              tags: localDirty ? current.tags : (state.tags ?? current.tags),
+              cvs: localDirty ? current.cvs : (state.cvs ?? current.cvs),
+              evidenceDocs: localDirty ? current.evidenceDocs : (state.evidenceDocs ?? current.evidenceDocs),
+              introductions: localDirty ? current.introductions : (state.introductions ?? current.introductions),
             });
           }
           if (matrixState) {
-            // Same conservative merge as the buckets branch above —
-            // preserve in-memory matrices when the server response
-            // doesn't include them (seed-only path, pre-merge state).
             const current = get();
             set({
-              matrices: matrixState.matrices ?? current.matrices,
-              matrixRowEdits: matrixState.matrixRowEdits ?? current.matrixRowEdits
+              matrices: localDirty ? current.matrices : (matrixState.matrices ?? current.matrices),
+              matrixRowEdits: localDirty ? current.matrixRowEdits : (matrixState.matrixRowEdits ?? current.matrixRowEdits),
             });
           }
         } catch (err) {
