@@ -60,7 +60,16 @@ test.describe('Approve auto-applies text to the editor', () => {
                 wordCount: 3, confidence: 0.95, acceptState: 'pending', rationale: '',
               },
             ],
-            evidenceText: [], evidenceFiles: [], matrixCells: [],
+            evidenceText: [],
+            evidenceFiles: [
+              {
+                sectionId: 'file-autoapply-1',
+                heading: 'AutoApply Evidence File',
+                snippet: 'Evidence file body for the File Library.',
+                wordCount: 6, confidence: 0.9, acceptState: 'pending', rationale: '',
+              },
+            ],
+            matrixCells: [],
           },
         },
         tags: [], cvs: [], evidenceDocs: [], introductions: {},
@@ -76,14 +85,33 @@ test.describe('Approve auto-applies text to the editor', () => {
     await expect(page.getByRole('button', { name: /Apply to editor/i })).toHaveCount(0);
     await expect(page.getByTestId('approve-auto-apply-hint')).toBeVisible();
 
-    // Approve the card — this alone must move the text into the editor.
-    await page.getByTestId(`approve-toggle-${SEC}`).click();
+    // Approve everything on the spec — text AND the evidence file.
+    await page.getByTestId('approve-all').click();
     await expect(page.getByTestId(`approve-toggle-${SEC}`)).toHaveAttribute('data-approved', 'true');
 
-    // narrativeContent (the editor's field) now contains the approved text.
+    // (a) narrativeContent (the editor's field) now contains the approved text.
     await expect
       .poll(() => narrativeContent(page, seed!.submissionId), { timeout: 30_000, intervals: [1000] })
       .toContain('AUTOAPPLY_MARKER');
+
+    // (b) the File Library is reachable by the owner (was 403) and the approved
+    //     evidence file materialized into it.
+    await expect
+      .poll(
+        async () => {
+          const res = await page.evaluate(async (submissionId: string) => {
+            const raw = localStorage.getItem('auth-storage');
+            const token = raw ? JSON.parse(raw)?.state?.token : null;
+            const r = await fetch(`/api/submissions/${submissionId}/evidence`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            return { status: r.status, body: await r.json() };
+          }, seed!.submissionId);
+          return JSON.stringify(res);
+        },
+        { timeout: 30_000, intervals: [1000] }
+      )
+      .toMatch(/AutoApply Evidence File/);
 
     // Survives reload.
     await page.reload();
