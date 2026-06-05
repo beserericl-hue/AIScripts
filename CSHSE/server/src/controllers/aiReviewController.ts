@@ -441,19 +441,29 @@ function autoEvaluateAffectedSpecs(
 ): void {
   if (!affected || affected.length === 0) return;
   void (async () => {
+    const { Submission } = await import('../models/Submission');
+    const dbg = async (msg: string) => {
+      try {
+        await Submission.updateOne(
+          { _id: submissionId },
+          { $set: { 'aiReviewState.__autoEvalDebug': { at: new Date().toISOString(), msg, affected } } }
+        );
+      } catch { /* */ }
+    };
     try {
+      await dbg(`start: ${affected.length} specs`);
       const { ValidationService } = await import('../services/validationService');
       const svc = new ValidationService();
-      const { Submission } = await import('../models/Submission');
       const sub: any = await Submission.findById(submissionId).select('narratives').lean();
       const getContent = (std: string, spec: string) => {
         const n = sub?.narratives?.[std]?.[spec] ?? sub?.narratives?.get?.(std)?.get?.(spec);
         return n?.content || '';
       };
+      let done = 0;
       const CONCURRENCY = 3;
       for (let i = 0; i < affected.length; i += CONCURRENCY) {
         const batch = affected.slice(i, i + CONCURRENCY);
-        await Promise.allSettled(
+        const results = await Promise.allSettled(
           batch.map(({ std, spec }) =>
             svc.validateSection({
               submissionId,
@@ -464,8 +474,13 @@ function autoEvaluateAffectedSpecs(
             })
           )
         );
+        done += results.filter((r) => r.status === 'fulfilled').length;
+        const firstErr = results.find((r) => r.status === 'rejected') as PromiseRejectedResult | undefined;
+        if (firstErr) await dbg(`batch err: ${String(firstErr.reason).slice(0, 200)}`);
       }
+      await dbg(`done: ${done}/${affected.length} evaluated`);
     } catch (err) {
+      await dbg(`threw: ${String(err).slice(0, 200)}`);
       console.warn('[autoEvaluateAffectedSpecs] failed (non-fatal):', err);
     }
   })();
