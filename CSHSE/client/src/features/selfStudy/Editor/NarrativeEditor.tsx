@@ -68,6 +68,11 @@ interface NarrativeEditorProps {
   readOnly?: boolean;
   onSelectionChange?: (selection: { text: string; from: number; to: number } | null) => void;
   highlightedComment?: { id: string; selectedText: string } | null;
+  // CR-059 — the editor calls this once its TipTap instance is ready, handing
+  // back an imperative `insertHtml` so the Import-file panel can paste a
+  // selected document section straight into this narrative. Insertion fires
+  // onUpdate → autosave, so it persists like any other edit.
+  onEditorReady?: (api: { insertHtml: (html: string) => void }) => void;
 }
 
 /**
@@ -92,6 +97,7 @@ export function NarrativeEditor({
   readOnly = false,
   onSelectionChange,
   highlightedComment,
+  onEditorReady,
 }: NarrativeEditorProps) {
   const [content, setContent] = useState(initialContent);
   const [supportingEvidenceCollapsed, setSupportingEvidenceCollapsed] = useState(true);
@@ -237,6 +243,18 @@ export function NarrativeEditor({
       },
     },
   });
+
+  // CR-059 — hand an imperative HTML insert back to the parent (the Import-file
+  // panel pastes a selected section here). insertContent triggers onUpdate →
+  // triggerAutoSave, so the pasted text persists exactly like a typed edit.
+  useEffect(() => {
+    if (!editor || !onEditorReady) return;
+    onEditorReady({
+      insertHtml: (html: string) => {
+        editor.chain().focus().insertContent(html).run();
+      },
+    });
+  }, [editor, onEditorReady]);
 
   // Initialize TipTap editor for supporting evidence
   const supportingEvidenceEditor = useEditor({

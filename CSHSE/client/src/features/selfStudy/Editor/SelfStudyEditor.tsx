@@ -31,6 +31,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { IntroductionEditor } from './IntroductionEditor';
+import { ImportFilePanel } from './ImportFilePanel';
 import { SpecAIReview } from './SpecAIReview';
 import { SpecNotApplicable } from './SpecNotApplicable';
 import { ReviewSurface } from './Review/ReviewSurface';
@@ -491,8 +492,15 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // CR-045 — per-PC preference: hide the legacy paste-and-tag importer.
   // Defaults true (clean single-importer toolbar) when the user has no
   // saved preference.
-  const hideLegacyImporter =
-    useAuthStore((s) => s.user?.preferences?.hideLegacyImporter) ?? true;
+  // CR-059 — the legacy per-standard "Import Document" importer is replaced by
+  // the standalone Import-file drawer (showImportFile). Its toolbar button and
+  // the "Hide legacy importer" settings toggle are removed.
+  const [showImportFile, setShowImportFile] = useState(false);
+  // The mounted narrative / introduction editors register their imperative
+  // insert here (CR-059) so the Import-file panel can paste a selected section
+  // into whichever surface is active. Refs (not state) — set on editor mount.
+  const narrativeInsertRef = useRef<((html: string) => void) | null>(null);
+  const docIntroInsertRef = useRef<((html: string) => void) | null>(null);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -2371,28 +2379,25 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     <AIImportTabButton
                       activeView={activeView}
                       setActiveView={setActiveView}
-                      showAiBadge={!hideLegacyImporter}
+                      showAiBadge={false}
                     />
-                    {/* CR-045 — legacy paste-and-tag importer is hidden by
-                        default; PCs re-enable it via cogwheel → Preferences
-                        → "Hide legacy importer". */}
-                    {!hideLegacyImporter && (
-                      <button
-                        onClick={() => setShowImportModal(true)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                          showImportModal
-                            ? 'bg-teal-100 text-teal-700'
-                            : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                        title="Import Document — paste a single section at a time into a chosen standard. Use this when multiple co-authors each contribute pieces of the self-study at different times."
-                      >
-                        <FileUp className="w-4 h-4 flex-shrink-0" />
-                        Import Document
-                        <span className="rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-700">
-                          Legacy
-                        </span>
-                      </button>
-                    )}
+                    {/* CR-059 — "Import file": a standalone single-file import
+                        drawer (drag/drop or browse → preview → paste into the
+                        narrative or as a file summary). Replaces the legacy
+                        per-standard "Import Document" editor. */}
+                    <button
+                      onClick={() => setShowImportFile((v) => !v)}
+                      data-testid="import-file-button"
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                        showImportFile
+                          ? 'bg-teal-100 text-teal-700'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                      title="Import file — bring in one CV, syllabus, project, or section draft and paste its content into a standard or as supporting evidence."
+                    >
+                      <FileUp className="w-4 h-4 flex-shrink-0" />
+                      Import file
+                    </button>
                   </div>
                 </div>
               )}
@@ -2748,6 +2753,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     readOnly={isEditingDisabled}
                     onSelectionChange={isReviewer ? setEditorSelection : undefined}
                     highlightedComment={highlightedComment}
+                    onEditorReady={(apiObj) => {
+                      narrativeInsertRef.current = apiObj.insertHtml;
+                    }}
                   />
                 ) : null}
                 {selectedSpec && (
@@ -2890,6 +2898,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   scope="document"
                   initialContent={(submission as any)?.documentIntroduction ?? ''}
                   readOnly={isEditingDisabled}
+                  onEditorReady={(apiObj) => {
+                    docIntroInsertRef.current = apiObj.insertHtml;
+                  }}
                 />
               </div>
             </main>
@@ -2926,6 +2937,40 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             </main>
           )}
         </div>
+
+        {/* CR-059 — Import file drawer (replaces the legacy importer). Renders
+            alongside whatever editor view is active so a selected section can be
+            pasted into the visible narrative or the file's evidence summary. */}
+        {showImportFile && isProgramCoordinator && submissionId && (() => {
+          const canPasteNarrative =
+            (activeView === 'standards' && !!selectedSpec) ||
+            activeView === 'introduction';
+          const narrativeTargetLabel =
+            activeView === 'introduction'
+              ? 'Introduction'
+              : selectedSpec
+              ? `Standard ${selectedStandard}.${selectedSpec}`
+              : '';
+          const onPasteNarrative = (html: string) => {
+            if (activeView === 'standards' && selectedSpec && narrativeInsertRef.current) {
+              narrativeInsertRef.current(html);
+            } else if (activeView === 'introduction' && docIntroInsertRef.current) {
+              docIntroInsertRef.current(html);
+            }
+          };
+          return (
+            <ImportFilePanel
+              submissionId={submissionId}
+              standardCode={selectedStandard}
+              specCode={selectedSpec}
+              canPasteNarrative={canPasteNarrative}
+              narrativeTargetLabel={narrativeTargetLabel}
+              onPasteNarrative={onPasteNarrative}
+              onClose={() => setShowImportFile(false)}
+              readOnly={isEditingDisabled}
+            />
+          );
+        })()}
 
         {/* Import Document Side Panel - Part of layout, not overlay */}
         {showImportModal && (

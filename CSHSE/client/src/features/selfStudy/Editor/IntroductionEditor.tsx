@@ -24,6 +24,11 @@ export interface IntroductionEditorProps {
   standardCode?: string;
   initialContent: string;
   readOnly?: boolean;
+  // CR-059 — the editor hands back an imperative `insertHtml` once ready so the
+  // Import-file panel can paste a selected section into the introduction.
+  // Unlike NarrativeEditor (which autosaves on every onUpdate), this editor
+  // only saves on blur, so the exposed insert also triggers a save.
+  onEditorReady?: (api: { insertHtml: (html: string) => void }) => void;
 }
 
 export function IntroductionEditor({
@@ -31,7 +36,8 @@ export function IntroductionEditor({
   scope,
   standardCode,
   initialContent,
-  readOnly = false
+  readOnly = false,
+  onEditorReady
 }: IntroductionEditorProps): JSX.Element {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -79,6 +85,18 @@ export function IntroductionEditor({
       setErrorMsg(err?.response?.data?.error || err?.message || 'Save failed');
     }
   }, [editor, submissionId, scope, standardCode]);
+
+  // CR-059 — expose an imperative insert; since this editor saves on blur, the
+  // insert explicitly calls handleSave() so the pasted text persists.
+  useEffect(() => {
+    if (!editor || !onEditorReady) return;
+    onEditorReady({
+      insertHtml: (html: string) => {
+        editor.chain().focus().insertContent(html).run();
+        void handleSave();
+      },
+    });
+  }, [editor, onEditorReady, handleSave]);
 
   if (!editor) return <div className="p-4 text-sm text-gray-500">Loading…</div>;
 
