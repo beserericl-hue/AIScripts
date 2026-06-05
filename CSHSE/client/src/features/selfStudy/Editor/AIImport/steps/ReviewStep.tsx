@@ -469,8 +469,15 @@ function FullReviewStep(): JSX.Element {
         { std: activeBucket.standardCode, spec: activeBucket.specCode },
         { std: activeBucket.standardCode, spec: activeBucket.specCode, kind: newKind }
       );
+      // Persist this discrete one-click change immediately rather than waiting
+      // for the 1.2s debounced autosave — a quick reload/navigation would
+      // otherwise cancel the pending write and the kind flip would silently
+      // vanish on reload. moveItem's zustand setState is synchronous, so this
+      // reads the just-updated buckets. (Scoped to kind flips only; bulk moves
+      // keep the batched debounce.)
+      void saveReviewStateToServer();
     },
-    [activeBucket, moveItem]
+    [activeBucket, moveItem, saveReviewStateToServer]
   );
 
   const handleBulkAction = useCallback(
