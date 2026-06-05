@@ -302,10 +302,6 @@ export async function saveReviewState(req: AuthenticatedRequest, res: Response):
  * persisted to the DB (they previously lived only in the browser store and were
  * wiped on reload). Idempotent; dedups; clears with an empty array.
  */
-// Captures the last evidence-packaging error from materialize so set-approved
-// can surface it (the create is in a non-fatal try/catch). Diagnostic aid.
-let _lastEvidenceError: string | null = null;
-
 function escapeHtml(s: string): string {
   return String(s || '')
     .replace(/&/g, '&amp;')
@@ -431,7 +427,6 @@ async function materializeApprovedToEditor(
       });
     }
   } catch (err) {
-    _lastEvidenceError = String((err as any)?.message || err).slice(0, 300);
     console.warn('[materializeApprovedToEditor] evidence packaging failed (non-fatal):', err);
   }
   return affected;
@@ -513,7 +508,6 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   (submission as any).markModified('aiReviewState');
   // Auto-apply: approving moves the text straight into the editor (replaces the
   // old separate "Apply to editor" button). Idempotent — safe on every call.
-  _lastEvidenceError = null;
   const affected = await materializeApprovedToEditor(submission, req.user?.id);
   await submission.save();
   // Run the AI evaluation for the affected specs so the final editor already has
@@ -521,7 +515,7 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   // (post-response fire-and-forget gets torn down on Railway), but the client
   // approve call is itself fire-and-forget so the UI never blocks on this.
   const evalSummary = await runAutoEvaluations(submission, affected);
-  res.json({ ok: true, approvedIds: state.approvedIds, autoEval: evalSummary, evidenceError: _lastEvidenceError });
+  res.json({ ok: true, approvedIds: state.approvedIds, autoEval: evalSummary });
 }
 
 /**
