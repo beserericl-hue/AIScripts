@@ -37,6 +37,9 @@ test.describe('Import-file drawer — paste into narrative', () => {
     await page.getByTestId('import-file-paste-narrative').click();
     await expect(page.getByTestId('import-file-paste-narrative')).toContainText(/Pasted into narrative/i);
 
+    // Localize: did the text actually land in the on-screen narrative editor?
+    await expect(page.locator('.ProseMirror').first()).toContainText(needle, { timeout: 10_000 });
+
     // The autosave (PATCH /narrative) persists it — read it back from the API,
     // scoped to standard 1 / spec a, and confirm the needle landed there.
     await expect

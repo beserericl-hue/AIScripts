@@ -245,16 +245,21 @@ export function NarrativeEditor({
   });
 
   // CR-059 — hand an imperative HTML insert back to the parent (the Import-file
-  // panel pastes a selected section here). insertContent triggers onUpdate →
-  // triggerAutoSave, so the pasted text persists exactly like a typed edit.
+  // panel pastes a selected section here). We insert AND persist immediately
+  // (onSave) rather than leaning on the 2s debounced autosave: an editor remount
+  // (key bump) could otherwise cancel the pending save and silently drop the
+  // paste. The immediate save mirrors the Introduction editor's behavior.
   useEffect(() => {
     if (!editor || !onEditorReady) return;
     onEditorReady({
       insertHtml: (html: string) => {
         editor.chain().focus().insertContent(html).run();
+        const next = editor.getHTML();
+        setContent(next);
+        void onSave(next);
       },
     });
-  }, [editor, onEditorReady]);
+  }, [editor, onEditorReady, onSave]);
 
   // Initialize TipTap editor for supporting evidence
   const supportingEvidenceEditor = useEditor({
