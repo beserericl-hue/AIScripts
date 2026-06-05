@@ -59,16 +59,24 @@ async function verifyEvidenceAccess(
     return { hasAccess: true, submission, institution };
   }
 
-  // Program coordinator - must be from same institution
+  // Program coordinator - the SUBMISSION OWNER always has access to their own
+  // submission's evidence (mirrors _loadOwnedSubmission used by the editor /
+  // review endpoints). This is the primary check: the institution↔PC linkage
+  // (programCoordinatorId) is a separate field that isn't always set, and
+  // requiring it denied owners access to their own File Library.
   if (userRole === 'program_coordinator') {
+    const isOwner =
+      (submission as any).submitterId?.toString() === userId.toString();
+    if (isOwner) {
+      return { hasAccess: true, submission, institution };
+    }
+    // Fallback — a co-coordinator linked to the same institution.
     if (!institution) {
       return { hasAccess: false, submission, institution };
     }
-    // Check if user's institution matches
     const userInst = await Institution.findOne({
       programCoordinatorId: userId
     }).lean();
-
     if (!userInst || userInst._id.toString() !== institution._id.toString()) {
       return { hasAccess: false, submission, institution };
     }
