@@ -302,6 +302,126 @@ export async function saveReviewState(req: AuthenticatedRequest, res: Response):
  * persisted to the DB (they previously lived only in the browser store and were
  * wiped on reload). Idempotent; dedups; clears with an empty array.
  */
+function escapeHtml(s: string): string {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * IDEMPOTENT materialize — recompute the Self-Study editor from the currently
+ * approved Review items. Replaces "Apply to editor": Approve / Approve-all now
+ * move text straight into the editor. Idempotent because each spec's content is
+ * RECOMPUTED as the concatenation of its approved items (replace, not append),
+ * so re-running on every approve never duplicates. A spec with no approved
+ * items is left untouched (un-approving the last item doesn't wipe prior work).
+ *
+ * Evidence files / CVs / syllabi / papers are materialized into the File
+ * Library as SupportingEvidence, deduped by a `rev:<sectionId>` tag so repeated
+ * runs don't create duplicate files.
+ */
+async function materializeApprovedToEditor(submission: any, userId: any): Promise<void> {
+  const state = submission.aiReviewState;
+  if (!state || !state.buckets) return;
+  const approved = new Set<string>(state.approvedIds || []);
+
+  // --- 1) narratives + supporting-evidence text → submission.narratives (Map) ---
+  const bySpec = new Map<string, { std: string; spec: string; narr: string[]; ev: string[] }>();
+  const slot = (std: string, spec: string) => {
+    const k = `${std}.${spec}`;
+    if (!bySpec.has(k)) bySpec.set(k, { std, spec, narr: [], ev: [] });
+    return bySpec.get(k)!;
+  };
+  for (const bucket of Object.values(state.buckets) as any[]) {
+    const std = bucket?.standardCode;
+    const spec = bucket?.specCode;
+    if (!std || !spec) continue;
+    for (const it of bucket.narratives || []) {
+      if (approved.has(it.sectionId)) {
+        slot(std, spec).narr.push(it.htmlSnippet || `<p>${escapeHtml(it.snippet || '')}</p>`);
+      }
+    }
+    for (const it of bucket.evidenceText || []) {
+      if (approved.has(it.sectionId)) {
+        slot(std, spec).ev.push(it.htmlSnippet || `<p>${escapeHtml(it.snippet || '')}</p>`);
+      }
+    }
+  }
+  if (!submission.narratives) submission.narratives = new Map();
+  for (const { std, spec, narr, ev } of bySpec.values()) {
+    if (narr.length === 0 && ev.length === 0) continue;
+    const stdMap: Map<string, any> = submission.narratives.get(std) || new Map();
+    const existing = stdMap.get(spec);
+    stdMap.set(spec, {
+      content: narr.length ? narr.join('\n<hr class="ai-import-merge"/>\n') : existing?.content || '',
+      supportingEvidenceText: ev.length ? ev.join('\n\n') : existing?.supportingEvidenceText || '',
+      lastModified: new Date(),
+      isComplete: existing?.isComplete ?? false,
+      linkedDocuments: existing?.linkedDocuments || [],
+    });
+    submission.narratives.set(std, stdMap);
+  }
+  submission.markModified('narratives');
+
+  // --- 2) approved evidence files / CVs / docs → SupportingEvidence (deduped) ---
+  const fileItems: Array<{ sectionId: string; std?: string; spec?: string; title: string; body: string; kind: string }> = [];
+  for (const bucket of Object.values(state.buckets) as any[]) {
+    for (const it of bucket.evidenceFiles || []) {
+      if (approved.has(it.sectionId)) {
+        fileItems.push({ sectionId: it.sectionId, std: bucket.standardCode, spec: bucket.specCode, title: it.heading || 'Evidence file', body: it.snippet || '', kind: 'file' });
+      }
+    }
+  }
+  for (const c of state.cvs || []) {
+    if (approved.has(c.sectionId) && (c.resolvedStd || c.routing?.std)) {
+      fileItems.push({ sectionId: c.sectionId, std: c.resolvedStd || c.routing?.std, spec: c.resolvedSpec || c.routing?.spec, title: `${c.facultyName || 'Faculty'} — CV`, body: c.snippet || '', kind: 'cv' });
+    }
+  }
+  for (const e of state.evidenceDocs || []) {
+    if (approved.has(e.sectionId) && (e.resolvedStd || e.routing?.std)) {
+      fileItems.push({ sectionId: e.sectionId, std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec, title: e.title || 'Evidence document', body: e.snippet || e.summary || '', kind: e.docSubKind || 'paper' });
+    }
+  }
+  if (fileItems.length === 0) return;
+
+  try {
+    const { SupportingEvidence } = await import('../models/SupportingEvidence');
+    const { Document, Packer, Paragraph, HeadingLevel } = await import('docx');
+    for (const fi of fileItems) {
+      const tag = `rev:${fi.sectionId}`;
+      const exists = await SupportingEvidence.findOne({ submissionId: submission._id, tags: tag, isDeleted: false }).select('_id').lean();
+      if (exists) continue; // idempotent — already materialized
+      const children: any[] = [
+        new Paragraph({ text: fi.title, heading: HeadingLevel.HEADING_1 }),
+      ];
+      for (const p of String(fi.body).split(/\n\s*\n/)) children.push(new Paragraph({ text: p.trim() }));
+      const buffer = await Packer.toBuffer(new Document({ creator: 'CSHSE', title: fi.title, sections: [{ properties: {}, children }] }));
+      const filename = `${String(fi.title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'evidence'}.docx`;
+      await SupportingEvidence.create({
+        institutionId: submission.institutionId,
+        submissionId: submission._id,
+        uploadedBy: userId || submission.submitterId,
+        standardCode: fi.std || undefined,
+        specCode: fi.spec || undefined,
+        evidenceType: 'document',
+        file: {
+          filename, originalName: filename,
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          size: buffer.byteLength, data: buffer.toString('base64'), encoding: 'base64',
+          storageType: 'base64', uploadedAt: new Date(), uploadedBy: userId || submission.submitterId,
+        } as any,
+        description: fi.title,
+        versionNumber: 1, isCurrentVersion: true, isDeleted: false,
+        linkedNarratives: [],
+        tags: ['ai-import', `kind:${fi.kind}`, tag],
+      });
+    }
+  } catch (err) {
+    console.warn('[materializeApprovedToEditor] evidence packaging failed (non-fatal):', err);
+  }
+}
+
 export async function setApprovedIds(req: AuthenticatedRequest, res: Response): Promise<void> {
   const submission = await _loadOwnedSubmission(req, res);
   if (!submission) return;
@@ -321,6 +441,9 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   state.discardedIds = (state.discardedIds || []).filter((id: string) => !clean.includes(id));
   state.lastUpdatedAt = new Date();
   (submission as any).markModified('aiReviewState');
+  // Auto-apply: approving moves the text straight into the editor (replaces the
+  // old separate "Apply to editor" button). Idempotent — safe on every call.
+  await materializeApprovedToEditor(submission, req.user?.id);
   await submission.save();
   res.json({ ok: true, approvedIds: state.approvedIds });
 }

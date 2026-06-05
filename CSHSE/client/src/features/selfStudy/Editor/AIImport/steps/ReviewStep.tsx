@@ -263,9 +263,21 @@ function FullReviewStep(): JSX.Element {
   // "Reviewed" marks survive a reload / Re-run detectors. (The old
   // setApprovedIds was browser-only — an hour of approvals vanished on reset.)
   const persistApprovedIds = useAIImportStore((s) => s.persistApprovedIds);
+  const saveReviewStateToServer = useAIImportStore((s) => s.saveReviewStateToServer);
   const approvedIds = useMemo(
     () => new Set(approvedIdsArr ?? []),
     [approvedIdsArr]
+  );
+  // Approving now MATERIALIZES the approved text into the editor (the server's
+  // set-approved recomputes Submission.narratives from the approved set). Flush
+  // any pending rail edits first so the server applies the latest content, then
+  // persist the approved set (which triggers the apply).
+  const persistAndApply = useCallback(
+    async (next: string[]) => {
+      await saveReviewStateToServer();
+      await persistApprovedIds(next);
+    },
+    [saveReviewStateToServer, persistApprovedIds]
   );
 
   // CR-032 — which item is currently being edited in the right preview pane.
@@ -277,21 +289,21 @@ function FullReviewStep(): JSX.Element {
       const next = new Set(approvedIds);
       if (next.has(rowId)) next.delete(rowId);
       else next.add(rowId);
-      void persistApprovedIds(Array.from(next));
+      void persistAndApply(Array.from(next));
     },
-    [approvedIds, persistApprovedIds]
+    [approvedIds, persistAndApply]
   );
   const approveAll = useCallback(
     (rowIds: string[]) => {
       const next = new Set(approvedIds);
       for (const id of rowIds) next.add(id);
-      void persistApprovedIds(Array.from(next));
+      void persistAndApply(Array.from(next));
     },
-    [approvedIds, persistApprovedIds]
+    [approvedIds, persistAndApply]
   );
   const clearApprovals = useCallback(() => {
-    void persistApprovedIds([]);
-  }, [persistApprovedIds]);
+    void persistAndApply([]);
+  }, [persistAndApply]);
 
   // One-click apply — counts the items waiting to be applied so the
   // confirm dialog tells the coordinator exactly what's going to land in
@@ -839,75 +851,22 @@ function FullReviewStep(): JSX.Element {
           >
             Next: {matrices.length > 0 ? 'Matrix' : 'Apply'} ▸
           </button>
-          <button
-            onClick={() => setConfirmApplyOpen(true)}
+          {/* "Apply to editor" was removed — Approve / Approve all now move the
+              text straight into the standards editor automatically. */}
+          <span
             data-tour="review-apply"
-            disabled={isApplying || isApplied || applyBlockedByMissing}
-            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300"
-            title={
-              applyBlockedByMissing
-                ? `Apply blocked — ${unresolvedMissingFragments.length} missing fragment(s) need to be discarded or reassigned first`
-                : 'Send all reviewed narratives, evidence, files, tags, and matrices straight to the standards editor'
-            }
+            data-testid="approve-auto-apply-hint"
+            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700"
+            title="Approving an item writes it into the standards editor automatically — no separate Apply step."
           >
-            {isApplying ? (
-              <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Applying…</>
-            ) : isApplied ? (
-              <>✓ Applied</>
-            ) : (
-              <><Rocket className="h-4 w-4" aria-hidden /> Apply to editor</>
-            )}
-          </button>
+            <Rocket className="h-3.5 w-3.5" aria-hidden /> Approve → saved to editor
+          </span>
         </div>
       </div>
 
-      {/* One-click apply confirm dialog */}
-      {confirmApplyOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setConfirmApplyOpen(false)}
-        >
-          <div
-            className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-base font-semibold text-gray-900">Send everything to the editor?</h3>
-            <p className="mt-2 text-sm text-gray-700">
-              The following items will be written to the standards editor
-              (Submission.narratives + SupportingEvidence + CurriculumMatrix).
-              Existing content stays — new content is merged in.
-            </p>
-            <ul className="mt-3 space-y-1 rounded bg-gray-50 px-3 py-2 text-sm text-gray-700">
-              <li>📝 {applyTotals.narratives} narratives</li>
-              <li>📄 {applyTotals.evidenceText} supporting evidence text</li>
-              <li>📎 {applyTotals.evidenceFiles} evidence files</li>
-              {applyTotals.matrixCells > 0 && (
-                <li>🔢 {applyTotals.matrixCells} matrix cells across {matrices.length} matrix{matrices.length === 1 ? '' : 'es'}</li>
-              )}
-              <li>🏷 {tags.length} unplaced items → Tag list</li>
-            </ul>
-            <p className="mt-3 text-xs text-gray-500">
-              You can still review and edit everything inside the standards editor afterwards.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmApplyOpen(false)}
-                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleOneClickApply}
-                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
-              >
-                <Rocket className="h-3.5 w-3.5" aria-hidden /> Confirm — send to editor
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* The "Apply to editor" confirm dialog was removed — Approve / Approve
+          all now write into the editor automatically (idempotent server-side
+          materialize on set-approved). */}
 
       <div className="flex flex-1 overflow-hidden">
         <SpecRail
