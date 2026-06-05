@@ -125,18 +125,6 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
     return () => clearTimeout(t);
   }, [dirty, saveReviewStateToServer]);
 
-  // Defense-in-depth — flush any pending edit when the surface unmounts (e.g.
-  // the PC clicks away to another editor view before the 1.2s debounce fires).
-  // Best-effort; a hard browser reload is already covered by the localStorage
-  // persist + the keep-local-when-dirty guard in loadPersistedReviewState.
-  useEffect(() => {
-    return () => {
-      if (useAIImportStore.getState().dirty) {
-        void useAIImportStore.getState().saveReviewStateToServer();
-      }
-    };
-  }, []);
-
   const handleRedetect = async () => {
     if (!importId) {
       setRedetectState({
