@@ -1384,6 +1384,24 @@ export const useAIImportStore = create<AIImportState>()(
               matrixRowEdits: matrixState.matrixRowEdits ?? current.matrixRowEdits
             });
           }
+
+          // Recovery (2026-06-05): some submissions have rich review content in
+          // the browser (localStorage Zustand seed from the import) but the
+          // SERVER's aiReviewState.buckets is empty — the narratives were never
+          // persisted server-side, so the PC dashboard / workflow-summary and
+          // any other server-reading surface under-count (e.g. "0 spec items"
+          // while the rail shows hundreds). If the server returned no buckets
+          // but the client has them, flag the store dirty so the ReviewSurface
+          // autosave pushes the full state back to the server (idempotent;
+          // server body limit is 50mb so the narratives fit).
+          const serverBucketCount =
+            state && state.buckets && typeof state.buckets === 'object'
+              ? Object.keys(state.buckets).length
+              : 0;
+          const clientBucketCount = Object.keys(get().buckets || {}).length;
+          if (serverBucketCount === 0 && clientBucketCount > 0) {
+            set({ dirty: true });
+          }
         } catch (err) {
           // Non-fatal — Review surface renders an empty state instead.
           console.warn('[CR-043] loadPersistedReviewState failed:', err);

@@ -429,9 +429,12 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
     const evidenceDocs: any[] = Array.isArray(rs.evidenceDocs) ? rs.evidenceDocs : [];
     const cvs = (Array.isArray(rs.cvs) ? rs.cvs : []).filter(isUnresolved).length;
     const syllabi = evidenceDocs.filter((d) => d?.docSubKind === 'syllabus' && isUnresolved(d)).length;
-    // "Projects" and "Plans" are the same thing (user direction
-    // 2026-05-27) — both map to docSubKind 'paper'.
-    const papers = evidenceDocs.filter((d) => d?.docSubKind === 'paper' && isUnresolved(d)).length;
+    // "Projects" / "Plans" / "Papers" are all the same Papers tile (user
+    // direction 2026-05-27). Match the Review rail (SpecRail), which counts
+    // Papers as "every evidenceDoc that ISN'T a syllabus" — so docSubKind
+    // 'paper', 'project', or untagged all count. (Previously this required
+    // docSubKind === 'paper' exactly and under-counted projects/untagged.)
+    const papers = evidenceDocs.filter((d) => d?.docSubKind !== 'syllabus' && isUnresolved(d)).length;
     let introductions = 0;
     const introsObj = rs.introductions || {};
     for (const ib of Object.values(introsObj) as any[]) {
