@@ -411,6 +411,10 @@ interface AIImportState {
   // Cleared on startOver/reset, on a successful Apply, and at the start
   // of a new upload.
   dirty: boolean;
+  // Drives the "Saving…/Saved" chip. Set by the store-level autosave (see the
+  // useAIImportStore.subscribe(...) below) so persistence is decoupled from any
+  // particular review surface (wizard OR the standalone ReviewSurface).
+  reviewSaveState: 'idle' | 'saving' | 'saved';
 
   // Errors surfaced from any stage
   errors: string[];
@@ -678,6 +682,7 @@ const initialState = {
   applyError: null,
   appliedCounts: null,
   dirty: false,
+  reviewSaveState: 'idle' as const,
   errors: [],
   approvedIds: [] as string[],
   discardedIds: [] as string[],
@@ -2396,20 +2401,19 @@ export const useAIImportStore = create<AIImportState>()(
     }),
     {
       name: 'ai-import-storage',
-      // Persist resumable identity + step + ALL bucket/tag/matrix state
-      // so coordinator edits made before clicking Apply survive a tab
-      // reload. Without this, hitting Reassign / kind-flip / Keep-or-
-      // Remove and then refreshing reverts every edit to the AI's
-      // original placement (bug reported 2026-05-21).
-      //
-      // The server-side Submission is only written on Apply, so all
-      // pre-Apply state has to live client-side. localStorage caps out
-      // around 5 MB per origin; a Stevenson run with 274 narratives is
-      // ~150-400 KB, well within the budget.
-      //
-      // On rehydrate + initial /ai-status fetch, _applySnapshot keeps
-      // the local buckets when they belong to the same importId — see
-      // its implementation for the keep-local-when-edited guard.
+      // 2026-06-06 — localStorage now holds ONLY the lightweight, resumable
+      // wizard identity (which import / submission / step / selection we're on,
+      // + batch progress). The heavy review CONTENT — buckets (narratives),
+      // tags, cvs, evidenceDocs, introductions, matrices, matrixRowEdits,
+      // approvedIds, discardedIds, coverageReport, placeholderSections — is NO
+      // LONGER persisted to the browser. It lives on the server
+      // (Submission.aiReviewState / aiMatrixState) and is the single source of
+      // truth: the import merge writes it, the store-level autosave keeps it in
+      // sync on every edit, and loadPersistedReviewState reads it back. This is
+      // the user's directive ("nothing in localStorage except the document +
+      // comparison items, for speed") and it removes the class of bug where
+      // review data lived only in the browser (the dashboard under-count, and
+      // a real data-loss risk on cache clear).
       partialize: (s) => ({
         importId: s.importId,
         submissionId: s.submissionId,
@@ -2420,34 +2424,8 @@ export const useAIImportStore = create<AIImportState>()(
         isReimport: s.isReimport,
         selectedSpecKey: s.selectedSpecKey,
         selectedSectionId: s.selectedSectionId,
-        buckets: s.buckets,
-        tags: s.tags,
-        placeholderSections: s.placeholderSections,
-        matrices: s.matrices,
-        matrixRowEdits: s.matrixRowEdits,
-        // MUST persist — without this, hard refresh defaults dirty to
-        // false. _applySnapshot then sees dirty=false on the next
-        // /ai-status fetch and overwrites buckets with the AI's
-        // original placement. That's exactly the regression reported
-        // 2026-05-22 (rail badge correct, middle pane empty).
-        dirty: s.dirty,
-        // CR-034 — per-card review checkmarks survive hard refresh.
-        approvedIds: s.approvedIds,
-        discardedIds: s.discardedIds,
-        // CR-039 / CR-040 / CR-033 — new content kinds also need to
-        // survive refresh; the same dirty=true guard keeps them in place
-        // across /ai-status reapplies.
-        introductions: s.introductions,
-        evidenceDocs: s.evidenceDocs,
-        cvs: s.cvs,
-        // CR-033 Phase 2c part 2 — sticky across refresh so the wizard
-        // re-enters the StandaloneCVReview path on reload.
         standaloneCv: s.standaloneCv,
-        // CR-040 Phase 3b — sticky across refresh.
-        coverageReport: s.coverageReport,
-        resolvedMissingFragmentIds: s.resolvedMissingFragmentIds,
-        // CR-041 US-2/US-4/US-5 — batch context survives refresh so the
-        // wizard rejoins Parse polling on the right batch.
+        // Batch context so the wizard rejoins Parse polling on the right batch.
         batchId: s.batchId,
         batchSnapshot: s.batchSnapshot,
         holdForReview: s.holdForReview
@@ -2455,3 +2433,38 @@ export const useAIImportStore = create<AIImportState>()(
     }
   )
 );
+
+// ---------------------------------------------------------------------------
+// Store-level autosave (2026-06-06).
+//
+// Persistence is now decoupled from the UI: whenever a review edit flips the
+// store `dirty`, we debounce 1.2s and push the full review state to the server
+// (saveReviewStateToServer, which is serialized). This runs no matter which
+// surface is mounted — the AI-Import wizard's ReviewStep OR the standalone
+// ReviewSurface — so review content is ALWAYS written to the DB and never
+// depends on localStorage. (localStorage now keeps only the lightweight,
+// resumable wizard identity + the read-and-compare document cache — see the
+// trimmed `partialize` above.)
+//
+// The `reviewSaveState` field drives the "Saving…/Saved" chip; components read
+// it instead of owning a local effect, which prevents two surfaces from racing
+// duplicate writes.
+let _autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let _lastDirty = false;
+useAIImportStore.subscribe((state) => {
+  const dirty = state.dirty === true;
+  // Only react to the false -> true transition (a fresh edit). Saves reset
+  // dirty back to false, which must not re-arm the timer.
+  if (dirty && !_lastDirty) {
+    _lastDirty = true;
+    if (!state.submissionId) return; // wizard-only run, nothing to persist
+    useAIImportStore.setState({ reviewSaveState: 'saving' });
+    if (_autosaveTimer) clearTimeout(_autosaveTimer);
+    _autosaveTimer = setTimeout(async () => {
+      const ok = await useAIImportStore.getState().saveReviewStateToServer();
+      useAIImportStore.setState({ reviewSaveState: ok ? 'saved' : 'idle' });
+    }, 1200);
+  } else if (!dirty) {
+    _lastDirty = false;
+  }
+});

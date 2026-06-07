@@ -56,11 +56,11 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
   const approvedIds = useAIImportStore((s) => s.approvedIds);
   const discardedIds = useAIImportStore((s) => s.discardedIds);
   const finishReviewOnServer = useAIImportStore((s) => s.finishReviewOnServer);
-  // Autosave: every review-rail mutation flips `dirty`; persist the content to
-  // the DB after a short idle so nothing lives only in the browser.
-  const dirty = useAIImportStore((s) => s.dirty);
-  const saveReviewStateToServer = useAIImportStore((s) => s.saveReviewStateToServer);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  // Autosave is store-level now (useAIImportStore.subscribe): every review-rail
+  // mutation flips `dirty`, the store debounces and pushes the full state to the
+  // DB regardless of which surface is mounted, so nothing lives only in the
+  // browser. This chip just reflects the shared save status.
+  const saveState = useAIImportStore((s) => s.reviewSaveState);
 
   const unresolvedCount = React.useMemo(() => {
     const approved = new Set(approvedIds || []);
@@ -112,18 +112,6 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
     loadPersistedReviewState();
   }, [submissionId, setSubmissionId, loadPersistedReviewState]);
 
-  // Debounced autosave — when the store goes dirty, persist the rail content to
-  // the DB after 1.2s of quiet. Resets the timer on each further change so
-  // rapid edits batch into one write.
-  useEffect(() => {
-    if (!dirty) return;
-    setSaveState('saving');
-    const t = setTimeout(async () => {
-      const ok = await saveReviewStateToServer();
-      setSaveState(ok ? 'saved' : 'idle');
-    }, 1200);
-    return () => clearTimeout(t);
-  }, [dirty, saveReviewStateToServer]);
 
   const handleRedetect = async () => {
     if (!importId) {
