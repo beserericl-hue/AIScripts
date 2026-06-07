@@ -2088,3 +2088,21 @@ approves + materializes to the editor), emerald approved-card styling, a header
 approved-count, and per-view Approve-all / Un-approve-all / Clear approvals. Added
 stable rail testids (rail-cvs/-syllabi/-papers) + spec 57. Full live E2E 18/18
 (39–57). Commit dd676bb.
+
+## [2026-06-07] fix | Approved items now appear in the spec editor without a hard reload
+User-reported (critical): approved items were "not moved" into the Standards/Specification
+editor; AI eval "fails not seeing a file." Investigated the full approve->editor path.
+FINDING: server materialization works correctly — live read of submission 6986239a confirmed
+all 66 approved specs (207 approved narratives) were present in Submission.narratives, 0
+missing. The real bug was CLIENT staleness: approval flows entirely through the Zustand
+aiImportStore, which has no access to react-query, so the editor's ['submission'] cache was
+never invalidated after set-approved. The Standards editor kept rendering its stale cached
+narrativeContent until a hard reload, so newly-approved specs looked empty. Old spec 44
+missed this because it only checked the server narrativeContent field via fetch, never the
+on-screen editor. FIX: aiImportStore bumps reviewMaterializedAt once set-approved confirms;
+SelfStudyEditor subscribes -> invalidates+refetches ['submission'] + workflow-summary, then
+bumps editorRefreshKey so the NarrativeEditor remounts with fresh content. New spec 58 drives
+the real UI (open editor -> approve on Review surface -> switch back, NO reload -> approved
+narrative visible) and was confirmed to FAIL pre-fix and PASS post-fix. Full live E2E 19/19
+(39-58). Commit abba8ea. NOTE: the separate "AI eval can't see a file" concern is NOT this
+fix — tracked as a distinct follow-up.
