@@ -63,12 +63,14 @@ export async function openAndImport(page: Page) {
  */
 export async function selectPreviewAndGetNeedle(page: Page): Promise<string> {
   const text = (await page.getByTestId('import-file-preview').innerText()).trim();
+  // Pick the longest PURELY-alphabetic token so the needle is a genuine
+  // substring of both the preview and the persisted content (no internal
+  // punctuation to get mangled, e.g. "continuing-education").
   const needle =
     text
       .split(/\s+/)
-      .map((w) => w.replace(/[^A-Za-z]/g, ''))
-      .filter((w) => w.length >= 7)
-      .sort((a, b) => b.length - a.length)[0] || text.slice(0, 20);
+      .filter((w) => /^[A-Za-z]{8,}$/.test(w))
+      .sort((a, b) => b.length - a.length)[0] || 'Introduction';
   await page.evaluate(() => {
     const el = document.querySelector('[data-testid=import-file-preview]');
     if (!el) return;
