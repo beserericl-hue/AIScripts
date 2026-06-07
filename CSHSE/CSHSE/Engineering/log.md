@@ -2074,3 +2074,17 @@ User reported the dashboard still looked wrong + suspected data wasn't pushed. V
 
 ## [2026-06-07] update | Review checkbox = approval (visible + persisted) + importer reopens on Upload
 Two user-reported fixes. (1) The Review card checkbox now REPRESENTS approval: it mirrors approvedIds, checking it approves the item (optimistic + persisted to the server), and approved items show a checked box across reload — so the PC can see at a glance what's approved. Header checkbox approves/clears the current spec; removed redundant "Approve selected" + select-based bulk recat buttons (per-card kind chips + reassign dropdown still recategorize); kept Approve all + Clear approvals; added data-testid approve-check-<id> + optimistic approvedIds update for instant response. (2) Importer reopens on the Upload step (not the stale Parse view) when the prior import is settled — Wizard mount lands on 'upload' if status is parsed/applied/finished/failed/canceled; old parse still reachable via the stepper; active parse still shows Parse. Full live E2E 18/18 (37–56 incl. new 56_approved_checkbox_visible). Commits 530be00, 9972222.
+
+## [2026-06-07] fix | Approve checkbox added to CVs / Syllabi / Papers views (were checkbox-less)
+User reported (4 screenshots): approved items not shown as checked. Root cause — the
+earlier "checkbox = approval" change only touched the narrative/evidence card list
+(ItemCard). The CVsView + EvidenceDocsView (CVs, Syllabi, Papers/Projects) rendered
+ONLY the standard/substandard dropdowns + View-source — no approve control at all.
+Live read of submission 6986239a6612bf17f04a3217 confirmed: approvedIds=68 =
+15/15 CVs + 35/41 evidence docs + 0/282 narratives — i.e. the user HAD approved all
+CVs and most syllabi/papers, but the UI had no checkbox to surface it. Fix: added a
+persisted approve checkbox per CV/syllabus/paper card (mirrors approvedIds, toggling
+approves + materializes to the editor), emerald approved-card styling, a header
+approved-count, and per-view Approve-all / Un-approve-all / Clear approvals. Added
+stable rail testids (rail-cvs/-syllabi/-papers) + spec 57. Full live E2E 18/18
+(39–57). Commit dd676bb.
