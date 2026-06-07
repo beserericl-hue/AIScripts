@@ -41,6 +41,7 @@ export interface WorkflowSummaryData {
     introductions: number;
     specItems: number;
     bySpec: Array<{ std: string; spec: string; count: number }>;
+    reviewed?: number;
   };
   selfStudy: {
     specsValidated: number;
@@ -204,7 +205,15 @@ export function WorkflowSummary({
       </SectionShell>
 
       {/* 2. DRAFTS -------------------------------------------------------- */}
-      <SectionShell step={2} label="Drafts" hint="Waiting in Review">
+      <SectionShell
+        step={2}
+        label="Drafts"
+        hint={
+          drafts && drafts.reviewed != null
+            ? `In review (totals) · ${drafts.reviewed} reviewed`
+            : 'In review (totals)'
+        }
+      >
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <CountTile
             icon={<Users className="w-6 h-6" />}

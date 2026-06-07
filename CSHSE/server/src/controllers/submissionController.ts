@@ -416,39 +416,46 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
         }
       : null;
 
-    // -- DRAFTS: items waiting in Review (aiReviewState) -------------
-    // CR-048 — counts reflect UN-TRIAGED items only: a draft is "pending"
-    // until the PC either approves it (it gets applied) or discards it
-    // (explicitly excluded, incl. via "Finish review"). Approved + applied
-    // items leave the state; discarded items stay but no longer count.
+    // -- DRAFTS: items detected by the import and shown in the Review rail.
+    // 2026-06-07 (user direction) — these counts now mirror the Review screen
+    // EXACTLY: they are TOTALS of what the AI pulled out (CVs / Syllabi /
+    // Papers / Introductions / per-spec items), not the un-triaged remainder.
+    // The PC compares the dashboard to the Review rail and expects them to
+    // match ("the draft screen shows what is there"). A separate `reviewed`
+    // count carries the triaged total so the UI can still show progress.
     const rs: any = (submission as any).aiReviewState || {};
     const approvedSet = new Set<string>(Array.isArray(rs.approvedIds) ? rs.approvedIds : []);
     const discardedSet = new Set<string>(Array.isArray(rs.discardedIds) ? rs.discardedIds : []);
-    const isUnresolved = (it: any): boolean =>
-      !!it?.sectionId && !approvedSet.has(it.sectionId) && !discardedSet.has(it.sectionId);
+    const isResolved = (it: any): boolean =>
+      !!it?.sectionId && (approvedSet.has(it.sectionId) || discardedSet.has(it.sectionId));
     const evidenceDocs: any[] = Array.isArray(rs.evidenceDocs) ? rs.evidenceDocs : [];
-    const cvs = (Array.isArray(rs.cvs) ? rs.cvs : []).filter(isUnresolved).length;
-    const syllabi = evidenceDocs.filter((d) => d?.docSubKind === 'syllabus' && isUnresolved(d)).length;
-    // "Projects" / "Plans" / "Papers" are all the same Papers tile (user
-    // direction 2026-05-27). Match the Review rail (SpecRail), which counts
-    // Papers as "every evidenceDoc that ISN'T a syllabus" — so docSubKind
-    // 'paper', 'project', or untagged all count. (Previously this required
-    // docSubKind === 'paper' exactly and under-counted projects/untagged.)
-    const papers = evidenceDocs.filter((d) => d?.docSubKind !== 'syllabus' && isUnresolved(d)).length;
+    const cvsArr: any[] = Array.isArray(rs.cvs) ? rs.cvs : [];
+    const cvs = cvsArr.length;
+    const syllabusDocs = evidenceDocs.filter((d) => d?.docSubKind === 'syllabus');
+    const syllabi = syllabusDocs.length;
+    // "Projects" / "Plans" / "Papers" are the same tile — every evidenceDoc
+    // that ISN'T a syllabus (matches the Review rail's SpecRail).
+    const paperDocs = evidenceDocs.filter((d) => d?.docSubKind !== 'syllabus');
+    const papers = paperDocs.length;
     let introductions = 0;
+    const introItemsAll: any[] = [];
     const introsObj = rs.introductions || {};
     for (const ib of Object.values(introsObj) as any[]) {
-      introductions += (Array.isArray(ib?.items) ? ib.items : []).filter(isUnresolved).length;
+      const items = Array.isArray(ib?.items) ? ib.items : [];
+      introductions += items.length;
+      introItemsAll.push(...items);
     }
-    // Per-spec review items — only specs with > 0 unresolved (user direction).
+    // Per-spec items — totals (every spec with at least one item).
     const buckets = rs.buckets || {};
     const bySpec: Array<{ std: string; spec: string; count: number }> = [];
     let specItems = 0;
+    const bucketItemsAll: any[] = [];
     for (const [key, b] of Object.entries(buckets) as [string, any][]) {
-      const count =
-        (Array.isArray(b?.narratives) ? b.narratives : []).filter(isUnresolved).length +
-        (Array.isArray(b?.evidenceText) ? b.evidenceText : []).filter(isUnresolved).length +
-        (Array.isArray(b?.evidenceFiles) ? b.evidenceFiles : []).filter(isUnresolved).length;
+      const narr = Array.isArray(b?.narratives) ? b.narratives : [];
+      const evt = Array.isArray(b?.evidenceText) ? b.evidenceText : [];
+      const evf = Array.isArray(b?.evidenceFiles) ? b.evidenceFiles : [];
+      const count = narr.length + evt.length + evf.length;
+      bucketItemsAll.push(...narr, ...evt, ...evf);
       if (count > 0) {
         // bucket keys are "std.spec" (e.g. "1.a") OR carry std/spec fields.
         const std = b?.standardCode ?? key.split('.')[0] ?? key;
@@ -457,6 +464,13 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
         specItems += count;
       }
     }
+    // Triaged (approved OR discarded) across everything — for a "X reviewed"
+    // progress indicator alongside the totals.
+    const reviewed =
+      cvsArr.filter(isResolved).length +
+      evidenceDocs.filter(isResolved).length +
+      introItemsAll.filter(isResolved).length +
+      bucketItemsAll.filter(isResolved).length;
     bySpec.sort((a, b) =>
       a.std === b.std ? a.spec.localeCompare(b.spec) : a.std.localeCompare(b.std, undefined, { numeric: true })
     );
@@ -527,7 +541,7 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
     const specsReady = specsValidated + specsExcluded;
     return res.json({
       import: importInfo,
-      drafts: { cvs, syllabi, papers, introductions, specItems, bySpec },
+      drafts: { cvs, syllabi, papers, introductions, specItems, bySpec, reviewed },
       selfStudy: {
         specsValidated,
         specsExcluded,
