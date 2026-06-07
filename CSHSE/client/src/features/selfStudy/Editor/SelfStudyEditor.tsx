@@ -551,6 +551,18 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     return () => window.removeEventListener('cr-043-open-review-surface', handler);
   }, []);
 
+  // 2026-06-06 — review state lives on the server now (not localStorage), so
+  // hydrate the store from Submission.aiReviewState on editor mount. Without
+  // this the toolbar Review button + draft counts would read an empty store on
+  // a fresh load/reload (localStorage no longer carries buckets/tags/etc.).
+  // Idempotent with ReviewSurface's own load; both read the same server state.
+  useEffect(() => {
+    if (!isProgramCoordinator || !submissionId) return;
+    const store = useAIImportStore.getState();
+    store.setSubmissionId(submissionId);
+    void store.loadPersistedReviewState();
+  }, [isProgramCoordinator, submissionId]);
+
   // CR-047 — deep-link from the PC dashboard's DRAFTS tiles. A tile/row
   // navigates here with `?view=review[&specKey=<rail key>]`; on mount we
   // open the Review surface and pre-select the matching rail entry
