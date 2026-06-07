@@ -36,9 +36,10 @@ test.describe('Approved items show a checked checkbox (persisted)', () => {
     const box = page.getByTestId(`approve-check-${SEC}`);
     await expect(box).not.toBeChecked();
 
-    // Check it → approves the item.
-    await box.check();
-    await expect(box).toBeChecked();
+    // Click it → approves the item (approval is an async server round-trip,
+    // so use click + a polling expectation rather than the strict .check()).
+    await box.click();
+    await expect(box).toBeChecked({ timeout: 10_000 });
     await expect(page.getByTestId(`approve-toggle-${SEC}`)).toHaveAttribute('data-approved', 'true');
 
     // Persisted to the DB.

@@ -289,6 +289,10 @@ function FullReviewStep(): JSX.Element {
       const next = new Set(approvedIds);
       if (next.has(rowId)) next.delete(rowId);
       else next.add(rowId);
+      // Optimistic: reflect the approval in the store immediately so the
+      // checkbox / "Reviewed" badge respond instantly, instead of waiting for
+      // the (awaited) save-then-materialize round-trip inside persistAndApply.
+      useAIImportStore.setState({ approvedIds: Array.from(next) });
       void persistAndApply(Array.from(next));
     },
     [approvedIds, persistAndApply]
