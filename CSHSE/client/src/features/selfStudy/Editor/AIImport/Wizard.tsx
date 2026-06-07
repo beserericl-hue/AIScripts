@@ -60,9 +60,24 @@ export function Wizard({ submissionId, initialTagId = null, setActiveView }: Wiz
   // On mount, if a persisted importId exists for this submission,
   // rehydrate the wizard from the server snapshot. Resilient to tab
   // close + re-open.
+  //
+  // 2026-06-07 (user direction) — but if that prior import is already SETTLED
+  // (parsed / applied / finished / failed / canceled), the coordinator has
+  // review data and is re-opening the importer to bring in a NEW file. Land
+  // them on the Upload step, not the stale "Parsing complete" view. The old
+  // parse stays reachable via the stepper; an actively-running parse still
+  // lands on Parse so live progress isn't hidden.
   useEffect(() => {
     if (importId) {
-      void loadExisting(importId);
+      void loadExisting(importId).then(() => {
+        const s = useAIImportStore.getState();
+        const settled = ['parsed', 'applied', 'finished', 'failed', 'canceled'].includes(
+          String(s.status)
+        );
+        if (settled && s.step === 'parse') {
+          s.setStep('upload');
+        }
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

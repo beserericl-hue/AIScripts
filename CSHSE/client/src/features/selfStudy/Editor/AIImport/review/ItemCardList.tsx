@@ -621,10 +621,13 @@ export function ItemCardList({
     return groupBucketByKind(bucket);
   }, [selectedKey, bucket]);
 
-  // Reset selection state when the active spec changes.
+  // 2026-06-07 (user direction) — the per-card checkbox now REPRESENTS approval
+  // ("Reviewed"), so a coordinator can see at a glance which items are approved,
+  // and that state is persisted (approvedIds → server). The local `checked` set
+  // mirrors approvedIds; toggling a checkbox toggles approval.
   useEffect(() => {
-    setChecked(new Set());
-  }, [selectedKey]);
+    setChecked(new Set(approvedIds ? Array.from(approvedIds) : []));
+  }, [approvedIds]);
 
   // Auto-scroll the selected card into view when it changes externally.
   useEffect(() => {
@@ -633,19 +636,21 @@ export function ItemCardList({
     target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [selectedSectionId]);
 
+  // Toggling a card's checkbox = approve / un-approve that item (persisted).
   const toggleCheck = (rowId: string) => {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(rowId)) next.delete(rowId);
-      else next.add(rowId);
-      return next;
-    });
+    onToggleApproval?.(rowId);
   };
 
   const allChecked = items.length > 0 && items.every((r) => checked.has(r.rowId));
+  // Header checkbox = approve / un-approve every item in the current spec.
   const toggleAll = () => {
-    if (allChecked) setChecked(new Set());
-    else setChecked(new Set(items.map((r) => r.rowId)));
+    if (allChecked) {
+      items.forEach((r) => onToggleApproval?.(r.rowId));
+    } else {
+      const toAdd = items.filter((r) => !checked.has(r.rowId)).map((r) => r.rowId);
+      if (onApproveAll) onApproveAll(toAdd);
+      else toAdd.forEach((rowId) => onToggleApproval?.(rowId));
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent, item: CardItem, idx: number) => {
@@ -666,17 +671,7 @@ export function ItemCardList({
     }
   };
 
-  const bulk = (action: 'to-tags' | 'to-file' | 'reassign') => {
-    const ids = [...checked]
-      .map((rowId) => items.find((r) => r.rowId === rowId)?.sectionId)
-      .filter((s): s is string => !!s);
-    if (ids.length === 0) return;
-    onBulkAction(action, ids);
-    setChecked(new Set());
-  };
-
   const isPlaceholder = selectedKey === UNWRITTEN_KEY;
-  const checkedCount = checked.size;
 
   if (!selectedKey) {
     return (
@@ -740,24 +735,15 @@ export function ItemCardList({
             />
             <span>
               {items.length} item{items.length === 1 ? '' : 's'}
-              {checkedCount > 0 && <span className="ml-1 text-cshse-700">· {checkedCount} selected</span>}
-              {approvedIds && approvedIds.size > 0 && (
-                <span className="ml-1 text-emerald-700">· {items.filter((r) => approvedIds.has(r.rowId)).length} approved</span>
-              )}
+              <span className="ml-1 text-emerald-700">
+                · {items.filter((r) => approvedIds?.has(r.rowId)).length} approved
+              </span>
             </span>
           </label>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {onApproveAll && (
             <>
-              <button
-                onClick={() => onApproveAll([...checked])}
-                disabled={checkedCount === 0 || isPlaceholder}
-                className="inline-flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Mark all currently-checked items as reviewed"
-              >
-                <Check className="h-3 w-3" aria-hidden /> Approve selected
-              </button>
               <button
                 data-testid="approve-all"
                 onClick={() => (onApproveEverything ? onApproveEverything() : onApproveAll(items.map((r) => r.rowId)))}
@@ -776,30 +762,8 @@ export function ItemCardList({
                   Clear approvals
                 </button>
               )}
-              <span className="text-gray-300">|</span>
             </>
           )}
-          <button
-            onClick={() => bulk('to-tags')}
-            disabled={checkedCount === 0 || isPlaceholder}
-            className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <TagIcon className="h-3 w-3" aria-hidden /> Send to tags
-          </button>
-          <button
-            onClick={() => bulk('to-file')}
-            disabled={checkedCount === 0 || isPlaceholder}
-            className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <FileBox className="h-3 w-3" aria-hidden /> Apply as file
-          </button>
-          <button
-            onClick={() => bulk('reassign')}
-            disabled={checkedCount === 0 || isPlaceholder}
-            className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Move className="h-3 w-3" aria-hidden /> Reassign…
-          </button>
         </div>
       </div>
 
@@ -1281,6 +1245,7 @@ function ItemCard({
       <div className="flex items-start gap-3">
         <input
           type="checkbox"
+          data-testid={`approve-check-${item.sectionId}`}
           checked={checked}
           onChange={(e) => {
             e.stopPropagation();
@@ -1288,8 +1253,9 @@ function ItemCard({
           }}
           onClick={(e) => e.stopPropagation()}
           disabled={disabled}
-          className="mt-1 rounded text-cshse-600 focus:ring-cshse-500 disabled:opacity-40"
-          aria-label="Select item"
+          className="mt-1 h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500 disabled:opacity-40"
+          aria-label={approved ? 'Approved (reviewed) — uncheck to un-approve' : 'Approve (mark reviewed)'}
+          title={approved ? 'Approved — uncheck to un-approve' : 'Check to approve (Reviewed)'}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
