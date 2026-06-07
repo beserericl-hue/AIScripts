@@ -238,6 +238,7 @@ export function SpecRail({
               <button
                 role="tab"
                 data-tour="review-cvs"
+                data-testid="rail-cvs"
                 aria-selected={selectedKey === CVS_KEY}
                 onClick={() => onSelect(CVS_KEY)}
                 title={
@@ -271,6 +272,7 @@ export function SpecRail({
               <button
                 role="tab"
                 data-tour="review-syllabi"
+                data-testid="rail-syllabi"
                 aria-selected={selectedKey === SYLLABI_KEY}
                 onClick={() => onSelect(SYLLABI_KEY)}
                 title={
@@ -304,6 +306,7 @@ export function SpecRail({
               <button
                 role="tab"
                 data-tour="review-papers"
+                data-testid="rail-papers"
                 aria-selected={selectedKey === PAPERS_KEY}
                 onClick={() => onSelect(PAPERS_KEY)}
                 title={

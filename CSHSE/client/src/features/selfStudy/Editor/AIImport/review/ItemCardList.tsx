@@ -699,7 +699,14 @@ export function ItemCardList({
   // surface that the detector ran.
   if (selectedKey === CVS_KEY) {
     return (
-      <CVsView cvs={cvs || []} onShowInSource={onShowInSource} />
+      <CVsView
+        cvs={cvs || []}
+        onShowInSource={onShowInSource}
+        approvedIds={approvedIds}
+        onToggleApproval={onToggleApproval}
+        onApproveAll={onApproveAll}
+        onClearApprovals={onClearApprovals}
+      />
     );
   }
 
@@ -709,15 +716,42 @@ export function ItemCardList({
   // routes here showing the combined list — kept for back-compat with
   // any persisted selectedSpecKey from before the split.
   if (selectedKey === EVIDENCE_DOCS_KEY) {
-    return <EvidenceDocsView docs={evidenceDocs || []} onShowInSource={onShowInSource} />;
+    return (
+      <EvidenceDocsView
+        docs={evidenceDocs || []}
+        onShowInSource={onShowInSource}
+        approvedIds={approvedIds}
+        onToggleApproval={onToggleApproval}
+        onApproveAll={onApproveAll}
+        onClearApprovals={onClearApprovals}
+      />
+    );
   }
   if (selectedKey === SYLLABI_KEY) {
     const syllabi = (evidenceDocs || []).filter((d) => d.docSubKind === 'syllabus');
-    return <EvidenceDocsView docs={syllabi} onShowInSource={onShowInSource} />;
+    return (
+      <EvidenceDocsView
+        docs={syllabi}
+        onShowInSource={onShowInSource}
+        approvedIds={approvedIds}
+        onToggleApproval={onToggleApproval}
+        onApproveAll={onApproveAll}
+        onClearApprovals={onClearApprovals}
+      />
+    );
   }
   if (selectedKey === PAPERS_KEY) {
     const papers = (evidenceDocs || []).filter((d) => d.docSubKind !== 'syllabus');
-    return <EvidenceDocsView docs={papers} onShowInSource={onShowInSource} />;
+    return (
+      <EvidenceDocsView
+        docs={papers}
+        onShowInSource={onShowInSource}
+        approvedIds={approvedIds}
+        onToggleApproval={onToggleApproval}
+        onApproveAll={onApproveAll}
+        onClearApprovals={onClearApprovals}
+      />
+    );
   }
 
   return (
@@ -1685,9 +1719,16 @@ interface CVsViewProps {
   cvs: CVItem[];
   /** CR-051 Sprint 7 polish — inline "View source" button on each card. */
   onShowInSource?: (sectionId: string) => void;
+  // 2026-06-07 (user direction) — CVs are approvable just like narratives.
+  // The checkbox REPRESENTS approval (persisted to the server), so the
+  // coordinator can see at a glance which CVs are approved.
+  approvedIds?: Set<string>;
+  onToggleApproval?: (rowId: string) => void;
+  onApproveAll?: (rowIds: string[]) => void;
+  onClearApprovals?: () => void;
 }
 
-function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
+function CVsView({ cvs, onShowInSource, approvedIds, onToggleApproval, onApproveAll, onClearApprovals }: CVsViewProps): JSX.Element {
   // CR-040 follow-on (post-release UX feedback) — clicking a CV card
   // selects it so the right-pane AI evaluation (confidence + heuristic
   // rationale + "show in source document") reads the same sectionId.
@@ -1705,19 +1746,55 @@ function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
       </div>
     );
   }
+  const approvedCount = cvs.filter((c) => approvedIds?.has(c.sectionId)).length;
+  const allApproved = cvs.length > 0 && cvs.every((c) => approvedIds?.has(c.sectionId));
+  const toggleAllCvs = () => {
+    if (allApproved) {
+      cvs.forEach((c) => onToggleApproval?.(c.sectionId));
+    } else {
+      const toAdd = cvs.filter((c) => !approvedIds?.has(c.sectionId)).map((c) => c.sectionId);
+      if (onApproveAll) onApproveAll(toAdd);
+      else toAdd.forEach((id) => onToggleApproval?.(id));
+    }
+  };
   return (
     <div className="flex h-full flex-1 flex-col bg-gray-50">
-      <div className="border-b border-gray-200 bg-white px-4 py-2 text-sm">
-        <span className="font-medium text-gray-800">
-          {cvs.length} faculty CV{cvs.length === 1 ? '' : 's'} detected
-        </span>
-        <span className="ml-2 text-xs text-gray-500">
-          Click a card to see confidence + source location in the right pane.
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-2 text-sm">
+        <div>
+          <span className="font-medium text-gray-800">
+            {cvs.length} faculty CV{cvs.length === 1 ? '' : 's'} detected
+          </span>
+          <span className="ml-1 text-emerald-700">· {approvedCount} approved</span>
+          <span className="ml-2 text-xs text-gray-500">
+            Check a card to approve it — saved to the editor + persisted.
+          </span>
+        </div>
+        {onToggleApproval && (
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="approve-all-cvs"
+              onClick={toggleAllCvs}
+              className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200"
+              title={allApproved ? 'Un-approve every CV' : 'Approve every CV'}
+            >
+              <Check className="h-3 w-3" aria-hidden /> {allApproved ? 'Un-approve all' : 'Approve all CVs'}
+            </button>
+            {approvedCount > 0 && onClearApprovals && (
+              <button
+                onClick={onClearApprovals}
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                title="Clear the approved flag across all specs"
+              >
+                Clear approvals
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <ul className="flex-1 space-y-3 overflow-auto p-4">
         {cvs.map((cv) => {
           const isSelected = selectedSectionId === cv.sectionId;
+          const approved = !!approvedIds?.has(cv.sectionId);
           return (
             <li
               key={cv.sectionId}
@@ -1733,13 +1810,32 @@ function CVsView({ cvs, onShowInSource }: CVsViewProps): JSX.Element {
                 }
               }}
               className={`cursor-pointer rounded-lg border bg-white p-3 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cshse-500 ${
-                isSelected
+                approved
+                  ? 'border-emerald-400 bg-emerald-50/30 ring-1 ring-emerald-200'
+                  : isSelected
                   ? 'border-cshse-500 ring-2 ring-cshse-300'
                   : 'border-gray-200 hover:border-cshse-300 hover:shadow-md'
               }`}
             >
               <div className="flex items-baseline justify-between gap-2">
-                <h3 className="text-sm font-semibold text-gray-900">{cv.facultyName}</h3>
+                <div className="flex items-center gap-2">
+                  {onToggleApproval && (
+                    <input
+                      type="checkbox"
+                      data-testid={`approve-check-${cv.sectionId}`}
+                      checked={approved}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        onToggleApproval(cv.sectionId);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500"
+                      aria-label={approved ? `Approved: ${cv.facultyName} — uncheck to un-approve` : `Approve ${cv.facultyName}`}
+                      title={approved ? 'Approved — uncheck to un-approve' : 'Check to approve'}
+                    />
+                  )}
+                  <h3 className="text-sm font-semibold text-gray-900">{cv.facultyName}</h3>
+                </div>
                 <span className="rounded bg-cshse-100 px-1.5 py-0.5 text-[10px] font-medium text-cshse-800">
                   via {cv.routing?.source ?? 'detector'}
                 </span>
@@ -1820,9 +1916,16 @@ interface EvidenceDocsViewProps {
   docs: EvidenceDocItem[];
   /** CR-051 Sprint 7 polish — inline "View source" button on each card. */
   onShowInSource?: (sectionId: string) => void;
+  // 2026-06-07 (user direction) — syllabi + papers are approvable. The
+  // checkbox REPRESENTS approval (persisted to the server) so the
+  // coordinator sees at a glance which evidence docs are approved.
+  approvedIds?: Set<string>;
+  onToggleApproval?: (rowId: string) => void;
+  onApproveAll?: (rowIds: string[]) => void;
+  onClearApprovals?: () => void;
 }
 
-function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.Element {
+function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval, onApproveAll, onClearApprovals }: EvidenceDocsViewProps): JSX.Element {
   // CR-040 Phase 2c — submissionId from the store is required to build
   // the download URL for the View-file button. The same id powers the
   // ReviewSurface + MatrixSurface.
@@ -1842,22 +1945,58 @@ function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.
   const papers = docs.filter((d) => d.docSubKind === 'paper');
   const syllabi = docs.filter((d) => d.docSubKind === 'syllabus');
   const anyApplied = docs.some((d) => d.fileId);
+  const approvedCount = docs.filter((d) => approvedIds?.has(d.sectionId)).length;
+  const allApproved = docs.length > 0 && docs.every((d) => approvedIds?.has(d.sectionId));
+  const toggleAllDocs = () => {
+    if (allApproved) {
+      docs.forEach((d) => onToggleApproval?.(d.sectionId));
+    } else {
+      const toAdd = docs.filter((d) => !approvedIds?.has(d.sectionId)).map((d) => d.sectionId);
+      if (onApproveAll) onApproveAll(toAdd);
+      else toAdd.forEach((id) => onToggleApproval?.(id));
+    }
+  };
   return (
     <div className="flex h-full flex-1 flex-col bg-gray-50">
-      <div className="border-b border-gray-200 bg-white px-4 py-2 text-sm">
-        <span className="font-medium text-gray-800">
-          {papers.length} paper{papers.length === 1 ? '' : 's'} ·{' '}
-          {syllabi.length} syllab{syllabi.length === 1 ? 'us' : 'i'}
-        </span>
-        <span className="ml-2 text-xs text-gray-500">
-          {anyApplied
-            ? 'Click "Download .docx" on a card to open the captured evidence in Word.'
-            : 'Each will be packaged as a standalone .docx at Apply time.'}
-        </span>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-2 text-sm">
+        <div>
+          <span className="font-medium text-gray-800">
+            {papers.length} paper{papers.length === 1 ? '' : 's'} ·{' '}
+            {syllabi.length} syllab{syllabi.length === 1 ? 'us' : 'i'}
+          </span>
+          <span className="ml-1 text-emerald-700">· {approvedCount} approved</span>
+          <span className="ml-2 text-xs text-gray-500">
+            {anyApplied
+              ? 'Check a card to approve it; "Download .docx" opens the captured evidence.'
+              : 'Check a card to approve it — saved to the editor + persisted.'}
+          </span>
+        </div>
+        {onToggleApproval && (
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="approve-all-evdocs"
+              onClick={toggleAllDocs}
+              className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200"
+              title={allApproved ? 'Un-approve every doc in this view' : 'Approve every doc in this view'}
+            >
+              <Check className="h-3 w-3" aria-hidden /> {allApproved ? 'Un-approve all' : 'Approve all'}
+            </button>
+            {approvedCount > 0 && onClearApprovals && (
+              <button
+                onClick={onClearApprovals}
+                className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                title="Clear the approved flag across all specs"
+              >
+                Clear approvals
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <ul className="flex-1 space-y-3 overflow-auto p-4">
         {docs.map((d) => {
           const isSelected = selectedSectionId === d.sectionId;
+          const approved = !!approvedIds?.has(d.sectionId);
           return (
           <li
             key={d.sectionId}
@@ -1873,13 +2012,32 @@ function EvidenceDocsView({ docs, onShowInSource }: EvidenceDocsViewProps): JSX.
               }
             }}
             className={`cursor-pointer rounded-lg border bg-white p-3 shadow-sm transition focus:outline-none focus:ring-2 focus:ring-cshse-500 ${
-              isSelected
+              approved
+                ? 'border-emerald-400 bg-emerald-50/30 ring-1 ring-emerald-200'
+                : isSelected
                 ? 'border-cshse-500 ring-2 ring-cshse-300'
                 : 'border-gray-200 hover:border-cshse-300 hover:shadow-md'
             }`}
           >
             <div className="flex items-baseline justify-between gap-2">
-              <h3 className="text-sm font-semibold text-gray-900">{d.title}</h3>
+              <div className="flex items-center gap-2">
+                {onToggleApproval && (
+                  <input
+                    type="checkbox"
+                    data-testid={`approve-check-${d.sectionId}`}
+                    checked={approved}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      onToggleApproval(d.sectionId);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4 rounded text-emerald-600 focus:ring-emerald-500"
+                    aria-label={approved ? `Approved: ${d.title} — uncheck to un-approve` : `Approve ${d.title}`}
+                    title={approved ? 'Approved — uncheck to un-approve' : 'Check to approve'}
+                  />
+                )}
+                <h3 className="text-sm font-semibold text-gray-900">{d.title}</h3>
+              </div>
               <span
                 className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                   d.docSubKind === 'paper'
