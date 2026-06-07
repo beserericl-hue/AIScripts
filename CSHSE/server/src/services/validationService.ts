@@ -117,16 +117,44 @@ export class ValidationService {
         const specNarr = stdNarr instanceof Map ? stdNarr.get(specCode) : stdNarr?.[specCode];
         narrativeText = specNarr?.content || '';
       }
+      // 2026-06-07 (user-reported: "no evidence file should be invisible to the
+      // AI evaluation"). Fetch evidence for THIS spec PLUS un-routed evidence
+      // (no standardCode) for the submission — the latter is general supporting
+      // material that hasn't been assigned to a spec yet, and must still be
+      // visible to every spec's evaluation rather than silently dropped. We read
+      // the evidence TEXT from metadata.description (the real file body, set by
+      // materializeApprovedToEditor); `description` holds the short title.
       const ev: any[] = await SupportingEvidence.find({
         submissionId,
-        standardCode,
-        specCode,
-        isDeleted: { $ne: true }
+        isDeleted: { $ne: true },
+        $or: [
+          { standardCode, specCode },
+          { standardCode: { $in: [null, ''] } },
+          { standardCode: { $exists: false } },
+        ],
       })
-        .select('description metadata.description')
+        .select('description metadata.description standardCode specCode')
         .lean();
-      evidenceTexts = ev
-        .map((e) => e?.description || e?.metadata?.description || '')
+      // Bound the prompt: cap count + per-item length so a large library of
+      // un-routed evidence can't blow up token usage. Routed-to-this-spec items
+      // come first so they're never crowded out by general evidence.
+      const MAX_EV = 80;
+      const MAX_LEN = 2000;
+      const ranked = ev.sort((a, b) => {
+        const aRouted = a?.standardCode === standardCode && a?.specCode === specCode ? 0 : 1;
+        const bRouted = b?.standardCode === standardCode && b?.specCode === specCode ? 0 : 1;
+        return aRouted - bRouted;
+      });
+      evidenceTexts = ranked
+        .slice(0, MAX_EV)
+        .map((e) => {
+          const title = (e?.description || '').trim();
+          const body = (e?.metadata?.description || '').trim();
+          const text = body || title;
+          if (!text) return '';
+          const labeled = title && body && !body.startsWith(title) ? `${title}: ${body}` : text;
+          return labeled.length > MAX_LEN ? `${labeled.slice(0, MAX_LEN)}…` : labeled;
+        })
         .filter(Boolean);
     } catch {
       /* context is best-effort */

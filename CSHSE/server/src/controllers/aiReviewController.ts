@@ -373,23 +373,44 @@ async function materializeApprovedToEditor(
   }
   submission.markModified('narratives');
 
-  // --- 2) approved evidence files / CVs / docs → SupportingEvidence (deduped) ---
+  // --- 2) approved evidence files / CVs / docs → SupportingEvidence ---
+  //
+  // 2026-06-07 (user-reported: "no evidence file should be invisible to the AI
+  // evaluation; files must be findable; place them in the spec they belong to"):
+  //  (a) We NO LONGER drop unassigned (un-routed) CVs / docs. Every approved
+  //      evidence item now materializes so it is findable in the File Library.
+  //      Routed items carry their (std, spec); un-routed items are saved with
+  //      no code (the evaluator treats those as general submission evidence —
+  //      see validationService — so they are still visible to every spec's AI
+  //      evaluation rather than silently lost).
+  //  (b) We store the actual evidence TEXT in `metadata.description` (and a
+  //      short title in `description`). The evaluator reads that text, so the
+  //      AI finally SEES the file content — previously it only got the title
+  //      (e.g. "(data table)") and reported it couldn't see the evidence.
+  //  (c) Existing records are now UPSERTED (not skipped): re-running set-approved
+  //      heals records created before this fix (adds text + (std, spec) when the
+  //      coordinator later assigns one), instead of leaving them content-less.
   const fileItems: Array<{ sectionId: string; std?: string; spec?: string; title: string; body: string; kind: string }> = [];
   for (const bucket of Object.values(state.buckets) as any[]) {
     for (const it of bucket.evidenceFiles || []) {
       if (approved.has(it.sectionId)) {
-        fileItems.push({ sectionId: it.sectionId, std: bucket.standardCode, spec: bucket.specCode, title: it.heading || 'Evidence file', body: it.snippet || '', kind: 'file' });
+        // Files are frequently tables — the real content lives in htmlSnippet;
+        // `snippet` is just a "(data table)" placeholder. Prefer the richer one.
+        const body = evidenceBodyText(it.htmlSnippet, it.snippet);
+        fileItems.push({ sectionId: it.sectionId, std: bucket.standardCode, spec: bucket.specCode, title: it.heading || 'Evidence file', body, kind: 'file' });
       }
     }
   }
   for (const c of state.cvs || []) {
-    if (approved.has(c.sectionId) && (c.resolvedStd || c.routing?.std)) {
-      fileItems.push({ sectionId: c.sectionId, std: c.resolvedStd || c.routing?.std, spec: c.resolvedSpec || c.routing?.spec, title: `${c.facultyName || 'Faculty'} — CV`, body: c.snippet || '', kind: 'cv' });
+    if (approved.has(c.sectionId)) {
+      const body = evidenceBodyText(c.htmlSnippet, c.snippet || c.fullText);
+      fileItems.push({ sectionId: c.sectionId, std: c.resolvedStd || c.routing?.std, spec: c.resolvedSpec || c.routing?.spec, title: `${c.facultyName || 'Faculty'} — CV`, body, kind: 'cv' });
     }
   }
   for (const e of state.evidenceDocs || []) {
-    if (approved.has(e.sectionId) && (e.resolvedStd || e.routing?.std)) {
-      fileItems.push({ sectionId: e.sectionId, std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec, title: e.title || 'Evidence document', body: e.snippet || e.summary || '', kind: e.docSubKind || 'paper' });
+    if (approved.has(e.sectionId)) {
+      const body = evidenceBodyText(e.htmlSnippet, e.snippet || e.summary);
+      fileItems.push({ sectionId: e.sectionId, std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec, title: e.title || 'Evidence document', body, kind: e.docSubKind || 'paper' });
     }
   }
   if (fileItems.length === 0) return affected;
@@ -397,12 +418,26 @@ async function materializeApprovedToEditor(
   try {
     for (const fi of fileItems) {
       const tag = `rev:${fi.sectionId}`;
-      const exists = await SupportingEvidence.findOne({ submissionId: submission._id, tags: tag, isDeleted: false }).select('_id').lean();
-      if (exists) continue; // idempotent — already materialized
+      // The AI evaluator reads `metadata.description` / `description` for the
+      // evidence text — store the real body there so the file is visible to it.
+      const bodyText = (fi.body || '').trim();
+      const existing: any = await SupportingEvidence.findOne({ submissionId: submission._id, tags: tag, isDeleted: false });
+      if (existing) {
+        // Heal/upgrade an already-materialized record: refresh routing + text so
+        // approvals made before this fix (or a later spec assignment) take effect.
+        existing.standardCode = fi.std || undefined;
+        existing.specCode = fi.spec || undefined;
+        existing.description = fi.title;
+        existing.metadata = { ...(existing.metadata || {}), description: bodyText };
+        existing.markModified('metadata');
+        await existing.save();
+        if (fi.std && fi.spec) affected.push({ std: fi.std, spec: fi.spec });
+        continue;
+      }
       const children: any[] = [
         new Paragraph({ text: fi.title, heading: HeadingLevel.HEADING_1 }),
       ];
-      for (const p of String(fi.body).split(/\n\s*\n/)) children.push(new Paragraph({ text: p.trim() }));
+      for (const p of String(bodyText).split(/\n\s*\n/)) children.push(new Paragraph({ text: p.trim() }));
       const buffer = await Packer.toBuffer(new Document({ creator: 'CSHSE', title: fi.title, sections: [{ properties: {}, children }] }));
       const filename = `${String(fi.title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'evidence'}.docx`;
       await SupportingEvidence.create({
@@ -419,15 +454,44 @@ async function materializeApprovedToEditor(
           storageType: 'base64', uploadedAt: new Date(), uploadedBy: userId || submission.submitterId,
         } as any,
         description: fi.title,
+        // AI-readable evidence text (the evaluator selects metadata.description).
+        metadata: { description: bodyText },
         versionNumber: 1, isCurrentVersion: true, isDeleted: false,
         linkedNarratives: [],
         tags: ['ai-import', `kind:${fi.kind}`, tag],
       });
+      if (fi.std && fi.spec) affected.push({ std: fi.std, spec: fi.spec });
     }
   } catch (err) {
     console.warn('[materializeApprovedToEditor] evidence packaging failed (non-fatal):', err);
   }
   return affected;
+}
+
+/**
+ * Best-effort plain-text body for an evidence record. Prefers the structural
+ * htmlSnippet (which carries the real table/cell content) over the short
+ * `snippet` placeholder (often just "(data table)"). Strips tags, decodes a
+ * few common entities, and collapses whitespace so the AI evaluator receives
+ * readable content rather than markup.
+ */
+function evidenceBodyText(html?: string | null, fallback?: string | null): string {
+  const stripped = (html || '')
+    .replace(/<\s*(br|tr|\/p|\/div|\/li|\/h[1-6])\s*\/?>/gi, '\n')
+    .replace(/<\s*(td|th)\b[^>]*>/gi, ' \t')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  const fb = (fallback || '').trim();
+  // Use the HTML-derived text when it's clearly richer than the placeholder
+  // snippet (which is often "(data table)" / a couple of words).
+  if (stripped.length > fb.length) return stripped;
+  return fb || stripped;
 }
 
 /**
