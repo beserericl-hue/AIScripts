@@ -563,6 +563,35 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     void store.loadPersistedReviewState();
   }, [isProgramCoordinator, submissionId]);
 
+  // 2026-06-07 (user-reported: "approved items not moved into the spec editor")
+  // — Approving an item POSTs set-approved, which materializes the approved
+  // text into Submission.narratives server-side. But approval flows entirely
+  // through the Zustand store, which can't touch the react-query ['submission']
+  // cache that this editor reads `narrativeContent` from. So without this
+  // bridge, an approval landed on the server but the spec editor kept showing
+  // its stale cached copy until a hard reload. We subscribe to the store's
+  // `reviewMaterializedAt` counter (bumped once set-approved confirms) and
+  // invalidate + refetch the submission, then bump editorRefreshKey so the
+  // mounted NarrativeEditor remounts with the freshly-materialized content.
+  useEffect(() => {
+    if (!submissionId) return;
+    let last = useAIImportStore.getState().reviewMaterializedAt;
+    const unsub = useAIImportStore.subscribe((state) => {
+      if (state.reviewMaterializedAt === last) return;
+      last = state.reviewMaterializedAt;
+      void queryClient
+        .invalidateQueries({ queryKey: ['submission', submissionId] })
+        .then(() => {
+          // Remount the editor(s) so the currently-viewed spec picks up the
+          // new narrative content even if the user is already on it.
+          setEditorRefreshKey((prev) => prev + 1);
+        });
+      // The dashboard DRAFTS / workflow-summary also reflect approvals.
+      queryClient.invalidateQueries({ queryKey: ['workflow-summary', submissionId] });
+    });
+    return unsub;
+  }, [submissionId, queryClient]);
+
   // CR-047 — deep-link from the PC dashboard's DRAFTS tiles. A tile/row
   // navigates here with `?view=review[&specKey=<rail key>]`; on mount we
   // open the Review surface and pre-select the matching rail entry

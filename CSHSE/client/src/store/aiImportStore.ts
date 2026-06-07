@@ -415,6 +415,12 @@ interface AIImportState {
   // useAIImportStore.subscribe(...) below) so persistence is decoupled from any
   // particular review surface (wizard OR the standalone ReviewSurface).
   reviewSaveState: 'idle' | 'saving' | 'saved';
+  // Monotonic counter bumped each time set-approved completes server-side
+  // (which materializes approved items into Submission.narratives). The
+  // Standards editor shell subscribes to this and invalidates its
+  // react-query ['submission'] cache so approved items appear in the spec
+  // editor immediately — not only after a hard reload.
+  reviewMaterializedAt: number;
 
   // Errors surfaced from any stage
   errors: string[];
@@ -683,6 +689,7 @@ const initialState = {
   appliedCounts: null,
   dirty: false,
   reviewSaveState: 'idle' as const,
+  reviewMaterializedAt: 0,
   errors: [],
   approvedIds: [] as string[],
   discardedIds: [] as string[],
@@ -865,6 +872,14 @@ export const useAIImportStore = create<AIImportState>()(
           if (Array.isArray(res.data?.approvedIds)) {
             set({ approvedIds: res.data.approvedIds });
           }
+          // 2026-06-07 (user-reported) — set-approved ALSO materializes the
+          // approved text into Submission.narratives server-side. The Standards
+          // editor reads that via the react-query ['submission'] cache, which the
+          // Zustand store can't touch directly. Bump a counter so the editor
+          // shell (SelfStudyEditor) can subscribe and invalidate/refetch the
+          // submission the moment materialization lands — otherwise approved
+          // items only appear after a hard reload.
+          set({ reviewMaterializedAt: (get().reviewMaterializedAt || 0) + 1 });
           return true;
         } catch (err) {
           console.warn('[set-approved] persist failed:', err);
