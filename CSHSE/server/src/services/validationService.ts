@@ -117,13 +117,16 @@ export class ValidationService {
         const specNarr = stdNarr instanceof Map ? stdNarr.get(specCode) : stdNarr?.[specCode];
         narrativeText = specNarr?.content || '';
       }
-      // 2026-06-07 (user-reported: "no evidence file should be invisible to the
-      // AI evaluation"). Fetch evidence for THIS spec PLUS un-routed evidence
-      // (no standardCode) for the submission — the latter is general supporting
-      // material that hasn't been assigned to a spec yet, and must still be
-      // visible to every spec's evaluation rather than silently dropped. We read
-      // the evidence TEXT from metadata.description (the real file body, set by
-      // materializeApprovedToEditor); `description` holds the short title.
+      // 2026-06-08 (user-reported): evidence that has been PLACED in a spec must
+      // be visible to THAT spec's AI evaluation, and must carry the real file
+      // text (read from metadata.description, set by materializeApprovedToEditor;
+      // `description` holds the short title). We prioritise evidence routed to
+      // this exact (standardCode, specCode); a small, strictly-bounded number of
+      // un-routed items fills any remaining budget so general material isn't
+      // wholly invisible — but the total is hard-capped so a large evidence
+      // library can never overflow the ai-service prompt (which previously
+      // truncated the JSON-format instructions and produced
+      // "could not parse model response").
       const ev: any[] = await SupportingEvidence.find({
         submissionId,
         isDeleted: { $ne: true },
@@ -135,27 +138,29 @@ export class ValidationService {
       })
         .select('description metadata.description standardCode specCode')
         .lean();
-      // Bound the prompt: cap count + per-item length so a large library of
-      // un-routed evidence can't blow up token usage. Routed-to-this-spec items
-      // come first so they're never crowded out by general evidence.
-      const MAX_EV = 80;
-      const MAX_LEN = 2000;
-      const ranked = ev.sort((a, b) => {
-        const aRouted = a?.standardCode === standardCode && a?.specCode === specCode ? 0 : 1;
-        const bRouted = b?.standardCode === standardCode && b?.specCode === specCode ? 0 : 1;
-        return aRouted - bRouted;
-      });
-      evidenceTexts = ranked
-        .slice(0, MAX_EV)
-        .map((e) => {
-          const title = (e?.description || '').trim();
-          const body = (e?.metadata?.description || '').trim();
-          const text = body || title;
-          if (!text) return '';
-          const labeled = title && body && !body.startsWith(title) ? `${title}: ${body}` : text;
-          return labeled.length > MAX_LEN ? `${labeled.slice(0, MAX_LEN)}…` : labeled;
-        })
-        .filter(Boolean);
+      // Routed-to-this-spec items first; un-routed only fills leftover budget.
+      const isRouted = (e: any) => e?.standardCode === standardCode && e?.specCode === specCode;
+      const ranked = ev.slice().sort((a, b) => (isRouted(a) ? 0 : 1) - (isRouted(b) ? 0 : 1));
+      const MAX_ITEMS = 12;     // hard cap on number of evidence snippets
+      const MAX_LEN = 1200;     // per-item char cap
+      const TOTAL_BUDGET = 12_000; // hard cap on total evidence chars in the prompt
+      let used = 0;
+      evidenceTexts = [];
+      for (const e of ranked) {
+        if (evidenceTexts.length >= MAX_ITEMS || used >= TOTAL_BUDGET) break;
+        // Once routed items are exhausted, only keep adding un-routed while budget
+        // remains — this keeps the per-spec prompt small and on-topic.
+        const title = (e?.description || '').trim();
+        const body = (e?.metadata?.description || '').trim();
+        const text = body || title;
+        if (!text) continue;
+        const labeled = title && body && !body.startsWith(title) ? `${title}: ${body}` : text;
+        const clipped = labeled.length > MAX_LEN ? `${labeled.slice(0, MAX_LEN)}…` : labeled;
+        const remaining = TOTAL_BUDGET - used;
+        const finalText = clipped.length > remaining ? `${clipped.slice(0, remaining)}…` : clipped;
+        evidenceTexts.push(finalText);
+        used += finalText.length;
+      }
     } catch {
       /* context is best-effort */
     }

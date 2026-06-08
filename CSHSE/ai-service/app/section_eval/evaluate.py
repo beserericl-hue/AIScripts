@@ -24,7 +24,12 @@ from app.config import Settings, get_settings
 from app.section_eval.scrape import scrape_link, MAX_TEXT_CHARS
 
 _HAIKU_MODEL = "claude-haiku-4-5"
-_MAX_INPUT_CHARS = 12000
+# Headroom so the assembled prompt (narrative ≤6k + bounded evidence ≤9k +
+# rubric + the trailing STRICT-JSON instructions) is never truncated. The old
+# 12k ceiling cut the JSON instructions once evidence carried real text, which
+# made the model emit non-JSON ("could not parse model response"). claude-haiku
+# has a 200k context, so 40k chars (~10k tokens) is comfortable. 2026-06-08.
+_MAX_INPUT_CHARS = 40000
 _MAX_TOKENS_OUT = 900
 
 _VALID_VERDICTS = {"pass", "needs_improvement", "fail"}
@@ -41,7 +46,24 @@ def _build_prompt(
     link_results: list[dict],
     correction_hints: str = "",
 ) -> str:
-    ev_block = "\n".join(f"- {t[:800]}" for t in evidence_texts if t) or "(none)"
+    # Bound the evidence block to a fixed char budget so it can never push the
+    # JSON-format instructions (built at the END of this prompt) past
+    # _MAX_INPUT_CHARS, which would truncate them and make the model emit
+    # non-JSON ("could not parse model response"). 2026-06-08.
+    _EV_ITEM_CAP = 800
+    _EV_BLOCK_BUDGET = 9000
+    _ev_lines: list[str] = []
+    _ev_used = 0
+    for _t in evidence_texts:
+        if not _t:
+            continue
+        if _ev_used >= _EV_BLOCK_BUDGET or len(_ev_lines) >= 15:
+            _ev_lines.append(f"- (+{len([x for x in evidence_texts if x]) - len(_ev_lines)} more evidence items omitted)")
+            break
+        _line = f"- {_t[:_EV_ITEM_CAP]}"
+        _ev_lines.append(_line)
+        _ev_used += len(_line)
+    ev_block = "\n".join(_ev_lines) or "(none)"
     files_block = (
         "\n".join(f"- {f.get('filename') or f.get('s3Key') or 'file'}" for f in files)
         or "(none)"
