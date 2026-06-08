@@ -419,17 +419,9 @@ async function materializeApprovedToEditor(
       fileItems.push({ sectionId: e.sectionId, std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec, title: e.title || 'Evidence document', body, kind: e.docSubKind || 'paper' });
     }
   }
-  // Always record what materialize saw, even when nothing matched — so the
-  // set-approved response can explain an empty result instead of silent null.
-  (submission as any).__evidenceStats = {
-    cvsTotal: (state.cvs || []).length,
-    docsTotal: (state.evidenceDocs || []).length,
-    approvedCount: approved.size,
-    sampleApproved: [...approved].slice(0, 3),
-    sampleCvId: (state.cvs || [])[0]?.sectionId ?? null,
-    fileItems: fileItems.length,
-    created: 0, updated: 0, errors: 0, firstError: '',
-  };
+  // Record a stat even when nothing matched, so the set-approved response can
+  // distinguish "no approved evidence" from a materialization failure.
+  (submission as any).__evidenceStats = { items: fileItems.length, created: 0, updated: 0, errors: 0, firstError: '' };
   if (fileItems.length === 0) return affected;
 
   // Per-item try/catch: one bad evidence item must NOT abort materialization of

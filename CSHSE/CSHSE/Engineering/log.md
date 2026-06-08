@@ -2106,3 +2106,33 @@ the real UI (open editor -> approve on Review surface -> switch back, NO reload 
 narrative visible) and was confirmed to FAIL pre-fix and PASS post-fix. Full live E2E 19/19
 (39-58). Commit abba8ea. NOTE: the separate "AI eval can't see a file" concern is NOT this
 fix — tracked as a distinct follow-up.
+
+## [2026-06-08] fix | AI validation restored (retired model) + evidence placement/visibility + materialize edge case
+User-reported (3 issues): (1) "evaluation error (NotFoundError)" on every spec incl. file-less ones,
+"0/83 Validated"; (2) approved evidence files not placed in their spec / invisible to AI; (3) "these
+numbers are wrong". Root causes + fixes:
+
+1. AI eval model RETIRED. ai-service section_eval/evaluate.py + evidence/score.py called
+   "claude-3-5-haiku-latest" → resolves to claude-3-5-haiku-20241022, retired 2026-02-19 →
+   Anthropic 404 → anthropic.NotFoundError → "evaluation error (NotFoundError)" on EVERY spec
+   (nothing to do with files). Fixed both to claude-haiku-4-5 (current; used everywhere else).
+   Verified: fresh evals now return real verdicts (1.a pass; 6.a cites the faculty-CV evidence).
+
+2. Approved evidence dropped + contentless. materializeApprovedToEditor (a) dropped UNASSIGNED
+   CVs/docs via `&& (resolvedStd||routing?.std)`; (b) stored only a title in `description`; (c)
+   skip-if-exists. Live submission 6986239a had 12 SupportingEvidence vs 65 approved. Fixed:
+   materialize ALL approved evidence; store real body text (htmlSnippet→text) in
+   metadata.description; UPSERT to heal. validationService now reads that text + includes
+   routed-to-this-spec evidence (un-routed fills leftover budget), hard-capped (12 items / 1200
+   chars / 12k total). ai-service prompt: bound evidence block + raise _MAX_INPUT_CHARS 12k→40k so
+   the trailing STRICT-JSON instruction is never truncated (was causing "could not parse model
+   response" once evidence carried text). Healed the live submission: 12 → 67 records (65 with body
+   text: 15 cv + 30 syllabus + 11 paper + 9 file); autoEval 24/24.
+
+3. Materialize bailed at `if (!state || !state.buckets) return []` — a submission with ONLY evidence
+   (empty buckets) never materialized any evidence. Now bail only when state is null; treat missing
+   buckets as {}. Also made the evidence loop PER-ITEM (one bad item no longer aborts the batch) and
+   surface {items,created,updated,errors,firstError} in the set-approved response.
+
+New spec 59 (unassigned CV+syllabus → materialize with body text) FAILED pre-fix, PASSES post-fix.
+Commits 1647b7c, c61082b, f5b5b59, bfefbd8, 556f5fd.
