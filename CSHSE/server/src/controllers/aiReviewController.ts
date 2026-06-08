@@ -330,7 +330,13 @@ async function materializeApprovedToEditor(
   userId: any
 ): Promise<Array<{ std: string; spec: string }>> {
   const state = submission.aiReviewState;
-  if (!state || !state.buckets) return [];
+  // BUG FIX 2026-06-08: previously bailed when `state.buckets` was empty/missing.
+  // A submission can have ONLY evidence (approved CVs / syllabi / papers) and no
+  // narrative buckets — bailing here meant those evidence files were NEVER
+  // materialized into SupportingEvidence (invisible to the editor + the AI eval).
+  // Only bail when there's no review state at all; treat missing buckets as {}.
+  if (!state) return [];
+  const buckets = state.buckets || {};
   const approved = new Set<string>(state.approvedIds || []);
   const affected: Array<{ std: string; spec: string }> = [];
 
@@ -341,7 +347,7 @@ async function materializeApprovedToEditor(
     if (!bySpec.has(k)) bySpec.set(k, { std, spec, narr: [], ev: [] });
     return bySpec.get(k)!;
   };
-  for (const bucket of Object.values(state.buckets) as any[]) {
+  for (const bucket of Object.values(buckets) as any[]) {
     const std = bucket?.standardCode;
     const spec = bucket?.specCode;
     if (!std || !spec) continue;
@@ -391,7 +397,7 @@ async function materializeApprovedToEditor(
   //      heals records created before this fix (adds text + (std, spec) when the
   //      coordinator later assigns one), instead of leaving them content-less.
   const fileItems: Array<{ sectionId: string; std?: string; spec?: string; title: string; body: string; kind: string }> = [];
-  for (const bucket of Object.values(state.buckets) as any[]) {
+  for (const bucket of Object.values(buckets) as any[]) {
     for (const it of bucket.evidenceFiles || []) {
       if (approved.has(it.sectionId)) {
         // Files are frequently tables — the real content lives in htmlSnippet;
