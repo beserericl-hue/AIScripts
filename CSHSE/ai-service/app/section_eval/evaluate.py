@@ -23,7 +23,7 @@ from anthropic import Anthropic
 from app.config import Settings, get_settings
 from app.section_eval.scrape import scrape_link, MAX_TEXT_CHARS
 
-_HAIKU_MODEL = "claude-3-5-haiku-latest"
+_HAIKU_MODEL = "claude-haiku-4-5"
 _MAX_INPUT_CHARS = 12000
 _MAX_TOKENS_OUT = 900
 

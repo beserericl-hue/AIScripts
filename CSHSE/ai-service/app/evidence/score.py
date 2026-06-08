@@ -27,7 +27,7 @@ from anthropic import Anthropic
 from app.config import Settings, get_settings
 
 
-_HAIKU_MODEL = "claude-3-5-haiku-latest"
+_HAIKU_MODEL = "claude-haiku-4-5"
 _MAX_INPUT_CHARS = 8000  # ~2k tokens
 _MAX_TOKENS_OUT = 600
 
