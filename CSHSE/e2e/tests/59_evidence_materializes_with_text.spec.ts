@@ -49,7 +49,8 @@ async function setApproved(page: any, submissionId: string, ids: string[]) {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ approvedIds: ids }),
     });
-    return r.status;
+    const body = await r.json().catch(() => ({}));
+    return { status: r.status, body };
   }, { id: submissionId, ids });
 }
 
@@ -102,8 +103,10 @@ test.describe('Approved evidence materializes with readable text (even unassigne
     console.log('[59-diag] seeded aiReviewState:', JSON.stringify(reviewState));
 
     // Approve both un-assigned evidence items via the API (materialize runs here).
-    const status = await setApproved(page, seed.submissionId, [CV, SYL]);
-    expect(status).toBe(200);
+    const res = await setApproved(page, seed.submissionId, [CV, SYL]);
+    // eslint-disable-next-line no-console
+    console.log('[59-diag] set-approved resp:', JSON.stringify(res));
+    expect(res.status).toBe(200);
     const rawEv = await evidence(page, seed.submissionId);
     // eslint-disable-next-line no-console
     console.log('[59-diag] evidence after approve:', JSON.stringify(rawEv));
