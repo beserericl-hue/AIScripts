@@ -415,8 +415,16 @@ async function materializeApprovedToEditor(
   }
   if (fileItems.length === 0) return affected;
 
-  try {
-    for (const fi of fileItems) {
+  // Per-item try/catch: one bad evidence item must NOT abort materialization of
+  // the rest (the previous single wrapping try/catch silently dropped every
+  // remaining item on the first failure). Stats are stashed on the submission so
+  // the set-approved response can surface them.
+  let _evCreated = 0;
+  let _evUpdated = 0;
+  let _evErrors = 0;
+  let _evFirstError = '';
+  for (const fi of fileItems) {
+    try {
       const tag = `rev:${fi.sectionId}`;
       // The AI evaluator reads `metadata.description` / `description` for the
       // evidence text — store the real body there so the file is visible to it.
@@ -431,6 +439,7 @@ async function materializeApprovedToEditor(
         existing.metadata = { ...(existing.metadata || {}), description: bodyText };
         existing.markModified('metadata');
         await existing.save();
+        _evUpdated += 1;
         if (fi.std && fi.spec) affected.push({ std: fi.std, spec: fi.spec });
         continue;
       }
@@ -460,11 +469,15 @@ async function materializeApprovedToEditor(
         linkedNarratives: [],
         tags: ['ai-import', `kind:${fi.kind}`, tag],
       });
+      _evCreated += 1;
       if (fi.std && fi.spec) affected.push({ std: fi.std, spec: fi.spec });
+    } catch (itemErr: any) {
+      _evErrors += 1;
+      if (!_evFirstError) _evFirstError = `${fi.kind}:${itemErr?.message || itemErr}`.slice(0, 300);
+      console.warn(`[materializeApprovedToEditor] evidence item ${fi.sectionId} failed (non-fatal):`, itemErr);
     }
-  } catch (err) {
-    console.warn('[materializeApprovedToEditor] evidence packaging failed (non-fatal):', err);
   }
+  (submission as any).__evidenceStats = { items: fileItems.length, created: _evCreated, updated: _evUpdated, errors: _evErrors, firstError: _evFirstError };
   return affected;
 }
 
@@ -573,7 +586,7 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   // (post-response fire-and-forget gets torn down on Railway), but the client
   // approve call is itself fire-and-forget so the UI never blocks on this.
   const evalSummary = await runAutoEvaluations(submission, affected);
-  res.json({ ok: true, approvedIds: state.approvedIds, autoEval: evalSummary });
+  res.json({ ok: true, approvedIds: state.approvedIds, autoEval: evalSummary, evidence: (submission as any).__evidenceStats ?? null });
 }
 
 /**

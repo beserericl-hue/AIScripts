@@ -90,9 +90,23 @@ test.describe('Approved evidence materializes with readable text (even unassigne
     });
     await loginAsSeededViaSso(page, seed);
 
+    // DIAGNOSTIC — confirm the seed actually persisted cvs/evidenceDocs into aiReviewState.
+    const reviewState = await page.evaluate(async (id: string) => {
+      const raw = localStorage.getItem('auth-storage');
+      const token = raw ? JSON.parse(raw)?.state?.token : null;
+      const r = await fetch(`/api/submissions/${id}/review`, { headers: { Authorization: `Bearer ${token}` } });
+      const st = (await r.json())?.aiReviewState || {};
+      return { cvs: (st.cvs || []).length, docs: (st.evidenceDocs || []).length, approved: st.approvedIds || [] };
+    }, seed.submissionId);
+    // eslint-disable-next-line no-console
+    console.log('[59-diag] seeded aiReviewState:', JSON.stringify(reviewState));
+
     // Approve both un-assigned evidence items via the API (materialize runs here).
     const status = await setApproved(page, seed.submissionId, [CV, SYL]);
     expect(status).toBe(200);
+    const rawEv = await evidence(page, seed.submissionId);
+    // eslint-disable-next-line no-console
+    console.log('[59-diag] evidence after approve:', JSON.stringify(rawEv));
 
     // Both must now exist as SupportingEvidence — NOT dropped — and carry the
     // real body text in metadata.description (what the AI evaluator reads).
