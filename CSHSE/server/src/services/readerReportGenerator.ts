@@ -1,18 +1,28 @@
 /**
- * Reader Report generator (2026-06-09).
+ * Reader Report generator (2026-06-09, template-driven).
  *
- * At submit, the self-study + AI verdicts are compiled into a single reviewer
- * packet — every standard/spec with the program's narrative, supporting evidence,
- * and the AI verdict (pass / needs improvement / fail) + rationale + suggestions,
- * plus the curriculum matrices. Emitted as BOTH a CSHSE-branded PDF and DOCX and
- * stored in the submission's Supporting File Library (tagged `reader-report`) so
- * assigned readers can download them.
+ * The CSHSE Reader Report is the official compliance checklist — one template per
+ * degree level (associate / baccalaureate / masters), each a per-standard grid
+ * with Compliant / Non-Compliant columns and a Reader's Comments column, ending
+ * in a recommendation + signature block.
  *
- * generateAndStoreReaderReport() is idempotent — it upserts the two files (by
- * tag) so re-running after more evaluations land just refreshes them.
+ * On submit (after the background validate-all finishes), this fills the ACTUAL
+ * template for the submission's degree level: header fields (institution, program)
+ * + per-standard AI verdict mark (Compliant / Non-Compliant, rolled up from the
+ * spec verdicts) + the AI rationale in Reader's Comments — producing an AI-DRAFTED
+ * reader report the reader reviews and edits. Emitted as the template-filled DOCX
+ * (via docx.patchDocument over a placeholder-tagged copy of the official file) and
+ * a matching checklist PDF (pdfkit). Both are stored in the Supporting File Library
+ * (tags reader-report:pdf / reader-report:docx). Idempotent (upsert by tag).
+ *
+ * The placeholder-tagged template copies live in
+ * src/assets/reader-report-templates/<level>.docx and are produced by
+ * scripts/prepare_reader_report_templates.py.
  */
+import fs from 'fs';
+import path from 'path';
 import PDFDocument from 'pdfkit';
-import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, patchDocument, PatchType } from 'docx';
 import mongoose from 'mongoose';
 import { Submission } from '../models/Submission';
 import { ValidationResult } from '../models/ValidationResult';
@@ -26,6 +36,25 @@ const VERDICT_LABEL: Record<string, string> = {
   needs_improvement: 'NEEDS IMPROVEMENT',
   fail: 'FAIL',
 };
+
+// Degree level -> templated file + the ordered standard keys the template marks.
+// (Mirrors scripts/prepare_reader_report_templates.py.) Masters has no template
+// yet → procedural fallback.
+const STDS_1_20 = Array.from({ length: 20 }, (_, i) => String(i + 1));
+const LEVELS: Record<string, { file: string; stds: string[]; title: string }> = {
+  baccalaureate: { file: 'baccalaureate.docx', stds: [...STDS_1_20, '22'], title: "Baccalaureate Degree" },
+  associate: { file: 'associate.docx', stds: [...STDS_1_20], title: 'Associate Degree' },
+};
+function resolveLevel(programLevel?: string): { key: string; cfg?: { file: string; stds: string[]; title: string } } {
+  const pl = String(programLevel || '').toLowerCase();
+  if (pl === 'associate') return { key: 'associate', cfg: LEVELS.associate };
+  if (pl === 'masters' || pl === 'master' || pl === "master's") return { key: 'masters', cfg: undefined };
+  // bachelors / baccalaureate / default
+  return { key: 'baccalaureate', cfg: LEVELS.baccalaureate };
+}
+function templatePath(file: string): string {
+  return path.join(__dirname, '..', 'assets', 'reader-report-templates', file);
+}
 
 function stripHtml(html?: string | null): string {
   return String(html || '')
@@ -42,26 +71,19 @@ function stripHtml(html?: string | null): string {
 }
 
 interface SpecBlock {
-  std: string;
-  spec: string;
-  title: string;
-  narrative: string;
-  evidence: string;
-  verdict?: string;
-  rationale?: string;
-  suggestions: string[];
-  excluded: boolean;
+  std: string; spec: string; title: string;
+  narrative: string; evidence: string;
+  verdict?: string; rationale?: string; suggestions: string[]; excluded: boolean;
 }
+interface StandardRollup { mark: 'compliant' | 'noncompliant' | null; comment: string }
 interface ReportData {
-  institutionName: string;
-  programName: string;
-  programLevel: string;
+  institutionName: string; programName: string; programLevel: string;
   submittedAt?: Date;
   standards: Array<{ code: string; title: string; specs: SpecBlock[] }>;
   matrices: Array<{ title: string; text: string }>;
 }
 
-/** Gather the full self-study + AI verdicts + matrices for the report. */
+/** Gather the full self-study + AI verdicts + matrices. */
 async function gatherReportData(submissionId: string): Promise<ReportData> {
   const submission: any = await Submission.findById(submissionId);
   const narratives: any = submission?.narratives;
@@ -76,10 +98,8 @@ async function gatherReportData(submissionId: string): Promise<ReportData> {
     return entry || {};
   };
 
-  // Latest ValidationResult per spec.
   const results: any[] = await ValidationResult.find({ submissionId })
-    .sort({ validatedAt: -1, createdAt: -1 })
-    .lean();
+    .sort({ validatedAt: -1, createdAt: -1 }).lean();
   const latest = new Map<string, any>();
   for (const r of results) {
     const k = `${r.standardCode}.${r.specCode}`;
@@ -94,13 +114,9 @@ async function gatherReportData(submissionId: string): Promise<ReportData> {
       const res = latest.get(`${std.code}.${sp.code}`);
       const st = getStatus(std.code, sp.code);
       specs.push({
-        std: std.code,
-        spec: sp.code,
-        title: sp.title || '',
-        narrative: stripHtml(n?.content),
-        evidence: stripHtml(n?.supportingEvidenceText),
-        verdict: res?.verdict,
-        rationale: res?.rationale || res?.feedback,
+        std: std.code, spec: sp.code, title: sp.title || '',
+        narrative: stripHtml(n?.content), evidence: stripHtml(n?.supportingEvidenceText),
+        verdict: res?.verdict, rationale: res?.rationale || res?.feedback,
         suggestions: res?.suggestions || res?.missingElements || [],
         excluded: st?.excluded === true,
       });
@@ -110,10 +126,8 @@ async function gatherReportData(submissionId: string): Promise<ReportData> {
 
   const cms: any[] = await CurriculumMatrix.find({ submissionId }).lean();
   const matrices: ReportData['matrices'] = [];
-  for (const cm of cms) {
-    for (const rc of cm.rawContent || []) {
-      matrices.push({ title: rc.title || cm.name || 'Curriculum Matrix', text: stripHtml(rc.content) });
-    }
+  for (const cm of cms) for (const rc of cm.rawContent || []) {
+    matrices.push({ title: rc.title || cm.name || 'Curriculum Matrix', text: stripHtml(rc.content) });
   }
 
   return {
@@ -121,13 +135,83 @@ async function gatherReportData(submissionId: string): Promise<ReportData> {
     programName: submission?.programName || '',
     programLevel: submission?.programLevel || '',
     submittedAt: submission?.submittedAt,
-    standards,
-    matrices,
+    standards, matrices,
   };
 }
 
-/** Build the CSHSE-branded PDF. */
-function buildPdf(data: ReportData): Promise<Buffer> {
+/** Roll up per-spec verdicts to a per-standard Compliant/Non-Compliant + comment. */
+function rollupByStandard(data: ReportData): Map<string, StandardRollup> {
+  const out = new Map<string, StandardRollup>();
+  for (const std of data.standards) {
+    const graded = std.specs.filter((s) => !s.excluded && (s.verdict || s.narrative || s.evidence));
+    if (graded.length === 0) { out.set(std.code, { mark: null, comment: '' }); continue; }
+    const anyFail = graded.some((s) => s.verdict === 'fail' || s.verdict === 'needs_improvement');
+    const anyPass = graded.some((s) => s.verdict === 'pass');
+    const mark: StandardRollup['mark'] = anyFail ? 'noncompliant' : anyPass ? 'compliant' : null;
+    const lines: string[] = [];
+    for (const s of graded) {
+      if (!s.verdict && !s.rationale) continue;
+      const v = s.verdict ? (VERDICT_LABEL[s.verdict] || s.verdict) : 'not evaluated';
+      let line = `${s.std}.${s.spec} — ${v}`;
+      const why = (s.rationale || '').trim();
+      if (why) line += `: ${why.length > 320 ? why.slice(0, 317) + '…' : why}`;
+      if (s.suggestions?.length) line += ` (Suggestions: ${s.suggestions.slice(0, 3).join('; ')})`;
+      lines.push(line);
+    }
+    out.set(std.code, { mark, comment: lines.join('\n') });
+  }
+  return out;
+}
+
+/** Build the template-filled DOCX (the official checklist, AI-drafted). */
+async function buildTemplatedDocx(
+  cfg: { file: string; stds: string[] }, data: ReportData, rollup: Map<string, StandardRollup>
+): Promise<Buffer> {
+  const tpl = fs.readFileSync(templatePath(cfg.file));
+  const mk = (text: string) => ({ type: PatchType.PARAGRAPH, children: [new TextRun(text || '')] });
+  const mkMulti = (text: string) => ({
+    type: PatchType.PARAGRAPH,
+    children: (text ? text.split('\n') : ['']).map((ln, i) => new TextRun({ text: ln, break: i === 0 ? 0 : 1 })),
+  });
+  const patches: Record<string, any> = {
+    inst_name: mk(data.institutionName),
+    prog_name: mk(data.programName),
+  };
+  for (const code of cfg.stds) {
+    const r = rollup.get(code) || { mark: null, comment: '' };
+    patches[`c_${code}`] = mk(r.mark === 'compliant' ? '☒' : '☐');
+    patches[`n_${code}`] = mk(r.mark === 'noncompliant' ? '☒' : '☐');
+    patches[`cm_${code}`] = mkMulti(r.comment ? `AI DRAFT — ${r.comment}` : '');
+  }
+  return patchDocument({ outputType: 'nodebuffer', data: tpl, patches, keepOriginalStyles: true }) as Promise<Buffer>;
+}
+
+/** Procedural fallback DOCX (masters — no template yet). Same checklist shape. */
+async function buildProceduralDocx(data: ReportData, rollup: Map<string, StandardRollup>, levelTitle: string): Promise<Buffer> {
+  const children: Paragraph[] = [];
+  children.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun(`CSHSE Self-Study Reader Report — ${levelTitle}`)] }));
+  children.push(new Paragraph({ children: [new TextRun({ text: `Institution's Name: ${data.institutionName}`, bold: true })] }));
+  children.push(new Paragraph({ children: [new TextRun({ text: `Program's Name: ${data.programName}`, bold: true })] }));
+  children.push(new Paragraph({ children: [new TextRun("Reader's Name and Credential: ____________________    Date: ____________")] }));
+  for (const std of data.standards) {
+    const r = rollup.get(std.code) || { mark: null, comment: '' };
+    if (r.mark === null && !r.comment) continue;
+    const box = r.mark === 'compliant' ? '☒ Compliant   ☐ Non-Compliant'
+      : r.mark === 'noncompliant' ? '☐ Compliant   ☒ Non-Compliant' : '☐ Compliant   ☐ Non-Compliant';
+    children.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun(`Standard ${std.code}: ${std.title}`)] }));
+    children.push(new Paragraph({ children: [new TextRun({ text: box, bold: true })] }));
+    for (const ln of (r.comment || '').split('\n')) if (ln) children.push(new Paragraph({ children: [new TextRun(ln)] }));
+  }
+  children.push(new Paragraph({ children: [new TextRun('')] }));
+  children.push(new Paragraph({ children: [new TextRun({ text: 'Recommendation to the Council:', bold: true })] }));
+  children.push(new Paragraph({ children: [new TextRun('☐ Accreditation with no conditions   ☐ Conditional accreditation   ☐ Deny accreditation   ☐ Hold a decision')] }));
+  children.push(new Paragraph({ children: [new TextRun('Self-Study Reader Signature: ____________________    Date: ____________')] }));
+  const doc = new Document({ sections: [{ properties: {}, ...brandedSectionChrome(), children }] } as any);
+  return Packer.toBuffer(doc);
+}
+
+/** Matching checklist PDF (mirrors the template's structure). */
+function buildChecklistPdf(data: ReportData, rollup: Map<string, StandardRollup>, levelTitle: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'LETTER', margin: 54 });
     const chunks: Buffer[] = [];
@@ -135,121 +219,56 @@ function buildPdf(data: ReportData): Promise<Buffer> {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(20).fillColor('#0f766e').text('CSHSE Self-Study — Reader Report', { align: 'left' });
+    doc.fontSize(16).fillColor('#0f766e').text(`CSHSE Self-Study Reader Report — ${levelTitle}`);
+    doc.moveDown(0.4);
+    doc.fontSize(11).fillColor('#111827').text(`Institution's Name: ${data.institutionName}`);
+    doc.text(`Program's Name: ${data.programName}`);
+    doc.fontSize(9).fillColor('#6b7280').text("Reader's Name and Credential: ____________________________     Date: ______________");
     doc.moveDown(0.3);
-    doc.fontSize(12).fillColor('#111827').text(data.institutionName);
-    doc.fontSize(11).fillColor('#374151').text(`${data.programName}${data.programLevel ? ` (${data.programLevel})` : ''}`);
-    if (data.submittedAt) doc.fontSize(9).fillColor('#6b7280').text(`Submitted ${new Date(data.submittedAt).toLocaleDateString()}`);
-    doc.moveDown(1);
+    doc.fontSize(8).fillColor('#6b7280').text('Compliance marks below are an AI-generated DRAFT rolled up from the per-specification AI verdicts. The assigned reader reviews and adjusts each mark and comment.');
+    doc.moveDown(0.6);
 
     for (const std of data.standards) {
-      const anyContent = std.specs.some((s) => s.narrative || s.evidence || s.verdict);
-      if (!anyContent) continue;
-      doc.addPage();
-      doc.fontSize(15).fillColor('#0f766e').text(`Standard ${std.code}: ${std.title}`);
-      doc.moveDown(0.4);
-      for (const s of std.specs) {
-        if (s.excluded) {
-          doc.fontSize(11).fillColor('#6b7280').text(`${s.std}.${s.spec} ${s.title} — Marked Not Applicable`);
-          doc.moveDown(0.4);
-          continue;
-        }
-        if (!s.narrative && !s.evidence && !s.verdict) continue;
-        doc.fontSize(12).fillColor('#111827').text(`${s.std}.${s.spec}  ${s.title}`, { underline: false });
-        if (s.verdict) {
-          const color = s.verdict === 'pass' ? '#15803d' : s.verdict === 'needs_improvement' ? '#b45309' : '#b91c1c';
-          doc.fontSize(10).fillColor(color).text(`AI verdict: ${VERDICT_LABEL[s.verdict] || s.verdict}`);
-        }
-        if (s.narrative) {
-          doc.fontSize(9).fillColor('#374151').text('Narrative:', { continued: false });
-          doc.fontSize(9).fillColor('#111827').text(s.narrative, { paragraphGap: 4 });
-        }
-        if (s.evidence) {
-          doc.fontSize(9).fillColor('#374151').text('Supporting evidence:');
-          doc.fontSize(9).fillColor('#111827').text(s.evidence, { paragraphGap: 4 });
-        }
-        if (s.rationale) {
-          doc.fontSize(9).fillColor('#374151').text('AI rationale:');
-          doc.fontSize(9).fillColor('#111827').text(s.rationale, { paragraphGap: 4 });
-        }
-        if (s.suggestions?.length) {
-          doc.fontSize(9).fillColor('#374151').text('Suggestions:');
-          for (const sug of s.suggestions) doc.fontSize(9).fillColor('#111827').text(`• ${sug}`);
-        }
-        doc.moveDown(0.6);
+      const r = rollup.get(std.code) || { mark: null, comment: '' };
+      if (r.mark === null && !r.comment) continue;
+      doc.fontSize(11).fillColor('#111827').text(`Standard ${std.code}: ${std.title}`);
+      const compMark = r.mark === 'compliant' ? '☒' : '☐';
+      const nonMark = r.mark === 'noncompliant' ? '☒' : '☐';
+      const color = r.mark === 'compliant' ? '#15803d' : r.mark === 'noncompliant' ? '#b91c1c' : '#6b7280';
+      doc.fontSize(10).fillColor(color).text(`${compMark} Compliant     ${nonMark} Non-Compliant`);
+      if (r.comment) {
+        doc.fontSize(9).fillColor('#374151').text('Reader’s Comments (AI draft):');
+        doc.fontSize(9).fillColor('#111827').text(r.comment, { paragraphGap: 3 });
       }
+      doc.moveDown(0.5);
     }
 
     if (data.matrices.length) {
       doc.addPage();
-      doc.fontSize(15).fillColor('#0f766e').text('Curriculum Matrices');
-      doc.moveDown(0.4);
+      doc.fontSize(13).fillColor('#0f766e').text('Curriculum Matrices');
+      doc.moveDown(0.3);
       for (const m of data.matrices) {
-        doc.fontSize(12).fillColor('#111827').text(m.title);
-        doc.fontSize(8).fillColor('#374151').text(m.text, { paragraphGap: 4 });
-        doc.moveDown(0.6);
+        doc.fontSize(11).fillColor('#111827').text(m.title);
+        doc.fontSize(8).fillColor('#374151').text(m.text, { paragraphGap: 3 });
+        doc.moveDown(0.4);
       }
     }
 
+    doc.addPage();
+    doc.fontSize(12).fillColor('#111827').text('Recommendation to the Council');
+    doc.moveDown(0.3);
+    doc.fontSize(10).fillColor('#374151').text('☐ Accreditation with no conditions');
+    doc.text('☐ Conditional accreditation (correctable noncompliance)');
+    doc.text('☐ Deny accreditation due to significant noncompliance');
+    doc.text('☐ Hold a decision');
+    doc.moveDown(1);
+    doc.text('Self-Study Reader Signature: ____________________________     Date: ______________');
     doc.end();
   });
 }
 
-/** Build the CSHSE-branded DOCX. */
-async function buildDocx(data: ReportData): Promise<Buffer> {
-  const children: Paragraph[] = [];
-  children.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun('CSHSE Self-Study — Reader Report')] }));
-  children.push(new Paragraph({ children: [new TextRun({ text: data.institutionName, bold: true })] }));
-  children.push(new Paragraph({ children: [new TextRun(`${data.programName}${data.programLevel ? ` (${data.programLevel})` : ''}`)] }));
-  if (data.submittedAt) children.push(new Paragraph({ children: [new TextRun({ text: `Submitted ${new Date(data.submittedAt).toLocaleDateString()}`, italics: true, size: 18 })] }));
-
-  for (const std of data.standards) {
-    const anyContent = std.specs.some((s) => s.narrative || s.evidence || s.verdict);
-    if (!anyContent) continue;
-    children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(`Standard ${std.code}: ${std.title}`)] }));
-    for (const s of std.specs) {
-      if (s.excluded) {
-        children.push(new Paragraph({ children: [new TextRun({ text: `${s.std}.${s.spec} ${s.title} — Marked Not Applicable`, italics: true })] }));
-        continue;
-      }
-      if (!s.narrative && !s.evidence && !s.verdict) continue;
-      children.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun(`${s.std}.${s.spec}  ${s.title}`)] }));
-      if (s.verdict) children.push(new Paragraph({ children: [new TextRun({ text: `AI verdict: ${VERDICT_LABEL[s.verdict] || s.verdict}`, bold: true })] }));
-      if (s.narrative) {
-        children.push(new Paragraph({ children: [new TextRun({ text: 'Narrative:', bold: true })] }));
-        for (const line of s.narrative.split('\n')) children.push(new Paragraph({ children: [new TextRun(line)] }));
-      }
-      if (s.evidence) {
-        children.push(new Paragraph({ children: [new TextRun({ text: 'Supporting evidence:', bold: true })] }));
-        for (const line of s.evidence.split('\n')) children.push(new Paragraph({ children: [new TextRun(line)] }));
-      }
-      if (s.rationale) {
-        children.push(new Paragraph({ children: [new TextRun({ text: 'AI rationale:', bold: true })] }));
-        children.push(new Paragraph({ children: [new TextRun(s.rationale)] }));
-      }
-      for (const sug of s.suggestions || []) children.push(new Paragraph({ children: [new TextRun(`• ${sug}`)] }));
-    }
-  }
-
-  if (data.matrices.length) {
-    children.push(new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Curriculum Matrices')] }));
-    for (const m of data.matrices) {
-      children.push(new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun(m.title)] }));
-      for (const line of m.text.split('\n')) children.push(new Paragraph({ children: [new TextRun(line)] }));
-    }
-  }
-
-  const doc = new Document({ sections: [{ properties: {}, ...brandedSectionChrome(), children }] } as any);
-  return Packer.toBuffer(doc);
-}
-
 /** Upsert one reader-report file (by tag) into the Supporting File Library. */
-async function upsertReportFile(
-  submission: any,
-  userId: any,
-  fmt: 'pdf' | 'docx',
-  buffer: Buffer
-): Promise<void> {
+async function upsertReportFile(submission: any, userId: any, fmt: 'pdf' | 'docx', buffer: Buffer): Promise<void> {
   const tag = `reader-report:${fmt}`;
   const filename = `Reader-Report-${String(submission.institutionName || 'submission').replace(/[^a-z0-9]+/gi, '-')}.${fmt}`;
   const mimeType = fmt === 'pdf'
@@ -264,7 +283,7 @@ async function upsertReportFile(
   const existing: any = await SupportingEvidence.findOne({ submissionId: submission._id, tags: tag, isDeleted: false });
   if (existing) {
     existing.file = fileData as any;
-    existing.description = 'Reader Report (full self-study + AI verdicts)';
+    existing.description = 'Reader Report (official CSHSE template, AI-drafted)';
     existing.markModified('file');
     await existing.save();
     return;
@@ -275,7 +294,7 @@ async function upsertReportFile(
     uploadedBy,
     evidenceType: 'document',
     file: fileData as any,
-    description: 'Reader Report (full self-study + AI verdicts)',
+    description: 'Reader Report (official CSHSE template, AI-drafted)',
     metadata: { description: `Auto-generated reader report (${fmt.toUpperCase()})` },
     versionNumber: 1, isCurrentVersion: true, isDeleted: false,
     linkedNarratives: [],
@@ -283,16 +302,31 @@ async function upsertReportFile(
   });
 }
 
-/** Build BOTH formats and store them in the library. Idempotent (upsert by tag). */
+/** Build BOTH formats from the official template and store them. Idempotent. */
 export async function generateAndStoreReaderReport(
-  submissionId: string,
-  userId?: any
-): Promise<{ pdf: boolean; docx: boolean }> {
-  const submission: any = await Submission.findById(submissionId).select('_id institutionId institutionName submitterId');
-  if (!submission) return { pdf: false, docx: false };
+  submissionId: string, userId?: any
+): Promise<{ pdf: boolean; docx: boolean; level: string; templated: boolean }> {
+  const submission: any = await Submission.findById(submissionId)
+    .select('_id institutionId institutionName submitterId programLevel');
+  if (!submission) return { pdf: false, docx: false, level: '', templated: false };
+
   const data = await gatherReportData(submissionId);
-  const [pdfBuf, docxBuf] = await Promise.all([buildPdf(data), buildDocx(data)]);
+  const rollup = rollupByStandard(data);
+  const { key, cfg } = resolveLevel(data.programLevel || submission.programLevel);
+  const levelTitle = cfg?.title || "Master's Degree";
+
+  let docxBuf: Buffer;
+  let templated = false;
+  if (cfg && fs.existsSync(templatePath(cfg.file))) {
+    docxBuf = await buildTemplatedDocx(cfg, data, rollup);
+    templated = true;
+  } else {
+    // masters (or missing template) → procedural checklist fallback
+    docxBuf = await buildProceduralDocx(data, rollup, levelTitle);
+  }
+  const pdfBuf = await buildChecklistPdf(data, rollup, levelTitle);
+
   await upsertReportFile(submission, userId, 'pdf', pdfBuf);
   await upsertReportFile(submission, userId, 'docx', docxBuf);
-  return { pdf: true, docx: true };
+  return { pdf: true, docx: true, level: key, templated };
 }
