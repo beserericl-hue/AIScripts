@@ -589,6 +589,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         });
       // The dashboard DRAFTS / workflow-summary also reflect approvals.
       queryClient.invalidateQueries({ queryKey: ['workflow-summary', submissionId] });
+      // Approving now also applies curriculum matrices (server-side) — refresh
+      // the Curriculum Matrix view so they appear without a manual reload.
+      queryClient.invalidateQueries({ queryKey: ['matrix', submissionId] });
     });
     return unsub;
   }, [submissionId, queryClient]);

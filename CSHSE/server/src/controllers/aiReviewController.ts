@@ -22,6 +22,7 @@ import { Document, Packer, Paragraph, HeadingLevel } from 'docx';
 
 import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
+import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { ValidationService } from '../services/validationService';
 import { applyAIImportCore } from './aiImportController';
 
@@ -549,6 +550,63 @@ function evidenceBodyText(html?: string | null, fallback?: string | null): strin
 }
 
 /**
+ * 2026-06-09 — Unify "Approve all" with matrices. Matrices historically had a
+ * SEPARATE apply path (import-time → CurriculumMatrix.rawContent), so approving
+ * review items moved narratives/evidence/intros but NOT the curriculum matrices.
+ * This materializes any detected matrices (aiMatrixState.matrices) into the
+ * submission's CurriculumMatrix.rawContent — the source the Matrix editor
+ * renders — so a single Approve also pushes the matrices.
+ *
+ * Idempotent + duplicate-safe: a matrix is skipped if an existing rawContent
+ * entry already carries the same HTML or title (the import may have applied it),
+ * so this never double-inserts.
+ */
+async function materializeApprovedMatrices(submission: any, userId: any): Promise<number> {
+  const matrices = (submission as any).aiMatrixState?.matrices;
+  if (!Array.isArray(matrices) || matrices.length === 0) return 0;
+  let cm: any = await CurriculumMatrix.findOne({ submissionId: submission._id });
+  if (!cm) {
+    cm = new CurriculumMatrix({
+      submissionId: submission._id,
+      matrixType: 'human_services_courses',
+      name: 'Curriculum Matrix',
+      version: 1,
+      lastModified: new Date(),
+      lastModifiedBy: userId ? new mongoose.Types.ObjectId(String(userId)) : submission.submitterId,
+      courses: [],
+      standards: [],
+      rawContent: [],
+    });
+  }
+  if (!Array.isArray(cm.rawContent)) cm.rawContent = [];
+  let changed = 0;
+  for (const m of matrices) {
+    const html = m?.htmlSnippet;
+    if (!html) continue;
+    const already = cm.rawContent.some(
+      (r: any) => r?.content === html || (m.name && r?.title === m.name)
+    );
+    if (already) continue;
+    cm.rawContent.push({
+      id: `matrix-ai-${m.matrixId || m.name || 'mx'}`,
+      content: html,
+      title: m.name || 'Curriculum Matrix',
+      addedAt: new Date(),
+      addedBy: userId ? new mongoose.Types.ObjectId(String(userId)) : submission.submitterId,
+      processed: true,
+      processedAt: new Date(),
+    });
+    changed += 1;
+  }
+  if (changed > 0) {
+    cm.lastModified = new Date();
+    cm.markModified('rawContent');
+    await cm.save();
+  }
+  return changed;
+}
+
+/**
  * Auto-run the AI evaluation for the specs whose editor content just changed,
  * so the final-editing step already has verdicts/suggestions — no manual
  * "Validate" click per spec. Fire-and-forget with a small concurrency cap so a
@@ -621,13 +679,16 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   // Auto-apply: approving moves the text straight into the editor (replaces the
   // old separate "Apply to editor" button). Idempotent — safe on every call.
   const affected = await materializeApprovedToEditor(submission, req.user?.id);
+  // Unify with matrices: approving also pushes detected curriculum matrices into
+  // the editor's CurriculumMatrix (idempotent; no-op when none are pending).
+  const matricesApplied = await materializeApprovedMatrices(submission, req.user?.id);
   await submission.save();
   // Run the AI evaluation for the affected specs so the final editor already has
   // the verdicts — saves the coordinator a manual "Validate" per spec. Awaited
   // (post-response fire-and-forget gets torn down on Railway), but the client
   // approve call is itself fire-and-forget so the UI never blocks on this.
   const evalSummary = await runAutoEvaluations(submission, affected);
-  res.json({ ok: true, approvedIds: state.approvedIds, autoEval: evalSummary, evidence: (submission as any).__evidenceStats ?? null });
+  res.json({ ok: true, approvedIds: state.approvedIds, autoEval: evalSummary, evidence: (submission as any).__evidenceStats ?? null, matricesApplied });
 }
 
 /**
