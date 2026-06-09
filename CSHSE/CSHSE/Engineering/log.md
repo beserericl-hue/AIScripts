@@ -2136,3 +2136,19 @@ numbers are wrong". Root causes + fixes:
 
 New spec 59 (unassigned CV+syllabus → materialize with body text) FAILED pre-fix, PASSES post-fix.
 Commits 1647b7c, c61082b, f5b5b59, bfefbd8, 556f5fd.
+
+## [2026-06-08] UX | One AI report (3-level) + readable editor sections
+User-reported: two AI verdicts that disagreed ("Failed" top pill vs "Needs improvement" bottom
+panel) and clipped narrative/evidence/report. Investigation: SAME evaluation — both the toolbar
+"Validate" button (POST /webhooks/validate) and the bottom "Run AI Review" (POST /…/evaluate) call
+validationService.validateSection → one ValidationResult. The result carries BOTH `status` (binary
+submit gate: pass/fail) and `verdict` (3-level: pass/needs_improvement/fail). The top pill rendered
+`status` (so needs_improvement showed as "Failed"); the bottom panel rendered `verdict`. Per user
+choice ("drop the bottom panel; keep the top pill at 3-level with expandable rationale; collapsible
+sections"): useValidationStatus now exposes verdict + criteriaCoverage (+ added them to the client
+ValidationResult type); NarrativeEditor's spec-header pill is 3-level (Passed/Needs improvement/Failed)
+and toggles ONE inline collapsible AI report (rationale + suggestions + missing elements + criteria),
+replacing the binary modal; removed the bottom SpecAIReview panel. Readability: Supporting Evidence
+editor max-h 400px→70vh; AI report scrolls within 60vh. Verified: /validation/latest for 1.e returns
+status=fail BUT verdict=needs_improvement (847-char feedback, 6 suggestions, 8 criteria) → pill now
+reads "Needs improvement". Editor E2E (48/52/53/58) green. Commit c21ba7b.
