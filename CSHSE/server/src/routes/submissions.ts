@@ -110,7 +110,9 @@ import {
   finishReview,
   applyReviewState,
   getMatrixState,
-  setMatrixRowEdit
+  setMatrixRowEdit,
+  evaluateAllSpecs,
+  getEvalProgress
 } from '../controllers/aiReviewController';
 
 router.get('/:submissionId/review', getReviewState);
@@ -124,6 +126,9 @@ router.post('/:submissionId/review/route-evidence', submissionLockout, routeEvid
 router.post('/:submissionId/review/split-item', submissionLockout, splitReviewItem);
 // Persist the whole approved-id set (Approve / Approve-all / Clear).
 router.post('/:submissionId/review/set-approved', submissionLockout, setApprovedIds);
+// Background AI-evaluation queue: "Validate all" enqueues every spec; poll progress.
+router.post('/:submissionId/review/evaluate-all', submissionLockout, evaluateAllSpecs);
+router.get('/:submissionId/review/eval-progress', getEvalProgress);
 // Autosave review-rail content (change-kind, reassign, edit, move, etc.).
 router.post('/:submissionId/review/save-state', submissionLockout, saveReviewState);
 // CR-048 — "I'm done reviewing": discard all remaining un-triaged drafts.

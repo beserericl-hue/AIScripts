@@ -683,12 +683,96 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   // the editor's CurriculumMatrix (idempotent; no-op when none are pending).
   const matricesApplied = await materializeApprovedMatrices(submission, req.user?.id);
   await submission.save();
-  // Run the AI evaluation for the affected specs so the final editor already has
-  // the verdicts — saves the coordinator a manual "Validate" per spec. Awaited
-  // (post-response fire-and-forget gets torn down on Railway), but the client
-  // approve call is itself fire-and-forget so the UI never blocks on this.
-  const evalSummary = await runAutoEvaluations(submission, affected);
-  res.json({ ok: true, approvedIds: state.approvedIds, autoEval: evalSummary, evidence: (submission as any).__evidenceStats ?? null, matricesApplied });
+  // 2026-06-09 — instead of synchronously evaluating up to 24 specs (which left
+  // the rest un-evaluated), ENQUEUE every affected spec for background AI
+  // evaluation. The worker drains the queue in batches so "Approve all" runs the
+  // AI against EVERYTHING without blocking the request/UI.
+  const evalQueued = await enqueueSpecsForEval(submission._id, affected.map((a) => `${a.std}.${a.spec}`));
+  res.json({
+    ok: true,
+    approvedIds: state.approvedIds,
+    evidence: (submission as any).__evidenceStats ?? null,
+    matricesApplied,
+    evalQueued, // how many specs were (re)queued for background evaluation
+  });
+}
+
+/** Specs (as "std.spec") that currently have non-empty narrative content. */
+function specsWithContent(submission: any): string[] {
+  const out: string[] = [];
+  const narr = submission.narratives;
+  if (!narr) return out;
+  const stdEntries: Array<[string, any]> =
+    narr instanceof Map ? Array.from(narr.entries()) : Object.entries(narr);
+  for (const [std, specMap] of stdEntries) {
+    const specEntries: Array<[string, any]> =
+      specMap instanceof Map ? Array.from(specMap.entries()) : Object.entries(specMap || {});
+    for (const [spec, entry] of specEntries) {
+      if (((entry?.content as string) || '').trim()) out.push(`${std}.${spec}`);
+    }
+  }
+  return out;
+}
+
+/** Merge spec keys into the submission's background eval queue (atomic). */
+async function enqueueSpecsForEval(submissionId: any, keys: string[]): Promise<number> {
+  const unique = [...new Set(keys.filter(Boolean))];
+  if (unique.length === 0) return 0;
+  await Submission.updateOne(
+    { _id: submissionId },
+    {
+      $addToSet: { aiEvalQueue: { $each: unique } },
+      $set: { aiEvalQueueStartedAt: new Date() },
+      $unset: { aiEvalQueueDoneAt: '' },
+    }
+  );
+  // Bump the high-water-mark total so progress (done = total - remaining) is sane.
+  const fresh: any = await Submission.findById(submissionId).select('aiEvalQueue aiEvalQueueTotal');
+  const len = (fresh?.aiEvalQueue || []).length;
+  const total = Math.max(fresh?.aiEvalQueueTotal || 0, len);
+  await Submission.updateOne({ _id: submissionId }, { $set: { aiEvalQueueTotal: total } });
+  return unique.length;
+}
+
+/**
+ * POST /api/submissions/:submissionId/review/evaluate-all
+ * Queue EVERY spec-with-content for background AI evaluation ("Validate all").
+ * Returns immediately; the worker drains the queue. Progress via /eval-progress.
+ */
+export async function evaluateAllSpecs(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const keys = specsWithContent(submission);
+  await Submission.updateOne(
+    { _id: submission._id },
+    {
+      $set: {
+        aiEvalQueue: keys,
+        aiEvalQueueTotal: keys.length,
+        aiEvalQueueStartedAt: new Date(),
+      },
+      $unset: { aiEvalQueueDoneAt: '' },
+    }
+  );
+  res.json({ ok: true, queued: keys.length });
+}
+
+/**
+ * GET /api/submissions/:submissionId/review/eval-progress
+ * Progress of the background AI-evaluation queue.
+ */
+export async function getEvalProgress(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const remaining = ((submission as any).aiEvalQueue || []).length;
+  const total = (submission as any).aiEvalQueueTotal || 0;
+  res.json({
+    total,
+    remaining,
+    done: Math.max(0, total - remaining),
+    running: remaining > 0,
+    doneAt: (submission as any).aiEvalQueueDoneAt || null,
+  });
 }
 
 /**

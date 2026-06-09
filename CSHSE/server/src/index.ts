@@ -11,6 +11,7 @@ import {
 } from './middleware/errorHandler';
 import { initializeSuperuser } from './services/superuserInit';
 import { runMigrations } from './services/migrations';
+import { startEvalQueueWorker } from './services/evalQueueWorker';
 
 // Import routes
 import importsRouter from './routes/imports';
@@ -255,6 +256,10 @@ const startServer = async () => {
 
     // Run data migrations (idempotent)
     await runMigrations();
+
+    // Start the background AI-evaluation queue worker (drains
+    // Submission.aiEvalQueue in small batches; survives restarts).
+    startEvalQueueWorker();
   } catch (error) {
     dbError = error instanceof Error ? error.message : 'Unknown database error';
     console.error('Database connection failed:', dbError);

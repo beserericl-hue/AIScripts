@@ -198,6 +198,14 @@ export interface ISubmission extends Document {
   // CR-043 — submission-scoped pre-Apply matrix state. Separate from
   // the post-Apply curriculumMatrices array.
   aiMatrixState?: IAIMatrixState;
+  // 2026-06-09 — background AI-evaluation queue. "Validate all" / "Approve all"
+  // enqueue every spec-with-content here as "std.spec" keys; a background worker
+  // drains it in small batches (calls cshse-ai) so the UI never blocks. Total +
+  // timestamps drive a progress indicator.
+  aiEvalQueue?: string[];
+  aiEvalQueueTotal?: number;
+  aiEvalQueueStartedAt?: Date;
+  aiEvalQueueDoneAt?: Date;
 
   // Reader lock
   readerLock: IReaderLock;
@@ -361,6 +369,11 @@ const SubmissionSchema = new Schema<ISubmission>({
   // parse-complete.
   aiReviewState: { type: Schema.Types.Mixed, default: undefined },
   aiMatrixState: { type: Schema.Types.Mixed, default: undefined },
+  // Background AI-evaluation queue (see interface).
+  aiEvalQueue: { type: [String], default: undefined },
+  aiEvalQueueTotal: { type: Number, default: undefined },
+  aiEvalQueueStartedAt: { type: Date, default: undefined },
+  aiEvalQueueDoneAt: { type: Date, default: undefined },
   documents: [DocumentRefSchema],
   decision: DecisionSchema,
   assignedReaders: [{

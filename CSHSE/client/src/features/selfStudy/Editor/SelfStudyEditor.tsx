@@ -742,6 +742,32 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     refetchOnMount: 'always',
   });
 
+  // 2026-06-09 — "Validate All": background AI-evaluation queue. The button
+  // enqueues every spec-with-content server-side; this query polls progress
+  // while a job runs so the UI shows "Validating X/Y" without blocking.
+  const { data: evalProgress } = useQuery<{ total: number; remaining: number; done: number; running: boolean }>({
+    queryKey: ['eval-progress', submissionId],
+    queryFn: async () => (await api.get(`/api/submissions/${submissionId}/review/eval-progress`)).data,
+    enabled: !!submissionId && isProgramCoordinator,
+    refetchInterval: (q: any) => (q?.state?.data?.running ? 3000 : false),
+    refetchOnWindowFocus: false,
+  });
+  const validateAllMutation = useMutation({
+    mutationFn: async () => (await api.post(`/api/submissions/${submissionId}/review/evaluate-all`)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['eval-progress', submissionId] }),
+  });
+  // When the queue finishes, refresh verdicts + the Validated counter.
+  const prevEvalRunningRef = useRef(false);
+  useEffect(() => {
+    const running = !!evalProgress?.running;
+    if (prevEvalRunningRef.current && !running) {
+      queryClient.invalidateQueries({ queryKey: ['submission', submissionId] });
+      queryClient.invalidateQueries({ queryKey: ['validation', submissionId] });
+      setEditorRefreshKey((prev) => prev + 1);
+    }
+    prevEvalRunningRef.current = running;
+  }, [evalProgress?.running, queryClient, submissionId]);
+
   // Fetch standards definitions
   const { data: standards, isLoading: loadingStandards, isError: standardsError } = useQuery<StandardDefinition[]>({
     queryKey: ['standards'],
@@ -2546,6 +2572,30 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     per-standard paste-and-tag modal (showImportModal).
                     "AI Import" tab opens the full wizard. Both write to
                     the same Submission record; PCs can mix and match. */}
+
+                {/* Validate All — runs the AI evaluation against EVERY spec with
+                    content, queued in the background (non-blocking). */}
+                {!isEditingDisabled && (
+                  <button
+                    data-testid="validate-all-cta"
+                    onClick={() => validateAllMutation.mutate()}
+                    disabled={validateAllMutation.isPending || !!evalProgress?.running}
+                    title="Run the AI review against every specification (runs in the background)"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-primary-300 text-primary-700 hover:bg-primary-50 disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    {evalProgress?.running ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Validating {evalProgress.done}/{evalProgress.total}…
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4" />
+                        Validate All
+                      </>
+                    )}
+                  </button>
+                )}
 
                 {/* Validation Progress */}
                 <span className="text-sm text-gray-500">
