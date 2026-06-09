@@ -1735,14 +1735,36 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
 
     await submission.save();
 
-    // CR-049 Phase 4a — auto-run the AI section evaluation across all specs
-    // with content to seed the reader report. Detached (this is a persistent
-    // Express process, not serverless): the heavy per-spec work runs in the
-    // background so the submit response returns immediately. Best-effort —
-    // a seed failure never blocks the submission.
-    void validationService
-      .runReaderReportSeed(submissionId)
-      .catch((err) => console.error('[CR-049] reader-report seed failed', err));
+    // 2026-06-09 — Submit also QUEUES a full "Validate all": every spec with
+    // content is enqueued onto the background AI-evaluation queue (drained by the
+    // evalQueueWorker), so the reader report is seeded reliably without the old
+    // detached fire-and-forget (which could be torn down on Railway). Non-blocking.
+    try {
+      const keys: string[] = [];
+      const narr: any = submission.narratives;
+      if (narr && typeof narr.forEach === 'function') {
+        narr.forEach((specMap: any, std: string) => {
+          if (specMap && typeof specMap.forEach === 'function') {
+            specMap.forEach((data: any, spec: string) => {
+              if (((data?.content as string) || '').replace(/<[^>]*>/g, '').trim().length > 0) {
+                keys.push(`${std}.${spec}`);
+              }
+            });
+          }
+        });
+      }
+      if (keys.length > 0) {
+        await Submission.updateOne(
+          { _id: submissionId },
+          {
+            $set: { aiEvalQueue: keys, aiEvalQueueTotal: keys.length, aiEvalQueueStartedAt: new Date() },
+            $unset: { aiEvalQueueDoneAt: '' },
+          }
+        );
+      }
+    } catch (seedErr) {
+      console.error('[submit] enqueue full AI evaluation failed (non-fatal):', seedErr);
+    }
 
     // CR-006 audit trail — record the final-submit event with the optional
     // submission note the PC enters in the confirm modal.
