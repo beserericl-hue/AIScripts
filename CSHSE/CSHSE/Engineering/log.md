@@ -2190,3 +2190,25 @@ beser.ericl@gmail.com):
    that nothing approved is left un-moved. 10/10 incl 44/48/52/53/55/56/57/58/59/60 green.
 NOTE: approved items remain VISIBLE in the review panel (marked approved) by design — they don't
 vanish after moving; "nothing left" = 0 pending / 0 un-moved.
+
+## [2026-06-09] feat | Unify Approve with matrices + matrix completeness E2E (CR follow-on)
+User asked: (1) add matrices to the completeness guarantee, (2) make "Approve all" also apply matrices;
+and clarified what "Approve all" covers. Answers/work:
+ - "Approve all" (green button, approveEverything) approves the ENTIRE review in total: every spec's
+   narratives+evidenceText+evidenceFiles (all specs/sub-specs), ALL CVs, ALL syllabi, ALL papers, ALL
+   introductions. (The per-spec card-list header checkbox approves just that one spec.) It did NOT
+   touch matrices — now fixed.
+ - Matrices are a SEPARATE artifact (CurriculumMatrix.rawContent), rendered by the Matrix editor, NOT
+   the narrative editor; historically applied at import time, outside the approve flow.
+ - UNIFY: setApprovedIds now also runs materializeApprovedMatrices — detected matrices
+   (aiMatrixState.matrices) are written into CurriculumMatrix.rawContent (find-or-create one per
+   submission). Idempotent + duplicate-safe (skip if an entry already has the same HTML/title), so it
+   never double-inserts the import's matrices and re-approve is a no-op. Response adds matricesApplied.
+   Client: the reviewMaterializedAt bridge also invalidates ['matrix'] so the Curriculum Matrix view
+   refreshes after approve.
+ - VERIFIED on Stevenson (6986239a): Curriculum Matrix already has 3 rawContent tables (Std 11/12/13,
+   Baccalaureate), renders in the UI (4 tables, no errors); aiMatrixState empty so matricesApplied=0
+   (no-op) — matrices already in the editor.
+ - E2E spec 61: seed a matrix+narrative, approve → matrix HTML in CurriculumMatrix exactly once
+   (matricesApplied 1), re-approve → 0 (no dup). 11/11 green (44/48/52/53/55/56/57/58/59/60/61).
+Commit 6515229.
