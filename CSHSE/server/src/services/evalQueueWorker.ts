@@ -13,6 +13,7 @@
  */
 import { Submission } from '../models/Submission';
 import { ValidationService } from './validationService';
+import { generateAndStoreReaderReport } from './readerReportGenerator';
 
 const TICK_MS = 4000;
 const BATCH = 3;            // specs evaluated per tick (matches the old CONCURRENCY)
@@ -67,12 +68,23 @@ export async function processEvalQueueTick(): Promise<void> {
       { $pull: { aiEvalQueue: { $in: batch } } }
     );
     // If that drained the queue, stamp completion.
-    const after: any = await Submission.findById(sub._id).select('aiEvalQueue');
+    const after: any = await Submission.findById(sub._id).select('aiEvalQueue status');
     if (after && (after.aiEvalQueue || []).length === 0) {
       await Submission.updateOne(
         { _id: sub._id },
         { $set: { aiEvalQueueDoneAt: new Date() } }
       );
+      // Once a SUBMITTED submission's full validate-all finishes, every spec has
+      // a verdict — compile the Reader Report (full self-study + AI verdicts, PDF
+      // + DOCX) into the library so assigned readers can download it. Idempotent.
+      if (!['in_progress', 'draft'].includes(String(after.status))) {
+        try {
+          const r = await generateAndStoreReaderReport(String(sub._id));
+          console.log(`[evalQueueWorker] reader report generated for ${sub._id} (pdf=${r.pdf} docx=${r.docx})`);
+        } catch (repErr) {
+          console.error('[evalQueueWorker] reader report generation failed (non-fatal):', repErr);
+        }
+      }
     }
   } catch (err) {
     console.warn('[evalQueueWorker] tick failed (non-fatal):', err);

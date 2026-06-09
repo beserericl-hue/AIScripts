@@ -4,7 +4,8 @@ import {
   generateCompilationReportPDF,
   generateAllReaderReportsPDF,
   previewReaderReport,
-  previewCompilationReport
+  previewCompilationReport,
+  generateReaderReportNow
 } from '../controllers/reportController';
 import { authenticate } from '../middleware/auth';
 
@@ -37,6 +38,15 @@ router.get('/reader/:reviewId/preview', previewReaderReport);
  * @access  Private (Lead Reader, Admin)
  */
 router.get('/submission/:submissionId/all-readers/pdf', generateAllReaderReportsPDF);
+
+/**
+ * @route   POST /api/reports/submission/:submissionId/reader-report/generate
+ * @desc    Compile the Reader Report (full self-study + AI verdicts) into the
+ *          library as PDF + DOCX. Auto-runs after a submitted submission's
+ *          background validate-all finishes; this forces an immediate rebuild.
+ * @access  Private (PC owner, Reader/Lead assigned, Admin)
+ */
+router.post('/submission/:submissionId/reader-report/generate', generateReaderReportNow);
 
 // ============================================
 // COMPILATION REPORT PDF ROUTES

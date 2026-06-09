@@ -5,6 +5,7 @@ import { LeadReaderCompilation } from '../models/LeadReaderCompilation';
 import { User } from '../models/User';
 import { Score } from '../models/Score';
 import { PDFGeneratorService } from '../services/pdfGenerator';
+import { generateAndStoreReaderReport } from '../services/readerReportGenerator';
 
 /**
  * CR-003 / S11.1 — build the per-spec 0-3 score map for a reader's report,
@@ -271,5 +272,29 @@ export const previewCompilationReport = async (req: AuthenticatedRequest, res: R
   } catch (error) {
     console.error('Preview compilation report error:', error);
     return res.status(500).json({ error: 'Failed to generate preview' });
+  }
+};
+
+/**
+ * Reader Report (full self-study + AI verdicts) — compile PDF + DOCX and store
+ * both in the submission's Supporting File Library (tagged `reader-report`).
+ * Normally produced automatically when a submitted submission's background
+ * validate-all finishes; this endpoint forces an immediate (re)build for
+ * testing / on-demand refresh. Idempotent (upserts by tag).
+ */
+export const generateReaderReportNow = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(submissionId)) {
+      return res.status(400).json({ error: 'Invalid submission id' });
+    }
+    const result = await generateAndStoreReaderReport(submissionId, req.user?.id);
+    if (!result.pdf && !result.docx) {
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+    return res.json({ ok: true, generated: result });
+  } catch (error) {
+    console.error('Generate reader report error:', error);
+    return res.status(500).json({ error: 'Failed to generate reader report' });
   }
 };
