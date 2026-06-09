@@ -2212,3 +2212,12 @@ and clarified what "Approve all" covers. Answers/work:
  - E2E spec 61: seed a matrix+narrative, approve → matrix HTML in CurriculumMatrix exactly once
    (matricesApplied 1), re-approve → 0 (no dup). 11/11 green (44/48/52/53/55/56/57/58/59/60/61).
 Commit 6515229.
+
+## 2026-06-09 — Submit queues Validate-all + Reader Report (PDF+DOCX) to library
+
+**Request:** "Submit button also queues up a validate all. And generates the Reader Report which is stored in the library so the reader(s) can download."
+
+- **Submit → Validate-all (queue):** `submitSelfStudy` now enqueues every spec-with-content onto `aiEvalQueue` (atomic `$set`) right after status→submitted+save, replacing the old detached `runReaderReportSeed` fire-and-forget. The `evalQueueWorker` drains it (calls cshse-ai per spec) — non-blocking, deploy-resumable.
+- **Reader Report generator** (`services/readerReportGenerator.ts`): compiles the full self-study + AI verdicts into ONE reviewer packet — every standard/spec with the program narrative, supporting-evidence text, the AI verdict (pass / needs improvement / fail) + rationale + suggestions, plus the curriculum matrices. Emits BOTH a CSHSE-branded **PDF** (pdfkit) and **DOCX** (docx + branded header/footer), upserted into the Supporting File Library tagged `reader-report:pdf` / `reader-report:docx`. Idempotent.
+- **Trigger:** the worker generates the report when a SUBMITTED submission's queue drains to empty (every spec has a verdict). Manual rebuild via `POST /api/reports/submission/:id/reader-report/generate` (reportController.generateReaderReportNow).
+- **Verified live:** spec 63 (generate endpoint stores branded PDF+DOCX, correct mime, non-empty, idempotent) + spec 62 (queue worker) both pass. Generated on the REAL Stevenson submission: `Reader-Report-Stevenson-University.pdf` (226 KB) + `.docx` (178 KB) now in its library.
