@@ -379,6 +379,35 @@ async function materializeApprovedToEditor(
   }
   submission.markModified('narratives');
 
+  // --- 1b) approved INTRODUCTION items → documentIntroduction / standardIntroductions ---
+  // BUG FIX 2026-06-09: materialize previously handled narratives + evidence +
+  // CVs/docs but NOT Introduction items, so an approved Document/Standard
+  // introduction was never written into the editor's Introduction section.
+  // Mirror the narrative semantics: a key's content is the concatenation of its
+  // approved intro items (replace, not append) so re-running is idempotent.
+  const introsState = (state.introductions || {}) as Record<string, { items?: any[] }>;
+  let introTouched = false;
+  for (const [ik, ib] of Object.entries(introsState)) {
+    const approvedItems = (ib?.items || []).filter((it: any) => approved.has(it.sectionId));
+    if (approvedItems.length === 0) continue;
+    const html = approvedItems
+      .map((it: any) => it.htmlSnippet || `<p>${escapeHtml(it.snippet || '')}</p>`)
+      .join('\n<hr class="ai-import-merge"/>\n');
+    if (ik === 'document') {
+      submission.documentIntroduction = html;
+      introTouched = true;
+    } else if (ik.startsWith('standard-')) {
+      const code = ik.slice('standard-'.length);
+      if (!submission.standardIntroductions) submission.standardIntroductions = new Map<string, string>();
+      (submission.standardIntroductions as Map<string, string>).set(String(code), html);
+      introTouched = true;
+    }
+  }
+  if (introTouched) {
+    submission.markModified('documentIntroduction');
+    submission.markModified('standardIntroductions');
+  }
+
   // --- 2) approved evidence files / CVs / docs → SupportingEvidence ---
   //
   // 2026-06-07 (user-reported: "no evidence file should be invisible to the AI
