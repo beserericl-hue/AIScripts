@@ -2166,3 +2166,27 @@ reflects the latest materialized narratives (a hard refresh now suffices; stays 
 Verified: reader (52) + lead (53) + editor (58) E2E pass. NOTE: 35_pc_dashboard deep-link test fails
 on a 60s tile-click timeout — on /dashboard, pre-navigation, unrelated to the editor-only change
 (pre-existing/separate; likely tour-overlay click interception). Commit 12634b8.
+
+## [2026-06-09] audit+fix | Full review→editor pipeline audited, DB corrected, extensive E2E added
+User: audit the entire review→self-study move, correct the DB (unknown state from repeated testing),
+and E2E-verify nothing is left unmoved. Findings + actions on submission 6986239a (PC owner
+beser.ericl@gmail.com):
+ - AUDIT: 357 approvedIds but only 339 map to current review items; 0 pending (everything approved).
+   18 orphaned approvedIds were table-fragments from a PRIOR import job (6a10b007…:tbl:) — leftover
+   from re-imports, inflating the "approved" count and unmaterializable.
+ - DB CORRECTION: re-POST set-approved with the 339 valid ids → server prunes the 18 stale + 
+   re-materializes everything. Reconciled per-category: narratives 207/207, evidenceText 66/66,
+   files 9/9, CVs 15/15, papers+syllabi 41/41, intro 1/1 — 0 gaps. SupportingEvidence 67 records,
+   0 genuine orphans (rev id not in approved), 0 missing. (Briefly mis-deleted 6 current rev:6a10b007
+   CV/doc records by prefix; re-heal restored them — orphan detection must compare rev:<id> to the
+   approved set, NOT a job prefix.) documentIntroduction now 14,882 chars; verified renders in UI.
+ - BUG 1 (deployed 0a988e4): materializeApprovedToEditor never handled Introductions. Added a pass:
+   approved `document` items → documentIntroduction; `standard-N` → standardIntroductions[N].
+ - BUG 2 (deployed ae25dcb): getSubmission returned submission.toObject() but Mongoose Maps don't
+   serialize that way — standardsStatus was already flattened, standardIntroductions was NOT, so
+   materialized standard-level intros came back {} and never reached the editor. Flatten + return it.
+ - E2E: new spec 60 seeds an item in EVERY category (narrative, evidenceText, file, CV, syllabus,
+   paper, document intro, standard intro), approves ALL, asserts each lands in its editor target AND
+   that nothing approved is left un-moved. 10/10 incl 44/48/52/53/55/56/57/58/59/60 green.
+NOTE: approved items remain VISIBLE in the review panel (marked approved) by design — they don't
+vanish after moving; "nothing left" = 0 pending / 0 un-moved.
