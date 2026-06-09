@@ -126,6 +126,16 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
       });
     }
 
+    // Flatten standardIntroductions Map → POJO for JSON (same Mongoose-Map
+    // serialization gap as standardsStatus). Without this, materialized
+    // standard-level Introductions came back as {} and never reached the editor.
+    const standardIntroductions: Record<string, string> = {};
+    if (submission.standardIntroductions) {
+      (submission.standardIntroductions as Map<string, string>).forEach((value, key) => {
+        standardIntroductions[key] = value;
+      });
+    }
+
     // Debug: log standardsStatus entries with validationStatus set
     const validatedKeys = Object.entries(standardsStatus)
       .filter(([, v]: [string, any]) => v?.validationStatus)
@@ -139,7 +149,8 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
     return res.json({
       ...submissionObj,
       narrativeContent,
-      standardsStatus
+      standardsStatus,
+      standardIntroductions
     });
   } catch (error) {
     console.error('Get submission error:', error);
