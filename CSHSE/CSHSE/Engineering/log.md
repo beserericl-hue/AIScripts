@@ -2152,3 +2152,17 @@ replacing the binary modal; removed the bottom SpecAIReview panel. Readability: 
 editor max-h 400px→70vh; AI report scrolls within 60vh. Verified: /validation/latest for 1.e returns
 status=fail BUT verdict=needs_improvement (847-char feedback, 6 suggestions, 8 criteria) → pill now
 reads "Needs improvement". Editor E2E (48/52/53/58) green. Commit c21ba7b.
+
+## [2026-06-09] fix | PC editor showed empty = stale react-query cache (not missing data)
+User-reported: approved review items "not in the self study editor"; asked to DB-push them.
+Investigation (definitive): the data was NOT missing — Submission.narratives had 62 specs with
+content, 0 gaps vs approved narratives. Logged in as the REAL PC owner (beser.ericl@gmail.com,
+provided by user) and the editor RENDERED every spec's narrative live (1.a=181, 1.b=1853, 1.c=2081,
+1.e=872 chars, no JS errors). So the editor was never broken. Root cause: client data-freshness —
+the global react-query staleTime is 5min, so an already-open editor tab kept serving a STALE
+(pre-materialize) ['submission'] and looked empty; server-side materializations/heals never signaled
+the tab. Fix: editor ['submission'] query → staleTime:0 + refetchOnMount:'always' so the editor always
+reflects the latest materialized narratives (a hard refresh now suffices; stays fresh after).
+Verified: reader (52) + lead (53) + editor (58) E2E pass. NOTE: 35_pc_dashboard deep-link test fails
+on a 60s tile-click timeout — on /dashboard, pre-navigation, unrelated to the editor-only change
+(pre-existing/separate; likely tour-overlay click interception). Commit 12634b8.
