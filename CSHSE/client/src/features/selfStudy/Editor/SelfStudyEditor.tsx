@@ -728,6 +728,15 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       const response = await api.get(`/api/submissions/${submissionId}`);
       return response.data;
     },
+    // 2026-06-09 — the editor reads `narrativeContent` from this query. The
+    // global 5-minute staleTime meant that after approved items were
+    // materialized server-side (e.g. via Apply / a heal), an already-open
+    // editor tab kept serving the STALE (pre-materialize) submission and the
+    // spec editors looked empty until a hard reload. Force this specific query
+    // to always refetch on mount and treat its data as immediately stale so the
+    // editor reliably reflects the latest materialized narratives.
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   // Fetch standards definitions
