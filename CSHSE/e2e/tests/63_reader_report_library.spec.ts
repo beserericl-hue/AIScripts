@@ -55,6 +55,9 @@ test.describe('Reader Report compiles to PDF + DOCX in the library', () => {
     expect(gen.status).toBe(200);
     expect(gen.body?.ok).toBe(true);
     expect(gen.body?.generated).toMatchObject({ pdf: true, docx: true });
+    // The OFFICIAL CSHSE template (baccalaureate, since the seed is a bachelors program) is used.
+    expect(gen.body?.generated?.templated, 'should fill the official template').toBe(true);
+    expect(gen.body?.generated?.level).toBe('baccalaureate');
 
     // Both files now live in the Supporting File Library.
     const ev = await api(page, `/api/submissions/${seed.submissionId}/evidence`);
