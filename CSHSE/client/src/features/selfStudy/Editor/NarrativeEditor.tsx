@@ -134,11 +134,13 @@ export function NarrativeEditor({
   // Validation status hook
   const {
     status: validationStatus,
+    verdict,
     isValidating,
     triggerValidation,
     feedback,
     suggestions,
     missingElements,
+    criteriaCoverage,
   } = useValidationStatus({
     submissionId,
     standardCode,
@@ -151,7 +153,24 @@ export function NarrativeEditor({
 
   // State for clear section confirmation
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [showValidationModal, setShowValidationModal] = useState(false);
+  // 2026-06-08 — single AI report, shown inline (collapsible) under the spec
+  // (the old `showValidationModal` state + modal were removed)
+  // header instead of a separate bottom panel + modal. Default open so the
+  // coordinator can read the verdict, rationale, suggestions and criteria.
+  const [aiReportOpen, setAiReportOpen] = useState(true);
+  // 3-level verdict drives the pill + report. Fall back to the binary status
+  // when an older record has no verdict. "needs_improvement" is its OWN state
+  // (amber) — it must NOT read as "Failed".
+  const effectiveVerdict: 'pass' | 'needs_improvement' | 'fail' | null =
+    verdict ?? (validationStatus === 'pass' ? 'pass' : validationStatus === 'fail' ? 'fail' : null);
+  const verdictUI = effectiveVerdict
+    ? ({
+        pass: { label: 'Passed', pill: 'bg-green-100 text-green-700', Icon: CheckCircle },
+        needs_improvement: { label: 'Needs improvement', pill: 'bg-amber-100 text-amber-800', Icon: AlertCircle },
+        fail: { label: 'Failed', pill: 'bg-red-100 text-red-700', Icon: AlertCircle },
+      } as const)[effectiveVerdict]
+    : null;
+  const hasAiReport = !!verdictUI && (!!feedback || suggestions.length > 0 || missingElements.length > 0 || criteriaCoverage.length > 0);
 
   // Initialize TipTap editor with Word paste support
   const editor = useEditor({
@@ -535,24 +554,19 @@ export function NarrativeEditor({
               <h5 className="text-sm font-semibold text-teal-800 mb-1">
                 {standardCode}.{specCode} - {specTitle}
               </h5>
-              {/* Validation status badge */}
-              {validationStatus !== 'pending' && feedback && (
+              {/* Single AI verdict pill (3-level). Click to show/hide the one
+                  inline AI report below — no separate bottom panel or modal. */}
+              {verdictUI && (
                 <button
-                  onClick={() => setShowValidationModal(true)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                    validationStatus === 'pass'
-                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                      : 'bg-red-100 text-red-700 hover:bg-red-200'
-                  }`}
-                  title="View validation details"
+                  onClick={() => setAiReportOpen((o) => !o)}
+                  data-testid="ai-verdict-pill"
+                  data-verdict={effectiveVerdict ?? ''}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors hover:brightness-95 ${verdictUI.pill}`}
+                  title={aiReportOpen ? 'Hide AI review' : 'Show AI review'}
                 >
-                  {validationStatus === 'pass' ? (
-                    <CheckCircle className="w-3.5 h-3.5" />
-                  ) : (
-                    <AlertCircle className="w-3.5 h-3.5" />
-                  )}
-                  {validationStatus === 'pass' ? 'Passed' : 'Failed'}
-                  <Eye className="w-3.5 h-3.5 ml-0.5" />
+                  <verdictUI.Icon className="w-3.5 h-3.5" />
+                  {verdictUI.label}
+                  {hasAiReport && (aiReportOpen ? <ChevronUp className="w-3.5 h-3.5 ml-0.5" /> : <ChevronDown className="w-3.5 h-3.5 ml-0.5" />)}
                 </button>
               )}
               {isValidating && (
@@ -563,6 +577,47 @@ export function NarrativeEditor({
               )}
             </div>
             <p className="text-sm text-teal-700">{standardText}</p>
+
+            {/* THE single AI report — inline, collapsible, fully readable.
+                Replaces the old binary modal + the separate bottom panel. */}
+            {hasAiReport && aiReportOpen && (
+              <div
+                data-testid="ai-report"
+                className="mt-3 rounded-lg border border-gray-200 bg-white p-4 max-h-[60vh] overflow-y-auto"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  {verdictUI && <verdictUI.Icon className={`w-4 h-4 ${effectiveVerdict === 'pass' ? 'text-green-600' : effectiveVerdict === 'needs_improvement' ? 'text-amber-600' : 'text-red-600'}`} />}
+                  <h5 className="text-sm font-semibold text-gray-900">AI Review — {verdictUI?.label}</h5>
+                </div>
+                {feedback && <p className="text-sm text-gray-700 whitespace-pre-wrap">{feedback}</p>}
+                {suggestions.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Suggestions to improve</p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
+                      {suggestions.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {missingElements.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-1">Missing elements</p>
+                    <ul className="list-disc pl-5 space-y-1 text-sm text-red-700">
+                      {missingElements.map((m, i) => <li key={i}>{m}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {criteriaCoverage.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {criteriaCoverage.map((c: { criterion: string; met: boolean; note?: string }, i: number) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        {c.met ? <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />}
+                        <span>{c.criterion}{c.note ? <span className="text-gray-500"> — {c.note}</span> : null}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1129,7 +1184,7 @@ export function NarrativeEditor({
                   )}
                   <EditorContent
                     editor={supportingEvidenceEditor}
-                    className="prose prose-sm max-w-none p-4 min-h-[150px] max-h-[400px] overflow-y-auto focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:max-w-full [&_.ProseMirror_table]:!table-auto [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[150px] [&_.ProseMirror]:overflow-x-auto"
+                    className="prose prose-sm max-w-none p-4 min-h-[150px] max-h-[70vh] overflow-y-auto focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:max-w-full [&_.ProseMirror_table]:!table-auto [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[150px] [&_.ProseMirror]:overflow-x-auto"
                   />
                 </div>
               ) : (
@@ -1142,58 +1197,8 @@ export function NarrativeEditor({
         </div>
       )}
 
-      {/* Validation Details Modal */}
-      {showValidationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className={`relative w-full max-w-lg mx-4 rounded-lg shadow-xl border ${
-            validationStatus === 'pass' ? 'bg-teal-100 border-teal-200' : 'bg-red-50 border-red-200'
-          }`}>
-            <div className="flex items-center justify-between p-4 border-b border-inherit">
-              <div className="flex items-center gap-2">
-                {validationStatus === 'pass' ? (
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                ) : (
-                  <AlertCircle className="w-5 h-5 text-red-600" />
-                )}
-                <h3 className="font-semibold text-gray-900">
-                  {validationStatus === 'pass' ? 'Validation Passed' : 'Validation Failed'}
-                </h3>
-              </div>
-              <button
-                onClick={() => setShowValidationModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
-              {feedback && (
-                <p className="text-sm text-gray-700">{feedback}</p>
-              )}
-              {suggestions.length > 0 && (
-                <div>
-                  <h5 className="text-sm font-medium text-gray-700 mb-1">Suggestions:</h5>
-                  <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
-                    {suggestions.map((suggestion, index) => (
-                      <li key={index}>{suggestion}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {missingElements.length > 0 && (
-                <div>
-                  <h5 className="text-sm font-medium text-red-700 mb-1">Missing Elements:</h5>
-                  <ul className="list-disc list-inside text-sm text-red-600 space-y-1">
-                    {missingElements.map((element, index) => (
-                      <li key={index}>{element}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* (The old binary "Validation Details" modal was removed — the single AI
+          report now renders inline + collapsible under the spec header above.) */}
     </div>
   );
 }

@@ -4,10 +4,15 @@ import { api } from '../services/api';
 
 interface ValidationResult {
   status: 'pass' | 'fail' | 'pending';
+  // 3-level AI verdict (the binary `status` is the submit gate; `verdict`
+  // is the nuanced result the UI displays).
+  verdict?: 'pass' | 'needs_improvement' | 'fail';
   score: number;
   feedback: string;
+  rationale?: string;
   suggestions: string[];
   missingElements: string[];
+  criteriaCoverage?: Array<{ criterion: string; met: boolean; note?: string }>;
 }
 
 interface ValidationResponse {
@@ -168,9 +173,13 @@ export function useValidationStatus({
     getStandardValidationStatus,
     validationError: validateMutation.error,
     status: validationResult?.result?.status ?? 'pending',
-    feedback: validationResult?.result?.feedback ?? null,
+    // 3-level AI verdict (pass | needs_improvement | fail) — the nuanced result
+    // the UI should display, vs `status` which is the binary submit gate.
+    verdict: validationResult?.result?.verdict ?? null,
+    feedback: validationResult?.result?.feedback ?? validationResult?.result?.rationale ?? null,
     suggestions: validationResult?.result?.suggestions ?? [],
     missingElements: validationResult?.result?.missingElements ?? [],
+    criteriaCoverage: validationResult?.result?.criteriaCoverage ?? [],
     score: validationResult?.result?.score ?? null,
   };
 }

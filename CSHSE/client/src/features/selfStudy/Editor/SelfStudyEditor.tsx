@@ -32,7 +32,8 @@ import { StandardsNavigation } from './StandardsNavigation';
 import { NarrativeEditor } from './NarrativeEditor';
 import { IntroductionEditor } from './IntroductionEditor';
 import { ImportFilePanel } from './ImportFilePanel';
-import { SpecAIReview } from './SpecAIReview';
+// SpecAIReview removed from the editor — the AI report now renders inline +
+// collapsible inside NarrativeEditor (single report per spec).
 import { SpecNotApplicable } from './SpecNotApplicable';
 import { ReviewSurface } from './Review/ReviewSurface';
 import { MatrixSurface } from './Review/MatrixSurface';
@@ -2799,16 +2800,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     }}
                   />
                 ) : null}
-                {selectedSpec && (
-                  /* CR-049 Phase 3 — AI Review of this section against the
-                     reader criteria (verdict + rationale + suggestions). */
-                  <SpecAIReview
-                    submissionId={submissionId}
-                    standardCode={selectedStandard}
-                    specCode={selectedSpec}
-                    canEvaluate={isProgramCoordinator && !isEditingDisabled}
-                  />
-                )}
+                {/* CR-049 Phase 3 — the AI Review now renders as ONE inline,
+                    collapsible report inside NarrativeEditor (under the spec
+                    header), driven by the same evaluation. The separate bottom
+                    panel was removed so there is a single, non-contradictory
+                    AI report per spec (2026-06-08). */}
                 {selectedSpec && (
                   /* CR-050 — PC may mark this spec Not Applicable so it
                      does not block Final Submit. */
