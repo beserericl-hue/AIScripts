@@ -1564,7 +1564,7 @@ function ItemCard({
             />
           ) : (
             <div className="mt-2 flex items-center gap-1.5">
-              <span className="text-base font-semibold text-gray-900">{item.displayLabel}</span>
+              <span data-testid={`card-name-${item.sectionId}`} className="text-base font-semibold text-gray-900">{item.displayLabel}</span>
               {canRename && (
                 <button
                   data-testid={`rename-open-${item.sectionId}`}
