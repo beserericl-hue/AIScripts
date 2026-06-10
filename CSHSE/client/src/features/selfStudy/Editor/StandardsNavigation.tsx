@@ -14,6 +14,9 @@ interface SpecificationProgress {
   specTitle: string;
   status: 'not_started' | 'in_progress' | 'complete' | 'submitted' | 'validated';
   validationStatus?: 'pending' | 'pass' | 'fail';
+  // True when the spec has STORED content (narrative or supporting evidence) —
+  // drives the sidebar count, independent of validation/complete status.
+  hasContent?: boolean;
 }
 
 interface StandardProgress {
@@ -120,8 +123,12 @@ function StandardItem({
     }
   }, [isSelected]);
 
+  // Count specs that have STORED content (narrative or supporting evidence) —
+  // this reflects what's actually saved in the section, not its validation
+  // status. (Completed/validated specs inherently have content, kept as a
+  // fallback for callers that don't pass hasContent.)
   const completedSpecs = standard.specifications.filter(
-    (s) => s.status === 'complete' || s.status === 'submitted' || s.status === 'validated'
+    (s) => s.hasContent || s.status === 'complete' || s.status === 'submitted' || s.status === 'validated'
   ).length;
   const totalSpecs = standard.specifications.length;
   const progressPercent = totalSpecs > 0 ? Math.round((completedSpecs / totalSpecs) * 100) : 0;

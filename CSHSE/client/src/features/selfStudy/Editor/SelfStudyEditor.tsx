@@ -2086,6 +2086,17 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // Build navigation data from standards
   const navigationData = React.useMemo(() => {
     if (!standards) return [];
+    // Which specs actually have STORED content (narrative or supporting
+    // evidence)? The sidebar count reflects this — not validation status — so a
+    // spec with materialized/imported content always counts even if it hasn't
+    // been validated or marked complete yet.
+    const plain = (s?: string) => (s || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/gi, ' ').trim();
+    const contentKeys = new Set<string>();
+    for (const nc of submission?.narrativeContent || []) {
+      if (plain(nc.content).length > 0 || plain(nc.supportingEvidenceText).length > 0) {
+        contentKeys.add(`${nc.standardCode}_${nc.specCode}`);
+      }
+    }
     return standards.map((standard) => ({
       standardCode: standard.code,
       standardTitle: standard.title,
@@ -2099,6 +2110,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           'not_started',
         validationStatus:
           submission?.standardsStatus?.[`${standard.code}_${spec.code}`]?.validationStatus,
+        hasContent: contentKeys.has(`${standard.code}_${spec.code}`),
       })),
     }));
   }, [standards, submission]);
