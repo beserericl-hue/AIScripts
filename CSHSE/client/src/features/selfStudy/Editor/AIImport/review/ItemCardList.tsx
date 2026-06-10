@@ -263,13 +263,56 @@ interface ItemCardListProps {
 // Headings like "b.", "c.", "1)", "(a)", "i.", or "x." are non-descriptive —
 // we synthesize a label from the body text instead.
 const _TERSE_HEADING_RE = /^\s*[A-Za-z0-9]{1,3}[.)\]]?\s*$/;
+// The splitter stamps a generic placeholder on data tables / untitled sections
+// (e.g. "(data table)"). These read as noise on the card — we name the item
+// from its content instead (the section heading inside the table).
+const _PLACEHOLDER_HEADING_RE = /^\(?\s*(data[\s_-]?table|table|no heading|untitled|section)\s*\)?$/i;
+// Boilerplate lines that aren't a good name for the item.
+const _BOILERPLATE_LINE_RE = /^(table of contents|context|response|see (table|appendix))\b/i;
 
-function deriveDisplayLabel(heading: string, snippet: string): string {
+export function isPlaceholderHeading(heading?: string): boolean {
   const h = (heading || '').trim();
-  if (!h || _TERSE_HEADING_RE.test(h)) {
+  return !h || _PLACEHOLDER_HEADING_RE.test(h);
+}
+
+// Turn HTML (or plain text) into trimmed, non-empty lines — splitting on table
+// cells / rows / paragraphs so the FIRST line is the table's leading heading.
+function contentToLines(html: string): string[] {
+  return (html || '')
+    .replace(/<\/(td|th|tr|p|div|li|h[1-6])>/gi, '\n')
+    .replace(/<br\s*\/?>(?=)/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .split('\n')
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+// Best descriptive name we can pull from an item's content — the first
+// meaningful line (a section heading like "B. Philosophical Base of Programs"),
+// skipping placeholders, terse markers and boilerplate.
+function deriveTitleFromContent(snippet: string, htmlSnippet?: string | null): string {
+  const lines = [...contentToLines(htmlSnippet || ''), ...contentToLines(snippet || '')];
+  for (const line of lines) {
+    if (line.length < 3) continue;
+    if (_PLACEHOLDER_HEADING_RE.test(line)) continue;
+    if (_TERSE_HEADING_RE.test(line)) continue;
+    if (_BOILERPLATE_LINE_RE.test(line)) continue;
+    return line.length > 80 ? line.slice(0, 80) + '…' : line;
+  }
+  return '';
+}
+
+function deriveDisplayLabel(heading: string, snippet: string, htmlSnippet?: string | null): string {
+  const h = (heading || '').trim();
+  if (!h || _TERSE_HEADING_RE.test(h) || _PLACEHOLDER_HEADING_RE.test(h)) {
+    const fromContent = deriveTitleFromContent(snippet, htmlSnippet);
+    if (fromContent) return fromContent;
     const firstLine = (snippet || '').trim().split(/\n+/)[0] || '';
-    if (firstLine) return firstLine.slice(0, 80) + (firstLine.length > 80 ? '…' : '');
-    return h || '(no heading)';
+    if (firstLine && !_PLACEHOLDER_HEADING_RE.test(firstLine)) {
+      return firstLine.slice(0, 80) + (firstLine.length > 80 ? '…' : '');
+    }
+    return '(untitled section)';
   }
   return h.length > 100 ? h.slice(0, 100) + '…' : h;
 }
@@ -329,7 +372,7 @@ function toCard(item: BucketItem, kind: ItemKind): CardItem {
     rowId: item.sectionId,
     sectionId: item.sectionId,
     rawHeading: item.heading || '',
-    displayLabel: deriveDisplayLabel(item.heading, item.snippet),
+    displayLabel: deriveDisplayLabel(item.heading, item.snippet, item.htmlSnippet),
     confidence: item.confidence,
     kind,
     wordCount: item.wordCount,
@@ -349,7 +392,7 @@ function flattenTags(tags: Tag[]): CardItem[] {
     rowId: t.tagId,
     sectionId: t.sectionId,
     rawHeading: t.sourceHeading || '',
-    displayLabel: deriveDisplayLabel(t.sourceHeading || t.summary, t.fullText),
+    displayLabel: deriveDisplayLabel(t.sourceHeading || t.summary, t.fullText, t.htmlSnippet),
     confidence: t.confidence,
     kind: 'tag' as ItemKind,
     wordCount: t.fullText.split(/\s+/).length,
@@ -1484,7 +1527,7 @@ function ItemCard({
               source-heading gets text-sm italic; body content wraps in
               prose prose-sm (matches Self-Study editor's exact baseline). */}
           <div className="mt-2 text-base font-semibold text-gray-900">{item.displayLabel}</div>
-          {item.rawHeading && item.rawHeading !== item.displayLabel && (
+          {item.rawHeading && item.rawHeading !== item.displayLabel && !isPlaceholderHeading(item.rawHeading) && (
             <div className="mt-0.5 text-sm italic text-gray-500">Source heading: {item.rawHeading}</div>
           )}
           {hasHtmlTable ? (
