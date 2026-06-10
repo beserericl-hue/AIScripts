@@ -100,7 +100,9 @@ export function NarrativeEditor({
   onEditorReady,
 }: NarrativeEditorProps) {
   const [content, setContent] = useState(initialContent);
-  const [supportingEvidenceCollapsed, setSupportingEvidenceCollapsed] = useState(true);
+  // Expanded by default when there's evidence to read (readers/PCs must see it
+  // without hunting for a toggle); collapsed only when empty.
+  const [supportingEvidenceCollapsed, setSupportingEvidenceCollapsed] = useState(!initialSupportingEvidence);
   const [contentChangedSinceValidation, setContentChangedSinceValidation] = useState(false);
 
   // Auto-save hook with 2s debounce
@@ -578,49 +580,68 @@ export function NarrativeEditor({
             </div>
             <p className="text-sm text-teal-700">{standardText}</p>
 
-            {/* THE single AI report — inline, collapsible, fully readable.
-                Replaces the old binary modal + the separate bottom panel. */}
-            {hasAiReport && aiReportOpen && (
-              <div
-                data-testid="ai-report"
-                className="mt-3 rounded-lg border border-gray-200 bg-white p-4 max-h-[60vh] overflow-y-auto"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  {verdictUI && <verdictUI.Icon className={`w-4 h-4 ${effectiveVerdict === 'pass' ? 'text-green-600' : effectiveVerdict === 'needs_improvement' ? 'text-amber-600' : 'text-red-600'}`} />}
-                  <h5 className="text-sm font-semibold text-gray-900">AI Review — {verdictUI?.label}</h5>
-                </div>
-                {feedback && <p className="text-sm text-gray-700 whitespace-pre-wrap">{feedback}</p>}
-                {suggestions.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Suggestions to improve</p>
-                    <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
-                      {suggestions.map((s, i) => <li key={i}>{s}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {missingElements.length > 0 && (
-                  <div className="mt-2">
-                    <p className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-1">Missing elements</p>
-                    <ul className="list-disc pl-5 space-y-1 text-sm text-red-700">
-                      {missingElements.map((m, i) => <li key={i}>{m}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {criteriaCoverage.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {criteriaCoverage.map((c: { criterion: string; met: boolean; note?: string }, i: number) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                        {c.met ? <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />}
-                        <span>{c.criterion}{c.note ? <span className="text-gray-500"> — {c.note}</span> : null}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
           </div>
         )}
       </div>
+
+      {/* AI Review opens in a POPUP so it never crowds the editor — the verdict
+          pill toggles it. Fully scrollable; click the backdrop or ✕ to close. */}
+      {hasAiReport && aiReportOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setAiReportOpen(false)}
+        >
+          <div
+            data-testid="ai-report"
+            className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2 px-5 py-3 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                {verdictUI && <verdictUI.Icon className={`w-5 h-5 ${effectiveVerdict === 'pass' ? 'text-green-600' : effectiveVerdict === 'needs_improvement' ? 'text-amber-600' : 'text-red-600'}`} />}
+                <h5 className="text-base font-semibold text-gray-900">AI Review — {verdictUI?.label}</h5>
+              </div>
+              <button
+                onClick={() => setAiReportOpen(false)}
+                className="p-1 rounded hover:bg-gray-100 text-gray-500"
+                title="Close AI review"
+                aria-label="Close AI review"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              {feedback && <p className="text-sm text-gray-700 whitespace-pre-wrap">{feedback}</p>}
+              {suggestions.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">Suggestions to improve</p>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-gray-700">
+                    {suggestions.map((s, i) => <li key={i}>{s}</li>)}
+                  </ul>
+                </div>
+              )}
+              {missingElements.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-red-600 mb-1">Missing elements</p>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-red-700">
+                    {missingElements.map((m, i) => <li key={i}>{m}</li>)}
+                  </ul>
+                </div>
+              )}
+              {criteriaCoverage.length > 0 && (
+                <ul className="mt-3 space-y-1">
+                  {criteriaCoverage.map((c: { criterion: string; met: boolean; note?: string }, i: number) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                      {c.met ? <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />}
+                      <span>{c.criterion}{c.note ? <span className="text-gray-500"> — {c.note}</span> : null}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toolbar - Two rows for better organization (hidden in readOnly/reviewer mode) */}
       {!readOnly && <div data-tour="ss-toolbar" className="editor-toolbar bg-gray-100 rounded-t-lg border border-gray-200 border-b-0">
