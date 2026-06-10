@@ -155,11 +155,9 @@ export function NarrativeEditor({
 
   // State for clear section confirmation
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  // 2026-06-08 — single AI report, shown inline (collapsible) under the spec
-  // (the old `showValidationModal` state + modal were removed)
-  // header instead of a separate bottom panel + modal. Default open so the
-  // coordinator can read the verdict, rationale, suggestions and criteria.
-  const [aiReportOpen, setAiReportOpen] = useState(true);
+  // AI report is shown in a popup that opens ONLY when the user clicks the
+  // verdict pill. Default CLOSED so it never pops up on its own.
+  const [aiReportOpen, setAiReportOpen] = useState(false);
   // 3-level verdict drives the pill + report. Fall back to the binary status
   // when an older record has no verdict. "needs_improvement" is its OWN state
   // (amber) — it must NOT read as "Failed".
