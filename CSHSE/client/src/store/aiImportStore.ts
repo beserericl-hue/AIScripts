@@ -98,6 +98,10 @@ export type BucketItem = {
   // items (the AI's snippet is canonical).
   originalSnippet?: string;
   editedAt?: number;
+  // Coordinator-typed display name for this card. When set (non-empty), it
+  // overrides the auto-derived label in the Review rail. Persisted with the
+  // review state (aiReviewState is Mixed, so the extra field round-trips).
+  customLabel?: string;
 };
 
 export type SpecBucket = {
@@ -209,6 +213,8 @@ export type Tag = {
   // CR-032 — coordinator inline edit, mirrored from BucketItem.
   originalSnippet?: string;
   editedAt?: number;
+  // Coordinator-typed display name (overrides the auto-derived label).
+  customLabel?: string;
 };
 
 export type PlaceholderSection = {
@@ -537,6 +543,10 @@ interface AIImportState {
   // it survives reload + Re-run detectors. No-op when there's no submissionId
   // (wizard-only run). Resolves to true on success, false on failure.
   persistEvidenceRouting: (sectionId: string, std: string, spec: string) => Promise<boolean>;
+  // Coordinator types/overrides the display name of a Review card. Sets
+  // customLabel on the matching bucket item (or tag) and persists via
+  // save-state. Empty string clears the override (back to the derived label).
+  setItemCustomLabel: (sectionId: string, label: string) => void;
   // Move a selected portion of a card into another subspec. Splits the source
   // item to `remainderHtml` and adds the `movedHtml` as a new item in
   // buckets[`${targetStd}.${targetSpec}`]. Updates the store immediately and
@@ -947,6 +957,32 @@ export const useAIImportStore = create<AIImportState>()(
           console.warn('[route-evidence] persist failed:', err);
           return false;
         }
+      },
+      setItemCustomLabel: (sectionId, label) => {
+        const clean = (label || '').trim();
+        const value = clean || undefined; // empty clears the override
+        set((s) => {
+          // Update the matching bucket item (narratives / evidenceText /
+          // evidenceFiles) in place; fall back to the unplaced tag list.
+          let hit = false;
+          const buckets: typeof s.buckets = {};
+          for (const [key, b] of Object.entries(s.buckets)) {
+            const apply = <T extends { sectionId: string }>(arr: T[]) =>
+              arr.map((it) => (it.sectionId === sectionId ? ((hit = true), { ...it, customLabel: value }) : it));
+            buckets[key] = {
+              ...b,
+              narratives: apply(b.narratives),
+              evidenceText: apply(b.evidenceText),
+              evidenceFiles: apply(b.evidenceFiles),
+            };
+          }
+          const tags = hit
+            ? s.tags
+            : s.tags.map((t) => (t.sectionId === sectionId ? { ...t, customLabel: value } : t));
+          return { buckets, tags, dirty: true };
+        });
+        // Persist (serialized with other save-state writes).
+        void get().saveReviewStateToServer();
       },
       moveSelectionToSpec: async ({
         sourceSectionId,

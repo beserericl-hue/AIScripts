@@ -194,6 +194,7 @@ export interface CardItem {
   sectionId: string;
   rawHeading: string;
   displayLabel: string;   // smart label — falls back to body snippet for terse headings
+  hasCustomLabel?: boolean; // true when displayLabel is a coordinator-typed override
   confidence: number;
   kind: ItemKind;
   wordCount: number;
@@ -372,7 +373,8 @@ function toCard(item: BucketItem, kind: ItemKind): CardItem {
     rowId: item.sectionId,
     sectionId: item.sectionId,
     rawHeading: item.heading || '',
-    displayLabel: deriveDisplayLabel(item.heading, item.snippet, item.htmlSnippet),
+    displayLabel: (item.customLabel && item.customLabel.trim()) || deriveDisplayLabel(item.heading, item.snippet, item.htmlSnippet),
+    hasCustomLabel: !!(item.customLabel && item.customLabel.trim()),
     confidence: item.confidence,
     kind,
     wordCount: item.wordCount,
@@ -392,7 +394,8 @@ function flattenTags(tags: Tag[]): CardItem[] {
     rowId: t.tagId,
     sectionId: t.sectionId,
     rawHeading: t.sourceHeading || '',
-    displayLabel: deriveDisplayLabel(t.sourceHeading || t.summary, t.fullText, t.htmlSnippet),
+    displayLabel: (t.customLabel && t.customLabel.trim()) || deriveDisplayLabel(t.sourceHeading || t.summary, t.fullText, t.htmlSnippet),
+    hasCustomLabel: !!(t.customLabel && t.customLabel.trim()),
     confidence: t.confidence,
     kind: 'tag' as ItemKind,
     wordCount: t.fullText.split(/\s+/).length,
@@ -1302,6 +1305,20 @@ function ItemCard({
   // (text / evidenceText / file). Tag-list items + matrix cells can't be
   // re-typed in place.
   const canSwitchKind = onChangeKind && (item.kind === 'text' || item.kind === 'evidenceText' || item.kind === 'file');
+
+  // Coordinator-editable card name. Persists to the store/server via
+  // setItemCustomLabel. Only bucket items + unplaced tags have a backing
+  // record to write to (matrix cells / placeholders are synthetic).
+  const setItemCustomLabel = useAIImportStore((s) => s.setItemCustomLabel);
+  const canRename = item.kind === 'text' || item.kind === 'evidenceText' || item.kind === 'file' || item.kind === 'tag';
+  const [editingName, setEditingName] = React.useState(false);
+  const [nameDraft, setNameDraft] = React.useState(item.displayLabel);
+  const commitName = () => {
+    setEditingName(false);
+    const next = nameDraft.trim();
+    if (next !== item.displayLabel) setItemCustomLabel(item.sectionId, next);
+  };
+
   return (
     <li
       data-section-id={item.sectionId}
@@ -1526,7 +1543,44 @@ function ItemCard({
               displayLabel goes to text-base font-semibold; sub-heading
               source-heading gets text-sm italic; body content wraps in
               prose prose-sm (matches Self-Study editor's exact baseline). */}
-          <div className="mt-2 text-base font-semibold text-gray-900">{item.displayLabel}</div>
+          {/* Coordinator-editable card name. Click the name (or the pencil) to
+              type an override; Enter/blur saves, Esc cancels, empty resets to
+              the auto-derived name. */}
+          {editingName ? (
+            <input
+              autoFocus
+              data-testid={`rename-input-${item.sectionId}`}
+              value={nameDraft}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitName}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') commitName();
+                if (e.key === 'Escape') { setNameDraft(item.displayLabel); setEditingName(false); }
+              }}
+              placeholder="Name this item…"
+              className="mt-2 w-full rounded border border-cshse-300 px-2 py-1 text-base font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-cshse-300"
+            />
+          ) : (
+            <div className="mt-2 flex items-center gap-1.5">
+              <span className="text-base font-semibold text-gray-900">{item.displayLabel}</span>
+              {canRename && (
+                <button
+                  data-testid={`rename-open-${item.sectionId}`}
+                  onClick={(e) => { e.stopPropagation(); setNameDraft(item.displayLabel); setEditingName(true); }}
+                  title="Rename this item"
+                  aria-label="Rename this item"
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition"
+                >
+                  <Pencil className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+              {item.hasCustomLabel && (
+                <span className="rounded bg-cshse-50 px-1 py-0.5 text-[10px] font-medium text-cshse-700" title="Custom name set by you">named</span>
+              )}
+            </div>
+          )}
           {item.rawHeading && item.rawHeading !== item.displayLabel && !isPlaceholderHeading(item.rawHeading) && (
             <div className="mt-0.5 text-sm italic text-gray-500">Source heading: {item.rawHeading}</div>
           )}
