@@ -2253,3 +2253,10 @@ Clicking a submission in the reader queue (/reader/:id) opened a blank page belo
 - **Narratives:** read from `submission.narratives` (a Mongoose Map that doesn't serialize → `{}`). Now builds the per-spec lookup from `submission.narrativeContent` (the flattened array getSubmission returns).
 - **Reader Report:** added Download buttons (PDF + editable Word) to the reader screen header, pulled from the Supporting File Library (`reader-report:pdf`/`docx`).
 - Verified: e2e spec 66 (reader screen renders standards scaffold + materialized narrative). Live data for Stevenson: /api/standards=21, narrativeContent=67, reader-report files=2. (Reader access itself still gated by Assignment + submitted status — unchanged; that gate passed for the impersonated session, only the render was broken.)
+
+## 2026-06-11 — Reader could see EVERY submission (impersonation elevation) + Stevenson assigned
+
+- **Impersonation kept superuser elevation:** a superuser "Viewing as Reader Two" still had `isSuperuser=true`, so `/api/submissions` (queue) and `getSubmission` bypassed the reader assignment/status scoping → all 26 submissions shown. Fix (auth.ts): effective `isSuperuser` is false while impersonating a non-admin role (kept only when not impersonating or impersonating admin); real flag preserved as `realIsSuperuser`.
+- **Impersonated user identity for scoping:** with elevation dropped, the Assignment lookup still used `req.user.id` (the superuser) → empty queue. listSubmissions + getSubmission now use `impersonation.impersonatedUserId` (client already sends `X-Impersonated-User-Id`) for the assignment scoping.
+- **Stevenson made reviewable:** `POST /api/reviews/submissions/<id>/assign` for the 3 assigned readers → status `readers_assigned` + Assignment docs created.
+- **Verified live (impersonating Reader Two):** queue returns exactly 1 (Stevenson), getSubmission(Stevenson)=200, getSubmission(unassigned E2E)=403. E2E spec 67 (reader queue assignment-scoped).
