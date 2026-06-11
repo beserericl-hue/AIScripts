@@ -87,13 +87,24 @@ export function ReaderSpecRowView(props: ReaderSpecRowViewProps): JSX.Element {
   const verdict = evaluation?.verdict;
   const meta = verdict ? VERDICT_META[verdict] : null;
 
+  // Shared rendered-content styling — matches the PC self-study editor's reading
+  // size (prose-base) and renders tables/links with structure instead of a wall
+  // of raw HTML.
+  const proseCls =
+    'prose prose-base max-w-none text-slate-800 ' +
+    '[&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 ' +
+    '[&_table]:border-collapse [&_table]:w-full [&_table]:my-3 ' +
+    '[&_td]:border [&_td]:border-slate-300 [&_td]:px-2 [&_td]:py-1 [&_td]:align-top ' +
+    '[&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-semibold ' +
+    '[&_a]:text-teal-700 [&_a]:underline';
+
   return (
     <section
       data-testid={`reader-spec-row-${standardCode}-${specCode}`}
       className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"
     >
       <header className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold text-slate-900">
+        <h3 className="text-base font-semibold text-slate-900">
           Standard {standardCode}.{specCode}
         </h3>
         {excluded ? (
@@ -121,19 +132,25 @@ export function ReaderSpecRowView(props: ReaderSpecRowViewProps): JSX.Element {
           {narrativeHtml ? (
             <div
               data-testid="reader-narrative"
-              className="prose prose-sm max-w-none rounded border border-slate-100 bg-slate-50 p-2 text-slate-800"
+              className={`rounded border border-slate-100 bg-slate-50 p-3 ${proseCls}`}
               dangerouslySetInnerHTML={{ __html: narrativeHtml }}
             />
           ) : (
-            <p className="text-xs italic text-slate-500">No narrative submitted.</p>
+            <p className="text-sm italic text-slate-500">No narrative submitted.</p>
           )}
           {evidenceText ? (
-            <p className="mt-2 text-xs text-slate-600">
-              <span className="font-medium">Supporting evidence:</span> {evidenceText}
-            </p>
+            <div data-testid="reader-evidence" className="mt-3">
+              <p className="mb-1 text-sm font-semibold text-slate-700">Supporting evidence</p>
+              {/* Program-authored HTML (same trust model as the narrative) —
+                  render it, don't print the tags. */}
+              <div
+                className={`rounded border border-slate-100 bg-white p-3 ${proseCls}`}
+                dangerouslySetInnerHTML={{ __html: evidenceText }}
+              />
+            </div>
           ) : null}
           {evaluation?.rationale ? (
-            <p className="mt-2 rounded bg-slate-50 p-2 text-xs text-slate-700">
+            <p className="mt-3 rounded bg-slate-50 p-3 text-sm text-slate-700">
               <span className="font-medium">AI rationale: </span>
               {evaluation.rationale}
             </p>

@@ -110,7 +110,7 @@ export function ReaderReviewScreenView({
   }
 
   return (
-    <div data-testid="reader-review-screen" className="mx-auto max-w-4xl p-6">
+    <div data-testid="reader-review-screen" className="mx-auto max-w-6xl p-6">
       <Link to="/reader" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900">
         <ChevronLeft className="h-4 w-4" aria-hidden />
         <span>Back to review queue</span>
