@@ -8,7 +8,8 @@ import {
   generateReaderReportNow,
   getReaderReportData,
   saveReaderReportData,
-  downloadReaderReport
+  downloadReaderReport,
+  listReaderReports
 } from '../controllers/reportController';
 import { authenticate } from '../middleware/auth';
 
@@ -59,6 +60,13 @@ router.post('/submission/:submissionId/reader-report/generate', generateReaderRe
 router.get('/submission/:submissionId/reader-report-data', getReaderReportData);
 router.put('/submission/:submissionId/reader-report-data', saveReaderReportData);
 router.get('/submission/:submissionId/reader-report/download', downloadReaderReport);
+
+/**
+ * List all readers' Reader Reports for a submission (reviewer + completion
+ * status) so a lead reader / admin can oversee them and open each completed
+ * one. Lead reader (assigned) / admin only.
+ */
+router.get('/submission/:submissionId/reader-reports', listReaderReports);
 
 // ============================================
 // COMPILATION REPORT PDF ROUTES

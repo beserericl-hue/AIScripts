@@ -606,15 +606,25 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // ReviewSurface's loadPersistedReviewState() call.
   const [deepLinkParams, setDeepLinkParams] = useSearchParams();
   useEffect(() => {
-    if (!isProgramCoordinator || !submissionId) return;
+    if (!submissionId) return;
     const view = deepLinkParams.get('view');
-    if (view === 'review') {
+    // Section deep-links work for EVERY role (readers/lead-readers navigate
+    // here from the Reader Report screen's top menu — see ReaderReportEditor).
+    if (view === 'introduction') {
+      setActiveView('introduction');
+    } else if (view === 'standards') {
+      setActiveView('standards');
+    } else if (view === 'curriculum' || view === 'matrix') {
+      setActiveView('curriculum');
+    } else if (view === 'files') {
+      setActiveView('files');
+    } else if (isProgramCoordinator && view === 'review') {
       setActiveView('review-surface');
       const specKey = deepLinkParams.get('specKey');
       if (specKey) {
         useAIImportStore.getState().selectSpec(specKey);
       }
-    } else if (view === 'import') {
+    } else if (isProgramCoordinator && view === 'import') {
       setActiveView('ai-import');
     } else {
       return;

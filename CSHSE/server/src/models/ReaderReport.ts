@@ -17,6 +17,9 @@ export interface IReaderReport extends Document {
   reviewerId: mongoose.Types.ObjectId;
   rows: IReaderReportRow[];
   recommendation: string;
+  // When the reader marks the report COMPLETE it becomes visible to the lead
+  // reader (and admin). Null/absent = still a draft, private to the reviewer.
+  completedAt?: Date | null;
   updatedAt: Date;
   createdAt: Date;
 }
@@ -32,6 +35,7 @@ const ReaderReportSchema = new Schema<IReaderReport>({
   reviewerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   rows: { type: [ReaderReportRowSchema], default: [] },
   recommendation: { type: String, default: '' },
+  completedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 ReaderReportSchema.index({ submissionId: 1, reviewerId: 1 }, { unique: true });

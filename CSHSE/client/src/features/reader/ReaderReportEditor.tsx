@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, Save, Check, Loader2, Download, Eye, X } from 'lucide-react';
+import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2 } from 'lucide-react';
 import { api } from '../../services/api';
+import { useAuthStore } from '../../store/authStore';
 
 interface ReportSpec {
   specCode: string;
@@ -27,42 +28,84 @@ interface ReportData {
   standards: ReportRow[];
   recommendation: string;
   updatedAt: string | null;
+  completedAt?: string | null;
+  readonly?: boolean;
+  reviewerId?: string;
+  reviewerName?: string;
+}
+interface ReaderReportListItem {
+  reviewerId: string;
+  reviewerName: string;
+  role: string;
+  isSelf: boolean;
+  completedAt: string | null;
+  updatedAt: string | null;
+  started: boolean;
+  viewable: boolean;
 }
 
 export function ReaderReportEditor(): JSX.Element {
   const { submissionId = '' } = useParams<{ submissionId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewReviewerId = searchParams.get('reviewerId') || '';
+  const effectiveRole = useAuthStore((s) => s.getEffectiveRole());
+  const isLeadOrAdmin = effectiveRole === 'lead_reader' || effectiveRole === 'admin';
+
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [recommendation, setRecommendation] = useState('');
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [completedAt, setCompletedAt] = useState<string | null>(null);
 
   const query = useQuery({
-    queryKey: ['reader-report-data', submissionId],
+    queryKey: ['reader-report-data', submissionId, viewReviewerId],
     queryFn: async () => {
-      const r = await api.get(`/api/reports/submission/${submissionId}/reader-report-data`);
+      const qs = viewReviewerId ? `?reviewerId=${encodeURIComponent(viewReviewerId)}` : '';
+      const r = await api.get(`/api/reports/submission/${submissionId}/reader-report-data${qs}`);
       return r.data as ReportData;
     },
     enabled: !!submissionId,
     refetchOnWindowFocus: false,
   });
 
+  // Read-only when a lead reader / admin is viewing ANOTHER reviewer's report.
+  const readonly = !!query.data?.readonly;
+
   useEffect(() => {
     if (query.data) {
       setRows(query.data.standards);
       setRecommendation(query.data.recommendation || '');
       setSavedAt(query.data.updatedAt);
+      setCompletedAt(query.data.completedAt || null);
     }
   }, [query.data]);
 
+  // The lead reader's roster of all readers' reports for this submission.
+  const listQuery = useQuery({
+    queryKey: ['reader-reports-list', submissionId],
+    queryFn: async () => {
+      const r = await api.get(`/api/reports/submission/${submissionId}/reader-reports`);
+      return (r.data?.reports || []) as ReaderReportListItem[];
+    },
+    enabled: !!submissionId && isLeadOrAdmin,
+    refetchOnWindowFocus: false,
+  });
+
   const save = useMutation({
-    mutationFn: async () => {
-      const r = await api.put(`/api/reports/submission/${submissionId}/reader-report-data`, {
+    mutationFn: async (opts?: { completed?: boolean }) => {
+      const body: any = {
         rows: rows.map((r) => ({ standardCode: r.code, mark: r.readerMark, comment: r.readerComment })),
         recommendation,
-      });
-      return r.data as { updatedAt: string };
+      };
+      if (opts && typeof opts.completed === 'boolean') body.completed = opts.completed;
+      const r = await api.put(`/api/reports/submission/${submissionId}/reader-report-data`, body);
+      return r.data as { updatedAt: string; completedAt: string | null };
     },
-    onSuccess: (d) => setSavedAt(d.updatedAt),
+    onSuccess: (d) => {
+      setSavedAt(d.updatedAt);
+      setCompletedAt(d.completedAt ?? completedAt);
+      if (isLeadOrAdmin) listQuery.refetch();
+    },
   });
 
   const setRow = (code: string, patch: Partial<ReportRow>) =>
@@ -71,12 +114,14 @@ export function ReaderReportEditor(): JSX.Element {
   const [dlError, setDlError] = useState<string | null>(null);
   const [viewHtml, setViewHtml] = useState<string | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
+  const reviewerParam = viewReviewerId ? `&reviewerId=${encodeURIComponent(viewReviewerId)}` : '';
   const openViewer = async () => {
     setDlError(null);
     setViewLoading(true);
     try {
-      await save.mutateAsync().catch(() => {});
-      const r = await api.get(`/api/reports/submission/${submissionId}/reader-report/download?format=html`);
+      // Persist the latest edits first — but only for your OWN report.
+      if (!readonly) await save.mutateAsync(undefined).catch(() => {});
+      const r = await api.get(`/api/reports/submission/${submissionId}/reader-report/download?format=html${reviewerParam}`);
       setViewHtml(r.data?.html || '<p>(empty report)</p>');
     } catch {
       setDlError('Could not load the formatted view.');
@@ -88,10 +133,11 @@ export function ReaderReportEditor(): JSX.Element {
     setDlError(null);
     try {
       // Save first so the download reflects the reader's latest edits, then
-      // stream the official template filled with their marks/comments.
-      await save.mutateAsync().catch(() => {});
+      // stream the official template filled with their marks/comments. Only
+      // save your own report; when viewing another reader's, just download it.
+      if (!readonly) await save.mutateAsync(undefined).catch(() => {});
       const resp = await api.get(
-        `/api/reports/submission/${submissionId}/reader-report/download?format=${fmt}`,
+        `/api/reports/submission/${submissionId}/reader-report/download?format=${fmt}${reviewerParam}`,
         { responseType: 'blob' }
       );
       const blob = new Blob([resp.data], {
@@ -154,6 +200,18 @@ export function ReaderReportEditor(): JSX.Element {
           </button>
           <h1 className="text-xl font-semibold text-slate-900">Reader Report — {data.levelTitle}</h1>
           <p className="text-sm text-slate-600">{data.institutionName} · {data.programName}</p>
+          {readonly ? (
+            <p data-testid="rr-readonly-banner" className="mt-1 inline-flex items-center gap-1.5 rounded bg-slate-100 px-2 py-1 text-xs font-medium text-slate-700">
+              <Lock className="h-3.5 w-3.5" />
+              Viewing {data.reviewerName || 'another reader'}’s report (read-only)
+              {completedAt && <span className="text-slate-500">· completed {new Date(completedAt).toLocaleDateString()}</span>}
+            </p>
+          ) : completedAt ? (
+            <p data-testid="rr-completed-badge" className="mt-1 inline-flex items-center gap-1.5 rounded bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Completed {new Date(completedAt).toLocaleDateString()} — visible to the lead reader
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {savedAt && <span className="text-xs text-emerald-600 inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />Saved</span>}
@@ -178,17 +236,157 @@ export function ReaderReportEditor(): JSX.Element {
           >
             <Download className="h-4 w-4" />Download template (Word)
           </button>
-          <button
-            data-testid="reader-report-save"
-            onClick={() => save.mutate()}
-            disabled={save.isPending}
-            className="inline-flex items-center gap-1.5 rounded bg-teal-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60"
-          >
-            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Save
-          </button>
+          {!readonly && (
+            <button
+              data-testid="reader-report-save"
+              onClick={() => save.mutate(undefined)}
+              disabled={save.isPending}
+              className="inline-flex items-center gap-1.5 rounded bg-teal-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60"
+            >
+              {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Save
+            </button>
+          )}
+          {/* Completion gate: marking complete makes this report visible to the
+              lead reader. Re-open to keep editing. Only on your OWN report. */}
+          {!readonly && (
+            completedAt ? (
+              <button
+                data-testid="reader-report-reopen"
+                onClick={() => save.mutate({ completed: false })}
+                disabled={save.isPending}
+                className="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-sm text-amber-800 hover:bg-amber-100 disabled:opacity-60"
+                title="Re-open this report for further editing (hides it from the lead reader until re-completed)"
+              >
+                Re-open
+              </button>
+            ) : (
+              <button
+                data-testid="reader-report-complete"
+                onClick={() => save.mutate({ completed: true })}
+                disabled={save.isPending}
+                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
+                title="Mark this report complete so the lead reader can review it"
+              >
+                <CheckCircle2 className="h-4 w-4" />Mark complete
+              </button>
+            )
+          )}
+          {readonly && (
+            <button
+              data-testid="reader-report-back-to-mine"
+              onClick={() => { const n = new URLSearchParams(searchParams); n.delete('reviewerId'); setSearchParams(n, { replace: true }); }}
+              className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <ChevronLeft className="h-4 w-4" />Back to my report
+            </button>
+          )}
         </div>
       </div>
+      {/* Top menu: jump straight to any part of the self-study without losing
+          your place. The Reader Report is the active tab here; the others
+          deep-link into the self-study editor's matching section. */}
+      <nav data-testid="reader-report-nav" className="mb-4 flex flex-col gap-1">
+        <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Self-Study</span>
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            data-testid="rr-nav-introduction"
+            onClick={() => navigate(`/self-study/${submissionId}?view=introduction`)}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap text-slate-600 hover:bg-slate-100"
+          >
+            <FileText className="h-4 w-4 flex-shrink-0" />Introduction
+          </button>
+          <button
+            data-testid="rr-nav-standards"
+            onClick={() => navigate(`/self-study/${submissionId}?view=standards`)}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap text-slate-600 hover:bg-slate-100"
+          >
+            <BookOpen className="h-4 w-4 flex-shrink-0" />Standards
+          </button>
+          <button
+            data-testid="rr-nav-curriculum"
+            onClick={() => navigate(`/self-study/${submissionId}?view=curriculum`)}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap text-slate-600 hover:bg-slate-100"
+          >
+            <Grid3X3 className="h-4 w-4 flex-shrink-0" />Curriculum Matrix
+          </button>
+          <button
+            data-testid="rr-nav-files"
+            onClick={() => navigate(`/self-study/${submissionId}?view=files`)}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap text-slate-600 hover:bg-slate-100"
+          >
+            <FolderOpen className="h-4 w-4 flex-shrink-0" />Supporting File Library
+          </button>
+          <span
+            aria-current="page"
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap border border-amber-300 bg-amber-100 text-amber-800"
+          >
+            <ClipboardList className="h-4 w-4 flex-shrink-0" />Reader Report
+          </span>
+        </div>
+      </nav>
+
+      {/* Lead reader / admin: oversee every reader's report. Each reader's report
+          becomes openable here once that reader marks it complete. */}
+      {isLeadOrAdmin && (
+        <details data-testid="rr-all-reports" open className="mb-4 rounded-lg border border-indigo-200 bg-indigo-50">
+          <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold text-indigo-900">
+            <Users className="h-4 w-4" /> All reader reports
+            {listQuery.data && (
+              <span className="font-normal text-indigo-600">
+                · {listQuery.data.filter((x) => x.completedAt).length} of {listQuery.data.length} complete
+              </span>
+            )}
+          </summary>
+          <div className="border-t border-indigo-200 p-3">
+            {listQuery.isLoading ? (
+              <p className="flex items-center gap-2 text-sm text-indigo-700"><Loader2 className="h-4 w-4 animate-spin" />Loading…</p>
+            ) : (listQuery.data || []).length === 0 ? (
+              <p className="text-sm text-indigo-700">No readers are assigned to this submission yet.</p>
+            ) : (
+              <ul className="divide-y divide-indigo-100">
+                {(listQuery.data || []).map((it) => {
+                  const active = it.reviewerId === (query.data?.reviewerId || '') && (!!viewReviewerId ? it.reviewerId === viewReviewerId : it.isSelf);
+                  return (
+                    <li key={it.reviewerId} data-testid={`rr-reviewer-${it.reviewerId}`} className="flex items-center justify-between gap-3 py-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-800">
+                          {it.reviewerName}
+                          {it.isSelf && <span className="ml-1 text-xs text-slate-500">(you)</span>}
+                          {it.role === 'lead_reader' && <span className="ml-1 rounded bg-slate-200 px-1 text-[10px] uppercase text-slate-600">lead</span>}
+                        </p>
+                        <p className="text-xs">
+                          {it.completedAt ? (
+                            <span className="text-emerald-700">✓ Completed {new Date(it.completedAt).toLocaleDateString()}</span>
+                          ) : it.started ? (
+                            <span className="text-amber-700">In progress (not yet completed)</span>
+                          ) : (
+                            <span className="text-slate-400">Not started</span>
+                          )}
+                        </p>
+                      </div>
+                      {it.isSelf ? (
+                        <span className="text-xs text-slate-500">{active ? 'Viewing' : ''}</span>
+                      ) : it.viewable ? (
+                        <button
+                          data-testid={`rr-view-reviewer-${it.reviewerId}`}
+                          onClick={() => { const n = new URLSearchParams(searchParams); n.set('reviewerId', it.reviewerId); setSearchParams(n, { replace: true }); }}
+                          className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs ${active ? 'border-indigo-400 bg-indigo-100 text-indigo-800' : 'border-slate-300 text-slate-700 hover:bg-white'}`}
+                        >
+                          <Eye className="h-3.5 w-3.5" />{active ? 'Viewing' : 'View report'}
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-400" title="Visible once the reader marks it complete"><Lock className="h-3.5 w-3.5" />Locked</span>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+        </details>
+      )}
+
       {dlError && <p className="mb-2 text-sm text-red-600">{dlError}</p>}
 
       <p className="mb-4 text-sm text-slate-500">
@@ -203,15 +401,15 @@ export function ReaderReportEditor(): JSX.Element {
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-slate-800">Standard {r.code}: {r.title}</h2>
               <div className="flex items-center gap-2 text-sm">
-                <label className="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name={`mark-${r.code}`} checked={r.readerMark === 'compliant'} onChange={() => setRow(r.code, { readerMark: 'compliant' })} className="text-emerald-600 focus:ring-emerald-500" />
+                <label className={`inline-flex items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
+                  <input type="radio" disabled={readonly} name={`mark-${r.code}`} checked={r.readerMark === 'compliant'} onChange={() => setRow(r.code, { readerMark: 'compliant' })} className="text-emerald-600 focus:ring-emerald-500 disabled:opacity-60" />
                   <span className="text-emerald-700">Compliant</span>
                 </label>
-                <label className="inline-flex items-center gap-1 cursor-pointer">
-                  <input type="radio" name={`mark-${r.code}`} checked={r.readerMark === 'noncompliant'} onChange={() => setRow(r.code, { readerMark: 'noncompliant' })} className="text-red-600 focus:ring-red-500" />
+                <label className={`inline-flex items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
+                  <input type="radio" disabled={readonly} name={`mark-${r.code}`} checked={r.readerMark === 'noncompliant'} onChange={() => setRow(r.code, { readerMark: 'noncompliant' })} className="text-red-600 focus:ring-red-500 disabled:opacity-60" />
                   <span className="text-red-700">Non-Compliant</span>
                 </label>
-                {r.readerMark && (
+                {!readonly && r.readerMark && (
                   <button onClick={() => setRow(r.code, { readerMark: '' })} className="text-xs text-slate-400 hover:text-slate-600" title="Clear mark">clear</button>
                 )}
               </div>
@@ -249,15 +447,18 @@ export function ReaderReportEditor(): JSX.Element {
 
             {/* Reader's comments — the checklist mark is the Compliant/Non-Compliant
                 control at the top of this section. */}
-            <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`rr-comment-${r.code}`}>Your comments for Standard {r.code}</label>
+            <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`rr-comment-${r.code}`}>
+              {readonly ? `${data.reviewerName || 'Reader'}’s comments for Standard ${r.code}` : `Your comments for Standard ${r.code}`}
+            </label>
             <textarea
               id={`rr-comment-${r.code}`}
               data-testid={`rr-comment-${r.code}`}
               value={r.readerComment}
               onChange={(e) => setRow(r.code, { readerComment: e.target.value })}
+              readOnly={readonly}
               placeholder="Note missing information or the reason for a non-compliant decision."
               rows={3}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-300"
+              className={`w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
             />
           </div>
         ))}
@@ -269,9 +470,10 @@ export function ReaderReportEditor(): JSX.Element {
           data-testid="rr-recommendation"
           value={recommendation}
           onChange={(e) => setRecommendation(e.target.value)}
+          readOnly={readonly}
           placeholder="Overall recommendation (e.g. accreditation with no conditions / conditional / deny / hold) and rationale."
           rows={4}
-          className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-300"
+          className={`w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
         />
       </div>
 
@@ -279,9 +481,18 @@ export function ReaderReportEditor(): JSX.Element {
         <button onClick={() => navigate(`/self-study/${submissionId}`)} className="rounded border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
           Back to Self-Study
         </button>
-        <button data-testid="reader-report-save-2" onClick={() => save.mutate()} disabled={save.isPending} className="inline-flex items-center gap-1.5 rounded bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
-          {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Reader Report
-        </button>
+        {!readonly && (
+          <>
+            <button data-testid="reader-report-save-2" onClick={() => save.mutate(undefined)} disabled={save.isPending} className="inline-flex items-center gap-1.5 rounded bg-teal-600 px-4 py-2 text-sm font-medium text-white hover:bg-teal-700 disabled:opacity-60">
+              {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Reader Report
+            </button>
+            {!completedAt && (
+              <button data-testid="reader-report-complete-2" onClick={() => save.mutate({ completed: true })} disabled={save.isPending} className="inline-flex items-center gap-1.5 rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60">
+                <CheckCircle2 className="h-4 w-4" /> Mark complete
+              </button>
+            )}
+          </>
+        )}
       </div>
 
       {/* Formatted viewer — the filled OFFICIAL template, converted to HTML and
