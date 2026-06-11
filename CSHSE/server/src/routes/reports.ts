@@ -7,7 +7,8 @@ import {
   previewCompilationReport,
   generateReaderReportNow,
   getReaderReportData,
-  saveReaderReportData
+  saveReaderReportData,
+  downloadReaderReport
 } from '../controllers/reportController';
 import { authenticate } from '../middleware/auth';
 
@@ -57,6 +58,7 @@ router.post('/submission/:submissionId/reader-report/generate', generateReaderRe
  */
 router.get('/submission/:submissionId/reader-report-data', getReaderReportData);
 router.put('/submission/:submissionId/reader-report-data', saveReaderReportData);
+router.get('/submission/:submissionId/reader-report/download', downloadReaderReport);
 
 // ============================================
 // COMPILATION REPORT PDF ROUTES

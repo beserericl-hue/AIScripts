@@ -60,20 +60,28 @@ export function ReaderReportEditor(): JSX.Element {
   const setRow = (code: string, patch: Partial<ReportRow>) =>
     setRows((rs) => rs.map((r) => (r.code === code ? { ...r, ...patch } : r)));
 
+  const [dlError, setDlError] = useState<string | null>(null);
   const downloadGenerated = async (fmt: 'pdf' | 'docx') => {
+    setDlError(null);
     try {
-      const ev = await api.get(`/api/submissions/${submissionId}/evidence`);
-      const items: any[] = ev.data?.evidence || ev.data?.items || [];
-      const it = items.find((i) => (i.tags || []).includes(`reader-report:${fmt}`));
-      if (!it) return;
-      const resp = await api.get(`/api/submissions/${submissionId}/evidence/${it._id}/download`, { responseType: 'blob' });
-      const blob = new Blob([resp.data], { type: resp.headers['content-type'] || 'application/octet-stream' });
+      // Save first so the download reflects the reader's latest edits, then
+      // stream the official template filled with their marks/comments.
+      await save.mutateAsync().catch(() => {});
+      const resp = await api.get(
+        `/api/reports/submission/${submissionId}/reader-report/download?format=${fmt}`,
+        { responseType: 'blob' }
+      );
+      const blob = new Blob([resp.data], {
+        type: resp.headers['content-type'] || (fmt === 'pdf' ? 'application/pdf' : 'application/octet-stream'),
+      });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = it.file?.originalName || `Reader-Report.${fmt}`;
+      a.href = url; a.download = `Reader-Report.${fmt}`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-    } catch { /* no-op */ }
+    } catch (e: any) {
+      setDlError(`Download failed${e?.response?.status ? ` (${e.response.status})` : ''}.`);
+    }
   };
 
   if (query.isLoading) {
@@ -128,6 +136,7 @@ export function ReaderReportEditor(): JSX.Element {
           </button>
         </div>
       </div>
+      {dlError && <p className="mb-2 text-sm text-red-600">{dlError}</p>}
 
       <p className="mb-4 text-sm text-slate-500">
         Each standard is pre-filled from the AI draft. Adjust the compliance mark and comments, then Save.
@@ -153,11 +162,25 @@ export function ReaderReportEditor(): JSX.Element {
                 )}
               </div>
             </div>
+
+            {/* AI assessment — read-only tag so the reader can see the AI's
+                per-spec verdicts/comments while writing their own. */}
+            {r.aiComment && (
+              <details className="mb-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900" open>
+                <summary className="cursor-pointer font-semibold text-amber-800">
+                  AI assessment{r.aiMark ? ` — ${r.aiMark === 'compliant' ? 'Compliant' : 'Non-Compliant'}` : ''}
+                </summary>
+                <div className="mt-1 whitespace-pre-wrap text-amber-900">{r.aiComment}</div>
+              </details>
+            )}
+
+            <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`rr-comment-${r.code}`}>Your comments</label>
             <textarea
+              id={`rr-comment-${r.code}`}
               data-testid={`rr-comment-${r.code}`}
               value={r.readerComment}
               onChange={(e) => setRow(r.code, { readerComment: e.target.value })}
-              placeholder="Reader's comments — note missing information or the reason for a non-compliant decision."
+              placeholder="Note missing information or the reason for a non-compliant decision."
               rows={3}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-300"
             />

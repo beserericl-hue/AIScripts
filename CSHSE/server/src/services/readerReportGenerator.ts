@@ -75,7 +75,7 @@ interface SpecBlock {
   narrative: string; evidence: string;
   verdict?: string; rationale?: string; suggestions: string[]; excluded: boolean;
 }
-interface StandardRollup { mark: 'compliant' | 'noncompliant' | null; comment: string }
+export interface StandardRollup { mark: 'compliant' | 'noncompliant' | null; comment: string }
 interface ReportData {
   institutionName: string; programName: string; programLevel: string;
   submittedAt?: Date;
@@ -343,6 +343,38 @@ export interface ReaderReportStructure {
   programLevel: string;
   levelTitle: string;
   standards: ReaderReportStandardRow[];
+}
+
+/**
+ * Generate the official-template PDF + DOCX buffers for a submission, with the
+ * READER's per-standard marks/comments merged over the AI draft (so the download
+ * reflects what the reader filled in). `readerOverrides` is keyed by standard
+ * code; a mark of '' clears it, a non-empty comment replaces the AI comment.
+ */
+export async function renderReaderReportBuffers(
+  submissionId: string,
+  readerOverrides?: Map<string, { mark: '' | 'compliant' | 'noncompliant'; comment: string }>
+): Promise<{ pdf: Buffer; docx: Buffer } | null> {
+  const submission: any = await Submission.findById(submissionId).select('_id programLevel');
+  if (!submission) return null;
+  const data = await gatherReportData(submissionId);
+  const rollup = rollupByStandard(data);
+  if (readerOverrides) {
+    for (const [code, ov] of readerOverrides) {
+      const base = rollup.get(code) || { mark: null, comment: '' };
+      rollup.set(code, {
+        mark: ov.mark === '' ? null : (ov.mark || base.mark),
+        comment: ov.comment && ov.comment.trim() ? ov.comment : base.comment,
+      });
+    }
+  }
+  const { cfg } = resolveLevel(data.programLevel || submission.programLevel);
+  const levelTitle = cfg?.title || "Master's Degree";
+  const docx = (cfg && fs.existsSync(templatePath(cfg.file)))
+    ? await buildTemplatedDocx(cfg, data, rollup)
+    : await buildProceduralDocx(data, rollup, levelTitle);
+  const pdf = await buildChecklistPdf(data, rollup, levelTitle);
+  return { pdf, docx };
 }
 
 /**

@@ -5,7 +5,7 @@ import { LeadReaderCompilation } from '../models/LeadReaderCompilation';
 import { User } from '../models/User';
 import { Score } from '../models/Score';
 import { PDFGeneratorService } from '../services/pdfGenerator';
-import { generateAndStoreReaderReport, getReaderReportStructure } from '../services/readerReportGenerator';
+import { generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
 import { ReaderReport } from '../models/ReaderReport';
 import { Assignment } from '../models/Assignment';
 
@@ -336,9 +336,11 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
 
     const standards = structure.standards.map((s) => ({
       ...s,
-      // Reader's saved override (falls back to the AI draft when unedited).
+      // The reader's CHECK MARK defaults to the AI's so the checklist starts
+      // pre-filled; the reader's COMMENT starts BLANK (the AI's assessment is
+      // shown separately, read-only, as the tag) so the reader writes their own.
       readerMark: savedByCode[s.code]?.mark ?? (s.aiMark || ''),
-      readerComment: savedByCode[s.code]?.comment ?? (s.aiComment || ''),
+      readerComment: savedByCode[s.code]?.comment ?? '',
     }));
 
     return res.json({
@@ -383,5 +385,43 @@ export const saveReaderReportData = async (req: AuthenticatedRequest, res: Respo
   } catch (error) {
     console.error('Save reader report data error:', error);
     return res.status(500).json({ error: 'Failed to save reader report' });
+  }
+};
+
+/**
+ * GET /api/reports/submission/:submissionId/reader-report/download?format=pdf|docx
+ * Stream the official-template Reader Report (PDF or editable Word) filled with
+ * the current reader's marks/comments (over the AI draft). Reader/lead-reader
+ * (assigned) or admin only — readers can't reach the evidence library directly.
+ */
+export const downloadReaderReport = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    const format = String(req.query.format || 'pdf').toLowerCase() === 'docx' ? 'docx' : 'pdf';
+    if (!mongoose.Types.ObjectId.isValid(submissionId)) return res.status(400).json({ error: 'Invalid submission id' });
+    if (!(await readerMayAccess(req, submissionId))) return res.status(403).json({ error: 'Forbidden' });
+
+    const reviewerId = effectiveReviewerId(req);
+    const saved = await ReaderReport.findOne({ submissionId, reviewerId }).lean();
+    const overrides = new Map<string, { mark: '' | 'compliant' | 'noncompliant'; comment: string }>();
+    for (const r of saved?.rows || []) {
+      if (r.mark || (r.comment && r.comment.trim())) {
+        overrides.set(r.standardCode, { mark: (r.mark as any) || '', comment: r.comment || '' });
+      }
+    }
+
+    const buffers = await renderReaderReportBuffers(submissionId, overrides);
+    if (!buffers) return res.status(404).json({ error: 'Submission not found' });
+
+    const buf = format === 'docx' ? buffers.docx : buffers.pdf;
+    const mime = format === 'docx'
+      ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      : 'application/pdf';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `attachment; filename="Reader-Report.${format}"`);
+    return res.end(buf);
+  } catch (error) {
+    console.error('Download reader report error:', error);
+    return res.status(500).json({ error: 'Failed to download reader report' });
   }
 };
