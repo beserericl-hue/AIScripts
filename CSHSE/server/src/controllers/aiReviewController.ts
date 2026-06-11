@@ -18,7 +18,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 
-import { Document, Packer, Paragraph, HeadingLevel } from 'docx';
+import { Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } from 'docx';
 
 import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
@@ -426,27 +426,27 @@ async function materializeApprovedToEditor(
   //  (c) Existing records are now UPSERTED (not skipped): re-running set-approved
   //      heals records created before this fix (adds text + (std, spec) when the
   //      coordinator later assigns one), instead of leaving them content-less.
-  const fileItems: Array<{ sectionId: string; std?: string; spec?: string; title: string; body: string; kind: string }> = [];
+  const fileItems: Array<{ sectionId: string; std?: string; spec?: string; title: string; body: string; html?: string | null; kind: string }> = [];
   for (const bucket of Object.values(buckets) as any[]) {
     for (const it of bucket.evidenceFiles || []) {
       if (approved.has(it.sectionId)) {
         // Files are frequently tables — the real content lives in htmlSnippet;
         // `snippet` is just a "(data table)" placeholder. Prefer the richer one.
         const body = evidenceBodyText(it.htmlSnippet, it.snippet);
-        fileItems.push({ sectionId: it.sectionId, std: bucket.standardCode, spec: bucket.specCode, title: it.heading || 'Evidence file', body, kind: 'file' });
+        fileItems.push({ sectionId: it.sectionId, std: bucket.standardCode, spec: bucket.specCode, title: it.heading || 'Evidence file', body, html: it.htmlSnippet, kind: 'file' });
       }
     }
   }
   for (const c of state.cvs || []) {
     if (approved.has(c.sectionId)) {
       const body = evidenceBodyText(c.htmlSnippet, c.snippet || c.fullText);
-      fileItems.push({ sectionId: c.sectionId, std: c.resolvedStd || c.routing?.std, spec: c.resolvedSpec || c.routing?.spec, title: `${c.facultyName || 'Faculty'} — CV`, body, kind: 'cv' });
+      fileItems.push({ sectionId: c.sectionId, std: c.resolvedStd || c.routing?.std, spec: c.resolvedSpec || c.routing?.spec, title: `${c.facultyName || 'Faculty'} — CV`, body, html: c.htmlSnippet, kind: 'cv' });
     }
   }
   for (const e of state.evidenceDocs || []) {
     if (approved.has(e.sectionId)) {
       const body = evidenceBodyText(e.htmlSnippet, e.snippet || e.summary);
-      fileItems.push({ sectionId: e.sectionId, std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec, title: e.title || 'Evidence document', body, kind: e.docSubKind || 'paper' });
+      fileItems.push({ sectionId: e.sectionId, std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec, title: e.title || 'Evidence document', body, html: e.htmlSnippet, kind: e.docSubKind || 'paper' });
     }
   }
   // Record a stat even when nothing matched, so the set-approved response can
@@ -468,26 +468,40 @@ async function materializeApprovedToEditor(
       // The AI evaluator reads `metadata.description` / `description` for the
       // evidence text — store the real body there so the file is visible to it.
       const bodyText = (fi.body || '').trim();
+      // Build the .docx with REAL tables when the source has them (evidence is
+      // frequently tabular). Mammoth round-trips real Word tables back to <table>
+      // so the File-Library preview is readable instead of a run-on paragraph.
+      const children: any[] = [
+        new Paragraph({ text: fi.title, heading: HeadingLevel.HEADING_1 }),
+        ...evidenceDocxBlocks(fi.html, bodyText),
+      ];
+      const buffer = await Packer.toBuffer(new Document({ creator: 'CSHSE', title: fi.title, sections: [{ properties: {}, children }] }));
+      const filename = `${String(fi.title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'evidence'}.docx`;
       const existing: any = await SupportingEvidence.findOne({ submissionId: submission._id, tags: tag, isDeleted: false });
       if (existing) {
-        // Heal/upgrade an already-materialized record: refresh routing + text so
-        // approvals made before this fix (or a later spec assignment) take effect.
+        // Heal/upgrade an already-materialized record: refresh routing + text AND
+        // regenerate the file so older flattened-table .docx files become readable
+        // (real tables) on the next set-approved.
         existing.standardCode = fi.std || undefined;
         existing.specCode = fi.spec || undefined;
         existing.description = fi.title;
         existing.metadata = { ...(existing.metadata || {}), description: bodyText };
         existing.markModified('metadata');
+        const ef = existing.file || {};
+        existing.file = {
+          ...ef,
+          filename: ef.filename || filename,
+          originalName: ef.originalName || filename,
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          size: buffer.byteLength, data: buffer.toString('base64'), encoding: 'base64',
+          storageType: 'base64', uploadedAt: new Date(), uploadedBy: userId || submission.submitterId,
+        };
+        existing.markModified('file');
         await existing.save();
         _evUpdated += 1;
         if (fi.std && fi.spec) affected.push({ std: fi.std, spec: fi.spec });
         continue;
       }
-      const children: any[] = [
-        new Paragraph({ text: fi.title, heading: HeadingLevel.HEADING_1 }),
-      ];
-      for (const p of String(bodyText).split(/\n\s*\n/)) children.push(new Paragraph({ text: p.trim() }));
-      const buffer = await Packer.toBuffer(new Document({ creator: 'CSHSE', title: fi.title, sections: [{ properties: {}, children }] }));
-      const filename = `${String(fi.title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'evidence'}.docx`;
       await SupportingEvidence.create({
         institutionId: submission.institutionId,
         submissionId: submission._id,
@@ -547,6 +561,91 @@ function evidenceBodyText(html?: string | null, fallback?: string | null): strin
   // snippet (which is often "(data table)" / a couple of words).
   if (stripped.length > fb.length) return stripped;
   return fb || stripped;
+}
+
+function _cellText(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+const _TBL_BORDER = { style: BorderStyle.SINGLE, size: 1, color: '999999' } as const;
+
+/** Parse one `<table>…</table>` HTML block into a real Word table. */
+function _htmlTableToDocx(tableHtml: string): Table | null {
+  const rows: TableRow[] = [];
+  const trRe = /<tr\b[\s\S]*?<\/tr>/gi;
+  let tr: RegExpExecArray | null;
+  let maxCols = 0;
+  const rawRows: string[][] = [];
+  while ((tr = trRe.exec(tableHtml))) {
+    const cells: string[] = [];
+    const cellRe = /<(td|th)\b[\s\S]*?<\/\1>/gi;
+    let c: RegExpExecArray | null;
+    while ((c = cellRe.exec(tr[0]))) cells.push(_cellText(c[0]));
+    if (cells.length) { rawRows.push(cells); maxCols = Math.max(maxCols, cells.length); }
+  }
+  if (rawRows.length === 0 || maxCols === 0) return null;
+  for (const cells of rawRows) {
+    // Pad short rows so every row has the same column count (valid OOXML table).
+    while (cells.length < maxCols) cells.push('');
+    rows.push(new TableRow({
+      children: cells.map((t) => new TableCell({ children: [new Paragraph({ text: t })] })),
+    }));
+  }
+  return new Table({
+    rows,
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    borders: {
+      top: _TBL_BORDER, bottom: _TBL_BORDER, left: _TBL_BORDER, right: _TBL_BORDER,
+      insideHorizontal: _TBL_BORDER, insideVertical: _TBL_BORDER,
+    },
+  });
+}
+
+/**
+ * Build DOCX body blocks (paragraphs + REAL tables) for an evidence item.
+ * Evidence items are frequently tables — rendering them as a flat paragraph
+ * makes the File-Library preview unreadable. When `html` carries `<table>`s we
+ * emit real Word tables (so mammoth round-trips them back to <table> in preview)
+ * and paragraphs for the surrounding prose; otherwise we fall back to plain-text
+ * paragraphs.
+ */
+function evidenceDocxBlocks(html?: string | null, fallbackText?: string): Array<Paragraph | Table> {
+  const out: Array<Paragraph | Table> = [];
+  const src = html || '';
+  const pushProse = (chunk: string) => {
+    const parts = chunk
+      .replace(/<\/(p|div|h[1-6]|li|tr)>/gi, '\n')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .split('\n')
+      .map(_cellText)
+      .filter(Boolean);
+    for (const p of parts) out.push(new Paragraph({ text: p }));
+  };
+
+  if (/<table[\s>]/i.test(src)) {
+    const re = /<table\b[\s\S]*?<\/table>/gi;
+    let last = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(src))) {
+      if (m.index > last) pushProse(src.slice(last, m.index));
+      const t = _htmlTableToDocx(m[0]);
+      if (t) out.push(t);
+      last = re.lastIndex;
+    }
+    if (last < src.length) pushProse(src.slice(last));
+  } else {
+    // No HTML tables — split the readable text into paragraphs.
+    for (const p of String(fallbackText || evidenceBodyText(html, fallbackText)).split(/\n\s*\n/)) {
+      const t = p.trim();
+      if (t) out.push(new Paragraph({ text: t }));
+    }
+  }
+  if (out.length === 0) out.push(new Paragraph({ text: (fallbackText || '').trim() }));
+  return out;
 }
 
 /**
