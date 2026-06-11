@@ -16,7 +16,12 @@ export interface AuthenticatedRequest extends Request {
     lastName?: string;
     name: string;
     institutionId?: string;
+    // EFFECTIVE elevation: false while impersonating a non-admin role, so all
+    // access checks treat the impersonated session as that role.
     isSuperuser?: boolean;
+    // The TRUE underlying superuser flag (unaffected by impersonation) for the
+    // rare feature that must know the real actor is a superuser.
+    realIsSuperuser?: boolean;
     // CR-058 — present only when a superuser is acting through an
     // impersonation session. `role` above is the *effective* (impersonated)
     // role; this captures the true actor + the chosen identity.
@@ -94,6 +99,15 @@ export const authenticate = async (
           }
         : undefined;
 
+      // While impersonating a NON-admin role (reader / lead_reader / program
+      // coordinator), the superuser must be treated AS that role for access
+      // control — otherwise a superuser "viewing as Reader Two" still sees every
+      // submission (elevation bypasses the reader assignment/status scoping).
+      // Keep elevation only when NOT impersonating, or impersonating admin.
+      // `realIsSuperuser` preserves the true flag for the rare feature that
+      // legitimately needs it; impersonation detection above uses the DB value.
+      const effectiveIsSuperuser = user.isSuperuser && (!isImpersonating || effectiveRole === 'admin');
+
       // Populate req.user with user information
       req.user = {
         id: user._id.toString(),
@@ -104,7 +118,8 @@ export const authenticate = async (
         lastName: user.lastName,
         name: actorName,
         institutionId: user.institutionId?.toString(),
-        isSuperuser: user.isSuperuser,
+        isSuperuser: effectiveIsSuperuser,
+        realIsSuperuser: user.isSuperuser,
         impersonation
       };
 
