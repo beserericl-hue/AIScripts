@@ -140,8 +140,17 @@ export function ReaderReportEditor(): JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           {savedAt && <span className="text-xs text-emerald-600 inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />Saved</span>}
-          <button onClick={() => downloadGenerated('pdf')} className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50" title="Download PDF"><Download className="h-4 w-4" />PDF</button>
-          <button onClick={() => downloadGenerated('docx')} className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50" title="Download editable Word"><Download className="h-4 w-4" />Word</button>
+          {/* The official CSHSE reader-report template IS a Word document — the
+              download is that template, filled with the reader's checklist +
+              comments. */}
+          <button
+            data-testid="reader-report-download"
+            onClick={() => downloadGenerated('docx')}
+            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            title="Download the official CSHSE template (Word), filled with your marks and comments"
+          >
+            <Download className="h-4 w-4" />Download template (Word)
+          </button>
           <button
             data-testid="reader-report-save"
             onClick={() => save.mutate()}
