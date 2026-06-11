@@ -87,9 +87,13 @@ export function ReaderDashboardView({
           const meta = statusMeta(sub.status);
           return (
             <li key={sub._id}>
+              {/* Readers open the submission in the SAME Self-Study Editor the
+                  PC uses (sidebar of standards + narrative + supporting evidence
+                  + comments on the side + scoring + Reader Report) — NOT a
+                  separate flat screen. */}
               <Link
                 data-testid={`reader-submission-${sub._id}`}
-                to={`/reader/${sub._id}`}
+                to={`/self-study/${sub._id}`}
                 className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50"
               >
                 <div className="min-w-0 flex-1">
