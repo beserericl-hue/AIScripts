@@ -73,6 +73,7 @@ function stripHtml(html?: string | null): string {
 interface SpecBlock {
   std: string; spec: string; title: string;
   narrative: string; evidence: string;
+  narrativeHtml: string; evidenceHtml: string;
   verdict?: string; rationale?: string; suggestions: string[]; excluded: boolean;
 }
 export interface StandardRollup { mark: 'compliant' | 'noncompliant' | null; comment: string }
@@ -116,6 +117,7 @@ async function gatherReportData(submissionId: string): Promise<ReportData> {
       specs.push({
         std: std.code, spec: sp.code, title: sp.title || '',
         narrative: stripHtml(n?.content), evidence: stripHtml(n?.supportingEvidenceText),
+        narrativeHtml: (n?.content as string) || '', evidenceHtml: (n?.supportingEvidenceText as string) || '',
         verdict: res?.verdict, rationale: res?.rationale || res?.feedback,
         suggestions: res?.suggestions || res?.missingElements || [],
         excluded: st?.excluded === true,
@@ -331,11 +333,20 @@ export async function generateAndStoreReaderReport(
   return { pdf: true, docx: true, level: key, templated };
 }
 
+export interface ReaderReportSpec {
+  specCode: string;
+  specTitle: string;
+  narrativeHtml: string;
+  evidenceHtml: string;
+  verdict?: string;
+  excluded: boolean;
+}
 export interface ReaderReportStandardRow {
   code: string;
   title: string;
   aiMark: 'compliant' | 'noncompliant' | null;
   aiComment: string;
+  specs: ReaderReportSpec[];
 }
 export interface ReaderReportStructure {
   institutionName: string;
@@ -391,7 +402,16 @@ export async function getReaderReportStructure(submissionId: string): Promise<Re
     .filter((s) => s.specs.some((sp) => !sp.excluded && (sp.narrative || sp.evidence || sp.verdict)))
     .map((s) => {
       const r = rollup.get(s.code) || { mark: null, comment: '' };
-      return { code: s.code, title: s.title, aiMark: r.mark, aiComment: r.comment };
+      // Specs with self-study content, so the reader can read the narrative +
+      // supporting evidence right on the report screen.
+      const specs: ReaderReportSpec[] = s.specs
+        .filter((sp) => !sp.excluded && (sp.narrativeHtml || sp.evidenceHtml))
+        .map((sp) => ({
+          specCode: sp.spec, specTitle: sp.title,
+          narrativeHtml: sp.narrativeHtml, evidenceHtml: sp.evidenceHtml,
+          verdict: sp.verdict, excluded: sp.excluded,
+        }));
+      return { code: s.code, title: s.title, aiMark: r.mark, aiComment: r.comment, specs };
     });
   return {
     institutionName: data.institutionName,

@@ -4,6 +4,13 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { ChevronLeft, Save, Check, Loader2, Download } from 'lucide-react';
 import { api } from '../../services/api';
 
+interface ReportSpec {
+  specCode: string;
+  specTitle: string;
+  narrativeHtml: string;
+  evidenceHtml: string;
+  verdict?: string;
+}
 interface ReportRow {
   code: string;
   title: string;
@@ -11,6 +18,7 @@ interface ReportRow {
   aiComment: string;
   readerMark: 'compliant' | 'noncompliant' | '';
   readerComment: string;
+  specs: ReportSpec[];
 }
 interface ReportData {
   institutionName: string;
@@ -106,6 +114,15 @@ export function ReaderReportEditor(): JSX.Element {
   }
 
   const data = query.data!;
+  // Rendered-content styling for narrative + supporting evidence (matches the
+  // reader review row: real tables/lists/links at a readable size).
+  const proseCls =
+    'prose prose-sm max-w-none text-slate-800 ' +
+    '[&_p]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 ' +
+    '[&_table]:border-collapse [&_table]:w-full [&_table]:my-2 ' +
+    '[&_td]:border [&_td]:border-slate-300 [&_td]:px-2 [&_td]:py-1 [&_td]:align-top ' +
+    '[&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-semibold ' +
+    '[&_a]:text-teal-700 [&_a]:underline';
   return (
     <div data-testid="reader-report-editor" className="mx-auto max-w-4xl p-6">
       {/* Header + nav back to the self-study editor */}
@@ -139,8 +156,9 @@ export function ReaderReportEditor(): JSX.Element {
       {dlError && <p className="mb-2 text-sm text-red-600">{dlError}</p>}
 
       <p className="mb-4 text-sm text-slate-500">
-        Each standard is pre-filled from the AI draft. Adjust the compliance mark and comments, then Save.
-        Use “Back to Self-Study” to read the narratives and add inline comments.
+        For each standard: click the AI assessment tag to see the AI's view, read the narrative and
+        supporting evidence below it, then set the Compliant/Non-Compliant check and write your comments. Save when done.
+        Use “Back to Self-Study” to add inline comments on the text.
       </p>
 
       <div className="space-y-3">
@@ -163,18 +181,39 @@ export function ReaderReportEditor(): JSX.Element {
               </div>
             </div>
 
-            {/* AI assessment — read-only tag so the reader can see the AI's
-                per-spec verdicts/comments while writing their own. */}
+            {/* AI assessment — a TAG you click to reveal the AI's per-spec
+                verdicts (collapsed by default), like the self-study editor. */}
             {r.aiComment && (
-              <details className="mb-2 rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900" open>
-                <summary className="cursor-pointer font-semibold text-amber-800">
-                  AI assessment{r.aiMark ? ` — ${r.aiMark === 'compliant' ? 'Compliant' : 'Non-Compliant'}` : ''}
+              <details data-testid={`rr-ai-${r.code}`} className="mb-3 rounded-lg border border-amber-200 bg-amber-50">
+                <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 rounded-lg">
+                  ⓘ AI assessment{r.aiMark ? ` — ${r.aiMark === 'compliant' ? 'Compliant' : 'Non-Compliant'}` : ''} <span className="font-normal text-amber-600">(click to view)</span>
                 </summary>
-                <div className="mt-1 whitespace-pre-wrap text-amber-900">{r.aiComment}</div>
+                <div className="border-t border-amber-200 px-3 py-2 text-xs whitespace-pre-wrap text-amber-900">{r.aiComment}</div>
               </details>
             )}
 
-            <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`rr-comment-${r.code}`}>Your comments</label>
+            {/* The self-study itself — each spec's narrative + supporting evidence,
+                so the reader reads and assesses in one place. */}
+            {r.specs.map((sp) => (
+              <div key={sp.specCode} className="mb-3 rounded border border-slate-100 bg-slate-50 p-3">
+                <h3 className="mb-1 text-sm font-semibold text-slate-700">{r.code}.{sp.specCode} {sp.specTitle}</h3>
+                {sp.narrativeHtml ? (
+                  <div className={proseCls} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />
+                ) : (
+                  <p className="text-sm italic text-slate-400">No narrative submitted.</p>
+                )}
+                {sp.evidenceHtml ? (
+                  <>
+                    <p className="mt-2 text-xs font-semibold text-slate-500">Supporting evidence</p>
+                    <div className={`${proseCls} rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />
+                  </>
+                ) : null}
+              </div>
+            ))}
+
+            {/* Reader's comments — the checklist mark is the Compliant/Non-Compliant
+                control at the top of this section. */}
+            <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`rr-comment-${r.code}`}>Your comments for Standard {r.code}</label>
             <textarea
               id={`rr-comment-${r.code}`}
               data-testid={`rr-comment-${r.code}`}
