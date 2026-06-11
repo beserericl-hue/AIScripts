@@ -2231,3 +2231,10 @@ Commit 6515229.
 - **Runtime:** `readerReportGenerator` selects the template by `programLevel`, rolls up per-spec AI verdicts → per-standard Compliant/Non-Compliant mark, writes the AI rationale into Reader's Comments, and fills the real template via `docx.patchDocument`. A matching checklist PDF (pdfkit) mirrors the structure + recommendation/signature. `build.js` already mirrors `src/assets`→`dist/assets`.
 - **Masters:** no official-template mapping yet → procedural checklist fallback (same shape). FOLLOW-UP: map the masters template (it's ~23 separate tables) the same way.
 - **Verified live on Stevenson (baccalaureate):** filled DOCX has header "Stevenson University" / "BACCALAUREATE DEGREE IN HUMAN SERVICES v2025", 22 standard rows marked (19 Non-Compliant from the AI verdicts, 3 blank), comments "AI DRAFT — 3.b — FAIL: …" appended after the template prompt, recommendation+signature preserved. PDF 15 pages. Spec 63 asserts `templated:true, level:baccalaureate`.
+
+## 2026-06-11 — Tabular evidence previews as a real table (File Library)
+
+**Symptom:** `(data table).docx` files in the Supporting File Library previewed as an unreadable run-on paragraph.
+**Root cause:** `materializeApprovedToEditor` built the evidence `.docx` from flattened `bodyText` (split on `\n\n` → one paragraph). The `.docx` had ZERO Word tables, so mammoth (preview) had no table to render.
+**Fix:** `evidenceDocxBlocks(html, fallback)` parses the item's `htmlSnippet` into REAL Word tables (`docx` Table/TableRow/TableCell, bordered) + paragraphs; used in BOTH the create and heal branches. The heal branch now REGENERATES the file buffer, so re-running set-approved upgrades old flat files. mammoth round-trips Word tables → `<table>`, which `FilePreviewModal` already styles.
+**Verified:** e2e spec 65 (approve table evidence → `/preview` html contains `<table>` + cells). Healed Stevenson: re-POST set-approved → 65 files regenerated; sample `(data table).docx` went `w:tbl` 0→1, preview html now has `<table>` (17 rows).
