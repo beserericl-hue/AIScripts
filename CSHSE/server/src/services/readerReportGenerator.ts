@@ -357,10 +357,13 @@ export interface ReaderReportStructure {
 }
 
 /**
- * Generate the official-template PDF + DOCX buffers for a submission, with the
- * READER's per-standard marks/comments merged over the AI draft (so the download
- * reflects what the reader filled in). `readerOverrides` is keyed by standard
- * code; a mark of '' clears it, a non-empty comment replaces the AI comment.
+ * Generate the official-template PDF + DOCX buffers for a submission.
+ *
+ * When `readerOverrides` is supplied (the reader's download/view) the template is
+ * filled from the READER's data ONLY — their check mark + their comments. The AI
+ * evaluation is NEVER written into the printed template (the reader sees it only
+ * as the on-screen tag). Without overrides (the auto-generated draft stored in
+ * the library) the AI rollup is used.
  */
 export async function renderReaderReportBuffers(
   submissionId: string,
@@ -369,15 +372,19 @@ export async function renderReaderReportBuffers(
   const submission: any = await Submission.findById(submissionId).select('_id programLevel');
   if (!submission) return null;
   const data = await gatherReportData(submissionId);
-  const rollup = rollupByStandard(data);
+  let rollup: Map<string, StandardRollup>;
   if (readerOverrides) {
-    for (const [code, ov] of readerOverrides) {
-      const base = rollup.get(code) || { mark: null, comment: '' };
-      rollup.set(code, {
-        mark: ov.mark === '' ? null : (ov.mark || base.mark),
-        comment: ov.comment && ov.comment.trim() ? ov.comment : base.comment,
+    // Reader's report: ONLY the reader's marks + comments (no AI text in print).
+    rollup = new Map<string, StandardRollup>();
+    for (const std of data.standards) {
+      const ov = readerOverrides.get(std.code);
+      rollup.set(std.code, {
+        mark: ov?.mark === 'compliant' || ov?.mark === 'noncompliant' ? ov.mark : null,
+        comment: ov?.comment || '',
       });
     }
+  } else {
+    rollup = rollupByStandard(data);
   }
   const { cfg } = resolveLevel(data.programLevel || submission.programLevel);
   const levelTitle = cfg?.title || "Master's Degree";

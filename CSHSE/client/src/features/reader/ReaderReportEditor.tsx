@@ -131,10 +131,12 @@ export function ReaderReportEditor(): JSX.Element {
   const data = query.data!;
   // Rendered-content styling for narrative + supporting evidence (matches the
   // reader review row: real tables/lists/links at a readable size).
+  // Match the self-study editor's reading size (prose-base) — readers said the
+  // smaller text was hard to read.
   const proseCls =
-    'prose prose-sm max-w-none text-slate-800 ' +
-    '[&_p]:my-1.5 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 ' +
-    '[&_table]:border-collapse [&_table]:w-full [&_table]:my-2 ' +
+    'prose prose-base max-w-none text-slate-800 ' +
+    '[&_p]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 ' +
+    '[&_table]:border-collapse [&_table]:w-full [&_table]:my-3 ' +
     '[&_td]:border [&_td]:border-slate-300 [&_td]:px-2 [&_td]:py-1 [&_td]:align-top ' +
     '[&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-semibold ' +
     '[&_a]:text-teal-700 [&_a]:underline';
