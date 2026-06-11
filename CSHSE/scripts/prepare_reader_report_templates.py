@@ -36,12 +36,25 @@ LEVELS = {
         "keys": [None,"1","2","3","4","5","6","7","8","9","10",
                  "11","12","13","14","15","16","17","18","19","20"],
     },
+    "masters": {
+        "file": "Self_Study_Reader_ template_ Master's degree July 2025.docx",
+        # 20 fillable header rows in document order: intro, Standards 1-10,
+        # curriculum-matrix intro, Standards 11-18.
+        "keys": [None,"1","2","3","4","5","6","7","8","9","10",
+                 None,"11","12","13","14","15","16","17","18"],
+        # Masters header is a single tab-delimited paragraph with multiple
+        # labels; filling it would clobber the other fields, so skip it.
+        "no_header": True,
+    },
 }
 
 def is_fillable(row):
     for c in row.cells:
         t = c.text.lower()
         if "reader" in t and "comment" in t:
+            return True
+        # Masters template uses an "Areas of noncompliance" comments column.
+        if "areas of noncompliance" in t:
             return True
     return False
 
@@ -58,8 +71,11 @@ def find_cells(row):
         norm = re.sub(r"[^a-z]", "", tl)
         if "reader" in tl and "comment" in tl:
             comm = c
-        elif norm == "compliant":
-            comp = c
+        elif "areas of noncompliance" in tl:   # masters comments column
+            comm = c
+        elif norm == "compliant" or (norm.endswith("compliant")
+                                     and "non" not in norm and len(norm) <= 12):
+            comp = c   # matches "Compliant" and masters' "a.  Compliant"
         elif norm.startswith("noncompliant"):
             noncomp = c
     return comp, noncomp, comm
@@ -109,8 +125,11 @@ def process(level, cfg):
         if noncomp is not None: prepend_run(noncomp, f"{{{{n_{key}}}}} ")
         if comm is not None:  comm.add_paragraph(f"{{{{cm_{key}}}}}")
         filled += 1
-    ih = fill_header(doc, "Institution’s Name:", "{{inst_name}}")
-    ph = fill_header(doc, "Program’s Name:", "{{prog_name}}")
+    if cfg.get("no_header"):
+        ih = ph = False
+    else:
+        ih = fill_header(doc, "Institution’s Name:", "{{inst_name}}")
+        ph = fill_header(doc, "Program’s Name:", "{{prog_name}}")
     out = f"{OUT}/{level}.docx"
     doc.save(out)
     print(f"  {level}: {filled} standard rows templated, header(inst={ih},prog={ph}) -> {out}")

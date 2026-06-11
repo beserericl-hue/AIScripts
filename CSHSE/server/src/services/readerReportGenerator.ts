@@ -41,14 +41,16 @@ const VERDICT_LABEL: Record<string, string> = {
 // (Mirrors scripts/prepare_reader_report_templates.py.) Masters has no template
 // yet → procedural fallback.
 const STDS_1_20 = Array.from({ length: 20 }, (_, i) => String(i + 1));
+const STDS_1_18 = Array.from({ length: 18 }, (_, i) => String(i + 1));
 const LEVELS: Record<string, { file: string; stds: string[]; title: string }> = {
   baccalaureate: { file: 'baccalaureate.docx', stds: [...STDS_1_20, '22'], title: "Baccalaureate Degree" },
   associate: { file: 'associate.docx', stds: [...STDS_1_20], title: 'Associate Degree' },
+  masters: { file: 'masters.docx', stds: [...STDS_1_18], title: "Master's Degree" },
 };
 function resolveLevel(programLevel?: string): { key: string; cfg?: { file: string; stds: string[]; title: string } } {
   const pl = String(programLevel || '').toLowerCase();
   if (pl === 'associate') return { key: 'associate', cfg: LEVELS.associate };
-  if (pl === 'masters' || pl === 'master' || pl === "master's") return { key: 'masters', cfg: undefined };
+  if (pl === 'masters' || pl === 'master' || pl === "master's") return { key: 'masters', cfg: LEVELS.masters };
   // bachelors / baccalaureate / default
   return { key: 'baccalaureate', cfg: LEVELS.baccalaureate };
 }
