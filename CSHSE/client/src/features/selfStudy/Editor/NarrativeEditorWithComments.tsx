@@ -12,6 +12,28 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+/**
+ * Convert narrative HTML to READABLE plain text for the comment view.
+ * CommentableText anchors comments by character offset, so it needs plain text —
+ * but a naive `replace(/<[^>]*>/g,'')` collapses a table into an unreadable
+ * run-on. This preserves structure: table rows become lines, cells are joined
+ * with " | ", and block elements become line breaks. So readers can actually
+ * read tabular evidence and still select text to comment on it.
+ */
+function htmlToReadableText(html: string): string {
+  return String(html || '')
+    .replace(/<\/\s*(td|th)\s*>/gi, ' | ')              // separator after each cell
+    .replace(/<\/\s*tr\s*>/gi, '\n')                    // row → line
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/\s*(p|div|li|h[1-6]|table)\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/[ \t]*\|\s*$/gm, '')                      // drop trailing separator at row end
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 interface Comment {
   _id: string;
   selectedText: string;
@@ -170,7 +192,7 @@ export function NarrativeEditorWithComments({
             </div>
 
             <CommentableText
-              content={initialContent.replace(/<[^>]*>/g, '')} // Strip HTML for plain text view
+              content={htmlToReadableText(initialContent)} // Strip HTML for plain text view
               submissionId={submissionId}
               standardCode={standardCode}
               specCode={specCode}
@@ -267,7 +289,7 @@ export function NarrativeEditorWithComments({
               </div>
 
               <CommentableText
-                content={initialContent.replace(/<[^>]*>/g, '')}
+                content={htmlToReadableText(initialContent)}
                 submissionId={submissionId}
                 standardCode={standardCode}
                 specCode={specCode}

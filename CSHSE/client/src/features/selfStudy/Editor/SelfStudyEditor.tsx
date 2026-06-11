@@ -2196,7 +2196,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       return { validated: 0, total: 0 };
     }
 
-    let validated = 0;
+    let validated = 0;   // specs that PASSED (gates the all-pass submit readiness)
+    let evaluated = 0;   // specs the AI has reviewed at all (pass OR fail)
     let total = 0;
 
     for (const standard of standards) {
@@ -2207,13 +2208,15 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         // doing. Keeps the X/Y counter honest.
         if (status?.excluded === true) continue;
         total++;
-        if (status?.validationStatus === 'pass') {
-          validated++;
-        }
+        if (status?.validationStatus === 'pass') validated++;
+        // A spec with any verdict (pass or fail) has been run through validation —
+        // this is what the header "Validated" counter reflects (rises with
+        // Validate-All), distinct from the all-pass submit gate.
+        if (status?.validationStatus === 'pass' || status?.validationStatus === 'fail') evaluated++;
       }
     }
 
-    return { validated, total };
+    return { validated, evaluated, total };
   }, [standards, submission?.standardsStatus]);
 
   // CR-045 — count of items waiting in the Drafts (Review) queue, for the
@@ -2609,9 +2612,14 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   </button>
                 )}
 
-                {/* Validation Progress */}
-                <span className="text-sm text-gray-500">
-                  {validationProgress.validated}/{validationProgress.total} Validated
+                {/* Validation Progress — specs the AI has reviewed (pass OR fail),
+                    so it reflects Validate-All progress. Submit still requires all
+                    to PASS (see the disabled-button tooltip). */}
+                <span
+                  className="text-sm text-gray-500"
+                  title={`${validationProgress.evaluated} of ${validationProgress.total} specifications reviewed by AI · ${validationProgress.validated} passed`}
+                >
+                  {validationProgress.evaluated}/{validationProgress.total} Validated
                 </span>
 
                 {/* Submit Self-Study Button */}
@@ -2629,7 +2637,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       ? "Self-study has been submitted for review"
                       : isSelfStudyReadyForSubmit
                       ? "Submit self-study for review - this will lock the document"
-                      : `All specifications must be validated before submitting (${validationProgress.validated}/${validationProgress.total} complete)`
+                      : `All specifications must PASS validation before submitting (${validationProgress.validated} of ${validationProgress.total} passed; ${validationProgress.evaluated} reviewed)`
                   }
                 >
                   {submitSelfStudyMutation.isPending ? (
@@ -4326,12 +4334,25 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 // Progress Indicator Component
 function ProgressIndicator({ submission }: { submission?: SubmissionData }) {
   const progress = React.useMemo(() => {
-    if (!submission?.standardsStatus) return { completed: 0, total: 21 };
-    const statuses = Object.values(submission.standardsStatus);
-    const completed = statuses.filter(
-      (s) => s.status === 'complete' || s.status === 'submitted' || s.status === 'validated'
-    ).length;
-    return { completed, total: statuses.length || 21 };
+    const ss: any = submission?.standardsStatus || {};
+    // standardsStatus is keyed by BOTH standard-level ("1") and spec-level
+    // ("1_a") entries. The "Standards" stat must count STANDARDS only — the
+    // old code counted every key (specs + standards), so it showed e.g. 86.
+    const standardKeys = Object.keys(ss).filter((k) => !k.includes('_'));
+    const total = standardKeys.length || 21;
+    const hasText = (s?: string) => (s || '').replace(/<[^>]*>/g, '').trim().length > 0;
+    // A standard counts as addressed when any of its specs has stored content,
+    // or the standard is explicitly marked complete.
+    const addressed = new Set<string>();
+    for (const n of submission?.narrativeContent || []) {
+      if (hasText(n.content) || hasText(n.supportingEvidenceText)) addressed.add(n.standardCode);
+    }
+    for (const k of standardKeys) {
+      const st = ss[k]?.status;
+      if (st === 'complete' || st === 'submitted' || st === 'validated') addressed.add(k);
+    }
+    const completed = [...addressed].filter((c) => standardKeys.includes(c)).length;
+    return { completed, total };
   }, [submission]);
 
   const percent = Math.round((progress.completed / progress.total) * 100);
