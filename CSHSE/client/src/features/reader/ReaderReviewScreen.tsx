@@ -2,7 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
-import { Loader2, ChevronLeft, MessageSquare } from 'lucide-react';
+import { Loader2, ChevronLeft, MessageSquare, Download } from 'lucide-react';
 import { ReaderSpecRow } from './ReaderSpecRow';
 import type { ScoreValue } from './Score4LevelSelector';
 import { useOnceHint } from '../tour/useOnceHint';
@@ -23,6 +23,9 @@ interface SubmissionPayload {
   programLevel: 'associate' | 'bachelors' | 'masters';
   status: string;
   narratives?: Record<string, Record<string, { content?: string; supportingEvidenceText?: string }>>;
+  // getSubmission flattens the narratives Map into this array (the Map itself
+  // does NOT serialize, so `narratives` comes back empty — read from here).
+  narrativeContent?: Array<{ standardCode: string; specCode: string; content?: string; supportingEvidenceText?: string }>;
   standardsStatus?: Record<string, { excluded?: boolean; excludedReason?: string }>;
 }
 
@@ -42,6 +45,7 @@ export interface ReaderReviewScreenViewProps {
   scoresByKey: Record<string, ScoreValue>;
   /** CR-009 follow-on / S11.3 — lead reader's Final score per spec, read-only. */
   finalScoresByKey?: Record<string, ScoreValue>;
+  reportFiles?: { pdf?: { id: string; name: string }; docx?: { id: string; name: string } };
   canScore: boolean;
   canOverride: boolean;
   isLoading: boolean;
@@ -53,11 +57,29 @@ export function ReaderReviewScreenView({
   standards,
   scoresByKey,
   finalScoresByKey = {},
+  reportFiles,
   canScore,
   canOverride,
   isLoading,
   error,
 }: ReaderReviewScreenViewProps): JSX.Element {
+  const downloadReport = React.useCallback(async (evidenceId: string, fileName: string) => {
+    if (!submission) return;
+    try {
+      const resp = await api.get(
+        `/api/submissions/${submission._id}/evidence/${evidenceId}/download`,
+        { responseType: 'blob' }
+      );
+      const blob = new Blob([resp.data], { type: resp.headers['content-type'] || 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fileName || 'Reader-Report';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch {
+      /* non-fatal — the button just no-ops if the file isn't ready */
+    }
+  }, [submission]);
   if (isLoading) {
     return (
       <div data-testid="reader-review-loading" className="flex items-center gap-2 p-6 text-slate-600">
@@ -81,6 +103,12 @@ export function ReaderReviewScreenView({
     );
   }
 
+  // Build a per-spec narrative lookup from the flattened array.
+  const narrativeByKey: Record<string, { content?: string; supportingEvidenceText?: string }> = {};
+  for (const n of submission.narrativeContent || []) {
+    narrativeByKey[`${n.standardCode}_${n.specCode}`] = { content: n.content, supportingEvidenceText: n.supportingEvidenceText };
+  }
+
   return (
     <div data-testid="reader-review-screen" className="mx-auto max-w-4xl p-6">
       <Link to="/reader" className="mb-3 inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900">
@@ -96,15 +124,43 @@ export function ReaderReviewScreenView({
             {submission.submissionId}
           </p>
         </div>
-        {/* CR-010 / S12.2 — Messages reachable from the reader workspace. */}
-        <Link
-          to={`/messages/${submission._id}`}
-          data-testid="reader-messages-link"
-          className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          <MessageSquare className="h-4 w-4" aria-hidden />
-          <span>Messages</span>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Reader Report — download the compiled self-study + AI verdicts
+              (official CSHSE template). DOCX is editable; PDF is the snapshot. */}
+          {reportFiles?.pdf && (
+            <button
+              type="button"
+              data-testid="reader-report-pdf"
+              onClick={() => downloadReport(reportFiles.pdf!.id, reportFiles.pdf!.name)}
+              className="inline-flex items-center gap-1 rounded border border-teal-300 bg-teal-50 px-3 py-1.5 text-sm text-teal-800 hover:bg-teal-100"
+              title="Download the Reader Report (PDF)"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              <span>Reader Report (PDF)</span>
+            </button>
+          )}
+          {reportFiles?.docx && (
+            <button
+              type="button"
+              data-testid="reader-report-docx"
+              onClick={() => downloadReport(reportFiles.docx!.id, reportFiles.docx!.name)}
+              className="inline-flex items-center gap-1 rounded border border-teal-300 bg-white px-3 py-1.5 text-sm text-teal-800 hover:bg-teal-50"
+              title="Download the editable Reader Report (Word)"
+            >
+              <Download className="h-4 w-4" aria-hidden />
+              <span>Word (editable)</span>
+            </button>
+          )}
+          {/* CR-010 / S12.2 — Messages reachable from the reader workspace. */}
+          <Link
+            to={`/messages/${submission._id}`}
+            data-testid="reader-messages-link"
+            className="inline-flex items-center gap-1 rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            <MessageSquare className="h-4 w-4" aria-hidden />
+            <span>Messages</span>
+          </Link>
+        </div>
       </header>
 
       <div className="space-y-4">
@@ -115,7 +171,9 @@ export function ReaderReviewScreenView({
               {std.specifications.map((spec) => {
                 const key = `${std.code}_${spec.code}`;
                 const status = submission.standardsStatus?.[key];
-                const narrative = submission.narratives?.[std.code]?.[spec.code];
+                // Prefer the flattened narrativeContent array (the nested
+                // `narratives` Map doesn't serialize and comes back empty).
+                const narrative = narrativeByKey[key] || submission.narratives?.[std.code]?.[spec.code];
                 return (
                   <ReaderSpecRow
                     key={key}
@@ -161,21 +219,40 @@ export function ReaderReviewScreen({ userRole }: ReaderReviewScreenProps): JSX.E
     refetchOnWindowFocus: false,
   });
 
-  // Active spec list — reuses the existing /api/specs?status=active endpoint
-  // the rest of the app uses (returns the CSHSE-defined standards + their
-  // specifications).
+  // Standards + specifications — the SAME source the PC editor uses
+  // (`/api/standards` returns the CSHSE-defined 21 standards with their specs
+  // directly). The old `/api/specs?status=active` path returned Spec documents
+  // WITHOUT a `.standards` array (only standardsCount) and picked specs[0]
+  // (the Master's set), so `standards` came back empty and the reader screen
+  // rendered a blank body below the header.
   const specsQuery = useQuery({
-    queryKey: ['active-specs'],
+    queryKey: ['standards'],
     queryFn: async () => {
-      const r = await api.get('/api/specs', { params: { status: 'active' } });
-      // The Spec model carries .standards; normalize to {code, specifications}.
-      const spec = r.data?.specs?.[0];
-      const raw = spec?.standards || [];
+      const r = await api.get('/api/standards');
+      const raw = Array.isArray(r.data) ? r.data : (r.data?.standards || []);
       return raw.map((s: any) => ({
         code: String(s.code ?? s.standardCode),
         specifications: (s.specifications || []).map((sp: any) => ({ code: String(sp.code ?? sp.specCode) })),
       })) as StandardSpec[];
     },
+    refetchOnWindowFocus: false,
+  });
+
+  // Reader Report files (PDF + editable DOCX) from the Supporting File Library,
+  // so the reader can download/view them right from the review screen.
+  const reportQuery = useQuery({
+    queryKey: ['reader-report-files', submissionId],
+    queryFn: async () => {
+      const r = await api.get(`/api/submissions/${submissionId}/evidence`);
+      const items: any[] = r.data?.evidence || r.data?.items || (Array.isArray(r.data) ? r.data : []);
+      const pick = (tag: string) => {
+        const it = items.find((i) => (i.tags || []).includes(tag));
+        return it ? { id: it._id as string, name: (it.file?.originalName as string) || 'Reader Report' } : undefined;
+      };
+      return { pdf: pick('reader-report:pdf'), docx: pick('reader-report:docx') };
+    },
+    enabled: !!submissionId,
+    retry: false,
     refetchOnWindowFocus: false,
   });
 
@@ -246,6 +323,7 @@ export function ReaderReviewScreen({ userRole }: ReaderReviewScreenProps): JSX.E
       standards={standards}
       scoresByKey={scoresByKey}
       finalScoresByKey={finalScoresByKey}
+      reportFiles={reportQuery.data}
       canScore={canScore}
       canOverride={canOverride}
       isLoading={isLoading}
