@@ -26,6 +26,7 @@ import {
   Lock,
   Sparkles,
   Download,
+  ClipboardList,
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -2601,29 +2602,30 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     <FolderOpen className="w-4 h-4 flex-shrink-0" />
                     Supporting File Library
                   </button>
-                  {/* Reader Report — view / download the compiled report (PDF +
-                      editable Word). Shown to everyone once it exists in the
-                      library (auto-generated after submit's Validate-all). */}
-                  {reportFiles?.pdf && (
+                  {/* Reader Report — reader/lead-reader ONLY. Opens the dedicated
+                      Reader Report screen to view, edit and save the compliance
+                      checklist; from there they return here to comment. */}
+                  {isReviewer && (
+                    <button
+                      data-testid="reader-report-open"
+                      onClick={() => navigate(`/reader-report/${submissionId}`)}
+                      title="Open the Reader Report — view, edit and save your assessment"
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                    >
+                      <ClipboardList className="w-4 h-4 flex-shrink-0" />
+                      Reader Report
+                    </button>
+                  )}
+                  {/* PC/admin keep a quick download of the generated report. */}
+                  {!isReviewer && reportFiles?.pdf && (
                     <button
                       data-testid="reader-report-pdf-toolbar"
                       onClick={() => downloadReport(reportFiles.pdf!.id, reportFiles.pdf!.name)}
-                      title="View / download the Reader Report (PDF)"
+                      title="Download the Reader Report (PDF)"
                       className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"
                     >
                       <Download className="w-4 h-4 flex-shrink-0" />
                       Reader Report
-                    </button>
-                  )}
-                  {reportFiles?.docx && (
-                    <button
-                      data-testid="reader-report-docx-toolbar"
-                      onClick={() => downloadReport(reportFiles.docx!.id, reportFiles.docx!.name)}
-                      title="Download the editable Reader Report (Word)"
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap border border-teal-200 text-teal-700 hover:bg-teal-50"
-                    >
-                      <Download className="w-4 h-4 flex-shrink-0" />
-                      Word
                     </button>
                   )}
                 </div>

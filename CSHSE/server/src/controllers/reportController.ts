@@ -5,7 +5,9 @@ import { LeadReaderCompilation } from '../models/LeadReaderCompilation';
 import { User } from '../models/User';
 import { Score } from '../models/Score';
 import { PDFGeneratorService } from '../services/pdfGenerator';
-import { generateAndStoreReaderReport } from '../services/readerReportGenerator';
+import { generateAndStoreReaderReport, getReaderReportStructure } from '../services/readerReportGenerator';
+import { ReaderReport } from '../models/ReaderReport';
+import { Assignment } from '../models/Assignment';
 
 /**
  * CR-003 / S11.1 — build the per-spec 0-3 score map for a reader's report,
@@ -296,5 +298,90 @@ export const generateReaderReportNow = async (req: AuthenticatedRequest, res: Re
   } catch (error) {
     console.error('Generate reader report error:', error);
     return res.status(500).json({ error: 'Failed to generate reader report' });
+  }
+};
+
+/** The effective reviewer id (the impersonated user when a SU is impersonating). */
+function effectiveReviewerId(req: AuthenticatedRequest): string {
+  return (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id || '';
+}
+
+async function readerMayAccess(req: AuthenticatedRequest, submissionId: string): Promise<boolean> {
+  const role = req.user?.role;
+  if (role === 'admin') return true;
+  if (role !== 'reader' && role !== 'lead_reader') return false;
+  const reviewerId = effectiveReviewerId(req);
+  const assigned = await Assignment.exists({ submissionId, userId: reviewerId, status: 'active' });
+  return !!assigned;
+}
+
+/**
+ * GET /api/reports/submission/:submissionId/reader-report-data
+ * The editable Reader Report for the current reader: the AI-drafted per-standard
+ * checklist merged with this reader's saved overrides. Reader/lead-reader only.
+ */
+export const getReaderReportData = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(submissionId)) return res.status(400).json({ error: 'Invalid submission id' });
+    if (!(await readerMayAccess(req, submissionId))) return res.status(403).json({ error: 'Forbidden' });
+
+    const structure = await getReaderReportStructure(submissionId);
+    if (!structure) return res.status(404).json({ error: 'Submission not found' });
+
+    const reviewerId = effectiveReviewerId(req);
+    const saved = await ReaderReport.findOne({ submissionId, reviewerId }).lean();
+    const savedByCode: Record<string, { mark: string; comment: string }> = {};
+    for (const r of saved?.rows || []) savedByCode[r.standardCode] = { mark: r.mark, comment: r.comment };
+
+    const standards = structure.standards.map((s) => ({
+      ...s,
+      // Reader's saved override (falls back to the AI draft when unedited).
+      readerMark: savedByCode[s.code]?.mark ?? (s.aiMark || ''),
+      readerComment: savedByCode[s.code]?.comment ?? (s.aiComment || ''),
+    }));
+
+    return res.json({
+      institutionName: structure.institutionName,
+      programName: structure.programName,
+      levelTitle: structure.levelTitle,
+      standards,
+      recommendation: saved?.recommendation || '',
+      updatedAt: saved?.updatedAt || null,
+    });
+  } catch (error) {
+    console.error('Get reader report data error:', error);
+    return res.status(500).json({ error: 'Failed to load reader report' });
+  }
+};
+
+/**
+ * PUT /api/reports/submission/:submissionId/reader-report-data
+ * Save the current reader's edits (per-standard mark + comment + recommendation).
+ */
+export const saveReaderReportData = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(submissionId)) return res.status(400).json({ error: 'Invalid submission id' });
+    if (!(await readerMayAccess(req, submissionId))) return res.status(403).json({ error: 'Forbidden' });
+
+    const reviewerId = effectiveReviewerId(req);
+    const body = req.body || {};
+    const rows = Array.isArray(body.rows) ? body.rows.map((r: any) => ({
+      standardCode: String(r.standardCode || ''),
+      mark: ['compliant', 'noncompliant', ''].includes(r.mark) ? r.mark : '',
+      comment: String(r.comment || ''),
+    })).filter((r: any) => r.standardCode) : [];
+    const recommendation = typeof body.recommendation === 'string' ? body.recommendation : '';
+
+    const doc = await ReaderReport.findOneAndUpdate(
+      { submissionId, reviewerId },
+      { $set: { rows, recommendation } },
+      { upsert: true, new: true }
+    );
+    return res.json({ ok: true, updatedAt: doc?.updatedAt });
+  } catch (error) {
+    console.error('Save reader report data error:', error);
+    return res.status(500).json({ error: 'Failed to save reader report' });
   }
 };

@@ -5,7 +5,9 @@ import {
   generateAllReaderReportsPDF,
   previewReaderReport,
   previewCompilationReport,
-  generateReaderReportNow
+  generateReaderReportNow,
+  getReaderReportData,
+  saveReaderReportData
 } from '../controllers/reportController';
 import { authenticate } from '../middleware/auth';
 
@@ -47,6 +49,14 @@ router.get('/submission/:submissionId/all-readers/pdf', generateAllReaderReports
  * @access  Private (PC owner, Reader/Lead assigned, Admin)
  */
 router.post('/submission/:submissionId/reader-report/generate', generateReaderReportNow);
+
+/**
+ * Editable Reader Report (per-standard compliance checklist) for the current
+ * reader/lead reader. GET returns the AI draft merged with their saved edits;
+ * PUT saves their edits. Reader/lead-reader (assigned) or admin only.
+ */
+router.get('/submission/:submissionId/reader-report-data', getReaderReportData);
+router.put('/submission/:submissionId/reader-report-data', saveReaderReportData);
 
 // ============================================
 // COMPILATION REPORT PDF ROUTES

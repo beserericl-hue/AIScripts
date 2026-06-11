@@ -330,3 +330,42 @@ export async function generateAndStoreReaderReport(
   await upsertReportFile(submission, userId, 'docx', docxBuf);
   return { pdf: true, docx: true, level: key, templated };
 }
+
+export interface ReaderReportStandardRow {
+  code: string;
+  title: string;
+  aiMark: 'compliant' | 'noncompliant' | null;
+  aiComment: string;
+}
+export interface ReaderReportStructure {
+  institutionName: string;
+  programName: string;
+  programLevel: string;
+  levelTitle: string;
+  standards: ReaderReportStandardRow[];
+}
+
+/**
+ * Structured per-standard reader-report data (for the editable Reader Report
+ * screen): the official checklist rolled up from the AI verdicts. The reader/
+ * lead reader edits the mark + comment on top of this AI draft.
+ */
+export async function getReaderReportStructure(submissionId: string): Promise<ReaderReportStructure | null> {
+  const data = await gatherReportData(submissionId);
+  if (!data) return null;
+  const rollup = rollupByStandard(data);
+  const { cfg } = resolveLevel(data.programLevel);
+  const standards: ReaderReportStandardRow[] = data.standards
+    .filter((s) => s.specs.some((sp) => !sp.excluded && (sp.narrative || sp.evidence || sp.verdict)))
+    .map((s) => {
+      const r = rollup.get(s.code) || { mark: null, comment: '' };
+      return { code: s.code, title: s.title, aiMark: r.mark, aiComment: r.comment };
+    });
+  return {
+    institutionName: data.institutionName,
+    programName: data.programName,
+    programLevel: data.programLevel,
+    levelTitle: cfg?.title || "Master's Degree",
+    standards,
+  };
+}
