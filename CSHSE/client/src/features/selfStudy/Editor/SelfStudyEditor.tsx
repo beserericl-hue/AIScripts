@@ -25,6 +25,7 @@ import {
   MessageSquarePlus,
   Lock,
   Sparkles,
+  Download,
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -776,6 +777,36 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       return response.data;
     },
   });
+
+  // Reader Report files (PDF + editable DOCX) from the Supporting File Library,
+  // so readers/PCs can view/download the compiled report from the toolbar.
+  const reportFilesQuery = useQuery({
+    queryKey: ['ss-reader-report-files', submissionId],
+    queryFn: async () => {
+      const r = await api.get(`/api/submissions/${submissionId}/evidence`);
+      const items: any[] = r.data?.evidence || r.data?.items || (Array.isArray(r.data) ? r.data : []);
+      const pick = (tag: string) => {
+        const it = items.find((i) => (i.tags || []).includes(tag));
+        return it ? { id: it._id as string, name: (it.file?.originalName as string) || 'Reader-Report' } : undefined;
+      };
+      return { pdf: pick('reader-report:pdf'), docx: pick('reader-report:docx') };
+    },
+    enabled: !!submissionId,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const reportFiles = reportFilesQuery.data;
+  const downloadReport = useCallback(async (evidenceId: string, fileName: string) => {
+    try {
+      const resp = await api.get(`/api/submissions/${submissionId}/evidence/${evidenceId}/download`, { responseType: 'blob' });
+      const blob = new Blob([resp.data], { type: resp.headers['content-type'] || 'application/octet-stream' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = fileName || 'Reader-Report';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch { /* file not ready — button no-ops */ }
+  }, [submissionId]);
 
   // Fetch reviewer's scores for this submission (reviewers only)
   const { data: scoresData } = useQuery<{ scores: { standardCode: string; specCode: string; score: number }[] }>({
@@ -2570,6 +2601,31 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     <FolderOpen className="w-4 h-4 flex-shrink-0" />
                     Supporting File Library
                   </button>
+                  {/* Reader Report — view / download the compiled report (PDF +
+                      editable Word). Shown to everyone once it exists in the
+                      library (auto-generated after submit's Validate-all). */}
+                  {reportFiles?.pdf && (
+                    <button
+                      data-testid="reader-report-pdf-toolbar"
+                      onClick={() => downloadReport(reportFiles.pdf!.id, reportFiles.pdf!.name)}
+                      title="View / download the Reader Report (PDF)"
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"
+                    >
+                      <Download className="w-4 h-4 flex-shrink-0" />
+                      Reader Report
+                    </button>
+                  )}
+                  {reportFiles?.docx && (
+                    <button
+                      data-testid="reader-report-docx-toolbar"
+                      onClick={() => downloadReport(reportFiles.docx!.id, reportFiles.docx!.name)}
+                      title="Download the editable Reader Report (Word)"
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap border border-teal-200 text-teal-700 hover:bg-teal-50"
+                    >
+                      <Download className="w-4 h-4 flex-shrink-0" />
+                      Word
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
