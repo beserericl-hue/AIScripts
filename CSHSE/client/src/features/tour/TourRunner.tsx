@@ -87,7 +87,11 @@ export function TourRunner(): JSX.Element | null {
     let prevCount = -1;
     let stableTicks = 0;
     const startedAt = Date.now();
-    const MAX_WAIT_MS = 2000;
+    // The reader's Self-Study Editor hydrates several panes asynchronously
+    // (per-spec scores, comments, AI evaluations) and can render its tour
+    // anchors a beat later than the PC's — give the settle loop more headroom
+    // so those anchored steps aren't dropped, collapsing the tour to intro+outro.
+    const MAX_WAIT_MS = 5000;
     const POLL_MS = 100;
 
     // Pre-select the first review card (if the Review surface is open and no

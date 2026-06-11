@@ -2608,6 +2608,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   {isReviewer && (
                     <button
                       data-testid="reader-report-open"
+                      data-tour="ss-reader-report"
                       onClick={() => navigate(`/reader-report/${submissionId}`)}
                       title="Open the Reader Report — view, edit and save your assessment"
                       className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
@@ -2770,7 +2771,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 </button>
 
                 {/* Score Control */}
-                <div className="flex items-center gap-1 text-sm text-gray-600">
+                <div data-tour="ss-score" className="flex items-center gap-1 text-sm text-gray-600">
                   <span className="font-medium">Score</span>
                   {['-', '0', '1', '2', '3'].map((val) => {
                     const isActive = val === '-'
@@ -3000,7 +3001,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
               {/* Comment Sidebar - shown for reviewers only */}
               {isReviewer && selectedSpec && userId && (
-                <aside className="w-80 flex-shrink-0 border-l border-gray-200 overflow-y-auto bg-white">
+                <aside data-tour="ss-comments" className="w-80 flex-shrink-0 border-l border-gray-200 overflow-y-auto bg-white">
                   <CommentSidebar
                     submissionId={submissionId}
                     standardCode={selectedStandard}

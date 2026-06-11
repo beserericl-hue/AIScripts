@@ -132,10 +132,16 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-tour="ss-tab-standards"]', 'tour.ss.tabStandards', translate),
       anchorStep('[data-tour="ss-tab-curriculum"]', 'tour.ss.tabCurriculum', translate),
       anchorStep('[data-tour="ss-tab-files"]', 'tour.ss.tabFiles', translate),
+      // Reader/lead-reader only — opens the Reader Report (drops for the PC,
+      // whose toolbar has no such button).
+      anchorStep('[data-tour="ss-reader-report"]', 'tour.ss.readerReport', translate, 'bottom'),
       anchorStep('[data-tour="ss-rail"]', 'tour.ss.rail', translate, 'right'),
       anchorStep('[data-tour="ss-editor"]', 'tour.ss.editor', translate, 'top'),
       anchorStep('[data-tour="ss-toolbar"]', 'tour.ss.toolbar', translate, 'bottom'),
       anchorStep('[data-tour="ss-evidence-text"]', 'tour.ss.evidenceText', translate, 'top'),
+      // Reader-only — the 0-3 score control + the comments rail on the right.
+      anchorStep('[data-tour="ss-score"]', 'tour.ss.score', translate, 'bottom'),
+      anchorStep('[data-tour="ss-comments"]', 'tour.ss.comments', translate, 'left'),
       anchorStep('[data-tour="ss-clear"]', 'tour.ss.clear', translate, 'top'),
       anchorStep('[data-tour="ss-save"]', 'tour.ss.save', translate, 'top'),
       anchorStep('[data-tour="ss-validate"]', 'tour.ss.validate', translate, 'top'),
