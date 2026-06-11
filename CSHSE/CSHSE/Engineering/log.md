@@ -2245,3 +2245,11 @@ Commit 6515229.
 - **Table formatting audit** (whole client): narrative editor (TipTap Table ext), curriculum matrix, review cards, reader spec row, document viewer all render tables ✅. Only flat surfaces were: evidence FILES (.docx) — fixed previously (real Word tables); and `NarrativeEditorWithComments` reader/comment view which stripped ALL HTML. CommentableText needs plain text (offset-anchored comments) so a new `htmlToReadableText` preserves table structure (rows→lines, cells joined with ' | ') instead of a run-on.
 - **Saved files**: Stevenson's 65 evidence files healed (real tables) via re-POST set-approved.
 - **Pending (separate task):** guided-tour positioning (react-joyride balloons mis-anchored; `disableScrolling:true` suspect) + missing step descriptions for Upload File / Add URL / header stats. Needs live browser verification.
+
+## 2026-06-11 — Reader review screen was blank (ASAP fix)
+
+Clicking a submission in the reader queue (/reader/:id) opened a blank page below the header.
+- **Standards source:** the screen used `/api/specs?status=active` and read `specs[0].standards` — but that list returns NO standards array (only standardsCount) and specs[0] is the Master's set → `standards=[]` → empty body. Now uses `/api/standards` (the same source the PC editor uses) → all 21 standards + specs render.
+- **Narratives:** read from `submission.narratives` (a Mongoose Map that doesn't serialize → `{}`). Now builds the per-spec lookup from `submission.narrativeContent` (the flattened array getSubmission returns).
+- **Reader Report:** added Download buttons (PDF + editable Word) to the reader screen header, pulled from the Supporting File Library (`reader-report:pdf`/`docx`).
+- Verified: e2e spec 66 (reader screen renders standards scaffold + materialized narrative). Live data for Stevenson: /api/standards=21, narrativeContent=67, reader-report files=2. (Reader access itself still gated by Assignment + submitted status — unchanged; that gate passed for the impersonated session, only the render was broken.)
