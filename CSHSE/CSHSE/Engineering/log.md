@@ -2260,3 +2260,10 @@ Clicking a submission in the reader queue (/reader/:id) opened a blank page belo
 - **Impersonated user identity for scoping:** with elevation dropped, the Assignment lookup still used `req.user.id` (the superuser) → empty queue. listSubmissions + getSubmission now use `impersonation.impersonatedUserId` (client already sends `X-Impersonated-User-Id`) for the assignment scoping.
 - **Stevenson made reviewable:** `POST /api/reviews/submissions/<id>/assign` for the 3 assigned readers → status `readers_assigned` + Assignment docs created.
 - **Verified live (impersonating Reader Two):** queue returns exactly 1 (Stevenson), getSubmission(Stevenson)=200, getSubmission(unassigned E2E)=403. E2E spec 67 (reader queue assignment-scoped).
+
+## 2026-06-11 — Editable Reader Report screen (reader/lead-reader only)
+
+The reader/lead reader can now view + edit + save the Reader Report (the official per-standard compliance checklist) on its own screen, then return to the self-study editor to read/comment.
+- Server: `getReaderReportStructure()` (AI-drafted per-standard rollup) + `ReaderReport` model (per submission per reviewer) + GET/PUT `/api/reports/submission/:id/reader-report-data` (assigned reader/lead/admin only; scoped to the impersonated reviewer; GET merges AI draft with saved edits).
+- Client: route `/reader-report/:submissionId` → `ReaderReportEditor` (per-standard Compliant/Non-Compliant + comments pre-filled from the AI draft, recommendation box, Save, PDF/Word download, 'Back to Self-Study'). Toolbar 'Reader Report' button is reader/lead-reader ONLY; PC/admin keep a plain report download.
+- Verified live (impersonating Reader Two): GET returns 20 standards pre-filled (Std 1 noncompliant, 4259-char comment); PUT saves a reader override + recommendation and GET reflects it; an unassigned reader gets 403. E2E spec 68.
