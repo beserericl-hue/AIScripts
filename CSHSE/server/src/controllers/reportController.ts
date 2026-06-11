@@ -410,8 +410,17 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
       }
     }
 
+    const wantHtml = String(req.query.format || '').toLowerCase() === 'html';
     const buffers = await renderReaderReportBuffers(submissionId, overrides);
     if (!buffers) return res.status(404).json({ error: 'Submission not found' });
+
+    // Formatted in-browser view: convert the FILLED official template (DOCX) to
+    // HTML so the reader sees the actual template, formatted, without Word.
+    if (wantHtml) {
+      const mammoth = (await import('mammoth')).default || (await import('mammoth'));
+      const result = await (mammoth as any).convertToHtml({ buffer: buffers.docx });
+      return res.json({ html: result.value });
+    }
 
     const buf = format === 'docx' ? buffers.docx : buffers.pdf;
     const mime = format === 'docx'

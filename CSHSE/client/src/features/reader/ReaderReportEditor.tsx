@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, Save, Check, Loader2, Download } from 'lucide-react';
+import { ChevronLeft, Save, Check, Loader2, Download, Eye, X } from 'lucide-react';
 import { api } from '../../services/api';
 
 interface ReportSpec {
@@ -69,6 +69,21 @@ export function ReaderReportEditor(): JSX.Element {
     setRows((rs) => rs.map((r) => (r.code === code ? { ...r, ...patch } : r)));
 
   const [dlError, setDlError] = useState<string | null>(null);
+  const [viewHtml, setViewHtml] = useState<string | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
+  const openViewer = async () => {
+    setDlError(null);
+    setViewLoading(true);
+    try {
+      await save.mutateAsync().catch(() => {});
+      const r = await api.get(`/api/reports/submission/${submissionId}/reader-report/download?format=html`);
+      setViewHtml(r.data?.html || '<p>(empty report)</p>');
+    } catch {
+      setDlError('Could not load the formatted view.');
+    } finally {
+      setViewLoading(false);
+    }
+  };
   const downloadGenerated = async (fmt: 'pdf' | 'docx') => {
     setDlError(null);
     try {
@@ -140,6 +155,16 @@ export function ReaderReportEditor(): JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           {savedAt && <span className="text-xs text-emerald-600 inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />Saved</span>}
+          {/* View the filled official template FORMATTED in the browser (no Word). */}
+          <button
+            data-testid="reader-report-view"
+            onClick={openViewer}
+            disabled={viewLoading}
+            className="inline-flex items-center gap-1 rounded border border-teal-300 bg-teal-50 px-2.5 py-1.5 text-sm text-teal-800 hover:bg-teal-100 disabled:opacity-60"
+            title="View the filled template, formatted, in the browser"
+          >
+            {viewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}View
+          </button>
           {/* The official CSHSE reader-report template IS a Word document — the
               download is that template, filled with the reader's checklist +
               comments. */}
@@ -256,6 +281,28 @@ export function ReaderReportEditor(): JSX.Element {
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} Save Reader Report
         </button>
       </div>
+
+      {/* Formatted viewer — the filled OFFICIAL template, converted to HTML and
+          shown in the browser (tables/checklist + comments), no Word needed. */}
+      {viewHtml != null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setViewHtml(null)}>
+          <div data-testid="reader-report-viewer" className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
+              <h3 className="text-base font-semibold text-slate-900">Reader Report — official template (formatted)</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => downloadGenerated('docx')} className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><Download className="h-4 w-4" />Word</button>
+                <button onClick={() => setViewHtml(null)} className="rounded p-1 text-slate-500 hover:bg-slate-100" aria-label="Close"><X className="h-5 w-5" /></button>
+              </div>
+            </div>
+            <div className="overflow-y-auto p-6">
+              <div
+                className={`${proseCls} [&_table]:w-full`}
+                dangerouslySetInnerHTML={{ __html: viewHtml }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
