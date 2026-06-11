@@ -181,7 +181,7 @@ async function buildTemplatedDocx(
     const r = rollup.get(code) || { mark: null, comment: '' };
     patches[`c_${code}`] = mk(r.mark === 'compliant' ? '☒' : '☐');
     patches[`n_${code}`] = mk(r.mark === 'noncompliant' ? '☒' : '☐');
-    patches[`cm_${code}`] = mkMulti(r.comment ? `AI DRAFT — ${r.comment}` : '');
+    patches[`cm_${code}`] = mkMulti(r.comment || '');
   }
   return patchDocument({ outputType: 'nodebuffer', data: tpl, patches, keepOriginalStyles: true }) as Promise<Buffer>;
 }
@@ -237,7 +237,7 @@ function buildChecklistPdf(data: ReportData, rollup: Map<string, StandardRollup>
       const color = r.mark === 'compliant' ? '#15803d' : r.mark === 'noncompliant' ? '#b91c1c' : '#6b7280';
       doc.fontSize(10).fillColor(color).text(`${compMark} Compliant     ${nonMark} Non-Compliant`);
       if (r.comment) {
-        doc.fontSize(9).fillColor('#374151').text('Reader’s Comments (AI draft):');
+        doc.fontSize(9).fillColor('#374151').text('Reader’s Comments:');
         doc.fontSize(9).fillColor('#111827').text(r.comment, { paragraphGap: 3 });
       }
       doc.moveDown(0.5);
