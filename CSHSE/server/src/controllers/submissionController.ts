@@ -22,6 +22,10 @@ interface AuthenticatedRequest extends Request {
     email: string;
     name?: string;
     isSuperuser?: boolean;
+    realIsSuperuser?: boolean;
+    institutionId?: string;
+    // Set when a superuser is impersonating; scoping uses impersonatedUserId.
+    impersonation?: { impersonatedUserId?: string; impersonatedRole?: string };
   };
 }
 
@@ -99,9 +103,12 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
       // this, any reader could read any submitted study by id. Assignment is
       // the single source of truth (Assignment model), role-agnostic so a
       // lead_reader assigned as either type still qualifies.
+      // When a superuser impersonates a specific reader, check THAT reader's
+      // assignment (not the superuser's).
+      const effectiveReaderId = req.user?.impersonation?.impersonatedUserId || req.user.id;
       const assigned = await Assignment.exists({
         submissionId: submission._id,
-        userId: req.user.id,
+        userId: effectiveReaderId,
         status: 'active'
       });
       if (!assigned) {
@@ -1528,8 +1535,12 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
     // Combined with the status allow-list above, a reader can never enumerate
     // submissions they aren't working on.
     if (!isElevated && isReaderRole) {
+      // When a superuser is impersonating a SPECIFIC reader, scope to THAT
+      // reader's assignments (not the superuser's), so "Viewing as Reader Two"
+      // shows exactly Reader Two's queue.
+      const effectiveReaderId = req.user?.impersonation?.impersonatedUserId || req.user?.id;
       const assignments = await Assignment.find({
-        userId: req.user?.id,
+        userId: effectiveReaderId,
         status: 'active'
       }).select('submissionId').lean();
       filter._id = { $in: assignments.map((a) => a.submissionId) };
