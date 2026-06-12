@@ -6,11 +6,25 @@ import { useToastStore } from '../../store/toastStore';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+interface CommentReply {
+  _id?: string;
+  content?: string;
+  authorName?: string;
+  authorRole?: string;
+  createdAt?: string;
+}
+
 interface CommentLite {
   _id: string;
   selectedText?: string;
   selectionStart?: number;
   selectionEnd?: number;
+  content?: string;
+  authorName?: string;
+  authorRole?: string;
+  isResolved?: boolean;
+  replies?: CommentReply[];
+  createdAt?: string;
 }
 
 interface FormattedCommentableProps {
@@ -23,6 +37,17 @@ interface FormattedCommentableProps {
   proseClassName: string;
   onCommentAdded: () => void;
   highlightCommentId?: string | null;
+}
+
+/** Human label for an author role. */
+function roleName(role?: string): string {
+  switch (role) {
+    case 'reader': return 'Reader';
+    case 'lead_reader': return 'Lead Reader';
+    case 'program_coordinator': return 'Program Coordinator';
+    case 'admin': return 'Admin';
+    default: return 'Reviewer';
+  }
 }
 
 /** Remove any markers we previously inserted, restoring the original DOM. */
@@ -67,7 +92,7 @@ function wrapRange(container: HTMLElement, start: number, end: number, id: strin
       mark.setAttribute('data-rr-comment', id);
       // The scroll/anchor target id goes on the FIRST piece (last in this loop).
       if (i === pieces.length - 1) mark.id = `comment-marker-${id}`;
-      mark.className = flash ? 'bg-yellow-400 ring-2 ring-yellow-500 rounded-sm' : 'bg-yellow-200 rounded-sm';
+      mark.className = (flash ? 'bg-yellow-400 ring-2 ring-yellow-500 rounded-sm' : 'bg-yellow-200 rounded-sm') + ' cursor-pointer hover:bg-yellow-300';
       range.surroundContents(mark);
     } catch { /* range crossed an element boundary mid-node — skip that piece */ }
   });
@@ -110,6 +135,41 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
     onSuccess: (data: any) => { setJustCreated(data?.comment?._id || null); onCommentAdded(); pushToast('Comment added', 'success'); },
     onError: () => pushToast('Could not add the comment', 'error'),
   });
+
+  // The open discussion thread, anchored NEAR its highlighted text. Clicking a
+  // highlight opens that one comment's thread here (Google-Docs-style), so the
+  // discussion lives next to the text it flags — not in one far-off list.
+  const [thread, setThread] = useState<{ commentId: string; top: number; left: number } | null>(null);
+  const [replyText, setReplyText] = useState('');
+  const openComment = thread ? comments.find((c) => c._id === thread.commentId) || null : null;
+
+  const reply = useMutation({
+    mutationFn: async (payload: { commentId: string; content: string }) =>
+      (await api.post(`${API_BASE}/comments/${payload.commentId}/replies`, { content: payload.content })).data,
+    onSuccess: () => { setReplyText(''); onCommentAdded(); pushToast('Reply added', 'success'); },
+    onError: () => pushToast('Could not add the reply', 'error'),
+  });
+  const resolve = useMutation({
+    mutationFn: async (payload: { commentId: string }) =>
+      (await api.post(`${API_BASE}/comments/${payload.commentId}/resolve`, {})).data,
+    onSuccess: (data: any) => { onCommentAdded(); pushToast(data?.comment?.isResolved ? 'Comment resolved' : 'Comment reopened', 'success'); },
+    onError: () => pushToast('Could not update the comment', 'error'),
+  });
+
+  // Open a comment's thread when its highlight is clicked, positioned near the mark.
+  const onContainerClick = (e: React.MouseEvent) => {
+    const el = ref.current;
+    if (!el) return;
+    const mark = (e.target as HTMLElement).closest('mark[data-rr-comment]') as HTMLElement | null;
+    if (!mark) return;
+    const id = mark.getAttribute('data-rr-comment');
+    if (!id) return;
+    e.preventDefault();
+    const box = el.getBoundingClientRect();
+    const r = mark.getBoundingClientRect();
+    setReplyText('');
+    setThread({ commentId: id, top: r.bottom - box.top + 6, left: Math.max(0, r.left - box.left) });
+  };
 
   // Submit: drop the dialog immediately (clear the selection) for instant
   // feedback, then save in the background.
@@ -165,8 +225,72 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
         data-testid={`rr-formatted-${standardCode}-${specCode}`}
         className={proseClassName}
         onMouseUp={onMouseUp}
+        onClick={onContainerClick}
         dangerouslySetInnerHTML={{ __html: html }}
       />
+      {openComment && thread && (
+        <div
+          data-testid="rr-comment-thread"
+          className="absolute z-30 w-80 max-w-[22rem] rounded-lg border border-slate-300 bg-white shadow-xl"
+          style={{ top: thread.top, left: Math.min(thread.left, Math.max(0, (ref.current?.clientWidth || 320) - 320)) }}
+        >
+          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
+            <span className="text-xs font-semibold text-slate-600">Discussion</span>
+            <button onClick={() => setThread(null)} aria-label="Close" className="text-slate-400 hover:text-slate-700">×</button>
+          </div>
+          <div className="max-h-72 overflow-y-auto px-3 py-2">
+            {openComment.selectedText && (
+              <p className="mb-2 truncate rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800" title={openComment.selectedText}>“{openComment.selectedText}”</p>
+            )}
+            <div className="mb-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-xs font-semibold text-slate-700">{openComment.authorName || roleName(openComment.authorRole)}</span>
+                {openComment.authorRole && <span className="text-[10px] uppercase tracking-wide text-slate-400">{roleName(openComment.authorRole)}</span>}
+              </div>
+              <p className="whitespace-pre-wrap text-sm text-slate-800">{openComment.content}</p>
+            </div>
+            {(openComment.replies || []).map((r, i) => (
+              <div key={r._id || i} className="mb-2 border-l-2 border-slate-200 pl-2">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-700">{r.authorName || roleName(r.authorRole)}</span>
+                  {r.authorRole && <span className="text-[10px] uppercase tracking-wide text-slate-400">{roleName(r.authorRole)}</span>}
+                </div>
+                <p className="whitespace-pre-wrap text-sm text-slate-800">{r.content}</p>
+              </div>
+            ))}
+          </div>
+          {canComment && (
+            <div className="border-t border-slate-200 px-3 py-2">
+              <textarea
+                data-testid="rr-thread-reply"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && replyText.trim()) reply.mutate({ commentId: openComment._id, content: replyText }); }}
+                rows={2}
+                placeholder="Reply…"
+                className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-300"
+              />
+              <div className="mt-1 flex items-center justify-between">
+                <button
+                  data-testid="rr-thread-resolve"
+                  onClick={() => resolve.mutate({ commentId: openComment._id })}
+                  className="text-xs text-slate-500 hover:text-slate-800"
+                >
+                  {openComment.isResolved ? 'Reopen' : 'Resolve'}
+                </button>
+                <button
+                  data-testid="rr-thread-reply-add"
+                  disabled={!replyText.trim()}
+                  onClick={() => reply.mutate({ commentId: openComment._id, content: replyText })}
+                  className="rounded bg-teal-600 px-2 py-0.5 text-xs font-medium text-white disabled:opacity-50"
+                >
+                  Reply
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       {composer && (
         <div
           className="absolute z-20 w-72 -translate-x-1/2 rounded-lg border border-slate-300 bg-white p-2 shadow-lg"

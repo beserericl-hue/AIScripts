@@ -311,11 +311,16 @@ export const addReply = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(403).json({ error: 'Program coordinators cannot access comments' });
     }
 
-    // Only readers and lead readers can add replies
+    // When a superuser impersonates a reader/lead reader, attribute the reply to
+    // the impersonated user (mirrors createComment). authorRole must be one of the
+    // enum values; an admin/superuser replying is recorded as a lead reader.
+    const imp = (req.user as any)?.impersonation;
+    const effectiveUserId = imp?.impersonatedUserId || req.user!.id;
+    const effectiveName = imp?.impersonatedUserName || req.user!.name;
     const reply = {
-      authorId: new mongoose.Types.ObjectId(req.user!.id),
-      authorName: req.user!.name,
-      authorRole: req.user!.role as 'reader' | 'lead_reader' | 'program_coordinator',
+      authorId: new mongoose.Types.ObjectId(effectiveUserId),
+      authorName: effectiveName,
+      authorRole: (['reader', 'lead_reader'].includes(req.user!.role) ? req.user!.role : 'lead_reader') as 'reader' | 'lead_reader' | 'program_coordinator',
       content,
       createdAt: new Date(),
       updatedAt: new Date()

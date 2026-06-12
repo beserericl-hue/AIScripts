@@ -84,7 +84,8 @@ export function ReaderReportEditor(): JSX.Element {
 
   // All comments for the submission (one shared query — same key as the chat
   // drawer, so react-query dedupes) → per-spec comments for the inline markers.
-  type FullComment = { _id: string; standardCode: string; specCode?: string; selectedText?: string; selectionStart?: number; selectionEnd?: number };
+  type CommentReply = { _id?: string; content?: string; authorName?: string; authorRole?: string; createdAt?: string };
+  type FullComment = { _id: string; standardCode: string; specCode?: string; selectedText?: string; selectionStart?: number; selectionEnd?: number; content?: string; authorName?: string; authorRole?: string; isResolved?: boolean; replies?: CommentReply[]; createdAt?: string };
   const allCommentsQuery = useQuery({
     queryKey: ['comments-all', submissionId],
     queryFn: async () => {
