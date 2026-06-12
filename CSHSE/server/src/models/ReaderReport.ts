@@ -21,6 +21,9 @@ export interface IReaderReport extends Document {
   reviewerId: mongoose.Types.ObjectId;
   rows: IReaderReportRow[];
   recommendation: string;
+  // The reader's acceptance vote on the submission (the poll the lead reader
+  // tallies across all readers). '' = not yet voted.
+  acceptanceVote?: 'accept' | 'conditional' | 'deny' | 'hold' | '';
   // When the reader marks the report COMPLETE it becomes visible to the lead
   // reader (and admin). Null/absent = still a draft, private to the reviewer.
   completedAt?: Date | null;
@@ -40,6 +43,7 @@ const ReaderReportSchema = new Schema<IReaderReport>({
   reviewerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   rows: { type: [ReaderReportRowSchema], default: [] },
   recommendation: { type: String, default: '' },
+  acceptanceVote: { type: String, enum: ['accept', 'conditional', 'deny', 'hold', ''], default: '' },
   completedAt: { type: Date, default: null },
 }, { timestamps: true });
 

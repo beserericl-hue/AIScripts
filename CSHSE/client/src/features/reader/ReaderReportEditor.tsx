@@ -27,12 +27,14 @@ interface ReportRow {
   readerComment: string;
   specs: ReportSpec[];
 }
+type AcceptanceVote = 'accept' | 'conditional' | 'deny' | 'hold' | '';
 interface ReportData {
   institutionName: string;
   programName: string;
   levelTitle: string;
   standards: ReportRow[];
   recommendation: string;
+  acceptanceVote?: AcceptanceVote;
   updatedAt: string | null;
   completedAt?: string | null;
   readonly?: boolean;
@@ -48,7 +50,15 @@ interface ReaderReportListItem {
   updatedAt: string | null;
   started: boolean;
   viewable: boolean;
+  acceptanceVote?: AcceptanceVote;
 }
+const VOTE_OPTIONS: { value: Exclude<AcceptanceVote, ''>; label: string; cls: string }[] = [
+  { value: 'accept', label: 'Accept', cls: 'border-emerald-300 bg-emerald-50 text-emerald-800' },
+  { value: 'conditional', label: 'Conditional', cls: 'border-amber-300 bg-amber-50 text-amber-800' },
+  { value: 'deny', label: 'Deny', cls: 'border-red-300 bg-red-50 text-red-800' },
+  { value: 'hold', label: 'Hold', cls: 'border-slate-300 bg-slate-50 text-slate-700' },
+];
+const voteLabel = (v?: AcceptanceVote) => VOTE_OPTIONS.find((o) => o.value === v)?.label || '—';
 
 export function ReaderReportEditor(): JSX.Element {
   const { submissionId = '' } = useParams<{ submissionId: string }>();
@@ -60,6 +70,7 @@ export function ReaderReportEditor(): JSX.Element {
 
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [recommendation, setRecommendation] = useState('');
+  const [acceptanceVote, setAcceptanceVote] = useState<AcceptanceVote>('');
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [completedAt, setCompletedAt] = useState<string | null>(null);
 
@@ -81,6 +92,7 @@ export function ReaderReportEditor(): JSX.Element {
     if (query.data) {
       setRows(query.data.standards);
       setRecommendation(query.data.recommendation || '');
+      setAcceptanceVote(query.data.acceptanceVote || '');
       setSavedAt(query.data.updatedAt);
       setCompletedAt(query.data.completedAt || null);
     }
@@ -91,11 +103,13 @@ export function ReaderReportEditor(): JSX.Element {
     queryKey: ['reader-reports-list', submissionId],
     queryFn: async () => {
       const r = await api.get(`/api/reports/submission/${submissionId}/reader-reports`);
-      return (r.data?.reports || []) as ReaderReportListItem[];
+      return r.data as { reports: ReaderReportListItem[]; tally: Record<string, number> };
     },
     enabled: !!submissionId && isLeadOrAdmin,
     refetchOnWindowFocus: false,
   });
+  const roster = listQuery.data?.reports || [];
+  const tally = listQuery.data?.tally || { accept: 0, conditional: 0, deny: 0, hold: 0 };
 
   const save = useMutation({
     mutationFn: async (opts?: { completed?: boolean }) => {
@@ -103,7 +117,7 @@ export function ReaderReportEditor(): JSX.Element {
       const specRows = rows.flatMap((r) =>
         r.specs.map((sp) => ({ standardCode: r.code, specCode: sp.specCode, mark: sp.readerMark, comment: sp.readerComment }))
       );
-      const body: any = { rows: specRows, recommendation };
+      const body: any = { rows: specRows, recommendation, acceptanceVote };
       if (opts && typeof opts.completed === 'boolean') body.completed = opts.completed;
       const r = await api.put(`/api/reports/submission/${submissionId}/reader-report-data`, body);
       return r.data as { updatedAt: string; completedAt: string | null };
@@ -365,18 +379,26 @@ export function ReaderReportEditor(): JSX.Element {
             <Users className="h-4 w-4" /> All reader reports
             {listQuery.data && (
               <span className="font-normal text-indigo-600">
-                · {listQuery.data.filter((x) => x.completedAt).length} of {listQuery.data.length} complete
+                · {roster.filter((x) => x.completedAt).length} of {roster.length} complete
               </span>
             )}
           </summary>
           <div className="border-t border-indigo-200 p-3">
+            {/* The acceptance poll — tally of completed readers' votes. */}
+            <div data-testid="rr-vote-tally" className="mb-3 flex flex-wrap gap-2">
+              {VOTE_OPTIONS.map((o) => (
+                <span key={o.value} className={`rounded-full border px-3 py-1 text-xs font-medium ${o.cls}`}>
+                  {o.label}: <strong>{tally[o.value] || 0}</strong>
+                </span>
+              ))}
+            </div>
             {listQuery.isLoading ? (
               <p className="flex items-center gap-2 text-sm text-indigo-700"><Loader2 className="h-4 w-4 animate-spin" />Loading…</p>
-            ) : (listQuery.data || []).length === 0 ? (
+            ) : roster.length === 0 ? (
               <p className="text-sm text-indigo-700">No readers are assigned to this submission yet.</p>
             ) : (
               <ul className="divide-y divide-indigo-100">
-                {(listQuery.data || []).map((it) => {
+                {roster.map((it) => {
                   const active = it.reviewerId === (query.data?.reviewerId || '') && (!!viewReviewerId ? it.reviewerId === viewReviewerId : it.isSelf);
                   return (
                     <li key={it.reviewerId} data-testid={`rr-reviewer-${it.reviewerId}`} className="flex items-center justify-between gap-3 py-2">
@@ -393,6 +415,9 @@ export function ReaderReportEditor(): JSX.Element {
                             <span className="text-amber-700">In progress (not yet completed)</span>
                           ) : (
                             <span className="text-slate-400">Not started</span>
+                          )}
+                          {it.completedAt && it.acceptanceVote && (
+                            <span className="ml-2 rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600 ring-1 ring-slate-200">Vote: {voteLabel(it.acceptanceVote)}</span>
                           )}
                         </p>
                       </div>
@@ -572,6 +597,28 @@ export function ReaderReportEditor(): JSX.Element {
             ))}
           </div>
         ))}
+      </div>
+
+      {/* Acceptance vote — the poll the lead reader tallies across readers. */}
+      <div data-testid="rr-vote" className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+        <h2 className="mb-2 text-sm font-semibold text-slate-800">Your vote on acceptance</h2>
+        <div className="flex flex-wrap gap-2">
+          {VOTE_OPTIONS.map((o) => {
+            const active = acceptanceVote === o.value;
+            return (
+              <button
+                key={o.value}
+                data-testid={`rr-vote-${o.value}`}
+                disabled={readonly}
+                onClick={() => { dirtyRef.current = true; setAcceptanceVote(active ? '' : o.value); }}
+                className={`rounded-full border px-4 py-1.5 text-sm font-medium disabled:opacity-60 ${active ? o.cls + ' ring-2 ring-offset-1' : 'border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-1 text-xs text-slate-400">Recorded with your report; visible to the lead reader once you mark it complete.</p>
       </div>
 
       <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">

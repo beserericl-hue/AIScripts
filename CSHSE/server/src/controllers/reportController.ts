@@ -404,6 +404,7 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
       levelTitle: structure.levelTitle,
       standards,
       recommendation: saved?.recommendation || '',
+      acceptanceVote: saved?.acceptanceVote || '',
       updatedAt: saved?.updatedAt || null,
       completedAt: saved?.completedAt || null,
       readonly: target.readonly,
@@ -435,11 +436,15 @@ export const saveReaderReportData = async (req: AuthenticatedRequest, res: Respo
       comment: String(r.comment || ''),
     })).filter((r: any) => r.standardCode) : [];
     const recommendation = typeof body.recommendation === 'string' ? body.recommendation : '';
+    const VOTES = ['accept', 'conditional', 'deny', 'hold', ''];
 
     // Completion gate: when the reader marks the report COMPLETE it becomes
     // visible to the lead reader. `completed` is optional — when omitted the
     // existing completion state is preserved (a plain autosave doesn't flip it).
     const update: Record<string, any> = { $set: { rows, recommendation } };
+    if (typeof body.acceptanceVote === 'string' && VOTES.includes(body.acceptanceVote)) {
+      update.$set.acceptanceVote = body.acceptanceVote;
+    }
     if (typeof body.completed === 'boolean') {
       if (body.completed) {
         const existing = await ReaderReport.findOne({ submissionId, reviewerId }).select('completedAt').lean();
@@ -547,7 +552,7 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
     const assignments = await Assignment.find({ submissionId, status: 'active' })
       .select('userId').lean();
     const reports = await ReaderReport.find({ submissionId })
-      .select('reviewerId completedAt updatedAt rows recommendation').lean();
+      .select('reviewerId completedAt updatedAt rows recommendation acceptanceVote').lean();
     const reportByReviewer = new Map(reports.map((r) => [String(r.reviewerId), r]));
 
     const reviewerIds = new Set<string>();
@@ -574,6 +579,9 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
         updatedAt: rep?.updatedAt || null,
         started: hasContent,
         viewable,
+        // Only reveal a reader's acceptance vote once the report is completed
+        // (or to an admin) — a draft vote stays private to that reader.
+        acceptanceVote: (completed || isAdmin) ? (rep?.acceptanceVote || '') : '',
       };
     }).sort((a, b) => {
       // Completed first, then started, then by name.
@@ -582,7 +590,13 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
       return a.reviewerName.localeCompare(b.reviewerName);
     });
 
-    return res.json({ reports: items });
+    // The poll: tally completed readers' acceptance votes.
+    const tally = { accept: 0, conditional: 0, deny: 0, hold: 0 } as Record<string, number>;
+    for (const it of items) {
+      if (it.completedAt && it.acceptanceVote && tally[it.acceptanceVote] !== undefined) tally[it.acceptanceVote] += 1;
+    }
+
+    return res.json({ reports: items, tally });
   } catch (error) {
     console.error('List reader reports error:', error);
     return res.status(500).json({ error: 'Failed to list reader reports' });
