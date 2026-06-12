@@ -97,7 +97,8 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
   const ref = useRef<HTMLDivElement>(null);
   const [composer, setComposer] = useState<{ x: number; y: number; selectedText: string; start: number; end: number } | null>(null);
   const [body, setBody] = useState('');
-  const canComment = currentUserRole === 'reader' || currentUserRole === 'lead_reader';
+  // Readers/lead-readers comment; admins/superusers may too (server enforces).
+  const canComment = currentUserRole === 'reader' || currentUserRole === 'lead_reader' || currentUserRole === 'admin';
 
   const create = useMutation({
     mutationFn: async (payload: { selectedText: string; selectionStart: number; selectionEnd: number; content: string }) =>

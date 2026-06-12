@@ -296,6 +296,11 @@ export function buildTestRouter(): Router | null {
       if (userSpec.preferences && typeof userSpec.preferences === 'object') {
         userPayload.preferences = userSpec.preferences;
       }
+      // Let fixtures seed a superuser (bypasses assignment/role gates) so a test
+      // can both open a reader report AND create comments without an Assignment.
+      if (userSpec.isSuperuser === true) {
+        userPayload.isSuperuser = true;
+      }
       userDoc = await User.create(userPayload);
 
       submissionDoc = await Submission.create({

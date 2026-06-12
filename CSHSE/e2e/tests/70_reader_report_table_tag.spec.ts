@@ -28,8 +28,9 @@ test.describe('Reader Report — formatted table is commentable in place', () =>
   test('table renders formatted; selecting text in it adds a comment marked on that text', async ({ page }) => {
     test.setTimeout(150_000);
     seed = await seedFixture('wizard_review_minimal', {
-      // reader so commenting is allowed (readers/lead-readers can comment).
-      user: { email: 'rr70@x.test', role: 'reader', preferences: { tours: { welcome: true } } },
+      // Superuser admin: can open the report AND create comments (bypasses the
+      // assignment gate that a plain seeded reader would lack).
+      user: { email: 'rr70@x.test', role: 'admin', isSuperuser: true, preferences: { tours: { welcome: true } } },
       reviewState: {
         buckets: {
           '1.a': {
