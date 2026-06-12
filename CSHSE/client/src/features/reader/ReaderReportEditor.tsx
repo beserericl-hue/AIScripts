@@ -78,7 +78,10 @@ export function ReaderReportEditor(): JSX.Element {
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [recommendation, setRecommendation] = useState('');
   const [acceptanceVote, setAcceptanceVote] = useState<AcceptanceVote>('');
-  const [commentsOpen, setCommentsOpen] = useState(true);
+  // The far-right "All comments" chat panel is OFF by default — comments now live
+  // in the margin next to the text they flag, so the page isn't squeezed by a
+  // duplicate list. The "Comments" button still opens it on demand.
+  const [commentsOpen, setCommentsOpen] = useState(false);
   // The comment the reader navigated to (next/prev or from the chat window).
   // Used to FLASH the highlighted text it anchors to (inside the table).
   const [highlightComment, setHighlightComment] = useState<{ std: string; spec?: string; commentId: string } | null>(null);

@@ -275,7 +275,7 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
         id={absolute ? `rr-card-${c._id}` : undefined}
         data-testid={absolute ? `rr-card-${c._id}` : undefined}
         onClick={() => { setActiveId(c._id); const m = document.getElementById(`comment-marker-${c._id}`); if (m) m.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}
-        className={`${absolute ? 'absolute right-0 w-[16.5rem]' : 'mb-3 w-full'} cursor-pointer rounded-lg border bg-white p-2.5 shadow-sm transition-all ${active ? 'border-teal-400 ring-2 ring-teal-200' : 'border-slate-200'} ${c.isResolved ? 'opacity-70' : ''}`}
+        className={`${absolute ? 'absolute inset-x-0' : 'mb-3 w-full'} cursor-pointer rounded-lg border bg-white p-2.5 shadow-sm transition-all ${active ? 'border-teal-400 ring-2 ring-teal-200' : 'border-slate-200'} ${c.isResolved ? 'opacity-70' : ''}`}
         style={absolute ? { top: layout.get(c._id) ?? 0 } : undefined}
       >
         {c.selectedText && (
@@ -285,10 +285,10 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
           <span className="text-xs font-semibold text-slate-700">{c.authorName || roleName(c.authorRole)}</span>
           {/* Prev/next walks every comment — navigation lives ON the comment. */}
           {total > 1 && idx >= 0 && (
-            <span className="flex items-center gap-0.5 text-[11px] text-slate-400" onClick={(e) => e.stopPropagation()}>
-              <button data-testid={tid(`rr-card-prev-${c._id}`)} aria-label="Previous comment" title="Previous comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx - 1 + total) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronUp className="h-3.5 w-3.5" /></button>
+            <span className="flex items-center gap-1 text-[11px] font-medium text-slate-500" onClick={(e) => e.stopPropagation()}>
+              <button data-testid={tid(`rr-card-prev-${c._id}`)} aria-label="Previous comment" title="Previous comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx - 1 + total) % total])} className="rounded border border-teal-300 bg-teal-50 p-0.5 text-teal-700 hover:bg-teal-100"><ChevronUp className="h-4 w-4" /></button>
               <span className="tabular-nums">{idx + 1}/{total}</span>
-              <button data-testid={tid(`rr-card-next-${c._id}`)} aria-label="Next comment" title="Next comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx + 1) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronDown className="h-3.5 w-3.5" /></button>
+              <button data-testid={tid(`rr-card-next-${c._id}`)} aria-label="Next comment" title="Next comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx + 1) % total])} className="rounded border border-teal-300 bg-teal-50 p-0.5 text-teal-700 hover:bg-teal-100"><ChevronDown className="h-4 w-4" /></button>
             </span>
           )}
         </div>
@@ -334,8 +334,10 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
 
   return (
     <div ref={wrapRef} className="relative">
-      <div className={hasComments ? 'lg:flex lg:items-start lg:gap-0' : ''}>
-        <div className={hasComments ? 'min-w-0 lg:flex-1 lg:pr-[17.5rem]' : ''}>
+      <div className={hasComments ? 'lg:flex lg:items-start lg:gap-4' : ''}>
+        {/* Narrative keeps its full readable width — the comments get their OWN
+            column, they do NOT eat the text's width. */}
+        <div className={hasComments ? 'min-w-0 lg:flex-1' : ''}>
           <div
             ref={ref}
             data-testid={`rr-formatted-${standardCode}-${specCode}`}
@@ -345,10 +347,11 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </div>
-        {/* Margin comment cards (desktop): absolutely positioned next to the text
-            they flag, aligned to each marked passage. */}
+        {/* Comment column (desktop): a fixed-width margin whose cards are absolutely
+            positioned at each marked passage's vertical offset, so every comment
+            lines up with the text it flags. */}
         {hasComments && (
-          <div data-testid={`rr-comments-margin-${standardCode}-${specCode}`} className="hidden lg:absolute lg:right-0 lg:top-0 lg:block lg:h-full lg:w-[16.5rem]">
+          <div data-testid={`rr-comments-margin-${standardCode}-${specCode}`} className="relative mt-3 hidden lg:mt-0 lg:block lg:w-[17rem] lg:shrink-0">
             {comments.map((c) => <Card key={c._id} c={c} absolute />)}
           </div>
         )}
