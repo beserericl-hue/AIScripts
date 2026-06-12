@@ -22,7 +22,8 @@ async function api(page: any, path: string, method = 'GET', body?: unknown) {
 
 function seedOpts(role: string, extraSubmission: Record<string, unknown> = {}) {
   return {
-    user: { email: `rr71-${role}@x.test`, role, isSuperuser: role === 'admin', preferences: { tours: { welcome: true } } },
+    // Mark the reader-report tour complete so its overlay doesn't block clicks.
+    user: { email: `rr71-${role}@x.test`, role, isSuperuser: role === 'admin', preferences: { tours: { welcome: true, 'reader-report': true } } },
     submission: { assignSeedUserAsReader: true, ...extraSubmission },
     reviewState: {
       buckets: { '1.a': { standardCode: '1', specCode: 'a', standardTitle: '', specPrompt: '', narratives: [{ sectionId: SEC, heading: 'h', snippet: 't', htmlSnippet: HTML, wordCount: 3, confidence: 0.9, acceptState: 'pending', rationale: '' }], evidenceText: [], evidenceFiles: [], matrixCells: [] } },

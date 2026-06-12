@@ -30,7 +30,7 @@ test.describe('Reader Report — formatted table is commentable in place', () =>
     seed = await seedFixture('wizard_review_minimal', {
       // Superuser admin: can open the report AND create comments (bypasses the
       // assignment gate that a plain seeded reader would lack).
-      user: { email: 'rr70@x.test', role: 'admin', isSuperuser: true, preferences: { tours: { welcome: true } } },
+      user: { email: 'rr70@x.test', role: 'admin', isSuperuser: true, preferences: { tours: { welcome: true, 'reader-report': true } } },
       reviewState: {
         buckets: {
           '1.a': {
