@@ -43,11 +43,23 @@ test.describe('Reader Report — margin comment cards next to the text', () => {
     const id2 = c2.body?.comment?._id as string;
     expect(id1 && id2).toBeTruthy();
 
+    await page.setViewportSize({ width: 1600, height: 1000 });
     await page.goto(`/reader-report/${seed.submissionId}`);
     await expect(page.getByTestId('reader-report-editor')).toBeVisible({ timeout: 20_000 });
 
     // 1) Both comments highlighted in the text.
     await expect(page.locator('#rr-spec-1-a mark[data-rr-comment]')).toHaveCount(2);
+
+    // 1b) Column order on screen is narrative | checklist | comments (left→right).
+    const narr = await page.getByTestId('rr-formatted-1-a').boundingBox();
+    const chk = await page.getByTestId('rr-check-1-a').boundingBox();
+    const side = await page.getByTestId('rr-comments-sidebar-1-a').boundingBox();
+    expect(narr && chk && side).toBeTruthy();
+    expect(narr!.x).toBeLessThan(chk!.x);      // narrative left of checklist
+    expect(chk!.x).toBeLessThan(side!.x);      // checklist left of comments
+    // Narrative is the wide main column (wider than either side column).
+    expect(narr!.width).toBeGreaterThan(chk!.width);
+    expect(narr!.width).toBeGreaterThan(side!.width);
 
     // 2) Each comment is its OWN margin card, ALWAYS visible (not bunched/clicked).
     const card1 = page.getByTestId(`rr-card-${id1}`);

@@ -64,6 +64,10 @@ test.describe('Reader Report — comment gate + navigator', () => {
     // Both comments are highlighted IN the text.
     await expect(page.locator('#rr-spec-1-a mark[data-rr-comment]')).toHaveCount(2);
 
+    // The "All comments" chat window is OFF by default now (comments live in the
+    // per-spec margin). Open it via the Comments toggle, then test its navigator.
+    await page.getByTestId('reader-report-comments-toggle').click();
+
     // The "All comments" chat window shows the prev/next navigator + counter.
     const nav = page.getByTestId('rr-all-comments');
     await expect(nav).toBeVisible();
