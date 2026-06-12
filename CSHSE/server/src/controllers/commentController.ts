@@ -202,7 +202,9 @@ export const createComment = async (req: AuthenticatedRequest, res: Response) =>
       selectionEnd,
       authorId: req.user!.id,
       authorName,
-      authorRole: req.user!.role,
+      // authorRole must be one of the enum values; a superuser/admin commenting
+      // for oversight is recorded as a lead reader (avoids a 500 on save).
+      authorRole: (['reader', 'lead_reader'].includes(req.user!.role) ? req.user!.role : 'lead_reader'),
       content,
       replies: []
     });
