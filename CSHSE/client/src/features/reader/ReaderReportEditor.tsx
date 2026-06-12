@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare } from 'lucide-react';
@@ -95,8 +95,21 @@ export function ReaderReportEditor(): JSX.Element {
     enabled: !!submissionId && !!currentUserId,
     refetchOnWindowFocus: false,
   });
+  // Group comments by spec ONCE per data change, so each spec's array keeps a
+  // stable reference across renders (otherwise FormattedCommentable re-marks the
+  // DOM every render, making the page churn / elements "unstable").
+  const EMPTY_COMMENTS = useMemo<FullComment[]>(() => [], []);
+  const commentsBySpec = useMemo(() => {
+    const m = new Map<string, FullComment[]>();
+    for (const c of (allCommentsQuery.data?.comments || [])) {
+      const k = `${c.standardCode}.${c.specCode || ''}`;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(c);
+    }
+    return m;
+  }, [allCommentsQuery.data]);
   const commentsForSpec = (std: string, spec: string): FullComment[] =>
-    (allCommentsQuery.data?.comments || []).filter((c) => c.standardCode === std && (c.specCode || '') === spec);
+    commentsBySpec.get(`${std}.${spec}`) || EMPTY_COMMENTS;
   const refreshComments = () => { allCommentsQuery.refetch(); };
 
   // Jump to a comment: scroll to its spec, then to the inline marker on the
