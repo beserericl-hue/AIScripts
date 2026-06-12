@@ -217,7 +217,7 @@ export function ReaderReportEditor(): JSX.Element {
     '[&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-semibold ' +
     '[&_a]:text-teal-700 [&_a]:underline';
   return (
-    <div data-testid="reader-report-editor" className="mx-auto max-w-4xl p-6">
+    <div data-testid="reader-report-editor" className="mx-auto max-w-6xl p-6">
       {/* Header + nav back to the self-study editor */}
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
@@ -446,33 +446,35 @@ export function ReaderReportEditor(): JSX.Element {
                 Reader's Comments) right beside it — matching the template. */}
             {r.specs.map((sp) => (
               <div key={sp.specCode} className="mb-4 rounded border border-slate-200 bg-slate-50 p-3">
-                <h3 className="mb-1 text-sm font-semibold text-slate-700">{r.code}.{sp.specCode} {sp.specTitle}</h3>
-                {sp.narrativeHtml ? (
-                  <div className={`${proseCls} max-h-64 overflow-y-auto`} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />
-                ) : (
-                  <p className="text-sm italic text-slate-400">No narrative submitted.</p>
-                )}
-                {sp.evidenceHtml ? (
-                  <>
-                    <p className="mt-2 text-xs font-semibold text-slate-500">Supporting evidence <span className="font-normal text-slate-400">(scroll within the box)</span></p>
-                    {/* Cap the height so a long evidence block doesn't push the
-                        checklist far down the page — it scrolls inside the box. */}
-                    <div className={`${proseCls} max-h-72 overflow-y-auto rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />
-                  </>
-                ) : null}
-
-                {/* Official checklist for THIS specification — labelled and
-                    highlighted so it stands out right under each spec's text. */}
-                <div className="mt-3 overflow-x-auto rounded-lg border-2 border-teal-300 bg-white">
-                  <div className="bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800">
-                    Reader’s checklist — Specification {r.code}.{sp.specCode}
+                <h3 className="mb-2 text-sm font-semibold text-slate-700">{r.code}.{sp.specCode} {sp.specTitle}</h3>
+                {/* Two columns: the specification's text on the LEFT, the reader's
+                    checklist pinned ALONGSIDE on the RIGHT (sticky, so it stays in
+                    view while reading the narrative + evidence). Stacks on narrow
+                    screens. */}
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                  <div className="min-w-0 lg:flex-1">
+                    {sp.narrativeHtml ? (
+                      <div className={proseCls} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />
+                    ) : (
+                      <p className="text-sm italic text-slate-400">No narrative submitted.</p>
+                    )}
+                    {sp.evidenceHtml ? (
+                      <>
+                        <p className="mt-2 text-xs font-semibold text-slate-500">Supporting evidence</p>
+                        <div className={`${proseCls} rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />
+                      </>
+                    ) : null}
                   </div>
-                  <table data-testid={`rr-check-${r.code}-${sp.specCode}`} className="w-full border-collapse text-sm">
-                    <tbody>
-                      <tr className="align-top">
-                        <td className="w-24 border border-slate-300 px-2 py-2 text-center">
-                          <label className={`flex flex-col items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
-                            <span className="text-xs font-semibold text-emerald-700">Compliant</span>
+
+                  {/* Checklist sidebar for THIS specification. */}
+                  <div className="lg:sticky lg:top-4 lg:w-80 lg:shrink-0">
+                    <div data-testid={`rr-check-${r.code}-${sp.specCode}`} className="rounded-lg border-2 border-teal-300 bg-white shadow-sm">
+                      <div className="rounded-t-md bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">
+                        Reader’s checklist — Specification {r.code}.{sp.specCode}
+                      </div>
+                      <div className="space-y-3 p-3">
+                        <div className="flex items-center gap-5">
+                          <label className={`inline-flex items-center gap-1.5 ${readonly ? '' : 'cursor-pointer'}`}>
                             <input
                               type="checkbox"
                               data-testid={`rr-c-${r.code}-${sp.specCode}`}
@@ -482,11 +484,9 @@ export function ReaderReportEditor(): JSX.Element {
                               className="h-4 w-4 text-emerald-600 disabled:opacity-60"
                               aria-label={`${r.code}.${sp.specCode} compliant`}
                             />
+                            <span className="text-sm font-semibold text-emerald-700">Compliant</span>
                           </label>
-                        </td>
-                        <td className="w-28 border border-slate-300 px-2 py-2 text-center">
-                          <label className={`flex flex-col items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
-                            <span className="text-xs font-semibold text-red-700">Non-Compliant</span>
+                          <label className={`inline-flex items-center gap-1.5 ${readonly ? '' : 'cursor-pointer'}`}>
                             <input
                               type="checkbox"
                               data-testid={`rr-n-${r.code}-${sp.specCode}`}
@@ -496,11 +496,12 @@ export function ReaderReportEditor(): JSX.Element {
                               className="h-4 w-4 text-red-600 disabled:opacity-60"
                               aria-label={`${r.code}.${sp.specCode} non-compliant`}
                             />
+                            <span className="text-sm font-semibold text-red-700">Non-Compliant</span>
                           </label>
-                        </td>
-                        <td className="border border-slate-300 px-2 py-1">
+                        </div>
+                        <div>
                           <label className="mb-1 block text-xs font-semibold text-slate-600" htmlFor={`rr-comment-${r.code}-${sp.specCode}`}>
-                            Reader’s Comments <span className="font-normal text-slate-400">— note missing information or the reason for a non-compliant decision; note strengths</span>
+                            Reader’s Comments
                           </label>
                           <textarea
                             id={`rr-comment-${r.code}-${sp.specCode}`}
@@ -508,14 +509,14 @@ export function ReaderReportEditor(): JSX.Element {
                             value={sp.readerComment}
                             readOnly={readonly}
                             onChange={(e) => setSpec(r.code, sp.specCode, { readerComment: e.target.value })}
-                            placeholder="Comments for this specification…"
-                            rows={2}
-                            className={`w-full resize-y rounded border border-slate-300 px-2 py-1 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
+                            placeholder="Note missing information or the reason for a non-compliant decision; note strengths."
+                            rows={5}
+                            className={`w-full resize-y rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
                           />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}
