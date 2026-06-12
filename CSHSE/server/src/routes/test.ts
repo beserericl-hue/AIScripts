@@ -315,7 +315,11 @@ export function buildTestRouter(): Router | null {
         programLevel: (submissionSpec.programLevel as string) ?? 'bachelors',
         submitterId: userDoc._id,
         type: 'initial',
-        status: 'in_progress'
+        status: 'in_progress',
+        // Let a fixture assign the seeded user as a reader on the submission so
+        // a test can exercise the assignment-gated comment path (and the
+        // superuser-impersonates-an-assigned-reader path).
+        ...(submissionSpec.assignSeedUserAsReader ? { assignedReaders: [userDoc._id] } : {}),
       });
 
       importDoc = await SelfStudyImport.create({
