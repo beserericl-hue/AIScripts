@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { MessageSquarePlus } from 'lucide-react';
 import { api } from '../../services/api';
+import { useToastStore } from '../../store/toastStore';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -102,11 +103,24 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
 
   // The comment just created here — flash + scroll to it once it re-marks.
   const [justCreated, setJustCreated] = useState<string | null>(null);
+  const pushToast = useToastStore((s) => s.push);
   const create = useMutation({
     mutationFn: async (payload: { selectedText: string; selectionStart: number; selectionEnd: number; content: string }) =>
       (await api.post(`${API_BASE}/submissions/${submissionId}/comments`, { standardCode, specCode, ...payload })).data,
-    onSuccess: (data: any) => { setComposer(null); setBody(''); setJustCreated(data?.comment?._id || null); onCommentAdded(); },
+    onSuccess: (data: any) => { setJustCreated(data?.comment?._id || null); onCommentAdded(); pushToast('Comment added', 'success'); },
+    onError: () => pushToast('Could not add the comment', 'error'),
   });
+
+  // Submit: drop the dialog immediately (clear the selection) for instant
+  // feedback, then save in the background.
+  const submitComment = () => {
+    if (!composer || !body.trim()) return;
+    const payload = { selectedText: composer.selectedText, selectionStart: composer.start, selectionEnd: composer.end, content: body };
+    setComposer(null);
+    setBody('');
+    window.getSelection()?.removeAllRanges();
+    create.mutate(payload);
+  };
 
   // (Re)apply markers whenever the content or comments change, and scroll to a
   // freshly-created comment so it shows right next to the text it's on.
@@ -164,16 +178,17 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
             autoFocus
             value={body}
             onChange={(e) => setBody(e.target.value)}
+            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submitComment(); }}
             rows={2}
             placeholder="Add a comment on the selected text…"
             className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-300"
           />
           <div className="mt-1 flex justify-end gap-2">
-            <button onClick={() => { setComposer(null); setBody(''); }} className="text-xs text-slate-500">Cancel</button>
+            <button onClick={() => { setComposer(null); setBody(''); window.getSelection()?.removeAllRanges(); }} className="text-xs text-slate-500">Cancel</button>
             <button
               data-testid="rr-fc-add"
-              disabled={!body.trim() || create.isPending}
-              onClick={() => create.mutate({ selectedText: composer.selectedText, selectionStart: composer.start, selectionEnd: composer.end, content: body })}
+              disabled={!body.trim()}
+              onClick={submitComment}
               className="inline-flex items-center gap-1 rounded bg-teal-600 px-2 py-0.5 text-xs font-medium text-white disabled:opacity-50"
             >
               <MessageSquarePlus className="h-3.5 w-3.5" />Add
