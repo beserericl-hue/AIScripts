@@ -141,7 +141,23 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
   // discussion lives next to the text it flags — not in one far-off list.
   const [thread, setThread] = useState<{ commentId: string; top: number; left: number } | null>(null);
   const [replyText, setReplyText] = useState('');
+  const threadRef = useRef<HTMLDivElement>(null);
   const openComment = thread ? comments.find((c) => c._id === thread.commentId) || null : null;
+
+  // Close the open thread when clicking anywhere outside it (but not on a
+  // highlight — that switches to the clicked comment's thread). Keeps a reader
+  // from being blocked when the popover floats over nearby text.
+  useEffect(() => {
+    if (!thread) return;
+    const onDocDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (threadRef.current?.contains(t)) return;
+      if (t.closest('mark[data-rr-comment]')) return;
+      setThread(null);
+    };
+    document.addEventListener('mousedown', onDocDown);
+    return () => document.removeEventListener('mousedown', onDocDown);
+  }, [thread]);
 
   const reply = useMutation({
     mutationFn: async (payload: { commentId: string; content: string }) =>
@@ -230,6 +246,7 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
       />
       {openComment && thread && (
         <div
+          ref={threadRef}
           data-testid="rr-comment-thread"
           className="absolute z-30 w-80 max-w-[22rem] rounded-lg border border-slate-300 bg-white shadow-xl"
           style={{ top: thread.top, left: Math.min(thread.left, Math.max(0, (ref.current?.clientWidth || 320) - 320)) }}

@@ -68,6 +68,10 @@ test.describe('Reader Report — inline comment threads next to the text', () =>
     }, { timeout: 15_000 }).toBe(true);
 
     // 4) The SECOND highlight opens a DISTINCT thread (not one merged list).
+    // Close the first thread (its popover floats over the nearby text) then open
+    // the second — proving each comment has its own thread, not one shared list.
+    await thread.getByRole('button', { name: 'Close' }).click();
+    await expect(thread).toBeHidden();
     await marks.nth(1).click();
     await expect(thread).toContainText('SECOND comment about phrase two');
     await expect(thread).not.toContainText('FIRST comment about phrase one');
