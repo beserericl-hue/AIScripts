@@ -267,6 +267,9 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
   const Card = ({ c, absolute }: { c: CommentLite; absolute: boolean }) => {
     const idx = navIndex(c._id);
     const active = activeId === c._id || highlightCommentId === c._id;
+    // Only the desktop (absolute) cards carry test ids — the mobile copies are
+    // display:none duplicates that would otherwise break strict-mode locators.
+    const tid = (s: string) => (absolute ? s : undefined);
     return (
       <div
         id={absolute ? `rr-card-${c._id}` : undefined}
@@ -283,9 +286,9 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
           {/* Prev/next walks every comment — navigation lives ON the comment. */}
           {total > 1 && idx >= 0 && (
             <span className="flex items-center gap-0.5 text-[11px] text-slate-400" onClick={(e) => e.stopPropagation()}>
-              <button data-testid={`rr-card-prev-${c._id}`} aria-label="Previous comment" title="Previous comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx - 1 + total) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronUp className="h-3.5 w-3.5" /></button>
+              <button data-testid={tid(`rr-card-prev-${c._id}`)} aria-label="Previous comment" title="Previous comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx - 1 + total) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronUp className="h-3.5 w-3.5" /></button>
               <span className="tabular-nums">{idx + 1}/{total}</span>
-              <button data-testid={`rr-card-next-${c._id}`} aria-label="Next comment" title="Next comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx + 1) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronDown className="h-3.5 w-3.5" /></button>
+              <button data-testid={tid(`rr-card-next-${c._id}`)} aria-label="Next comment" title="Next comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx + 1) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronDown className="h-3.5 w-3.5" /></button>
             </span>
           )}
         </div>
@@ -301,7 +304,7 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
             {replyFor === c._id ? (
               <div>
                 <textarea
-                  data-testid={`rr-card-reply-${c._id}`}
+                  data-testid={tid(`rr-card-reply-${c._id}`)}
                   autoFocus
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
@@ -312,13 +315,13 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
                 />
                 <div className="mt-1 flex justify-end gap-2">
                   <button onClick={() => { setReplyFor(null); setReplyText(''); }} className="text-[11px] text-slate-500">Cancel</button>
-                  <button data-testid={`rr-card-reply-add-${c._id}`} disabled={!replyText.trim()} onClick={() => reply.mutate({ commentId: c._id, content: replyText })} className="rounded bg-teal-600 px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-50">Reply</button>
+                  <button data-testid={tid(`rr-card-reply-add-${c._id}`)} disabled={!replyText.trim()} onClick={() => reply.mutate({ commentId: c._id, content: replyText })} className="rounded bg-teal-600 px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-50">Reply</button>
                 </div>
               </div>
             ) : (
               <div className="flex items-center gap-3 text-[11px]">
-                <button data-testid={`rr-card-reply-open-${c._id}`} onClick={() => { setReplyFor(c._id); setReplyText(''); }} className="text-teal-700 hover:underline">Reply</button>
-                <button data-testid={`rr-card-resolve-${c._id}`} onClick={() => resolve.mutate({ commentId: c._id })} className="inline-flex items-center gap-0.5 text-slate-500 hover:text-slate-800">
+                <button data-testid={tid(`rr-card-reply-open-${c._id}`)} onClick={() => { setReplyFor(c._id); setReplyText(''); }} className="text-teal-700 hover:underline">Reply</button>
+                <button data-testid={tid(`rr-card-resolve-${c._id}`)} onClick={() => resolve.mutate({ commentId: c._id })} className="inline-flex items-center gap-0.5 text-slate-500 hover:text-slate-800">
                   {c.isResolved ? 'Reopen' : (<><Check className="h-3 w-3" />Resolve</>)}
                 </button>
               </div>
