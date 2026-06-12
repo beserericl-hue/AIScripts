@@ -573,33 +573,6 @@ export function ReaderReportEditor(): JSX.Element {
                   </div>
                 </div>
 
-                {/* Official checklist TABLE for this specification at the end of
-                    the subspec (the template view), bound to the SAME per-spec
-                    state as the sidebar above. */}
-                <div className="mt-3 overflow-x-auto rounded border border-slate-300 bg-white">
-                  <div className="bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">Checklist (template) — {r.code}.{sp.specCode}</div>
-                  <table data-testid={`rr-check-table-${r.code}-${sp.specCode}`} className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-slate-100 text-left">
-                        <th className="w-20 border border-slate-300 px-2 py-1.5 text-center font-semibold text-emerald-700">Compliant</th>
-                        <th className="w-24 border border-slate-300 px-2 py-1.5 text-center font-semibold text-red-700">Non-Compliant</th>
-                        <th className="border border-slate-300 px-2 py-1.5 font-semibold text-slate-700">Reader’s Comments</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="align-top">
-                        <td className="border border-slate-300 px-2 py-2 text-center">
-                          <input type="checkbox" disabled={readonly} checked={sp.readerMark === 'compliant'} onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'compliant' ? '' : 'compliant' })} className="h-4 w-4 text-emerald-600 disabled:opacity-60" aria-label={`${r.code}.${sp.specCode} compliant (table)`} />
-                        </td>
-                        <td className="border border-slate-300 px-2 py-2 text-center">
-                          <input type="checkbox" disabled={readonly} checked={sp.readerMark === 'noncompliant'} onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'noncompliant' ? '' : 'noncompliant' })} className="h-4 w-4 text-red-600 disabled:opacity-60" aria-label={`${r.code}.${sp.specCode} non-compliant (table)`} />
-                        </td>
-                        <td className="border border-slate-300 px-2 py-1 text-sm text-slate-700 whitespace-pre-wrap">{sp.readerComment || <span className="italic text-slate-400">—</span>}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
                 {/* Self-study comment process for this spec (select text → add
                     a comment), reused from the self-study editor. */}
                 {currentUserId && (
