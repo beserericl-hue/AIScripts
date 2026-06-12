@@ -173,9 +173,17 @@ export const createComment = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    // Verify user is assigned to this submission (superusers bypass)
+    // When a superuser impersonates a reader/lead reader, act AS that user:
+    // assignment + authorship use the impersonated id, not the superuser's.
+    const imp = (req.user as any)?.impersonation;
+    const effectiveUserId = imp?.impersonatedUserId || req.user!.id;
+    const effectiveName = imp?.impersonatedUserName || req.user!.name;
+
+    // Verify the (effective) user is assigned to this submission (superusers
+    // bypass — but note: while impersonating a non-admin, isSuperuser is false,
+    // so the assignment of the impersonated reader is what matters).
     if (!req.user!.isSuperuser) {
-      const userId = new mongoose.Types.ObjectId(req.user!.id);
+      const userId = new mongoose.Types.ObjectId(effectiveUserId);
       const isAssigned =
         submission.assignedReaders.some(r => r.equals(userId)) ||
         submission.leadReader?.equals(userId);
@@ -191,7 +199,7 @@ export const createComment = async (req: AuthenticatedRequest, res: Response) =>
       reader: 'Reader', lead_reader: 'Lead Reader',
       program_coordinator: 'Program Coordinator', admin: 'Admin'
     };
-    const authorName = req.user!.name || roleLabels[req.user!.role] || req.user!.role;
+    const authorName = effectiveName || roleLabels[req.user!.role] || req.user!.role;
 
     const comment = new Comment({
       submissionId,
@@ -200,7 +208,7 @@ export const createComment = async (req: AuthenticatedRequest, res: Response) =>
       selectedText,
       selectionStart,
       selectionEnd,
-      authorId: req.user!.id,
+      authorId: effectiveUserId,
       authorName,
       // authorRole must be one of the enum values; a superuser/admin commenting
       // for oversight is recorded as a lead reader (avoids a 500 on save).
