@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
@@ -78,6 +78,7 @@ export function ReaderReportEditor(): JSX.Element {
   const [acceptanceVote, setAcceptanceVote] = useState<AcceptanceVote>('');
   const [commentPage, setCommentPage] = useState(1);
   const [commentsOpen, setCommentsOpen] = useState(true);
+  const [focusIdx, setFocusIdx] = useState(0); // floating prev/next position
   // The comment the reader navigated to (next/prev or from the chat window).
   // Used to FLASH the highlighted text it anchors to (inside the table).
   const [highlightComment, setHighlightComment] = useState<{ std: string; spec?: string; commentId: string } | null>(null);
@@ -111,6 +112,18 @@ export function ReaderReportEditor(): JSX.Element {
       }, 400);
       setTimeout(() => setHighlightComment((h) => (h && h.commentId === commentId ? null : h)), 3500);
     }
+  };
+  // All comments in document order, for the floating prev/next navigator.
+  const orderedComments = (allCommentsQuery.data?.comments || []).slice().sort((a, b) => {
+    const k = `${a.standardCode}.${a.specCode || ''}`.localeCompare(`${b.standardCode}.${b.specCode || ''}`, undefined, { numeric: true });
+    return k !== 0 ? k : (a.selectionStart || 0) - (b.selectionStart || 0);
+  });
+  const focusComment = (n: number) => {
+    if (!orderedComments.length) return;
+    const i = ((n % orderedComments.length) + orderedComments.length) % orderedComments.length;
+    setFocusIdx(i);
+    const c = orderedComments[i];
+    navigateToComment(c.standardCode, c.specCode, c._id);
   };
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [completedAt, setCompletedAt] = useState<string | null>(null);
@@ -772,6 +785,18 @@ export function ReaderReportEditor(): JSX.Element {
         </div>
       )}
     </div>
+
+    {/* Floating comment navigator — always visible; prev/next jumps to the
+        next/previous comment ANYWHERE in the report and flashes its in-text
+        highlight. Independent of the chat window. */}
+    {currentUserId && orderedComments.length > 0 && (
+      <div data-testid="rr-comment-navigator" className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-1.5 shadow-lg">
+        <MessageSquare className="ml-1 h-4 w-4 text-teal-700" />
+        <button data-testid="rr-nav-prev" onClick={() => focusComment(focusIdx - 1)} className="rounded-full p-1 text-slate-600 hover:bg-slate-100" aria-label="Previous comment" title="Previous comment"><ChevronLeft className="h-4 w-4" /></button>
+        <span className="min-w-[92px] text-center text-xs font-medium text-slate-700">Comment {Math.min(focusIdx + 1, orderedComments.length)} / {orderedComments.length}</span>
+        <button data-testid="rr-nav-next" onClick={() => focusComment(focusIdx + 1)} className="rounded-full p-1 text-slate-600 hover:bg-slate-100" aria-label="Next comment" title="Next comment"><ChevronRight className="h-4 w-4" /></button>
+      </div>
+    )}
 
     {/* The "Chat window and all comments" — every comment from reader 1,
         reader 2 and the lead reader — as a sidebar COLUMN (like the self-study
