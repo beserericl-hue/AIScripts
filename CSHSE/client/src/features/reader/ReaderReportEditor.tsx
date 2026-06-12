@@ -4,6 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
+import { SpecComments } from './SpecComments';
 
 interface ReportSpec {
   specCode: string;
@@ -66,6 +67,8 @@ export function ReaderReportEditor(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
   const viewReviewerId = searchParams.get('reviewerId') || '';
   const effectiveRole = useAuthStore((s) => s.getEffectiveRole());
+  const effectiveUser = useAuthStore((s) => s.getEffectiveUser());
+  const currentUserId = (effectiveUser as any)?.id || (effectiveUser as any)?._id || '';
   const isLeadOrAdmin = effectiveRole === 'lead_reader' || effectiveRole === 'admin';
 
   const [rows, setRows] = useState<ReportRow[]>([]);
@@ -593,6 +596,19 @@ export function ReaderReportEditor(): JSX.Element {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Self-study comment process for this spec (select text → add
+                    a comment), reused from the self-study editor. */}
+                {currentUserId && (
+                  <SpecComments
+                    submissionId={submissionId}
+                    standardCode={r.code}
+                    specCode={sp.specCode}
+                    contentHtml={`${sp.narrativeHtml || ''}\n${sp.evidenceHtml || ''}`}
+                    currentUserId={currentUserId}
+                    currentUserRole={effectiveRole as any}
+                  />
+                )}
               </div>
             ))}
           </div>
