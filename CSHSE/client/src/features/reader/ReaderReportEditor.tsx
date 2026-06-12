@@ -448,14 +448,16 @@ export function ReaderReportEditor(): JSX.Element {
               <div key={sp.specCode} className="mb-4 rounded border border-slate-200 bg-slate-50 p-3">
                 <h3 className="mb-1 text-sm font-semibold text-slate-700">{r.code}.{sp.specCode} {sp.specTitle}</h3>
                 {sp.narrativeHtml ? (
-                  <div className={proseCls} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />
+                  <div className={`${proseCls} max-h-64 overflow-y-auto`} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />
                 ) : (
                   <p className="text-sm italic text-slate-400">No narrative submitted.</p>
                 )}
                 {sp.evidenceHtml ? (
                   <>
-                    <p className="mt-2 text-xs font-semibold text-slate-500">Supporting evidence</p>
-                    <div className={`${proseCls} rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />
+                    <p className="mt-2 text-xs font-semibold text-slate-500">Supporting evidence <span className="font-normal text-slate-400">(scroll within the box)</span></p>
+                    {/* Cap the height so a long evidence block doesn't push the
+                        checklist far down the page — it scrolls inside the box. */}
+                    <div className={`${proseCls} max-h-72 overflow-y-auto rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />
                   </>
                 ) : null}
 
