@@ -60,19 +60,20 @@ test.describe('Reader Report — comment gate + navigator', () => {
     await page.goto(`/reader-report/${seed.submissionId}`);
     await expect(page.getByTestId('reader-report-editor')).toBeVisible({ timeout: 20_000 });
 
-    // Navigator visible with 2 comments, both highlighted in the text.
-    const nav = page.getByTestId('rr-comment-navigator');
-    await expect(nav).toBeVisible();
-    await expect(nav).toContainText('/ 2');
+    // Both comments are highlighted IN the text.
     await expect(page.locator('#rr-spec-1-a mark[data-rr-comment]')).toHaveCount(2);
 
-    // Next advances the counter (1/2 → 2/2) and scrolls to the next comment.
-    await expect(nav).toContainText('Comment 1 / 2');
-    await page.getByTestId('rr-nav-next').click();
-    await expect(nav).toContainText('Comment 2 / 2');
-    await page.getByTestId('rr-nav-next').click();
-    await expect(nav).toContainText('Comment 1 / 2'); // wraps around
-    await page.getByTestId('rr-nav-prev').click();
-    await expect(nav).toContainText('Comment 2 / 2'); // prev wraps the other way
+    // The "All comments" chat window shows the prev/next navigator + counter.
+    const nav = page.getByTestId('rr-all-comments');
+    await expect(nav).toBeVisible();
+    await expect(nav).toContainText('1 / 2');
+
+    // Next advances the counter (1/2 → 2/2) and wraps; prev wraps the other way.
+    await page.getByTestId('rr-comments-next').click();
+    await expect(nav).toContainText('2 / 2');
+    await page.getByTestId('rr-comments-next').click();
+    await expect(nav).toContainText('1 / 2'); // wraps around
+    await page.getByTestId('rr-comments-prev').click();
+    await expect(nav).toContainText('2 / 2'); // prev wraps the other way
   });
 });
