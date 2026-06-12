@@ -12,6 +12,7 @@ interface ReportSpec {
   evidenceHtml: string;
   verdict?: string;
   aiMark: 'compliant' | 'noncompliant' | null;
+  evidenceCount?: number;
   // The reader's per-specification checklist mark + comment (the official
   // template captures these per spec, next to each specification).
   readerMark: 'compliant' | 'noncompliant' | '';
@@ -514,9 +515,58 @@ export function ReaderReportEditor(): JSX.Element {
                             className={`w-full resize-y rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
                           />
                         </div>
+                        {/* Jump straight to this spec's files/links in the library
+                            (CVs / syllabi / projects included) or the matrix. */}
+                        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-2">
+                          {(sp.evidenceCount || 0) > 0 && (
+                            <button
+                              data-testid={`rr-files-${r.code}-${sp.specCode}`}
+                              onClick={() => navigate(`/self-study/${submissionId}?view=files&std=${r.code}&spec=${sp.specCode}`)}
+                              className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                              title="Open this specification's files and links in the Supporting File Library"
+                            >
+                              <FolderOpen className="h-3.5 w-3.5" />Files ({sp.evidenceCount})
+                            </button>
+                          )}
+                          <button
+                            data-testid={`rr-matrix-${r.code}-${sp.specCode}`}
+                            onClick={() => navigate(`/self-study/${submissionId}?view=curriculum&std=${r.code}&spec=${sp.specCode}`)}
+                            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+                            title="View this specification in the Curriculum Matrix"
+                          >
+                            <Grid3X3 className="h-3.5 w-3.5" />Matrix
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Official checklist TABLE for this specification at the end of
+                    the subspec (the template view), bound to the SAME per-spec
+                    state as the sidebar above. */}
+                <div className="mt-3 overflow-x-auto rounded border border-slate-300 bg-white">
+                  <div className="bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-600">Checklist (template) — {r.code}.{sp.specCode}</div>
+                  <table data-testid={`rr-check-table-${r.code}-${sp.specCode}`} className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-100 text-left">
+                        <th className="w-20 border border-slate-300 px-2 py-1.5 text-center font-semibold text-emerald-700">Compliant</th>
+                        <th className="w-24 border border-slate-300 px-2 py-1.5 text-center font-semibold text-red-700">Non-Compliant</th>
+                        <th className="border border-slate-300 px-2 py-1.5 font-semibold text-slate-700">Reader’s Comments</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="align-top">
+                        <td className="border border-slate-300 px-2 py-2 text-center">
+                          <input type="checkbox" disabled={readonly} checked={sp.readerMark === 'compliant'} onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'compliant' ? '' : 'compliant' })} className="h-4 w-4 text-emerald-600 disabled:opacity-60" aria-label={`${r.code}.${sp.specCode} compliant (table)`} />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-2 text-center">
+                          <input type="checkbox" disabled={readonly} checked={sp.readerMark === 'noncompliant'} onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'noncompliant' ? '' : 'noncompliant' })} className="h-4 w-4 text-red-600 disabled:opacity-60" aria-label={`${r.code}.${sp.specCode} non-compliant (table)`} />
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1 text-sm text-slate-700 whitespace-pre-wrap">{sp.readerComment || <span className="italic text-slate-400">—</span>}</td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               </div>
             ))}

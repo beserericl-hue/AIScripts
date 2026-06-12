@@ -610,14 +610,20 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     const view = deepLinkParams.get('view');
     // Section deep-links work for EVERY role (readers/lead-readers navigate
     // here from the Reader Report screen's top menu — see ReaderReportEditor).
+    // Optional spec target for deep-links into the file library / matrix
+    // (the Reader Report screen links "Open files for 1.a" etc.).
+    const dlStd = deepLinkParams.get('std');
+    const dlSpec = deepLinkParams.get('spec');
     if (view === 'introduction') {
       setActiveView('introduction');
     } else if (view === 'standards') {
       setActiveView('standards');
     } else if (view === 'curriculum' || view === 'matrix') {
       setActiveView('curriculum');
+      if (dlStd && dlSpec) setMatrixScrollTarget({ std: dlStd, spec: dlSpec });
     } else if (view === 'files') {
       setActiveView('files');
+      if (dlStd && dlSpec) setFileScrollTarget({ std: dlStd, spec: dlSpec });
     } else if (isProgramCoordinator && view === 'review') {
       setActiveView('review-surface');
       const specKey = deepLinkParams.get('specKey');
@@ -641,6 +647,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // consumes the target via `scrollToSpec` and clears the state after it has
   // scrolled+highlighted the row.
   const [matrixScrollTarget, setMatrixScrollTarget] = useState<
+    { std: string; spec: string } | null
+  >(null);
+  // Same idea for the Supporting File Library — a reader can jump from a spec on
+  // the Reader Report straight to that spec's files/links in the library.
+  const [fileScrollTarget, setFileScrollTarget] = useState<
     { std: string; spec: string } | null
   >(null);
 
@@ -3060,6 +3071,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
               <FileLibrary
                 submissionId={submissionId}
                 readOnly={isEditingDisabled}
+                scrollToSpec={fileScrollTarget}
+                onScrollConsumed={() => setFileScrollTarget(null)}
               />
             </main>
           )}

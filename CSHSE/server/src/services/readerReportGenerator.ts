@@ -344,6 +344,9 @@ export interface ReaderReportSpec {
   // The AI's per-spec verdict mapped to the checklist mark (pass→compliant,
   // fail/needs_improvement→noncompliant) so each spec's checklist starts drafted.
   aiMark: 'compliant' | 'noncompliant' | null;
+  // How many Supporting-Evidence items (files / URLs / CVs / syllabi / projects)
+  // are tagged to this spec — drives the "Open files in library" button.
+  evidenceCount: number;
   excluded: boolean;
 }
 
@@ -417,6 +420,15 @@ export async function getReaderReportStructure(submissionId: string): Promise<Re
   if (!data) return null;
   const rollup = rollupByStandard(data);
   const { cfg } = resolveLevel(data.programLevel);
+  // Count Supporting-Evidence items (files / URLs / CVs / syllabi / projects)
+  // per standard.spec so each spec can show an "Open files in library" button.
+  const evDocs: any[] = await SupportingEvidence.find({ submissionId, isDeleted: { $ne: true } })
+    .select('standardCode specCode').lean();
+  const evCount = new Map<string, number>();
+  for (const e of evDocs) {
+    const k = `${e.standardCode || ''}.${e.specCode || ''}`;
+    evCount.set(k, (evCount.get(k) || 0) + 1);
+  }
   const standards: ReaderReportStandardRow[] = data.standards
     .filter((s) => s.specs.some((sp) => !sp.excluded && (sp.narrative || sp.evidence || sp.verdict)))
     .map((s) => {
@@ -428,7 +440,9 @@ export async function getReaderReportStructure(submissionId: string): Promise<Re
         .map((sp) => ({
           specCode: sp.spec, specTitle: sp.title,
           narrativeHtml: sp.narrativeHtml, evidenceHtml: sp.evidenceHtml,
-          verdict: sp.verdict, aiMark: verdictToMark(sp.verdict), excluded: sp.excluded,
+          verdict: sp.verdict, aiMark: verdictToMark(sp.verdict),
+          evidenceCount: evCount.get(`${s.code}.${sp.spec}`) || 0,
+          excluded: sp.excluded,
         }));
       return { code: s.code, title: s.title, aiMark: r.mark, aiComment: r.comment, specs };
     });

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import { FilePreviewModal } from './FilePreviewModal';
@@ -61,9 +61,13 @@ interface Evidence {
 interface FileLibraryProps {
   submissionId: string;
   readOnly?: boolean;
+  // Deep-link target: expand this standard and scroll to this spec's files
+  // (a reader clicks "Open files for 1.a" on the Reader Report).
+  scrollToSpec?: { std: string; spec: string } | null;
+  onScrollConsumed?: () => void;
 }
 
-export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps) {
+export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = null, onScrollConsumed }: FileLibraryProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -122,6 +126,25 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
     }
     return grouped;
   }, [allEvidence]);
+
+  // Deep-link: when a reader opens the library targeting a spec, expand that
+  // standard and scroll/flash its files. Runs once the evidence has loaded.
+  useEffect(() => {
+    if (!scrollToSpec || isLoading) return;
+    const { std, spec } = scrollToSpec;
+    setExpandedStandards((prev) => new Set(prev).add(std));
+    const t = setTimeout(() => {
+      const el = document.getElementById(`file-spec-${std}-${spec}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-teal-400', 'rounded');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-teal-400', 'rounded'), 2200);
+      }
+      onScrollConsumed?.();
+    }, 150);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollToSpec, isLoading]);
 
   // Count evidence per standard
   const countForStandard = (code: string): number => {
@@ -462,7 +485,7 @@ export function FileLibrary({ submissionId, readOnly = false }: FileLibraryProps
     if (items.length === 0) return null;
 
     return (
-      <div key={spec.code} className="mb-3">
+      <div key={spec.code} id={`file-spec-${standardCode}-${spec.code}`} className="mb-3 scroll-mt-4">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded text-sm">
           <span className="font-medium text-gray-600">
             {standardCode}.{spec.code}
