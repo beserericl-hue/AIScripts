@@ -78,15 +78,22 @@ export function ReaderReportEditor(): JSX.Element {
   const [acceptanceVote, setAcceptanceVote] = useState<AcceptanceVote>('');
   const [commentPage, setCommentPage] = useState(1);
   const [commentsOpen, setCommentsOpen] = useState(true);
-  // Jump to a comment anywhere on the page: scroll to its spec, then its marker.
+  // The comment the reader navigated to (next/prev or from the chat window).
+  // Used to FLASH the highlighted text it anchors to.
+  const [highlightComment, setHighlightComment] = useState<{ std: string; spec?: string; commentId: string } | null>(null);
+  // Jump to a comment anywhere on the page: scroll to its spec, then its marker,
+  // and flash the highlighted text so the comment is clearly linked to it.
   const navigateToComment = (std: string, spec?: string, commentId?: string) => {
     const el = document.getElementById(`rr-spec-${std}-${spec || ''}`);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (commentId) {
+      setHighlightComment({ std, spec, commentId });
       setTimeout(() => {
         const m = document.getElementById(`comment-marker-${commentId}`);
         if (m) m.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }, 350);
+      // Clear the flash after a few seconds.
+      setTimeout(() => setHighlightComment((h) => (h && h.commentId === commentId ? null : h)), 3500);
     }
   };
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -547,17 +554,25 @@ export function ReaderReportEditor(): JSX.Element {
                     screens. */}
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                   <div className="min-w-0 lg:flex-1">
-                    {sp.narrativeHtml ? (
-                      <div className={proseCls} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />
+                    {/* The narrative + evidence as the commentable reading surface:
+                        commented text is highlighted INLINE, so comments sit next
+                        to the text they're on (select text → right-click → add). */}
+                    {currentUserId ? (
+                      <SpecComments
+                        submissionId={submissionId}
+                        standardCode={r.code}
+                        specCode={sp.specCode}
+                        contentHtml={`${sp.narrativeHtml || ''}\n${sp.evidenceHtml || ''}`}
+                        currentUserId={currentUserId}
+                        currentUserRole={effectiveRole as any}
+                        highlightCommentId={highlightComment && highlightComment.std === r.code && highlightComment.spec === sp.specCode ? highlightComment.commentId : null}
+                      />
                     ) : (
-                      <p className="text-sm italic text-slate-400">No narrative submitted.</p>
-                    )}
-                    {sp.evidenceHtml ? (
                       <>
-                        <p className="mt-2 text-xs font-semibold text-slate-500">Supporting evidence</p>
-                        <div className={`${proseCls} rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />
+                        {sp.narrativeHtml && <div className={proseCls} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />}
+                        {sp.evidenceHtml && <div className={`${proseCls} mt-2 rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />}
                       </>
-                    ) : null}
+                    )}
                   </div>
 
                   {/* Checklist sidebar for THIS specification. */}
@@ -655,19 +670,6 @@ export function ReaderReportEditor(): JSX.Element {
                     </div>
                   </div>
                 </div>
-
-                {/* Self-study comment process for this spec (select text → add
-                    a comment), reused from the self-study editor. */}
-                {currentUserId && (
-                  <SpecComments
-                    submissionId={submissionId}
-                    standardCode={r.code}
-                    specCode={sp.specCode}
-                    contentHtml={`${sp.narrativeHtml || ''}\n${sp.evidenceHtml || ''}`}
-                    currentUserId={currentUserId}
-                    currentUserRole={effectiveRole as any}
-                  />
-                )}
               </div>
             ))}
           </div>

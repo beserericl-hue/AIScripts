@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
 import { api } from '../../services/api';
@@ -29,16 +29,18 @@ interface SpecCommentsProps {
   contentHtml: string;
   currentUserId: string;
   currentUserRole: 'reader' | 'lead_reader' | 'program_coordinator' | 'admin';
+  // When the user navigates to a comment (next/prev or from the chat window),
+  // this is the comment id to flash on the highlighted text.
+  highlightCommentId?: string | null;
 }
 
 /**
  * The self-study comment process, reused per specification on the Reader Report:
- * the spec's narrative+evidence rendered as commentable text (select → right-click
- * → Add Comment) with the comment thread sidebar. Collapsed by default.
+ * the spec's narrative+evidence rendered as commentable text. Commented text is
+ * highlighted INLINE (so comments sit next to the text they're on); select text
+ * → right-click → Add Comment. Threads + replies live in the right chat window.
  */
-export function SpecComments({ submissionId, standardCode, specCode, contentHtml, currentUserId, currentUserRole }: SpecCommentsProps): JSX.Element {
-  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null);
-
+export function SpecComments({ submissionId, standardCode, specCode, contentHtml, currentUserId, currentUserRole, highlightCommentId = null }: SpecCommentsProps): JSX.Element {
   const { data, refetch } = useQuery({
     queryKey: ['comments', submissionId, standardCode, specCode],
     queryFn: async () => {
@@ -52,19 +54,17 @@ export function SpecComments({ submissionId, standardCode, specCode, contentHtml
     refetchOnWindowFocus: false,
   });
   const comments: any[] = data?.comments || [];
-  // highlightedCommentId is kept for CommentableText's highlight prop; setter
-  // is currently unused but retained for future "jump from drawer" wiring.
-  void setHighlightedCommentId;
 
   return (
-    <div data-testid={`rr-comments-${standardCode}-${specCode}`} className="mt-3 rounded-lg border border-slate-200 bg-white">
-      <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-        <MessageSquare className="h-4 w-4" /> Add a comment ({comments.length})
-        <span className="font-normal text-slate-400">— select text below, right-click to add. All comments appear in the chat window on the right.</span>
+    <div data-testid={`rr-comments-${standardCode}-${specCode}`} className="rounded-lg border border-slate-200 bg-white">
+      <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600">
+        <MessageSquare className="h-4 w-4" /> Narrative &amp; evidence — {comments.length} comment{comments.length === 1 ? '' : 's'}
+        <span className="font-normal text-slate-400">· highlighted text has a comment; select text to add one</span>
       </div>
       <div className="p-3">
-        {/* The add surface: select text → right-click → Add Comment. The full
-            threaded discussion lives in the right-hand "All comments" drawer. */}
+        {/* The reading + comment surface: commented text is highlighted inline,
+            so comments sit right next to the text. Select text → right-click →
+            Add Comment. Threads + replies live in the right "All comments" window. */}
         <CommentableText
           content={htmlToReadableText(contentHtml)}
           submissionId={submissionId}
@@ -74,7 +74,7 @@ export function SpecComments({ submissionId, standardCode, specCode, contentHtml
           currentUserId={currentUserId}
           currentUserRole={currentUserRole}
           onCommentAdded={() => refetch()}
-          highlightedCommentId={highlightedCommentId}
+          highlightedCommentId={highlightCommentId}
         />
       </div>
     </div>
