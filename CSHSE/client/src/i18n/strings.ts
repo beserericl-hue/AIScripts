@@ -149,7 +149,9 @@ const STRINGS = {
   'tour.rr.matrix':
     "Matrix shows this part in the Curriculum Matrix.",
   'tour.rr.comments':
-    "Comments for this part live here. Everyone — reader 1, reader 2, and the lead reader — sees them. Select text and right-click to add your own.",
+    "Add a comment about this part: select text here and right-click. Everyone — reader 1, reader 2, and the lead reader — can see it.",
+  'tour.rr.chatWindow':
+    "This is the chat window. Every comment from every reader and the lead reader shows here, grouped by part. Reply, mark them resolved, or click one to jump to it. Use the Comments button up top to hide or show it.",
   'tour.rr.vote':
     "Cast your vote on the program: Accept, Conditional, Deny, or Hold. The lead reader tallies every reader's vote.",
   'tour.rr.recommendation':

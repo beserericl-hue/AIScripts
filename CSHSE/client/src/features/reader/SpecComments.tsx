@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MessageSquare } from 'lucide-react';
 import { api } from '../../services/api';
-import { CommentableText, CommentSidebar } from '../comments';
+import { CommentableText } from '../comments';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -52,47 +52,30 @@ export function SpecComments({ submissionId, standardCode, specCode, contentHtml
     refetchOnWindowFocus: false,
   });
   const comments: any[] = data?.comments || [];
-
-  const handleCommentClick = (c: any) => {
-    setHighlightedCommentId(c._id);
-    const m = document.getElementById(`comment-marker-${c._id}`);
-    if (m) m.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setTimeout(() => setHighlightedCommentId(null), 3000);
-  };
+  // highlightedCommentId is kept for CommentableText's highlight prop; setter
+  // is currently unused but retained for future "jump from drawer" wiring.
+  void setHighlightedCommentId;
 
   return (
     <div data-testid={`rr-comments-${standardCode}-${specCode}`} className="mt-3 rounded-lg border border-slate-200 bg-white">
       <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
-        <MessageSquare className="h-4 w-4" /> Comments ({comments.length})
-        <span className="font-normal text-slate-400">— select text below, right-click to add</span>
+        <MessageSquare className="h-4 w-4" /> Add a comment ({comments.length})
+        <span className="font-normal text-slate-400">— select text below, right-click to add. All comments appear in the chat window on the right.</span>
       </div>
       <div className="p-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
-          <div className="min-w-0 lg:flex-1">
-            <CommentableText
-              content={htmlToReadableText(contentHtml)}
-              submissionId={submissionId}
-              standardCode={standardCode}
-              specCode={specCode}
-              comments={comments as any}
-              currentUserId={currentUserId}
-              currentUserRole={currentUserRole}
-              onCommentAdded={() => refetch()}
-              highlightedCommentId={highlightedCommentId}
-            />
-          </div>
-          {/* Always-open comment thread (its own header + prev/next + replies). */}
-          <div className="lg:w-80 lg:shrink-0">
-            <CommentSidebar
-              submissionId={submissionId}
-              standardCode={standardCode}
-              specCode={specCode}
-              currentUserId={currentUserId}
-              currentUserRole={currentUserRole}
-              onCommentClick={handleCommentClick}
-            />
-          </div>
-        </div>
+        {/* The add surface: select text → right-click → Add Comment. The full
+            threaded discussion lives in the right-hand "All comments" drawer. */}
+        <CommentableText
+          content={htmlToReadableText(contentHtml)}
+          submissionId={submissionId}
+          standardCode={standardCode}
+          specCode={specCode}
+          comments={comments as any}
+          currentUserId={currentUserId}
+          currentUserRole={currentUserRole}
+          onCommentAdded={() => refetch()}
+          highlightedCommentId={highlightedCommentId}
+        />
       </div>
     </div>
   );

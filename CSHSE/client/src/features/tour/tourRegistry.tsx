@@ -107,6 +107,7 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-testid^="rr-files-"]', 'tour.rr.files', translate, 'left'),
       anchorStep('[data-testid^="rr-matrix-"]', 'tour.rr.matrix', translate, 'left'),
       anchorStep('[data-testid^="rr-comments-"]', 'tour.rr.comments', translate, 'top'),
+      anchorStep('[data-testid="rr-all-comments"]', 'tour.rr.chatWindow', translate, 'left'),
       anchorStep('[data-testid="rr-vote"]', 'tour.rr.vote', translate, 'top'),
       anchorStep('[data-testid="rr-recommendation"]', 'tour.rr.recommendation', translate, 'top'),
       centerStep('tour.rr.lastStep', translate),

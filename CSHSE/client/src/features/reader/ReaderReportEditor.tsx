@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2 } from 'lucide-react';
+import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { SpecComments } from './SpecComments';
+import { AllCommentsDrawer } from './AllCommentsDrawer';
 import { CommentNavigation } from '../comments';
 
 interface ReportSpec {
@@ -76,6 +77,7 @@ export function ReaderReportEditor(): JSX.Element {
   const [recommendation, setRecommendation] = useState('');
   const [acceptanceVote, setAcceptanceVote] = useState<AcceptanceVote>('');
   const [commentPage, setCommentPage] = useState(1);
+  const [commentsOpen, setCommentsOpen] = useState(true);
   // Jump to a comment anywhere on the page: scroll to its spec, then its marker.
   const navigateToComment = (std: string, spec?: string, commentId?: string) => {
     const el = document.getElementById(`rr-spec-${std}-${spec || ''}`);
@@ -273,7 +275,7 @@ export function ReaderReportEditor(): JSX.Element {
     '[&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-semibold ' +
     '[&_a]:text-teal-700 [&_a]:underline';
   return (
-    <div data-testid="reader-report-editor" className="mx-auto max-w-6xl p-6">
+    <div data-testid="reader-report-editor" className={`mx-auto max-w-6xl p-6 ${commentsOpen ? 'lg:mr-[25rem]' : ''}`}>
       {/* Header + nav back to the self-study editor */}
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
@@ -301,6 +303,15 @@ export function ReaderReportEditor(): JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           {savedAt && <span className="text-xs text-emerald-600 inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />Saved</span>}
+          {/* Toggle the "All comments" chat window docked on the right. */}
+          <button
+            data-testid="reader-report-comments-toggle"
+            onClick={() => setCommentsOpen((v) => !v)}
+            className={`inline-flex items-center gap-1 rounded border px-2.5 py-1.5 text-sm ${commentsOpen ? 'border-teal-300 bg-teal-50 text-teal-800' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+            title="Show or hide the all-comments chat window"
+          >
+            <MessageSquare className="h-4 w-4" />Comments
+          </button>
           {/* View the COMPLETED report (official template filled with the
               reader's marks + comments) formatted in the browser. */}
           <button
@@ -735,6 +746,18 @@ export function ReaderReportEditor(): JSX.Element {
             </div>
           </div>
         </div>
+      )}
+
+      {/* The "Chat window and all comments" — every comment from reader 1,
+          reader 2 and the lead reader, docked on the right. */}
+      {currentUserId && (
+        <AllCommentsDrawer
+          submissionId={submissionId}
+          currentUserRole={effectiveRole as any}
+          open={commentsOpen}
+          onClose={() => setCommentsOpen(false)}
+          onJump={navigateToComment}
+        />
       )}
     </div>
   );
