@@ -803,7 +803,7 @@ export function ReaderReportEditor(): JSX.Element {
         next/previous comment ANYWHERE in the report and flashes its in-text
         highlight. Independent of the chat window. */}
     {currentUserId && orderedComments.length > 0 && (
-      <div data-testid="rr-comment-navigator" className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-1.5 shadow-lg">
+      <div data-testid="rr-comment-navigator" className="fixed bottom-4 left-4 z-[60] flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-1.5 shadow-lg">
         <MessageSquare className="ml-1 h-4 w-4 text-teal-700" />
         <button data-testid="rr-nav-prev" onClick={() => focusComment(focusIdx - 1)} className="rounded-full p-1 text-slate-600 hover:bg-slate-100" aria-label="Previous comment" title="Previous comment"><ChevronLeft className="h-4 w-4" /></button>
         <span className="min-w-[92px] text-center text-xs font-medium text-slate-700">Comment {Math.min(focusIdx + 1, orderedComments.length)} / {orderedComments.length}</span>

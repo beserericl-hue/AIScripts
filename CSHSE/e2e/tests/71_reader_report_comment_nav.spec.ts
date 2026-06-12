@@ -68,11 +68,11 @@ test.describe('Reader Report — comment gate + navigator', () => {
 
     // Next advances the counter (1/2 → 2/2) and scrolls to the next comment.
     await expect(nav).toContainText('Comment 1 / 2');
-    await page.getByTestId('rr-nav-next').click({ force: true });
+    await page.getByTestId('rr-nav-next').click();
     await expect(nav).toContainText('Comment 2 / 2');
-    await page.getByTestId('rr-nav-next').click({ force: true });
+    await page.getByTestId('rr-nav-next').click();
     await expect(nav).toContainText('Comment 1 / 2'); // wraps around
-    await page.getByTestId('rr-nav-prev').click({ force: true });
+    await page.getByTestId('rr-nav-prev').click();
     await expect(nav).toContainText('Comment 2 / 2'); // prev wraps the other way
   });
 });
