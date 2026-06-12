@@ -301,26 +301,26 @@ export function ReaderReportEditor(): JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           {savedAt && <span className="text-xs text-emerald-600 inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />Saved</span>}
-          {/* View the filled official template FORMATTED in the browser (no Word). */}
+          {/* View the COMPLETED report (official template filled with the
+              reader's marks + comments) formatted in the browser. */}
           <button
             data-testid="reader-report-view"
             onClick={openViewer}
             disabled={viewLoading}
             className="inline-flex items-center gap-1 rounded border border-teal-300 bg-teal-50 px-2.5 py-1.5 text-sm text-teal-800 hover:bg-teal-100 disabled:opacity-60"
-            title="View the filled template, formatted, in the browser"
+            title="View your completed Reader Report (your marks + comments in the official template)"
           >
-            {viewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}View
+            {viewLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}View report
           </button>
-          {/* The official CSHSE reader-report template IS a Word document — the
-              download is that template, filled with the reader's checklist +
-              comments. */}
+          {/* Download the COMPLETED report — the official template filled with
+              the reader's checklist marks + comments (not a blank template). */}
           <button
             data-testid="reader-report-download"
             onClick={() => downloadGenerated('docx')}
             className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-            title="Download the official CSHSE template (Word), filled with your marks and comments"
+            title="Download your completed Reader Report (your marks + comments filled into the official template)"
           >
-            <Download className="h-4 w-4" />Download template (Word)
+            <Download className="h-4 w-4" />Download report (Word)
           </button>
           {!readonly && (
             <button
@@ -721,7 +721,7 @@ export function ReaderReportEditor(): JSX.Element {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setViewHtml(null)}>
           <div data-testid="reader-report-viewer" className="bg-white rounded-lg shadow-xl w-full max-w-5xl max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
-              <h3 className="text-base font-semibold text-slate-900">Reader Report — official template (formatted)</h3>
+              <h3 className="text-base font-semibold text-slate-900">Completed Reader Report (your marks + comments)</h3>
               <div className="flex items-center gap-2">
                 <button onClick={() => downloadGenerated('docx')} className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"><Download className="h-4 w-4" />Word</button>
                 <button onClick={() => setViewHtml(null)} className="rounded p-1 text-slate-500 hover:bg-slate-100" aria-label="Close"><X className="h-5 w-5" /></button>
