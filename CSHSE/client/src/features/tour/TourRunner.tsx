@@ -198,7 +198,12 @@ export function TourRunner(): JSX.Element | null {
       showSkipButton
       hideCloseButton
       disableOverlayClose
-      disableScrolling
+      // Scroll each anchored target into view (offset clears the sticky header)
+      // so a tooltip never renders off-screen — some browsers can't show the
+      // full page height. Previously disableScrolling left below-the-fold steps
+      // off-screen, blocking the UI.
+      scrollToFirstStep
+      scrollOffset={140}
       callback={onCallback}
       tooltipComponent={CshseTooltip as any}
       styles={{

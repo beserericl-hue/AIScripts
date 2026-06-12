@@ -275,7 +275,8 @@ export function ReaderReportEditor(): JSX.Element {
     '[&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-semibold ' +
     '[&_a]:text-teal-700 [&_a]:underline';
   return (
-    <div data-testid="reader-report-editor" className={`mx-auto max-w-6xl p-6 ${commentsOpen ? 'lg:mr-[25rem]' : ''}`}>
+    <div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-start justify-center gap-4 px-4">
+    <div data-testid="reader-report-editor" className="min-w-0 max-w-6xl flex-1 py-6">
       {/* Header + nav back to the self-study editor */}
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
@@ -747,10 +748,14 @@ export function ReaderReportEditor(): JSX.Element {
           </div>
         </div>
       )}
+    </div>
 
-      {/* The "Chat window and all comments" — every comment from reader 1,
-          reader 2 and the lead reader, docked on the right. */}
-      {currentUserId && (
+    {/* The "Chat window and all comments" — every comment from reader 1,
+        reader 2 and the lead reader — as a sidebar COLUMN (like the self-study
+        comment sidebar), not a floating overlay. Wraps below on narrow screens
+        so it always stays on a visible part of the screen. */}
+    {currentUserId && commentsOpen && (
+      <div className="w-full shrink-0 py-6 lg:w-96">
         <AllCommentsDrawer
           submissionId={submissionId}
           currentUserRole={effectiveRole as any}
@@ -758,7 +763,8 @@ export function ReaderReportEditor(): JSX.Element {
           onClose={() => setCommentsOpen(false)}
           onJump={navigateToComment}
         />
-      )}
+      </div>
+    )}
     </div>
   );
 }

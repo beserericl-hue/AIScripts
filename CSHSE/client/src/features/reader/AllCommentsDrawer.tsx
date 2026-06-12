@@ -76,7 +76,7 @@ export function AllCommentsDrawer({ submissionId, currentUserRole, open, onClose
   return (
     <aside
       data-testid="rr-all-comments"
-      className="fixed right-0 top-[96px] z-30 flex h-[calc(100vh-96px)] w-96 max-w-[90vw] flex-col border-l border-slate-200 bg-white shadow-xl"
+      className="sticky top-4 flex max-h-[calc(100vh-2rem)] w-full flex-col self-start overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
     >
       <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
