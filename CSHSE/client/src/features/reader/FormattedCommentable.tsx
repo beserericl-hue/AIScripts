@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { MessageSquarePlus, ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { MessageSquarePlus, ChevronUp, ChevronDown, Check } from 'lucide-react';
 import { api } from '../../services/api';
 import { useToastStore } from '../../store/toastStore';
 
@@ -283,9 +283,9 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
           {/* Prev/next walks every comment — navigation lives ON the comment. */}
           {total > 1 && idx >= 0 && (
             <span className="flex items-center gap-0.5 text-[11px] text-slate-400" onClick={(e) => e.stopPropagation()}>
-              <button data-testid={`rr-card-prev-${c._id}`} aria-label="Previous comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx - 1 + total) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronLeft className="h-3.5 w-3.5" /></button>
+              <button data-testid={`rr-card-prev-${c._id}`} aria-label="Previous comment" title="Previous comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx - 1 + total) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronUp className="h-3.5 w-3.5" /></button>
               <span className="tabular-nums">{idx + 1}/{total}</span>
-              <button data-testid={`rr-card-next-${c._id}`} aria-label="Next comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx + 1) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronRight className="h-3.5 w-3.5" /></button>
+              <button data-testid={`rr-card-next-${c._id}`} aria-label="Next comment" title="Next comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx + 1) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronDown className="h-3.5 w-3.5" /></button>
             </span>
           )}
         </div>
