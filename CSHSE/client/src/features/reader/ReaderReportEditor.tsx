@@ -6,7 +6,6 @@ import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
 import { AllCommentsDrawer } from './AllCommentsDrawer';
-import { CommentNavigation } from '../comments';
 
 interface ReportSpec {
   specCode: string;
@@ -79,7 +78,6 @@ export function ReaderReportEditor(): JSX.Element {
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [recommendation, setRecommendation] = useState('');
   const [acceptanceVote, setAcceptanceVote] = useState<AcceptanceVote>('');
-  const [commentPage, setCommentPage] = useState(1);
   const [commentsOpen, setCommentsOpen] = useState(true);
   // The comment the reader navigated to (next/prev or from the chat window).
   // Used to FLASH the highlighted text it anchors to (inside the table).
@@ -114,6 +112,23 @@ export function ReaderReportEditor(): JSX.Element {
   const commentsForSpec = (std: string, spec: string): FullComment[] =>
     commentsBySpec.get(`${std}.${spec}`) || EMPTY_COMMENTS;
   const refreshComments = () => { allCommentsQuery.refetch(); };
+
+  // Global comment order + lookup, so each comment card carries its own prev/next
+  // that walks EVERY comment (the navigation lives on the comment, not a top bar).
+  const orderedCommentIds = useMemo(() => {
+    const arr = [...(allCommentsQuery.data?.comments || [])];
+    arr.sort((a, b) =>
+      String(a.standardCode).localeCompare(String(b.standardCode), undefined, { numeric: true }) ||
+      String(a.specCode || '').localeCompare(String(b.specCode || '')) ||
+      ((a.selectionStart ?? 0) - (b.selectionStart ?? 0)));
+    return arr.map((c) => c._id);
+  }, [allCommentsQuery.data]);
+  const commentMetaById = useMemo(() => {
+    const m = new Map<string, { std: string; spec: string }>();
+    for (const c of (allCommentsQuery.data?.comments || [])) m.set(c._id, { std: c.standardCode, spec: c.specCode || '' });
+    return m;
+  }, [allCommentsQuery.data]);
+  const jumpToComment = (id: string) => { const meta = commentMetaById.get(id); if (meta) navigateToComment(meta.std, meta.spec, id); };
 
   // Jump to a comment: scroll to its spec, then to the inline marker on the
   // selected text (inside the table) and flash it so the link points AT the text.
@@ -541,20 +556,9 @@ export function ReaderReportEditor(): JSX.Element {
       <p className="mb-4 text-sm text-slate-500">
         For each specification: click the AI assessment tag to see the AI's view, read the narrative and
         supporting evidence, fill the checklist (Compliant / Non-Compliant + Score) and add comments by
-        selecting text. Your work autosaves; jump between comments with the navigator below.
+        selecting text. Each comment appears in the margin next to the text it flags, with its own
+        prev/next to walk every comment. Your work autosaves.
       </p>
-
-      {/* Comment navigator (prev/next across every specification). */}
-      {currentUserId && (
-        <div className="mb-4">
-          <CommentNavigation
-            submissionId={submissionId}
-            currentPage={commentPage}
-            onPageChange={setCommentPage}
-            onNavigateToComment={navigateToComment}
-          />
-        </div>
-      )}
 
       <div className="space-y-3">
         {rows.map((r) => (
@@ -604,6 +608,8 @@ export function ReaderReportEditor(): JSX.Element {
                           proseClassName={proseCls}
                           onCommentAdded={refreshComments}
                           highlightCommentId={highlightComment && highlightComment.std === r.code && highlightComment.spec === sp.specCode ? highlightComment.commentId : null}
+                          orderedCommentIds={orderedCommentIds}
+                          onJumpToComment={jumpToComment}
                         />
                       ) : (
                         <div className={proseCls} dangerouslySetInnerHTML={{ __html: `${sp.narrativeHtml || ''}${sp.evidenceHtml || ''}` }} />

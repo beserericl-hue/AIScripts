@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { MessageSquarePlus } from 'lucide-react';
+import { MessageSquarePlus, ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { api } from '../../services/api';
 import { useToastStore } from '../../store/toastStore';
 
@@ -37,6 +37,11 @@ interface FormattedCommentableProps {
   proseClassName: string;
   onCommentAdded: () => void;
   highlightCommentId?: string | null;
+  // Global comment order (ids across every spec) + a jump handler, so each
+  // comment card carries its OWN prev/next that walks every comment — the
+  // navigation lives ON the comment, not in a bar that scrolls away.
+  orderedCommentIds?: string[];
+  onJumpToComment?: (id: string) => void;
 }
 
 /** Human label for an author role. */
@@ -114,17 +119,30 @@ function markComment(container: HTMLElement, c: CommentLite, flash: boolean) {
   if (start >= 0 && end > start) wrapRange(container, start, end, c._id, flash);
 }
 
+const CARD_GAP = 10;        // px between stacked cards
+const CARD_EST_HEIGHT = 96; // px assumed per card for anti-overlap stacking
+
 /**
- * Renders FORMATTED html (tables/lists/links intact) AND lets the reader select
- * text inside it to add a comment. Commented text is highlighted IN PLACE — the
- * marker sits on the selected text inside the table, not on a tag outside it.
+ * Renders FORMATTED html (tables/lists/links intact) AND shows each comment as a
+ * card in the right margin, vertically aligned with the text it flags (like
+ * Google-Docs margin comments). Selecting text adds a new comment; the card has
+ * its own reply box, resolve, and prev/next that walks every comment.
  */
-export function FormattedCommentable({ html, submissionId, standardCode, specCode, comments, currentUserRole, proseClassName, onCommentAdded, highlightCommentId = null }: FormattedCommentableProps): JSX.Element {
-  const ref = useRef<HTMLDivElement>(null);
+export function FormattedCommentable({ html, submissionId, standardCode, specCode, comments, currentUserRole, proseClassName, onCommentAdded, highlightCommentId = null, orderedCommentIds = [], onJumpToComment }: FormattedCommentableProps): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);     // the prose container (marks live here)
+  const wrapRef = useRef<HTMLDivElement>(null);  // relative wrapper (cards anchor here)
   const [composer, setComposer] = useState<{ x: number; y: number; selectedText: string; start: number; end: number } | null>(null);
   const [body, setBody] = useState('');
   // Readers/lead-readers comment; admins/superusers may too (server enforces).
   const canComment = currentUserRole === 'reader' || currentUserRole === 'lead_reader' || currentUserRole === 'admin';
+
+  const hasComments = comments.length > 0;
+  // Measured vertical offset (px, relative to the wrapper top) of each comment's
+  // marker, so its margin card sits next to the text it flags.
+  const [markTops, setMarkTops] = useState<Record<string, number>>({});
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [replyFor, setReplyFor] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState('');
 
   // The comment just created here — flash + scroll to it once it re-marks.
   const [justCreated, setJustCreated] = useState<string | null>(null);
@@ -135,34 +153,10 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
     onSuccess: (data: any) => { setJustCreated(data?.comment?._id || null); onCommentAdded(); pushToast('Comment added', 'success'); },
     onError: () => pushToast('Could not add the comment', 'error'),
   });
-
-  // The open discussion thread, anchored NEAR its highlighted text. Clicking a
-  // highlight opens that one comment's thread here (Google-Docs-style), so the
-  // discussion lives next to the text it flags — not in one far-off list.
-  const [thread, setThread] = useState<{ commentId: string; top: number; left: number } | null>(null);
-  const [replyText, setReplyText] = useState('');
-  const threadRef = useRef<HTMLDivElement>(null);
-  const openComment = thread ? comments.find((c) => c._id === thread.commentId) || null : null;
-
-  // Close the open thread when clicking anywhere outside it (but not on a
-  // highlight — that switches to the clicked comment's thread). Keeps a reader
-  // from being blocked when the popover floats over nearby text.
-  useEffect(() => {
-    if (!thread) return;
-    const onDocDown = (e: MouseEvent) => {
-      const t = e.target as HTMLElement;
-      if (threadRef.current?.contains(t)) return;
-      if (t.closest('mark[data-rr-comment]')) return;
-      setThread(null);
-    };
-    document.addEventListener('mousedown', onDocDown);
-    return () => document.removeEventListener('mousedown', onDocDown);
-  }, [thread]);
-
   const reply = useMutation({
     mutationFn: async (payload: { commentId: string; content: string }) =>
       (await api.post(`${API_BASE}/comments/${payload.commentId}/replies`, { content: payload.content })).data,
-    onSuccess: () => { setReplyText(''); onCommentAdded(); pushToast('Reply added', 'success'); },
+    onSuccess: () => { setReplyText(''); setReplyFor(null); onCommentAdded(); pushToast('Reply added', 'success'); },
     onError: () => pushToast('Could not add the reply', 'error'),
   });
   const resolve = useMutation({
@@ -171,21 +165,6 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
     onSuccess: (data: any) => { onCommentAdded(); pushToast(data?.comment?.isResolved ? 'Comment resolved' : 'Comment reopened', 'success'); },
     onError: () => pushToast('Could not update the comment', 'error'),
   });
-
-  // Open a comment's thread when its highlight is clicked, positioned near the mark.
-  const onContainerClick = (e: React.MouseEvent) => {
-    const el = ref.current;
-    if (!el) return;
-    const mark = (e.target as HTMLElement).closest('mark[data-rr-comment]') as HTMLElement | null;
-    if (!mark) return;
-    const id = mark.getAttribute('data-rr-comment');
-    if (!id) return;
-    e.preventDefault();
-    const box = el.getBoundingClientRect();
-    const r = mark.getBoundingClientRect();
-    setReplyText('');
-    setThread({ commentId: id, top: r.bottom - box.top + 6, left: Math.max(0, r.left - box.left) });
-  };
 
   // Submit: drop the dialog immediately (clear the selection) for instant
   // feedback, then save in the background.
@@ -198,21 +177,47 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
     create.mutate(payload);
   };
 
-  // (Re)apply markers whenever the content or comments change, and scroll to a
-  // freshly-created comment so it shows right next to the text it's on.
-  useEffect(() => {
+  // (Re)apply markers AND measure their offsets in one layout pass (before paint),
+  // so each comment's margin card aligns with the text it flags.
+  useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    const wrap = wrapRef.current;
+    if (!el || !wrap) return;
     clearMarks(el);
     for (const c of comments) markComment(el, c, c._id === highlightCommentId || c._id === justCreated);
-    if (justCreated) {
-      const m = document.getElementById(`comment-marker-${justCreated}`);
-      if (m) m.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const t = setTimeout(() => setJustCreated(null), 3000);
-      return () => clearTimeout(t);
-    }
+    const measure = () => {
+      const wrapTop = wrap.getBoundingClientRect().top;
+      const tops: Record<string, number> = {};
+      for (const c of comments) {
+        const m = document.getElementById(`comment-marker-${c._id}`);
+        if (m) tops[c._id] = Math.max(0, m.getBoundingClientRect().top - wrapTop);
+      }
+      setMarkTops((prev) => {
+        const keys = new Set([...Object.keys(prev), ...Object.keys(tops)]);
+        for (const k of keys) if (Math.abs((prev[k] ?? -1) - (tops[k] ?? -1)) > 1) return tops;
+        return prev;
+      });
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [html, comments, highlightCommentId, justCreated]);
+
+  // Clear the freshly-created flash after a moment.
+  useEffect(() => {
+    if (!justCreated) return;
+    const t = setTimeout(() => setJustCreated(null), 3000);
+    return () => clearTimeout(t);
+  }, [justCreated]);
+
+  // When navigated to, flash + scroll the card.
+  useEffect(() => {
+    if (!highlightCommentId) return;
+    setActiveId(highlightCommentId);
+    const card = document.getElementById(`rr-card-${highlightCommentId}`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [highlightCommentId]);
 
   // On selection, offer an "Add comment" button anchored at the selection.
   const onMouseUp = () => {
@@ -224,94 +229,138 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
     if (!el.contains(range.commonAncestorContainer)) return;
     const selectedText = sel.toString().trim();
     if (!selectedText) return;
-    // Offset of the selection start within the container's textContent.
     const pre = range.cloneRange();
     pre.selectNodeContents(el);
     pre.setEnd(range.startContainer, range.startOffset);
     const start = pre.toString().length;
     const end = start + selectedText.length;
     const rect = range.getBoundingClientRect();
-    setComposer({ x: rect.left + rect.width / 2, y: rect.bottom + window.scrollY + 6, selectedText, start, end });
+    const wrapRect = wrapRef.current?.getBoundingClientRect();
+    setComposer({ x: rect.left - (wrapRect?.left || 0) + rect.width / 2, y: rect.bottom - (wrapRect?.top || 0) + 6, selectedText, start, end });
+  };
+
+  // Clicking a highlight focuses (scrolls to + flashes) its margin card.
+  const onContainerClick = (e: React.MouseEvent) => {
+    const mark = (e.target as HTMLElement).closest('mark[data-rr-comment]') as HTMLElement | null;
+    if (!mark) return;
+    const id = mark.getAttribute('data-rr-comment');
+    if (!id) return;
+    setActiveId(id);
+    const card = document.getElementById(`rr-card-${id}`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  // Anti-overlap stacking: order cards by measured top, pushing each below the
+  // previous so adjacent comments don't sit on top of each other.
+  const layout = new Map<string, number>();
+  const placed = comments.filter((c) => markTops[c._id] != null).sort((a, b) => markTops[a._id] - markTops[b._id]);
+  let prevBottom = -Infinity;
+  for (const c of placed) {
+    const top = Math.max(markTops[c._id], prevBottom + CARD_GAP);
+    layout.set(c._id, top);
+    prevBottom = top + CARD_EST_HEIGHT;
+  }
+
+  const navIndex = (id: string) => orderedCommentIds.indexOf(id);
+  const total = orderedCommentIds.length;
+
+  const Card = ({ c, absolute }: { c: CommentLite; absolute: boolean }) => {
+    const idx = navIndex(c._id);
+    const active = activeId === c._id || highlightCommentId === c._id;
+    return (
+      <div
+        id={absolute ? `rr-card-${c._id}` : undefined}
+        data-testid={absolute ? `rr-card-${c._id}` : undefined}
+        onClick={() => { setActiveId(c._id); const m = document.getElementById(`comment-marker-${c._id}`); if (m) m.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}
+        className={`${absolute ? 'absolute right-0 w-[16.5rem]' : 'mb-3 w-full'} cursor-pointer rounded-lg border bg-white p-2.5 shadow-sm transition-all ${active ? 'border-teal-400 ring-2 ring-teal-200' : 'border-slate-200'} ${c.isResolved ? 'opacity-70' : ''}`}
+        style={absolute ? { top: layout.get(c._id) ?? 0 } : undefined}
+      >
+        {c.selectedText && (
+          <p className="mb-1 truncate rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] text-yellow-800" title={c.selectedText}>“{c.selectedText}”</p>
+        )}
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-xs font-semibold text-slate-700">{c.authorName || roleName(c.authorRole)}</span>
+          {/* Prev/next walks every comment — navigation lives ON the comment. */}
+          {total > 1 && idx >= 0 && (
+            <span className="flex items-center gap-0.5 text-[11px] text-slate-400" onClick={(e) => e.stopPropagation()}>
+              <button data-testid={`rr-card-prev-${c._id}`} aria-label="Previous comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx - 1 + total) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronLeft className="h-3.5 w-3.5" /></button>
+              <span className="tabular-nums">{idx + 1}/{total}</span>
+              <button data-testid={`rr-card-next-${c._id}`} aria-label="Next comment" onClick={() => onJumpToComment?.(orderedCommentIds[(idx + 1) % total])} className="rounded p-0.5 hover:bg-slate-100"><ChevronRight className="h-3.5 w-3.5" /></button>
+            </span>
+          )}
+        </div>
+        <p className="whitespace-pre-wrap text-sm text-slate-800">{c.content}</p>
+        {(c.replies || []).map((r, i) => (
+          <div key={r._id || i} className="mt-1.5 border-l-2 border-slate-200 pl-2">
+            <span className="text-[11px] font-semibold text-slate-600">{r.authorName || roleName(r.authorRole)}</span>
+            <p className="whitespace-pre-wrap text-xs text-slate-700">{r.content}</p>
+          </div>
+        ))}
+        {canComment && (
+          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+            {replyFor === c._id ? (
+              <div>
+                <textarea
+                  data-testid={`rr-card-reply-${c._id}`}
+                  autoFocus
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && replyText.trim()) reply.mutate({ commentId: c._id, content: replyText }); }}
+                  rows={2}
+                  placeholder="Reply…"
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-teal-300"
+                />
+                <div className="mt-1 flex justify-end gap-2">
+                  <button onClick={() => { setReplyFor(null); setReplyText(''); }} className="text-[11px] text-slate-500">Cancel</button>
+                  <button data-testid={`rr-card-reply-add-${c._id}`} disabled={!replyText.trim()} onClick={() => reply.mutate({ commentId: c._id, content: replyText })} className="rounded bg-teal-600 px-2 py-0.5 text-[11px] font-medium text-white disabled:opacity-50">Reply</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 text-[11px]">
+                <button data-testid={`rr-card-reply-open-${c._id}`} onClick={() => { setReplyFor(c._id); setReplyText(''); }} className="text-teal-700 hover:underline">Reply</button>
+                <button data-testid={`rr-card-resolve-${c._id}`} onClick={() => resolve.mutate({ commentId: c._id })} className="inline-flex items-center gap-0.5 text-slate-500 hover:text-slate-800">
+                  {c.isResolved ? 'Reopen' : (<><Check className="h-3 w-3" />Resolve</>)}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
-    <div className="relative">
-      <div
-        ref={ref}
-        data-testid={`rr-formatted-${standardCode}-${specCode}`}
-        className={proseClassName}
-        onMouseUp={onMouseUp}
-        onClick={onContainerClick}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-      {openComment && thread && (
-        <div
-          ref={threadRef}
-          data-testid="rr-comment-thread"
-          className="absolute z-30 w-80 max-w-[22rem] rounded-lg border border-slate-300 bg-white shadow-xl"
-          style={{ top: thread.top, left: Math.min(thread.left, Math.max(0, (ref.current?.clientWidth || 320) - 320)) }}
-        >
-          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-2">
-            <span className="text-xs font-semibold text-slate-600">Discussion</span>
-            <button onClick={() => setThread(null)} aria-label="Close" className="text-slate-400 hover:text-slate-700">×</button>
-          </div>
-          <div className="max-h-72 overflow-y-auto px-3 py-2">
-            {openComment.selectedText && (
-              <p className="mb-2 truncate rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800" title={openComment.selectedText}>“{openComment.selectedText}”</p>
-            )}
-            <div className="mb-2">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="text-xs font-semibold text-slate-700">{openComment.authorName || roleName(openComment.authorRole)}</span>
-                {openComment.authorRole && <span className="text-[10px] uppercase tracking-wide text-slate-400">{roleName(openComment.authorRole)}</span>}
-              </div>
-              <p className="whitespace-pre-wrap text-sm text-slate-800">{openComment.content}</p>
-            </div>
-            {(openComment.replies || []).map((r, i) => (
-              <div key={r._id || i} className="mb-2 border-l-2 border-slate-200 pl-2">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-xs font-semibold text-slate-700">{r.authorName || roleName(r.authorRole)}</span>
-                  {r.authorRole && <span className="text-[10px] uppercase tracking-wide text-slate-400">{roleName(r.authorRole)}</span>}
-                </div>
-                <p className="whitespace-pre-wrap text-sm text-slate-800">{r.content}</p>
-              </div>
-            ))}
-          </div>
-          {canComment && (
-            <div className="border-t border-slate-200 px-3 py-2">
-              <textarea
-                data-testid="rr-thread-reply"
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && replyText.trim()) reply.mutate({ commentId: openComment._id, content: replyText }); }}
-                rows={2}
-                placeholder="Reply…"
-                className="w-full rounded border border-slate-300 px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-teal-300"
-              />
-              <div className="mt-1 flex items-center justify-between">
-                <button
-                  data-testid="rr-thread-resolve"
-                  onClick={() => resolve.mutate({ commentId: openComment._id })}
-                  className="text-xs text-slate-500 hover:text-slate-800"
-                >
-                  {openComment.isResolved ? 'Reopen' : 'Resolve'}
-                </button>
-                <button
-                  data-testid="rr-thread-reply-add"
-                  disabled={!replyText.trim()}
-                  onClick={() => reply.mutate({ commentId: openComment._id, content: replyText })}
-                  className="rounded bg-teal-600 px-2 py-0.5 text-xs font-medium text-white disabled:opacity-50"
-                >
-                  Reply
-                </button>
-              </div>
-            </div>
-          )}
+    <div ref={wrapRef} className="relative">
+      <div className={hasComments ? 'lg:flex lg:items-start lg:gap-0' : ''}>
+        <div className={hasComments ? 'min-w-0 lg:flex-1 lg:pr-[17.5rem]' : ''}>
+          <div
+            ref={ref}
+            data-testid={`rr-formatted-${standardCode}-${specCode}`}
+            className={proseClassName}
+            onMouseUp={onMouseUp}
+            onClick={onContainerClick}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
         </div>
-      )}
+        {/* Margin comment cards (desktop): absolutely positioned next to the text
+            they flag, aligned to each marked passage. */}
+        {hasComments && (
+          <div data-testid={`rr-comments-margin-${standardCode}-${specCode}`} className="hidden lg:absolute lg:right-0 lg:top-0 lg:block lg:h-full lg:w-[16.5rem]">
+            {comments.map((c) => <Card key={c._id} c={c} absolute />)}
+          </div>
+        )}
+        {/* Same cards stacked below the text on narrow screens. */}
+        {hasComments && (
+          <div className="mt-3 lg:hidden">
+            {comments.map((c) => <Card key={c._id} c={c} absolute={false} />)}
+          </div>
+        )}
+      </div>
+
       {composer && (
         <div
           className="absolute z-20 w-72 -translate-x-1/2 rounded-lg border border-slate-300 bg-white p-2 shadow-lg"
-          style={{ left: composer.x - (ref.current?.getBoundingClientRect().left || 0), top: (composer.y - window.scrollY) - (ref.current?.getBoundingClientRect().top || 0) }}
+          style={{ left: composer.x, top: composer.y }}
         >
           <p className="mb-1 truncate rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800" title={composer.selectedText}>“{composer.selectedText}”</p>
           <textarea
