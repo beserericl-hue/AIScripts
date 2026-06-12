@@ -32,6 +32,7 @@ export type TourName =
   | 'welcome'
   | 'self-study'
   | 'reader-review'
+  | 'reader-report'
   | 'lead-compilation'
   | 'admin-settings'
   | 'site-visit';
@@ -83,6 +84,36 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
     autoStart: true,
     startLabelKey: 'help.menu.startTour',
     restartLabelKey: 'help.menu.restartTour',
+  },
+  {
+    name: 'reader-report',
+    matchRoute: (p) => p.startsWith('/reader-report'),
+    // Anchored to existing data-testids. Per-spec anchors use ^= so the tour
+    // spotlights the first specification; the DOM-presence filter drops any
+    // step whose element isn't on screen (e.g. no Files button on a spec
+    // without evidence, no roster for a plain reader).
+    getSteps: ({ translate = t }) => [
+      centerStep('tour.rr.intro', translate),
+      anchorStep('[data-testid="reader-report-back"]', 'tour.rr.backLink', translate, 'bottom'),
+      anchorStep('[data-testid="reader-report-view"]', 'tour.rr.view', translate),
+      anchorStep('[data-testid="reader-report-download"]', 'tour.rr.download', translate),
+      anchorStep('[data-testid="reader-report-save"]', 'tour.rr.save', translate),
+      anchorStep('[data-testid="reader-report-complete"]', 'tour.rr.markComplete', translate),
+      anchorStep('[data-testid="reader-report-nav"]', 'tour.rr.nav', translate),
+      anchorStep('[data-testid="rr-all-reports"]', 'tour.rr.allReports', translate),
+      anchorStep('[data-testid^="rr-ai-"]', 'tour.rr.aiAssessment', translate),
+      anchorStep('[data-testid^="rr-check-"]', 'tour.rr.checklist', translate, 'left'),
+      anchorStep('[data-testid^="rr-score-"]', 'tour.rr.score', translate, 'left'),
+      anchorStep('[data-testid^="rr-files-"]', 'tour.rr.files', translate, 'left'),
+      anchorStep('[data-testid^="rr-matrix-"]', 'tour.rr.matrix', translate, 'left'),
+      anchorStep('[data-testid^="rr-comments-"]', 'tour.rr.comments', translate, 'top'),
+      anchorStep('[data-testid="rr-vote"]', 'tour.rr.vote', translate, 'top'),
+      anchorStep('[data-testid="rr-recommendation"]', 'tour.rr.recommendation', translate, 'top'),
+      centerStep('tour.rr.lastStep', translate),
+    ],
+    autoStart: true,
+    startLabelKey: 'help.menu.tourScreen',
+    restartLabelKey: 'help.menu.tourScreenAgain',
   },
   {
     name: 'self-study',

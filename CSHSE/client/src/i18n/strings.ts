@@ -121,6 +121,41 @@ const STRINGS = {
     "Score this part on the 0–3 scale as you review it. Your score is saved automatically.",
   'tour.ss.comments':
     "Comments on this part appear here on the right. Select text in the narrative and click Comment to add your own.",
+  // tour.rr.* — the Reader Report editor screen
+  'tour.rr.intro':
+    "This is the Reader Report. For every part of the self-study you read the school's answer, mark it Compliant or Non-Compliant, give it a 0–3 score, and add comments. Here's a quick tour of the screen.",
+  'tour.rr.backLink':
+    "This takes you back to the Self-Study to read the full story and add inline comments on the text.",
+  'tour.rr.view':
+    "View shows your completed Reader Report — your marks and comments filled into the official template — right here in the browser.",
+  'tour.rr.download':
+    "Download gives you that same completed report as a Word file to print or send.",
+  'tour.rr.save':
+    "Save keeps your marks and comments. It also saves on its own as you work.",
+  'tour.rr.markComplete':
+    "Mark complete when you're finished. That's when the lead reader can see your report.",
+  'tour.rr.nav':
+    "These tabs jump to any part of the self-study — Introduction, Standards, Curriculum Matrix, and the Supporting File Library — without losing your place.",
+  'tour.rr.allReports':
+    "Lead readers see every reader's report here, with the vote tally. Open each one once that reader marks it complete.",
+  'tour.rr.aiAssessment':
+    "Click this tag to see the AI helper's view of whether this part is compliant, and why.",
+  'tour.rr.checklist':
+    "This is the checklist for the part. Mark it Compliant or Non-Compliant and write your comments. It saves automatically.",
+  'tour.rr.score':
+    "Give this part a score from 0 to 3. The dash clears it. It saves automatically.",
+  'tour.rr.files':
+    "Files opens the documents and links for this part in the Supporting File Library — CVs, syllabi, and projects too.",
+  'tour.rr.matrix':
+    "Matrix shows this part in the Curriculum Matrix.",
+  'tour.rr.comments':
+    "Comments for this part live here. Everyone — reader 1, reader 2, and the lead reader — sees them. Select text and right-click to add your own.",
+  'tour.rr.vote':
+    "Cast your vote on the program: Accept, Conditional, Deny, or Hold. The lead reader tallies every reader's vote.",
+  'tour.rr.recommendation':
+    "Write your overall recommendation to the Council here — the decision and why.",
+  'tour.rr.lastStep':
+    "That's the Reader Report. Click the question mark in the header any time to see this tour again.",
   'tour.ss.rail':
     "This left list is every standard and its parts. The little circle shows which parts are done. Click one to work on it.",
   'tour.ss.editor':
