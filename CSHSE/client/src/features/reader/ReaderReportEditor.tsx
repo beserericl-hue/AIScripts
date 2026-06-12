@@ -441,11 +441,10 @@ export function ReaderReportEditor(): JSX.Element {
               </details>
             )}
 
-            {/* Each specification: its narrative + supporting evidence, with the
-                official reader-report checklist (Compliant / Non-Compliant /
-                Reader's Comments) right beside it — matching the template. */}
+            {/* The standard's TEXT — each specification's narrative + supporting
+                evidence, so the reader reads the self-study in place. */}
             {r.specs.map((sp) => (
-              <div key={sp.specCode} className="mb-4 rounded border border-slate-200 bg-slate-50 p-3">
+              <div key={sp.specCode} className="mb-3 rounded border border-slate-100 bg-slate-50 p-3">
                 <h3 className="mb-1 text-sm font-semibold text-slate-700">{r.code}.{sp.specCode} {sp.specTitle}</h3>
                 {sp.narrativeHtml ? (
                   <div className={proseCls} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />
@@ -458,61 +457,73 @@ export function ReaderReportEditor(): JSX.Element {
                     <div className={`${proseCls} rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />
                   </>
                 ) : null}
-
-                {/* Official checklist for THIS specification. */}
-                <div className="mt-3 overflow-x-auto rounded border border-slate-300 bg-white">
-                  <table data-testid={`rr-check-${r.code}-${sp.specCode}`} className="w-full border-collapse text-sm">
-                    <tbody>
-                      <tr className="align-top">
-                        <td className="w-24 border border-slate-300 px-2 py-2 text-center">
-                          <label className={`flex flex-col items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
-                            <span className="text-xs font-semibold text-emerald-700">Compliant</span>
-                            <input
-                              type="checkbox"
-                              data-testid={`rr-c-${r.code}-${sp.specCode}`}
-                              disabled={readonly}
-                              checked={sp.readerMark === 'compliant'}
-                              onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'compliant' ? '' : 'compliant' })}
-                              className="h-4 w-4 text-emerald-600 disabled:opacity-60"
-                              aria-label={`${r.code}.${sp.specCode} compliant`}
-                            />
-                          </label>
-                        </td>
-                        <td className="w-28 border border-slate-300 px-2 py-2 text-center">
-                          <label className={`flex flex-col items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
-                            <span className="text-xs font-semibold text-red-700">Non-Compliant</span>
-                            <input
-                              type="checkbox"
-                              data-testid={`rr-n-${r.code}-${sp.specCode}`}
-                              disabled={readonly}
-                              checked={sp.readerMark === 'noncompliant'}
-                              onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'noncompliant' ? '' : 'noncompliant' })}
-                              className="h-4 w-4 text-red-600 disabled:opacity-60"
-                              aria-label={`${r.code}.${sp.specCode} non-compliant`}
-                            />
-                          </label>
-                        </td>
-                        <td className="border border-slate-300 px-2 py-1">
-                          <label className="mb-1 block text-xs font-semibold text-slate-600" htmlFor={`rr-comment-${r.code}-${sp.specCode}`}>
-                            Reader’s Comments <span className="font-normal text-slate-400">— note missing information or the reason for a non-compliant decision; note strengths</span>
-                          </label>
-                          <textarea
-                            id={`rr-comment-${r.code}-${sp.specCode}`}
-                            data-testid={`rr-comment-${r.code}-${sp.specCode}`}
-                            value={sp.readerComment}
-                            readOnly={readonly}
-                            onChange={(e) => setSpec(r.code, sp.specCode, { readerComment: e.target.value })}
-                            placeholder="Comments for this specification…"
-                            rows={2}
-                            className={`w-full resize-y rounded border border-slate-300 px-2 py-1 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
-                          />
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
               </div>
             ))}
+
+            {/* The official reader-report checklist TABLE for THIS standard — one
+                row per specification (Compliant / Non-Compliant / Reader's
+                Comments), exactly as the CSHSE template lays it out. */}
+            <div className="mt-3 overflow-x-auto rounded border border-slate-300 bg-white">
+              <p className="border-b border-slate-200 px-3 py-2 text-xs italic text-slate-600">
+                For each Specification there should be a clear, detailed, concise and descriptive narrative,
+                which includes active hyperlinks to documents or uploaded documents that support and verify
+                statements made in the narrative. The reader should be referred to the appropriate page or
+                section of multi-paged documents.
+              </p>
+              <table data-testid={`rr-check-table-${r.code}`} className="w-full border-collapse text-sm">
+                <thead>
+                  <tr className="bg-slate-100 text-left">
+                    <th className="border border-slate-300 px-3 py-2 font-semibold text-slate-700">Specification</th>
+                    <th className="w-20 border border-slate-300 px-2 py-2 text-center font-semibold text-emerald-700">Compliant</th>
+                    <th className="w-24 border border-slate-300 px-2 py-2 text-center font-semibold text-red-700">Non-Compliant</th>
+                    <th className="border border-slate-300 px-3 py-2 font-semibold text-slate-700">Reader’s Comments <span className="font-normal text-slate-400">— note missing information or reason for a non-compliant decision; note strengths</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {r.specs.map((sp) => (
+                    <tr key={sp.specCode} data-testid={`rr-check-${r.code}-${sp.specCode}`} className="align-top">
+                      <td className="border border-slate-300 px-3 py-2">
+                        <span className="font-medium text-slate-800">{r.code}.{sp.specCode}</span>
+                        <div className="text-xs text-slate-500">{sp.specTitle}</div>
+                      </td>
+                      <td className="border border-slate-300 px-2 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          data-testid={`rr-c-${r.code}-${sp.specCode}`}
+                          disabled={readonly}
+                          checked={sp.readerMark === 'compliant'}
+                          onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'compliant' ? '' : 'compliant' })}
+                          className="h-4 w-4 text-emerald-600 disabled:opacity-60"
+                          aria-label={`${r.code}.${sp.specCode} compliant`}
+                        />
+                      </td>
+                      <td className="border border-slate-300 px-2 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          data-testid={`rr-n-${r.code}-${sp.specCode}`}
+                          disabled={readonly}
+                          checked={sp.readerMark === 'noncompliant'}
+                          onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'noncompliant' ? '' : 'noncompliant' })}
+                          className="h-4 w-4 text-red-600 disabled:opacity-60"
+                          aria-label={`${r.code}.${sp.specCode} non-compliant`}
+                        />
+                      </td>
+                      <td className="border border-slate-300 px-2 py-1">
+                        <textarea
+                          data-testid={`rr-comment-${r.code}-${sp.specCode}`}
+                          value={sp.readerComment}
+                          readOnly={readonly}
+                          onChange={(e) => setSpec(r.code, sp.specCode, { readerComment: e.target.value })}
+                          placeholder="Comments for this specification…"
+                          rows={2}
+                          className={`w-full resize-y rounded border border-slate-300 px-2 py-1 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         ))}
       </div>
