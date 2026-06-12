@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare } from 'lucide-react';
+import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
@@ -15,6 +15,9 @@ interface ReportSpec {
   evidenceHtml: string;
   verdict?: string;
   aiMark: 'compliant' | 'noncompliant' | null;
+  // The AI's full reasoning for THIS spec, revealed behind a marker in the
+  // checklist so the reader sees why the AI judged it compliant/non-compliant.
+  aiComment?: string;
   evidenceCount?: number;
   // The reader's per-specification checklist mark + comment (the official
   // template captures these per spec, next to each specification).
@@ -617,6 +620,22 @@ export function ReaderReportEditor(): JSX.Element {
                         Reader’s checklist — Specification {r.code}.{sp.specCode}
                       </div>
                       <div className="space-y-3 p-3">
+                        {/* AI evaluation for THIS spec — a marker the reader clicks
+                            to see exactly why the AI judged it compliant or not
+                            (verdict + rationale + suggestions), so the reasoning
+                            stays in view next to the checklist while scrolling. */}
+                        {(sp.aiComment || sp.aiMark) && (
+                          <details data-testid={`rr-ai-spec-${r.code}-${sp.specCode}`} className="rounded-md border border-amber-200 bg-amber-50">
+                            <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100">
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Why the AI says{sp.aiMark ? ` “${sp.aiMark === 'compliant' ? 'Compliant' : 'Non-Compliant'}”` : ' this'}
+                              <span className="ml-auto font-normal text-amber-600">view</span>
+                            </summary>
+                            <div className="max-h-64 overflow-y-auto border-t border-amber-200 px-2.5 py-2 text-xs whitespace-pre-wrap text-amber-900">
+                              {sp.aiComment || 'No AI rationale was recorded for this specification.'}
+                            </div>
+                          </details>
+                        )}
                         <div className="flex items-center gap-5">
                           <label className={`inline-flex items-center gap-1.5 ${readonly ? '' : 'cursor-pointer'}`}>
                             <input

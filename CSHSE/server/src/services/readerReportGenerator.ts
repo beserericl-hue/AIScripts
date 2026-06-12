@@ -344,6 +344,10 @@ export interface ReaderReportSpec {
   // The AI's per-spec verdict mapped to the checklist mark (pass→compliant,
   // fail/needs_improvement→noncompliant) so each spec's checklist starts drafted.
   aiMark: 'compliant' | 'noncompliant' | null;
+  // The AI's full reasoning for THIS spec — verdict label + rationale +
+  // suggestions — shown behind a marker in the checklist so the reader can see
+  // why the AI judged the spec compliant/non-compliant without leaving the row.
+  aiComment: string;
   // How many Supporting-Evidence items (files / URLs / CVs / syllabi / projects)
   // are tagged to this spec — drives the "Open files in library" button.
   evidenceCount: number;
@@ -355,6 +359,17 @@ function verdictToMark(verdict?: string): 'compliant' | 'noncompliant' | null {
   if (verdict === 'pass') return 'compliant';
   if (verdict === 'fail' || verdict === 'needs_improvement') return 'noncompliant';
   return null;
+}
+
+/** The AI's full per-spec reasoning, formatted for the on-screen marker. */
+function specAiText(sp: { verdict?: string; rationale?: string; suggestions?: string[] }): string {
+  const parts: string[] = [];
+  const v = sp.verdict ? (VERDICT_LABEL[sp.verdict] || sp.verdict) : '';
+  if (v) parts.push(`AI verdict: ${v}`);
+  const why = (sp.rationale || '').trim();
+  if (why) parts.push(why);
+  if (sp.suggestions?.length) parts.push(`Suggestions:\n• ${sp.suggestions.slice(0, 8).join('\n• ')}`);
+  return parts.join('\n\n');
 }
 export interface ReaderReportStandardRow {
   code: string;
@@ -441,6 +456,7 @@ export async function getReaderReportStructure(submissionId: string): Promise<Re
           specCode: sp.spec, specTitle: sp.title,
           narrativeHtml: sp.narrativeHtml, evidenceHtml: sp.evidenceHtml,
           verdict: sp.verdict, aiMark: verdictToMark(sp.verdict),
+          aiComment: specAiText(sp),
           evidenceCount: evCount.get(`${s.code}.${sp.spec}`) || 0,
           excluded: sp.excluded,
         }));
