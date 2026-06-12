@@ -364,16 +364,31 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
 
     const reviewerId = target.reviewerId;
     const saved = await ReaderReport.findOne({ submissionId, reviewerId }).lean();
-    const savedByCode: Record<string, { mark: string; comment: string }> = {};
-    for (const r of saved?.rows || []) savedByCode[r.standardCode] = { mark: r.mark, comment: r.comment };
+    // Saved rows are stored per-SPECIFICATION (key = "std.spec"); legacy rows
+    // with no specCode are keyed by standard alone.
+    const savedByKey: Record<string, { mark: string; comment: string }> = {};
+    for (const r of saved?.rows || []) {
+      const key = r.specCode ? `${r.standardCode}.${r.specCode}` : r.standardCode;
+      savedByKey[key] = { mark: r.mark, comment: r.comment };
+    }
 
     const standards = structure.standards.map((s) => ({
       ...s,
-      // The reader's CHECK MARK defaults to the AI's so the checklist starts
-      // pre-filled; the reader's COMMENT starts BLANK (the AI's assessment is
-      // shown separately, read-only, as the tag) so the reader writes their own.
-      readerMark: savedByCode[s.code]?.mark ?? (s.aiMark || ''),
-      readerComment: savedByCode[s.code]?.comment ?? '',
+      // Each SPECIFICATION carries its own checklist: the reader's CHECK MARK
+      // defaults to the AI's per-spec verdict so the checklist starts drafted;
+      // the reader's COMMENT starts BLANK (the AI assessment is shown separately
+      // as the read-only tag) so the reader writes their own.
+      specs: s.specs.map((sp) => {
+        const key = `${s.code}.${sp.specCode}`;
+        return {
+          ...sp,
+          readerMark: savedByKey[key]?.mark ?? (sp.aiMark || ''),
+          readerComment: savedByKey[key]?.comment ?? '',
+        };
+      }),
+      // Standard-level fields kept for the AI tag / legacy fallback.
+      readerMark: savedByKey[s.code]?.mark ?? (s.aiMark || ''),
+      readerComment: savedByKey[s.code]?.comment ?? '',
     }));
 
     // Name the reviewer when a lead reader is viewing someone else's report.
@@ -415,6 +430,7 @@ export const saveReaderReportData = async (req: AuthenticatedRequest, res: Respo
     const body = req.body || {};
     const rows = Array.isArray(body.rows) ? body.rows.map((r: any) => ({
       standardCode: String(r.standardCode || ''),
+      specCode: String(r.specCode || ''),
       mark: ['compliant', 'noncompliant', ''].includes(r.mark) ? r.mark : '',
       comment: String(r.comment || ''),
     })).filter((r: any) => r.standardCode) : [];
@@ -462,11 +478,27 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
     if (!target) return res.status(403).json({ error: 'Forbidden' });
     const reviewerId = target.reviewerId;
     const saved = await ReaderReport.findOne({ submissionId, reviewerId }).lean();
-    const overrides = new Map<string, { mark: '' | 'compliant' | 'noncompliant'; comment: string }>();
+    // The official .docx template has one checklist cell per STANDARD, so roll
+    // the reader's per-SPECIFICATION marks/comments up to the standard: the
+    // standard is Non-Compliant if ANY spec is, else Compliant if any spec is;
+    // the comment concatenates each spec's note (labelled by spec).
+    const byStd = new Map<string, { specs: Array<{ spec: string; mark: string; comment: string }> }>();
     for (const r of saved?.rows || []) {
-      if (r.mark || (r.comment && r.comment.trim())) {
-        overrides.set(r.standardCode, { mark: (r.mark as any) || '', comment: r.comment || '' });
-      }
+      if (!r.mark && !(r.comment && r.comment.trim())) continue;
+      const g = byStd.get(r.standardCode) || { specs: [] };
+      g.specs.push({ spec: r.specCode || '', mark: r.mark || '', comment: r.comment || '' });
+      byStd.set(r.standardCode, g);
+    }
+    const overrides = new Map<string, { mark: '' | 'compliant' | 'noncompliant'; comment: string }>();
+    for (const [stdCode, g] of byStd) {
+      const anyNon = g.specs.some((s) => s.mark === 'noncompliant');
+      const anyComp = g.specs.some((s) => s.mark === 'compliant');
+      const mark: '' | 'compliant' | 'noncompliant' = anyNon ? 'noncompliant' : anyComp ? 'compliant' : '';
+      const comment = g.specs
+        .filter((s) => (s.comment && s.comment.trim()))
+        .map((s) => (s.spec ? `${stdCode}.${s.spec}: ${s.comment.trim()}` : s.comment.trim()))
+        .join('\n');
+      overrides.set(stdCode, { mark, comment });
     }
 
     const wantHtml = String(req.query.format || '').toLowerCase() === 'html';

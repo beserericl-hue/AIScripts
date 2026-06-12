@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2 } from 'lucide-react';
@@ -11,6 +11,11 @@ interface ReportSpec {
   narrativeHtml: string;
   evidenceHtml: string;
   verdict?: string;
+  aiMark: 'compliant' | 'noncompliant' | null;
+  // The reader's per-specification checklist mark + comment (the official
+  // template captures these per spec, next to each specification).
+  readerMark: 'compliant' | 'noncompliant' | '';
+  readerComment: string;
 }
 interface ReportRow {
   code: string;
@@ -93,10 +98,11 @@ export function ReaderReportEditor(): JSX.Element {
 
   const save = useMutation({
     mutationFn: async (opts?: { completed?: boolean }) => {
-      const body: any = {
-        rows: rows.map((r) => ({ standardCode: r.code, mark: r.readerMark, comment: r.readerComment })),
-        recommendation,
-      };
+      // Persist the checklist PER SPECIFICATION (one row per spec).
+      const specRows = rows.flatMap((r) =>
+        r.specs.map((sp) => ({ standardCode: r.code, specCode: sp.specCode, mark: sp.readerMark, comment: sp.readerComment }))
+      );
+      const body: any = { rows: specRows, recommendation };
       if (opts && typeof opts.completed === 'boolean') body.completed = opts.completed;
       const r = await api.put(`/api/reports/submission/${submissionId}/reader-report-data`, body);
       return r.data as { updatedAt: string; completedAt: string | null };
@@ -108,8 +114,32 @@ export function ReaderReportEditor(): JSX.Element {
     },
   });
 
-  const setRow = (code: string, patch: Partial<ReportRow>) =>
+  // Autosave: any edit marks the form dirty; a debounced effect persists it so
+  // the reader never loses checklist marks/comments by forgetting to hit Save.
+  const dirtyRef = useRef(false);
+  const setRow = (code: string, patch: Partial<ReportRow>) => {
+    dirtyRef.current = true;
     setRows((rs) => rs.map((r) => (r.code === code ? { ...r, ...patch } : r)));
+  };
+  // Patch a single specification's checklist (mark/comment).
+  const setSpec = (code: string, specCode: string, patch: Partial<ReportSpec>) => {
+    dirtyRef.current = true;
+    setRows((rs) => rs.map((r) =>
+      r.code === code
+        ? { ...r, specs: r.specs.map((sp) => (sp.specCode === specCode ? { ...sp, ...patch } : sp)) }
+        : r
+    ));
+  };
+  const setRecommendationDirty = (v: string) => { dirtyRef.current = true; setRecommendation(v); };
+
+  useEffect(() => {
+    if (readonly || !dirtyRef.current) return;
+    const t = setTimeout(() => {
+      if (dirtyRef.current && !save.isPending) { dirtyRef.current = false; save.mutate(undefined); }
+    }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, recommendation, readonly]);
 
   const [dlError, setDlError] = useState<string | null>(null);
   const [viewHtml, setViewHtml] = useState<string | null>(null);
@@ -390,94 +420,15 @@ export function ReaderReportEditor(): JSX.Element {
       {dlError && <p className="mb-2 text-sm text-red-600">{dlError}</p>}
 
       <p className="mb-4 text-sm text-slate-500">
-        For each standard: click the AI assessment tag to see the AI's view, read the narrative and
-        supporting evidence below it, then set the Compliant/Non-Compliant check and write your comments. Save when done.
-        Use “Back to Self-Study” to add inline comments on the text.
+        For each specification: click the AI assessment tag to see the AI's view, read the narrative and
+        supporting evidence, then fill the checklist beside it — check Compliant or Non-Compliant and write
+        your comments. Your work autosaves; use “Back to Self-Study” to add inline comments on the text.
       </p>
-
-      {/* The official CSHSE compliance-checklist TABLE, embedded inline so the
-          reader fills the template right on this page. It binds to the SAME row
-          state as the per-standard sections below, so a mark/comment set in
-          either place stays in sync — and it is exactly what the downloaded
-          Word template ("Download template") gets filled with. */}
-      <div className="mb-6">
-        <h2 className="mb-2 text-sm font-semibold text-slate-800">Compliance checklist — official template</h2>
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
-          <table data-testid="rr-checklist-table" className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="bg-slate-100 text-left">
-                <th className="border border-slate-300 px-3 py-2 font-semibold text-slate-700">Standard</th>
-                <th className="w-24 border border-slate-300 px-2 py-2 text-center font-semibold text-emerald-700">Compliant</th>
-                <th className="w-28 border border-slate-300 px-2 py-2 text-center font-semibold text-red-700">Non-Compliant</th>
-                <th className="border border-slate-300 px-3 py-2 font-semibold text-slate-700">Reader’s comments</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.code} data-testid={`rr-check-${r.code}`} className="align-top">
-                  <td className="border border-slate-300 px-3 py-2">
-                    <a href={`#rr-row-${r.code}`} className="font-medium text-slate-800 hover:text-teal-700">Standard {r.code}</a>
-                    <div className="text-xs text-slate-500">{r.title}</div>
-                  </td>
-                  <td className="border border-slate-300 px-2 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      data-testid={`rr-check-c-${r.code}`}
-                      disabled={readonly}
-                      checked={r.readerMark === 'compliant'}
-                      onChange={() => setRow(r.code, { readerMark: r.readerMark === 'compliant' ? '' : 'compliant' })}
-                      className="h-4 w-4 text-emerald-600 disabled:opacity-60"
-                      aria-label={`Standard ${r.code} compliant`}
-                    />
-                  </td>
-                  <td className="border border-slate-300 px-2 py-2 text-center">
-                    <input
-                      type="checkbox"
-                      data-testid={`rr-check-n-${r.code}`}
-                      disabled={readonly}
-                      checked={r.readerMark === 'noncompliant'}
-                      onChange={() => setRow(r.code, { readerMark: r.readerMark === 'noncompliant' ? '' : 'noncompliant' })}
-                      className="h-4 w-4 text-red-600 disabled:opacity-60"
-                      aria-label={`Standard ${r.code} non-compliant`}
-                    />
-                  </td>
-                  <td className="border border-slate-300 px-2 py-1">
-                    <textarea
-                      value={r.readerComment}
-                      readOnly={readonly}
-                      onChange={(e) => setRow(r.code, { readerComment: e.target.value })}
-                      rows={2}
-                      placeholder="Comments…"
-                      className={`w-full resize-y rounded border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-1 text-xs text-slate-500">Check Compliant or Non-Compliant and add comments per standard. The detailed narrative + evidence for each standard is below.</p>
-      </div>
 
       <div className="space-y-3">
         {rows.map((r) => (
           <div key={r.code} id={`rr-row-${r.code}`} data-testid={`rr-row-${r.code}`} className="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold text-slate-800">Standard {r.code}: {r.title}</h2>
-              <div className="flex items-center gap-2 text-sm">
-                <label className={`inline-flex items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
-                  <input type="radio" disabled={readonly} name={`mark-${r.code}`} checked={r.readerMark === 'compliant'} onChange={() => setRow(r.code, { readerMark: 'compliant' })} className="text-emerald-600 focus:ring-emerald-500 disabled:opacity-60" />
-                  <span className="text-emerald-700">Compliant</span>
-                </label>
-                <label className={`inline-flex items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
-                  <input type="radio" disabled={readonly} name={`mark-${r.code}`} checked={r.readerMark === 'noncompliant'} onChange={() => setRow(r.code, { readerMark: 'noncompliant' })} className="text-red-600 focus:ring-red-500 disabled:opacity-60" />
-                  <span className="text-red-700">Non-Compliant</span>
-                </label>
-                {!readonly && r.readerMark && (
-                  <button onClick={() => setRow(r.code, { readerMark: '' })} className="text-xs text-slate-400 hover:text-slate-600" title="Clear mark">clear</button>
-                )}
-              </div>
-            </div>
+            <h2 className="mb-2 text-sm font-semibold text-slate-800">Standard {r.code}: {r.title}</h2>
 
             {/* AI assessment — a TAG you click to reveal the AI's per-spec
                 verdicts (collapsed by default), like the self-study editor. */}
@@ -490,10 +441,11 @@ export function ReaderReportEditor(): JSX.Element {
               </details>
             )}
 
-            {/* The self-study itself — each spec's narrative + supporting evidence,
-                so the reader reads and assesses in one place. */}
+            {/* Each specification: its narrative + supporting evidence, with the
+                official reader-report checklist (Compliant / Non-Compliant /
+                Reader's Comments) right beside it — matching the template. */}
             {r.specs.map((sp) => (
-              <div key={sp.specCode} className="mb-3 rounded border border-slate-100 bg-slate-50 p-3">
+              <div key={sp.specCode} className="mb-4 rounded border border-slate-200 bg-slate-50 p-3">
                 <h3 className="mb-1 text-sm font-semibold text-slate-700">{r.code}.{sp.specCode} {sp.specTitle}</h3>
                 {sp.narrativeHtml ? (
                   <div className={proseCls} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />
@@ -506,24 +458,61 @@ export function ReaderReportEditor(): JSX.Element {
                     <div className={`${proseCls} rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />
                   </>
                 ) : null}
+
+                {/* Official checklist for THIS specification. */}
+                <div className="mt-3 overflow-x-auto rounded border border-slate-300 bg-white">
+                  <table data-testid={`rr-check-${r.code}-${sp.specCode}`} className="w-full border-collapse text-sm">
+                    <tbody>
+                      <tr className="align-top">
+                        <td className="w-24 border border-slate-300 px-2 py-2 text-center">
+                          <label className={`flex flex-col items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
+                            <span className="text-xs font-semibold text-emerald-700">Compliant</span>
+                            <input
+                              type="checkbox"
+                              data-testid={`rr-c-${r.code}-${sp.specCode}`}
+                              disabled={readonly}
+                              checked={sp.readerMark === 'compliant'}
+                              onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'compliant' ? '' : 'compliant' })}
+                              className="h-4 w-4 text-emerald-600 disabled:opacity-60"
+                              aria-label={`${r.code}.${sp.specCode} compliant`}
+                            />
+                          </label>
+                        </td>
+                        <td className="w-28 border border-slate-300 px-2 py-2 text-center">
+                          <label className={`flex flex-col items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
+                            <span className="text-xs font-semibold text-red-700">Non-Compliant</span>
+                            <input
+                              type="checkbox"
+                              data-testid={`rr-n-${r.code}-${sp.specCode}`}
+                              disabled={readonly}
+                              checked={sp.readerMark === 'noncompliant'}
+                              onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'noncompliant' ? '' : 'noncompliant' })}
+                              className="h-4 w-4 text-red-600 disabled:opacity-60"
+                              aria-label={`${r.code}.${sp.specCode} non-compliant`}
+                            />
+                          </label>
+                        </td>
+                        <td className="border border-slate-300 px-2 py-1">
+                          <label className="mb-1 block text-xs font-semibold text-slate-600" htmlFor={`rr-comment-${r.code}-${sp.specCode}`}>
+                            Reader’s Comments <span className="font-normal text-slate-400">— note missing information or the reason for a non-compliant decision; note strengths</span>
+                          </label>
+                          <textarea
+                            id={`rr-comment-${r.code}-${sp.specCode}`}
+                            data-testid={`rr-comment-${r.code}-${sp.specCode}`}
+                            value={sp.readerComment}
+                            readOnly={readonly}
+                            onChange={(e) => setSpec(r.code, sp.specCode, { readerComment: e.target.value })}
+                            placeholder="Comments for this specification…"
+                            rows={2}
+                            className={`w-full resize-y rounded border border-slate-300 px-2 py-1 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
+                          />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ))}
-
-            {/* Reader's comments — the checklist mark is the Compliant/Non-Compliant
-                control at the top of this section. */}
-            <label className="mb-1 block text-xs font-medium text-slate-600" htmlFor={`rr-comment-${r.code}`}>
-              {readonly ? `${data.reviewerName || 'Reader'}’s comments for Standard ${r.code}` : `Your comments for Standard ${r.code}`}
-            </label>
-            <textarea
-              id={`rr-comment-${r.code}`}
-              data-testid={`rr-comment-${r.code}`}
-              value={r.readerComment}
-              onChange={(e) => setRow(r.code, { readerComment: e.target.value })}
-              readOnly={readonly}
-              placeholder="Note missing information or the reason for a non-compliant decision."
-              rows={3}
-              className={`w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
-            />
           </div>
         ))}
       </div>
@@ -533,7 +522,7 @@ export function ReaderReportEditor(): JSX.Element {
         <textarea
           data-testid="rr-recommendation"
           value={recommendation}
-          onChange={(e) => setRecommendation(e.target.value)}
+          onChange={(e) => setRecommendationDirty(e.target.value)}
           readOnly={readonly}
           placeholder="Overall recommendation (e.g. accreditation with no conditions / conditional / deny / hold) and rationale."
           rows={4}

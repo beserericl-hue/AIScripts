@@ -8,6 +8,10 @@ import mongoose, { Schema, Document } from 'mongoose';
  */
 export interface IReaderReportRow {
   standardCode: string;
+  // The specification within the standard (e.g. "a"), so the checklist is
+  // stored per-specification — matching the official reader-report template.
+  // Empty/absent for legacy standard-level rows.
+  specCode?: string;
   mark: 'compliant' | 'noncompliant' | '';
   comment: string;
 }
@@ -26,6 +30,7 @@ export interface IReaderReport extends Document {
 
 const ReaderReportRowSchema = new Schema<IReaderReportRow>({
   standardCode: { type: String, required: true },
+  specCode: { type: String, default: '' },
   mark: { type: String, enum: ['compliant', 'noncompliant', ''], default: '' },
   comment: { type: String, default: '' },
 }, { _id: false });

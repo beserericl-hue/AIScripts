@@ -341,7 +341,17 @@ export interface ReaderReportSpec {
   narrativeHtml: string;
   evidenceHtml: string;
   verdict?: string;
+  // The AI's per-spec verdict mapped to the checklist mark (pass→compliant,
+  // fail/needs_improvement→noncompliant) so each spec's checklist starts drafted.
+  aiMark: 'compliant' | 'noncompliant' | null;
   excluded: boolean;
+}
+
+/** Map an AI per-spec verdict to a Compliant/Non-Compliant checklist mark. */
+function verdictToMark(verdict?: string): 'compliant' | 'noncompliant' | null {
+  if (verdict === 'pass') return 'compliant';
+  if (verdict === 'fail' || verdict === 'needs_improvement') return 'noncompliant';
+  return null;
 }
 export interface ReaderReportStandardRow {
   code: string;
@@ -418,7 +428,7 @@ export async function getReaderReportStructure(submissionId: string): Promise<Re
         .map((sp) => ({
           specCode: sp.spec, specTitle: sp.title,
           narrativeHtml: sp.narrativeHtml, evidenceHtml: sp.evidenceHtml,
-          verdict: sp.verdict, excluded: sp.excluded,
+          verdict: sp.verdict, aiMark: verdictToMark(sp.verdict), excluded: sp.excluded,
         }));
       return { code: s.code, title: s.title, aiMark: r.mark, aiComment: r.comment, specs };
     });
