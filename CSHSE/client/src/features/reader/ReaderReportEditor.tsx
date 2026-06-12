@@ -474,8 +474,11 @@ export function ReaderReportEditor(): JSX.Element {
                 official reader-report checklist (Compliant / Non-Compliant /
                 Reader's Comments) right beside it — matching the template. */}
             {r.specs.map((sp) => (
-              <div key={sp.specCode} className="mb-4 rounded border border-slate-200 bg-slate-50 p-3">
-                <h3 className="mb-2 text-sm font-semibold text-slate-700">{r.code}.{sp.specCode} {sp.specTitle}</h3>
+              <div key={sp.specCode} id={`rr-spec-${r.code}-${sp.specCode}`} className="mb-4 scroll-mt-4 rounded border border-slate-200 bg-slate-50 p-3">
+                <h3 className="mb-2 flex items-baseline gap-2 text-sm font-semibold text-slate-700">
+                  <span className="rounded bg-teal-600 px-2 py-0.5 text-xs font-bold text-white">{r.code}.{sp.specCode}</span>
+                  <span>{sp.specTitle}</span>
+                </h3>
                 {/* Two columns: the specification's text on the LEFT, the reader's
                     checklist pinned ALONGSIDE on the RIGHT (sticky, so it stays in
                     view while reading the narrative + evidence). Stacks on narrow
