@@ -100,20 +100,29 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
   // Readers/lead-readers comment; admins/superusers may too (server enforces).
   const canComment = currentUserRole === 'reader' || currentUserRole === 'lead_reader' || currentUserRole === 'admin';
 
+  // The comment just created here — flash + scroll to it once it re-marks.
+  const [justCreated, setJustCreated] = useState<string | null>(null);
   const create = useMutation({
     mutationFn: async (payload: { selectedText: string; selectionStart: number; selectionEnd: number; content: string }) =>
-      api.post(`${API_BASE}/submissions/${submissionId}/comments`, { standardCode, specCode, ...payload }),
-    onSuccess: () => { setComposer(null); setBody(''); onCommentAdded(); },
+      (await api.post(`${API_BASE}/submissions/${submissionId}/comments`, { standardCode, specCode, ...payload })).data,
+    onSuccess: (data: any) => { setComposer(null); setBody(''); setJustCreated(data?.comment?._id || null); onCommentAdded(); },
   });
 
-  // (Re)apply markers whenever the content or comments change.
+  // (Re)apply markers whenever the content or comments change, and scroll to a
+  // freshly-created comment so it shows right next to the text it's on.
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     clearMarks(el);
-    for (const c of comments) markComment(el, c, c._id === highlightCommentId);
+    for (const c of comments) markComment(el, c, c._id === highlightCommentId || c._id === justCreated);
+    if (justCreated) {
+      const m = document.getElementById(`comment-marker-${justCreated}`);
+      if (m) m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const t = setTimeout(() => setJustCreated(null), 3000);
+      return () => clearTimeout(t);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [html, comments, highlightCommentId]);
+  }, [html, comments, highlightCommentId, justCreated]);
 
   // On selection, offer an "Add comment" button anchored at the selection.
   const onMouseUp = () => {

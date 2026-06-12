@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { MessageSquare, X, Check, CornerDownRight, ChevronRight } from 'lucide-react';
+import { MessageSquare, X, Check, CornerDownRight, ChevronRight, ChevronLeft } from 'lucide-react';
 import { api } from '../../services/api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -11,6 +11,7 @@ interface AllComment {
   standardCode: string;
   specCode?: string;
   selectedText?: string;
+  selectionStart?: number;
   content?: string;
   authorName?: string;
   authorRole?: string;
@@ -35,6 +36,7 @@ interface AllCommentsDrawerProps {
 export function AllCommentsDrawer({ submissionId, currentUserRole, open, onClose, onJump }: AllCommentsDrawerProps): JSX.Element | null {
   const [replyFor, setReplyFor] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [idx, setIdx] = useState(0); // prev/next focus position
 
   const { data, refetch } = useQuery({
     queryKey: ['comments-all', submissionId],
@@ -70,6 +72,19 @@ export function AllCommentsDrawer({ submissionId, currentUserRole, open, onClose
   }
   groups.sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
 
+  // Flat, document-ordered list for prev/next focus navigation.
+  const ordered = [...comments].sort((a, b) => {
+    const k = `${a.standardCode}.${a.specCode || ''}`.localeCompare(`${b.standardCode}.${b.specCode || ''}`, undefined, { numeric: true });
+    return k !== 0 ? k : (a.selectionStart || 0) - (b.selectionStart || 0);
+  });
+  const focusAt = (n: number) => {
+    if (!ordered.length) return;
+    const i = ((n % ordered.length) + ordered.length) % ordered.length;
+    setIdx(i);
+    const c = ordered[i];
+    onJump(c.standardCode, c.specCode, c._id);
+  };
+
   if (!open) return null;
   const unresolved = comments.filter((c) => !c.isResolved).length;
 
@@ -78,12 +93,32 @@ export function AllCommentsDrawer({ submissionId, currentUserRole, open, onClose
       data-testid="rr-all-comments"
       className="sticky top-4 flex max-h-[calc(100vh-2rem)] w-full flex-col self-start overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
     >
-      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-2.5">
+        <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
           <MessageSquare className="h-4 w-4" /> All comments
-          <span className="font-normal text-slate-500">({comments.length}, {unresolved} unresolved)</span>
+          <span className="font-normal text-slate-500">({comments.length})</span>
         </div>
-        <button onClick={onClose} className="rounded p-1 text-slate-500 hover:bg-slate-200" aria-label="Close comments"><X className="h-4 w-4" /></button>
+        <div className="flex items-center gap-1">
+          {/* Prev / next focus: scroll to each comment's highlighted text. */}
+          <button
+            data-testid="rr-comments-prev"
+            onClick={() => focusAt(idx - 1)}
+            disabled={ordered.length === 0}
+            className="rounded p-1 text-slate-500 hover:bg-slate-200 disabled:opacity-40"
+            aria-label="Previous comment"
+            title="Previous comment"
+          ><ChevronLeft className="h-4 w-4" /></button>
+          <span className="min-w-[44px] text-center text-xs text-slate-500">{ordered.length ? `${Math.min(idx + 1, ordered.length)} / ${ordered.length}` : '0 / 0'}</span>
+          <button
+            data-testid="rr-comments-next"
+            onClick={() => focusAt(idx + 1)}
+            disabled={ordered.length === 0}
+            className="rounded p-1 text-slate-500 hover:bg-slate-200 disabled:opacity-40"
+            aria-label="Next comment"
+            title="Next comment"
+          ><ChevronRight className="h-4 w-4" /></button>
+          <button onClick={onClose} className="ml-1 rounded p-1 text-slate-500 hover:bg-slate-200" aria-label="Close comments"><X className="h-4 w-4" /></button>
+        </div>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {comments.length === 0 ? (
