@@ -4,7 +4,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
-import { SpecComments } from './SpecComments';
+import { FormattedCommentable } from './FormattedCommentable';
 import { AllCommentsDrawer } from './AllCommentsDrawer';
 import { CommentNavigation } from '../comments';
 
@@ -79,38 +79,30 @@ export function ReaderReportEditor(): JSX.Element {
   const [commentPage, setCommentPage] = useState(1);
   const [commentsOpen, setCommentsOpen] = useState(true);
   // The comment the reader navigated to (next/prev or from the chat window).
-  // Used to FLASH the highlighted text it anchors to.
+  // Used to FLASH the highlighted text it anchors to (inside the table).
   const [highlightComment, setHighlightComment] = useState<{ std: string; spec?: string; commentId: string } | null>(null);
-  // Specs currently switched to the inline-comment view (vs the formatted,
-  // tables-intact reading view). A tag above each spec toggles this.
-  const [commentModeSpecs, setCommentModeSpecs] = useState<Set<string>>(new Set());
-  const specKey = (std: string, spec: string) => `${std}.${spec}`;
-  const isCommentMode = (std: string, spec: string) => commentModeSpecs.has(specKey(std, spec));
-  const toggleCommentMode = (std: string, spec: string) =>
-    setCommentModeSpecs((prev) => { const n = new Set(prev); const k = specKey(std, spec); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   // All comments for the submission (one shared query — same key as the chat
-  // drawer, so react-query dedupes) → per-spec counts for the tags.
+  // drawer, so react-query dedupes) → per-spec comments for the inline markers.
+  type FullComment = { _id: string; standardCode: string; specCode?: string; selectedText?: string; selectionStart?: number; selectionEnd?: number };
   const allCommentsQuery = useQuery({
     queryKey: ['comments-all', submissionId],
     queryFn: async () => {
       const r = await api.get(`/api/submissions/${submissionId}/comments?limit=500`);
-      return r.data as { comments: { standardCode: string; specCode?: string }[] };
+      return r.data as { comments: FullComment[] };
     },
     enabled: !!submissionId && !!currentUserId,
     refetchOnWindowFocus: false,
   });
-  const commentCountFor = (std: string, spec: string) =>
-    (allCommentsQuery.data?.comments || []).filter((c) => c.standardCode === std && (c.specCode || '') === spec).length;
+  const commentsForSpec = (std: string, spec: string): FullComment[] =>
+    (allCommentsQuery.data?.comments || []).filter((c) => c.standardCode === std && (c.specCode || '') === spec);
+  const refreshComments = () => { allCommentsQuery.refetch(); };
 
-  // Jump to a comment anywhere on the page: open that spec's comment view, scroll
-  // to it, then flash the highlighted text so the comment is clearly linked to it.
+  // Jump to a comment: scroll to its spec, then to the inline marker on the
+  // selected text (inside the table) and flash it so the link points AT the text.
   const navigateToComment = (std: string, spec?: string, commentId?: string) => {
-    if (spec) setCommentModeSpecs((prev) => new Set(prev).add(specKey(std, spec)));
-    setTimeout(() => {
-      const el = document.getElementById(`rr-spec-${std}-${spec || ''}`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 60);
+    const specEl = document.getElementById(`rr-spec-${std}-${spec || ''}`);
+    if (specEl) specEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     if (commentId) {
       setHighlightComment({ std, spec, commentId });
       setTimeout(() => {
@@ -578,46 +570,29 @@ export function ReaderReportEditor(): JSX.Element {
                     screens. */}
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
                   <div className="min-w-0 lg:flex-1">
-                    {/* TAG above the content: keeps the formatted tables viewable
-                        and links to the comment data. Click it to switch to the
-                        comment view (inline-highlighted text) and back. */}
-                    {currentUserId && (
-                      <button
-                        data-testid={`rr-comment-tag-${r.code}-${sp.specCode}`}
-                        onClick={() => toggleCommentMode(r.code, sp.specCode)}
-                        className={`mb-2 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${isCommentMode(r.code, sp.specCode) ? 'border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200' : 'border-teal-300 bg-teal-50 text-teal-800 hover:bg-teal-100'}`}
-                        title="Keep the formatted tables, or switch to the comment view to read/add comments on the text"
-                      >
-                        <MessageSquare className="h-3.5 w-3.5" />
-                        {isCommentMode(r.code, sp.specCode)
-                          ? '← Back to formatted view'
-                          : `Comments (${commentCountFor(r.code, sp.specCode)}) — view & add`}
-                      </button>
-                    )}
-                    {currentUserId && isCommentMode(r.code, sp.specCode) ? (
-                      /* Comment view: commented text highlighted inline. */
-                      <SpecComments
-                        submissionId={submissionId}
-                        standardCode={r.code}
-                        specCode={sp.specCode}
-                        contentHtml={`${sp.narrativeHtml || ''}\n${sp.evidenceHtml || ''}`}
-                        currentUserId={currentUserId}
-                        currentUserRole={effectiveRole as any}
-                        highlightCommentId={highlightComment && highlightComment.std === r.code && highlightComment.spec === sp.specCode ? highlightComment.commentId : null}
-                      />
+                    {/* FORMATTED narrative + evidence (tables/lists/links intact),
+                        AND commentable in place: select text inside the table to
+                        add a comment; commented text is highlighted right there,
+                        so the marker/link sits ON the selected data, not on a tag
+                        outside the table. */}
+                    {(sp.narrativeHtml || sp.evidenceHtml) ? (
+                      currentUserId ? (
+                        <FormattedCommentable
+                          submissionId={submissionId}
+                          standardCode={r.code}
+                          specCode={sp.specCode}
+                          html={`${sp.narrativeHtml || ''}${sp.evidenceHtml ? `<p class="rr-evidence-label">Supporting evidence</p>${sp.evidenceHtml}` : ''}`}
+                          comments={commentsForSpec(r.code, sp.specCode)}
+                          currentUserRole={effectiveRole as any}
+                          proseClassName={proseCls}
+                          onCommentAdded={refreshComments}
+                          highlightCommentId={highlightComment && highlightComment.std === r.code && highlightComment.spec === sp.specCode ? highlightComment.commentId : null}
+                        />
+                      ) : (
+                        <div className={proseCls} dangerouslySetInnerHTML={{ __html: `${sp.narrativeHtml || ''}${sp.evidenceHtml || ''}` }} />
+                      )
                     ) : (
-                      /* Formatted reading view — tables, lists and links intact. */
-                      <>
-                        {sp.narrativeHtml
-                          ? <div className={proseCls} dangerouslySetInnerHTML={{ __html: sp.narrativeHtml }} />
-                          : <p className="text-sm italic text-slate-400">No narrative submitted.</p>}
-                        {sp.evidenceHtml && (
-                          <>
-                            <p className="mt-2 text-xs font-semibold text-slate-500">Supporting evidence</p>
-                            <div className={`${proseCls} rounded border border-slate-200 bg-white p-2`} dangerouslySetInnerHTML={{ __html: sp.evidenceHtml }} />
-                          </>
-                        )}
-                      </>
+                      <p className="text-sm italic text-slate-400">No narrative submitted.</p>
                     )}
                   </div>
 

@@ -1,7 +1,7 @@
 /**
- * The Reader Report must NOT destroy table formatting. Each spec shows the
- * narrative/evidence formatted (real <table>) by default, with a "tag" above it
- * that toggles to the comment view (inline-highlighted text) and back.
+ * The Reader Report keeps table formatting AND lets the reader select text
+ * INSIDE the table to comment — the marker/highlight is placed ON the selected
+ * text inside the table (not on a tag outside it).
  */
 import { test, expect } from '@playwright/test';
 import { seedFixture, cleanupSeed, loginAsSeededViaSso, type SeedResult } from '../helpers/seed';
@@ -21,14 +21,15 @@ async function api(page: any, path: string, method = 'GET', body?: unknown) {
   }, { path, method, body });
 }
 
-test.describe('Reader Report — formatted tables preserved + comment tag', () => {
+test.describe('Reader Report — formatted table is commentable in place', () => {
   let seed: SeedResult | undefined;
   test.afterEach(async () => { await cleanupSeed(seed); seed = undefined; });
 
-  test('table renders formatted by default; the tag toggles to the comment view', async ({ page }) => {
+  test('table renders formatted; selecting text in it adds a comment marked on that text', async ({ page }) => {
     test.setTimeout(150_000);
     seed = await seedFixture('wizard_review_minimal', {
-      user: { email: 'rr70@x.test', role: 'admin', preferences: { tours: { welcome: true } } },
+      // reader so commenting is allowed (readers/lead-readers can comment).
+      user: { email: 'rr70@x.test', role: 'reader', preferences: { tours: { welcome: true } } },
       reviewState: {
         buckets: {
           '1.a': {
@@ -48,24 +49,27 @@ test.describe('Reader Report — formatted tables preserved + comment tag', () =
     await expect(page.getByTestId('reader-report-editor')).toBeVisible({ timeout: 20_000 });
 
     const spec = page.locator('#rr-spec-1-a');
-    await expect(spec).toBeVisible();
-
-    // 1) Default = formatted view → a REAL <table> with the header cells.
+    // 1) The table renders FORMATTED (real <table>, header + cells intact).
     await expect(spec.locator('table')).toBeVisible();
-    await expect(spec.getByText('Course', { exact: true })).toBeVisible();
-    await expect(spec.getByText('HS 101', { exact: true })).toBeVisible();
+    const cell = spec.locator('td', { hasText: 'HS 101' });
+    await expect(cell).toBeVisible();
 
-    // 2) The tag above the content links to the comment data.
-    const tag = page.getByTestId('rr-comment-tag-1-a');
-    await expect(tag).toBeVisible();
+    // 2) Select the text INSIDE the table cell and raise the composer.
+    await cell.selectText();
+    await page.getByTestId('rr-formatted-1-a').dispatchEvent('mouseup');
+    await expect(page.getByTestId('rr-fc-composer')).toBeVisible();
+    await page.getByTestId('rr-fc-composer').fill('Comment on HS 101 inside the table');
+    await page.getByTestId('rr-fc-add').click();
 
-    // 3) Toggle → comment view (commentable text); the raw <table> is replaced.
-    await tag.click();
-    await expect(page.getByTestId('rr-comments-1-a')).toBeVisible();
-    await expect(spec.locator('table')).toHaveCount(0);
+    // 3) The comment persists, anchored to the selected text.
+    await expect.poll(async () => {
+      const r = await api(page, `/api/submissions/${seed!.submissionId}/comments?standardCode=1&specCode=a`);
+      return (r.body?.comments || []).some((c: any) => (c.selectedText || '').includes('HS 101'));
+    }, { timeout: 15_000 }).toBe(true);
 
-    // 4) Toggle back → the formatted table is intact again.
-    await tag.click();
+    // 4) A marker is placed ON the selected text, INSIDE the still-formatted table.
     await expect(spec.locator('table')).toBeVisible();
+    await expect(spec.locator('table mark[data-rr-comment]')).toBeVisible();
+    await expect(spec.locator('table mark[data-rr-comment]')).toHaveText(/HS 101/);
   });
 });
