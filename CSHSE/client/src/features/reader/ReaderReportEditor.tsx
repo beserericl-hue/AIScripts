@@ -459,8 +459,12 @@ export function ReaderReportEditor(): JSX.Element {
                   </>
                 ) : null}
 
-                {/* Official checklist for THIS specification. */}
-                <div className="mt-3 overflow-x-auto rounded border border-slate-300 bg-white">
+                {/* Official checklist for THIS specification — labelled and
+                    highlighted so it stands out right under each spec's text. */}
+                <div className="mt-3 overflow-x-auto rounded-lg border-2 border-teal-300 bg-white">
+                  <div className="bg-teal-50 px-3 py-1.5 text-xs font-semibold text-teal-800">
+                    Reader’s checklist — Specification {r.code}.{sp.specCode}
+                  </div>
                   <table data-testid={`rr-check-${r.code}-${sp.specCode}`} className="w-full border-collapse text-sm">
                     <tbody>
                       <tr className="align-top">
