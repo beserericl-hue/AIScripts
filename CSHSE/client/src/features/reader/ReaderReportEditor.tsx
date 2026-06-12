@@ -395,9 +395,73 @@ export function ReaderReportEditor(): JSX.Element {
         Use “Back to Self-Study” to add inline comments on the text.
       </p>
 
+      {/* The official CSHSE compliance-checklist TABLE, embedded inline so the
+          reader fills the template right on this page. It binds to the SAME row
+          state as the per-standard sections below, so a mark/comment set in
+          either place stays in sync — and it is exactly what the downloaded
+          Word template ("Download template") gets filled with. */}
+      <div className="mb-6">
+        <h2 className="mb-2 text-sm font-semibold text-slate-800">Compliance checklist — official template</h2>
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table data-testid="rr-checklist-table" className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="bg-slate-100 text-left">
+                <th className="border border-slate-300 px-3 py-2 font-semibold text-slate-700">Standard</th>
+                <th className="w-24 border border-slate-300 px-2 py-2 text-center font-semibold text-emerald-700">Compliant</th>
+                <th className="w-28 border border-slate-300 px-2 py-2 text-center font-semibold text-red-700">Non-Compliant</th>
+                <th className="border border-slate-300 px-3 py-2 font-semibold text-slate-700">Reader’s comments</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.code} data-testid={`rr-check-${r.code}`} className="align-top">
+                  <td className="border border-slate-300 px-3 py-2">
+                    <a href={`#rr-row-${r.code}`} className="font-medium text-slate-800 hover:text-teal-700">Standard {r.code}</a>
+                    <div className="text-xs text-slate-500">{r.title}</div>
+                  </td>
+                  <td className="border border-slate-300 px-2 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      data-testid={`rr-check-c-${r.code}`}
+                      disabled={readonly}
+                      checked={r.readerMark === 'compliant'}
+                      onChange={() => setRow(r.code, { readerMark: r.readerMark === 'compliant' ? '' : 'compliant' })}
+                      className="h-4 w-4 text-emerald-600 disabled:opacity-60"
+                      aria-label={`Standard ${r.code} compliant`}
+                    />
+                  </td>
+                  <td className="border border-slate-300 px-2 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      data-testid={`rr-check-n-${r.code}`}
+                      disabled={readonly}
+                      checked={r.readerMark === 'noncompliant'}
+                      onChange={() => setRow(r.code, { readerMark: r.readerMark === 'noncompliant' ? '' : 'noncompliant' })}
+                      className="h-4 w-4 text-red-600 disabled:opacity-60"
+                      aria-label={`Standard ${r.code} non-compliant`}
+                    />
+                  </td>
+                  <td className="border border-slate-300 px-2 py-1">
+                    <textarea
+                      value={r.readerComment}
+                      readOnly={readonly}
+                      onChange={(e) => setRow(r.code, { readerComment: e.target.value })}
+                      rows={2}
+                      placeholder="Comments…"
+                      className={`w-full resize-y rounded border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">Check Compliant or Non-Compliant and add comments per standard. The detailed narrative + evidence for each standard is below.</p>
+      </div>
+
       <div className="space-y-3">
         {rows.map((r) => (
-          <div key={r.code} data-testid={`rr-row-${r.code}`} className="rounded-lg border border-slate-200 bg-white p-4">
+          <div key={r.code} id={`rr-row-${r.code}`} data-testid={`rr-row-${r.code}`} className="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-slate-800">Standard {r.code}: {r.title}</h2>
               <div className="flex items-center gap-2 text-sm">
