@@ -211,8 +211,9 @@ export default function Layout() {
     ? impersonation.impersonatedRole
     : user?.role;
 
-  // Check if we're on a full-width route (self-study editor with submissionId)
-  const isFullWidthRoute = location.pathname.match(/^\/self-study\/[^/]+/);
+  // Full-width routes (no max-w-7xl cap): the self-study editor AND the reader
+  // report — both need the room for a wide narrative + checklist + comments.
+  const isFullWidthRoute = location.pathname.match(/^\/(self-study|reader-report)\/[^/]+/);
 
   return (
     <div className="min-h-screen bg-gray-50">

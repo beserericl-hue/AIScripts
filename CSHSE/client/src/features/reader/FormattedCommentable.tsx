@@ -41,6 +41,9 @@ interface FormattedCommentableProps {
   // comment's up/down nav walks EVERY comment in the report and scrolls to it.
   orderedCommentIds?: string[];
   onJumpToComment?: (id: string) => void;
+  // Rendered BETWEEN the narrative and the comment sidebar (the reader's
+  // checklist), giving the column order: narrative | checklist | comments.
+  middleSlot?: React.ReactNode;
 }
 
 const roleColors: Record<string, string> = {
@@ -130,7 +133,7 @@ function markComment(container: HTMLElement, c: CommentLite, flash: boolean) {
  * text adds a comment; clicking a card's quote scrolls to the highlighted text.
  * Each card has up/down arrows that walk EVERY comment in the report.
  */
-export function FormattedCommentable({ html, submissionId, standardCode, specCode, comments, currentUserRole, proseClassName, onCommentAdded, highlightCommentId = null, orderedCommentIds = [], onJumpToComment }: FormattedCommentableProps): JSX.Element {
+export function FormattedCommentable({ html, submissionId, standardCode, specCode, comments, currentUserRole, proseClassName, onCommentAdded, highlightCommentId = null, orderedCommentIds = [], onJumpToComment, middleSlot }: FormattedCommentableProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);     // the prose container (marks live here)
   const wrapRef = useRef<HTMLDivElement>(null);
   const [composer, setComposer] = useState<{ x: number; y: number; selectedText: string; start: number; end: number } | null>(null);
@@ -323,11 +326,14 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
     );
   };
 
+  const useRow = hasComments || !!middleSlot;
+
   return (
     <div ref={wrapRef} className="relative">
-      <div className={hasComments ? 'lg:flex lg:items-start lg:gap-4' : ''}>
+      {/* Column order: narrative (wide) | checklist (middleSlot) | comments. */}
+      <div className={useRow ? 'lg:flex lg:items-start lg:gap-4' : ''}>
         {/* Narrative keeps its full readable width. */}
-        <div className={hasComments ? 'min-w-0 lg:flex-1' : ''}>
+        <div className={useRow ? 'min-w-0 lg:flex-1' : ''}>
           <div
             ref={ref}
             data-testid={`rr-formatted-${standardCode}-${specCode}`}
@@ -337,7 +343,9 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
             dangerouslySetInnerHTML={{ __html: html }}
           />
         </div>
-        {/* Comment sidebar — same look as the self-study screen. */}
+        {/* Reader's checklist column (passed in by the editor). */}
+        {middleSlot}
+        {/* Comment sidebar — same look as the self-study screen — on the right. */}
         {hasComments && (
           <div data-testid={`rr-comments-sidebar-${standardCode}-${specCode}`} className="mt-4 lg:mt-0 lg:w-80 lg:shrink-0">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700">

@@ -582,47 +582,10 @@ export function ReaderReportEditor(): JSX.Element {
             {/* Each specification: its narrative + supporting evidence, with the
                 official reader-report checklist (Compliant / Non-Compliant /
                 Reader's Comments) right beside it — matching the template. */}
-            {r.specs.map((sp) => (
-              <div key={sp.specCode} id={`rr-spec-${r.code}-${sp.specCode}`} className="mb-4 scroll-mt-4 rounded border border-slate-200 bg-slate-50 p-3">
-                <h3 className="mb-2 flex items-baseline gap-2 text-sm font-semibold text-slate-700">
-                  <span className="rounded bg-teal-600 px-2 py-0.5 text-xs font-bold text-white">{r.code}.{sp.specCode}</span>
-                  <span>{sp.specTitle}</span>
-                </h3>
-                {/* Two columns: the specification's text on the LEFT, the reader's
-                    checklist pinned ALONGSIDE on the RIGHT (sticky, so it stays in
-                    view while reading the narrative + evidence). Stacks on narrow
-                    screens. */}
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-                  <div className="min-w-0 lg:flex-1">
-                    {/* FORMATTED narrative + evidence (tables/lists/links intact),
-                        AND commentable in place: select text inside the table to
-                        add a comment; commented text is highlighted right there,
-                        so the marker/link sits ON the selected data, not on a tag
-                        outside the table. */}
-                    {(sp.narrativeHtml || sp.evidenceHtml) ? (
-                      currentUserId ? (
-                        <FormattedCommentable
-                          submissionId={submissionId}
-                          standardCode={r.code}
-                          specCode={sp.specCode}
-                          html={`${sp.narrativeHtml || ''}${sp.evidenceHtml ? `<p class="rr-evidence-label">Supporting evidence</p>${sp.evidenceHtml}` : ''}`}
-                          comments={commentsForSpec(r.code, sp.specCode)}
-                          currentUserRole={effectiveRole as any}
-                          proseClassName={proseCls}
-                          onCommentAdded={refreshComments}
-                          highlightCommentId={highlightComment && highlightComment.std === r.code && highlightComment.spec === sp.specCode ? highlightComment.commentId : null}
-                          orderedCommentIds={orderedCommentIds}
-                          onJumpToComment={jumpToComment}
-                        />
-                      ) : (
-                        <div className={proseCls} dangerouslySetInnerHTML={{ __html: `${sp.narrativeHtml || ''}${sp.evidenceHtml || ''}` }} />
-                      )
-                    ) : (
-                      <p className="text-sm italic text-slate-400">No narrative submitted.</p>
-                    )}
-                  </div>
-
-                  {/* Checklist sidebar for THIS specification. */}
+            {r.specs.map((sp) => {
+              // The reader's checklist column — rendered BETWEEN the narrative and
+              // the comments so the order is: narrative (wide) | checklist | comments.
+              const checklistNode = (
                   <div className="lg:sticky lg:top-4 lg:w-80 lg:shrink-0">
                     <div data-testid={`rr-check-${r.code}-${sp.specCode}`} className="rounded-lg border-2 border-teal-300 bg-white shadow-sm">
                       <div className="rounded-t-md bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">
@@ -732,9 +695,45 @@ export function ReaderReportEditor(): JSX.Element {
                       </div>
                     </div>
                   </div>
+              );
+              return (
+                <div key={sp.specCode} id={`rr-spec-${r.code}-${sp.specCode}`} className="mb-4 scroll-mt-4 rounded border border-slate-200 bg-slate-50 p-3">
+                  <h3 className="mb-2 flex items-baseline gap-2 text-sm font-semibold text-slate-700">
+                    <span className="rounded bg-teal-600 px-2 py-0.5 text-xs font-bold text-white">{r.code}.{sp.specCode}</span>
+                    <span>{sp.specTitle}</span>
+                  </h3>
+                  {/* Column order: narrative (wide) | checklist | comments. */}
+                  {(sp.narrativeHtml || sp.evidenceHtml) ? (
+                    currentUserId ? (
+                      <FormattedCommentable
+                        submissionId={submissionId}
+                        standardCode={r.code}
+                        specCode={sp.specCode}
+                        html={`${sp.narrativeHtml || ''}${sp.evidenceHtml ? `<p class="rr-evidence-label">Supporting evidence</p>${sp.evidenceHtml}` : ''}`}
+                        comments={commentsForSpec(r.code, sp.specCode)}
+                        currentUserRole={effectiveRole as any}
+                        proseClassName={proseCls}
+                        onCommentAdded={refreshComments}
+                        highlightCommentId={highlightComment && highlightComment.std === r.code && highlightComment.spec === sp.specCode ? highlightComment.commentId : null}
+                        orderedCommentIds={orderedCommentIds}
+                        onJumpToComment={jumpToComment}
+                        middleSlot={checklistNode}
+                      />
+                    ) : (
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                        <div className="min-w-0 lg:flex-1"><div className={proseCls} dangerouslySetInnerHTML={{ __html: `${sp.narrativeHtml || ''}${sp.evidenceHtml || ''}` }} /></div>
+                        {checklistNode}
+                      </div>
+                    )
+                  ) : (
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+                      <p className="min-w-0 lg:flex-1 text-sm italic text-slate-400">No narrative submitted.</p>
+                      {checklistNode}
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ))}
       </div>
