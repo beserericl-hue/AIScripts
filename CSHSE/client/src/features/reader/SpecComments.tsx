@@ -61,12 +61,12 @@ export function SpecComments({ submissionId, standardCode, specCode, contentHtml
   };
 
   return (
-    <details data-testid={`rr-comments-${standardCode}-${specCode}`} className="mt-3 rounded-lg border border-slate-200 bg-white">
-      <summary className="flex cursor-pointer items-center gap-2 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+    <div data-testid={`rr-comments-${standardCode}-${specCode}`} className="mt-3 rounded-lg border border-slate-200 bg-white">
+      <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700">
         <MessageSquare className="h-4 w-4" /> Comments ({comments.length})
         <span className="font-normal text-slate-400">— select text below, right-click to add</span>
-      </summary>
-      <div className="border-t border-slate-200 p-3">
+      </div>
+      <div className="p-3">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
           <div className="min-w-0 lg:flex-1">
             <CommentableText
@@ -81,21 +81,20 @@ export function SpecComments({ submissionId, standardCode, specCode, contentHtml
               highlightedCommentId={highlightedCommentId}
             />
           </div>
-          {comments.length > 0 && (
-            <div className="lg:w-80 lg:shrink-0">
-              <CommentSidebar
-                submissionId={submissionId}
-                standardCode={standardCode}
-                specCode={specCode}
-                currentUserId={currentUserId}
-                currentUserRole={currentUserRole}
-                onCommentClick={handleCommentClick}
-              />
-            </div>
-          )}
+          {/* Always-open comment thread (its own header + prev/next + replies). */}
+          <div className="lg:w-80 lg:shrink-0">
+            <CommentSidebar
+              submissionId={submissionId}
+              standardCode={standardCode}
+              specCode={specCode}
+              currentUserId={currentUserId}
+              currentUserRole={currentUserRole}
+              onCommentClick={handleCommentClick}
+            />
+          </div>
         </div>
       </div>
-    </details>
+    </div>
   );
 }
 

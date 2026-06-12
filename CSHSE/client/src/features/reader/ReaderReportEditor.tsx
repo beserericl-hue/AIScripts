@@ -5,6 +5,7 @@ import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { SpecComments } from './SpecComments';
+import { CommentNavigation } from '../comments';
 
 interface ReportSpec {
   specCode: string;
@@ -74,6 +75,18 @@ export function ReaderReportEditor(): JSX.Element {
   const [rows, setRows] = useState<ReportRow[]>([]);
   const [recommendation, setRecommendation] = useState('');
   const [acceptanceVote, setAcceptanceVote] = useState<AcceptanceVote>('');
+  const [commentPage, setCommentPage] = useState(1);
+  // Jump to a comment anywhere on the page: scroll to its spec, then its marker.
+  const navigateToComment = (std: string, spec?: string, commentId?: string) => {
+    const el = document.getElementById(`rr-spec-${std}-${spec || ''}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (commentId) {
+      setTimeout(() => {
+        const m = document.getElementById(`comment-marker-${commentId}`);
+        if (m) m.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 350);
+    }
+  };
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [completedAt, setCompletedAt] = useState<string | null>(null);
 
@@ -113,6 +126,31 @@ export function ReaderReportEditor(): JSX.Element {
   });
   const roster = listQuery.data?.reports || [];
   const tally = listQuery.data?.tally || { accept: 0, conditional: 0, deny: 0, hold: 0 };
+
+  // Per-spec 0–3 rubric Score (same model as the self-study reviewer score).
+  // When viewing another reviewer's report, show THEIR scores (read-only).
+  const scoresQuery = useQuery({
+    queryKey: ['scores', submissionId, viewReviewerId],
+    queryFn: async () => {
+      const qs = viewReviewerId ? `?reviewerId=${encodeURIComponent(viewReviewerId)}` : '';
+      const r = await api.get(`/api/submissions/${submissionId}/scores${qs}`);
+      return (r.data?.scores || []) as { standardCode: string; specCode: string; score: number }[];
+    },
+    enabled: !!submissionId,
+    refetchOnWindowFocus: false,
+  });
+  const scoreFor = (std: string, spec: string): number | undefined =>
+    (scoresQuery.data || []).find((s) => s.standardCode === std && s.specCode === spec)?.score;
+  const saveScore = useMutation({
+    mutationFn: async ({ std, spec, score }: { std: string; spec: string; score: number | null }) => {
+      if (score === null) {
+        await api.delete(`/api/submissions/${submissionId}/scores`, { data: { standardCode: std, specCode: spec } });
+      } else {
+        await api.put(`/api/submissions/${submissionId}/scores`, { standardCode: std, specCode: spec, score });
+      }
+    },
+    onSuccess: () => scoresQuery.refetch(),
+  });
 
   const save = useMutation({
     mutationFn: async (opts?: { completed?: boolean }) => {
@@ -450,9 +488,21 @@ export function ReaderReportEditor(): JSX.Element {
 
       <p className="mb-4 text-sm text-slate-500">
         For each specification: click the AI assessment tag to see the AI's view, read the narrative and
-        supporting evidence, then fill the checklist beside it — check Compliant or Non-Compliant and write
-        your comments. Your work autosaves; use “Back to Self-Study” to add inline comments on the text.
+        supporting evidence, fill the checklist (Compliant / Non-Compliant + Score) and add comments by
+        selecting text. Your work autosaves; jump between comments with the navigator below.
       </p>
+
+      {/* Comment navigator (prev/next across every specification). */}
+      {currentUserId && (
+        <div className="mb-4">
+          <CommentNavigation
+            submissionId={submissionId}
+            currentPage={commentPage}
+            onPageChange={setCommentPage}
+            onNavigateToComment={navigateToComment}
+          />
+        </div>
+      )}
 
       <div className="space-y-3">
         {rows.map((r) => (
@@ -567,6 +617,27 @@ export function ReaderReportEditor(): JSX.Element {
                           >
                             <Grid3X3 className="h-3.5 w-3.5" />Matrix
                           </button>
+                        </div>
+                        {/* 0–3 rubric Score (same as the self-study reviewer score). */}
+                        <div className="flex items-center gap-1.5 border-t border-slate-100 pt-2">
+                          <span className="text-xs font-semibold text-slate-600">Score</span>
+                          {(['-', 0, 1, 2, 3] as const).map((v) => {
+                            const cur = scoreFor(r.code, sp.specCode);
+                            const isClear = v === '-';
+                            const active = !isClear && cur === v;
+                            return (
+                              <button
+                                key={String(v)}
+                                data-testid={`rr-score-${r.code}-${sp.specCode}-${v}`}
+                                disabled={readonly || saveScore.isPending}
+                                onClick={() => saveScore.mutate({ std: r.code, spec: sp.specCode, score: isClear ? null : (v as number) })}
+                                className={`h-6 w-6 rounded text-xs font-semibold disabled:opacity-50 ${active ? 'bg-teal-600 text-white' : 'border border-slate-300 text-slate-600 hover:bg-slate-50'}`}
+                                title={isClear ? 'Clear score' : `Score ${v}`}
+                              >
+                                {v}
+                              </button>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
