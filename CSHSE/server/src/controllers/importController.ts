@@ -1509,6 +1509,53 @@ export const mapSection = async (req: AuthenticatedRequest, res: Response) => {
  * Apply all mappings to the submission
  * Writes matched content to the narrative rich text editor for each spec
  */
+/**
+ * Data-integrity guard: a section the importer CLASSIFIED as a matrix must never
+ * be silently dropped on apply — once the self-study is locked, the PC can't
+ * recover it. applyMappings only persists sections the PC explicitly mapped, so
+ * a matrix that wasn't hand-placed would vanish. This materializes EVERY
+ * matrix-classified section of the import into the CurriculumMatrix.rawContent,
+ * idempotently (deduped by content signature). Returns how many it added.
+ */
+async function materializeImportedMatrices(importRecord: any, userId?: string): Promise<number> {
+  const sigOf = (html: string) => (html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 120).toLowerCase();
+  const candidates: { content: string; title?: string; standardCode?: string }[] = [];
+  for (const s of (importRecord.detectedSections || [])) {
+    if (s?.isMatrix) candidates.push({ content: s.htmlContent || s.fullContent || '', title: s.headerText, standardCode: s.standardCode });
+  }
+  for (const s of (importRecord.extractedContent?.sections || [])) {
+    if (s?.isMatrix || s?.sectionType === 'matrix') candidates.push({ content: s.content || (s as any).htmlContent || '', title: (s as any).title || (s as any).heading, standardCode: (s as any).standardCode });
+  }
+  const withContent = candidates.filter((c) => (c.content || '').trim().length > 0);
+  if (!withContent.length) return 0;
+
+  let matrix = await CurriculumMatrix.findOne({ submissionId: importRecord.submissionId });
+  if (!matrix) {
+    matrix = new CurriculumMatrix({
+      submissionId: importRecord.submissionId,
+      name: 'Curriculum Matrix',
+      courses: [], standards: [], rawContent: [],
+      lastModifiedBy: userId ? new mongoose.Types.ObjectId(userId) : new mongoose.Types.ObjectId(String(importRecord.submissionId)),
+    });
+  }
+  if (!matrix.rawContent) matrix.rawContent = [];
+  const seen = new Set((matrix.rawContent || []).map((rc: any) => sigOf(rc.content)));
+  let added = 0;
+  for (const c of withContent) {
+    const sig = sigOf(c.content);
+    if (!sig || seen.has(sig)) continue;
+    seen.add(sig);
+    matrix.rawContent.push({
+      id: uuidv4(), content: c.content, title: c.title, standardCode: c.standardCode || undefined,
+      sourceImportId: String(importRecord._id), addedAt: new Date(),
+      addedBy: (userId ? new mongoose.Types.ObjectId(userId) : (matrix.lastModifiedBy as any)), processed: false,
+    } as any);
+    added++;
+  }
+  if (added > 0) { matrix.markModified('rawContent'); await saveWithRetry(matrix); }
+  return added;
+}
+
 export const applyMappings = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
@@ -1621,15 +1668,26 @@ export const applyMappings = async (req: AuthenticatedRequest, res: Response) =>
 
     await saveWithRetry(submission);
 
+    // Never drop a matrix the importer classified — materialize every matrix
+    // section, even ones the PC didn't hand-place (idempotent).
+    let matricesMaterialized = 0;
+    try {
+      matricesMaterialized = await materializeImportedMatrices(importRecord, req.user?.id);
+    } catch (mErr) {
+      console.error('materializeImportedMatrices failed (non-fatal):', mErr);
+    }
+
     debugLog('Submission saved successfully', {
       appliedCount,
-      appliedMappings
+      appliedMappings,
+      matricesMaterialized
     });
 
     return res.json({
       success: true,
       appliedCount,
       appliedMappings,
+      matricesMaterialized,
       message: `Applied ${appliedCount} mappings to submission`
     });
   } catch (error) {
