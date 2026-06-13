@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CurriculumMatrix, ICurriculumMatrix } from '../models/CurriculumMatrix';
+import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { parseMatrixHtml } from '../services/matrixHtmlParser';
 import mongoose from 'mongoose';
@@ -59,11 +60,40 @@ export const getAllMatrices = async (req: AuthenticatedRequest, res: Response) =
     const { submissionId } = req.params;
     const matrices = await CurriculumMatrix.find({ submissionId }).lean();
     const sections: any[] = [];
+    const seen = new Set<string>();
+    const sig = (html: string) => (html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 120).toLowerCase();
+
+    // 1) The applied/stored matrix sections.
     for (const m of matrices) {
       for (const rc of ((m as any).rawContent || [])) {
-        sections.push({ ...rc, matrixId: m._id, matrixName: (m as any).name });
+        sections.push({ ...rc, matrixId: m._id, matrixName: (m as any).name, source: 'matrix' });
+        seen.add(sig(rc.content));
       }
     }
+
+    // 2) ANY matrix the importer DETECTED (isMatrix) that never got applied to a
+    //    CurriculumMatrix — otherwise it silently disappears from the reader's
+    //    view. Deduped against the applied sections by content signature.
+    const imports = await SelfStudyImport.find({ submissionId }).lean();
+    for (const im of imports) {
+      for (const s of (((im as any).detectedSections) || [])) {
+        if (!s?.isMatrix) continue;
+        const content = s.htmlContent || s.fullContent || '';
+        if (!content) continue;
+        if (seen.has(sig(content))) continue;
+        seen.add(sig(content));
+        sections.push({
+          id: String(s.id || s._id || sig(content)),
+          title: s.headerText || s.title || 'Imported matrix',
+          content,
+          standardCode: s.standardCode || '',
+          matrixName: 'Imported matrix (not applied)',
+          source: 'import',
+          appliedDirectly: !!s.appliedDirectly,
+        });
+      }
+    }
+
     return res.json({ count: sections.length, matrixCount: matrices.length, sections });
   } catch (error) {
     console.error('Get all matrices error:', error);
