@@ -856,6 +856,7 @@ export const useAIImportStore = create<AIImportState>()(
               evidenceDocs: s.evidenceDocs,
               introductions: s.introductions,
               placeholderSections: s.placeholderSections,
+              resolvedMissingFragmentIds: s.resolvedMissingFragmentIds,
             });
             set({ dirty: false });
             return true;
@@ -1429,6 +1430,8 @@ export const useAIImportStore = create<AIImportState>()(
               introductions: state.introductions ?? current.introductions,
               placeholderSections: state.placeholderSections || [],
               coverageReport: state.coverageReport ?? get().coverageReport,
+              resolvedMissingFragmentIds:
+                state.resolvedMissingFragmentIds ?? get().resolvedMissingFragmentIds,
               approvedIds: state.approvedIds || [],
               discardedIds: state.discardedIds || []
             });
@@ -1863,7 +1866,13 @@ export const useAIImportStore = create<AIImportState>()(
           matrices: mergedMatrices,
           cvs: mergedCvs,
           evidenceDocs: mergedEvidenceDocs,
-          introductions: mergedIntroductions
+          introductions: mergedIntroductions,
+          // The multi-file merge places real parsed content into the store.
+          // Without flagging dirty it would reach the server ONLY if the
+          // coordinator happened to make a later edit (or ran Apply) — close the
+          // tab first and the merged placement was lost (it isn't in
+          // localStorage either). Flag dirty so the autosave persists it.
+          dirty: true
         });
       },
 
@@ -2519,3 +2528,27 @@ useAIImportStore.subscribe((state) => {
     _lastDirty = false;
   }
 });
+
+// Flush-on-hide: the autosave above debounces 1.2 s, and review CONTENT is not
+// kept in localStorage — so an edit made <1.2 s before the tab is hidden or
+// closed would otherwise live only in volatile browser memory and be lost.
+// When the page is hidden or unloading AND there is an unsaved edit, flush
+// immediately through the normal authed API (full headers, no payload-size
+// cap) instead of waiting for the debounce. Best-effort on hard close; on a
+// tab switch the async write completes normally.
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  const flushIfDirty = () => {
+    const st = useAIImportStore.getState();
+    if (st.dirty === true && st.submissionId) {
+      if (_autosaveTimer) {
+        clearTimeout(_autosaveTimer);
+        _autosaveTimer = null;
+      }
+      void st.saveReviewStateToServer();
+    }
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushIfDirty();
+  });
+  window.addEventListener('pagehide', flushIfDirty);
+}

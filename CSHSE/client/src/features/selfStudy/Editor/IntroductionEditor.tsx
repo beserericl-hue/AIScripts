@@ -7,9 +7,12 @@
  * narrative prose with the same StarterKit so paste-formatting,
  * lists, and basic typography all work.
  *
- * Auto-saves on blur via PATCH /api/submissions/:id/introduction.
+ * Auto-saves on blur AND on a 1.5 s debounce while typing (plus a flush when
+ * the editor unmounts) via PATCH /api/submissions/:id/introduction, so a
+ * coordinator who closes the tab or navigates away without blurring the field
+ * never loses introduction text to the browser.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -25,9 +28,8 @@ export interface IntroductionEditorProps {
   initialContent: string;
   readOnly?: boolean;
   // CR-059 — the editor hands back an imperative `insertHtml` once ready so the
-  // Import-file panel can paste a selected section into the introduction.
-  // Unlike NarrativeEditor (which autosaves on every onUpdate), this editor
-  // only saves on blur, so the exposed insert also triggers a save.
+  // Import-file panel can paste a selected section into the introduction. The
+  // exposed insert also triggers an immediate save so pasted text persists.
   onEditorReady?: (api: { insertHtml: (html: string) => void }) => void;
 }
 
@@ -42,6 +44,14 @@ export function IntroductionEditor({
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Debounced-autosave plumbing. latestHtmlRef holds the most recent content so
+  // an unmount flush can persist it WITHOUT touching a possibly-destroyed
+  // editor instance. pendingRef tracks whether there's an unsaved edit.
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestHtmlRef = useRef<string>(initialContent || '');
+  const pendingRef = useRef(false);
+  const saveContentRef = useRef<(html: string) => void>(() => {});
+
   const placeholder =
     scope === 'document'
       ? 'Document Introduction — overview of the institution, mission, glossary, or other context that spans every standard.'
@@ -55,7 +65,19 @@ export function IntroductionEditor({
       Placeholder.configure({ placeholder })
     ],
     content: initialContent || '',
-    editable: !readOnly
+    editable: !readOnly,
+    onUpdate: ({ editor: ed }) => {
+      if (readOnly) return;
+      latestHtmlRef.current = ed.getHTML();
+      pendingRef.current = true;
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        saveTimerRef.current = null;
+        if (!pendingRef.current) return;
+        pendingRef.current = false;
+        saveContentRef.current(latestHtmlRef.current);
+      }, 1500);
+    }
   });
 
   // Re-sync when initialContent changes (e.g. after a refetch or when
@@ -66,9 +88,13 @@ export function IntroductionEditor({
     editor.commands.setContent(initialContent || '', false);
   }, [editor, initialContent]);
 
-  const handleSave = useCallback(async () => {
-    if (!editor) return;
-    const content = editor.getHTML();
+  const saveContent = useCallback(async (content: string) => {
+    // A real save supersedes any pending debounce.
+    pendingRef.current = false;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
     setSaveState('saving');
     setErrorMsg(null);
     try {
@@ -84,7 +110,30 @@ export function IntroductionEditor({
       setSaveState('error');
       setErrorMsg(err?.response?.data?.error || err?.message || 'Save failed');
     }
-  }, [editor, submissionId, scope, standardCode]);
+  }, [submissionId, scope, standardCode]);
+
+  const handleSave = useCallback(async () => {
+    if (!editor) return;
+    await saveContent(editor.getHTML());
+  }, [editor, saveContent]);
+
+  // Keep the ref the debounce/unmount flush calls pointed at the latest saver.
+  useEffect(() => {
+    saveContentRef.current = saveContent;
+  }, [saveContent]);
+
+  // Flush a pending edit when the editor unmounts (standard switch, leaving the
+  // page) so the last keystrokes aren't stranded in the browser. Uses the
+  // captured HTML ref, never the (possibly torn-down) editor.
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        saveContentRef.current(latestHtmlRef.current);
+      }
+    };
+  }, []);
 
   // CR-059 — expose an imperative insert; since this editor saves on blur, the
   // insert explicitly calls handleSave() so the pasted text persists.

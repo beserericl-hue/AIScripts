@@ -24,6 +24,7 @@ import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SelfStudyImport } from '../models/SelfStudyImport';
+import { buildEmptyReviewState } from '../services/aiReviewMerge';
 import { ValidationService } from '../services/validationService';
 import { applyAIImportCore } from './aiImportController';
 
@@ -377,15 +378,25 @@ const SAVEABLE_FIELDS = [
   'evidenceDocs',
   'introductions',
   'placeholderSections',
+  // Apply-gate state: which coverage-verifier "missing fragments" the
+  // coordinator has resolved. Persist it so the gate survives a refresh
+  // instead of resetting (and silently re-blocking Apply).
+  'resolvedMissingFragmentIds',
 ] as const;
 
 export async function saveReviewState(req: AuthenticatedRequest, res: Response): Promise<void> {
   const submission = await _loadOwnedSubmission(req, res);
   if (!submission) return;
-  const state = (submission as any).aiReviewState;
+  // UPSERT: if this submission has no aiReviewState yet (the import callback
+  // never seeded it, or seeding failed), DON'T reject — initialize an empty
+  // state and save into it. Previously this returned 409, which meant the
+  // client's recovery autosave (it has the content, the server doesn't) could
+  // never heal a never-seeded submission, leaving that content stranded in the
+  // browser. All parsed/entered content must be able to reach the database.
+  let state = (submission as any).aiReviewState;
   if (!state) {
-    res.status(409).json({ error: 'aiReviewState is empty' });
-    return;
+    state = buildEmptyReviewState();
+    (submission as any).aiReviewState = state;
   }
   const body = req.body || {};
   let touched = 0;
