@@ -83,41 +83,78 @@ export const authenticate = async (
       const impersonatedUserId = req.headers['x-impersonated-user-id'] as string | undefined;
       const impersonatedUserName = decodeHeader(req.headers['x-impersonated-user-name'] as string | undefined);
       const isImpersonating = !!(user.isSuperuser && (impersonatedRole || impersonatedUserId));
-      const effectiveRole = (user.isSuperuser && impersonatedRole)
-        ? impersonatedRole
-        : user.role;
-
       const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
+
+      // EFFECTIVE IDENTITY. When a superuser impersonates a SPECIFIC user, the
+      // session must FULLY assume that user — id, _id, institutionId, role,
+      // name, email — so EVERY downstream check behaves exactly as that user:
+      // ownership gates, institution scoping, reader-assignment lookups, AND the
+      // authorship/actor fields stamped onto anything written. Previously only
+      // `role` was swapped while `id`/`institutionId` stayed the superuser's,
+      // which both mis-scoped reads (a PC viewing as themselves saw the wrong
+      // institution) AND silently stamped the superuser onto data the
+      // impersonated user created (scores, locks, comments, imports, audit
+      // actors). Assuming the identity here removes that class of bug at the
+      // root for every controller, with no per-handler special-casing. The real
+      // superuser is still recorded in `impersonation` / `realIsSuperuser` for
+      // the audit trail and superuser-only features.
+      //
+      // Role-only impersonation (no specific user chosen) cannot assume an
+      // identity — there is no target user — so it keeps the superuser's id and
+      // only swaps the role. That path is a read preview; any write in it is
+      // honestly the superuser's own (it overwrites no other user's
+      // attribution, because no other identity was selected).
+      let identityUser: typeof user = user;
+      if (isImpersonating && impersonatedUserId) {
+        try {
+          const target = await User.findById(impersonatedUserId).select(
+            'email role firstName lastName institutionId isSuperuser'
+          );
+          if (target) identityUser = target;
+        } catch { /* invalid id — fall back to role-only impersonation below */ }
+      }
+      const assumedSpecificUser = identityUser !== user;
+
+      // Role: a fully-assumed user uses THEIR DB role (authoritative — also
+      // closes any client-supplied-role spoof); role-only impersonation uses the
+      // header role; otherwise the user's own role.
+      const effectiveRole = assumedSpecificUser
+        ? identityUser.role
+        : ((user.isSuperuser && impersonatedRole) ? impersonatedRole : user.role);
+
+      const identityName =
+        `${identityUser.firstName || ''} ${identityUser.lastName || ''}`.trim() || identityUser.email;
+
       const impersonation: ImpersonationContext | undefined = isImpersonating
         ? {
             actualUserId: user._id.toString(),
             actualName: actorName,
             actualRole: user.role,
             impersonatedRole: impersonatedRole || undefined,
-            impersonatedUserId: impersonatedUserId || undefined,
-            impersonatedUserName: impersonatedUserName || undefined
+            impersonatedUserId:
+              impersonatedUserId || (assumedSpecificUser ? identityUser._id.toString() : undefined),
+            impersonatedUserName:
+              impersonatedUserName || (assumedSpecificUser ? identityName : undefined)
           }
         : undefined;
 
-      // While impersonating a NON-admin role (reader / lead_reader / program
-      // coordinator), the superuser must be treated AS that role for access
-      // control — otherwise a superuser "viewing as Reader Two" still sees every
-      // submission (elevation bypasses the reader assignment/status scoping).
-      // Keep elevation only when NOT impersonating, or impersonating admin.
-      // `realIsSuperuser` preserves the true flag for the rare feature that
-      // legitimately needs it; impersonation detection above uses the DB value.
-      const effectiveIsSuperuser = user.isSuperuser && (!isImpersonating || effectiveRole === 'admin');
+      // While impersonating a NON-admin role the superuser must be treated AS
+      // that role for access control (elevation off), so reader/PC scoping
+      // applies. Keep elevation only when NOT impersonating, or the effective
+      // identity is itself an admin. `realIsSuperuser` preserves the true flag.
+      const effectiveIsSuperuser =
+        user.isSuperuser && (!isImpersonating || effectiveRole === 'admin');
 
-      // Populate req.user with user information
+      // Populate req.user with the EFFECTIVE identity.
       req.user = {
-        id: user._id.toString(),
-        _id: user._id.toString(),
-        email: user.email,
+        id: identityUser._id.toString(),
+        _id: identityUser._id.toString(),
+        email: identityUser.email,
         role: effectiveRole,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        name: actorName,
-        institutionId: user.institutionId?.toString(),
+        firstName: identityUser.firstName,
+        lastName: identityUser.lastName,
+        name: identityName,
+        institutionId: identityUser.institutionId?.toString(),
         isSuperuser: effectiveIsSuperuser,
         realIsSuperuser: user.isSuperuser,
         impersonation

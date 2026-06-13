@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { api } from '../services/api';
+import { queryClient } from '../lib/queryClient';
 
 // CR-045 — per-user UI preferences mirrored from GET /api/auth/me.
 // CR-052 — `tours` records per-tour completion (e.g. { welcome: true })
@@ -92,6 +93,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // SECURITY: never leak one session's cached data into the next login.
+        queryClient.clear();
         set({
           user: null,
           token: null,
@@ -144,6 +147,14 @@ export const useAuthStore = create<AuthState>()(
         const { user } = get();
         if (!user?.isSuperuser) return;
 
+        // SECURITY: the effective identity is about to change. Drop every cached
+        // query so the superuser's admin-scoped data (e.g. the all-institutions
+        // submission list) can never be shown — or clicked into — under the
+        // impersonated identity. Without this, a stale list survives the switch
+        // and navigating into it hits the now-correct server scoping check and
+        // 403s. The new identity's screens refetch from scratch.
+        queryClient.clear();
+
         set({
           impersonation: {
             isImpersonating: true,
@@ -182,6 +193,10 @@ export const useAuthStore = create<AuthState>()(
           ? `${endingUser.firstName || ''} ${endingUser.lastName || ''}`.trim() || endingUser.email
           : undefined;
 
+        // SECURITY: returning to the superuser identity — clear the impersonated
+        // identity's cached data so it isn't shown back under the superuser.
+        queryClient.clear();
+
         set({
           impersonation: {
             isImpersonating: false,
@@ -203,7 +218,9 @@ export const useAuthStore = create<AuthState>()(
       },
 
       skipImpersonation: () => {
-        // SU chooses to continue as themselves
+        // SU chooses to continue as themselves — clear any cache left from a
+        // prior impersonated identity before resuming the superuser view.
+        queryClient.clear();
         set({ needsImpersonationSelection: false });
       },
 
