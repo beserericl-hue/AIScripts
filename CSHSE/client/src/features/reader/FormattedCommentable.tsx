@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { MessageSquare, MessageSquarePlus, ChevronUp, ChevronDown, User, CheckCircle, Circle, Reply as ReplyIcon, Send, Clock } from 'lucide-react';
 import { api } from '../../services/api';
@@ -64,6 +64,26 @@ function formatDate(s?: string): string {
   const d = new Date(s);
   if (isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+/**
+ * Turn "Standard N" / "Standard N.x" references in the narrative into clickable
+ * cross-reference links (a click scrolls to that spec's section). Operates on
+ * the HTML STRING but only inside TEXT segments (never inside tags), and wraps
+ * matches in an <a> whose text is unchanged — so comment offsets, which are
+ * computed from textContent, stay valid.
+ */
+function linkifyStandards(html: string): string {
+  if (!html) return html;
+  const STD = /Standard\s+(\d{1,2})(?:\.([a-z]))?\b/g;
+  return html
+    .split(/(<[^>]+>)/g)
+    .map((part) => {
+      if (part.startsWith('<')) return part; // a tag — leave untouched
+      return part.replace(STD, (m, n, sp) =>
+        `<a data-rr-xref-std="${n}" data-rr-xref-spec="${sp || ''}" class="rr-xref cursor-pointer font-medium text-teal-700 underline decoration-dotted underline-offset-2 hover:text-teal-900">${m}</a>`);
+    })
+    .join('');
 }
 
 /** Remove any markers we previously inserted, restoring the original DOM. */
@@ -141,6 +161,9 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
   const canComment = currentUserRole === 'reader' || currentUserRole === 'lead_reader' || currentUserRole === 'admin';
 
   const hasComments = comments.length > 0;
+  // Narrative with "Standard N.x" references turned into scroll-to links. Text is
+  // unchanged, so comment offsets (measured from textContent) remain valid.
+  const linkedHtml = useMemo(() => linkifyStandards(html), [html]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [replyFor, setReplyFor] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -218,8 +241,24 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
     setComposer({ x: rect.left - (wrapRect?.left || 0) + rect.width / 2, y: rect.bottom - (wrapRect?.top || 0) + 6, selectedText, start, end });
   };
 
-  // Clicking a highlight focuses its comment card.
+  // Clicking a highlight focuses its comment card; clicking a "Standard N.x"
+  // cross-reference scrolls to that specification's section in the report.
   const onContainerClick = (e: React.MouseEvent) => {
+    const xref = (e.target as HTMLElement).closest('[data-rr-xref-std]') as HTMLElement | null;
+    if (xref) {
+      e.preventDefault();
+      const std = xref.getAttribute('data-rr-xref-std');
+      const spec = xref.getAttribute('data-rr-xref-spec') || '';
+      const target = (spec && document.getElementById(`rr-spec-${std}-${spec}`)) || document.getElementById(`rr-row-${std}`);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        target.classList.add('ring-2', 'ring-teal-400', 'rounded');
+        setTimeout(() => target.classList.remove('ring-2', 'ring-teal-400', 'rounded'), 2200);
+      } else {
+        pushToast(`Standard ${std}${spec ? '.' + spec : ''} is not part of this report`, 'info');
+      }
+      return;
+    }
     const mark = (e.target as HTMLElement).closest('mark[data-rr-comment]') as HTMLElement | null;
     if (!mark) return;
     const id = mark.getAttribute('data-rr-comment');
@@ -340,7 +379,7 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
             className={proseClassName}
             onMouseUp={onMouseUp}
             onClick={onContainerClick}
-            dangerouslySetInnerHTML={{ __html: html }}
+            dangerouslySetInnerHTML={{ __html: linkedHtml }}
           />
         </div>
         {/* Reader's checklist column (passed in by the editor). */}
