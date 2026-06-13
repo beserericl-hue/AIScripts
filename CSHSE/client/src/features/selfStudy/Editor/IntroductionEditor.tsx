@@ -30,7 +30,9 @@ export interface IntroductionEditorProps {
   // CR-059 — the editor hands back an imperative `insertHtml` once ready so the
   // Import-file panel can paste a selected section into the introduction. The
   // exposed insert also triggers an immediate save so pasted text persists.
-  onEditorReady?: (api: { insertHtml: (html: string) => void }) => void;
+  // `flush` force-saves the current content NOW (used before Final Submit locks
+  // the submission).
+  onEditorReady?: (api: { insertHtml: (html: string) => void; flush: () => Promise<void> }) => void;
 }
 
 export function IntroductionEditor({
@@ -144,8 +146,13 @@ export function IntroductionEditor({
         editor.chain().focus().insertContent(html).run();
         void handleSave();
       },
+      // Force-persist the current introduction text NOW (pre-Final-Submit).
+      flush: async () => {
+        if (readOnly) return;
+        try { await handleSave(); } catch { /* best-effort */ }
+      },
     });
-  }, [editor, onEditorReady, handleSave]);
+  }, [editor, onEditorReady, handleSave, readOnly]);
 
   if (!editor) return <div className="p-4 text-sm text-gray-500">Loading…</div>;
 

@@ -71,8 +71,10 @@ interface NarrativeEditorProps {
   // CR-059 — the editor calls this once its TipTap instance is ready, handing
   // back an imperative `insertHtml` so the Import-file panel can paste a
   // selected document section straight into this narrative. Insertion fires
-  // onUpdate → autosave, so it persists like any other edit.
-  onEditorReady?: (api: { insertHtml: (html: string) => void }) => void;
+  // onUpdate → autosave, so it persists like any other edit. `flush` forces any
+  // pending debounced narrative + supporting-evidence save to the server NOW —
+  // used before Final Submit locks the submission so a last edit isn't stranded.
+  onEditorReady?: (api: { insertHtml: (html: string) => void; flush: () => Promise<void> }) => void;
 }
 
 /**
@@ -277,8 +279,23 @@ export function NarrativeEditor({
         setContent(next);
         void onSave(next);
       },
+      // Force-persist any pending narrative + supporting-evidence edit NOW,
+      // bypassing the 2s debounce. Called right before Final Submit locks the
+      // submission (a post-lock save would 403). supportingEvidenceEditor is
+      // referenced via the closure (created once), kept out of the deps array
+      // because it is declared below this effect.
+      flush: async () => {
+        if (readOnly) return;
+        try { await saveNow(editor.getHTML()); } catch { /* best-effort */ }
+        try {
+          if (supportingEvidenceEditor) {
+            await saveSupportingEvidenceNow(supportingEvidenceEditor.getHTML());
+          }
+        } catch { /* best-effort */ }
+      },
     });
-  }, [editor, onEditorReady, onSave]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, onEditorReady, onSave, saveNow, saveSupportingEvidenceNow, readOnly]);
 
   // Initialize TipTap editor for supporting evidence
   const supportingEvidenceEditor = useEditor({

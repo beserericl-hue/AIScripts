@@ -46,10 +46,19 @@ export function useAutoSave<T>({
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const pendingDataRef = useRef<T | null>(null);
+  // Latest saveFn, captured in a ref so the unmount / tab-hide flush can call it
+  // WITHOUT touching React state on an unmounted component.
+  const saveFnRef = useRef(saveFn);
+  useEffect(() => {
+    saveFnRef.current = saveFn;
+  }, [saveFn]);
 
   const mutation = useMutation({
     mutationFn: saveFn,
     onSuccess: () => {
+      // The pending edit has reached the server — clear it so the flush paths
+      // below don't redundantly re-save already-persisted content.
+      pendingDataRef.current = null;
       setHasUnsavedChanges(false);
       setLastSavedAt(new Date());
       onSaveSuccess?.();
@@ -58,6 +67,21 @@ export function useAutoSave<T>({
       onSaveError?.(error);
     },
   });
+
+  // Fire any unsaved edit immediately through the raw save fn (no React state),
+  // for unmount / navigation / tab-hide where the debounce hasn't fired yet.
+  const flushPending = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    const data = pendingDataRef.current;
+    if (data === null) return;
+    pendingDataRef.current = null;
+    void Promise.resolve(saveFnRef.current(data)).catch(() => {
+      /* best-effort flush — a lost network race here is the floor, not the norm */
+    });
+  }, []);
 
   const cancelAutoSave = useCallback(() => {
     if (debounceTimerRef.current) {
@@ -95,27 +119,39 @@ export function useAutoSave<T>({
     [mutation, cancelAutoSave]
   );
 
-  // Cleanup on unmount
+  // FLUSH (not just cancel) any pending edit on unmount. Switching specs,
+  // navigating away, or the editor remounting must never drop the last
+  // <debounceMs of typing. Previously this only cancelled the timer, so that
+  // edit lived solely in the browser and was lost. flushPending fires the raw
+  // save fn and touches no React state, so it's safe during teardown.
   useEffect(() => {
     return () => {
-      cancelAutoSave();
+      flushPending();
     };
-  }, [cancelAutoSave]);
+  }, [flushPending]);
 
-  // Save pending changes on beforeunload
+  // Flush on tab-hide and unload so a close / tab-switch within the debounce
+  // window still reaches the server (a normal request completes on mere hide).
+  // beforeunload additionally keeps the browser's "unsaved changes" prompt as a
+  // last resort if a hard close interrupts an in-flight flush.
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasUnsavedChanges) {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushPending();
+    };
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (pendingDataRef.current !== null) {
+        flushPending();
         e.preventDefault();
         e.returnValue = '';
       }
     };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('beforeunload', onBeforeUnload);
     };
-  }, [hasUnsavedChanges]);
+  }, [flushPending]);
 
   return {
     triggerAutoSave,

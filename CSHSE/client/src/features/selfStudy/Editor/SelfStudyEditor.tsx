@@ -504,6 +504,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // into whichever surface is active. Refs (not state) — set on editor mount.
   const narrativeInsertRef = useRef<((html: string) => void) | null>(null);
   const docIntroInsertRef = useRef<((html: string) => void) | null>(null);
+  // Force-save handles for the currently-mounted editors, flushed before Final
+  // Submit locks the submission so a last unsaved edit isn't lost to the lock.
+  const narrativeFlushRef = useRef<(() => Promise<void>) | null>(null);
+  const docIntroFlushRef = useRef<(() => Promise<void>) | null>(null);
 
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -2233,6 +2237,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const handleFinalSubmitConfirm = useCallback(
     async (submissionNote: string, override?: { reason: string }) => {
       try {
+        // Flush any pending debounced editor save BEFORE the submit locks the
+        // submission — a save that lands after the lock would be rejected (403)
+        // and the edit lost. Best-effort: a flush failure must not block submit.
+        try { await narrativeFlushRef.current?.(); } catch { /* ignore */ }
+        try { await docIntroFlushRef.current?.(); } catch { /* ignore */ }
         await submitSelfStudyMutation.mutateAsync({ submissionNote, override });
         setFinalSubmitOpen(false);
       } catch (err) {
@@ -2959,6 +2968,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     highlightedComment={highlightedComment}
                     onEditorReady={(apiObj) => {
                       narrativeInsertRef.current = apiObj.insertHtml;
+                      narrativeFlushRef.current = apiObj.flush;
                     }}
                   />
                 ) : null}
@@ -3101,6 +3111,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   readOnly={isEditingDisabled}
                   onEditorReady={(apiObj) => {
                     docIntroInsertRef.current = apiObj.insertHtml;
+                    docIntroFlushRef.current = apiObj.flush;
                   }}
                 />
               </div>
