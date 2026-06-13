@@ -7,6 +7,7 @@ import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
 import { AllCommentsDrawer } from './AllCommentsDrawer';
 import { SpecFilesMenu, type SpecEvidence } from './SpecFilesMenu';
+import { SpecMatrixModal } from './SpecMatrixModal';
 
 interface ReportSpec {
   specCode: string;
@@ -281,6 +282,8 @@ export function ReaderReportEditor(): JSX.Element {
 
   const [dlError, setDlError] = useState<string | null>(null);
   const [viewHtml, setViewHtml] = useState<string | null>(null);
+  // The curriculum matrix is shown IN PLACE (a reader can't reach /self-study).
+  const [matrixStandard, setMatrixStandard] = useState<string | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
   const reviewerParam = viewReviewerId ? `&reviewerId=${encodeURIComponent(viewReviewerId)}` : '';
   const openViewer = async () => {
@@ -683,9 +686,9 @@ export function ReaderReportEditor(): JSX.Element {
                           />
                           <button
                             data-testid={`rr-matrix-${r.code}-${sp.specCode}`}
-                            onClick={() => navigate(`/self-study/${submissionId}?view=curriculum&std=${r.code}&spec=${sp.specCode}`)}
+                            onClick={() => setMatrixStandard(r.code)}
                             className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                            title="View this specification in the Curriculum Matrix"
+                            title="View the Curriculum Matrix in place"
                           >
                             <Grid3X3 className="h-3.5 w-3.5" />Matrix
                           </button>
@@ -830,6 +833,15 @@ export function ReaderReportEditor(): JSX.Element {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Curriculum Matrix, viewed IN PLACE (a reader can't reach /self-study). */}
+      {matrixStandard !== null && (
+        <SpecMatrixModal
+          submissionId={submissionId}
+          focusStandard={matrixStandard || undefined}
+          onClose={() => setMatrixStandard(null)}
+        />
       )}
     </div>
 
