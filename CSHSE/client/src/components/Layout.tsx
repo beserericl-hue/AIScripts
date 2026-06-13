@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
+import { OverflowNav } from './OverflowNav';
 import { useAuthStore } from '../store/authStore';
 import { api } from '../services/api';
 import { HelpChat } from './HelpChat';
@@ -258,28 +259,30 @@ export default function Layout() {
                 <span className="app-logo-text hidden md:block">Self-Study Portal</span>
               </Link>
 
-              <nav className="nav-tabs">
-                {navigation.map((item) => {
-                  const isActive = location.pathname === item.href ||
-                    (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
-                  const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      // CR-052 — data-tour-step anchors the welcome tour
-                      // spotlight to the nav item. Optional; items
-                      // without a tourStep are simply not in the tour.
-                      data-tour-step={item.tourStep}
-                      className={`nav-tab flex items-center space-x-2 ${
-                        isActive ? 'nav-tab-active' : 'nav-tab-inactive'
-                      }`}
-                    >
-                      <Icon />
-                      <span>{item.name}</span>
-                    </Link>
-                  );
-                })}
+              {/* Overflow nav — items that don't fit the browser width tuck
+                  into a "More ▾" dropdown instead of overlapping. */}
+              <nav className="nav-tabs min-w-0 flex-1">
+                <OverflowNav
+                  items={navigation.map((item) => ({ ...item, key: item.name }))}
+                  renderItem={(item, inMenu) => {
+                    const isActive = location.pathname === item.href ||
+                      (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        to={item.href}
+                        // CR-052 — data-tour-step anchors the welcome tour spotlight.
+                        data-tour-step={item.tourStep}
+                        className={inMenu
+                          ? `flex items-center gap-2 px-3 py-2 text-sm font-medium ${isActive ? 'text-teal-700' : 'text-gray-700'}`
+                          : `nav-tab flex items-center space-x-2 ${isActive ? 'nav-tab-active' : 'nav-tab-inactive'}`}
+                      >
+                        <Icon />
+                        <span>{item.name}</span>
+                      </Link>
+                    );
+                  }}
+                />
               </nav>
             </div>
 
