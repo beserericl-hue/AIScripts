@@ -118,6 +118,42 @@ async function buildMatricesFromDurableSources(
     cells: [] as any[]
   });
 
+  // 0) AUTHORITATIVE SOURCE — the AI parser's own `aiMatrices` from the most
+  // recent import that produced any. These are the real, full curriculum
+  // matrices (e.g. the HS-courses and non-HS-courses matrices), already in the
+  // exact MatrixData shape with structured cells + per-row anchors. They MUST
+  // win over the legacy fallbacks below, which can hold mis-split fragments
+  // (header + per-standard context paragraphs) of the same document — using
+  // those instead silently shows the wrong, incomplete matrices.
+  const withAiMatrices = await SelfStudyImport.find({
+    submissionId,
+    'aiMatrices.0': { $exists: true }
+  })
+    .sort({ _id: -1 })
+    .limit(1)
+    .lean();
+  if (withAiMatrices.length > 0) {
+    const ai = ((withAiMatrices[0] as any).aiMatrices || []).filter(
+      (m: any) => m && (m.htmlSnippet || '').trim()
+    );
+    if (ai.length > 0) {
+      return ai.map((m: any, i: number) => ({
+        matrixId: m.matrixId || `ai-${i}`,
+        name: m.name || 'Curriculum Matrix',
+        anchorName: m.anchorName || '',
+        programLevel: m.programLevel || programLevel || '',
+        htmlSnippet: m.htmlSnippet || '',
+        columnHeaders: Array.isArray(m.columnHeaders) ? m.columnHeaders : [],
+        rowsMatched: m.rowsMatched || 0,
+        rowsTotal: m.rowsTotal || 0,
+        columnCount: m.columnCount || 0,
+        cells: Array.isArray(m.cells) ? m.cells : []
+      }));
+    }
+  }
+
+  // FALLBACK (only when the AI parser produced no matrices anywhere) — flatten
+  // applied CurriculumMatrix sections + importer-detected isMatrix sections.
   // 1) Applied/stored matrix sections.
   const matrices = await CurriculumMatrix.find({ submissionId }).lean();
   for (const m of matrices) {

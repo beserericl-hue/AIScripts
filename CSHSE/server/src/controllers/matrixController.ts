@@ -58,6 +58,38 @@ export const getMatrix = async (req: AuthenticatedRequest, res: Response) => {
 export const getAllMatrices = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
+
+    // AUTHORITATIVE SOURCE first — the AI parser's own `aiMatrices` (the real,
+    // full curriculum matrices, e.g. HS-courses + non-HS-courses) from the most
+    // recent import that produced any. These win over the legacy
+    // CurriculumMatrix.rawContent / detectedSections fallbacks below, which can
+    // hold mis-split fragments of the same document. Keeps the reader's matrix
+    // viewer showing the SAME real matrices as the coordinator's Review rail.
+    const withAiMatrices = await SelfStudyImport.find({
+      submissionId,
+      'aiMatrices.0': { $exists: true }
+    })
+      .sort({ _id: -1 })
+      .limit(1)
+      .lean();
+    if (withAiMatrices.length > 0) {
+      const ai = (((withAiMatrices[0] as any).aiMatrices) || []).filter(
+        (m: any) => m && (m.htmlSnippet || '').trim()
+      );
+      if (ai.length > 0) {
+        const aiSections = ai.map((m: any, i: number) => ({
+          id: m.matrixId || `ai-${i}`,
+          title: m.name || 'Curriculum Matrix',
+          content: m.htmlSnippet || '',
+          standardCode: '',
+          matrixName: m.name || 'Curriculum Matrix',
+          source: 'ai-parsed',
+          rowsTotal: m.rowsTotal || 0,
+        }));
+        return res.json({ count: aiSections.length, matrixCount: aiSections.length, sections: aiSections });
+      }
+    }
+
     const matrices = await CurriculumMatrix.find({ submissionId }).lean();
     const sections: any[] = [];
     const seen = new Set<string>();
