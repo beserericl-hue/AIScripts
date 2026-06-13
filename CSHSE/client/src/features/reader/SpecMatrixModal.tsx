@@ -7,8 +7,14 @@ interface RawSection { id: string; title?: string; content: string; standardCode
 
 interface SpecMatrixModalProps {
   submissionId: string;
-  focusStandard?: string; // the spec's standard code, scrolled into view + highlighted
+  focusStandard?: string;   // the spec's standard code (scroll to its section)
+  focusSpecText?: string;   // the spec's title — scroll to its ROW within the matrix
   onClose: () => void;
+}
+
+/** lowercase alphanumerics + single spaces, for fuzzy row matching. */
+function norm(s: string): string {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
 /**
@@ -18,8 +24,9 @@ interface SpecMatrixModalProps {
  * matrices "disappeared". This read-only modal fetches the same matrix and shows
  * its imported sections without leaving the report.
  */
-export function SpecMatrixModal({ submissionId, focusStandard, onClose }: SpecMatrixModalProps): JSX.Element {
+export function SpecMatrixModal({ submissionId, focusStandard, focusSpecText, onClose }: SpecMatrixModalProps): JSX.Element {
   const focusRef = useRef<HTMLDivElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const { data: matrix, isLoading } = useQuery({
     queryKey: ['matrix', submissionId],
     queryFn: async () => (await api.get(`/api/submissions/${submissionId}/matrix`)).data,
@@ -31,11 +38,32 @@ export function SpecMatrixModal({ submissionId, focusStandard, onClose }: SpecMa
     (b.standardCode === focusStandard ? 1 : 0) - (a.standardCode === focusStandard ? 1 : 0));
 
   useEffect(() => {
-    if (focusRef.current) focusRef.current.scrollIntoView({ block: 'start' });
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [isLoading, onClose]);
+  }, [onClose]);
+
+  // After the matrix renders, jump to the SPECIFICATION's row (matched by its
+  // text — the matrix has no per-spec anchors), falling back to the standard's
+  // section. The matched cell is highlighted so the reader sees the right line.
+  useEffect(() => {
+    if (isLoading) return;
+    const body = bodyRef.current;
+    const key = norm(focusSpecText || '').split(' ').slice(0, 5).join(' ');
+    if (body && key.length >= 8) {
+      const cells = Array.from(body.querySelectorAll('td, th')) as HTMLElement[];
+      const hit = cells.find((c) => norm(c.textContent || '').includes(key));
+      if (hit) {
+        const row = (hit.closest('tr') as HTMLElement) || hit;
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.style.outline = '2px solid #2dd4bf';
+        row.style.background = '#ccfbf1';
+        return;
+      }
+    }
+    if (focusRef.current) focusRef.current.scrollIntoView({ block: 'start' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, focusSpecText, matrix]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -48,7 +76,7 @@ export function SpecMatrixModal({ submissionId, focusStandard, onClose }: SpecMa
           </h3>
           <button onClick={onClose} aria-label="Close" className="rounded p-1 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button>
         </div>
-        <div className="overflow-y-auto p-5">
+        <div ref={bodyRef} className="overflow-y-auto p-5">
           {isLoading ? (
             <div className="flex items-center justify-center py-16 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
           ) : sections.length === 0 ? (

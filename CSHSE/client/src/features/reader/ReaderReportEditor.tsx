@@ -282,8 +282,9 @@ export function ReaderReportEditor(): JSX.Element {
 
   const [dlError, setDlError] = useState<string | null>(null);
   const [viewHtml, setViewHtml] = useState<string | null>(null);
-  // The curriculum matrix is shown IN PLACE (a reader can't reach /self-study).
-  const [matrixStandard, setMatrixStandard] = useState<string | null>(null);
+  // The curriculum matrix is shown IN PLACE (a reader can't reach /self-study),
+  // scrolled to the clicked specification's row.
+  const [matrixFocus, setMatrixFocus] = useState<{ std: string; specText: string } | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
   const reviewerParam = viewReviewerId ? `&reviewerId=${encodeURIComponent(viewReviewerId)}` : '';
   const openViewer = async () => {
@@ -686,7 +687,7 @@ export function ReaderReportEditor(): JSX.Element {
                           />
                           <button
                             data-testid={`rr-matrix-${r.code}-${sp.specCode}`}
-                            onClick={() => setMatrixStandard(r.code)}
+                            onClick={() => setMatrixFocus({ std: r.code, specText: sp.specTitle || '' })}
                             className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
                             title="View the Curriculum Matrix in place"
                           >
@@ -836,11 +837,12 @@ export function ReaderReportEditor(): JSX.Element {
       )}
 
       {/* Curriculum Matrix, viewed IN PLACE (a reader can't reach /self-study). */}
-      {matrixStandard !== null && (
+      {matrixFocus && (
         <SpecMatrixModal
           submissionId={submissionId}
-          focusStandard={matrixStandard || undefined}
-          onClose={() => setMatrixStandard(null)}
+          focusStandard={matrixFocus.std}
+          focusSpecText={matrixFocus.specText}
+          onClose={() => setMatrixFocus(null)}
         />
       )}
     </div>
