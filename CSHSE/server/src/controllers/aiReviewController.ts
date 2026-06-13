@@ -163,16 +163,35 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
   const state = (submission as any).aiReviewState || null;
   let matrixState = (submission as any).aiMatrixState || null;
   // If the persisted matrix state has no matrices, rebuild the list from the
-  // durable CurriculumMatrix / SelfStudyImport sources so the Review rail's
-  // "Matrices" entry never disappears when content was imported but stored in
-  // a different field.
+  // durable CurriculumMatrix / SelfStudyImport sources AND PERSIST it back into
+  // submission.aiMatrixState. The parse pipeline only writes aiMatrixState when
+  // the AI path emits aiMatrices[]; matrices detected via detectedSections
+  // (isMatrix) or applied into CurriculumMatrix never reached this field, so
+  // the Review rail's "Matrices" entry vanished and the data effectively lived
+  // only wherever the client had cached it. Writing it here makes the parsed
+  // matrices a durable DB field (self-healing on first open) — all parsed data
+  // belongs in the database, never only in browser-local state.
   if (!matrixState || !Array.isArray(matrixState.matrices) || matrixState.matrices.length === 0) {
     const rebuilt = await buildMatricesFromDurableSources(
       String(submission._id),
       (submission as any).programLevel || ''
     );
     if (rebuilt.length > 0) {
-      matrixState = { ...(matrixState || {}), matrices: rebuilt };
+      matrixState = {
+        ...(matrixState || {}),
+        matrices: rebuilt,
+        matrixRowEdits: (matrixState && matrixState.matrixRowEdits) || {},
+        lastUpdatedAt: new Date()
+      };
+      (submission as any).aiMatrixState = matrixState;
+      (submission as any).markModified('aiMatrixState');
+      try {
+        await submission.save();
+      } catch (persistErr) {
+        // Non-fatal: the response still carries the rebuilt matrices even if
+        // the durable write fails (e.g. a transient write conflict).
+        console.warn('[matrices] failed to persist rebuilt aiMatrixState:', persistErr);
+      }
     }
   }
   res.json({
