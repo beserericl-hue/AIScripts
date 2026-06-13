@@ -162,7 +162,10 @@ describe('<SpecRail />', () => {
     expect(screen.getByRole('tab', { name: /Unwritten/i })).toBeInTheDocument();
   });
 
-  it('renders the Matrices entry only when at least one matrix is present', () => {
+  it('Matrices tile ALWAYS renders (like CVs/Syllabi/Papers), showing 0 when empty', () => {
+    // Post-release feedback (2026-06-13) — coordinators expect "CV, Syllabi,
+    // Projects, Matrices" listed together as file types; hiding the entry when
+    // empty made them think the feature was removed. Now it always renders.
     const { rerender } = render(
       <SpecRail
         buckets={{}}
@@ -173,7 +176,10 @@ describe('<SpecRail />', () => {
         onSelect={() => {}}
       />
     );
-    expect(screen.queryByRole('tab', { name: /^Matrices$/i })).toBeNull();
+    const emptyTile = screen.getByTestId('rail-matrices');
+    expect(emptyTile).toBeInTheDocument();
+    expect(emptyTile).toHaveTextContent(/Matrices/i);
+    expect(emptyTile).toHaveTextContent('0');
 
     const matrices: MatrixData[] = [
       { matrixId: 'mx1', name: 'Curriculum Map', cells: [], columnHeaders: [] } as any,
@@ -188,7 +194,9 @@ describe('<SpecRail />', () => {
         onSelect={() => {}}
       />
     );
-    expect(screen.getByRole('tab', { name: /Matrices/i })).toBeInTheDocument();
+    const tile = screen.getByTestId('rail-matrices');
+    expect(tile).toBeInTheDocument();
+    expect(tile).toHaveTextContent('1');
   });
 
   it('Supporting Evidence group: CVs / Syllabi / Papers tiles ALWAYS render (even when empty)', () => {

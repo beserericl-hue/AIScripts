@@ -23,6 +23,7 @@ import { Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, 
 import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
+import { SelfStudyImport } from '../models/SelfStudyImport';
 import { ValidationService } from '../services/validationService';
 import { applyAIImportCore } from './aiImportController';
 
@@ -83,15 +84,101 @@ function collectAllSectionIds(state: any): string[] {
   return ids;
 }
 
+/**
+ * Surface curriculum matrices in the Review rail's MatrixData shape, drawn from
+ * the DURABLE sources — the applied `CurriculumMatrix.rawContent` PLUS any
+ * importer-detected `isMatrix` section that never got applied. The Review rail
+ * reads ONLY `aiMatrixState.matrices`; on some submissions that field was never
+ * populated (the matrices live in CurriculumMatrix / SelfStudyImport instead),
+ * so the "Matrices" entry silently vanished even though the data was imported.
+ * Rebuilding it here — read-only, never persisted — keeps classified matrix
+ * content visible no matter which field it landed in. Mirrors getAllMatrices in
+ * matrixController (same dedup-by-content-signature). See the hard rule:
+ * imported matrix/CV/syllabus/project content must never be lost.
+ */
+async function buildMatricesFromDurableSources(
+  submissionId: string,
+  programLevel: string
+): Promise<any[]> {
+  const out: any[] = [];
+  const seen = new Set<string>();
+  const sig = (html: string) =>
+    (html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 120).toLowerCase();
+  const toMatrixData = (id: string, name: string, html: string) => ({
+    matrixId: id,
+    name,
+    anchorName: '',
+    programLevel: programLevel || '',
+    htmlSnippet: html,
+    columnHeaders: [] as string[],
+    rowsMatched: 0,
+    rowsTotal: 0,
+    columnCount: 0,
+    cells: [] as any[]
+  });
+
+  // 1) Applied/stored matrix sections.
+  const matrices = await CurriculumMatrix.find({ submissionId }).lean();
+  for (const m of matrices) {
+    let idx = 0;
+    for (const rc of ((m as any).rawContent || [])) {
+      const content = rc.content || '';
+      if (!content) continue;
+      seen.add(sig(content));
+      out.push(
+        toMatrixData(
+          `cm-${String((m as any)._id)}-${rc.id || idx}`,
+          rc.title || (m as any).name || 'Curriculum Matrix',
+          content
+        )
+      );
+      idx++;
+    }
+  }
+
+  // 2) Importer-detected matrices not (yet) applied — deduped by content.
+  const imports = await SelfStudyImport.find({ submissionId }).lean();
+  for (const im of imports) {
+    for (const s of (((im as any).detectedSections) || [])) {
+      if (!s?.isMatrix) continue;
+      const content = s.htmlContent || s.fullContent || '';
+      if (!content || seen.has(sig(content))) continue;
+      seen.add(sig(content));
+      out.push(
+        toMatrixData(
+          `im-${String((im as any)._id)}-${s.id || s._id || sig(content)}`,
+          s.headerText || s.title || 'Imported matrix',
+          content
+        )
+      );
+    }
+  }
+  return out;
+}
+
 /** GET /api/submissions/:submissionId/review */
 export async function getReviewState(req: AuthenticatedRequest, res: Response): Promise<void> {
   const submission = await _loadOwnedSubmission(req, res);
   if (!submission) return;
   const state = (submission as any).aiReviewState || null;
+  let matrixState = (submission as any).aiMatrixState || null;
+  // If the persisted matrix state has no matrices, rebuild the list from the
+  // durable CurriculumMatrix / SelfStudyImport sources so the Review rail's
+  // "Matrices" entry never disappears when content was imported but stored in
+  // a different field.
+  if (!matrixState || !Array.isArray(matrixState.matrices) || matrixState.matrices.length === 0) {
+    const rebuilt = await buildMatricesFromDurableSources(
+      String(submission._id),
+      (submission as any).programLevel || ''
+    );
+    if (rebuilt.length > 0) {
+      matrixState = { ...(matrixState || {}), matrices: rebuilt };
+    }
+  }
   res.json({
     submissionId: String(submission._id),
     aiReviewState: state,
-    aiMatrixState: (submission as any).aiMatrixState || null
+    aiMatrixState: matrixState
   });
 }
 

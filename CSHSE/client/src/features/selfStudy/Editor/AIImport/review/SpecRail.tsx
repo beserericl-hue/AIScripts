@@ -192,34 +192,6 @@ export function SpecRail({
           </div>
         )}
 
-        {matrices.length > 0 && (
-          // Sticky so it stays visible no matter how far the coordinator
-          // scrolls into the 21-standard rail. Without this, the entry
-          // disappears off the top as soon as the user reaches Standard 3
-          // and they reasonably think we removed the feature.
-          <div className="sticky top-0 z-10 -mx-2 mb-3 border-b border-gray-200 bg-gray-50 px-2 pb-3 pt-1 shadow-[0_2px_4px_-2px_rgba(0,0,0,0.08)]" data-tour="review-matrices">
-            <button
-              role="tab"
-              aria-selected={selectedKey === MATRICES_KEY}
-              onClick={() => onSelect(MATRICES_KEY)}
-              title={`${matrices.length} curriculum matrix(es): ${matrices.map((m) => m.name).join(', ')}`}
-              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
-                selectedKey === MATRICES_KEY
-                  ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
-                  : 'bg-white text-gray-700 hover:bg-gray-100 ring-1 ring-gray-200'
-              }`}
-            >
-              <span className="flex items-center gap-1.5">
-                <Grid3x3 className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
-                <span className="font-medium">Matrices</span>
-              </span>
-              <span className="rounded bg-cshse-200 px-1.5 text-xs text-cshse-800">
-                {matrices.length}
-              </span>
-            </button>
-          </div>
-        )}
-
         {/* CR-033 / CR-040 follow-on (post-release UX feedback 2026-05-26)
             — Supporting Evidence rail group. ALWAYS rendered with three
             sub-tiles (CVs / Syllabi / Papers) even when the count is 0,
@@ -332,6 +304,45 @@ export function SpecRail({
                   }`}
                 >
                   {paperCount}
+                </span>
+              </button>
+            </li>
+            {/* Matrices sub-tile — ALWAYS visible like the other file
+                types (post-release feedback 2026-06-13: coordinators expect
+                "CV, Syllabi, Projects, Matrices" listed together). The count
+                comes from aiMatrixState.matrices, which the server rebuilds
+                from the durable CurriculumMatrix / SelfStudyImport sources so
+                imported matrices never silently drop off this list. */}
+            <li>
+              <button
+                role="tab"
+                data-tour="review-matrices"
+                data-testid="rail-matrices"
+                aria-selected={selectedKey === MATRICES_KEY}
+                onClick={() => onSelect(MATRICES_KEY)}
+                title={
+                  matrices.length > 0
+                    ? `${matrices.length} curriculum matrix(es): ${matrices.map((m) => m.name).join(', ')}`
+                    : 'Curriculum matrices detected at import. None surfaced for this submission yet.'
+                }
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm ${
+                  selectedKey === MATRICES_KEY
+                    ? 'bg-cshse-100 text-cshse-800 ring-1 ring-cshse-500'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <Grid3x3 className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
+                  <span className="font-medium">Matrices</span>
+                </span>
+                <span
+                  className={`rounded px-1.5 text-xs ${
+                    matrices.length > 0
+                      ? 'bg-cshse-200 text-cshse-800'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {matrices.length}
                 </span>
               </button>
             </li>
