@@ -140,16 +140,11 @@ export function TourRunner(): JSX.Element | null {
     };
   }, [activeTour, role]);
 
-  // Body-scroll lock — captured original on mount, restored on unmount or
-  // whenever activeTour goes back to null.
-  React.useEffect(() => {
-    if (!activeTour) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [activeTour]);
+  // NOTE: we deliberately do NOT lock body scroll while a tour runs. Locking
+  // `overflow: hidden` prevents react-joyride from scrolling a below-the-fold
+  // anchor into view, which left the tooltip stuck off-screen ("hanging the UI")
+  // on long pages like the Reader Report. Joyride's own scrollToFirstStep +
+  // per-step scrolling keeps each tooltip in the visible screen real estate.
 
   const onCallback = React.useCallback(
     async (data: CallBackProps) => {

@@ -106,8 +106,11 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-testid^="rr-score-"]', 'tour.rr.score', translate, 'left'),
       anchorStep('[data-testid^="rr-files-"]', 'tour.rr.files', translate, 'left'),
       anchorStep('[data-testid^="rr-matrix-"]', 'tour.rr.matrix', translate, 'left'),
-      anchorStep('[data-testid^="rr-comments-"]', 'tour.rr.comments', translate, 'top'),
-      anchorStep('[data-testid="rr-all-comments"]', 'tour.rr.chatWindow', translate, 'left'),
+      // Comments are explained at a HIGH LEVEL on the toolbar's Comments toggle —
+      // a given specification may have no comments yet when the reader first
+      // opens the report, so we don't anchor to a per-spec comment that may be
+      // absent (which would scroll/jump the tour to an empty area).
+      anchorStep('[data-testid="reader-report-comments-toggle"]', 'tour.rr.comments', translate, 'bottom'),
       anchorStep('[data-testid="rr-vote"]', 'tour.rr.vote', translate, 'top'),
       anchorStep('[data-testid="rr-recommendation"]', 'tour.rr.recommendation', translate, 'top'),
       centerStep('tour.rr.lastStep', translate),
