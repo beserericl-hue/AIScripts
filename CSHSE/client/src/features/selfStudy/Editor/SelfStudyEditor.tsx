@@ -2510,7 +2510,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-3 min-w-0">
             {/* CR-045 — toolbar grouped by workflow phase. Left-to-right
                 matches the data flow: IMPORT → DRAFTS → SELF-STUDY. Each
                 group carries a plain-English label so a teacher reads the
@@ -2656,7 +2656,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           </div>
           {/* Right cluster: progress + submit. ml-auto pushes it right when
               there's room on the line; wraps to its own row when not. */}
-          <div className="flex flex-wrap items-center gap-3 ml-auto">
+          <div className="flex flex-wrap items-center gap-3 ml-auto shrink-0">
             {/* Overall Progress */}
             <ProgressIndicator submission={submission} />
 
