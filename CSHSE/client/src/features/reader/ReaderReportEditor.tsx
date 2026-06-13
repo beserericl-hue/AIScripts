@@ -6,6 +6,7 @@ import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
 import { AllCommentsDrawer } from './AllCommentsDrawer';
+import { SpecFilesMenu, type SpecEvidence } from './SpecFilesMenu';
 
 interface ReportSpec {
   specCode: string;
@@ -132,6 +133,27 @@ export function ReaderReportEditor(): JSX.Element {
     return m;
   }, [allCommentsQuery.data]);
   const jumpToComment = (id: string) => { const meta = commentMetaById.get(id); if (meta) navigateToComment(meta.std, meta.spec, id); };
+
+  // Supporting evidence for the per-spec Files menu (view files in place, grouped
+  // by kind, without leaving the report). Fetched once, grouped by std.spec.
+  const evidenceQuery = useQuery({
+    queryKey: ['evidence', submissionId, 'reader-report'],
+    queryFn: async () => (await api.get(`/api/submissions/${submissionId}/evidence`)).data,
+    enabled: !!submissionId,
+    refetchOnWindowFocus: false,
+  });
+  const EMPTY_FILES = useMemo<SpecEvidence[]>(() => [], []);
+  const filesBySpec = useMemo(() => {
+    const m = new Map<string, SpecEvidence[]>();
+    for (const e of (evidenceQuery.data?.evidence || []) as SpecEvidence[]) {
+      if (!e.standardCode) continue;
+      const k = `${e.standardCode}.${e.specCode || ''}`;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(e);
+    }
+    return m;
+  }, [evidenceQuery.data]);
+  const filesForSpec = (std: string, spec: string): SpecEvidence[] => filesBySpec.get(`${std}.${spec}`) || EMPTY_FILES;
 
   // Jump to a comment: scroll to its spec, then to the inline marker on the
   // selected text (inside the table) and flash it so the link points AT the text.
@@ -649,19 +671,16 @@ export function ReaderReportEditor(): JSX.Element {
                             className={`w-full resize-y rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}
                           />
                         </div>
-                        {/* Jump straight to this spec's files/links in the library
-                            (CVs / syllabi / projects included) or the matrix. */}
+                        {/* This spec's linked files — a menu (grouped Syllabi /
+                            CVs / Projects) that VIEWS each file in place, plus the
+                            Curriculum Matrix link. No screen shift to the library. */}
                         <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-2">
-                          {(sp.evidenceCount || 0) > 0 && (
-                            <button
-                              data-testid={`rr-files-${r.code}-${sp.specCode}`}
-                              onClick={() => navigate(`/self-study/${submissionId}?view=files&std=${r.code}&spec=${sp.specCode}`)}
-                              className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                              title="Open this specification's files and links in the Supporting File Library"
-                            >
-                              <FolderOpen className="h-3.5 w-3.5" />Files ({sp.evidenceCount})
-                            </button>
-                          )}
+                          <SpecFilesMenu
+                            submissionId={submissionId}
+                            files={filesForSpec(r.code, sp.specCode)}
+                            standardCode={r.code}
+                            specCode={sp.specCode}
+                          />
                           <button
                             data-testid={`rr-matrix-${r.code}-${sp.specCode}`}
                             onClick={() => navigate(`/self-study/${submissionId}?view=curriculum&std=${r.code}&spec=${sp.specCode}`)}
