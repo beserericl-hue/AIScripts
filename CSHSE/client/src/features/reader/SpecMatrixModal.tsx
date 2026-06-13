@@ -27,12 +27,14 @@ function norm(s: string): string {
 export function SpecMatrixModal({ submissionId, focusStandard, focusSpecText, onClose }: SpecMatrixModalProps): JSX.Element {
   const focusRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const { data: matrix, isLoading } = useQuery({
-    queryKey: ['matrix', submissionId],
-    queryFn: async () => (await api.get(`/api/submissions/${submissionId}/matrix`)).data,
+  // Fetch ALL matrices' sections (a submission can have more than one imported
+  // matrix; the primary /matrix endpoint only returns the first).
+  const { data, isLoading } = useQuery({
+    queryKey: ['matrices-all', submissionId],
+    queryFn: async () => (await api.get(`/api/submissions/${submissionId}/matrices`)).data,
   });
-
-  const sections: RawSection[] = matrix?.rawContent || [];
+  const matrix = data;
+  const sections: RawSection[] = data?.sections || [];
   // The clicked spec's standard first, so it's what the reader sees on open.
   const ordered = [...sections].sort((a, b) =>
     (b.standardCode === focusStandard ? 1 : 0) - (a.standardCode === focusStandard ? 1 : 0));

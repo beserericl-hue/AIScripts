@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import {
   getMatrix,
+  getAllMatrices,
   addCourse,
   removeCourse,
   updateAssessment,
@@ -30,6 +31,14 @@ router.use(authenticate);
  * @access  Private
  */
 router.get('/submissions/:submissionId/matrix', getMatrix);
+
+/**
+ * @route   GET /api/submissions/:submissionId/matrices
+ * @desc    ALL curriculum matrices' imported sections (the report viewer shows
+ *          every imported matrix, not just the first/primary one).
+ * @access  Private
+ */
+router.get('/submissions/:submissionId/matrices', getAllMatrices);
 
 /**
  * @route   GET /api/submissions/:submissionId/matrix/:matrixId

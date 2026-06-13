@@ -49,6 +49,29 @@ export const getMatrix = async (req: AuthenticatedRequest, res: Response) => {
 };
 
 /**
+ * Get ALL curriculum matrices for a submission, with their imported sections
+ * flattened. getMatrix() returns only the first/primary doc, so a submission
+ * that imported more than one matrix would only ever show one — this returns
+ * every imported matrix section so the Reader Report viewer shows them all.
+ */
+export const getAllMatrices = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    const matrices = await CurriculumMatrix.find({ submissionId }).lean();
+    const sections: any[] = [];
+    for (const m of matrices) {
+      for (const rc of ((m as any).rawContent || [])) {
+        sections.push({ ...rc, matrixId: m._id, matrixName: (m as any).name });
+      }
+    }
+    return res.json({ count: sections.length, matrixCount: matrices.length, sections });
+  } catch (error) {
+    console.error('Get all matrices error:', error);
+    return res.status(500).json({ error: 'Failed to get matrices' });
+  }
+};
+
+/**
  * Add a course column to the matrix
  */
 export const addCourse = async (req: AuthenticatedRequest, res: Response) => {
