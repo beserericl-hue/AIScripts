@@ -59,6 +59,13 @@ test.describe('Reader Report — formatted table is commentable in place', () =>
     await cell.selectText();
     await page.getByTestId('rr-formatted-1-a').dispatchEvent('mouseup');
     await expect(page.getByTestId('rr-fc-composer')).toBeVisible();
+    // The composer must be fully ON SCREEN (not clipped off the left/right edge,
+    // which happened when selecting a cell at the edge of a wide table).
+    const composerBox = await page.getByTestId('rr-fc-composer').boundingBox();
+    const vw = page.viewportSize()?.width ?? 1280;
+    expect(composerBox).toBeTruthy();
+    expect(composerBox!.x).toBeGreaterThanOrEqual(0);
+    expect(composerBox!.x + composerBox!.width).toBeLessThanOrEqual(vw);
     await page.getByTestId('rr-fc-composer').fill('Comment on HS 101 inside the table');
     await page.getByTestId('rr-fc-add').click();
 

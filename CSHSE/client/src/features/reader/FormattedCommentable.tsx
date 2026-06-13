@@ -360,8 +360,10 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
 
       {composer && (
         <div
-          className="absolute z-20 w-72 -translate-x-1/2 rounded-lg border border-slate-300 bg-white p-2 shadow-lg"
-          style={{ left: composer.x, top: composer.y }}
+          className="absolute z-20 w-72 rounded-lg border border-slate-300 bg-white p-2 shadow-lg"
+          // Clamp inside the container so the composer is never clipped off the
+          // left/right edge — e.g. when selecting a cell at the edge of a wide table.
+          style={{ left: Math.max(8, Math.min(composer.x - 144, (wrapRef.current?.clientWidth || 320) - 296)), top: composer.y }}
         >
           <p className="mb-1 truncate rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-800" title={composer.selectedText}>“{composer.selectedText}”</p>
           <textarea
