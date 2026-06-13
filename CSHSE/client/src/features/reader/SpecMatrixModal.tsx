@@ -78,6 +78,23 @@ export function SpecMatrixModal({ submissionId, focusStandard, focusSpecText, on
           </h3>
           <button onClick={onClose} aria-label="Close" className="rounded p-1 text-slate-500 hover:bg-slate-100"><X className="h-5 w-5" /></button>
         </div>
+        {/* Index of EVERY imported matrix section, so it's obvious there's more
+            than one and the reader can jump between them. */}
+        {sections.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-5 py-2 text-xs">
+            <span className="font-semibold text-slate-500">Matrices:</span>
+            {ordered.map((s, i) => (
+              <button
+                key={s.id}
+                data-testid={`rr-matrix-jump-${s.id}`}
+                onClick={() => { const el = bodyRef.current?.querySelector(`#matrix-sec-${s.id}`) as HTMLElement | null; el?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}
+                className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 font-medium text-purple-700 hover:bg-purple-100"
+              >
+                {s.standardCode ? `Standard ${s.standardCode}` : `Matrix ${i + 1}`}
+              </button>
+            ))}
+          </div>
+        )}
         <div ref={bodyRef} className="overflow-y-auto p-5">
           {isLoading ? (
             <div className="flex items-center justify-center py-16 text-slate-400"><Loader2 className="h-6 w-6 animate-spin" /></div>
@@ -88,7 +105,7 @@ export function SpecMatrixModal({ submissionId, focusStandard, focusSpecText, on
               {ordered.map((s) => {
                 const isFocus = !!focusStandard && s.standardCode === focusStandard;
                 return (
-                  <div key={s.id} ref={isFocus ? focusRef : undefined} className={`rounded-lg border ${isFocus ? 'border-teal-300 ring-2 ring-teal-200' : 'border-slate-200'} p-3`}>
+                  <div key={s.id} id={`matrix-sec-${s.id}`} ref={isFocus ? focusRef : undefined} className={`scroll-mt-2 rounded-lg border ${isFocus ? 'border-teal-300 ring-2 ring-teal-200' : 'border-slate-200'} p-3`}>
                     <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700">
                       <FileText className="h-4 w-4 text-purple-500" />
                       {s.standardCode ? `Standard ${s.standardCode} — ` : ''}{s.title || 'Imported matrix'}
