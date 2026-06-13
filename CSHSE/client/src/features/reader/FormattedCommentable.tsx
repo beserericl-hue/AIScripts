@@ -345,15 +345,23 @@ export function FormattedCommentable({ html, submissionId, standardCode, specCod
         </div>
         {/* Reader's checklist column (passed in by the editor). */}
         {middleSlot}
-        {/* Comment sidebar — same look as the self-study screen — on the right. */}
-        {hasComments && (
+        {/* Comment sidebar — same look as the self-study screen — on the right.
+            The column is ALWAYS reserved (even with no comments) so the narrative
+            keeps a consistent width across every specification. */}
+        {useRow && (
           <div data-testid={`rr-comments-sidebar-${standardCode}-${specCode}`} className="mt-4 lg:mt-0 lg:w-80 lg:shrink-0">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700">
               <MessageSquare className="h-4 w-4 text-gray-500" />Comments ({comments.length})
             </div>
-            <div className="space-y-3">
-              {comments.map((c) => <CommentCard key={c._id} c={c} />)}
-            </div>
+            {hasComments ? (
+              <div className="space-y-3">
+                {comments.map((c) => <CommentCard key={c._id} c={c} />)}
+              </div>
+            ) : (
+              <p className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-3 py-2 text-xs italic text-gray-400">
+                No comments yet. Select text in the narrative to add one.
+              </p>
+            )}
           </div>
         )}
       </div>

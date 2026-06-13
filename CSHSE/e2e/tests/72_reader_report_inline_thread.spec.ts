@@ -10,7 +10,9 @@ import { test, expect } from '@playwright/test';
 import { seedFixture, cleanupSeed, loginAsSeededViaSso, type SeedResult } from '../helpers/seed';
 
 const SEC = 'sec-rr72';
+const SEC_B = 'sec-rr72b';
 const HTML = '<p>Alpha phrase one here. Beta phrase two there. Gamma phrase three yonder.</p>';
+const HTML_B = '<p>Bravo spec has narrative text but no comments at all on it here.</p>';
 
 async function api(page: any, path: string, method = 'GET', body?: unknown) {
   return page.evaluate(async ({ path, method, body }: any) => {
@@ -30,12 +32,15 @@ test.describe('Reader Report — margin comment cards next to the text', () => {
     seed = await seedFixture('wizard_review_minimal', {
       user: { email: 'rr72@x.test', role: 'admin', isSuperuser: true, preferences: { tours: { welcome: true, 'reader-report': true } } },
       reviewState: {
-        buckets: { '1.a': { standardCode: '1', specCode: 'a', standardTitle: '', specPrompt: '', narratives: [{ sectionId: SEC, heading: 'h', snippet: 't', htmlSnippet: HTML, wordCount: 3, confidence: 0.9, acceptState: 'pending', rationale: '' }], evidenceText: [], evidenceFiles: [], matrixCells: [] } },
+        buckets: {
+          '1.a': { standardCode: '1', specCode: 'a', standardTitle: '', specPrompt: '', narratives: [{ sectionId: SEC, heading: 'h', snippet: 't', htmlSnippet: HTML, wordCount: 3, confidence: 0.9, acceptState: 'pending', rationale: '' }], evidenceText: [], evidenceFiles: [], matrixCells: [] },
+          '1.b': { standardCode: '1', specCode: 'b', standardTitle: '', specPrompt: '', narratives: [{ sectionId: SEC_B, heading: 'h', snippet: 't', htmlSnippet: HTML_B, wordCount: 3, confidence: 0.9, acceptState: 'pending', rationale: '' }], evidenceText: [], evidenceFiles: [], matrixCells: [] },
+        },
         tags: [], cvs: [], evidenceDocs: [], introductions: {}, placeholderSections: [], approvedIds: [], discardedIds: [], itemSources: {}, mergeLog: [],
       },
     });
     await loginAsSeededViaSso(page, seed);
-    await api(page, `/api/submissions/${seed.submissionId}/review/set-approved`, 'POST', { approvedIds: [SEC] });
+    await api(page, `/api/submissions/${seed.submissionId}/review/set-approved`, 'POST', { approvedIds: [SEC, SEC_B] });
 
     const c1 = await api(page, `/api/submissions/${seed.submissionId}/comments`, 'POST', { standardCode: '1', specCode: 'a', selectedText: 'phrase one', selectionStart: 6, selectionEnd: 16, content: 'FIRST comment about phrase one' });
     const c2 = await api(page, `/api/submissions/${seed.submissionId}/comments`, 'POST', { standardCode: '1', specCode: 'a', selectedText: 'phrase two', selectionStart: 30, selectionEnd: 40, content: 'SECOND comment about phrase two' });
@@ -60,6 +65,15 @@ test.describe('Reader Report — margin comment cards next to the text', () => {
     // Narrative is the wide main column (wider than either side column).
     expect(narr!.width).toBeGreaterThan(chk!.width);
     expect(narr!.width).toBeGreaterThan(side!.width);
+
+    // 1c) A spec WITHOUT comments keeps the SAME narrative width as one WITH
+    // comments — the comments column is always reserved, so the text never
+    // shifts/widens between specs. (1.b has narrative but no comments.)
+    await expect(page.getByTestId('rr-comments-sidebar-1-b')).toBeVisible();
+    const narrB = await page.getByTestId('rr-formatted-1-b').boundingBox();
+    expect(narrB).toBeTruthy();
+    expect(Math.abs(narrB!.width - narr!.width)).toBeLessThanOrEqual(2);
+    expect(Math.abs(narrB!.x - narr!.x)).toBeLessThanOrEqual(2);
 
     // 2) Each comment is its OWN margin card, ALWAYS visible (not bunched/clicked).
     const card1 = page.getByTestId(`rr-card-${id1}`);
