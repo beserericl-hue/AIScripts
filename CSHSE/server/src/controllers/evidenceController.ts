@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
+import { Assignment } from '../models/Assignment';
 import { asyncHandler } from '../middleware/errorHandler';
 import {
   AppError,
@@ -83,23 +84,39 @@ async function verifyEvidenceAccess(
     return { hasAccess: true, submission, institution };
   }
 
-  // Reader or Lead Reader - must be assigned to this institution/submission
+  // Reader or Lead Reader - must be assigned to this submission. The CURRENT
+  // assignment model is the Assignment collection (created by /reviews/.../assign)
+  // plus submission.assignedReaders / submission.leadReader — the SAME source the
+  // reader-report and comment endpoints use. The older institution-level
+  // assignedReaderIds / assignedLeadReaderId are kept as a fallback so legacy
+  // assignments still resolve. (Previously this ONLY checked the institution
+  // fields, so an assigned reader got 403 and the File Library showed 0 files.)
   if (userRole === 'reader' || userRole === 'lead_reader') {
-    if (!institution) {
-      return { hasAccess: false, submission, institution };
-    }
+    const uid = userId.toString();
 
-    // Check if lead reader is assigned
-    if (userRole === 'lead_reader') {
-      const isAssigned = institution.assignedLeadReaderId?.toString() === userId;
-      return { hasAccess: isAssigned, submission, institution };
-    }
+    // 1) Active Assignment doc for this submission (primary, current model).
+    const hasAssignment = await Assignment.exists({
+      submissionId, userId, status: 'active'
+    });
+    if (hasAssignment) return { hasAccess: true, submission, institution };
 
-    // Check if reader is assigned
-    const isAssigned = institution.assignedReaderIds?.some(
-      (id: any) => id.toString() === userId
-    );
-    return { hasAccess: isAssigned, submission, institution };
+    // 2) submission-level assignment fields.
+    const sub: any = submission;
+    const assignedOnSubmission =
+      (Array.isArray(sub.assignedReaders) && sub.assignedReaders.some((id: any) => id?.toString() === uid)) ||
+      sub.leadReader?.toString() === uid;
+    if (assignedOnSubmission) return { hasAccess: true, submission, institution };
+
+    // 3) Legacy institution-level assignment (fallback).
+    if (institution) {
+      if (userRole === 'lead_reader' && institution.assignedLeadReaderId?.toString() === uid) {
+        return { hasAccess: true, submission, institution };
+      }
+      if (institution.assignedReaderIds?.some((id: any) => id.toString() === uid)) {
+        return { hasAccess: true, submission, institution };
+      }
+    }
+    return { hasAccess: false, submission, institution };
   }
 
   return { hasAccess: false, submission, institution };
@@ -113,7 +130,10 @@ async function verifyEvidenceAccess(
 export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId } = req.params;
   const { standardCode, specCode, evidenceType, includeVersions } = req.query;
-  const userId = req.user?.id;
+  // When a superuser impersonates a reader/lead reader, act AS that user so the
+  // assignment check uses the impersonated id (matches the reader-report/comment
+  // endpoints). For a real reader, impersonation is absent and this is their id.
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -178,7 +198,7 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
  */
 export const getEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -215,7 +235,7 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { submissionId } = req.params;
   const { standardCode, specCode, description, replaceExisting } = req.body;
   const file = req.file;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -415,7 +435,7 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
 export const addUrlEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId } = req.params;
   const { standardCode, specCode, url, title, description } = req.body;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -487,7 +507,7 @@ export const addUrlEvidence = asyncHandler(async (req: AuthenticatedRequest, res
 export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
   const { standardCode, specCode, description, title } = req.body;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -560,7 +580,7 @@ export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res
  */
 export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -614,7 +634,7 @@ export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res
  */
 export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -730,7 +750,7 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
 export const linkEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
   const { standardCode, specCode } = req.body;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -776,7 +796,7 @@ export const linkEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
  */
 export const unlinkEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -818,7 +838,7 @@ export const unlinkEvidence = asyncHandler(async (req: AuthenticatedRequest, res
  */
 export const getEvidenceStats = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId } = req.params;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 
@@ -924,7 +944,7 @@ function formatBytesLabel(bytes: number): string {
  */
 export const previewEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { submissionId, evidenceId } = req.params;
-  const userId = req.user?.id;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
   const isSuperuser = req.user?.isSuperuser;
 

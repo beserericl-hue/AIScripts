@@ -47,6 +47,13 @@ test.describe('Reader Report — comment gate + navigator', () => {
     });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     expect(r.body?.comment?.authorRole).toBe('reader');
+
+    // The assigned reader can also LIST the submission's evidence (the File
+    // Library). This previously 403'd because the check only looked at the old
+    // institution-level assignment, so the library showed 0 files.
+    const ev = await api(page, `/api/submissions/${seed.submissionId}/evidence`);
+    expect(ev.status, JSON.stringify(ev.body)).toBe(200);
+    expect(Array.isArray(ev.body?.evidence)).toBe(true);
   });
 
   test('71b — floating navigator walks prev/next across comments', async ({ page }) => {
