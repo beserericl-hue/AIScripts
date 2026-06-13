@@ -83,66 +83,41 @@ export const authenticate = async (
       const impersonatedUserId = req.headers['x-impersonated-user-id'] as string | undefined;
       const impersonatedUserName = decodeHeader(req.headers['x-impersonated-user-name'] as string | undefined);
       const isImpersonating = !!(user.isSuperuser && (impersonatedRole || impersonatedUserId));
+      const effectiveRole = (user.isSuperuser && impersonatedRole)
+        ? impersonatedRole
+        : user.role;
 
       const actorName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email;
-
-      // EFFECTIVE IDENTITY. When a superuser impersonates a SPECIFIC user, the
-      // session must FULLY assume that user — id, institutionId, role, name — so
-      // EVERY downstream check behaves exactly as that user, with no
-      // per-controller special-casing. Previously only `role` was swapped while
-      // `id` and `institutionId` stayed the superuser's, which silently caused
-      // permission mismatches (a PC viewing as themselves saw the wrong
-      // institution; evidence/assignment checks acted as the superuser). The
-      // real superuser is still recorded in `impersonation`/`realIsSuperuser`
-      // for the audit trail and superuser-only features.
-      let identityUser: typeof user = user;
-      if (isImpersonating && impersonatedUserId) {
-        try {
-          const target = await User.findById(impersonatedUserId).select(
-            'email role firstName lastName institutionId isSuperuser'
-          );
-          if (target) identityUser = target;
-        } catch { /* invalid id — fall back to role-only impersonation below */ }
-      }
-      const assumedSpecificUser = identityUser !== user;
-
-      // Role: a fully-assumed user uses THEIR role (authoritative, DB-sourced —
-      // also closes the client-supplied-role spoof); role-only impersonation
-      // uses the header role; otherwise the user's own role.
-      const effectiveRole = assumedSpecificUser
-        ? identityUser.role
-        : ((user.isSuperuser && impersonatedRole) ? impersonatedRole : user.role);
-
-      const identityName = `${identityUser.firstName || ''} ${identityUser.lastName || ''}`.trim() || identityUser.email;
-
       const impersonation: ImpersonationContext | undefined = isImpersonating
         ? {
             actualUserId: user._id.toString(),
             actualName: actorName,
             actualRole: user.role,
             impersonatedRole: impersonatedRole || undefined,
-            impersonatedUserId: impersonatedUserId || (assumedSpecificUser ? identityUser._id.toString() : undefined),
-            impersonatedUserName: impersonatedUserName || (assumedSpecificUser ? identityName : undefined)
+            impersonatedUserId: impersonatedUserId || undefined,
+            impersonatedUserName: impersonatedUserName || undefined
           }
         : undefined;
 
-      // While impersonating a NON-admin role the superuser must be treated AS
-      // that role for access control (elevation off), so reader/PC scoping
-      // applies. Keep elevation only when NOT impersonating, or the effective
-      // identity is itself an admin.
-      const effectiveIsSuperuser =
-        user.isSuperuser && (!isImpersonating || effectiveRole === 'admin');
+      // While impersonating a NON-admin role (reader / lead_reader / program
+      // coordinator), the superuser must be treated AS that role for access
+      // control — otherwise a superuser "viewing as Reader Two" still sees every
+      // submission (elevation bypasses the reader assignment/status scoping).
+      // Keep elevation only when NOT impersonating, or impersonating admin.
+      // `realIsSuperuser` preserves the true flag for the rare feature that
+      // legitimately needs it; impersonation detection above uses the DB value.
+      const effectiveIsSuperuser = user.isSuperuser && (!isImpersonating || effectiveRole === 'admin');
 
-      // Populate req.user with the EFFECTIVE identity.
+      // Populate req.user with user information
       req.user = {
-        id: identityUser._id.toString(),
-        _id: identityUser._id.toString(),
-        email: identityUser.email,
+        id: user._id.toString(),
+        _id: user._id.toString(),
+        email: user.email,
         role: effectiveRole,
-        firstName: identityUser.firstName,
-        lastName: identityUser.lastName,
-        name: identityName,
-        institutionId: identityUser.institutionId?.toString(),
+        firstName: user.firstName,
+        lastName: user.lastName,
+        name: actorName,
+        institutionId: user.institutionId?.toString(),
         isSuperuser: effectiveIsSuperuser,
         realIsSuperuser: user.isSuperuser,
         impersonation
