@@ -37,7 +37,7 @@ export {
 export {
   SupportingEvidence,
   ISupportingEvidence,
-  IFileInfo,
+  IFileData,
   IUrlInfo,
   IImageMetadata
 } from './SupportingEvidence';

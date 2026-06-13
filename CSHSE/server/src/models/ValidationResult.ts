@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document } from 'mongoose';
+import mongoose, { Schema, Document, PipelineStage } from 'mongoose';
 
 export interface IValidationResultData {
   status: 'pass' | 'fail' | 'warning' | 'pending' | 'needs_improvement';
@@ -134,7 +134,7 @@ ValidationResultSchema.statics.getFailedSections = async function(
   }
 
   // Get the latest validation for each section that failed
-  const pipeline = [
+  const pipeline: PipelineStage[] = [
     { $match: query },
     { $sort: { validatedAt: -1 } },
     {

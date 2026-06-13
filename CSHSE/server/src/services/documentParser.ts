@@ -203,7 +203,8 @@ export class DocumentParserService {
     const result = await mammoth.extractRawText({ buffer });
     // Use mammoth's HTML conversion which preserves headings as h1, h2, etc.
     const htmlResult = await mammoth.convertToHtml({
-      buffer,
+      buffer
+    }, {
       styleMap: [
         // Map Word styles to HTML headings
         "p[style-name='Heading 1'] => h1:fresh",
@@ -266,7 +267,8 @@ export class DocumentParserService {
 
     // Convert to HTML with images saved to temp files
     const htmlResult = await mammoth.convertToHtml({
-      buffer,
+      buffer
+    }, {
       styleMap: [
         // Map Word styles to HTML headings
         "p[style-name='Heading 1'] => h1:fresh",

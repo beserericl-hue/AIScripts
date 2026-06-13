@@ -423,7 +423,7 @@ const DetectedSectionSchema = new Schema<IDetectedSection>({
   isAppendix: { type: Boolean, default: false },
   isSelected: { type: Boolean, default: true },
   parentId: String,
-  children: { type: [Schema.Types.Mixed], default: [] },  // Recursive reference
+  children: { type: [Schema.Types.Mixed] as any, default: [] },  // Recursive reference
   // Manual tagging metadata
   standardCode: String,
   specCode: String,

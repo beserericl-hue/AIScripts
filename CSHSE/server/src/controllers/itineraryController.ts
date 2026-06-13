@@ -186,7 +186,7 @@ export const replaceAgenda = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(403).json({ error: 'Only the assigned lead reader and the program coordinator can edit the itinerary.' });
     }
     const valid = _validateAgenda(req.body?.agenda);
-    if (!valid.ok) return res.status(400).json({ error: valid.error });
+    if (!valid.ok) return res.status(400).json({ error: (valid as { ok: false; error: string }).error });
 
     const prior = siteVisit.agenda?.length ?? 0;
     siteVisit.agenda = valid.agenda as any;

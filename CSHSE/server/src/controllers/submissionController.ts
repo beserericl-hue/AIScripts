@@ -1821,11 +1821,11 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
         if (leadReader && submitter) {
           const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
           await emailService.sendSelfStudySubmittedEmail({
-            leadReaderName: leadReader.name,
+            leadReaderName: `${leadReader.firstName} ${leadReader.lastName}`,
             leadReaderEmail: leadReader.email,
             programName: submission.programName,
             institutionName: submission.institutionName,
-            submitterName: submitter.name,
+            submitterName: `${submitter.firstName} ${submitter.lastName}`,
             submissionLink: `${baseUrl}/self-study/${submission._id}`,
             submittedAt: new Date()
           });

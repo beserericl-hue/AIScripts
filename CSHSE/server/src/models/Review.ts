@@ -84,6 +84,10 @@ export interface IReview extends Document {
 
   createdAt: Date;
   updatedAt: Date;
+
+  // Instance methods
+  getCompletionPercentage(): number;
+  isReadyForSubmission(): { ready: boolean; missingItems: string[] };
 }
 
 const SpecificationAssessmentSchema = new Schema<ISpecificationAssessment>({

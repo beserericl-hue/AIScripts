@@ -64,8 +64,17 @@ export const getEvidenceRecommendations = async (
         topK,
         programLevel: submission.programLevel
       });
+      if (!out.ready) {
+        const notReady = out as { ready: false; phase: string; detail: string };
+        return res.status(503).json({
+          error: 'Evidence recommendations not available yet',
+          phase: notReady.phase,
+          detail: notReady.detail
+        });
+      }
+      const ready = out as { ready: true; data: { chunks: unknown[] } };
       return res.json({
-        chunks: out.chunks,
+        chunks: ready.data.chunks,
         collection: (out as any).collection ?? null,
         standardCode,
         specCode,

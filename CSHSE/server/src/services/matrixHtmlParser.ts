@@ -604,6 +604,7 @@ export function parseMatrixHtml(html: string, options?: { defaultStandardCode?: 
         assessments.push({
           standardCode: currentStandard,
           specCode,
+          specText: labelText,
           coursePrefix: course.coursePrefix,
           courseNumber: course.courseNumber,
           type: cellValue.types,

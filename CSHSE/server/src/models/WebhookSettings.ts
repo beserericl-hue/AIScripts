@@ -9,6 +9,7 @@ export interface IWebhookAuthentication {
 export interface IRetryConfig {
   maxRetries: number;
   retryDelayMs: number;
+  backoffMultiplier?: number;
 }
 
 export type WebhookSettingType = 'n8n_validation' | 'notification' | 'lead_reader_notification' | 'spec_loader' | 'document_matcher' | 'help_chat' | 'help_upload';
@@ -27,6 +28,14 @@ export interface IWebhookSettings extends Document {
   createdAt: Date;
   updatedAt: Date;
   updatedBy: mongoose.Types.ObjectId;
+
+  // Instance methods
+  testConnection(): Promise<{
+    success: boolean;
+    statusCode?: number;
+    error?: string;
+    responseTimeMs?: number;
+  }>;
 }
 
 const WebhookAuthenticationSchema = new Schema<IWebhookAuthentication>({
@@ -41,7 +50,8 @@ const WebhookAuthenticationSchema = new Schema<IWebhookAuthentication>({
 
 const RetryConfigSchema = new Schema<IRetryConfig>({
   maxRetries: { type: Number, default: 3, min: 0, max: 10 },
-  retryDelayMs: { type: Number, default: 1000, min: 100, max: 60000 }
+  retryDelayMs: { type: Number, default: 1000, min: 100, max: 60000 },
+  backoffMultiplier: { type: Number, min: 1, max: 10 }
 }, { _id: false });
 
 const WebhookSettingsSchema = new Schema<IWebhookSettings>({

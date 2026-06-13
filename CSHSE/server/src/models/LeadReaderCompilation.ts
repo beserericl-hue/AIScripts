@@ -106,6 +106,11 @@ export interface ILeadReaderCompilation extends Document {
 
   createdAt: Date;
   updatedAt: Date;
+
+  // Instance methods
+  aggregateReaderVotes(): Promise<void>;
+  calculateStatistics(): void;
+  getDisagreements(): any[];
 }
 
 const ReaderComplianceVoteSchema = new Schema<IReaderComplianceVote>({

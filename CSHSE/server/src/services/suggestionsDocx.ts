@@ -134,7 +134,7 @@ async function loadBuckets(opts: SuggestionsDocOptions): Promise<SpecBucket[]> {
   for (const c of comments) {
     const std = c.standardCode;
     const spec = c.specCode || '_';
-    getBucket(std, spec).comments.push(c as IComment);
+    getBucket(std, spec).comments.push(c as unknown as IComment);
   }
 
   for (const [, v] of latestBySpec) {

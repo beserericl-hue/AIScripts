@@ -111,7 +111,7 @@ export const updateWebhookSettings = async (req: AuthenticatedRequest, res: Resp
     // Update retry config
     if (retryConfig) {
       if (!settings.retryConfig) {
-        settings.retryConfig = {};
+        settings.retryConfig = { maxRetries: 3, retryDelayMs: 1000 };
       }
       if (retryConfig.maxRetries !== undefined) {
         settings.retryConfig.maxRetries = retryConfig.maxRetries;
