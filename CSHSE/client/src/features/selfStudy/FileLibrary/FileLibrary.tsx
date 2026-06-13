@@ -53,9 +53,31 @@ interface Evidence {
     description?: string;
   };
   description?: string;
+  tags?: string[];
   versionNumber?: number;
   isCurrentVersion?: boolean;
   createdAt: string;
+}
+
+// Map the import "kind:" tag to a human label for files whose original name is
+// junk (e.g. a numeric import-row label like "4." → "4..docx").
+const KIND_LABEL: Record<string, string> = {
+  syllabus: 'Syllabus', cv: 'CV', paper: 'Paper', project: 'Project', file: 'Document',
+};
+
+/** A readable file name: the real originalName, or — when that's just a number/
+ *  letter from an import row — a label derived from its kind + standard. */
+function prettyFileName(item: Evidence): string {
+  const raw = item.file?.originalName || '';
+  const dot = raw.lastIndexOf('.');
+  const ext = dot > 0 ? raw.slice(dot) : '';
+  const base = (dot > 0 ? raw.slice(0, dot) : raw).trim();
+  const alnum = base.replace(/[^a-z0-9]/gi, '');
+  if (alnum.length > 2) return raw; // a real name — keep it
+  const kindTag = (item.tags || []).find((t) => t.startsWith('kind:'));
+  const kind = kindTag ? (KIND_LABEL[kindTag.slice(5)] || 'Document') : 'Document';
+  const where = item.standardCode ? ` — Standard ${item.standardCode}${item.specCode ? `.${item.specCode}` : ''}` : '';
+  return `${kind}${where}${ext}`;
 }
 
 interface FileLibraryProps {
@@ -376,7 +398,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
     const title =
       item.evidenceType === 'url'
         ? item.url?.title || 'Untitled Link'
-        : item.file?.originalName || 'Untitled File';
+        : (item.file ? prettyFileName(item) : 'Untitled File');
     const desc = getDescription(item);
 
     return (
@@ -398,7 +420,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
             </a>
           ) : (
             <button
-              onClick={() => handleDownload(item._id, item.file?.originalName)}
+              onClick={() => handleDownload(item._id, prettyFileName(item))}
               className="flex-shrink-0 p-1 rounded hover:bg-teal-100 transition-colors"
               title="Download file"
             >
@@ -441,7 +463,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
           {/* For non-previewable files, still show a download button on the right */}
           {item.evidenceType !== 'url' && !isPreviewableType(item) && (
             <button
-              onClick={() => handleDownload(item._id, item.file?.originalName)}
+              onClick={() => handleDownload(item._id, prettyFileName(item))}
               className="flex items-center gap-1 px-2 py-1 text-xs text-teal-700 bg-teal-50 border border-teal-200 rounded hover:bg-teal-100 transition-colors"
               title="Download"
             >
