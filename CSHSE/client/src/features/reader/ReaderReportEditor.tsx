@@ -135,26 +135,23 @@ export function ReaderReportEditor(): JSX.Element {
   }, [allCommentsQuery.data]);
   const jumpToComment = (id: string) => { const meta = commentMetaById.get(id); if (meta) navigateToComment(meta.std, meta.spec, id); };
 
-  // Supporting evidence for the per-spec Files menu (view files in place, grouped
-  // by kind, without leaving the report). Fetched once, grouped by std.spec.
+  // The program's imported supporting evidence — CVs, syllabi, projects, papers,
+  // documents and links — for the Files menu. The reader references these from
+  // ANY specification (most were imported program-wide, not tagged to one spec),
+  // so the menu shows the whole library grouped by kind; the menu itself floats
+  // the spec's own tagged items to the top of each group.
   const evidenceQuery = useQuery({
     queryKey: ['evidence', submissionId, 'reader-report'],
     queryFn: async () => (await api.get(`/api/submissions/${submissionId}/evidence`)).data,
     enabled: !!submissionId,
     refetchOnWindowFocus: false,
   });
-  const EMPTY_FILES = useMemo<SpecEvidence[]>(() => [], []);
-  const filesBySpec = useMemo(() => {
-    const m = new Map<string, SpecEvidence[]>();
-    for (const e of (evidenceQuery.data?.evidence || []) as SpecEvidence[]) {
-      if (!e.standardCode) continue;
-      const k = `${e.standardCode}.${e.specCode || ''}`;
-      if (!m.has(k)) m.set(k, []);
-      m.get(k)!.push(e);
-    }
-    return m;
+  const evidenceLibrary = useMemo<SpecEvidence[]>(() => {
+    return ((evidenceQuery.data?.evidence || []) as SpecEvidence[]).filter((e) =>
+      // exclude the generated reader-report PDF/DOCX artifacts; keep real files + links
+      !(e.tags || []).some((t) => t.startsWith('reader-report')) &&
+      ((e.file && e.file.originalName) || e.evidenceType === 'url'));
   }, [evidenceQuery.data]);
-  const filesForSpec = (std: string, spec: string): SpecEvidence[] => filesBySpec.get(`${std}.${spec}`) || EMPTY_FILES;
 
   // Jump to a comment: scroll to its spec, then to the inline marker on the
   // selected text (inside the table) and flash it so the link points AT the text.
@@ -681,7 +678,7 @@ export function ReaderReportEditor(): JSX.Element {
                         <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-2">
                           <SpecFilesMenu
                             submissionId={submissionId}
-                            files={filesForSpec(r.code, sp.specCode)}
+                            files={evidenceLibrary}
                             standardCode={r.code}
                             specCode={sp.specCode}
                           />
