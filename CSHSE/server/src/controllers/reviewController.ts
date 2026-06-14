@@ -171,26 +171,23 @@ export const saveAssessment = async (req: AuthenticatedRequest, res: Response) =
       return res.status(400).json({ error: 'Cannot modify a submitted review' });
     }
 
-    // Find or create standard assessment
+    // Find or create standard assessment. NOTE: after pushing a plain object to
+    // a Mongoose DocumentArray, Mongoose stores a *cast copy* — mutating the
+    // original object no longer affects the stored subdocument. So we re-read the
+    // just-pushed subdoc from the array and mutate THAT. (Previously, the 2nd+
+    // spec scored under a standard was written to a throwaway object and the
+    // stored subdoc kept compliance=null, so the review never became submittable.)
     let standardAssessment = review.assessments.find(a => a.standardCode === standardCode);
     if (!standardAssessment) {
-      standardAssessment = {
-        standardCode,
-        specifications: [],
-        isComplete: false
-      };
-      review.assessments.push(standardAssessment);
+      review.assessments.push({ standardCode, specifications: [], isComplete: false });
+      standardAssessment = review.assessments[review.assessments.length - 1];
     }
 
-    // Find or create specification assessment
+    // Find or create specification assessment (same cast-on-push rule).
     let specAssessment = standardAssessment.specifications.find(s => s.specCode === specCode);
     if (!specAssessment) {
-      specAssessment = {
-        specCode,
-        compliance: null,
-        comments: ''
-      };
-      standardAssessment.specifications.push(specAssessment);
+      standardAssessment.specifications.push({ specCode, compliance: null, comments: '' });
+      specAssessment = standardAssessment.specifications[standardAssessment.specifications.length - 1];
     }
 
     // Update the assessment
@@ -254,24 +251,18 @@ export const bulkSaveAssessments = async (req: AuthenticatedRequest, res: Respon
     }
 
     for (const item of assessments) {
+      // Re-read the pushed subdoc after push (Mongoose cast-on-push — see
+      // saveAssessment) so mutations land on the stored subdocument.
       let standardAssessment = review.assessments.find(a => a.standardCode === item.standardCode);
       if (!standardAssessment) {
-        standardAssessment = {
-          standardCode: item.standardCode,
-          specifications: [],
-          isComplete: false
-        };
-        review.assessments.push(standardAssessment);
+        review.assessments.push({ standardCode: item.standardCode, specifications: [], isComplete: false });
+        standardAssessment = review.assessments[review.assessments.length - 1];
       }
 
       let specAssessment = standardAssessment.specifications.find(s => s.specCode === item.specCode);
       if (!specAssessment) {
-        specAssessment = {
-          specCode: item.specCode,
-          compliance: null,
-          comments: ''
-        };
-        standardAssessment.specifications.push(specAssessment);
+        standardAssessment.specifications.push({ specCode: item.specCode, compliance: null, comments: '' });
+        specAssessment = standardAssessment.specifications[standardAssessment.specifications.length - 1];
       }
 
       specAssessment.compliance = item.compliance;
