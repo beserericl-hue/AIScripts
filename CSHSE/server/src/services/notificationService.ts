@@ -24,6 +24,9 @@ export interface NotifyOptions {
   dedupeKey?: string;
   /** When true, also email the recipient (looked up by id). */
   email?: boolean;
+  /** Per-user identity for the email's Reply-To (e.g. the actor who triggered
+   *  this notification) so replies reach that person, not the branded mailbox. */
+  replyTo?: string;
 }
 
 const APP_BASE_URL = (): string =>
@@ -106,6 +109,7 @@ async function _sendEmail(opts: NotifyOptions): Promise<void> {
     opts.title,
     opts.body,
     _absoluteLink(opts.link),
-    opts.link ? 'Open in portal' : undefined
+    opts.link ? 'Open in portal' : undefined,
+    opts.replyTo
   );
 }

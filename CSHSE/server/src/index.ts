@@ -5,6 +5,7 @@ import cors from 'cors';
 import path from 'path';
 import dotenv from 'dotenv';
 import { connectDatabase } from './config/database';
+import { assertPostalConfig } from './services/postal';
 import {
   globalErrorHandler,
   setupProcessErrorHandlers
@@ -243,6 +244,9 @@ const startServer = async () => {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    // CR — surface Postal email config at boot (warns loudly if the API key is
+    // missing) so a misconfig is obvious before the first send.
+    assertPostalConfig();
   });
 
   // Connect to database in background

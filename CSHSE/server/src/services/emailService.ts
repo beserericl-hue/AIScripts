@@ -1,10 +1,13 @@
-import nodemailer from 'nodemailer';
+// CR — all outbound mail now goes through Postal (courseworx.media), not SMTP.
+import { sendEmail as postalSendEmail, isPostalConfigured } from './postal';
 
 export interface EmailOptions {
   to: string | string[];
   subject: string;
   text?: string;
   html?: string;
+  /** Per-user identity — replies route here; From stays branded (cshse@…). */
+  replyTo?: string;
 }
 
 export interface InvitationEmailData {
@@ -62,56 +65,26 @@ export interface SelfStudySubmittedEmailData {
 }
 
 class EmailService {
-  private transporter: nodemailer.Transporter | null = null;
-  private isConfigured = false;
-
-  constructor() {
-    this.initialize();
-  }
-
-  private initialize() {
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-    const smtpUser = process.env.SMTP_USER;
-    const smtpPass = process.env.SMTP_PASS;
-    const smtpFrom = process.env.SMTP_FROM;
-
-    if (!smtpUser || !smtpPass) {
-      console.warn('Email service not configured: SMTP_USER and SMTP_PASS required');
-      return;
-    }
-
-    this.transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
-      secure: smtpPort === 465,
-      auth: {
-        user: smtpUser,
-        pass: smtpPass
-      }
-    });
-
-    this.isConfigured = true;
-    console.log(`Email service initialized (${smtpHost}:${smtpPort})`);
-  }
-
+  /**
+   * Send a templated email through Postal. The branded From (cshse@courseworx.media)
+   * is fixed inside the Postal client; per-user identity rides in `replyTo`.
+   * Fail-soft (returns false) so a mail hiccup never breaks the triggering request
+   * — the Postal client itself logs the structured error.
+   */
   async sendEmail(options: EmailOptions): Promise<boolean> {
-    if (!this.isConfigured || !this.transporter) {
-      console.warn('Email not sent - service not configured');
+    if (!isPostalConfigured()) {
+      console.warn('Email not sent - Postal not configured (POSTAL_API_KEY missing)');
       return false;
     }
-
-    const from = process.env.SMTP_FROM || process.env.SMTP_USER;
-
     try {
-      await this.transporter.sendMail({
-        from: `CSHSE Accreditation <${from}>`,
-        to: Array.isArray(options.to) ? options.to.join(', ') : options.to,
+      const { messageId } = await postalSendEmail({
+        to: options.to,
         subject: options.subject,
+        html: options.html,
         text: options.text,
-        html: options.html
+        replyTo: options.replyTo,
       });
-      console.log(`Email sent to ${options.to}: ${options.subject}`);
+      console.log(`Email sent to ${options.to}: ${options.subject} (postal ${messageId})`);
       return true;
     } catch (error) {
       console.error('Failed to send email:', error);
@@ -397,7 +370,10 @@ Review the self-study here: ${data.submissionLink}
     subject: string,
     message: string,
     actionUrl?: string,
-    actionText?: string
+    actionText?: string,
+    // Per-user identity (e.g. the actor who triggered this notification) so
+    // replies route to that person rather than the branded mailbox.
+    replyTo?: string
   ): Promise<boolean> {
     const actionButton = actionUrl && actionText
       ? `<div style="text-align: center; margin: 30px 0;">
@@ -424,12 +400,13 @@ Review the self-study here: ${data.submissionLink}
       to,
       subject,
       html,
-      text: message + (actionUrl ? `\n\n${actionText}: ${actionUrl}` : '')
+      text: message + (actionUrl ? `\n\n${actionText}: ${actionUrl}` : ''),
+      replyTo
     });
   }
 
   isEnabled(): boolean {
-    return this.isConfigured;
+    return isPostalConfigured();
   }
 }
 
