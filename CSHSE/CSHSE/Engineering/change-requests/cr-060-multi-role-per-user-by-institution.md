@@ -69,7 +69,8 @@ From the administrator's 2026-06-14 review of `admin/settings` (Users + Institut
 - [x] `PUT /api/users/:id/role-assignments` (admin-only) re-validates server-side + refreshes the derived primary.
 - [x] Migration backfilled existing users (17 users, 0 conflicts; one correctly got lead_reader at two institutions).
 - [x] Live-verified: same-institution PC+reader → 400; reader@Stevenson + PC@E2E → 200.
-- [ ] **Phase 3** — access gates honor `roleAssignments` so cross-institution roles take full effect (edit/submit, list/get visibility, reader review); reader visibility stays Assignment-gated per submission (decision 1).
+- [x] **Phase 3 (core)** — submission access gates honor `roleAssignments` (getSubmission visibility, listSubmissions PC+reviewer OR-scope, PC write gates on saveNarrative/submit/revert/markNA/clearNA/preflight/evaluateSpec/workflow, getUsers PC scoping); reader visibility stays Assignment-gated (decision 1). Backward-compat fallback for un-migrated users. 8 integration tests + regression suite green. Commit f1f2a4d.
+- [ ] **Phase 3 (remainder)** — reportController/scoreController reader-report + score sub-gates onto `roleAssignments`.
 - [ ] **Phase 3** — dashboard lists every one of the user's role assignments (institution + role), each clickable to enter that context (decision 2).
 - [ ] **Phase 3b** — institution-record roster UI: list + add/remove PCs / readers / lead readers (decision 3).
 

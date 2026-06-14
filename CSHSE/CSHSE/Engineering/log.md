@@ -2285,3 +2285,11 @@ New change request [[cr-060-multi-role-per-user-by-institution]] capturing the a
 3. Institution roster UI — BUILD (Phase 3b): institution record gets add/remove of PCs/readers/lead.
 4. Admin scope — out of scope; admin/superuser stay global.
 Phase 3 is approved to build (gate rollout + dashboard assignment list); Phase 3b (institution roster) committed.
+
+## 2026-06-14 — update | CR-060 Phase 3 core shipped (access-gate rollout)
+
+[[cr-060-multi-role-per-user-by-institution]] Phase 3 core: submission access gates migrated to the multi-role algorithm.
+- `roleResolver` gained a backward-compat fallback (legacy single role+institutionId → one assignment) so un-migrated users keep working.
+- `submissionController`: getSubmission visibility, listSubmissions PC+reviewer OR-scope, and `pcCanWrite()` write gates (saveNarrative/submit/revert/markNA/clearNA/preflight/evaluateSpec/workflow). `userController.getUsers` PC scoping via institutionIdsWithRole.
+- Tests: `tests/integration/cr060-multi-role.test.ts` (8, one per requirement) green; regression-risk suite (isolation, reader-access-hardening, cr055, cr057, submission-lockout, jv-filter, evidence-owner-access) green. Commit f1f2a4d.
+- Remaining: report/score reader-report sub-gates, dashboard assignment list, Phase 3b institution roster UI.
