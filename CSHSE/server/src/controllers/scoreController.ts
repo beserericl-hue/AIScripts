@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { Score } from '../models/Score';
+import { isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -8,8 +9,29 @@ interface AuthenticatedRequest extends Request {
     email: string;
     firstName?: string;
     lastName?: string;
+    institutionId?: string;
     isSuperuser?: boolean;
+    realIsSuperuser?: boolean;
+    // CR-060 — per-institution role assignments.
+    roleAssignments?: Array<{ role: string; institutionId: string; institutionName?: string }>;
   };
+}
+
+// CR-060 — a caller may enter/clear scores if they hold a reviewer role
+// (reader/lead_reader) at ANY institution, or are a global admin. Assignment
+// scopes WHICH submission they're actually working on (enforced upstream by the
+// reader-report/getSubmission gates). reader folds lead in institutionIdsWithRole.
+function canScore(u: AuthenticatedRequest['user']): boolean {
+  // global admin, OR a legacy global reviewer (primary role reader/lead with no
+  // institution), OR an institution-scoped reviewer assignment.
+  return isGlobalAdmin(u as any)
+    || u?.role === 'reader' || u?.role === 'lead_reader'
+    || institutionIdsWithRole(u as any, 'reader').length > 0;
+}
+function isLeadOrAdminAnywhere(u: AuthenticatedRequest['user']): boolean {
+  return isGlobalAdmin(u as any)
+    || u?.role === 'lead_reader'
+    || institutionIdsWithRole(u as any, 'lead_reader').length > 0;
 }
 
 /**
@@ -19,7 +41,7 @@ interface AuthenticatedRequest extends Request {
  */
 export const upsertScore = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!['reader', 'lead_reader'].includes(req.user?.role || '') && !req.user?.isSuperuser) {
+    if (!canScore(req.user)) {
       return res.status(403).json({ error: 'Only readers and lead readers can score' });
     }
 
@@ -34,6 +56,13 @@ export const upsertScore = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(400).json({ error: 'Score must be 0, 1, 2, or 3' });
     }
 
+    // CR-060 — Score.reviewerRole only allows reader/lead_reader. Derive it from
+    // the caller's REVIEWER role (a cross-role user whose primary role is
+    // program_coordinator but who scores as a reader must record 'reader' /
+    // 'lead_reader', never their primary role).
+    const reviewerRole: 'reader' | 'lead_reader' =
+      isLeadOrAdminAnywhere(req.user) && !isGlobalAdmin(req.user as any) ? 'lead_reader' : 'reader';
+
     const result = await Score.findOneAndUpdate(
       {
         submissionId,
@@ -45,7 +74,7 @@ export const upsertScore = async (req: AuthenticatedRequest, res: Response) => {
         $set: {
           score,
           reviewerName: `${req.user!.firstName || ''} ${req.user!.lastName || ''}`.trim() || req.user!.email,
-          reviewerRole: req.user!.role
+          reviewerRole
         },
         $setOnInsert: {
           submissionId,
@@ -71,7 +100,7 @@ export const upsertScore = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const deleteScore = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!['reader', 'lead_reader'].includes(req.user?.role || '') && !req.user?.isSuperuser) {
+    if (!canScore(req.user)) {
       return res.status(403).json({ error: 'Only readers and lead readers can manage scores' });
     }
 
@@ -99,7 +128,8 @@ export const deleteScore = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const getScores = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (req.user?.role === 'program_coordinator') {
+    // CR-060 — non-reviewers (PC-only / no role) see no scores.
+    if (!canScore(req.user)) {
       return res.json({ scores: [] });
     }
 
@@ -108,9 +138,10 @@ export const getScores = async (req: AuthenticatedRequest, res: Response) => {
 
     const filter: any = { submissionId };
 
-    // Readers can only see their own scores; lead_reader and admin can see all
-    if (req.user?.role === 'reader') {
-      filter.reviewerId = req.user.id;
+    // A plain reader sees only their own scores; a lead reader (anywhere) or
+    // admin can see all (or a requested reviewer's).
+    if (!isLeadOrAdminAnywhere(req.user)) {
+      filter.reviewerId = req.user!.id;
     } else if (reviewerId) {
       filter.reviewerId = reviewerId;
     }
@@ -131,7 +162,8 @@ export const getScores = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const getScoreSummary = async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (req.user?.role === 'program_coordinator') {
+    // CR-060 — non-reviewers (PC-only / no role) get no score summary.
+    if (!canScore(req.user)) {
       return res.json({ bySpec: {}, byStandard: {}, global: null });
     }
 

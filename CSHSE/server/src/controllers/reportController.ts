@@ -8,6 +8,7 @@ import { PDFGeneratorService } from '../services/pdfGenerator';
 import { generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
 import { ReaderReport } from '../models/ReaderReport';
 import { Assignment } from '../models/Assignment';
+import { isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
 
 /**
  * CR-003 / S11.1 — build the per-spec 0-3 score map for a reader's report,
@@ -51,11 +52,7 @@ export const generateReaderReportPDF = async (req: AuthenticatedRequest, res: Re
     }
 
     // Check authorization
-    if (
-      review.reviewerId.toString() !== req.user?.id &&
-      req.user?.role !== 'admin' &&
-      req.user?.role !== 'lead_reader'
-    ) {
+    if (review.reviewerId.toString() !== req.user?.id && !isLeadOrAdmin(req)) {
       return res.status(403).json({ error: 'Not authorized to generate this report' });
     }
 
@@ -100,10 +97,7 @@ export const generateCompilationReportPDF = async (req: AuthenticatedRequest, re
     }
 
     // Check authorization
-    if (
-      compilation.leadReaderId.toString() !== req.user?.id &&
-      req.user?.role !== 'admin'
-    ) {
+    if (compilation.leadReaderId.toString() !== req.user?.id && !isGlobalAdmin(req.user)) {
       return res.status(403).json({ error: 'Not authorized to generate this report' });
     }
 
@@ -141,7 +135,7 @@ export const generateAllReaderReportsPDF = async (req: AuthenticatedRequest, res
   try {
     const { submissionId } = req.params;
 
-    if (req.user?.role !== 'admin' && req.user?.role !== 'lead_reader') {
+    if (!isLeadOrAdmin(req)) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
@@ -307,18 +301,22 @@ function effectiveReviewerId(req: AuthenticatedRequest): string {
 }
 
 async function readerMayAccess(req: AuthenticatedRequest, submissionId: string): Promise<boolean> {
-  const role = req.user?.role;
-  if (role === 'admin') return true;
-  if (role !== 'reader' && role !== 'lead_reader') return false;
+  // CR-060 — Assignment is authoritative for WHICH submissions a reviewer may
+  // work on. A user with an active assignment is authorized REGARDLESS of their
+  // primary role (a PC@A who is also Reader@B and assigned to B's study passes
+  // here for B). Admins always pass.
+  if (isGlobalAdmin(req.user)) return true;
   const reviewerId = effectiveReviewerId(req);
   const assigned = await Assignment.exists({ submissionId, userId: reviewerId, status: 'active' });
   return !!assigned;
 }
 
-/** A lead reader or admin may oversee OTHER reviewers' completed reports. */
+/** A lead reader (at any institution) or admin may oversee OTHER reviewers'
+ *  completed reports. CR-060 — derive from roleAssignments, not the single role. */
 function isLeadOrAdmin(req: AuthenticatedRequest): boolean {
-  const role = req.user?.role;
-  return role === 'admin' || role === 'lead_reader';
+  return isGlobalAdmin(req.user)
+    || req.user?.role === 'lead_reader'
+    || institutionIdsWithRole(req.user as any, 'lead_reader').length > 0;
 }
 
 /**
