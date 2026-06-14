@@ -79,6 +79,7 @@ export function InstitutionManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingInstitution, setEditingInstitution] = useState<Institution | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [rosterError, setRosterError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     type: 'university' as 'college' | 'university',
@@ -114,6 +115,16 @@ export function InstitutionManagement() {
     queryKey: ['lead-readers'],
     queryFn: async () => {
       const response = await api.get('/api/users?role=lead_reader');
+      return response.data;
+    }
+  });
+
+  // CR-060 — all users (with roleAssignments) to render + edit each institution's
+  // roster (PCs / readers / lead readers).
+  const { data: allUsersData } = useQuery({
+    queryKey: ['users-for-roster'],
+    queryFn: async () => {
+      const response = await api.get('/api/users', { params: { limit: 500 } });
       return response.data;
     }
   });
@@ -175,6 +186,89 @@ export function InstitutionManagement() {
       queryClient.invalidateQueries({ queryKey: ['institutions'] });
     }
   });
+
+  // CR-060 — institution roster: add/remove a (role, institution) on a user by
+  // editing that user's roleAssignments.
+  const allUsers: any[] = allUsersData?.users || [];
+  const userAssignments = (u: any): Array<{ role: string; institutionId: string }> =>
+    (u.roleAssignments && u.roleAssignments.length)
+      ? u.roleAssignments.map((a: any) => ({ role: a.role, institutionId: String(a.institutionId) }))
+      : (u.role && u.institutionId && u.role !== 'admin'
+          ? [{ role: u.role, institutionId: String(u.institutionId) }] : []);
+  const rosterFor = (institutionId: string, role: string): any[] =>
+    allUsers.filter((u) => userAssignments(u).some(
+      (a) => a.institutionId === institutionId && (a.role === role || (role === 'reader' && a.role === 'lead_reader'))
+    ));
+  const setRolesMutation = useMutation({
+    mutationFn: async ({ userId, roleAssignments }: { userId: string; roleAssignments: any[] }) => {
+      const r = await api.put(`/api/users/${userId}/role-assignments`, { roleAssignments });
+      return r.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users-for-roster'] });
+      queryClient.invalidateQueries({ queryKey: ['institutions'] });
+      setRosterError(null);
+    },
+    onError: (e: any) => setRosterError(e?.response?.data?.error || 'Failed to update roles'),
+  });
+  const addRole = (user: any, role: string, institutionId: string) => {
+    setRosterError(null);
+    const current = userAssignments(user);
+    const atInst = current.filter((a) => a.institutionId === institutionId);
+    const pc = atInst.some((a) => a.role === 'program_coordinator');
+    const reviewer = atInst.some((a) => a.role === 'reader' || a.role === 'lead_reader');
+    if ((role === 'program_coordinator' && reviewer) || ((role === 'reader' || role === 'lead_reader') && pc)) {
+      setRosterError(`${user.firstName} ${user.lastName} cannot be a PC and a reviewer at the same institution.`);
+      return;
+    }
+    if (current.some((a) => a.institutionId === institutionId && a.role === role)) return;
+    setRolesMutation.mutate({ userId: user._id, roleAssignments: [...current, { role, institutionId }] });
+  };
+  const removeRole = (user: any, role: string, institutionId: string) => {
+    setRosterError(null);
+    const next = userAssignments(user).filter(
+      (a) => !(a.institutionId === institutionId && (a.role === role || (role === 'reader' && a.role === 'lead_reader')))
+    );
+    setRolesMutation.mutate({ userId: user._id, roleAssignments: next });
+  };
+  const renderRoleGroup = (
+    institutionId: string,
+    role: 'program_coordinator' | 'reader' | 'lead_reader',
+    label: string
+  ) => {
+    const members = rosterFor(institutionId, role);
+    const memberIds = new Set(members.map((m: any) => String(m._id)));
+    const candidates = allUsers.filter((u: any) => !u.isSuperuser && u.role !== 'admin' && !memberIds.has(String(u._id)));
+    return (
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+          {members.length === 0 && <span className="text-xs text-gray-400">None</span>}
+          {members.map((m: any) => (
+            <span key={m._id} className="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-xs text-gray-700 ring-1 ring-gray-200">
+              {m.firstName} {m.lastName}
+              <button
+                onClick={() => removeRole(m, role, institutionId)}
+                disabled={setRolesMutation.isPending}
+                className="text-gray-400 hover:text-red-600 disabled:opacity-40"
+                title="Remove"
+              >×</button>
+            </span>
+          ))}
+          <select
+            value=""
+            onChange={(e) => { const u = allUsers.find((x: any) => String(x._id) === e.target.value); if (u) addRole(u, role, institutionId); }}
+            className="rounded border border-gray-300 px-1.5 py-0.5 text-xs text-gray-600"
+          >
+            <option value="">+ add…</option>
+            {candidates.map((u: any) => (
+              <option key={u._id} value={u._id}>{u.firstName} {u.lastName}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+    );
+  };
 
   // Archive institution mutation
   const archiveMutation = useMutation({
@@ -298,6 +392,9 @@ export function InstitutionManagement() {
         </div>
 
         {/* Institution List */}
+        {rosterError && (
+          <div className="mx-4 mt-3 rounded bg-red-50 px-3 py-2 text-sm text-red-700">{rosterError}</div>
+        )}
         <div className="divide-y divide-gray-100">
           {filteredInstitutions.length === 0 ? (
             <div className="p-8 text-center text-gray-500">
@@ -407,6 +504,15 @@ export function InstitutionManagement() {
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
+                </div>
+
+                {/* CR-060 — institution roster: PCs / Lead Readers / Readers,
+                    each with add/remove. Multiple PCs allowed (Rule 2); a user
+                    cannot be PC and reviewer at the same institution (Rule 1). */}
+                <div className="mt-4 grid grid-cols-1 gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 md:grid-cols-3">
+                  {renderRoleGroup(institution._id, 'program_coordinator', 'Program Coordinators')}
+                  {renderRoleGroup(institution._id, 'lead_reader', 'Lead Readers')}
+                  {renderRoleGroup(institution._id, 'reader', 'Readers')}
                 </div>
               </div>
             ))
