@@ -146,6 +146,21 @@ export function Dashboard() {
     enabled: !isProgramCoordinator
   });
 
+  // Active joint ventures visible to this user. The endpoint scopes itself by
+  // role: elevated users (admin/superuser) get every JV; a non-elevated user
+  // gets only the JV(s) their own institution belongs to — i.e. exactly the
+  // "institution visibility in a joint venture" rule. Used to power the
+  // "Joint Venture" Institution-Type filter (members of any visible JV).
+  const { data: jointVenturesData } = useQuery({
+    queryKey: ['joint-ventures-dashboard'],
+    queryFn: async () => {
+      const response = await api.get('/api/joint-ventures', {
+        params: { archived: 'false' },
+      });
+      return response.data;
+    },
+  });
+
   // Fetch all institutions where the user is program coordinator
   const { data: myInstitutionsData, isLoading: myInstitutionLoading } = useQuery({
     queryKey: ['my-institutions', effectiveUser?.id],
@@ -300,11 +315,26 @@ export function Dashboard() {
     }
   };
 
+  // Set of every institution id that belongs to a visible active joint venture.
+  const jvInstitutionIds = useMemo(() => {
+    const set = new Set<string>();
+    for (const jv of (jointVenturesData?.jointVentures || [])) {
+      for (const id of (jv.institutionIds || [])) set.add(String(id));
+    }
+    return set;
+  }, [jointVenturesData]);
+
   // Filter institutions (for non-PC roles)
   const filteredInstitutions = useMemo(() => {
     return institutions.filter((inst) => {
-      if (filters.institutionType && inst.type !== filters.institutionType) {
-        return false;
+      if (filters.institutionType) {
+        if (filters.institutionType === 'joint_venture') {
+          // "Joint Venture" is a synthetic type — match any institution that is
+          // a member of a joint venture, not the institution's own `type`.
+          if (!jvInstitutionIds.has(String(inst._id))) return false;
+        } else if (inst.type !== filters.institutionType) {
+          return false;
+        }
       }
       if (filters.institutionId && inst._id !== filters.institutionId) {
         return false;
@@ -329,7 +359,7 @@ export function Dashboard() {
       }
       return true;
     });
-  }, [institutions, filters]);
+  }, [institutions, filters, jvInstitutionIds]);
 
   // Filter change requests
   const filteredChangeRequests = useMemo(() => {
@@ -693,6 +723,7 @@ export function Dashboard() {
               <option value="university">University</option>
               <option value="college">College</option>
               <option value="community_college">Community College</option>
+              <option value="joint_venture">Joint Venture</option>
             </select>
 
             {/* Institution */}
