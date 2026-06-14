@@ -97,6 +97,17 @@ export function ReaderReportEditor(): JSX.Element {
       chk.classList.add('ring-2', 'ring-teal-400');
       setTimeout(() => chk.classList.remove('ring-2', 'ring-teal-400'), 1200);
     }
+    // Move keyboard focus onto the Compliant checkbox so the reader can act
+    // immediately — Space to mark Compliant, Tab to Non-Compliant / comments /
+    // Score — without reaching for the mouse. preventScroll keeps the smooth
+    // scrollIntoView above from being overridden by focus' default jump. (In
+    // read-only mode the checkbox is disabled and simply won't take focus.)
+    const compliant = document.querySelector(
+      `[data-testid="rr-c-${std}-${spec}"]`
+    ) as HTMLElement | null;
+    if (compliant) {
+      setTimeout(() => compliant.focus({ preventScroll: true }), 50);
+    }
   }, []);
   const [recommendation, setRecommendation] = useState('');
   const [acceptanceVote, setAcceptanceVote] = useState<AcceptanceVote>('');
@@ -695,7 +706,7 @@ export function ReaderReportEditor(): JSX.Element {
                               disabled={readonly}
                               checked={sp.readerMark === 'compliant'}
                               onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'compliant' ? '' : 'compliant' })}
-                              className="h-4 w-4 text-emerald-600 disabled:opacity-60"
+                              className="h-4 w-4 text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 disabled:opacity-60"
                               aria-label={`${r.code}.${sp.specCode} compliant`}
                             />
                             <span className="text-sm font-semibold text-emerald-700">Compliant</span>
