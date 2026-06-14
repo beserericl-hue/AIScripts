@@ -2267,3 +2267,21 @@ The reader/lead reader can now view + edit + save the Reader Report (the officia
 - Server: `getReaderReportStructure()` (AI-drafted per-standard rollup) + `ReaderReport` model (per submission per reviewer) + GET/PUT `/api/reports/submission/:id/reader-report-data` (assigned reader/lead/admin only; scoped to the impersonated reviewer; GET merges AI draft with saved edits).
 - Client: route `/reader-report/:submissionId` → `ReaderReportEditor` (per-standard Compliant/Non-Compliant + comments pre-filled from the AI draft, recommendation box, Save, PDF/Word download, 'Back to Self-Study'). Toolbar 'Reader Report' button is reader/lead-reader ONLY; PC/admin keep a plain report download.
 - Verified live (impersonating Reader Two): GET returns 20 standards pre-filled (Std 1 noncompliant, 4259-char comment); PUT saves a reader override + recommendation and GET reflects it; an unassigned reader gets 403. E2E spec 68.
+
+## 2026-06-14 — ingest | CR-060 multi-role per user (role-by-institution)
+
+New change request [[cr-060-multi-role-per-user-by-institution]] capturing the administrator's 2026-06-14 review of the admin Users + Institutions screens.
+- **Requirement:** a user can hold different roles at different institutions (PC at A, Reader/Lead Reader at B); an institution can have multiple PCs; the admin needs to edit a user and assign roles. Rule 1 — no PC + reviewer in the SAME institution (cross-institution mixing OK). Rule 2 — multiple PCs per institution.
+- **Design:** authoritative `User.roleAssignments[] = {role, institutionId}`; admin/superuser stay global; legacy `User.role`/`institutionId` kept as derived primary. Algorithm in `server/src/services/roleResolver.ts` (`rolesAt`/`hasRoleAt`/`validateRoleAssignments`).
+- **Shipped (Phase 1+2, commit fd98f24):** model + migration (17 users, 0 conflicts) + `auth.ts` wiring + admin Manage-roles modal (`UserManagement.tsx`) + `PUT /api/users/:id/role-assignments`. Live-verified: same-institution PC+reader → 400; reader@Stevenson + PC@E2E → 200.
+- **PENDING review before build (Phase 3):** roll the ~178 access gates onto `rolesAt`/`hasRoleAt` so cross-institution roles are enforced end-to-end; optional institution-side roster UI. Open questions captured on the CR page.
+- Status set to `in-progress`; added to [[index]] P1 table.
+
+## 2026-06-14 — update | CR-060 open questions resolved (administrator review)
+
+[[cr-060-multi-role-per-user-by-institution]] reviewed; 4 open questions decided:
+1. Reader scoping — keep Assignment-gated per submission; `roleAssignments` = eligibility only.
+2. Multi-institution landing — no header switcher; the DASHBOARD lists all of the user's role assignments (institution + role), each clickable to enter context.
+3. Institution roster UI — BUILD (Phase 3b): institution record gets add/remove of PCs/readers/lead.
+4. Admin scope — out of scope; admin/superuser stay global.
+Phase 3 is approved to build (gate rollout + dashboard assignment list); Phase 3b (institution roster) committed.
