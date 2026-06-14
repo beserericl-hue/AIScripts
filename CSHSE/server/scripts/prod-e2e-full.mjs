@@ -165,21 +165,34 @@ async function main() {
   });
   rec('12 assign readers', asg.status < 300 && reviews.length >= 2, `assign=${asg.status} reviews=${reviews.length}`);
 
-  // 13 READER SCORING (impersonate each reader) — score a few specs + final + submit
+  // Fetch the full CSHSE spec list so each reader can assess EVERY spec — a
+  // review can only be SUBMITTED once it is complete.
+  const stdResp = await api('GET', '/api/standards');
+  const stdArr = Array.isArray(stdResp.data) ? stdResp.data : (stdResp.data?.standards || []);
+  const specPairs = [];
+  for (const st of stdArr) {
+    const sc = String(st.code ?? st.standardCode ?? st.number);
+    for (const sp of (st.specifications || st.specs || [])) specPairs.push([sc, String(sp.code ?? sp.specCode ?? sp.number)]);
+  }
+
+  // 13 READER SCORING (impersonate each reader) — score EVERY spec + final + submit
   async function readerFlow(uid, label) {
     const revId = reviewByReader[uid];
     if (!revId) return rec(`13 ${label} review found`, false);
     let okAll = true;
-    for (const [std, spec] of [['1','1.1'],['1','1.2'],['2','2.1']]) {
+    for (const [std, spec] of specPairs) {
       const a = await api('PATCH', `/api/reviews/${revId}/assessment`, {
         imp: uid, body: { standardCode: std, specCode: spec, compliance: 'compliant', comments: `E2E ${spec}` } });
       okAll = okAll && a.status < 300;
     }
     const f = await api('PATCH', `/api/reviews/${revId}/final-assessment`, {
-      imp: uid, body: { finalRecommendation: 'accreditation_no_conditions', strengths: 'E2E ok', weaknesses: 'none' } });
+      imp: uid, body: {
+        recommendation: 'accreditation_no_conditions',
+        programStrengths: 'Strong alignment with CSHSE standards; clear, measurable student learning outcomes.',
+        programWeaknesses: 'Minor evidence gaps in a few specifications; otherwise complete.' } });
     const sub = await api('POST', `/api/reviews/${revId}/submit`, { imp: uid, body: {} });
     return rec(`13 ${label} score+final+submit`, okAll && f.status < 300 && sub.status < 300,
-      `assess=${okAll} final=${f.status} submit=${sub.status}`);
+      `assess=${okAll} final=${f.status} submit=${sub.status} ${sub.status >= 400 ? JSON.stringify(sub.data).slice(0, 240) : ''}`);
   }
   await readerFlow(rd1.uid, 'reader1');
   await readerFlow(rd2.uid, 'reader2');

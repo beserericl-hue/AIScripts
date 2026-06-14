@@ -207,6 +207,13 @@ export const saveAssessment = async (req: AuthenticatedRequest, res: Response) =
       review.lastAutoSave = new Date();
     }
 
+    // Each call mutates a nested subdocument array
+    // (assessments[].specifications[]). Mark the path dirty so Mongoose persists
+    // pushes INTO an already-existing standard's specifications array — without
+    // this, the 2nd+ spec scored under a standard is silently dropped on save
+    // (only the first spec per standard, which rides in with the standard
+    // subdoc push, survived), so a reader could never complete/submit a review.
+    review.markModified('assessments');
     // Increment draft version
     review.draftVersion += 1;
 
@@ -274,6 +281,8 @@ export const bulkSaveAssessments = async (req: AuthenticatedRequest, res: Respon
       specAssessment.reviewedAt = new Date();
     }
 
+    // Persist pushes into nested specifications arrays (see saveAssessment).
+    review.markModified('assessments');
     review.draftVersion += 1;
     await review.save();
 
