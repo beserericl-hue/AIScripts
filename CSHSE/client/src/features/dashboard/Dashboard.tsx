@@ -435,6 +435,39 @@ export function Dashboard() {
   const isLoading = institutionsLoading || changeRequestsLoading || siteVisitsLoading ||
     (isProgramCoordinator && (myInstitutionLoading || mySubmissionLoading));
 
+  // CR-060 — when the user holds roles at more than one institution, surface
+  // ALL of them as clickable chips so they can jump into each context (decision
+  // 2). PC chips open the Self-Study editor; reviewer chips open the reader
+  // queue (this dashboard, reader view).
+  const renderRolesCard = () => {
+    const ras = effectiveUser?.roleAssignments || [];
+    if (ras.length < 2) return null;
+    const roleLabel = (r: string) =>
+      r === 'program_coordinator' ? 'Program Coordinator' : r === 'lead_reader' ? 'Lead Reader' : 'Reader';
+    const go = (r: string) => navigate(r === 'program_coordinator' ? '/self-study' : '/dashboard');
+    return (
+      <div className="max-w-7xl mx-auto px-6 pt-6">
+        <div className="rounded-lg border border-gray-200 bg-white p-4">
+          <h2 className="mb-2 text-sm font-semibold text-gray-900">Your roles &amp; institutions</h2>
+          <div className="flex flex-wrap gap-2">
+            {ras.map((a, i) => (
+              <button
+                key={i}
+                onClick={() => go(a.role)}
+                title={`Open your ${roleLabel(a.role)} work at ${a.institutionName || a.institutionId}`}
+                className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm text-teal-800 hover:bg-teal-100"
+              >
+                <span className="font-medium">{roleLabel(a.role)}</span>
+                <span className="text-teal-400">·</span>
+                <span>{a.institutionName || a.institutionId}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Program Coordinator Dashboard
   if (isProgramCoordinator) {
     // Unassigned state
@@ -469,6 +502,7 @@ export function Dashboard() {
 
     return (
       <div className="min-h-screen bg-gray-50">
+        {renderRolesCard()}
         {/* Spec Name Banner */}
         {myInstitution?.specName && (
           <div className="bg-primary-600 text-white">
@@ -665,6 +699,7 @@ export function Dashboard() {
   // Admin/Lead Reader/Reader Dashboard
   return (
     <div className="min-h-screen bg-gray-50">
+      {renderRolesCard()}
       {/* Header */}
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-6">

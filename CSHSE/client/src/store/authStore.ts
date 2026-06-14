@@ -20,6 +20,8 @@ interface User {
   institutionId?: string;
   institutionName?: string;
   isSuperuser?: boolean;
+  // CR-060 — per-institution role assignments (PC@A, Reader@B, …).
+  roleAssignments?: Array<{ role: string; institutionId: string; institutionName?: string }>;
   // CR-045 — server defaults hideLegacyImporter to true when absent.
   preferences?: UserPreferences;
 }

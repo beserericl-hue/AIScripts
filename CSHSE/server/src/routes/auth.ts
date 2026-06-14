@@ -257,6 +257,13 @@ router.get('/me', async (req: Request, res: Response) => {
         role: user.role,
         institutionId: institutionIdStr,
         institutionName: institutionNameStr,
+        // CR-060 — every per-institution role the user holds (PC@A, Reader@B, …)
+        // so the dashboard can list them all + let the user jump between contexts.
+        roleAssignments: (user.roleAssignments || []).map((a: any) => ({
+          role: a.role,
+          institutionId: a.institutionId?.toString?.() || String(a.institutionId),
+          institutionName: a.institutionName,
+        })),
         permissions: user.permissions,
         status: user.status,
         lastLogin: user.lastLogin,
