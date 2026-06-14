@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { Submission, ISubmission } from '../models/Submission';
 import { Institution } from '../models/Institution';
+// CR-060 — multi-role access: role-by-institution resolution.
+import { hasRoleAt, isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
 import { ValidationResult } from '../models/ValidationResult';
 import { ValidationService } from '../services/validationService';
 import { emailService } from '../services/emailService';
@@ -63,6 +65,21 @@ function narrativesMapToArray(narratives: Map<string, Map<string, any>> | undefi
 /**
  * Get submission by ID
  */
+/**
+ * CR-060 — a caller may WRITE a submission's self-study iff they are a global
+ * admin/superuser, a Program Coordinator AT the submission's institution, or
+ * (for an institution-less dev submission) its original submitter. Replaces the
+ * old `submitterId === req.user.id` ownership checks AND closes the write routes
+ * that previously had NO authorization gate (only submissionLockout).
+ */
+function pcCanWrite(reqUser: any, submission: any): boolean {
+  if (isGlobalAdmin(reqUser)) return true;
+  if (submission?.institutionId) {
+    return hasRoleAt(reqUser, 'program_coordinator', submission.institutionId.toString());
+  }
+  return String(submission?.submitterId || '') === String(reqUser?.id || '');
+}
+
 export const getSubmission = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
@@ -76,20 +93,24 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
     // their own institution. Without this, any logged-in PC could fetch
     // any submission by id (regression caught by the new
     // tests/integration/isolation.test.ts negative-case suite).
-    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
-    if (
-      !isElevated &&
-      req.user?.role === 'program_coordinator' &&
-      (req.user as any).institutionId &&
-      submission.institutionId &&
-      submission.institutionId.toString() !== (req.user as any).institutionId
-    ) {
-      return res.status(403).json({ error: 'Forbidden: cross-institution access' });
-    }
+    // CR-060 — role-by-institution visibility. A user may read a submission if
+    // they are: a global admin/superuser; a Program Coordinator AT THIS
+    // submission's institution (or, for an institution-less dev submission, its
+    // submitter); OR an assigned reviewer on a SUBMITTED study. This replaces the
+    // single-role CR-017 cross-institution guard + CR-007 reader gate, so a user
+    // who is PC at A and Reader at B is scoped correctly at each.
+    const isElevated = isGlobalAdmin(req.user);
+    const instId = submission.institutionId ? submission.institutionId.toString() : null;
+    const isSubmitter = String(submission.submitterId || '') === String(req.user?.id || '');
+    const isPCHere = instId
+      ? hasRoleAt(req.user, 'program_coordinator', instId)
+      : isSubmitter; // institution-less dev data → fall back to ownership
 
-    // CR-007: readers + lead readers can only see a submission once the PC
-    // has clicked final submit. Direct URL access to a draft returns 403.
-    if (!isElevated && (req.user?.role === 'reader' || req.user?.role === 'lead_reader')) {
+    if (!isElevated && !isPCHere) {
+      // Not admin and not a PC at this institution. The only remaining way in is
+      // an ACTIVE assignment on a SUBMITTED study (CR-007 assigned-only;
+      // Assignment is the source of truth for WHICH submissions a reviewer sees,
+      // roleAssignments governs eligibility at assignment time).
       const draftStates = ['draft', 'in_progress'];
       if (draftStates.includes(submission.status)) {
         return res.status(403).json({
@@ -97,15 +118,7 @@ export const getSubmission = async (req: AuthenticatedRequest, res: Response) =>
           status: submission.status
         });
       }
-
-      // CR-007 part 2 (assigned-only, product decision 2026-05-31): a reader
-      // may only open a submission they hold an ACTIVE assignment to. Without
-      // this, any reader could read any submitted study by id. Assignment is
-      // the single source of truth (Assignment model), role-agnostic so a
-      // lead_reader assigned as either type still qualifies.
-      // When a superuser impersonates a specific reader, check THAT reader's
-      // assignment (not the superuser's).
-      const effectiveReaderId = req.user?.impersonation?.impersonatedUserId || req.user.id;
+      const effectiveReaderId = req.user?.impersonation?.impersonatedUserId || req.user?.id;
       const assigned = await Assignment.exists({
         submissionId: submission._id,
         userId: effectiveReaderId,
@@ -269,6 +282,12 @@ export const saveNarrative = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Submission not found' });
     }
 
+    // CR-060 — only a PC at this submission's institution (or admin/owner) may
+    // edit the narrative. Previously this route had NO authorization gate.
+    if (!pcCanWrite(req.user, submission)) {
+      return res.status(403).json({ error: 'Forbidden: you are not a Program Coordinator for this institution' });
+    }
+
     // Initialize narratives map if not present
     if (!submission.narratives) {
       submission.narratives = new Map();
@@ -407,14 +426,8 @@ export const getWorkflowSummary = async (req: AuthenticatedRequest, res: Respons
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
-    if (
-      !isElevated &&
-      req.user?.role === 'program_coordinator' &&
-      (req.user as any).institutionId &&
-      submission.institutionId &&
-      submission.institutionId.toString() !== (req.user as any).institutionId
-    ) {
+    // CR-060 — PC-at-this-institution (or admin/owner) only.
+    if (!pcCanWrite(req.user, submission)) {
       return res.status(403).json({ error: 'Forbidden: cross-institution access' });
     }
 
@@ -724,12 +737,8 @@ export const revertStandard = async (req: AuthenticatedRequest, res: Response) =
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    // Ownership check — only the PC submitter or admin may revert.
-    if (
-      submission.submitterId.toString() !== req.user!.id &&
-      req.user!.role !== 'admin' &&
-      !req.user!.isSuperuser
-    ) {
+    // CR-060 — only a PC at this institution (or admin/owner) may revert.
+    if (!pcCanWrite(req.user, submission)) {
       return res.status(403).json({ error: 'Not authorized to revert this standard' });
     }
 
@@ -956,14 +965,8 @@ export const evaluateSpec = async (req: AuthenticatedRequest, res: Response) => 
       return res.status(404).json({ error: 'Submission not found' });
     }
     // Owner-PC or admin only.
-    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
-    if (
-      !isElevated &&
-      req.user?.role === 'program_coordinator' &&
-      (req.user as any).institutionId &&
-      submission.institutionId &&
-      submission.institutionId.toString() !== (req.user as any).institutionId
-    ) {
+    // CR-060 — PC-at-this-institution (or admin/owner) only.
+    if (!pcCanWrite(req.user, submission)) {
       return res.status(403).json({ error: 'Forbidden: cross-institution access' });
     }
 
@@ -1112,9 +1115,8 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    // Ownership: only the PC who owns this (or admin) can read preflight.
-    const isAdmin = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
-    if (!isAdmin && submission.submitterId?.toString() !== req.user!.id) {
+    // CR-060 — PC at this institution (or admin/owner) only.
+    if (!pcCanWrite(req.user, submission)) {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
@@ -1345,7 +1347,7 @@ export const markSpecNotApplicable = async (req: AuthenticatedRequest, res: Resp
 
     // Ownership — only the PC who owns this submission (or admin) can mark N/A.
     const isAdmin = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
-    if (!isAdmin && submission.submitterId.toString() !== req.user!.id) {
+    if (!pcCanWrite(req.user, submission)) {
       return res.status(403).json({ error: 'Not authorized to modify this submission' });
     }
 
@@ -1415,7 +1417,7 @@ export const clearSpecNotApplicable = async (req: AuthenticatedRequest, res: Res
     }
 
     const isAdmin = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
-    if (!isAdmin && submission.submitterId.toString() !== req.user!.id) {
+    if (!pcCanWrite(req.user, submission)) {
       return res.status(403).json({ error: 'Not authorized to modify this submission' });
     }
     if (submission.readerLock?.isLocked && !isAdmin) {
@@ -1476,74 +1478,66 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
     // honored the query-string value first, which let PC-A enumerate
     // PC-B's submissions by spoofing the parameter. Admin + superuser
     // remain free to filter by any institution they own.
-    const isElevated_ = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
-    if (req.user?.role === 'program_coordinator' && (req.user as any).institutionId) {
-      filter.institutionId = (req.user as any).institutionId;
-    } else if (institutionId && isElevated_) {
-      filter.institutionId = institutionId;
-    }
-
-    // CR-019 / S13 — reporting filter: admins/superusers can scope the list to a
-    // joint venture's member institutions via `?jointVentureId=`. Intersects with
-    // any institutionId already set (a JV + institution filter narrows to that
-    // institution only if it's a member). Non-elevated callers are unaffected
-    // (PCs are pinned to their own institution; readers to their assignments).
-    if (jointVentureId && isElevated_) {
-      const jv = await JointVenture.findById(String(jointVentureId)).select('institutionIds').lean();
-      const memberIds = (jv?.institutionIds || []).map((id) => String(id));
-      if (filter.institutionId) {
-        // Keep the explicit institution only when it is a JV member; otherwise
-        // the combined filter matches nothing (sentinel).
-        if (!memberIds.includes(String(filter.institutionId))) {
-          filter.institutionId = new mongoose.Types.ObjectId();
-        }
-      } else {
-        filter.institutionId = { $in: memberIds.length ? memberIds : [new mongoose.Types.ObjectId()] };
-      }
-    }
-
-    // CR-007: readers + lead readers only see submissions whose status has
-    // progressed beyond draft. Draft submissions are PC-only.
-    // Admin + superuser are exempt.
-    const isElevated = req.user?.role === 'admin' || (req.user as any)?.isSuperuser;
-    const isReaderRole = req.user?.role === 'reader' || req.user?.role === 'lead_reader';
+    // CR-060 — role-by-institution list scoping. Replaces the single-role
+    // PC-pin / reader-assignment `if/else` (which could only ever apply ONE,
+    // so a PC-at-A + Reader-at-B user saw just one scope).
     const READER_VISIBLE_STATUSES = [
       'submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant'
     ];
+    const isElevated = isGlobalAdmin(req.user);
+    const requestedStatuses: string[] | null = status
+      ? (Array.isArray(status) ? status : [status]).map((s) => String(s))
+      : null;
 
-    // BUG-A fix (CR-007): the explicit `?status=` param must INTERSECT with the
-    // reader allow-list, never REPLACE it. The previous code applied the
-    // allow-list then unconditionally overwrote `filter.status = status`, so a
-    // reader could pass `?status=draft` to enumerate draft submissions'
-    // metadata. Now: for a reader, any requested status is filtered down to the
-    // allow-list (an out-of-list request yields an empty result, not a leak).
-    if (status) {
-      const requested = (Array.isArray(status) ? status : [status]).map((s) => String(s));
-      if (!isElevated && isReaderRole) {
-        const allowed = requested.filter((s) => READER_VISIBLE_STATUSES.includes(s));
-        // Sentinel that matches nothing if the reader asked only for disallowed statuses.
-        filter.status = { $in: allowed.length ? allowed : ['__forbidden__'] };
-      } else {
-        filter.status = requested.length === 1 ? requested[0] : { $in: requested };
+    if (isElevated) {
+      // Admin / superuser: optional explicit institution + JV + status filters.
+      if (institutionId) filter.institutionId = institutionId;
+      if (jointVentureId) {
+        const jv = await JointVenture.findById(String(jointVentureId)).select('institutionIds').lean();
+        const memberIds = (jv?.institutionIds || []).map((id) => String(id));
+        if (filter.institutionId) {
+          if (!memberIds.includes(String(filter.institutionId))) filter.institutionId = new mongoose.Types.ObjectId();
+        } else {
+          filter.institutionId = { $in: memberIds.length ? memberIds : [new mongoose.Types.ObjectId()] };
+        }
       }
-    } else if (!isElevated && isReaderRole) {
-      filter.status = { $in: READER_VISIBLE_STATUSES };
-    }
-
-    // CR-007 part 2 (assigned-only, product decision 2026-05-31): a reader's
-    // list is restricted to the submissions they hold an ACTIVE assignment to.
-    // Combined with the status allow-list above, a reader can never enumerate
-    // submissions they aren't working on.
-    if (!isElevated && isReaderRole) {
-      // When a superuser is impersonating a SPECIFIC reader, scope to THAT
-      // reader's assignments (not the superuser's), so "Viewing as Reader Two"
-      // shows exactly Reader Two's queue.
+      if (requestedStatuses) {
+        filter.status = requestedStatuses.length === 1 ? requestedStatuses[0] : { $in: requestedStatuses };
+      }
+    } else {
+      // Non-elevated: OR together
+      //   (a) every submission of an institution where the user is a Program
+      //       Coordinator (any status — PCs see their own drafts), and
+      //   (b) every submission they hold an ACTIVE assignment to, restricted to
+      //       reader-visible statuses (CR-007 assigned-only; the explicit
+      //       `?status=` is INTERSECTED with the allow-list, never widening it).
+      const pcInsts = institutionIdsWithRole(req.user, 'program_coordinator')
+        .map((id) => new mongoose.Types.ObjectId(id));
       const effectiveReaderId = req.user?.impersonation?.impersonatedUserId || req.user?.id;
-      const assignments = await Assignment.find({
-        userId: effectiveReaderId,
-        status: 'active'
-      }).select('submissionId').lean();
-      filter._id = { $in: assignments.map((a) => a.submissionId) };
+      const assignments = await Assignment.find({ userId: effectiveReaderId, status: 'active' })
+        .select('submissionId').lean();
+      const assignedIds = assignments.map((a) => a.submissionId);
+
+      const or: any[] = [];
+      if (pcInsts.length) {
+        const clause: any = { institutionId: { $in: pcInsts } };
+        if (requestedStatuses) clause.status = requestedStatuses.length === 1 ? requestedStatuses[0] : { $in: requestedStatuses };
+        or.push(clause);
+      }
+      if (assignedIds.length) {
+        const allowed = requestedStatuses
+          ? requestedStatuses.filter((s) => READER_VISIBLE_STATUSES.includes(s))
+          : READER_VISIBLE_STATUSES;
+        or.push({ _id: { $in: assignedIds }, status: { $in: allowed.length ? allowed : ['__forbidden__'] } });
+      }
+
+      if (or.length === 0) {
+        filter._id = new mongoose.Types.ObjectId(); // no PC/reviewer role → see nothing
+      } else if (or.length === 1) {
+        Object.assign(filter, or[0]);
+      } else {
+        filter.$or = or;
+      }
     }
 
     const [submissions, total] = await Promise.all([
@@ -1654,8 +1648,8 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       return res.status(404).json({ error: 'Submission not found' });
     }
 
-    // Check ownership - only the program coordinator who owns this can submit
-    if (submission.submitterId.toString() !== req.user!.id) {
+    // CR-060 — only a PC at this institution (or admin/owner) may submit.
+    if (!pcCanWrite(req.user, submission)) {
       return res.status(403).json({ error: 'Not authorized to submit this self-study' });
     }
 

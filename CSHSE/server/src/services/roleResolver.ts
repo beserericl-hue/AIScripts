@@ -26,12 +26,31 @@ export interface RoleAssignmentLike {
 
 export interface RoleBearer {
   role?: string;
+  // Legacy single-institution scope (pre-CR-060 / un-migrated users). Used as a
+  // fallback when roleAssignments is empty.
+  institutionId?: unknown;
   isSuperuser?: boolean;
   realIsSuperuser?: boolean;
   roleAssignments?: RoleAssignmentLike[] | null;
 }
 
-const REVIEWER_ROLES: ReadonlySet<string> = new Set(['reader', 'lead_reader']);
+const SCOPED_ROLES: ReadonlySet<string> = new Set(['program_coordinator', 'reader', 'lead_reader']);
+
+/**
+ * The bearer's effective assignments. Prefers `roleAssignments`; if those are
+ * absent/empty, falls back to the LEGACY single `role` + `institutionId` (so a
+ * user the CR-060 migration hasn't touched, or one created through an old code
+ * path, still resolves correctly). Admin/superuser have no institution-scoped
+ * assignment here (handled separately via isGlobalAdmin).
+ */
+function effectiveAssignments(u: RoleBearer | null | undefined): RoleAssignmentLike[] {
+  const ra = u?.roleAssignments || [];
+  if (ra.length > 0) return ra;
+  if (u && u.role && SCOPED_ROLES.has(u.role) && u.institutionId) {
+    return [{ role: u.role, institutionId: u.institutionId }];
+  }
+  return [];
+}
 
 /** Normalize any id-ish value (ObjectId | string | populated doc) to a string. */
 export function idStr(v: unknown): string {
@@ -58,7 +77,7 @@ export function rolesAt(u: RoleBearer | null | undefined, institutionId: unknown
   if (!u) return out;
   const target = idStr(institutionId);
   if (!target) return out;
-  for (const a of (u.roleAssignments || [])) {
+  for (const a of effectiveAssignments(u)) {
     if (idStr(a.institutionId) === target) out.add(String(a.role));
   }
   return out;
@@ -84,7 +103,7 @@ export function hasRoleAt(
 /** Distinct institution ids (as strings) where the bearer holds ANY role. */
 export function accessibleInstitutionIds(u: RoleBearer | null | undefined): string[] {
   const set = new Set<string>();
-  for (const a of (u?.roleAssignments || [])) {
+  for (const a of effectiveAssignments(u)) {
     const id = idStr(a.institutionId);
     if (id) set.add(id);
   }
@@ -97,7 +116,7 @@ export function institutionIdsWithRole(
   role: InstitutionScopedRole
 ): string[] {
   const set = new Set<string>();
-  for (const a of (u?.roleAssignments || [])) {
+  for (const a of effectiveAssignments(u)) {
     if (a.role === role || (role === 'reader' && a.role === 'lead_reader')) {
       const id = idStr(a.institutionId);
       if (id) set.add(id);

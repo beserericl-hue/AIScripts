@@ -3,6 +3,7 @@ import { User } from '../models/User';
 import { Institution } from '../models/Institution';
 import { Invitation } from '../models/Invitation';
 import mongoose from 'mongoose';
+import { isGlobalAdmin, institutionIdsWithRole, validateRoleAssignments } from '../services/roleResolver';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -10,6 +11,10 @@ interface AuthenticatedRequest extends Request {
     name: string;
     role: string;
     institutionId?: string;
+    isSuperuser?: boolean;
+    realIsSuperuser?: boolean;
+    // CR-060 — per-institution role assignments (for role-by-institution scoping).
+    roleAssignments?: Array<{ role: string; institutionId: string; institutionName?: string }>;
   };
 }
 
@@ -24,17 +29,17 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response) => {
     // Build query based on user's role
     const query: any = {};
 
-    // Only admin can see all users
-    if (userRole !== 'admin') {
-      // Lead readers can see readers assigned to their institutions
-      if (userRole === 'lead_reader') {
+    // CR-060 — role-by-institution scoping. Global admins/superusers see all;
+    // a lead reader (anywhere) sees the readers/PCs committee; a Program
+    // Coordinator sees users at the institution(s) where they coordinate.
+    if (!isGlobalAdmin(req.user)) {
+      const leadInsts = institutionIdsWithRole(req.user, 'lead_reader');
+      const pcInsts = institutionIdsWithRole(req.user, 'program_coordinator');
+      if (leadInsts.length > 0) {
         query.role = { $in: ['reader', 'program_coordinator'] };
-      }
-      // Program coordinators can only see users from their institution
-      else if (userRole === 'program_coordinator') {
-        query.institutionId = req.user?.institutionId;
-      }
-      else {
+      } else if (pcInsts.length > 0) {
+        query.institutionId = { $in: pcInsts.map((id) => new mongoose.Types.ObjectId(id)) };
+      } else {
         return res.status(403).json({ error: 'Access denied' });
       }
     }
@@ -406,8 +411,6 @@ export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Res
     if (req.user?.role !== 'admin' && !(req.user as any)?.isSuperuser) {
       return res.status(403).json({ error: 'Admin access required' });
     }
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { validateRoleAssignments } = require('../services/roleResolver');
     const input = Array.isArray(req.body?.roleAssignments) ? req.body.roleAssignments : [];
     const { ok, error, normalized } = validateRoleAssignments(input);
     if (!ok) return res.status(400).json({ error });
