@@ -323,6 +323,7 @@ describe('GET /api/submissions/:id/workflow-summary — count correctness', () =
       introductions: 0,
       specItems: 0,
       bySpec: [],
+      reviewed: 0,
     });
     expect(res.body.selfStudy.specsValidated).toBe(0);
     expect(res.body.selfStudy.narrativesWritten).toBe(0);
@@ -331,7 +332,7 @@ describe('GET /api/submissions/:id/workflow-summary — count correctness', () =
     expect(res.body.submit.ready).toBe(false);
   });
 
-  it('CR-048 — draft counts exclude approved + discarded items (un-triaged only)', async () => {
+  it('workflow-summary — drafts report category TOTALS; reviewed = approved+discarded count', async () => {
     const inst = new mongoose.Types.ObjectId();
     const { user } = await createUser({
       role: 'program_coordinator',
@@ -355,16 +356,20 @@ describe('GET /api/submissions/:id/workflow-summary — count correctness', () =
       .get(`/api/submissions/${sub._id}/workflow-summary`)
       .set('Authorization', `Bearer ${token}`);
 
+    // Drafts are CATEGORY TOTALS (the client renders "In review (totals) ·
+    // N reviewed"); `reviewed` carries the approved+discarded count so the UI
+    // shows triage progress against the totals.
     expect(res.status).toBe(200);
-    expect(res.body.drafts.cvs).toBe(1); // cv-2 (cv-1 approved)
-    expect(res.body.drafts.syllabi).toBe(2); // ed-2, ed-3 (ed-1 discarded)
+    expect(res.body.drafts.cvs).toBe(2); // cv-1, cv-2
+    expect(res.body.drafts.syllabi).toBe(3); // ed-1, ed-2, ed-3
     expect(res.body.drafts.papers).toBe(1); // ed-4
     expect(res.body.drafts.introductions).toBe(2); // in-1, in-2
-    expect(res.body.drafts.specItems).toBe(3); // 1.a n-1 + 2.c (n-3 + et-1); n-2 discarded
+    expect(res.body.drafts.specItems).toBe(4); // 1.a n-1 + 2.c (n-2, n-3, et-1)
+    expect(res.body.drafts.reviewed).toBe(3); // cv-1 approved + ed-1, n-2 discarded
     expect(res.body.drafts.bySpec).toEqual(
       expect.arrayContaining([
         { std: '1', spec: 'a', count: 1 },
-        { std: '2', spec: 'c', count: 2 },
+        { std: '2', spec: 'c', count: 3 },
       ])
     );
   });

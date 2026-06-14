@@ -103,7 +103,7 @@ async function main() {
     const s = await api('GET', `/api/imports/${cap.importId}/ai-status`);
     aiStat = s.data?.aiStatus || s.data?.status || '';
     const prog = s.data?.progress ?? '';
-    if (['finished', 'complete', 'completed', 'done'].includes(String(aiStat).toLowerCase())) { aiDone = true; break; }
+    if (['finished', 'complete', 'completed', 'done', 'parsed', 'ready'].includes(String(aiStat).toLowerCase())) { aiDone = true; break; }
     if (['error', 'failed'].includes(String(aiStat).toLowerCase())) break;
     if (i % 4 === 0) log(`   …ai-status=${aiStat} progress=${prog} (${i*8}s)`);
     await sleep(8000);

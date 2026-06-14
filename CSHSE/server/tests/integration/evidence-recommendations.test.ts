@@ -22,11 +22,16 @@ import { createUser, signTokenFor } from '../helpers/factories';
 let recommendSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  // recommendEvidence resolves to the structured { ready, data } envelope
+  // (ready:false on the 501 "not shipped" stub; ready:true + data otherwise).
   recommendSpy = vi.spyOn(ai, 'recommendEvidence').mockResolvedValue({
-    chunks: [
-      { chunkId: 'c1', score: 0.91, payload: { text: 'org chart', filename: 'a.pdf' } } as any,
-      { chunkId: 'c2', score: 0.84, payload: { text: 'mission', filename: 'b.pdf' } } as any
-    ]
+    ready: true,
+    data: {
+      chunks: [
+        { chunkId: 'c1', score: 0.91, payload: { text: 'org chart', filename: 'a.pdf' } } as any,
+        { chunkId: 'c2', score: 0.84, payload: { text: 'mission', filename: 'b.pdf' } } as any
+      ]
+    }
   } as any);
 });
 
@@ -114,7 +119,7 @@ describe('CR-018 — evidence-recommendations endpoint', () => {
     expect((recommendSpy.mock.calls[0][0] as any).topK).toBe(3);
 
     vi.clearAllMocks();
-    recommendSpy.mockResolvedValue({ chunks: [] } as any);
+    recommendSpy.mockResolvedValue({ ready: true, data: { chunks: [] } } as any);
     const r2 = await request(app)
       .get(`/api/submissions/${sid}/specs/1/a/evidence-recommendations?topK=99`)
       .set('Authorization', `Bearer ${readerTok}`);
