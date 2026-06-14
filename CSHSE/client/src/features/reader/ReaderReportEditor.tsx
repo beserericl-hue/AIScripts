@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
@@ -78,6 +78,26 @@ export function ReaderReportEditor(): JSX.Element {
   const isLeadOrAdmin = effectiveRole === 'lead_reader' || effectiveRole === 'admin';
 
   const [rows, setRows] = useState<ReportRow[]>([]);
+
+  // Flat, in-document-order list of every specification across all standards, so
+  // each checklist panel can carry prev/next buttons that walk to the next
+  // spec's checklist (mirrors the per-comment prev/next walker the readers asked
+  // to also have on the checklist objects).
+  const orderedSpecs = useMemo(
+    () => rows.flatMap((r) => r.specs.map((sp) => ({ std: r.code, spec: sp.specCode }))),
+    [rows]
+  );
+  const scrollToSpec = useCallback((std: string, spec: string) => {
+    const el = document.getElementById(`rr-spec-${std}-${spec}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Flash the checklist box so the reader sees where they landed.
+    const chk = el.querySelector('[data-testid^="rr-check-"]') as HTMLElement | null;
+    if (chk) {
+      chk.classList.add('ring-2', 'ring-teal-400');
+      setTimeout(() => chk.classList.remove('ring-2', 'ring-teal-400'), 1200);
+    }
+  }, []);
   const [recommendation, setRecommendation] = useState('');
   const [acceptanceVote, setAcceptanceVote] = useState<AcceptanceVote>('');
   // The far-right "All comments" chat panel is OFF by default — comments now live
@@ -611,8 +631,44 @@ export function ReaderReportEditor(): JSX.Element {
               const checklistNode = (
                   <div className="lg:sticky lg:top-4 lg:w-80 lg:shrink-0">
                     <div data-testid={`rr-check-${r.code}-${sp.specCode}`} className="rounded-lg border-2 border-teal-300 bg-white shadow-sm">
-                      <div className="rounded-t-md bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">
-                        Reader’s checklist — Specification {r.code}.{sp.specCode}
+                      <div className="flex items-center justify-between gap-2 rounded-t-md bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">
+                        <span>Reader’s checklist — Specification {r.code}.{sp.specCode}</span>
+                        {(() => {
+                          // Prev/next walker across EVERY spec's checklist, in
+                          // document order — jumps to and flashes the next/prev
+                          // checklist so the reader can move spec-to-spec without
+                          // scrolling/hunting.
+                          const pos = orderedSpecs.findIndex((x) => x.std === r.code && x.spec === sp.specCode);
+                          const prev = pos > 0 ? orderedSpecs[pos - 1] : null;
+                          const next = pos >= 0 && pos < orderedSpecs.length - 1 ? orderedSpecs[pos + 1] : null;
+                          return (
+                            <span className="flex shrink-0 items-center gap-1">
+                              <button
+                                type="button"
+                                data-testid={`rr-check-prev-${r.code}-${sp.specCode}`}
+                                disabled={!prev}
+                                onClick={() => prev && scrollToSpec(prev.std, prev.spec)}
+                                title={prev ? `Previous checklist (${prev.std}.${prev.spec})` : 'First specification'}
+                                aria-label="Previous specification checklist"
+                                className="rounded border border-teal-300 p-0.5 text-teal-700 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                <ChevronUp className="h-3.5 w-3.5" />
+                              </button>
+                              <span className="tabular-nums font-normal text-teal-600">{pos + 1}/{orderedSpecs.length}</span>
+                              <button
+                                type="button"
+                                data-testid={`rr-check-next-${r.code}-${sp.specCode}`}
+                                disabled={!next}
+                                onClick={() => next && scrollToSpec(next.std, next.spec)}
+                                title={next ? `Next checklist (${next.std}.${next.spec})` : 'Last specification'}
+                                aria-label="Next specification checklist"
+                                className="rounded border border-teal-300 p-0.5 text-teal-700 hover:bg-teal-100 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                              </button>
+                            </span>
+                          );
+                        })()}
                       </div>
                       <div className="space-y-3 p-3">
                         {/* AI evaluation for THIS spec — a marker the reader clicks
