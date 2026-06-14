@@ -42,8 +42,8 @@ describe('postal client', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, opts] = fetchMock.mock.calls[0] as [string, any];
 
-    // URL is the /send/message path (NOT /api/v1/...).
-    expect(url).toBe(`${POSTAL_API_URL}/send/message`);
+    // URL is the live instance's send path (/api/v1/send/message — verified).
+    expect(url).toBe(`${POSTAL_API_URL}/api/v1/send/message`);
     // Lowercase x-server-api-key header (not Authorization).
     expect(opts.headers['x-server-api-key']).toBe('test-key-123');
     expect(opts.headers['Content-Type']).toBe('application/json');

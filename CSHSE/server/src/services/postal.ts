@@ -7,9 +7,13 @@
  * parameter — branding stays constant. Per-user identity goes in `reply_to`, so
  * replies route to the human who triggered the send while From stays branded.
  *
- * Wire contract (verified against the live courseworx.media instance — some
- * Postal docs disagree, these specifics are authoritative):
- *   POST  {POSTAL_API_URL}/send/message      (NOT /api/v1/send/message — 404s)
+ * Wire contract. NOTE: empirically verified against the live
+ * postal-admin.courseworx.media instance on 2026-06-14, the send route is
+ * `/api/v1/send/message` (the standard Postal path) — `/send/message` returns
+ * 404 there. (The integration brief claimed the reverse; the live probe is
+ * authoritative: /send/message → 404, /api/v1/send/message → 200.) Override with
+ * POSTAL_SEND_PATH if a future deployment differs.
+ *   POST  {POSTAL_API_URL}{POSTAL_SEND_PATH=/api/v1/send/message}
  *   header  x-server-api-key: <POSTAL_API_KEY>   (lowercase; not Authorization)
  *   Content-Type: application/json
  *   body: { to[], from, subject, html_body, plain_body, reply_to?, cc?, bcc?,
@@ -22,6 +26,8 @@
 
 const POSTAL_API_URL = (process.env.POSTAL_API_URL || 'https://postal-admin.courseworx.media').replace(/\/+$/, '');
 const POSTAL_DEFAULT_FROM = process.env.POSTAL_DEFAULT_FROM || 'cshse@courseworx.media';
+// Empirically /api/v1/send/message on the live courseworx.media Postal instance.
+const POSTAL_SEND_PATH = process.env.POSTAL_SEND_PATH || '/api/v1/send/message';
 
 export interface PostalAttachment {
   name: string;
@@ -108,7 +114,7 @@ export async function sendEmail(input: SendEmailInput): Promise<{ messageId: str
     }));
   }
 
-  const url = `${POSTAL_API_URL}/send/message`;
+  const url = `${POSTAL_API_URL}${POSTAL_SEND_PATH}`;
   const recipientsForLog = to.join(',');
   let lastErr: unknown;
 
