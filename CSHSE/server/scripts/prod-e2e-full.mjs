@@ -117,32 +117,53 @@ async function main() {
   } else rec('8 apply-ai (skipped, import not finished)', false);
 
   // 9 VALIDATE-ALL (background -> cshse-ai /ai/section/evaluate)
+  // 8b SEED a narrative so validation has real content to evaluate — this is
+  //    what proves the web -> cshse-ai /ai/section/evaluate path live (the
+  //    sample import can yield 0 narratives).
+  const seedNarr = await api('PATCH', `/api/submissions/${cap.submissionId}/narrative`, { body: {
+    standardCode: '1', specCode: 'a',
+    content: '<p>The program maintains a clearly articulated mission aligned with CSHSE standards, reviewed annually by faculty and community stakeholders. Curriculum maps demonstrate coverage of the human services competencies across all required specifications, with measurable student learning outcomes.</p>' } });
+  rec('8b seed narrative (std 1 spec a)', seedNarr.status < 300, `status=${seedNarr.status}`);
+
   r = await api('POST', `/api/submissions/${cap.submissionId}/review/evaluate-all`, { body: {} });
   rec('9 evaluate-all enqueued', r.status < 300, `status=${r.status} ${JSON.stringify(r.data).slice(0,100)}`);
 
-  // 10 POLL eval progress (<= 10 min)
+  // 10 POLL eval progress (<= 10 min). Break when the queue drains; a 0-content
+  //    submission (nothing queued) is a tolerated pass after a few polls.
   let evalDone = false, evalInfo = '';
   for (let i = 0; i < 75; i++) {
     const s = await api('GET', `/api/submissions/${cap.submissionId}/review/eval-progress`);
     const { total, done, remaining, running } = s.data || {};
     evalInfo = `done=${done}/${total} remaining=${remaining}`;
-    if (running === false && (total > 0)) { evalDone = true; break; }
+    if (running === false && total > 0) { evalDone = done >= total; break; }
+    if (running === false && total === 0 && i >= 3) { evalDone = true; evalInfo = 'no specs with content'; break; }
     if (i % 4 === 0) log(`   …${evalInfo} running=${running} (${i*8}s)`);
     await sleep(8000);
   }
-  rec('10 AI validation completed', evalDone, evalInfo);
+  rec('10 AI validation completed (web->cshse-ai/section/evaluate)', evalDone, evalInfo);
 
-  // 11 SUBMIT self-study
-  r = await api('POST', `/api/submissions/${cap.submissionId}/submit`, { body: {} });
-  rec('11 submit self-study', r.status < 300, `status=${r.status} -> ${(r.data?.submission||{}).status}`);
+  // 11 SUBMIT self-study. A fresh smoke submission isn't fully validated, so use
+  //    the CR-008 override-with-reason path (the app correctly hard-blocks an
+  //    incomplete submit otherwise). Submit also enqueues a submit-time
+  //    Validate-all (every spec-with-content -> cshse-ai).
+  r = await api('POST', `/api/submissions/${cap.submissionId}/submit`, { body: {
+    override: true,
+    overrideReason: 'E2E regression smoke — force-submit to exercise the reader/lead/board pipeline end-to-end.' } });
+  rec('11 submit self-study (override)', r.status < 300, `status=${r.status} -> ${(r.data?.submission||{}).status}`);
 
-  // 12 ASSIGN READERS
-  r = await api('POST', `/api/reviews/submissions/${cap.submissionId}/assign`, { body: {
+  // 12 ASSIGN READERS — then fetch the created Review docs (robust to the
+  //    assign response shape).
+  const asg = await api('POST', `/api/reviews/submissions/${cap.submissionId}/assign`, { body: {
     readerIds: [rd1.uid, rd2.uid], reason: 'E2E smoke reader assignment' } });
-  const reviews = r.data?.reviews || r.data?.assignments || [];
+  const rl = await api('GET', `/api/reviews/submissions/${cap.submissionId}`);
+  const reviews = Array.isArray(rl.data) ? rl.data : (rl.data?.reviews || rl.data?.assignments || []);
   cap.reviewIds = reviews.map(idOf).filter(Boolean);
-  const reviewByReader = {}; reviews.forEach(v => { reviewByReader[v.reviewerId || v.readerId] = idOf(v); });
-  rec('12 assign readers', r.status < 300 && reviews.length >= 1, `status=${r.status} reviews=${reviews.length}`);
+  const reviewByReader = {};
+  reviews.forEach(v => {
+    const rid = v.reviewerId?._id || v.reviewerId || v.readerId || v.userId;
+    if (rid) reviewByReader[String(rid)] = idOf(v);
+  });
+  rec('12 assign readers', asg.status < 300 && reviews.length >= 2, `assign=${asg.status} reviews=${reviews.length}`);
 
   // 13 READER SCORING (impersonate each reader) — score a few specs + final + submit
   async function readerFlow(uid, label) {

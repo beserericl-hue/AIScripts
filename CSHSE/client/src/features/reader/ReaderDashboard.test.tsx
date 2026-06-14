@@ -49,8 +49,10 @@ describe('ReaderDashboardView', () => {
     expect(screen.getAllByText(/Human Services/).length).toBe(2);
     expect(screen.getByText('Under review')).toBeInTheDocument();
     expect(screen.getByText('Submitted — awaiting assignment')).toBeInTheDocument();
-    expect(screen.getByTestId('reader-submission-a')).toHaveAttribute('href', '/reader/a');
-    expect(screen.getByTestId('reader-submission-b')).toHaveAttribute('href', '/reader/b');
+    // Readers open the submission in the SHARED Self-Study Editor (not a
+    // separate /reader/:id flat screen) — see ReaderDashboard.tsx.
+    expect(screen.getByTestId('reader-submission-a')).toHaveAttribute('href', '/self-study/a');
+    expect(screen.getByTestId('reader-submission-b')).toHaveAttribute('href', '/self-study/b');
   });
 
   it('renders an error banner if the query failed', () => {

@@ -22,7 +22,7 @@
  */
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 import { ItemCardList } from './ItemCardList';
@@ -146,71 +146,11 @@ describe('<ItemCardList />', () => {
     expect(onSelect).toHaveBeenCalledWith('s1');
   });
 
-  it('toolbar bulk actions fire onBulkAction with the checked sectionIds', async () => {
-    const onBulkAction = vi.fn();
-    const bucket = mkBucket({
-      narratives: [
-        mkItem({ sectionId: 's1', heading: 'A' }),
-        mkItem({ sectionId: 's2', heading: 'B' }),
-      ],
-    });
-    render(
-      <ItemCardList
-        selectedKey="1.a"
-        bucket={bucket}
-        unplacedTags={[]}
-        placeholders={[]}
-        matrices={[]}
-        selectedSectionId={null}
-        onSelect={() => {}}
-        onBulkAction={onBulkAction}
-      />
-    );
-    // Check the per-item checkbox for "A" (Select item).
-    const itemCheckboxes = screen.getAllByLabelText(/Select item/i);
-    await userEvent.click(itemCheckboxes[0]);
-    // Toolbar buttons.
-    await userEvent.click(screen.getByRole('button', { name: /Send to tags/i }));
-    expect(onBulkAction).toHaveBeenCalledWith('to-tags', ['s1']);
-
-    // Re-check then Apply as file.
-    await userEvent.click(itemCheckboxes[0]);
-    await userEvent.click(screen.getByRole('button', { name: /Apply as file/i }));
-    expect(onBulkAction).toHaveBeenLastCalledWith('to-file', ['s1']);
-
-    await userEvent.click(itemCheckboxes[0]);
-    await userEvent.click(screen.getByRole('button', { name: /Reassign/i }));
-    expect(onBulkAction).toHaveBeenLastCalledWith('reassign', ['s1']);
-  });
-
-  it('"Select all" toolbar checkbox toggles every card', async () => {
-    const onBulkAction = vi.fn();
-    const bucket = mkBucket({
-      narratives: [
-        mkItem({ sectionId: 's1', heading: 'A' }),
-        mkItem({ sectionId: 's2', heading: 'B' }),
-      ],
-    });
-    render(
-      <ItemCardList
-        selectedKey="1.a"
-        bucket={bucket}
-        unplacedTags={[]}
-        placeholders={[]}
-        matrices={[]}
-        selectedSectionId={null}
-        onSelect={() => {}}
-        onBulkAction={onBulkAction}
-      />
-    );
-    // The first checkbox in the toolbar is "select-all". Click it,
-    // then a bulk action — both sectionIds should land.
-    const toolbar = screen.getByText(/\d+ items?/i).closest('div')!;
-    const selectAll = within(toolbar).getByRole('checkbox');
-    await userEvent.click(selectAll);
-    await userEvent.click(screen.getByRole('button', { name: /Send to tags/i }));
-    expect(onBulkAction).toHaveBeenCalledWith('to-tags', expect.arrayContaining(['s1', 's2']));
-  });
+  // NOTE: the per-item "select + Send-to-tags / Apply-as-file / Reassign"
+  // bulk-action toolbar was removed in the 2026-06-07 redesign — the per-card
+  // checkbox now represents APPROVAL and the toolbar exposes "Approve all" /
+  // "Clear approvals" (covered by the "Approve all" test below). The obsolete
+  // selection-toolbar tests were removed with that change.
 
   it('Approve all fires onApproveAll with every rowId in the active view', async () => {
     const onApproveAll = vi.fn();
