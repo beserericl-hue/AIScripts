@@ -2293,3 +2293,11 @@ Phase 3 is approved to build (gate rollout + dashboard assignment list); Phase 3
 - `submissionController`: getSubmission visibility, listSubmissions PC+reviewer OR-scope, and `pcCanWrite()` write gates (saveNarrative/submit/revert/markNA/clearNA/preflight/evaluateSpec/workflow). `userController.getUsers` PC scoping via institutionIdsWithRole.
 - Tests: `tests/integration/cr060-multi-role.test.ts` (8, one per requirement) green; regression-risk suite (isolation, reader-access-hardening, cr055, cr057, submission-lockout, jv-filter, evidence-owner-access) green. Commit f1f2a4d.
 - Remaining: report/score reader-report sub-gates, dashboard assignment list, Phase 3b institution roster UI.
+
+## 2026-06-14 — update | CR-060 Phases 3+3b complete (shipped)
+
+[[cr-060-multi-role-per-user-by-institution]] fully built + tested + deployed.
+- Reader-side gates: reportController (readerMayAccess Assignment-authoritative; isLeadOrAdmin + PDF gates multi-role) + scoreController (canScore/isLeadOrAdminAnywhere; reviewerRole derivation; getScores/summary scoping). Global-reader path preserved (cr057 chain green). Commit aebbfe2.
+- Institution roster UI (Phase 3b): add/remove PCs/readers/lead on each institution card via roleAssignments, Rule-1 guarded. Commit cdfb59d.
+- Dashboard role chips (decision 2): /auth/me returns roleAssignments; multi-institution users see clickable role@institution chips. Commit 0c69fd9.
+- Tests: cr060-multi-role.test.ts (10) green; regression (isolation, reader-access, cr055, cr057, submission-lockout, jv-filter, evidence-owner) green. Status → shipped (pending in-app sign-off).

@@ -3,12 +3,14 @@ name: CR-060 — Multi-role per user (role-by-institution)
 description: A user can hold different roles at different institutions (PC at A, Reader/Lead Reader at B) and an institution can have multiple PCs. New authoritative User.roleAssignments[] + roleResolver algorithm + admin Manage-roles UI. Phase 1+2 shipped; Phase 3 (access-gate rollout) pending review.
 type: change-request
 cr_id: CR-060
-status: in-progress
+status: shipped
 priority: P1
 source: "Administrator review 2026-06-14 (admin/settings Users + Institutions screens) · [[cr-017-cross-institution-isolation-audit]] · commit fd98f24 (Phase 1+2)"
 sprint_target: Post-beta admin hardening
 tags: [access-control, rbac, roles, admin, institution, multi-role]
 last_reviewed: 2026-06-14
+shipped_notes: |
+  Phases 1+2+3+3b all code-complete, integration-tested (cr060 ×10 + regression suite green), and deployed to developer (fd98f24 / f1f2a4d / aebbfe2 / cdfb59d / 0c69fd9). Pending the administrator's in-app sign-off.
 ---
 
 # CR-060 — Multi-role per user (role-by-institution)
@@ -70,9 +72,9 @@ From the administrator's 2026-06-14 review of `admin/settings` (Users + Institut
 - [x] Migration backfilled existing users (17 users, 0 conflicts; one correctly got lead_reader at two institutions).
 - [x] Live-verified: same-institution PC+reader → 400; reader@Stevenson + PC@E2E → 200.
 - [x] **Phase 3 (core)** — submission access gates honor `roleAssignments` (getSubmission visibility, listSubmissions PC+reviewer OR-scope, PC write gates on saveNarrative/submit/revert/markNA/clearNA/preflight/evaluateSpec/workflow, getUsers PC scoping); reader visibility stays Assignment-gated (decision 1). Backward-compat fallback for un-migrated users. 8 integration tests + regression suite green. Commit f1f2a4d.
-- [ ] **Phase 3 (remainder)** — reportController/scoreController reader-report + score sub-gates onto `roleAssignments`.
-- [ ] **Phase 3** — dashboard lists every one of the user's role assignments (institution + role), each clickable to enter that context (decision 2).
-- [ ] **Phase 3b** — institution-record roster UI: list + add/remove PCs / readers / lead readers (decision 3).
+- [x] **Phase 3 (remainder)** — reportController (`readerMayAccess` Assignment-authoritative; `isLeadOrAdmin` + PDF gates multi-role) + scoreController (`canScore`/`isLeadOrAdminAnywhere`; reviewerRole derivation) onto `roleAssignments`; global-reader path preserved. cr057 chain green. Commit aebbfe2.
+- [x] **Phase 3** — dashboard "Your roles & institutions" card lists every role@institution as clickable chips (decision 2); `/auth/me` returns roleAssignments. Commit 0c69fd9.
+- [x] **Phase 3b** — institution roster on each institution card: add/remove PCs / readers / lead readers via roleAssignments, Rule-1 guarded (decision 3). Commit cdfb59d.
 
 ## Files affected (Phase 1+2 — commit fd98f24, 2026-06-14, branch developer)
 
