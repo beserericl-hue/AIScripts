@@ -26,8 +26,13 @@
 
 const POSTAL_API_URL = (process.env.POSTAL_API_URL || 'https://postal-admin.courseworx.media').replace(/\/+$/, '');
 const POSTAL_DEFAULT_FROM = process.env.POSTAL_DEFAULT_FROM || 'cshse@courseworx.media';
-// Empirically /api/v1/send/message on the live courseworx.media Postal instance.
-const POSTAL_SEND_PATH = process.env.POSTAL_SEND_PATH || '/api/v1/send/message';
+// Resolve the send URL to <host>/api/v1/send/message regardless of whether the
+// configured base already ends in /api/v1 — the WritersWorkbench convention sets
+// POSTAL_API_URL to ".../api/v1", a bare host also works. An explicit
+// POSTAL_SEND_PATH overrides for any future deployment that differs.
+const POSTAL_SEND_URL = process.env.POSTAL_SEND_PATH
+  ? `${POSTAL_API_URL}${process.env.POSTAL_SEND_PATH}`
+  : `${POSTAL_API_URL.replace(/\/api\/v1$/i, '')}/api/v1/send/message`;
 
 export interface PostalAttachment {
   name: string;
@@ -114,7 +119,7 @@ export async function sendEmail(input: SendEmailInput): Promise<{ messageId: str
     }));
   }
 
-  const url = `${POSTAL_API_URL}${POSTAL_SEND_PATH}`;
+  const url = POSTAL_SEND_URL;
   const recipientsForLog = to.join(',');
   let lastErr: unknown;
 

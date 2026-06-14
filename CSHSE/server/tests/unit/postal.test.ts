@@ -75,6 +75,19 @@ describe('postal client', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // 4xx is a client bug — no retry
   });
 
+  it('does not double /api/v1 when POSTAL_API_URL already includes it (WritersWorkbench convention)', async () => {
+    process.env.POSTAL_API_URL = 'https://postal-test.example/api/v1';
+    vi.resetModules();
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify({ status: 'success', data: { message_id: 'm' } }), { status: 200 }
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const { sendEmail } = await import('../../src/services/postal');
+    await sendEmail({ to: 'r@example.com', subject: 's', text: 't' });
+    const [url] = fetchMock.mock.calls[0] as [string, any];
+    expect(url).toBe('https://postal-test.example/api/v1/send/message');
+  });
+
   it('throws when POSTAL_API_KEY is missing', async () => {
     delete process.env.POSTAL_API_KEY;
     vi.resetModules();
