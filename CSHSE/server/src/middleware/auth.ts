@@ -16,6 +16,11 @@ export interface AuthenticatedRequest extends Request {
     lastName?: string;
     name: string;
     institutionId?: string;
+    // CR-060 — the effective identity's per-institution role assignments
+    // (Program Coordinator at A, Reader/Lead Reader at B, …). Authoritative for
+    // role-by-institution access checks via services/roleResolver. While
+    // impersonating a specific user these are the IMPERSONATED user's.
+    roleAssignments?: Array<{ role: string; institutionId: string; institutionName?: string }>;
     // EFFECTIVE elevation: false while impersonating a non-admin role, so all
     // access checks treat the impersonated session as that role.
     isSuperuser?: boolean;
@@ -69,7 +74,7 @@ export const authenticate = async (
 
       // Get full user info from database
       const user = await User.findById(decoded.id).select(
-        'email role firstName lastName institutionId isSuperuser'
+        'email role firstName lastName institutionId isSuperuser roleAssignments'
       );
 
       if (!user) {
@@ -108,7 +113,7 @@ export const authenticate = async (
       if (isImpersonating && impersonatedUserId) {
         try {
           const target = await User.findById(impersonatedUserId).select(
-            'email role firstName lastName institutionId isSuperuser'
+            'email role firstName lastName institutionId isSuperuser roleAssignments'
           );
           if (target) identityUser = target;
         } catch { /* invalid id — fall back to role-only impersonation below */ }
@@ -155,6 +160,13 @@ export const authenticate = async (
         lastName: identityUser.lastName,
         name: identityName,
         institutionId: identityUser.institutionId?.toString(),
+        // CR-060 — carry the EFFECTIVE identity's per-institution role
+        // assignments (the impersonated user's while impersonating).
+        roleAssignments: (identityUser.roleAssignments || []).map((a: any) => ({
+          role: String(a.role),
+          institutionId: a.institutionId?.toString?.() || String(a.institutionId),
+          institutionName: a.institutionName
+        })),
         isSuperuser: effectiveIsSuperuser,
         realIsSuperuser: user.isSuperuser,
         impersonation
@@ -199,7 +211,7 @@ export const optionalAuth = async (
       const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
 
       const user = await User.findById(decoded.id).select(
-        'email role firstName lastName institutionId isSuperuser'
+        'email role firstName lastName institutionId isSuperuser roleAssignments'
       );
 
       if (user) {
@@ -212,6 +224,11 @@ export const optionalAuth = async (
           lastName: user.lastName,
           name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email,
           institutionId: user.institutionId?.toString(),
+          roleAssignments: (user.roleAssignments || []).map((a: any) => ({
+            role: String(a.role),
+            institutionId: a.institutionId?.toString?.() || String(a.institutionId),
+            institutionName: a.institutionName
+          })),
           isSuperuser: user.isSuperuser
         };
       }

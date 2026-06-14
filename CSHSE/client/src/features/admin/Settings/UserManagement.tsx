@@ -18,6 +18,12 @@ import {
   Building2
 } from 'lucide-react';
 
+interface RoleAssignment {
+  role: 'program_coordinator' | 'reader' | 'lead_reader';
+  institutionId: string;
+  institutionName?: string;
+}
+
 interface User {
   _id: string;
   email: string;
@@ -26,7 +32,12 @@ interface User {
   name: string;
   role: string;
   status: string;
+  institutionId?: string;
   institutionName?: string;
+  isSuperuser?: boolean;
+  // CR-060 — per-institution roles (PC at A, Reader/Lead at B). May be absent on
+  // legacy records that predate the migration.
+  roleAssignments?: RoleAssignment[];
   lastLogin?: string;
   createdAt: string;
 }
@@ -74,6 +85,10 @@ export function UserManagement() {
     role: 'reader',
     institutionId: ''
   });
+  // CR-060 — manage-roles modal state.
+  const [roleUser, setRoleUser] = useState<User | null>(null);
+  const [roleDraft, setRoleDraft] = useState<RoleAssignment[]>([]);
+  const [roleError, setRoleError] = useState<string | null>(null);
 
   // Fetch users
   const { data: usersData, isLoading: usersLoading } = useQuery({
@@ -151,6 +166,57 @@ export function UserManagement() {
   const users: User[] = usersData?.users || [];
   const invitations: Invitation[] = invitationsData?.invitations || [];
   const institutions = institutionsData?.institutions || [];
+
+  // CR-060 — save a user's role assignments.
+  const roleMutation = useMutation({
+    mutationFn: async ({ userId, roleAssignments }: { userId: string; roleAssignments: RoleAssignment[] }) => {
+      const response = await api.put(`/api/users/${userId}/role-assignments`, { roleAssignments });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['institutions'] });
+      setRoleUser(null);
+      setRoleDraft([]);
+      setRoleError(null);
+    },
+    onError: (err: any) => {
+      setRoleError(err?.response?.data?.error || 'Failed to save roles');
+    }
+  });
+
+  // Open the manage-roles modal seeded with the user's current assignments
+  // (falling back to the legacy single role/institution for un-migrated users).
+  const openRoleModal = (user: User) => {
+    setRoleError(null);
+    const seed: RoleAssignment[] =
+      user.roleAssignments && user.roleAssignments.length > 0
+        ? user.roleAssignments.map((a) => ({ ...a }))
+        : (user.institutionId && user.role !== 'admin'
+            ? [{ role: user.role as RoleAssignment['role'], institutionId: user.institutionId, institutionName: user.institutionName }]
+            : []);
+    setRoleUser(user);
+    setRoleDraft(seed);
+  };
+
+  // Client-side mirror of the server's Rule 1 (no PC + reviewer in one
+  // institution) so the admin gets instant feedback before saving.
+  const roleConflict = (): string | null => {
+    const byInst = new Map<string, Set<string>>();
+    for (const a of roleDraft) {
+      if (!a.institutionId) return 'Pick an institution for every role row.';
+      if (!byInst.has(a.institutionId)) byInst.set(a.institutionId, new Set());
+      byInst.get(a.institutionId)!.add(a.role);
+    }
+    for (const [, roles] of byInst) {
+      const pc = roles.has('program_coordinator');
+      const reviewer = roles.has('reader') || roles.has('lead_reader');
+      if (pc && reviewer) {
+        return 'A user cannot be Program Coordinator and Reader/Lead Reader at the same institution.';
+      }
+    }
+    return null;
+  };
 
   const filteredUsers = users.filter(
     user =>
@@ -283,19 +349,39 @@ export function UserManagement() {
                         <p className="text-sm text-gray-500">{user.email}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className={`px-2 py-1 text-xs rounded-full ${roleColors[user.role]}`}>
-                        {roleLabels[user.role]}
-                      </span>
-                      {user.institutionName && (
-                        <span className="flex items-center gap-1 text-sm text-gray-500">
-                          <Building2 className="w-4 h-4" />
-                          {user.institutionName}
-                        </span>
-                      )}
-                      <span className="text-sm text-gray-400">
+                    <div className="flex items-center gap-3">
+                      {/* CR-060 — show every per-institution role; admins are global. */}
+                      <div className="flex max-w-md flex-wrap items-center justify-end gap-1.5">
+                        {user.role === 'admin' || user.isSuperuser ? (
+                          <span className={`px-2 py-1 text-xs rounded-full ${roleColors['admin']}`}>{roleLabels['admin']}</span>
+                        ) : user.roleAssignments && user.roleAssignments.length > 0 ? (
+                          user.roleAssignments.map((a, i) => (
+                            <span
+                              key={i}
+                              className={`px-2 py-0.5 text-xs rounded-full ${roleColors[a.role]}`}
+                              title={`${roleLabels[a.role]} at ${a.institutionName || a.institutionId}`}
+                            >
+                              {roleLabels[a.role]} · {a.institutionName || '—'}
+                            </span>
+                          ))
+                        ) : (
+                          <span className={`px-2 py-1 text-xs rounded-full ${roleColors[user.role]}`}>
+                            {roleLabels[user.role]}{user.institutionName ? ` · ${user.institutionName}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      <span className="whitespace-nowrap text-sm text-gray-400">
                         Last login: {formatDate(user.lastLogin)}
                       </span>
+                      {!(user.role === 'admin' || user.isSuperuser) && (
+                        <button
+                          onClick={() => openRoleModal(user)}
+                          className="rounded p-2 text-gray-400 hover:bg-teal-50 hover:text-teal-600"
+                          title="Manage roles"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => disableMutation.mutate(user._id)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
@@ -523,6 +609,100 @@ export function UserManagement() {
           </div>
         </div>
       )}
+
+      {/* CR-060 — Manage Roles modal: assign per-institution roles to a user. */}
+      {roleUser && (() => {
+        const conflict = roleConflict();
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-gray-200 p-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Manage roles — {roleUser.name}</h3>
+                  <p className="text-sm text-gray-500">{roleUser.email}</p>
+                </div>
+                <button onClick={() => { setRoleUser(null); setRoleError(null); }} className="rounded p-1 text-gray-400 hover:bg-gray-100">
+                  <XCircle className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="max-h-[60vh] space-y-3 overflow-y-auto p-4">
+                <p className="text-sm text-gray-600">
+                  A user can hold different roles at different institutions (e.g. Program Coordinator at one,
+                  Reader/Lead Reader at another). They cannot be a Program Coordinator and a reviewer at the
+                  <em> same</em> institution.
+                </p>
+
+                {roleDraft.length === 0 && (
+                  <p className="rounded border border-dashed border-gray-300 p-4 text-center text-sm text-gray-400">
+                    No roles assigned. Add one below.
+                  </p>
+                )}
+
+                {roleDraft.map((a, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <select
+                      value={a.role}
+                      onChange={(e) => setRoleDraft((d) => d.map((x, i) => i === idx ? { ...x, role: e.target.value as RoleAssignment['role'] } : x))}
+                      className="rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="program_coordinator">Program Coordinator</option>
+                      <option value="reader">Reader</option>
+                      <option value="lead_reader">Lead Reader</option>
+                    </select>
+                    <span className="text-sm text-gray-400">at</span>
+                    <select
+                      value={a.institutionId}
+                      onChange={(e) => {
+                        const inst = institutions.find((i: any) => i._id === e.target.value);
+                        setRoleDraft((d) => d.map((x, i) => i === idx ? { ...x, institutionId: e.target.value, institutionName: inst?.name } : x));
+                      }}
+                      className="flex-1 rounded border border-gray-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">— select institution —</option>
+                      {institutions.map((inst: any) => (
+                        <option key={inst._id} value={inst._id}>{inst.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => setRoleDraft((d) => d.filter((_, i) => i !== idx))}
+                      className="rounded p-2 text-gray-400 hover:bg-red-50 hover:text-red-600"
+                      title="Remove role"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+
+                <button
+                  onClick={() => setRoleDraft((d) => [...d, { role: 'reader', institutionId: '', institutionName: undefined }])}
+                  className="flex items-center gap-1 rounded border border-teal-300 px-3 py-1.5 text-sm font-medium text-teal-700 hover:bg-teal-50"
+                >
+                  <UserPlus className="h-4 w-4" /> Add role
+                </button>
+
+                {(conflict || roleError) && (
+                  <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{conflict || roleError}</p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 p-4">
+                <button onClick={() => { setRoleUser(null); setRoleError(null); }} className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900">
+                  Cancel
+                </button>
+                <button
+                  onClick={() => roleMutation.mutate({ userId: roleUser._id, roleAssignments: roleDraft })}
+                  disabled={!!conflict || roleMutation.isPending}
+                  className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm text-white hover:bg-teal-700 disabled:opacity-50"
+                >
+                  {roleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                  Save roles
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

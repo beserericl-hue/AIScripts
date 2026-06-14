@@ -370,3 +370,119 @@ export const removeFromSubmission = async (req: AuthenticatedRequest, res: Respo
     return res.status(500).json({ error: 'Failed to remove user from submission' });
   }
 };
+
+// ============================================================================
+// CR-060 — multi-role management. A user can hold different institution-scoped
+// roles at different institutions (PC at A, Reader/Lead Reader at B). These are
+// the authoritative source; the legacy single role/institutionId are kept as a
+// DERIVED "primary" for display + the impersonation identity.
+// ============================================================================
+
+/** Derive the back-compat primary {role, institutionId, institutionName} from a
+ *  user's role assignments. PC outranks lead_reader outranks reader. Admins are
+ *  left untouched. */
+function derivePrimary(assignments: Array<{ role: string; institutionId: any; institutionName?: string }>):
+  { role: string; institutionId?: any; institutionName?: string } | null {
+  if (!assignments || assignments.length === 0) return null;
+  const order = ['program_coordinator', 'lead_reader', 'reader'];
+  for (const role of order) {
+    const hit = assignments.find((a) => a.role === role);
+    if (hit) return { role, institutionId: hit.institutionId, institutionName: hit.institutionName };
+  }
+  return null;
+}
+
+/**
+ * PUT /api/users/:id/role-assignments  (Admin only)
+ * Body: { roleAssignments: [{ role, institutionId }] }
+ * Replaces the user's full assignment list. Enforces Rule 1 (no PC + reviewer
+ * at the same institution) via the roleResolver, normalizes (lead_reader
+ * absorbs reader), stamps institution names, and refreshes the derived primary
+ * role/institutionId. Best-effort syncs the legacy Institution roster fields so
+ * existing reads stay consistent until the access-gate rollout (Phase 3).
+ */
+export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'admin' && !(req.user as any)?.isSuperuser) {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { validateRoleAssignments } = require('../services/roleResolver');
+    const input = Array.isArray(req.body?.roleAssignments) ? req.body.roleAssignments : [];
+    const { ok, error, normalized } = validateRoleAssignments(input);
+    if (!ok) return res.status(400).json({ error });
+
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin' || user.isSuperuser) {
+      return res.status(400).json({ error: 'Admins / superusers are global and do not take per-institution roles.' });
+    }
+
+    // Validate every institution exists + collect names.
+    const instIds: string[] = [...new Set<string>(normalized.map((a: any) => String(a.institutionId)))];
+    const insts = await Institution.find({ _id: { $in: instIds } }).select('name').lean();
+    const nameById = new Map(insts.map((i: any) => [String(i._id), i.name]));
+    if (insts.length !== instIds.length) {
+      return res.status(400).json({ error: 'One or more institutions not found' });
+    }
+
+    const prevInstIds = new Set((user.roleAssignments || []).map((a: any) => String(a.institutionId)));
+
+    user.roleAssignments = normalized.map((a: any) => ({
+      role: a.role,
+      institutionId: new mongoose.Types.ObjectId(String(a.institutionId)),
+      institutionName: nameById.get(String(a.institutionId))
+    })) as any;
+
+    // Refresh the derived primary so legacy role/institutionId reads stay valid.
+    const primary = derivePrimary(user.roleAssignments as any);
+    if (primary) {
+      user.role = primary.role as any;
+      user.institutionId = primary.institutionId;
+      user.institutionName = primary.institutionName;
+    }
+    user.markModified('roleAssignments');
+    await user.save();
+
+    // Best-effort legacy-field sync so the existing Institution-based reads /
+    // dashboards stay consistent before Phase 3. (roleAssignments is canonical.)
+    const touched = new Set<string>([...prevInstIds, ...instIds]);
+    for (const instId of touched) {
+      try {
+        const inst = await Institution.findById(instId);
+        if (!inst) continue;
+        const myRoles = new Set(
+          (user.roleAssignments || [])
+            .filter((a: any) => String(a.institutionId) === instId)
+            .map((a: any) => a.role)
+        );
+        const uid = user._id as mongoose.Types.ObjectId;
+        // Readers array — add/remove this user.
+        const isReader = myRoles.has('reader') || myRoles.has('lead_reader');
+        const already = (inst.assignedReaderIds || []).some((r: any) => String(r) === String(uid));
+        if (isReader && !already) inst.assignedReaderIds.push(uid);
+        if (!isReader && already) inst.assignedReaderIds = inst.assignedReaderIds.filter((r: any) => String(r) !== String(uid));
+        // Lead reader (single legacy slot) — set if this user leads + empty; clear if this user no longer leads.
+        if (myRoles.has('lead_reader') && !inst.assignedLeadReaderId) inst.assignedLeadReaderId = uid;
+        if (!myRoles.has('lead_reader') && String(inst.assignedLeadReaderId || '') === String(uid)) inst.assignedLeadReaderId = undefined as any;
+        // PC (single legacy slot) — set if this user is PC + empty; clear if this user no longer PC.
+        if (myRoles.has('program_coordinator') && !inst.programCoordinatorId) inst.programCoordinatorId = uid;
+        if (!myRoles.has('program_coordinator') && String(inst.programCoordinatorId || '') === String(uid)) inst.programCoordinatorId = undefined as any;
+        await inst.save();
+      } catch { /* best-effort */ }
+    }
+
+    return res.json({
+      message: 'Role assignments updated',
+      user: {
+        id: user._id,
+        role: user.role,
+        institutionId: user.institutionId,
+        roleAssignments: user.roleAssignments
+      }
+    });
+  } catch (error) {
+    console.error('Set role assignments error:', error);
+    return res.status(500).json({ error: 'Failed to update role assignments' });
+  }
+};

@@ -7,7 +7,8 @@ import {
   enableUser,
   getReadersCommittee,
   assignToSubmission,
-  removeFromSubmission
+  removeFromSubmission,
+  setUserRoleAssignments
 } from '../controllers/userController';
 import {
   getInvitations,
@@ -91,6 +92,13 @@ router.get('/:id', getUser);
  * @access  Private (Admin or self for limited fields)
  */
 router.put('/:id', updateUser);
+
+/**
+ * @route   PUT /api/users/:id/role-assignments
+ * @desc    CR-060 — replace a user's per-institution role assignments
+ * @access  Private (Admin only)
+ */
+router.put('/:id/role-assignments', requireAdmin, setUserRoleAssignments);
 
 /**
  * @route   DELETE /api/users/:id

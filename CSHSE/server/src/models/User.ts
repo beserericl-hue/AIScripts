@@ -4,6 +4,21 @@ import bcrypt from 'bcrypt';
 export type UserRole = 'program_coordinator' | 'reader' | 'lead_reader' | 'admin';
 export type UserStatus = 'pending' | 'active' | 'disabled';
 
+// CR-060 — multi-role. A user can hold DIFFERENT roles at DIFFERENT institutions
+// (e.g. Program Coordinator at A, Reader/Lead Reader at B). Each assignment binds
+// ONE institution-scoped role to ONE institution. `admin` is global and is NOT
+// represented here (it lives on `User.role` / `isSuperuser`). The legacy
+// `User.role` + `User.institutionId` are kept as a DERIVED "primary" for display
+// and the impersonation identity; `roleAssignments` is the source of truth for
+// who-can-do-what-where.
+export type InstitutionScopedRole = 'program_coordinator' | 'reader' | 'lead_reader';
+
+export interface IRoleAssignment {
+  role: InstitutionScopedRole;
+  institutionId: mongoose.Types.ObjectId;
+  institutionName?: string;
+}
+
 // CR-042: how the user came to exist. Drives the auto-derived SSO domain
 // allowlist — only `invitation` and `manual` users contribute trusted domains.
 export type ProvisionedByType = 'invitation' | 'manual' | 'sso-key';
@@ -31,6 +46,8 @@ export interface IUser extends Document {
   role: UserRole;
   institutionId?: mongoose.Types.ObjectId;
   institutionName?: string;
+  // CR-060 — authoritative per-institution roles (see InstitutionScopedRole).
+  roleAssignments: IRoleAssignment[];
   status: UserStatus;
   permissions: Permission[];
   assignedSubmissions: mongoose.Types.ObjectId[];
@@ -106,6 +123,23 @@ const UserSchema = new Schema<IUser>({
     ref: 'Institution'
   },
   institutionName: String,
+  // CR-060 — multi-role assignments. Each {role, institutionId} grants the user
+  // that institution-scoped role at that institution. `_id:false` keeps them as
+  // plain embedded objects. Rule constraints (no PC + reviewer in one
+  // institution; one role per institution) are enforced in the controller via
+  // the roleResolver helpers, not the schema.
+  roleAssignments: {
+    type: [new Schema<IRoleAssignment>({
+      role: {
+        type: String,
+        enum: ['program_coordinator', 'reader', 'lead_reader'],
+        required: true
+      },
+      institutionId: { type: Schema.Types.ObjectId, ref: 'Institution', required: true },
+      institutionName: { type: String }
+    }, { _id: false })],
+    default: []
+  },
   status: {
     type: String,
     enum: ['pending', 'active', 'disabled'],
@@ -177,6 +211,9 @@ UserSchema.index({ email: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ isActive: 1 });
 UserSchema.index({ institutionId: 1 });
+// CR-060 — find every user holding a given role at a given institution (drives
+// the institution roster: "all PCs / readers / lead readers for institution X").
+UserSchema.index({ 'roleAssignments.institutionId': 1, 'roleAssignments.role': 1 });
 
 // Hash password before saving
 UserSchema.pre('save', async function(next) {
