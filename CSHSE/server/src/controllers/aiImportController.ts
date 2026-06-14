@@ -73,7 +73,12 @@ function getAIServiceSecret(): string {
 }
 
 function getServerPublicUrl(): string {
-  return process.env.SERVER_PUBLIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN || 'http://localhost:3001';
+  const raw = process.env.SERVER_PUBLIC_URL || process.env.RAILWAY_PUBLIC_DOMAIN || 'http://localhost:3001';
+  // RAILWAY_PUBLIC_DOMAIN is always scheme-less (e.g. "cshse.courseworx.media").
+  // cshse-ai's HTTP client rejects scheme-less webhook URLs (UnsupportedProtocol),
+  // which silently strands every import. Normalize to an absolute https:// URL.
+  const trimmed = raw.trim().replace(/\/+$/, '');
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 // ============================================================================

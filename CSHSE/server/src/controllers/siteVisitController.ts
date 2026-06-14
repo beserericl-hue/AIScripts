@@ -99,6 +99,12 @@ export const getSiteVisit = async (req: AuthenticatedRequest, res: Response) => 
   try {
     const { id } = req.params;
 
+    // Guard against non-ObjectId path segments (e.g. /site-visits/checklist) so a
+    // bad id returns 404 rather than surfacing a Mongoose CastError as a 500.
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(404).json({ error: 'Site visit not found' });
+    }
+
     const siteVisit = await SiteVisit.findById(id)
       .populate('submissionId')
       .populate('leadReaderId', 'firstName lastName email')
