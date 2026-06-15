@@ -5,6 +5,30 @@
 import { sendEmail as postalSendEmail, isPostalConfigured } from './postal';
 import { sendEmail as sendgridSendEmail, isSendgridConfigured } from './sendgrid';
 
+// Shared trust footer. A clear sender identity + a physical postal address are
+// what inbox-placement filters (Microsoft/Gmail) and CAN-SPAM both look for, so
+// every templated email carries the same block to improve deliverability and
+// keep messages out of the junk folder. Source of record: CSHSE Member Handbook.
+const ORG_NAME = 'Council for Standards in Human Service Education';
+const ORG_ADDRESS = '9600 SW Oak Street, Ste 565, Tigard, OR 97223';
+const ORG_EMAIL = 'info@cshse.org';
+const ORG_WEBSITE = 'https://cshse.org';
+
+const BRAND_FOOTER_HTML = `<div style="background-color: #e2e8f0; padding: 20px; text-align: center; font-size: 12px; color: #666; line-height: 1.6;">
+          <p style="margin: 0 0 4px; font-weight: bold; color: #1a365d;">${ORG_NAME}</p>
+          <p style="margin: 0 0 4px;">${ORG_ADDRESS}</p>
+          <p style="margin: 0 0 8px;"><a href="mailto:${ORG_EMAIL}" style="color: #2563eb; text-decoration: none;">${ORG_EMAIL}</a> &nbsp;&middot;&nbsp; <a href="${ORG_WEBSITE}" style="color: #2563eb; text-decoration: none;">cshse.org</a></p>
+          <p style="margin: 0; color: #888;">This is an automated message from the CSHSE Accreditation System. Questions? Reply to this email or contact <a href="mailto:${ORG_EMAIL}" style="color: #888;">${ORG_EMAIL}</a>.</p>
+        </div>`;
+
+const BRAND_FOOTER_TEXT = `--
+${ORG_NAME}
+${ORG_ADDRESS}
+${ORG_EMAIL} · ${ORG_WEBSITE}
+
+This is an automated message from the CSHSE Accreditation System.
+Questions? Reply to this email or contact ${ORG_EMAIL}.`;
+
 export interface EmailOptions {
   to: string | string[];
   subject: string;
@@ -124,9 +148,7 @@ class EmailService {
           <p style="color: #666; font-size: 14px;">This invitation expires on ${expiresFormatted}.</p>
           <p style="color: #666; font-size: 14px;">If you didn't expect this invitation, you can safely ignore this email.</p>
         </div>
-        <div style="background-color: #e2e8f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p>Council for Standards in Human Service Education</p>
-        </div>
+        ${BRAND_FOOTER_HTML}
       </div>
     `;
 
@@ -142,7 +164,7 @@ This invitation expires on ${expiresFormatted}.
 
 If you didn't expect this invitation, you can safely ignore this email.
 
-- CSHSE Accreditation System
+${BRAND_FOOTER_TEXT}
     `;
 
     return this.sendEmail({
@@ -173,9 +195,7 @@ If you didn't expect this invitation, you can safely ignore this email.
             <a href="${data.submissionLink}" style="background-color: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Review Submission</a>
           </div>
         </div>
-        <div style="background-color: #e2e8f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p>Council for Standards in Human Service Education</p>
-        </div>
+        ${BRAND_FOOTER_HTML}
       </div>
     `;
 
@@ -191,7 +211,7 @@ Submitted by: ${data.submitterName}
 
 Review the submission here: ${data.submissionLink}
 
-- CSHSE Accreditation System
+${BRAND_FOOTER_TEXT}
     `;
 
     return this.sendEmail({
@@ -231,9 +251,7 @@ Review the submission here: ${data.submissionLink}
             <a href="${data.submissionLink}" style="background-color: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">View Submission</a>
           </div>
         </div>
-        <div style="background-color: #e2e8f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p>Council for Standards in Human Service Education</p>
-        </div>
+        ${BRAND_FOOTER_HTML}
       </div>
     `;
 
@@ -250,7 +268,7 @@ ${data.suggestions && data.suggestions.length > 0 ? `Suggestions:\n${data.sugges
 
 View your submission here: ${data.submissionLink}
 
-- CSHSE Accreditation System
+${BRAND_FOOTER_TEXT}
     `;
 
     return this.sendEmail({
@@ -282,9 +300,7 @@ View your submission here: ${data.submissionLink}
             <a href="${data.submissionLink}" style="background-color: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">View Details</a>
           </div>
         </div>
-        <div style="background-color: #e2e8f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p>Council for Standards in Human Service Education</p>
-        </div>
+        ${BRAND_FOOTER_HTML}
       </div>
     `;
 
@@ -301,7 +317,7 @@ ${data.comments ? `Comments: ${data.comments}` : ''}
 
 View details here: ${data.submissionLink}
 
-- CSHSE Accreditation System
+${BRAND_FOOTER_TEXT}
     `;
 
     return this.sendEmail({
@@ -342,9 +358,7 @@ View details here: ${data.submissionLink}
             <a href="${data.submissionLink}" style="background-color: #0d9488; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Review Self-Study</a>
           </div>
         </div>
-        <div style="background-color: #e2e8f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p>Council for Standards in Human Service Education</p>
-        </div>
+        ${BRAND_FOOTER_HTML}
       </div>
     `;
 
@@ -362,7 +376,7 @@ All standards and specifications have been validated. Please review the self-stu
 
 Review the self-study here: ${data.submissionLink}
 
-- CSHSE Accreditation System
+${BRAND_FOOTER_TEXT}
     `;
 
     return this.sendEmail({
@@ -398,9 +412,7 @@ Review the self-study here: ${data.submissionLink}
           <p>${message.replace(/\n/g, '<br>')}</p>
           ${actionButton}
         </div>
-        <div style="background-color: #e2e8f0; padding: 15px; text-align: center; font-size: 12px; color: #666;">
-          <p>Council for Standards in Human Service Education</p>
-        </div>
+        ${BRAND_FOOTER_HTML}
       </div>
     `;
 
@@ -408,7 +420,7 @@ Review the self-study here: ${data.submissionLink}
       to,
       subject,
       html,
-      text: message + (actionUrl ? `\n\n${actionText}: ${actionUrl}` : ''),
+      text: message + (actionUrl ? `\n\n${actionText}: ${actionUrl}` : '') + `\n\n${BRAND_FOOTER_TEXT}`,
       replyTo
     });
   }
