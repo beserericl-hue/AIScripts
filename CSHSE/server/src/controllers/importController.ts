@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { SelfStudyImport, ISelfStudyImport, IDetectedSection } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
+import { SupportingEvidence } from '../models/SupportingEvidence';
 import { WebhookSettings } from '../models/WebhookSettings';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { documentParserService, TOCBasedSection, ParsedDocument } from '../services/documentParser';
@@ -259,6 +260,70 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
       // Non-fatal: preserve-original failure should NOT block the import.
       // Legacy imports worked without this; we log and continue.
       console.warn('[Import] recordVersion failed (non-fatal):', versionErr);
+    }
+
+    // CR — DIRECT-STORE path. When the coordinator marks the upload as a CV,
+    // Syllabus, or Project on the upload screen, skip AI section-parsing
+    // entirely and file the ORIGINAL document straight into the Supporting File
+    // Library under the matching `kind:` marker (the same markers the AI
+    // importer uses, so it shows in the right bucket). Program coordinators
+    // import CVs/syllabi standalone, and the parser was mis-filing their
+    // content into standard narrative sections — this lets them say up front
+    // "this whole file IS a CV / syllabus / project" and store it as-is.
+    const rawKind =
+      typeof req.body.documentKind === 'string'
+        ? req.body.documentKind.trim().toLowerCase()
+        : '';
+    const DIRECT_KINDS = ['cv', 'syllabus', 'project'];
+    if (DIRECT_KINDS.includes(rawKind)) {
+      try {
+        const uploaderId = new mongoose.Types.ObjectId(req.user?.id);
+        const evidence = await SupportingEvidence.create({
+          institutionId: submission.institutionId,
+          submissionId: submission._id,
+          uploadedBy: uploaderId,
+          evidenceType: 'document',
+          file: {
+            filename: file.originalname,
+            originalName: file.originalname,
+            mimeType: file.mimetype,
+            size: file.buffer.length,
+            data: file.buffer.toString('base64'),
+            encoding: 'base64',
+            storageType: 'base64',
+            uploadedAt: new Date(),
+            uploadedBy: uploaderId,
+          } as any,
+          description: file.originalname,
+          versionNumber: 1,
+          isCurrentVersion: true,
+          isDeleted: false,
+          linkedNarratives: [],
+          // `kind:<cv|syllabus|project>` is what the File Library groups on.
+          tags: ['ai-import', 'direct-upload', `kind:${rawKind}`],
+        });
+        await SelfStudyImport.findByIdAndUpdate(importRecord._id, {
+          $set: { status: 'completed' },
+        });
+        debugLog('Direct-stored upload as supporting evidence', {
+          importId: importRecord._id,
+          evidenceId: evidence._id,
+          kind: rawKind,
+        });
+        return res.status(201).json({
+          importId: importRecord._id,
+          directStored: true,
+          kind: rawKind,
+          evidenceId: evidence._id,
+          fileName: file.originalname,
+          message: `Stored as ${rawKind.toUpperCase()} in the File Library — no parsing needed.`,
+        });
+      } catch (evErr) {
+        console.error('[Import] direct-store as evidence failed:', evErr);
+        return res
+          .status(500)
+          .json({ error: 'Failed to file the document as supporting evidence.' });
+      }
     }
 
     // Construct callback URL for n8n

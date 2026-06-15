@@ -11,10 +11,11 @@
  * inline.
  */
 import React, { useCallback, useState } from 'react';
-import { Upload as UploadIcon, AlertTriangle } from 'lucide-react';
+import { Upload as UploadIcon, AlertTriangle, CheckCircle2, FileText } from 'lucide-react';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;  // 100 MB (raised from legacy 50 MB cap)
+const KIND_LABELS: Record<string, string> = { cv: 'CV', syllabus: 'Syllabus', project: 'Project' };
 const ACCEPTED_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  // .docx
   'application/pdf'  // .pdf fallback
@@ -32,6 +33,10 @@ export function UploadStep(): JSX.Element {
   const setProgramLevel = useAIImportStore((s) => s.setProgramLevel);
   const setIsReimport = useAIImportStore((s) => s.setIsReimport);
   const setForceFormat = useAIImportStore((s) => s.setForceFormat);
+  const documentKind = useAIImportStore((s) => s.documentKind);
+  const setDocumentKind = useAIImportStore((s) => s.setDocumentKind);
+  const directStoredResult = useAIImportStore((s) => s.directStoredResult);
+  const clearDirectStored = useAIImportStore((s) => s.clearDirectStored);
   const startUpload = useAIImportStore((s) => s.startUpload);
 
   const [localError, setLocalError] = useState<string | null>(null);
@@ -109,7 +114,10 @@ export function UploadStep(): JSX.Element {
       // through the batched-import code path. Single-file uploads keep
       // the legacy startUpload flow so the existing wizard semantics
       // stay unchanged.
-      if (pendingFiles.length > 0 && uploadFile) {
+      // A marked CV / Syllabus / Project is always filed individually via the
+      // single-file path (it skips parsing server-side), even if other files
+      // happen to be queued.
+      if (pendingFiles.length > 0 && uploadFile && !documentKind) {
         const allFiles = [uploadFile, ...pendingFiles];
         await startBatchUpload(allFiles);
       } else {
@@ -118,7 +126,7 @@ export function UploadStep(): JSX.Element {
     } catch (err: any) {
       setLocalError(err?.message || String(err));
     }
-  }, [startUpload, startBatchUpload, pendingFiles, uploadFile]);
+  }, [startUpload, startBatchUpload, pendingFiles, uploadFile, documentKind]);
 
   const isUploading = status === 'uploading';
   // After upload hits 100% the client makes a follow-up POST /start-ai;
@@ -132,7 +140,29 @@ export function UploadStep(): JSX.Element {
       <p className="text-sm text-gray-600">
         Drop a .docx file (PDF accepted as a fallback). The AI service will auto-detect whether
         this is a finished free-form self-study or a partially-filled template and route accordingly.
+        Importing a standalone CV, syllabus, or project? Mark it below and we&rsquo;ll file it directly &mdash;
+        no parsing.
       </p>
+
+      {directStoredResult && (
+        <div className="flex items-start gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-600" />
+          <div className="flex-1">
+            <div className="font-medium">
+              Added to your File Library as a {KIND_LABELS[directStoredResult.kind] || directStoredResult.kind.toUpperCase()}.
+            </div>
+            <div className="mt-0.5 text-emerald-700">
+              <span className="font-mono">{directStoredResult.fileName}</span> was filed directly &mdash; no parsing needed.
+            </div>
+            <button
+              onClick={() => { clearDirectStored(); setDocumentKind(null); setUploadFile(null); }}
+              className="mt-2 rounded-md border border-emerald-300 bg-white px-3 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+            >
+              Upload another file
+            </button>
+          </div>
+        </div>
+      )}
 
       <label
         onDragOver={handleDragOver}
@@ -259,6 +289,49 @@ export function UploadStep(): JSX.Element {
         </label>
       </div>
 
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium text-gray-700">What kind of file is this?</legend>
+        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
+          {([
+            { val: null, label: 'Self-study document', hint: 'Parse into sections' },
+            { val: 'cv', label: 'CV', hint: 'File as a CV' },
+            { val: 'syllabus', label: 'Syllabus', hint: 'File as a syllabus' },
+            { val: 'project', label: 'Project', hint: 'File as a project' },
+          ] as const).map((opt) => {
+            const active = documentKind === opt.val;
+            return (
+              <label
+                key={String(opt.val)}
+                className={`flex cursor-pointer flex-col rounded-md border px-3 py-2 ${
+                  active ? 'border-cshse-500 bg-cshse-50 ring-1 ring-cshse-400' : 'border-gray-300 hover:border-cshse-300'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="documentKind"
+                    checked={active}
+                    onChange={() => setDocumentKind(opt.val)}
+                    className="text-cshse-600 focus:ring-cshse-500"
+                  />
+                  <span className="font-medium text-gray-800">{opt.label}</span>
+                </span>
+                <span className="ml-6 text-xs text-gray-500">{opt.hint}</span>
+              </label>
+            );
+          })}
+        </div>
+        {documentKind && (
+          <p className="flex items-start gap-2 rounded-md bg-cshse-50 p-2 text-xs text-cshse-800">
+            <FileText className="h-4 w-4 flex-shrink-0" />
+            <span>
+              This file will be filed directly in your File Library as a {KIND_LABELS[documentKind]} &mdash; it
+              won&rsquo;t be parsed into standard sections.
+            </span>
+          </p>
+        )}
+      </fieldset>
+
       {isUploading && (
         <div>
           <div className="flex justify-between text-xs text-gray-600">
@@ -285,7 +358,11 @@ export function UploadStep(): JSX.Element {
           disabled={!canProceed}
           className="rounded-md bg-cshse-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-cshse-700 disabled:cursor-not-allowed disabled:bg-gray-300"
         >
-          {isStartingAi ? 'Starting AI…' : isUploading ? 'Uploading…' : 'Next ▸'}
+          {isStartingAi
+            ? 'Starting AI…'
+            : isUploading
+              ? (documentKind ? 'Filing…' : 'Uploading…')
+              : (documentKind ? `Add ${KIND_LABELS[documentKind]} to File Library` : 'Next ▸')}
         </button>
       </div>
     </div>

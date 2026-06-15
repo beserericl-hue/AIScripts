@@ -363,6 +363,11 @@ interface AIImportState {
   programLevel: ProgramLevel;
   isReimport: boolean;
   forceFormat: 'template' | 'self_study' | null;
+  // When set, the upload is filed straight into the File Library as a CV /
+  // Syllabus / Project (no AI parsing). See startUpload + UploadStep.
+  documentKind: 'cv' | 'syllabus' | 'project' | null;
+  // Set after a direct-store upload completes so the UI can confirm it.
+  directStoredResult: { kind: string; fileName: string } | null;
 
   // Queue + SSE transport state
   queuePosition: number | null;
@@ -568,6 +573,8 @@ interface AIImportState {
   setProgramLevel: (l: ProgramLevel) => void;
   setIsReimport: (v: boolean) => void;
   setForceFormat: (f: 'template' | 'self_study' | null) => void;
+  setDocumentKind: (k: 'cv' | 'syllabus' | 'project' | null) => void;
+  clearDirectStored: () => void;
   selectSpec: (key: string) => void;
   selectSection: (sectionId: string) => void;
   // Jump the wizard to the Matrices view scrolled+highlighted to the given
@@ -674,6 +681,8 @@ const initialState = {
   programLevel: 'bachelors' as ProgramLevel,
   isReimport: false,
   forceFormat: null,
+  documentKind: null,
+  directStoredResult: null,
   queuePosition: null,
   queueDepth: null,
   etaSeconds: null,
@@ -1167,6 +1176,8 @@ export const useAIImportStore = create<AIImportState>()(
       setProgramLevel: (l) => set({ programLevel: l }),
       setIsReimport: (v) => set({ isReimport: v }),
       setForceFormat: (f) => set({ forceFormat: f }),
+      setDocumentKind: (k) => set({ documentKind: k }),
+      clearDirectStored: () => set({ directStoredResult: null }),
       selectSpec: (key) => set({ selectedSpecKey: key, selectedSectionId: null }),
       selectSection: (id) => set({ selectedSectionId: id }),
       selectMatrixRow: (rowAnchor) =>
@@ -1982,7 +1993,7 @@ export const useAIImportStore = create<AIImportState>()(
       },
 
       startUpload: async () => {
-        const { uploadFile, programLevel, submissionId, isReimport, forceFormat } = get();
+        const { uploadFile, programLevel, submissionId, isReimport, forceFormat, documentKind } = get();
         if (!uploadFile || !submissionId) {
           throw new Error('uploadFile and submissionId are required to start an import');
         }
@@ -2005,6 +2016,9 @@ export const useAIImportStore = create<AIImportState>()(
         const form = new FormData();
         form.append('file', uploadFile);
         form.append('submissionId', submissionId);
+        // CR — direct-store: tell the server to file this as a CV/Syllabus/
+        // Project and skip parsing. The server returns directStored:true.
+        if (documentKind) form.append('documentKind', documentKind);
 
         let importId: string;
         try {
@@ -2017,6 +2031,22 @@ export const useAIImportStore = create<AIImportState>()(
             }
           });
           importId = uploadRes.data.importId;
+          // Direct-store path — the file was filed straight into the File
+          // Library. No AI job; land back on the upload step with a success
+          // confirmation and a cleared picker so they can add another.
+          if (uploadRes.data?.directStored) {
+            set({
+              importId,
+              uploadProgress: 1,
+              status: 'idle',
+              uploadFile: null,
+              directStoredResult: {
+                kind: String(uploadRes.data.kind || documentKind || ''),
+                fileName: String(uploadRes.data.fileName || uploadFile.name),
+              },
+            });
+            return;
+          }
           set({ importId, uploadProgress: 1 });
         } catch (err: any) {
           const detail = err?.response?.data?.error || err?.response?.data?.detail || err?.message || String(err);
