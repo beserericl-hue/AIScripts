@@ -6,6 +6,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { connectDatabase } from './config/database';
 import { assertPostalConfig } from './services/postal';
+import { assertSendgridConfig } from './services/sendgrid';
 import {
   globalErrorHandler,
   setupProcessErrorHandlers
@@ -247,6 +248,7 @@ const startServer = async () => {
     // CR — surface Postal email config at boot (warns loudly if the API key is
     // missing) so a misconfig is obvious before the first send.
     assertPostalConfig();
+    assertSendgridConfig();
   });
 
   // Connect to database in background

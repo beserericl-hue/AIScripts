@@ -1,5 +1,9 @@
-// CR — all outbound mail now goes through Postal (courseworx.media), not SMTP.
+// CR — outbound mail goes through SendGrid when configured (clean, reverse-DNS-
+// aligned sending IPs that strict receivers like Microsoft/.edu accept), and
+// falls back to the self-hosted Postal server otherwise. Setting SENDGRID_API_KEY
+// switches providers with no other change.
 import { sendEmail as postalSendEmail, isPostalConfigured } from './postal';
+import { sendEmail as sendgridSendEmail, isSendgridConfigured } from './sendgrid';
 
 export interface EmailOptions {
   to: string | string[];
@@ -72,19 +76,23 @@ class EmailService {
    * — the Postal client itself logs the structured error.
    */
   async sendEmail(options: EmailOptions): Promise<boolean> {
-    if (!isPostalConfigured()) {
-      console.warn('Email not sent - Postal not configured (POSTAL_API_KEY missing)');
+    // Prefer SendGrid (deliverable to strict receivers); fall back to Postal.
+    const useSendgrid = isSendgridConfigured();
+    if (!useSendgrid && !isPostalConfigured()) {
+      console.warn('Email not sent - no provider configured (SENDGRID_API_KEY / POSTAL_API_KEY missing)');
       return false;
     }
+    const send = useSendgrid ? sendgridSendEmail : postalSendEmail;
+    const provider = useSendgrid ? 'sendgrid' : 'postal';
     try {
-      const { messageId } = await postalSendEmail({
+      const { messageId } = await send({
         to: options.to,
         subject: options.subject,
         html: options.html,
         text: options.text,
         replyTo: options.replyTo,
       });
-      console.log(`Email sent to ${options.to}: ${options.subject} (postal ${messageId})`);
+      console.log(`Email sent to ${options.to}: ${options.subject} (${provider} ${messageId})`);
       return true;
     } catch (error) {
       console.error('Failed to send email:', error);
@@ -406,7 +414,7 @@ Review the self-study here: ${data.submissionLink}
   }
 
   isEnabled(): boolean {
-    return isPostalConfigured();
+    return isSendgridConfigured() || isPostalConfigured();
   }
 }
 
