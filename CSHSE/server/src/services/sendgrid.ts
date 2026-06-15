@@ -19,7 +19,7 @@
 const SENDGRID_SEND_URL = 'https://api.sendgrid.com/v3/mail/send';
 const SENDGRID_FROM =
   process.env.SENDGRID_FROM || process.env.POSTAL_DEFAULT_FROM || 'cshse@courseworx.media';
-const SENDGRID_FROM_NAME = process.env.SENDGRID_FROM_NAME || 'CSHSE Accreditation System';
+const SENDGRID_FROM_NAME = process.env.SENDGRID_FROM_NAME || 'CSHSE Self-Study Portal';
 
 export interface SendEmailInput {
   to: string | string[];

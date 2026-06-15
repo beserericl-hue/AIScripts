@@ -18,7 +18,7 @@ const BRAND_FOOTER_HTML = `<div style="background-color: #e2e8f0; padding: 20px;
           <p style="margin: 0 0 4px; font-weight: bold; color: #1a365d;">${ORG_NAME}</p>
           <p style="margin: 0 0 4px;">${ORG_ADDRESS}</p>
           <p style="margin: 0 0 8px;"><a href="mailto:${ORG_EMAIL}" style="color: #2563eb; text-decoration: none;">${ORG_EMAIL}</a> &nbsp;&middot;&nbsp; <a href="${ORG_WEBSITE}" style="color: #2563eb; text-decoration: none;">cshse.org</a></p>
-          <p style="margin: 0; color: #888;">This is an automated message from the CSHSE Accreditation System. Questions? Reply to this email or contact <a href="mailto:${ORG_EMAIL}" style="color: #888;">${ORG_EMAIL}</a>.</p>
+          <p style="margin: 0; color: #888;">This is an automated message from the CSHSE Self-Study Portal. Questions? Reply to this email or contact <a href="mailto:${ORG_EMAIL}" style="color: #888;">${ORG_EMAIL}</a>.</p>
         </div>`;
 
 const BRAND_FOOTER_TEXT = `--
@@ -26,7 +26,7 @@ ${ORG_NAME}
 ${ORG_ADDRESS}
 ${ORG_EMAIL} · ${ORG_WEBSITE}
 
-This is an automated message from the CSHSE Accreditation System.
+This is an automated message from the CSHSE Self-Study Portal.
 Questions? Reply to this email or contact ${ORG_EMAIL}.`;
 
 export interface EmailOptions {
@@ -135,12 +135,12 @@ class EmailService {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #1a365d; color: white; padding: 20px; text-align: center;">
-          <h1 style="margin: 0;">CSHSE Accreditation System</h1>
+          <h1 style="margin: 0;">CSHSE Self-Study Portal</h1>
         </div>
         <div style="padding: 30px; background-color: #f8f9fa;">
           <h2 style="color: #1a365d;">You've Been Invited!</h2>
           <p>Hello ${data.recipientName},</p>
-          <p><strong>${data.inviterName}</strong> has invited you to join the CSHSE Accreditation System as a <strong>${data.role}</strong>${data.institutionName ? ` for ${data.institutionName}` : ''}.</p>
+          <p><strong>${data.inviterName}</strong> has invited you to join the CSHSE Self-Study Portal as a <strong>${data.role}</strong>${data.institutionName ? ` for ${data.institutionName}` : ''}.</p>
           <p>Click the button below to accept your invitation and set up your account:</p>
           <div style="text-align: center; margin: 30px 0;">
             <a href="${data.invitationLink}" style="background-color: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Accept Invitation</a>
@@ -155,7 +155,7 @@ class EmailService {
     const text = `
 Hello ${data.recipientName},
 
-${data.inviterName} has invited you to join the CSHSE Accreditation System as a ${data.role}${data.institutionName ? ` for ${data.institutionName}` : ''}.
+${data.inviterName} has invited you to join the CSHSE Self-Study Portal as a ${data.role}${data.institutionName ? ` for ${data.institutionName}` : ''}.
 
 Click the link below to accept your invitation and set up your account:
 ${data.invitationLink}
@@ -169,7 +169,7 @@ ${BRAND_FOOTER_TEXT}
 
     return this.sendEmail({
       to: data.recipientEmail,
-      subject: `You're invited to CSHSE Accreditation System`,
+      subject: `You're invited to CSHSE Self-Study Portal`,
       html,
       text
     });
@@ -179,7 +179,7 @@ ${BRAND_FOOTER_TEXT}
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #1a365d; color: white; padding: 20px; text-align: center;">
-          <h1 style="margin: 0;">CSHSE Accreditation System</h1>
+          <h1 style="margin: 0;">CSHSE Self-Study Portal</h1>
         </div>
         <div style="padding: 30px; background-color: #f8f9fa;">
           <h2 style="color: #1a365d;">Standard Ready for Review</h2>
@@ -233,7 +233,7 @@ ${BRAND_FOOTER_TEXT}
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #1a365d; color: white; padding: 20px; text-align: center;">
-          <h1 style="margin: 0;">CSHSE Accreditation System</h1>
+          <h1 style="margin: 0;">CSHSE Self-Study Portal</h1>
         </div>
         <div style="padding: 30px; background-color: #f8f9fa;">
           <h2 style="color: #1a365d;">Validation Result</h2>
@@ -283,7 +283,7 @@ ${BRAND_FOOTER_TEXT}
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #1a365d; color: white; padding: 20px; text-align: center;">
-          <h1 style="margin: 0;">CSHSE Accreditation System</h1>
+          <h1 style="margin: 0;">CSHSE Self-Study Portal</h1>
         </div>
         <div style="padding: 30px; background-color: #f8f9fa;">
           <h2 style="color: #1a365d;">Review Complete</h2>
@@ -341,7 +341,7 @@ ${BRAND_FOOTER_TEXT}
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #1a365d; color: white; padding: 20px; text-align: center;">
-          <h1 style="margin: 0;">CSHSE Accreditation System</h1>
+          <h1 style="margin: 0;">CSHSE Self-Study Portal</h1>
         </div>
         <div style="padding: 30px; background-color: #f8f9fa;">
           <h2 style="color: #1a365d;">Self-Study Submitted for Review</h2>
@@ -406,7 +406,7 @@ ${BRAND_FOOTER_TEXT}
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #1a365d; color: white; padding: 20px; text-align: center;">
-          <h1 style="margin: 0;">CSHSE Accreditation System</h1>
+          <h1 style="margin: 0;">CSHSE Self-Study Portal</h1>
         </div>
         <div style="padding: 30px; background-color: #f8f9fa;">
           <p>${message.replace(/\n/g, '<br>')}</p>

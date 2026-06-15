@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
+import { useToastStore } from '../../../store/toastStore';
 import {
   Users,
   UserPlus,
@@ -75,6 +76,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 
 export function UserManagement() {
   const queryClient = useQueryClient();
+  const pushToast = useToastStore((s) => s.push);
   const [activeTab, setActiveTab] = useState<'users' | 'invitations' | 'readers'>('users');
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -142,14 +144,28 @@ export function UserManagement() {
     }
   });
 
-  // Resend invitation mutation
+  // Resend invitation mutation. The server returns { invitation: { email, emailSent } };
+  // surface the outcome via the global toast so the click has visible feedback
+  // (otherwise a successful resend silently refetches an identical-looking list).
   const resendMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await api.post(`/api/users/invitations/${id}/resend`);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
+      const email = data?.invitation?.email;
+      if (data?.invitation?.emailSent === false) {
+        pushToast(
+          `Invitation updated, but the email could not be sent${email ? ` to ${email}` : ''}. Check email settings.`,
+          'error'
+        );
+      } else {
+        pushToast(`Invitation resent${email ? ` to ${email}` : ''}.`, 'success');
+      }
+    },
+    onError: (err: any) => {
+      pushToast(err?.response?.data?.error || 'Failed to resend invitation.', 'error');
     }
   });
 
