@@ -410,7 +410,7 @@ export function ReaderReportEditor(): JSX.Element {
           ) : completedAt ? (
             <p data-testid="rr-completed-badge" className="mt-1 inline-flex items-center gap-1.5 rounded bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Completed {new Date(completedAt).toLocaleDateString()} — visible to the lead reader
+              Completed {new Date(completedAt).toLocaleDateString()} — submitted to the lead reader
             </p>
           ) : null}
         </div>
@@ -597,7 +597,7 @@ export function ReaderReportEditor(): JSX.Element {
                           <Eye className="h-3.5 w-3.5" />{active ? 'Viewing' : 'View report'}
                         </button>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-xs text-slate-400" title="Visible once the reader marks it complete"><Lock className="h-3.5 w-3.5" />Locked</span>
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-400" title="Nothing to view yet — this reader hasn’t started their report"><Lock className="h-3.5 w-3.5" />Not started</span>
                       )}
                     </li>
                   );
@@ -844,7 +844,7 @@ export function ReaderReportEditor(): JSX.Element {
             );
           })}
         </div>
-        <p className="mt-1 text-xs text-slate-400">Recorded with your report; visible to the lead reader once you mark it complete.</p>
+        <p className="mt-1 text-xs text-slate-400">Recorded with your report; the lead reader can see your in-progress report and vote.</p>
       </div>
 
       <div className="mt-5 rounded-lg border border-slate-200 bg-white p-4">

@@ -322,7 +322,9 @@ function isLeadOrAdmin(req: AuthenticatedRequest): boolean {
 /**
  * Resolve which reviewer's report the request targets and whether the caller is
  * allowed to see it. `?reviewerId=` lets a lead reader / admin open another
- * reader's report (read-only) once that reader has marked it COMPLETE.
+ * reader's report (read-only). The lead reader oversees the review while it is
+ * IN PROGRESS, so — like an admin — they may read a reader's report as soon as
+ * it exists (it does not need to be marked complete first).
  * Returns { reviewerId, readonly } or null when the caller may not view it.
  */
 async function resolveTargetReviewer(
@@ -335,11 +337,9 @@ async function resolveTargetReviewer(
   if (!isLeadOrAdmin(req)) return null;
   if (!mongoose.Types.ObjectId.isValid(requested)) return null;
   const other = await ReaderReport.findOne({ submissionId, reviewerId: requested })
-    .select('completedAt').lean();
-  // Admins can inspect drafts; a lead reader only sees it once it's completed.
-  const isAdmin = req.user?.role === 'admin';
+    .select('_id').lean();
+  // The report must exist (the reader has started it); completion is NOT required.
   if (!other) return null;
-  if (!isAdmin && !other.completedAt) return null;
   return { reviewerId: requested, readonly: true };
 }
 
@@ -543,7 +543,6 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
     if (!isLeadOrAdmin(req)) return res.status(403).json({ error: 'Forbidden' });
 
     const self = effectiveReviewerId(req);
-    const isAdmin = req.user?.role === 'admin';
 
     // Everyone assigned to read this submission (so we can show readers who
     // haven't started their report yet), plus anyone who already has a report.
@@ -570,8 +569,9 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
       const rep = reportByReviewer.get(rid);
       const completed = !!rep?.completedAt;
       const hasContent = !!rep && ((rep.rows || []).some((x: any) => x.mark || (x.comment || '').trim()) || (rep.recommendation || '').trim().length > 0);
-      // A lead reader may OPEN a report only once it is completed; admins always.
-      const viewable = completed || isAdmin;
+      // The lead reader oversees the review in progress: a report is OPENABLE as
+      // soon as it exists (the reader has started it). No completion gate.
+      const viewable = !!rep;
       return {
         reviewerId: rid,
         reviewerName: u ? (`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email) : 'Unknown reviewer',
@@ -581,9 +581,9 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
         updatedAt: rep?.updatedAt || null,
         started: hasContent,
         viewable,
-        // Only reveal a reader's acceptance vote once the report is completed
-        // (or to an admin) — a draft vote stays private to that reader.
-        acceptanceVote: (completed || isAdmin) ? (rep?.acceptanceVote || '') : '',
+        // The lead reader sees each reader's current vote while the review is in
+        // progress (it travels with the report they can already open).
+        acceptanceVote: rep?.acceptanceVote || '',
       };
     }).sort((a, b) => {
       // Completed first, then started, then by name.
