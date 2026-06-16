@@ -259,10 +259,12 @@ export default function Layout() {
                 <span className="app-logo-text hidden md:block">Self-Study Portal</span>
               </Link>
 
-              {/* Overflow nav — items that don't fit the browser width tuck
-                  into a "More ▾" dropdown instead of overlapping. */}
+              {/* Per client: keep a single "More ▾" dropdown holding all nav
+                  items at every screen size, for a consistent menu that does
+                  not change as the window resizes (alwaysCollapse). */}
               <nav className="nav-tabs min-w-0 flex-1">
                 <OverflowNav
+                  alwaysCollapse
                   items={navigation.map((item) => ({ ...item, key: item.name }))}
                   renderItem={(item, inMenu) => {
                     const isActive = location.pathname === item.href ||

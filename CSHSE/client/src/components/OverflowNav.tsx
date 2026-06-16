@@ -9,21 +9,33 @@ export interface OverflowNavItem {
 interface OverflowNavProps<T extends OverflowNavItem> {
   items: T[];
   renderItem: (item: T, inMenu: boolean) => React.ReactNode;
+  /**
+   * When true, ALL items live in the "More ▾" dropdown at every width (no
+   * inline tabs), for a consistent menu that doesn't change with screen size.
+   * Default false keeps the measure-and-overflow responsive behaviour.
+   */
+  alwaysCollapse?: boolean;
 }
 
 /**
  * A horizontal nav that NEVER overflows: it measures how many items fit in the
  * available width and tucks the rest into a "More ▾" dropdown. Re-measures on
- * resize so it re-adjusts to the browser size.
+ * resize so it re-adjusts to the browser size. With `alwaysCollapse`, every
+ * item stays in the dropdown regardless of width.
  */
-export function OverflowNav<T extends OverflowNavItem>({ items, renderItem }: OverflowNavProps<T>): JSX.Element {
+export function OverflowNav<T extends OverflowNavItem>({ items, renderItem, alwaysCollapse = false }: OverflowNavProps<T>): JSX.Element {
   const wrapRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
-  const [visibleCount, setVisibleCount] = useState(items.length);
+  const [visibleCount, setVisibleCount] = useState(alwaysCollapse ? 0 : items.length);
   const [menuOpen, setMenuOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
+    // Consistent-menu mode: keep everything in the dropdown, skip measuring.
+    if (alwaysCollapse) {
+      setVisibleCount(0);
+      return;
+    }
     const wrap = wrapRef.current;
     const meas = measureRef.current;
     if (!wrap || !meas) return;
@@ -46,7 +58,7 @@ export function OverflowNav<T extends OverflowNavItem>({ items, renderItem }: Ov
     const ro = new ResizeObserver(recompute);
     ro.observe(wrap);
     return () => ro.disconnect();
-  }, [items]);
+  }, [items, alwaysCollapse]);
 
   useEffect(() => {
     if (!menuOpen) return;
