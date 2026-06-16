@@ -1,7 +1,7 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Loader2, ChevronLeft, Check, X, FileDown, Lock, Send } from 'lucide-react';
+import { Loader2, ChevronLeft, Check, X, FileDown, Lock, Send, ClipboardList } from 'lucide-react';
 import { api } from '../../../services/api';
 import { Score4LevelSelector, SCORE_LEVELS } from '../../reader/Score4LevelSelector';
 import type { ScoreValue } from '../../reader/Score4LevelSelector';
@@ -312,6 +312,27 @@ function scoreChipClasses(value: number): string {
   return 'border-green-300 bg-green-100 text-green-900';
 }
 
+/**
+ * Entry point from the lead reader's compilation into the per-reader Reader
+ * Reports. The lead reader IS a reader: this opens THEIR own Reader Report
+ * checklist, and the editor there lists every assigned reader's report
+ * (lead reader / admin only) so the lead reader can read each one and switch
+ * the whole view between readers. Score-based compilation never surfaced this.
+ */
+function ReaderReportsLink({ submissionId }: { submissionId: string }): JSX.Element {
+  return (
+    <Link
+      data-testid="compilation-reader-reports-link"
+      to={`/reader-report/${submissionId}`}
+      className="inline-flex items-center gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-800 hover:bg-indigo-100"
+      title="Open your own Reader Report and read each assigned reader's report"
+    >
+      <ClipboardList className="h-4 w-4" aria-hidden />
+      <span>Reader reports — mine &amp; all readers</span>
+    </Link>
+  );
+}
+
 export function CompilationTabView({
   data,
   isLoading,
@@ -365,12 +386,15 @@ export function CompilationTabView({
           <ChevronLeft className="h-4 w-4" aria-hidden />
           <span>Back to compilations</span>
         </Link>
-        <header className="mb-4 border-b border-slate-200 pb-3">
-          <h1 className="text-xl font-semibold text-slate-900">{data.institutionName}</h1>
-          <p className="text-sm text-slate-600">
-            {data.programName} <span className="text-slate-400">·</span>{' '}
-            <span className="uppercase">{data.programLevel}</span>
-          </p>
+        <header className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900">{data.institutionName}</h1>
+            <p className="text-sm text-slate-600">
+              {data.programName} <span className="text-slate-400">·</span>{' '}
+              <span className="uppercase">{data.programLevel}</span>
+            </p>
+          </div>
+          <ReaderReportsLink submissionId={data.submissionId} />
         </header>
         {lockedPhase && (
           <AssignmentChangeRequestBox
@@ -393,12 +417,15 @@ export function CompilationTabView({
         <ChevronLeft className="h-4 w-4" aria-hidden />
         <span>Back to compilations</span>
       </Link>
-      <header className="mb-4 border-b border-slate-200 pb-3">
-        <h1 className="text-xl font-semibold text-slate-900">{data.institutionName}</h1>
-        <p className="text-sm text-slate-600">
-          {data.programName} <span className="text-slate-400">·</span>{' '}
-          <span className="uppercase">{data.programLevel}</span>
-        </p>
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900">{data.institutionName}</h1>
+          <p className="text-sm text-slate-600">
+            {data.programName} <span className="text-slate-400">·</span>{' '}
+            <span className="uppercase">{data.programLevel}</span>
+          </p>
+        </div>
+        <ReaderReportsLink submissionId={data.submissionId} />
       </header>
 
       {lockedPhase && (

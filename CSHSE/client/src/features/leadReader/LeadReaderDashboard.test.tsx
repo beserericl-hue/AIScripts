@@ -34,6 +34,12 @@ describe('LeadReaderDashboardView', () => {
     expect(screen.getByTestId('lead-submission-s2')).toHaveAttribute('href', '/lead-reader/s2');
   });
 
+  it('links each row to that submission’s Reader Reports (lead reader is also a reader)', () => {
+    render(wrap(<LeadReaderDashboardView submissions={sample} isLoading={false} />));
+    expect(screen.getByTestId('lead-reader-reports-s1')).toHaveAttribute('href', '/reader-report/s1');
+    expect(screen.getByTestId('lead-reader-reports-s2')).toHaveAttribute('href', '/reader-report/s2');
+  });
+
   it('shows the status label for known statuses', () => {
     render(wrap(<LeadReaderDashboardView submissions={sample} isLoading={false} />));
     expect(screen.getByText(/Review complete/)).toBeInTheDocument();

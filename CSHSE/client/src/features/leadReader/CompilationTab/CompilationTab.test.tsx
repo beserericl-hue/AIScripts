@@ -122,6 +122,22 @@ describe('CompilationTabView', () => {
     expect(screen.getByTestId('compilation-no-rows')).toBeInTheDocument();
   });
 
+  it('links the header to the per-reader Reader Reports (with and without rows)', () => {
+    const { rerender } = render(
+      wrap(<CompilationTabView {...baseHandlers} data={sample} isLoading={false} />)
+    );
+    expect(screen.getByTestId('compilation-reader-reports-link')).toHaveAttribute(
+      'href',
+      '/reader-report/sub-1'
+    );
+    // The entry point is present even before any reader scores exist.
+    rerender(wrap(<CompilationTabView {...baseHandlers} data={{ ...sample, rows: [] }} isLoading={false} />));
+    expect(screen.getByTestId('compilation-reader-reports-link')).toHaveAttribute(
+      'href',
+      '/reader-report/sub-1'
+    );
+  });
+
   it('renders a column header per reader', () => {
     render(
       wrap(

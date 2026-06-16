@@ -2,7 +2,7 @@ import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
-import { Loader2, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { Loader2, ChevronRight, FileSpreadsheet, ClipboardList } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
 // CR-009 / Sprint 5.1 — Lead-reader dashboard.
@@ -83,11 +83,11 @@ export function LeadReaderDashboardView({
         {submissions.map((sub) => {
           const meta = statusMeta(sub.status);
           return (
-            <li key={sub._id}>
+            <li key={sub._id} className="flex items-stretch hover:bg-slate-50">
               <Link
                 data-testid={`lead-submission-${sub._id}`}
                 to={`/lead-reader/${sub._id}`}
-                className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-50"
+                className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-slate-900">{sub.institutionName}</p>
@@ -99,6 +99,18 @@ export function LeadReaderDashboardView({
                 </div>
                 <span className={['rounded-full px-2 py-0.5 text-xs', meta.cls].join(' ')}>{meta.label}</span>
                 <ChevronRight className="h-4 w-4 text-slate-400" aria-hidden />
+              </Link>
+              {/* The lead reader IS a reader: jump straight to their own Reader
+                  Report + every assigned reader's report (read each, switch views). */}
+              <Link
+                data-testid={`lead-reader-reports-${sub._id}`}
+                to={`/reader-report/${sub._id}`}
+                onClick={(e) => e.stopPropagation()}
+                title="Open your own Reader Report and read each assigned reader's report"
+                className="flex shrink-0 items-center gap-1.5 border-l border-slate-200 px-4 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+              >
+                <ClipboardList className="h-4 w-4" aria-hidden />
+                <span className="hidden sm:inline">Reader reports</span>
               </Link>
             </li>
           );

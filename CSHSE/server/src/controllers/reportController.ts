@@ -548,10 +548,14 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
     // Everyone assigned to read this submission (so we can show readers who
     // haven't started their report yet), plus anyone who already has a report.
     const assignments = await Assignment.find({ submissionId, status: 'active' })
-      .select('userId').lean();
+      .select('userId assignmentType').lean();
     const reports = await ReaderReport.find({ submissionId })
       .select('reviewerId completedAt updatedAt rows recommendation acceptanceVote').lean();
     const reportByReviewer = new Map(reports.map((r) => [String(r.reviewerId), r]));
+    // The lead reader IS a reader (own report) but is distinguished in the
+    // roster — derive the badge from the authoritative Assignment.assignmentType,
+    // not the user's primary role (a multi-role user's primary role may differ).
+    const assignmentTypeByUser = new Map(assignments.map((a) => [String(a.userId), a.assignmentType]));
 
     const reviewerIds = new Set<string>();
     for (const a of assignments) reviewerIds.add(String(a.userId));
@@ -571,7 +575,7 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
       return {
         reviewerId: rid,
         reviewerName: u ? (`${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email) : 'Unknown reviewer',
-        role: u?.role || 'reader',
+        role: assignmentTypeByUser.get(rid) || u?.role || 'reader',
         isSelf: rid === self,
         completedAt: rep?.completedAt || null,
         updatedAt: rep?.updatedAt || null,
