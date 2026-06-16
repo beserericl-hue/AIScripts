@@ -79,6 +79,8 @@ export function InstitutionManagement() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingInstitution, setEditingInstitution] = useState<Institution | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  // Optional Joint Venture assignment for the institution being created/edited.
+  const [selectedJvId, setSelectedJvId] = useState('');
   const [rosterError, setRosterError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
@@ -138,13 +140,57 @@ export function InstitutionManagement() {
     }
   });
 
+  // Active joint ventures — to offer the optional JV dropdown in the edit form
+  // and to know which JV (if any) an institution currently belongs to.
+  const { data: jvData } = useQuery({
+    queryKey: ['joint-ventures', 'active'],
+    queryFn: async () => {
+      const response = await api.get('/api/joint-ventures?archived=false');
+      return response.data;
+    }
+  });
+  const jointVentures: any[] = jvData?.jointVentures || [];
+  // The id of the active JV that contains `instId`, or '' if none.
+  const currentJvIdFor = (instId: string): string => {
+    const jv = jointVentures.find((j) =>
+      (j.institutionIds || []).some((x: any) => String(x?._id ?? x) === String(instId))
+    );
+    return jv?._id || '';
+  };
+  // Seed the JV dropdown when the edit modal opens (and re-seed if the JV list
+  // loads after the modal); reset to none for the create form.
+  React.useEffect(() => {
+    setSelectedJvId(editingInstitution ? currentJvIdFor(editingInstitution._id) : '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingInstitution, jvData]);
+
+  // Apply an institution's JV membership change via the JV member endpoints
+  // (the relationship lives on the JointVenture, not the institution PUT).
+  const syncInstitutionJv = async (instId: string) => {
+    const currentJv = currentJvIdFor(instId);
+    if (selectedJvId === currentJv) return;
+    if (currentJv) await api.delete(`/api/joint-ventures/${currentJv}/institutions/${instId}`);
+    if (selectedJvId) await api.post(`/api/joint-ventures/${selectedJvId}/institutions`, { institutionId: instId });
+    queryClient.invalidateQueries({ queryKey: ['joint-ventures'] });
+  };
+
   // Create institution mutation
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const response = await api.post('/api/institutions', data);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: async (data: any) => {
+      // If a Joint Venture was picked on the create form, add the new institution to it.
+      const newId = data?.institution?._id || data?._id;
+      if (selectedJvId && newId) {
+        try {
+          await api.post(`/api/joint-ventures/${selectedJvId}/institutions`, { institutionId: newId });
+          queryClient.invalidateQueries({ queryKey: ['joint-ventures'] });
+        } catch {
+          // Institution was created; JV add is best-effort — admin can set it via Edit.
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['institutions'] });
       setShowCreateModal(false);
       setFormError(null);
@@ -299,12 +345,16 @@ export function InstitutionManagement() {
     createMutation.mutate(formData);
   };
 
-  const handleUpdate = () => {
-    if (editingInstitution) {
-      updateMutation.mutate({
-        id: editingInstitution._id,
-        data: formData
-      });
+  const handleUpdate = async () => {
+    if (!editingInstitution) return;
+    try {
+      setFormError(null);
+      // Sync JV membership first; if it fails (e.g. already in another JV) the
+      // error surfaces while the modal is still open, before the institution PUT.
+      await syncInstitutionJv(editingInstitution._id);
+      updateMutation.mutate({ id: editingInstitution._id, data: formData });
+    } catch (error: any) {
+      setFormError(error?.response?.data?.error || 'Failed to update joint venture assignment');
     }
   };
 
@@ -702,6 +752,28 @@ export function InstitutionManagement() {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Joint Venture (optional) — group institutions that apply together */}
+              <div>
+                <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                  Joint Venture <span className="font-normal text-gray-400">(Optional)</span>
+                </h4>
+                <select
+                  value={selectedJvId}
+                  onChange={(e) => setSelectedJvId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500"
+                >
+                  <option value="">— None —</option>
+                  {jointVentures.map((jv: any) => (
+                    <option key={jv._id} value={jv._id}>{jv.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {jointVentures.length === 0
+                    ? 'No joint ventures yet. Create one in the Joint Ventures tab, then assign institutions here.'
+                    : 'Assign this institution to a joint venture (institutions that co-deliver one accredited program).'}
+                </p>
               </div>
 
               {/* Program Coordinator (only for new institutions) */}
