@@ -527,12 +527,17 @@ export function ReaderReportEditor(): JSX.Element {
           >
             <FolderOpen className="h-4 w-4 flex-shrink-0" />Supporting File Library
           </button>
-          <span
+          {/* The active section. While viewing another reader's report (read-only)
+              this returns the lead reader to THEIR OWN Reader Report. */}
+          <button
+            data-testid="rr-nav-reader-report"
             aria-current="page"
+            onClick={() => { if (viewReviewerId) { const n = new URLSearchParams(searchParams); n.delete('reviewerId'); setSearchParams(n, { replace: true }); } }}
+            title={viewReviewerId ? 'Back to my Reader Report' : 'Reader Report'}
             className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap border border-amber-300 bg-amber-100 text-amber-800"
           >
             <ClipboardList className="h-4 w-4 flex-shrink-0" />Reader Report
-          </span>
+          </button>
         </div>
       </nav>
 
@@ -587,7 +592,16 @@ export function ReaderReportEditor(): JSX.Element {
                         </p>
                       </div>
                       {it.isSelf ? (
-                        <span className="text-xs text-slate-500">{active ? 'Viewing' : ''}</span>
+                        // The lead reader IS a reader — their own row always opens
+                        // (and EDITS) their report, so they can leave another
+                        // reader's read-only view and get back to their own.
+                        <button
+                          data-testid="rr-open-my-report"
+                          onClick={() => { const n = new URLSearchParams(searchParams); n.delete('reviewerId'); setSearchParams(n, { replace: true }); }}
+                          className={`inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs ${!viewReviewerId ? 'border-indigo-400 bg-indigo-100 text-indigo-800' : 'border-slate-300 text-slate-700 hover:bg-white'}`}
+                        >
+                          <Eye className="h-3.5 w-3.5" />{!viewReviewerId ? 'Editing my report' : 'Open my report'}
+                        </button>
                       ) : it.viewable ? (
                         <button
                           data-testid={`rr-view-reviewer-${it.reviewerId}`}
