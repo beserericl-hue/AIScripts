@@ -9,19 +9,21 @@ import {
   FileText,
   Database,
   HelpCircle,
-  FolderOpen
+  FolderOpen,
+  Network
 } from 'lucide-react';
 import { useAuthStore } from '../../../store/authStore';
 import { WebhookSettings } from '../WebhookSettings';
 import { APIKeySettings } from './APIKeySettings';
 import { UserManagement } from './UserManagement';
 import { InstitutionManagement } from './InstitutionManagement';
+import { JointVentureManagement } from '../JointVentureManagement/JointVentureManagement';
 import { SpecManagement } from './SpecManagement';
 import { DataManagement } from './DataManagement';
 import { HelpDocumentUpload } from './HelpDocumentUpload';
 import { DashboardFileUpload } from './DashboardFileUpload';
 
-type SettingsSection = 'webhook' | 'api-keys' | 'data-management' | 'users' | 'institutions' | 'specs' | 'dashboard-files' | 'help-docs';
+type SettingsSection = 'webhook' | 'api-keys' | 'data-management' | 'users' | 'institutions' | 'joint-ventures' | 'specs' | 'dashboard-files' | 'help-docs';
 
 interface NavItem {
   id: SettingsSection;
@@ -66,6 +68,13 @@ const allNavItems: NavItem[] = [
     label: 'Institutions',
     icon: <Building2 className="w-5 h-5" />,
     description: 'Manage colleges and universities',
+    access: 'admin'
+  },
+  {
+    id: 'joint-ventures',
+    label: 'Joint Ventures',
+    icon: <Network className="w-5 h-5" />,
+    description: 'Group institutions that apply together',
     access: 'admin'
   },
   {
@@ -138,6 +147,8 @@ export function SettingsPage() {
         return <UserManagement />;
       case 'institutions':
         return <InstitutionManagement />;
+      case 'joint-ventures':
+        return <JointVentureManagement />;
       case 'specs':
         return <SpecManagement />;
       case 'dashboard-files':
