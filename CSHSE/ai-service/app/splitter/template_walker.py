@@ -291,6 +291,11 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
     """
     sections: list[TemplateSection] = []
     current: TemplateSection | None = None
+    # The spec/subspec CURRENTLY being processed — tables and in-prose evidence
+    # are supporting evidence of THIS spec, even when they fall under a stray
+    # list item ("2. The committee met…") that looks like a section root. Reset
+    # only at a true Standard root (a new standard with no spec yet).
+    current_spec_section: TemplateSection | None = None
     # Everything before the first Standard / Roman part header is the document
     # Introduction (ends with the glossary of terms). Only gate on this when the
     # document ACTUALLY has a standards region — otherwise a bare fragment of
@@ -303,9 +308,12 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
 
     for idx, block in enumerate(blocks):
         if block and block[0] == "table":
-            # A table belongs to whatever section it sits under in the document.
-            if current is not None:
-                current.evidence_tables.append({"html": block[1], "text": block[2]})
+            # The table is evidence of the spec currently being processed (carry
+            # forward across stray list-item "headings"); fall back to the
+            # current section (e.g. an intro table with no spec yet).
+            target = current_spec_section if current_spec_section is not None else current
+            if target is not None:
+                target.evidence_tables.append({"html": block[1], "text": block[2]})
             continue
 
         text = (block[1] if block else "").strip()
@@ -346,6 +354,17 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
                 placeholder=False,  # set on close
                 is_introduction=in_introduction,
             )
+            # Track the spec currently being processed for evidence attribution.
+            is_std_root = (
+                not in_introduction
+                and std_hint is not None
+                and spec_hint is None
+                and bool(re.match(r"^\s*Standard\b", text, re.IGNORECASE))
+            )
+            if is_std_root:
+                current_spec_section = None  # new standard, no spec yet
+            elif not in_introduction and std_hint and spec_hint:
+                current_spec_section = current  # this spec is now active
             continue
 
         if current is None:
@@ -353,11 +372,11 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
             # The template's actual content always starts under a heading.
             continue
 
-        # Record any "See Appendix …" references as import reminders (kept in
-        # the body too — they're part of the prose, just also actionable).
+        # Record any "See Appendix …" references as import reminders — under the
+        # spec currently being processed (kept in the body prose too).
         refs = _extract_appendix_refs(text)
         if refs:
-            current.appendix_refs.extend(refs)
+            (current_spec_section or current).appendix_refs.extend(refs)
 
         # Inside a section. Strip ``Response:`` markers; if the line is
         # only the marker, skip it entirely (the body comes on the next

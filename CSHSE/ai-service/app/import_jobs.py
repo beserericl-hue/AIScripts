@@ -612,6 +612,17 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     #      to its containing spec's bucket as an evidenceFiles item (HTML kept).
     #  (2) "See Appendix …" references — PC import reminders, as evidenceText.
     import uuid as _uuid
+
+    def _table_caption(text: str) -> str:
+        # A human title for the table: its first meaningful header line
+        # (e.g. "Attendees", "Name | Role", "Grading Structure …"). Never
+        # "(data table)" — that reads as noise on the review card.
+        for line in (text or "").splitlines():
+            s = line.replace("|", " ").strip()
+            if len(s) > 1:
+                return s[:70]
+        return ""
+
     tbl_count = apx_count = 0
     for raw in raw_sections:
         std, sp = raw.standard_hint, raw.spec_hint
@@ -624,15 +635,17 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
             txt = (tb.get("text") or "").strip()
             if not txt:
                 continue
+            caption = _table_caption(txt)
+            title = f"Table: {caption}" if caption else f"Supporting table — Standard {std}.{sp}"
             bucket["evidenceFiles"].append({
                 "sectionId": f"{job.job_id}:tbl:{_uuid.uuid4().hex[:8]}",
-                "heading": f"Table — {raw.heading[:60]}",
+                "heading": title,
                 "snippet": txt[:2000],
                 "htmlSnippet": tb.get("html"),
                 "wordCount": len(txt.split()),
                 "confidence": 0.9,
                 "acceptState": "review_unknown",
-                "rationale": "Embedded table extracted as supporting evidence (rosters/grids the matcher can't see).",
+                "rationale": f"Embedded table under Standard {std}.{sp} — supporting evidence the per-section matcher can't see.",
             })
             tbl_count += 1
         seen_refs: set[str] = set()
