@@ -89,6 +89,38 @@ describe('aiImportStore — _applySnapshot', () => {
     expect(s.step).toBe('parse');
   });
 
+  it('lifts an intro-hinted section from the Tags rail into the Introduction bucket', () => {
+    useAIImportStore.getState()._applySnapshot({
+      status: 'parsed',
+      buckets: {},
+      tags: [
+        {
+          tagId: 't-glossary',
+          sectionId: 'sec-glossary',
+          summary: 'Glossary of terms',
+          fullText: 'Accreditation: the process by which…',
+          suggestedStd: null,
+          suggestedSpec: null,
+          confidence: 0.1,
+          sourceHeading: 'B. Include a glossary of terms',
+          acceptState: 'review_unknown',
+          rationale: 'intro [introduction:document]'
+        }
+      ],
+      introductionHints: { 'sec-glossary': 'introduction:document' },
+      placeholderSections: [],
+      matrices: [],
+      stages: [{ name: 'done', state: 'done' }]
+    } as any);
+    const s = useAIImportStore.getState();
+    // The glossary now lives in the Document Introduction rail…
+    expect(s.introductions['document'].items).toHaveLength(1);
+    expect(s.introductions['document'].items[0].sectionId).toBe('sec-glossary');
+    expect(s.introductions['document'].items[0].heading).toContain('glossary');
+    // …and is removed from the Tags rail so it doesn't double-show.
+    expect(s.tags.find((t) => t.sectionId === 'sec-glossary')).toBeUndefined();
+  });
+
   it('folds parsed snapshot with full bucket payload', () => {
     useAIImportStore.getState()._applySnapshot({
       status: 'parsed',

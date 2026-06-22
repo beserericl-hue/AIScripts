@@ -130,6 +130,29 @@ export type IntroductionBucket = {
   items: BucketItem[];
 };
 
+// CR-039 — convert a Tag (Unplaced rail) into an Introduction-bucket item.
+// The template pipeline routes EVERY document/standard introduction (incl. the
+// glossary) to the Tags rail, and low-confidence self-study intros land there
+// too. The intro-hint seeding originally resolved hints only against
+// buckets[].narratives, so those tag-resident introductions never reached the
+// Introduction rail. Lifting from tags fixes that.
+function tagToIntroItem(t: Tag): BucketItem {
+  const text = t.fullText || t.summary || '';
+  return {
+    sectionId: t.sectionId,
+    heading: t.sourceHeading || t.summary || '',
+    snippet: text,
+    htmlSnippet: t.htmlSnippet ?? null,
+    wordCount: text.split(/\s+/).filter(Boolean).length,
+    confidence: t.confidence ?? 0,
+    acceptState: t.acceptState || 'review_unknown',
+    rationale: t.rationale || '',
+    byteOffsetStart: t.byteOffsetStart,
+    sourceImportId: t.sourceImportId,
+    sourceFilename: t.sourceFilename,
+  };
+}
+
 // CR-033 Phase 1 — faculty CV extracted from the self-study document.
 // Routing precedence: matrix-row → spec → matcher → unplaced. Phase 2
 // brings the ai-service `cv_detector.py` + the standalone-CV upload
@@ -1855,6 +1878,7 @@ export const useAIImportStore = create<AIImportState>()(
                 ? hint.slice('introduction:'.length)
                 : null;
               if (!targetKey || !mergedIntroductions[targetKey]) continue;
+              let lifted = false;
               if (snap.buckets) {
                 for (const b of Object.values(snap.buckets)) {
                   const found = b.narratives.find((n) => n.sectionId === sectionId);
@@ -1863,8 +1887,21 @@ export const useAIImportStore = create<AIImportState>()(
                       stamp(found, importId, filename)
                     );
                     seenIntroIds.add(sectionId);
+                    lifted = true;
                     break;
                   }
+                }
+              }
+              // Intros routed to the Tags rail (template path / low-confidence
+              // self-study) — lift from tags and drop the tag.
+              if (!lifted) {
+                const ti = mergedTags.findIndex((t) => t.sectionId === sectionId);
+                if (ti >= 0) {
+                  mergedIntroductions[targetKey].items.push(
+                    stamp(tagToIntroItem(mergedTags[ti]), importId, filename)
+                  );
+                  mergedTags.splice(ti, 1);
+                  seenIntroIds.add(sectionId);
                 }
               }
             }
@@ -1922,6 +1959,10 @@ export const useAIImportStore = create<AIImportState>()(
           for (const [bk, b] of Object.entries(incomingBuckets)) {
             newBucketsForIntro[bk] = { ...b, narratives: [...b.narratives] };
           }
+          // Tags can also carry introductions (the template pipeline routes ALL
+          // intros — and the glossary — to the Tags rail). Lift from there too,
+          // removing the tag so it doesn't double-show in Unplaced.
+          const introTags: Tag[] = [...((snap.tags ?? current.tags) || [])];
           for (const [sectionId, hint] of Object.entries(snap.introductionHints)) {
             const targetKey = hint.startsWith('introduction:')
               ? hint.slice('introduction:'.length)
@@ -1945,13 +1986,21 @@ export const useAIImportStore = create<AIImportState>()(
                 break;
               }
             }
+            if (!found) {
+              const ti = introTags.findIndex((t) => t.sectionId === sectionId);
+              if (ti >= 0) {
+                found = tagToIntroItem(introTags[ti]);
+                introTags.splice(ti, 1);
+              }
+            }
             if (found) {
               seededIntros[targetKey].items.push(found);
             }
           }
           nextIntroductions = seededIntros;
-          // Reuse the seeded buckets below
+          // Reuse the seeded buckets + the tags with intros lifted out below
           (snap as AIStatusSnapshot).buckets = newBucketsForIntro;
+          (snap as AIStatusSnapshot).tags = introTags;
         }
 
         set({
