@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from app.splitter.template_walker import (
     walk_template_paragraphs,
+    walk_template_docx,
     _is_placeholder,
     _match_heading,
 )
@@ -219,6 +220,79 @@ def test_walker_handles_per_spec_form_when_present():
     assert (sections[1].standard_hint, sections[1].spec_hint) == ("1", "b")
 
 
+def test_match_heading_standard_colon_form():
+    """'Standard 1: The primary objective shall…' — colon form is a Standard
+    ROOT (std hint, no spec). The shall-sentence runs on the same line."""
+    assert _match_heading("Standard 1: The primary program objective shall be to prepare…") == ("1", None)
+    assert _match_heading("Standard 10: Each program shall articulate policies…") == ("10", None)
+
+
+def test_match_heading_widened_spec_letters():
+    """Spec letters run past 'h' (e.g. Field Experience 21 a–j)."""
+    assert _match_heading("21.j Provide…") == ("21", "j")
+    assert _match_heading("9e. Describe office/classroom space") == ("9", "e")
+
+
+# ------------------------------------------------ introduction region (KSU-style)
+
+
+def _ksu_like():
+    # Title block + intro prompts (their OWN 1./2a. numbering) + glossary,
+    # THEN the standards region opening with "Standard 1: …" and real specs.
+    return _texts(
+        "1. Specify the degree(s) offered",
+        "Response:",
+        "Bachelor of Science in Human Services.",
+        "2a. Describe the organizational structure",
+        "Response:",
+        "KSU is governed by the Board of Regents.",
+        "B. Glossary of terms",
+        "Accreditation: the process by which…",
+        "Standard 1: The primary program objective shall be to prepare human services professionals.",
+        "Context: institutional requirements.",
+        "1a. The program is part of a regionally accredited institution.",
+        "Response:",
+        "KSU is accredited by SACSCOC.",
+        "1b. Provide evidence that competent professionals is the primary objective.",
+        "Response:",
+        "The program's purpose is…",
+    )
+
+
+def test_intro_region_items_are_flagged_and_lose_spec_hints():
+    sections = walk_template_paragraphs(_ksu_like())
+    by_heading = {s.heading: s for s in sections}
+
+    # The intro's own "1." / "2a." numbering must NOT be read as Standard specs.
+    intro_degree = by_heading["1. Specify the degree(s) offered"]
+    assert intro_degree.is_introduction is True
+    assert (intro_degree.standard_hint, intro_degree.spec_hint) == (None, None)
+
+    intro_org = by_heading["2a. Describe the organizational structure"]
+    assert intro_org.is_introduction is True
+    assert (intro_org.standard_hint, intro_org.spec_hint) == (None, None)
+
+    # The glossary closes the introduction and stays in the intro region.
+    glossary = by_heading["B. Glossary of terms"]
+    assert glossary.is_introduction is True
+
+
+def test_standards_after_intro_keep_their_hints():
+    sections = walk_template_paragraphs(_ksu_like())
+    by_heading = {s.heading: s for s in sections}
+
+    # The Standard root (colon form) ends the intro and is NOT an intro section.
+    std1 = next(s for s in sections if s.heading.startswith("Standard 1:"))
+    assert std1.is_introduction is False
+    assert std1.standard_hint == "1"
+    assert std1.spec_hint is None
+
+    # Real specs under the standard keep their std+spec hints.
+    spec_1a = by_heading["1a. The program is part of a regionally accredited institution."]
+    assert spec_1a.is_introduction is False
+    assert (spec_1a.standard_hint, spec_1a.spec_hint) == ("1", "a")
+
+
 def test_walker_keeps_see_appendix_pointer_inline():
     """``See Appendix`` lines mixed with prose are kept (matcher uses them as evidence pointers)."""
     paras = _texts(
@@ -231,3 +305,54 @@ def test_walker_keeps_see_appendix_pointer_inline():
     sections = walk_template_paragraphs(paras)
     assert "See Appendix I — #1 Map of Kennesaw Campus" in sections[0].body_text
     assert "two campuses" in sections[0].body_text
+
+
+# ------------------------------------- walk_template_docx flag emission (pipeline contract)
+
+
+def _make_docx(paragraphs, path):
+    from docx import Document as _D
+    d = _D()
+    for p in paragraphs:
+        d.add_paragraph(p)
+    d.save(str(path))
+
+
+def test_docx_flags_route_intro_and_keep_spec_hints(tmp_path):
+    """The flags the template pipeline reads: document intro + glossary →
+    introduction:document; Standard root → introduction:standard-N; real spec
+    keeps templateStandardHint/templateSpecHint and carries NO intro hint."""
+    docx = tmp_path / "tmpl.docx"
+    _make_docx(
+        [
+            "1. Specify the degree(s) offered",
+            "Response:",
+            "Bachelor of Science in Human Services.",
+            "B. Glossary of terms",
+            "Accreditation: the process by which an institution is reviewed.",
+            "Standard 1: The primary program objective shall be to prepare professionals.",
+            "Context: institutional requirements.",
+            "1a. The program is part of a regionally accredited institution.",
+            "Response:",
+            "KSU is accredited by SACSCOC.",
+        ],
+        docx,
+    )
+    sections, _raw = walk_template_docx(str(docx), base_id="t")
+    by_heading = {s.heading: s for s in sections}
+
+    intro = by_heading["1. Specify the degree(s) offered"]
+    assert intro.flags.get("templateIntroductionHint") == "introduction:document"
+    assert intro.flags.get("templateStandardHint") == ""
+    assert intro.flags.get("templateSpecHint") == ""
+
+    glossary = by_heading["B. Glossary of terms"]
+    assert glossary.flags.get("templateIntroductionHint") == "introduction:document"
+
+    std_root = next(s for s in sections if s.heading.startswith("Standard 1:"))
+    assert std_root.flags.get("templateIntroductionHint") == "introduction:standard-1"
+
+    spec = by_heading["1a. The program is part of a regionally accredited institution."]
+    assert spec.flags.get("templateIntroductionHint") in (None, "")
+    assert spec.flags.get("templateStandardHint") == "1"
+    assert spec.flags.get("templateSpecHint") == "a"

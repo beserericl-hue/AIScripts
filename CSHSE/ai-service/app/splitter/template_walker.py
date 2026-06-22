@@ -55,24 +55,45 @@ from app.splitter.sections import Section, _heuristic_flags
 _HEADING_PATTERNS = [
     # "Standard 1, Specification a." or "Standard 11 Specification b"
     re.compile(
-        r"^\s*Standard\s+(?P<std>\d{1,2})\s*[,.\s]+\s*Specification\s+(?P<spec>[a-h])\b",
+        r"^\s*Standard\s+(?P<std>\d{1,2})\s*[,.\s]+\s*Specification\s+(?P<spec>[a-j])\b",
         re.IGNORECASE,
     ),
     # "Standard 12b." / "Standard 16c"
     re.compile(
-        r"^\s*Standard\s+(?P<std>\d{1,2})\s*(?P<spec>[a-h])\.?\s+",
+        r"^\s*Standard\s+(?P<std>\d{1,2})\s*(?P<spec>[a-j])\.?\s+",
         re.IGNORECASE,
     ),
+    # "Standard 1:" / "Standard 4: The program shall…" — the colon form a
+    # program uses to open a Standard whose normative ("shall") sentence runs
+    # ON THE SAME LINE. It's a Standard ROOT: a std hint, NO spec. The specs
+    # (1a., 1b., …) follow underneath. (Must precede the bare-standard rule.)
+    re.compile(r"^\s*Standard\s+(?P<std>\d{1,2})\s*:", re.IGNORECASE),
     # "1.a." / "11.b" — dotted spec form (Handbook canonical form)
-    re.compile(r"^\s*(?P<std>\d{1,2})\.(?P<spec>[a-h])\.?\s"),
+    re.compile(r"^\s*(?P<std>\d{1,2})\.(?P<spec>[a-j])\.?\s"),
     # "1a." / "2b" — undotted spec form (template intro-section form)
-    re.compile(r"^\s*(?P<std>\d{1,2})(?P<spec>[a-h])\.?\s"),
+    re.compile(r"^\s*(?P<std>\d{1,2})(?P<spec>[a-j])\.?\s"),
     # Section root like "1." / "2." / "Standard 1" — std hint without spec
     re.compile(r"^\s*(?P<std>\d{1,2})\.\s"),
     re.compile(r"^\s*Standard\s+(?P<std>\d{1,2})\b\s*$", re.IGNORECASE),
     # "A. Required Self-Study Introductory…", "B. Glossary", etc.
     re.compile(r"^\s*(?P<letter>[A-Z])\.\s+[A-Z]"),
 ]
+
+# The heading that OPENS the standards region. Everything BEFORE the first one
+# of these is the document Introduction (front matter + the intro's own
+# "1." / "2a." prompts + the closing Glossary of terms). The user's rule:
+# "document introduction ends with glossary of terms" — and the glossary always
+# sits just before the first Standard. Matches a Standard heading in any form,
+# or a Roman-numeral part header ("I. GENERAL PROGRAM CHARACTERISTICS").
+#
+# Why this matters: the Introduction reuses spec-LOOKING numbering ("2a. Describe
+# the organizational structure" is an INTRO prompt, not Standard 2 spec a). Held
+# inside the intro region, those hints are dropped so nothing misfiles under a
+# Standard — the whole region routes to introduction:document instead.
+_STANDARDS_REGION_RE = re.compile(
+    r"^\s*(Standard\s+\d{1,2}\b|[IVX]+\.\s+[A-Z])",
+    re.IGNORECASE,
+)
 
 # Markers that are not section breaks — they appear inside a section body.
 _RESPONSE_MARKER_RE = re.compile(r"^\s*Response\s*:\s*", re.IGNORECASE)
@@ -111,6 +132,11 @@ class TemplateSection:
     standard_hint: str | None
     spec_hint: str | None
     placeholder: bool
+    # True when this section lives in the document Introduction region (before
+    # the first Standard / Roman part header — title block, intro prompts,
+    # glossary). These route to introduction:document, and their spec-looking
+    # numbering is NOT trusted as Standard hints.
+    is_introduction: bool = False
 
     @property
     def body_text(self) -> str:
@@ -190,6 +216,14 @@ def walk_template_paragraphs(
     """
     sections: list[TemplateSection] = []
     current: TemplateSection | None = None
+    # Everything before the first Standard / Roman part header is the document
+    # Introduction (ends with the glossary of terms). Only gate on this when the
+    # document ACTUALLY has a standards region — otherwise a bare fragment of
+    # "1." / "2a." headings (no Standard) keeps its spec hints (old behavior).
+    has_standards_region = any(
+        _STANDARDS_REGION_RE.match((t or "").strip()) for t in paragraph_texts
+    )
+    in_introduction = has_standards_region
 
     for idx, raw in enumerate(paragraph_texts):
         text = (raw or "").strip()
@@ -203,6 +237,12 @@ def walk_template_paragraphs(
         if _is_front_matter(text):
             continue
 
+        # Leaving the Introduction: the first Standard (or Roman part header)
+        # ends it. Detected BEFORE heading classification so the Standard line
+        # itself is NOT tagged as introduction.
+        if in_introduction and _STANDARDS_REGION_RE.match(text):
+            in_introduction = False
+
         hit = _match_heading(text)
         if hit is not None:
             # Close the previous section.
@@ -210,6 +250,11 @@ def walk_template_paragraphs(
                 current.placeholder = _is_placeholder(current.body_paragraphs)
                 sections.append(current)
             std_hint, spec_hint = hit
+            if in_introduction:
+                # Intro numbering ("1.", "2a.", "B. Glossary") is the intro's
+                # own, NOT Standard specs — drop the hints so nothing buckets
+                # under a Standard; the section routes to introduction:document.
+                std_hint, spec_hint = None, None
             current = TemplateSection(
                 paragraph_index=idx,
                 heading=text,
@@ -217,6 +262,7 @@ def walk_template_paragraphs(
                 standard_hint=std_hint,
                 spec_hint=spec_hint,
                 placeholder=False,  # set on close
+                is_introduction=in_introduction,
             )
             continue
 
@@ -266,8 +312,25 @@ def walk_template_docx(
         flags = _heuristic_flags(md)
         # Carry the heading-derived hints in flags so downstream coverage /
         # bucket-allocation can also surface them, not just the matcher.
-        flags["templateStandardHint"] = raw.standard_hint or ""
-        flags["templateSpecHint"] = raw.spec_hint or ""
+        # Introduction-region sections carry NO standard/spec hint and a
+        # document-introduction routing hint instead — the template pipeline
+        # routes them to the documentIntroduction bucket rather than the matcher.
+        if raw.is_introduction:
+            flags["templateStandardHint"] = ""
+            flags["templateSpecHint"] = ""
+            flags["templateIntroductionHint"] = "introduction:document"
+        elif raw.standard_hint and not raw.spec_hint and re.match(
+            r"^\s*Standard\b", raw.heading, re.IGNORECASE
+        ):
+            # A Standard ROOT ("Standard 1: …the program shall…") — the
+            # normative sentence + Context framing is NOT a spec response;
+            # route it to that Standard's introduction (standardIntroductions[N]).
+            flags["templateStandardHint"] = raw.standard_hint
+            flags["templateSpecHint"] = ""
+            flags["templateIntroductionHint"] = f"introduction:standard-{raw.standard_hint}"
+        else:
+            flags["templateStandardHint"] = raw.standard_hint or ""
+            flags["templateSpecHint"] = raw.spec_hint or ""
         flags["templateHeading"] = raw.heading[:200]
         sections.append(
             Section(

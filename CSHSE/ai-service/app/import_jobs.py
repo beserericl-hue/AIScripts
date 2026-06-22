@@ -467,6 +467,21 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
         f"{len(raw_sections)} sections ({len(sections)} authored, {len(placeholders)} placeholder)",
     )
 
+    # Introduction routing seed (template path). The walker deterministically
+    # tags the document Introduction (front matter + intro prompts + glossary →
+    # introduction:document) and each Standard's framing (the "Standard N: …
+    # shall…" root → introduction:standard-N). Layer the lexical heading
+    # detector on top to catch any intro heading (Mission/Glossary/Overview)
+    # the region scan missed. These route to the Introduction buckets below.
+    from app.splitter.introduction_detector import detect_introductions
+    job.introduction_hints = job.introduction_hints or {}
+    for sec in sections:
+        h = (sec.flags or {}).get("templateIntroductionHint")
+        if h:
+            job.introduction_hints[sec.id] = h
+    for sid, h in detect_introductions(sections).items():
+        job.introduction_hints.setdefault(sid, h)
+
     _stage_started(job, "matcher", f"0 / {len(sections)}")
     store = VectorStore(settings.qdrant_url, settings.qdrant_api_key or None)
     embedder = EmbeddingClient(settings.openai_api_key)
@@ -539,8 +554,33 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
         }
 
     tags: list[dict[str, Any]] = []
+    # Introduction routing (mirrors the self-study path). A walker-provided hint
+    # (templateIntroductionHint) is AUTHORITATIVE — the document intro + glossary
+    # and each Standard's framing always route to the Introduction buckets, never
+    # to a spec. A matcher-only intro (section_type='introduction') routes too.
+    INTRO_OVERRIDE_THRESHOLD = 0.75
+    intro_routed_count = 0
     for sec in sections:
         rec = recommendations.get(sec.id)
+        walker_hint = (sec.flags or {}).get("templateIntroductionHint")
+        intro_hint = walker_hint or (job.introduction_hints or {}).get(sec.id)
+        if not intro_hint and rec is not None and rec.section_type == "introduction":
+            intro_hint = (
+                f"introduction:standard-{rec.primary_standard}"
+                if rec.primary_standard else "introduction:document"
+            )
+        if intro_hint and (
+            walker_hint
+            or rec is None
+            or rec.section_type == "introduction"
+            or rec.primary_confidence < INTRO_OVERRIDE_THRESHOLD
+        ):
+            job.introduction_hints[sec.id] = intro_hint
+            tag = _recommendation_to_tag(sec, rec)
+            tag["rationale"] = (tag.get("rationale") or "") + f" [{intro_hint}]"
+            tags.append(tag)
+            intro_routed_count += 1
+            continue
         if rec is None or rec.primary_standard is None or rec.primary_spec is None:
             tags.append(_recommendation_to_tag(sec, rec))
             continue
