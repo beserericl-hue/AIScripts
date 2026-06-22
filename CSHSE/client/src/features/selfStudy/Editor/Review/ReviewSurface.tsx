@@ -148,7 +148,7 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-1 min-h-0 flex-col">
       <header className="flex items-center justify-between gap-2 border-b border-gray-200 bg-white px-6 py-2">
         <div>
           <h1 className="text-lg font-semibold text-gray-900">Review</h1>
@@ -237,7 +237,7 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
           </button>
         </div>
       </header>
-      <div className="flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
         <ReviewStep />
       </div>
     </div>

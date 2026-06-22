@@ -3131,7 +3131,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           {/* CR-043 — Review surface, decoupled from the wizard.
               State comes from Submission.aiReviewState. */}
           {activeView === 'review-surface' && isProgramCoordinator && submissionId && (
-            <main className="flex-1 overflow-hidden">
+            <main className="flex flex-1 flex-col overflow-hidden">
               <ReviewSurface
                 submissionId={submissionId}
                 onClose={() => setActiveView('standards')}
@@ -3141,7 +3141,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
           {/* CR-043 — Matrix surface, decoupled from the wizard. */}
           {activeView === 'matrix-surface' && isProgramCoordinator && submissionId && (
-            <main className="flex-1 overflow-hidden">
+            <main className="flex flex-1 flex-col overflow-hidden">
               <MatrixSurface
                 submissionId={submissionId}
                 onClose={() => setActiveView('standards')}
