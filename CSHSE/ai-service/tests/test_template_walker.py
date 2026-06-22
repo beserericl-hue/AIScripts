@@ -356,3 +356,45 @@ def test_docx_flags_route_intro_and_keep_spec_hints(tmp_path):
     assert spec.flags.get("templateIntroductionHint") in (None, "")
     assert spec.flags.get("templateStandardHint") == "1"
     assert spec.flags.get("templateSpecHint") == "a"
+
+
+def test_inline_standard_citation_does_not_end_intro_before_glossary():
+    """A front-matter curriculum citation ('Standard 13 a:') must NOT end the
+    Introduction — the glossary that follows it still belongs to the intro."""
+    paras = _texts(
+        "1. Specify the degree(s) offered",
+        "Response:",
+        "Bachelor of Science.",
+        "Standard 13 a: students understand small-group theory",  # inline citation
+        "B. Include a glossary of terms",
+        "Accreditation: the process by which…",
+        "Standard 1: The primary objective shall be to prepare professionals.",
+        "1a. The program is regionally accredited.",
+        "Response:",
+        "Accredited by SACSCOC.",
+    )
+    sections = walk_template_paragraphs(paras)
+    glossary = next(s for s in sections if "glossary" in s.heading.lower())
+    assert glossary.is_introduction is True
+    spec_1a = next(s for s in sections if s.heading.startswith("1a."))
+    assert spec_1a.is_introduction is False
+    assert (spec_1a.standard_hint, spec_1a.spec_hint) == ("1", "a")
+
+
+def test_standard_root_with_empty_body_still_emits_standard_intro(tmp_path):
+    """Standard 9: with the shall-sentence in the heading and no body still
+    emits a section routed to introduction:standard-9 (not dropped as empty)."""
+    docx = tmp_path / "t.docx"
+    _make_docx(
+        [
+            "I. GENERAL PROGRAM CHARACTERISTICS",
+            "Standard 9: The program shall have adequate faculty, staff, and resources.",
+            "9a. Include budgetary information.",
+            "Response:",
+            "The annual budget is sufficient.",
+        ],
+        docx,
+    )
+    sections, _ = walk_template_docx(str(docx), base_id="t")
+    root = next(s for s in sections if s.heading.startswith("Standard 9:"))
+    assert root.flags.get("templateIntroductionHint") == "introduction:standard-9"

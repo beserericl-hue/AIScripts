@@ -83,15 +83,21 @@ _HEADING_PATTERNS = [
 # of these is the document Introduction (front matter + the intro's own
 # "1." / "2a." prompts + the closing Glossary of terms). The user's rule:
 # "document introduction ends with glossary of terms" — and the glossary always
-# sits just before the first Standard. Matches a Standard heading in any form,
-# or a Roman-numeral part header ("I. GENERAL PROGRAM CHARACTERISTICS").
+# sits just before the first Standard.
 #
-# Why this matters: the Introduction reuses spec-LOOKING numbering ("2a. Describe
-# the organizational structure" is an INTRO prompt, not Standard 2 spec a). Held
-# inside the intro region, those hints are dropped so nothing misfiles under a
-# Standard — the whole region routes to introduction:document instead.
+# Match ONLY a true boundary: a Roman-numeral part header ("I. GENERAL PROGRAM
+# CHARACTERISTICS") or a Standard ROOT — "Standard 1:" (colon) or a bare
+# "Standard 1" on its own line. Deliberately NOT inline curriculum citations
+# like "Standard 13 a:" or "Standard 12b. …", which the front-matter program
+# description sprinkles BEFORE the glossary — those must not end the intro early
+# (that was dropping the glossary out of the introduction).
+#
+# Why the region matters: the Introduction reuses spec-LOOKING numbering ("2a.
+# Describe the organizational structure" is an INTRO prompt, not Standard 2 spec
+# a). Held inside the intro region, those hints are dropped so nothing misfiles
+# under a Standard — the whole region routes to introduction:document instead.
 _STANDARDS_REGION_RE = re.compile(
-    r"^\s*(Standard\s+\d{1,2}\b|[IVX]+\.\s+[A-Z])",
+    r"^\s*(?:[IVX]+\.\s+[A-Z]|Standard\s+\d{1,2}\s*(?::|\.?\s*$))",
     re.IGNORECASE,
 )
 
@@ -303,7 +309,17 @@ def walk_template_docx(
 
     sections: list[Section] = []
     for raw in raw_sections:
-        if raw.placeholder:
+        # A Standard ROOT ("Standard 9: …the program shall…") carries its
+        # normative statement IN THE HEADING, so its body is often empty — but
+        # it still anchors that Standard's introduction. Emit it even when the
+        # body is a placeholder; skip only genuinely-unwritten spec responses.
+        is_std_root = bool(
+            raw.standard_hint
+            and not raw.spec_hint
+            and not raw.is_introduction
+            and re.match(r"^\s*Standard\b", raw.heading, re.IGNORECASE)
+        )
+        if raw.placeholder and not is_std_root:
             # Don't send unwritten / "Not applicable" sections through the
             # matcher — there's nothing to classify and we'd just waste
             # API calls (and add noise to the preview).
