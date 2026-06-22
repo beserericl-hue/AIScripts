@@ -614,13 +614,23 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     import uuid as _uuid
 
     def _table_caption(text: str) -> str:
-        # A human title for the table: its first meaningful header line
-        # (e.g. "Attendees", "Name | Role", "Grading Structure …"). Never
+        # A human title for the table: its first meaningful header row, with
+        # repeated header cells collapsed (a header spanning columns repeats),
+        # e.g. "Example of a CIP Code", "Name · Role", "Attendees". Never
         # "(data table)" — that reads as noise on the review card.
         for line in (text or "").splitlines():
-            s = line.replace("|", " ").strip()
-            if len(s) > 1:
-                return s[:70]
+            cells = [c.strip() for c in line.split("|") if c.strip()]
+            if not cells:
+                continue
+            seen: set[str] = set()
+            uniq: list[str] = []
+            for c in cells:
+                if c.lower() not in seen:
+                    seen.add(c.lower())
+                    uniq.append(c)
+            cap = " · ".join(uniq)
+            if len(cap) > 1:
+                return cap[:70]
         return ""
 
     tbl_count = apx_count = 0
