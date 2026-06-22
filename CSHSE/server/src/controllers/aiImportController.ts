@@ -751,6 +751,15 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
     (importRecord as any).aiIntroductionHints = payload.introductionHints;
     (importRecord as any).markModified('aiIntroductionHints');
   }
+  // CR-039 Phase 2c — STRUCTURED introductions ('document' / 'standard-N' →
+  // {scope, standardCode, items[]}). Persist so the merge below seeds
+  // Submission.aiReviewState.introductions — the field the wizard's
+  // Introduction rail renders. Without this, only hints arrived and the rail
+  // stayed empty.
+  if (payload.introductions && typeof payload.introductions === 'object') {
+    (importRecord as any).aiIntroductions = payload.introductions;
+    (importRecord as any).markModified('aiIntroductions');
+  }
   importRecord.aiCompletedAt = new Date();
   importRecord.aiQueuePosition = null;
   importRecord.aiQueueDepth = null;

@@ -154,6 +154,11 @@ class JobRecord:
     # the callback so cshse-server can seed the wizard's Introduction
     # buckets without re-running the heading-based detector client-side.
     introduction_hints: dict[str, str] | None = None
+    # CR-039 — STRUCTURED Introduction buckets ('document' / 'standard-N' →
+    # {scope, standardCode, items[]}). This is what the wizard's Introduction
+    # rail renders (Submission.aiReviewState.introductions). Hints alone left it
+    # empty; the server maps this straight through (payload.introductions).
+    introductions: dict[str, Any] | None = None
     # CR-040 Phase 3 — post-parse coverage report. Counts per
     # destination + a list of unassigned sections so the wizard can
     # surface a "Missing from import" rail entry.
@@ -190,6 +195,7 @@ class JobRecord:
             # the wizard's Introduction buckets (Phase 2c will also use
             # it as a matcher-prompt override).
             "introductionHints": self.introduction_hints or {},
+            "introductions": self.introductions or {},
             # CR-040 Phase 3 — coverage report (per-destination counts +
             # missing fragments).
             "coverageReport": self.coverage_report or {},
@@ -560,6 +566,13 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     # to a spec. A matcher-only intro (section_type='introduction') routes too.
     INTRO_OVERRIDE_THRESHOLD = 0.75
     intro_routed_count = 0
+    # Structured Introduction buckets the wizard's Introduction rail actually
+    # reads (Submission.aiReviewState.introductions, keyed 'document' /
+    # 'standard-N' with items[]). cshse-ai only ever sent intro HINTS + tags,
+    # so aiReviewState.introductions stayed {} and the rail was empty. Build the
+    # structure here and route intros to it ONLY (not tags) so they don't also
+    # show in Unplaced.
+    intro_struct: dict[str, dict[str, Any]] = {}
     for sec in sections:
         rec = recommendations.get(sec.id)
         walker_hint = (sec.flags or {}).get("templateIntroductionHint")
@@ -576,9 +589,13 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
             or rec.primary_confidence < INTRO_OVERRIDE_THRESHOLD
         ):
             job.introduction_hints[sec.id] = intro_hint
-            tag = _recommendation_to_tag(sec, rec)
-            tag["rationale"] = (tag.get("rationale") or "") + f" [{intro_hint}]"
-            tags.append(tag)
+            key = intro_hint.split("introduction:", 1)[-1]  # 'document' | 'standard-N'
+            scope = "standard" if key.startswith("standard-") else "document"
+            std_code = key.split("-", 1)[1] if scope == "standard" else None
+            ib = intro_struct.setdefault(
+                key, {"scope": scope, "standardCode": std_code, "items": []}
+            )
+            ib["items"].append(_section_to_item(sec, rec))
             intro_routed_count += 1
             continue
         if rec is None or rec.primary_standard is None or rec.primary_spec is None:
@@ -793,6 +810,7 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
 
     job.buckets = buckets
     job.tags = tags
+    job.introductions = intro_struct
     job.matrices = []
 
 
