@@ -398,3 +398,27 @@ def test_standard_root_with_empty_body_still_emits_standard_intro(tmp_path):
     sections, _ = walk_template_docx(str(docx), base_id="t")
     root = next(s for s in sections if s.heading.startswith("Standard 9:"))
     assert root.flags.get("templateIntroductionHint") == "introduction:standard-9"
+
+
+def test_walker_captures_embedded_table_and_appendix_refs(tmp_path):
+    """Embedded tables attach to the current spec as evidence; 'See Appendix'
+    lines are captured as import reminders. (Paragraph-only walking dropped
+    tables entirely — the rosters/grids that ARE the supporting evidence.)"""
+    from docx import Document as _D
+    d = _D()
+    d.add_paragraph("I. GENERAL PROGRAM CHARACTERISTICS")
+    d.add_paragraph("Standard 7: The program shall manage essential roles.")
+    d.add_paragraph("7b 2. Provide a table matching faculty and staff with roles.")
+    d.add_paragraph("Response:")
+    d.add_paragraph("The roles are filled as shown. See Appendix VII Standard 7 Roster.")
+    t = d.add_table(rows=2, cols=2)
+    t.rows[0].cells[0].text = "Name"; t.rows[0].cells[1].text = "Role"
+    t.rows[1].cells[0].text = "Jane Doe"; t.rows[1].cells[1].text = "Director"
+    docx = tmp_path / "roster.docx"; d.save(str(docx))
+
+    sections, raw = walk_template_docx(str(docx), base_id="t")
+    spec = next(r for r in raw if r.standard_hint == "7" and r.spec_hint == "b")
+    assert len(spec.evidence_tables) == 1
+    assert "Name" in spec.evidence_tables[0]["text"] and "Director" in spec.evidence_tables[0]["text"]
+    assert "<table>" in spec.evidence_tables[0]["html"]
+    assert spec.appendix_refs and "Appendix VII" in spec.appendix_refs[0]

@@ -39,11 +39,20 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from docx import Document
 
 from app.splitter.sections import Section, _heuristic_flags
+
+# A "See Appendix …" / "See Part II Appendices …" reference. In real PC
+# submissions these are REMINDERS for the coordinator to import the named
+# appendix document as supporting evidence — never extractable content. We
+# surface them as import reminders, we do not treat them as evidence files.
+_APPENDIX_RE = re.compile(
+    r"see\s+(?:part\s+[ivx]+\s+)?append(?:ix|ices)\b[^\n]{0,160}",
+    re.IGNORECASE,
+)
 
 # ----------------------------------------------------------------- patterns
 #
@@ -143,6 +152,14 @@ class TemplateSection:
     # glossary). These route to introduction:document, and their spec-looking
     # numbering is NOT trusted as Standard hints.
     is_introduction: bool = False
+    # Embedded TABLES that fall under this section in document order (faculty
+    # rosters, advisory-board attendee lists, credit-hour grids). The paragraph
+    # walk drops tables entirely, so these are captured separately and surfaced
+    # as SUPPORTING EVIDENCE for the section's spec. Each: {"html","text"}.
+    evidence_tables: list[dict] = field(default_factory=list)
+    # "See Appendix …" references found in this section's prose — surfaced as
+    # PC import reminders (import that appendix doc as supporting evidence).
+    appendix_refs: list[str] = field(default_factory=list)
 
     @property
     def body_text(self) -> str:
@@ -189,6 +206,47 @@ def _strip_response_marker(text: str) -> str:
     return _RESPONSE_MARKER_RE.sub("", text).strip()
 
 
+def _extract_appendix_refs(text: str) -> list[str]:
+    """Return any ``See Appendix …`` references in ``text`` (verbatim, trimmed)."""
+    return [m.group(0).strip() for m in _APPENDIX_RE.finditer(text or "")]
+
+
+def _esc(s: str) -> str:
+    return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _table_to_text(table) -> str:
+    return "\n".join(
+        " | ".join((c.text or "").strip() for c in r.cells) for r in table.rows
+    ).strip()
+
+
+def _table_to_html(table) -> str:
+    rows = [
+        "<tr>" + "".join(f"<td>{_esc((c.text or '').strip())}</td>" for c in r.cells) + "</tr>"
+        for r in table.rows
+    ]
+    return "<table>" + "".join(rows) + "</table>"
+
+
+def _iter_block_items(doc):
+    """Yield ``("p", text)`` and ``("table", html, text)`` for every paragraph
+    and table in the document, IN DOCUMENT ORDER. ``doc.paragraphs`` alone drops
+    tables; we walk the body XML so embedded tables land under the right section.
+    """
+    from docx.oxml.text.paragraph import CT_P
+    from docx.oxml.table import CT_Tbl
+    from docx.table import Table as _Table
+    from docx.text.paragraph import Paragraph as _Paragraph
+
+    for child in doc.element.body.iterchildren():
+        if isinstance(child, CT_P):
+            yield ("p", _Paragraph(child, doc).text or "")
+        elif isinstance(child, CT_Tbl):
+            t = _Table(child, doc)
+            yield ("table", _table_to_html(t), _table_to_text(t))
+
+
 def _is_placeholder(body_paragraphs: list[str]) -> bool:
     """A section is a placeholder when every non-empty body paragraph
     matches the ``_PLACEHOLDER_RE`` pattern, or when the body is empty.
@@ -214,11 +272,22 @@ def _is_placeholder(body_paragraphs: list[str]) -> bool:
 def walk_template_paragraphs(
     paragraph_texts: list[str],
 ) -> list[TemplateSection]:
-    """Pure-function walker over a list of paragraph strings.
+    """Pure-function walker over a list of paragraph strings (no tables).
 
-    This is the unit-testable core: callers feed in the paragraph text
-    list (in document order) and get back the section structure. The
-    ``walk_template_docx`` wrapper handles DOCX I/O and Section wrapping.
+    Thin wrapper over :func:`walk_template_blocks` — kept for the unit tests
+    and any caller that only has paragraph text.
+    """
+    return walk_template_blocks([("p", t) for t in paragraph_texts])
+
+
+def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
+    """Walk an in-document-order block stream into sections.
+
+    Each block is ``("p", text)`` or ``("table", html, text)``. Paragraphs cut
+    and fill sections exactly as before; a table attaches to the CURRENT
+    section's ``evidence_tables`` (so embedded rosters/grids stay with their
+    spec instead of being dropped). ``See Appendix …`` lines are also recorded
+    on the section as import reminders.
     """
     sections: list[TemplateSection] = []
     current: TemplateSection | None = None
@@ -226,13 +295,20 @@ def walk_template_paragraphs(
     # Introduction (ends with the glossary of terms). Only gate on this when the
     # document ACTUALLY has a standards region — otherwise a bare fragment of
     # "1." / "2a." headings (no Standard) keeps its spec hints (old behavior).
+    text_blocks = [b[1] for b in blocks if b and b[0] == "p"]
     has_standards_region = any(
-        _STANDARDS_REGION_RE.match((t or "").strip()) for t in paragraph_texts
+        _STANDARDS_REGION_RE.match((t or "").strip()) for t in text_blocks
     )
     in_introduction = has_standards_region
 
-    for idx, raw in enumerate(paragraph_texts):
-        text = (raw or "").strip()
+    for idx, block in enumerate(blocks):
+        if block and block[0] == "table":
+            # A table belongs to whatever section it sits under in the document.
+            if current is not None:
+                current.evidence_tables.append({"html": block[1], "text": block[2]})
+            continue
+
+        text = (block[1] if block else "").strip()
         if not text:
             continue
 
@@ -277,6 +353,12 @@ def walk_template_paragraphs(
             # The template's actual content always starts under a heading.
             continue
 
+        # Record any "See Appendix …" references as import reminders (kept in
+        # the body too — they're part of the prose, just also actionable).
+        refs = _extract_appendix_refs(text)
+        if refs:
+            current.appendix_refs.extend(refs)
+
         # Inside a section. Strip ``Response:`` markers; if the line is
         # only the marker, skip it entirely (the body comes on the next
         # paragraph). Otherwise keep what remains.
@@ -304,8 +386,8 @@ def walk_template_docx(
     matcher never sees.
     """
     doc = Document(docx_path)
-    paragraph_texts = [(p.text or "") for p in doc.paragraphs]
-    raw_sections = walk_template_paragraphs(paragraph_texts)
+    blocks = list(_iter_block_items(doc))
+    raw_sections = walk_template_blocks(blocks)
 
     sections: list[Section] = []
     for raw in raw_sections:

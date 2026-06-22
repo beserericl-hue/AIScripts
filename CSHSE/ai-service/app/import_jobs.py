@@ -606,6 +606,58 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
         else:
             tags.append(_recommendation_to_tag(sec, rec))
 
+    # Deterministic supporting evidence the per-section matcher never sees:
+    #  (1) Embedded TABLES (faculty rosters, advisory-board attendee lists,
+    #      credit-hour grids) — the paragraph walk drops tables, so attach each
+    #      to its containing spec's bucket as an evidenceFiles item (HTML kept).
+    #  (2) "See Appendix …" references — PC import reminders, as evidenceText.
+    import uuid as _uuid
+    tbl_count = apx_count = 0
+    for raw in raw_sections:
+        std, sp = raw.standard_hint, raw.spec_hint
+        if not (std and sp):
+            continue  # tables under intro / standard-root carry no spec anchor
+        bucket = buckets.get(f"{std}.{sp}")
+        if bucket is None:
+            continue
+        for tb in (raw.evidence_tables or []):
+            txt = (tb.get("text") or "").strip()
+            if not txt:
+                continue
+            bucket["evidenceFiles"].append({
+                "sectionId": f"{job.job_id}:tbl:{_uuid.uuid4().hex[:8]}",
+                "heading": f"Table — {raw.heading[:60]}",
+                "snippet": txt[:2000],
+                "htmlSnippet": tb.get("html"),
+                "wordCount": len(txt.split()),
+                "confidence": 0.9,
+                "acceptState": "review_unknown",
+                "rationale": "Embedded table extracted as supporting evidence (rosters/grids the matcher can't see).",
+            })
+            tbl_count += 1
+        seen_refs: set[str] = set()
+        for ref in (raw.appendix_refs or []):
+            r = ref.strip()
+            if not r or r.lower() in seen_refs:
+                continue
+            seen_refs.add(r.lower())
+            bucket["evidenceText"].append({
+                "sectionId": f"{job.job_id}:apx:{_uuid.uuid4().hex[:8]}",
+                "heading": "Import reminder — appendix reference",
+                "snippet": f"\U0001F4CE {r}\n(Reminder: import this appendix document as supporting evidence.)",
+                "htmlSnippet": None,
+                "wordCount": len(r.split()),
+                "confidence": 1.0,
+                "acceptState": "review_unknown",
+                "rationale": "Appendix reference — the coordinator should import the named document as supporting evidence.",
+            })
+            apx_count += 1
+    if tbl_count or apx_count:
+        job.warnings.append(
+            f"template evidence: extracted {tbl_count} embedded table(s) and "
+            f"{apx_count} appendix import-reminder(s) into supporting evidence"
+        )
+
     # Coverage review only on filled specs; synthesize for empties.
     filled = [s for (std, sp), s in spec_index.items() if buckets[f"{std}.{sp}"]["narratives"] or buckets[f"{std}.{sp}"]["evidenceText"] or buckets[f"{std}.{sp}"]["evidenceFiles"]]
     if filled:
