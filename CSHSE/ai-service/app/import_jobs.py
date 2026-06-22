@@ -671,6 +671,75 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
             f"{apx_count} appendix import-reminder(s) into supporting evidence"
         )
 
+    # LLM content split — read INSIDE each spec's full narrative (everything from
+    # its heading to the next spec) and pull out embedded supporting evidence:
+    # quoted policy/document text and lists of materials/artifacts. The narrative
+    # is left intact; the evidence is additionally surfaced under the SAME spec.
+    _stage_started(job, "evidence_split", "queued")
+    from app.matcher.evidence_splitter import EvidenceSplitter, _KIND_LABEL, _norm as _norm_ev
+    split_specs = [
+        s for (std, sp), s in spec_index.items()
+        if buckets[f"{std}.{sp}"]["narratives"]
+    ]
+    ev_added = 0
+    if split_specs:
+        try:
+            splitter = EvidenceSplitter(settings.anthropic_api_key)
+
+            def _split_one(spec):
+                bk = buckets[f"{spec.standard_code}.{spec.spec_code}"]
+                narrative_text = "\n\n".join(
+                    (n.get("snippet") or "") for n in bk["narratives"]
+                ).strip()
+                # Tiny answers carry nothing to separate — skip to save calls.
+                if len(narrative_text.split()) < 40:
+                    return spec, []
+                return spec, splitter.split(spec, narrative_text)
+
+            completed = 0
+            with ThreadPoolExecutor(max_workers=6) as ex:
+                futures = {ex.submit(_split_one, s): s for s in split_specs}
+                for fut in as_completed(futures):
+                    spec, passages = fut.result()
+                    bk = buckets[f"{spec.standard_code}.{spec.spec_code}"]
+                    existing = {(_norm_ev(e.get("snippet")))[:120] for e in bk["evidenceText"]}
+                    for p in passages:
+                        key = _norm_ev(p.excerpt)[:120]
+                        if key in existing:
+                            continue
+                        existing.add(key)
+                        bk["evidenceText"].append({
+                            "sectionId": f"{job.job_id}:evs:{_uuid.uuid4().hex[:8]}",
+                            "heading": p.label or _KIND_LABEL.get(p.kind, "Supporting evidence"),
+                            "snippet": p.excerpt[:2000],
+                            "htmlSnippet": None,
+                            "wordCount": len(p.excerpt.split()),
+                            "confidence": 0.8,
+                            "acceptState": "review_unknown",
+                            "rationale": (
+                                f"Embedded {p.kind} pulled from the "
+                                f"{spec.standard_code}.{spec.spec_code} narrative."
+                            ),
+                        })
+                        ev_added += 1
+                    completed += 1
+                    if completed % 5 == 0 or completed == len(split_specs):
+                        for st in reversed(job.stages):
+                            if st.name == "evidence_split":
+                                st.detail = f"{completed} / {len(split_specs)}"
+                                st.state = "running"
+                                break
+                        _publish_status(job)
+            _stage_done(
+                job, "evidence_split",
+                f"{ev_added} evidence passage(s) from {len(split_specs)} spec(s)",
+            )
+        except Exception as exc:  # noqa: BLE001 — never let the split sink the import
+            job.warnings.append(f"evidence_split: {type(exc).__name__}: {exc}")
+            _stage_done(job, "evidence_split", f"skipped ({type(exc).__name__})")
+    else:
+        _stage_skipped(job, "evidence_split", "no narratives")
+
     # Coverage review only on filled specs; synthesize for empties.
     filled = [s for (std, sp), s in spec_index.items() if buckets[f"{std}.{sp}"]["narratives"] or buckets[f"{std}.{sp}"]["evidenceText"] or buckets[f"{std}.{sp}"]["evidenceFiles"]]
     if filled:
