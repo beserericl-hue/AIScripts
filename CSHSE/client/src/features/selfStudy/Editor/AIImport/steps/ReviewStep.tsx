@@ -171,6 +171,7 @@ function FullReviewStep(): JSX.Element {
   const selectedSpecKey = useAIImportStore((s) => s.selectedSpecKey);
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
   const importId = useAIImportStore((s) => s.importId);
+  const submissionId = useAIImportStore((s) => s.submissionId);
   const matrices = useAIImportStore((s) => s.matrices);
   const setStep = useAIImportStore((s) => s.setStep);
   const selectSpec = useAIImportStore((s) => s.selectSpec);
@@ -240,6 +241,10 @@ function FullReviewStep(): JSX.Element {
   const [sourceOpen, setSourceOpen] = useState(false);
   const [sourceSectionId, setSourceSectionId] = useState<string | null>(null);
   const [sourceMatchText, setSourceMatchText] = useState('');
+  // The import the clicked item actually came FROM (its own provenance), so
+  // "Show in source" opens THAT document — never the stale global store
+  // importId, which could point at a different submission's upload.
+  const [sourceImportId, setSourceImportId] = useState<string | null>(null);
   // Correction-flow state — when set, the source modal opens in selection
   // mode targeting this (std, spec). Confirming the passage fires the
   // corrections API + adds a local bucket item so the spec card fills
@@ -668,16 +673,36 @@ function FullReviewStep(): JSX.Element {
   const handleShowInSource = useCallback(
     (sectionId: string) => {
       let matchText = '';
+      // Resolve the import the item came FROM (provenance) so we open the right
+      // document, not the stale global store importId.
+      let srcImportId: string | null = null;
       if (activeBucket) {
         const inAny =
           activeBucket.narratives.find((i) => i.sectionId === sectionId) ||
           activeBucket.evidenceText.find((i) => i.sectionId === sectionId) ||
           activeBucket.evidenceFiles.find((i) => i.sectionId === sectionId);
-        if (inAny) matchText = stripCardHeading(inAny.snippet);
+        if (inAny) {
+          matchText = stripCardHeading(inAny.snippet);
+          srcImportId = (inAny as any).sourceImportId || null;
+        }
       }
-      if (!matchText) {
+      if (!srcImportId) {
+        // Introductions live in their own buckets — check there too.
+        for (const ib of Object.values(introductions || {})) {
+          const hit = (ib?.items || []).find((i: any) => i.sectionId === sectionId);
+          if (hit) {
+            if (!matchText) matchText = stripCardHeading(hit.snippet || '');
+            srcImportId = (hit as any).sourceImportId || null;
+            break;
+          }
+        }
+      }
+      if (!matchText || !srcImportId) {
         const tag = tags.find((t) => t.sectionId === sectionId);
-        if (tag) matchText = stripCardHeading(tag.fullText);
+        if (tag) {
+          if (!matchText) matchText = stripCardHeading(tag.fullText);
+          srcImportId = srcImportId || (tag as any).sourceImportId || null;
+        }
       }
       // CR-040 follow-on (2026-05-27) — Show-in-source bug fix.
       // CV cards and evidenceDoc cards aren't in buckets[] or tags[],
@@ -687,7 +712,7 @@ function FullReviewStep(): JSX.Element {
       // "This content is no longer in the current document version,
       // showing the document from the top." — exactly what the user
       // saw on the Stevenson document.
-      if (!matchText) {
+      if (!matchText || !srcImportId) {
         const cv = cvs.find((c) => c.sectionId === sectionId);
         if (cv) {
           // For CVs, the faculty name is the most distinctive marker
@@ -695,24 +720,31 @@ function FullReviewStep(): JSX.Element {
           // the modal's fuzzy match has a strong anchor even if the
           // snippet was generated from a slightly different region of
           // the body than what now lives in the latest DocumentVersion.
-          const headLine = cv.facultyName ? `${cv.facultyName}\n` : '';
-          matchText = headLine + stripCardHeading(cv.snippet || '');
+          if (!matchText) {
+            const headLine = cv.facultyName ? `${cv.facultyName}\n` : '';
+            matchText = headLine + stripCardHeading(cv.snippet || '');
+          }
+          srcImportId = srcImportId || (cv as any).sourceImportId || null;
         }
       }
-      if (!matchText) {
+      if (!matchText || !srcImportId) {
         const ed = evidenceDocs.find((d) => d.sectionId === sectionId);
         if (ed) {
           // For evidence docs (paper or syllabus), title is the most
           // distinctive marker; fall back to summary if title is short.
-          const headLine = ed.title ? `${ed.title}\n` : '';
-          matchText = headLine + stripCardHeading(ed.summary || '');
+          if (!matchText) {
+            const headLine = ed.title ? `${ed.title}\n` : '';
+            matchText = headLine + stripCardHeading(ed.summary || '');
+          }
+          srcImportId = srcImportId || (ed as any).sourceImportId || null;
         }
       }
       setSourceSectionId(sectionId);
       setSourceMatchText(matchText);
+      setSourceImportId(srcImportId);
       setSourceOpen(true);
     },
-    [activeBucket, tags, cvs, evidenceDocs]
+    [activeBucket, introductions, tags, cvs, evidenceDocs]
   );
 
   // Coordinator clicked "+ Add from source" on an empty spec card. Open the
@@ -976,7 +1008,8 @@ function FullReviewStep(): JSX.Element {
       />
       <ShowInSourceModal
         open={sourceOpen}
-        importId={importId}
+        importId={sourceImportId || importId}
+        submissionId={submissionId}
         sectionId={sourceSectionId}
         matchText={sourceMatchText}
         onClose={() => {

@@ -2478,6 +2478,20 @@ export const getDocumentContent = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Import not found' });
     }
 
+    // CROSS-SUBMISSION LEAK FIX: when the caller scopes the request to a
+    // submission, the import MUST belong to that submission. "Show in source"
+    // was passing a stale/foreign importId (left over in the client store),
+    // which streamed ANOTHER school's document (e.g. Stevenson) into a
+    // different submission's review. Refuse the mismatch.
+    const scopeSubmissionId = String((req.query.submissionId as string) || '').trim();
+    if (scopeSubmissionId && String(importRecord.submissionId || '') !== scopeSubmissionId) {
+      debugLog('Import does not belong to the scoped submission', {
+        importId, scopeSubmissionId, importSubmission: String(importRecord.submissionId),
+      });
+      if (wantsHtml) return res.status(403).type('text/plain').send('This document does not belong to the current submission.');
+      return res.status(403).json({ error: 'Import does not belong to this submission' });
+    }
+
     // Check if HTML is stored in GridFS (new approach) or inline (legacy)
     const isGridFS = importRecord.extractedContent?.metadata?.htmlStoredInGridFS === true;
 

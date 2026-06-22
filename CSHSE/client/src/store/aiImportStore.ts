@@ -1454,6 +1454,24 @@ export const useAIImportStore = create<AIImportState>()(
             // (matters when hydrated from a localStorage seed before the
             // server-side merge has run).
             const current = get();
+            // Sync the global importId to THIS submission's import (from item
+            // provenance) so any import-scoped action targets the right
+            // document — the persisted store otherwise carries a stale importId
+            // from a previously-opened submission (the Stevenson "Show in
+            // source" leak).
+            const derivedImportId = ((): string | null => {
+              const srcs = Object.values((state as any).itemSources || {}) as any[];
+              if (srcs.length) {
+                const latest = srcs.reduce((a, b) =>
+                  new Date(b?.importedAt || 0) > new Date(a?.importedAt || 0) ? b : a);
+                if (latest?.importId) return String(latest.importId);
+              }
+              for (const b of Object.values(state.buckets || {}) as any[]) {
+                const it = b?.narratives?.[0] || b?.evidenceText?.[0] || b?.evidenceFiles?.[0];
+                if (it?.sourceImportId) return String(it.sourceImportId);
+              }
+              return null;
+            })();
             set({
               buckets: bucketsEditedDuringFetch
                 ? current.buckets
@@ -1467,7 +1485,8 @@ export const useAIImportStore = create<AIImportState>()(
               resolvedMissingFragmentIds:
                 state.resolvedMissingFragmentIds ?? get().resolvedMissingFragmentIds,
               approvedIds: state.approvedIds || [],
-              discardedIds: state.discardedIds || []
+              discardedIds: state.discardedIds || [],
+              importId: derivedImportId ?? current.importId
             });
           }
           if (matrixState) {

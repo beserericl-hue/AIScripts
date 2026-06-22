@@ -22,6 +22,9 @@ import { tableizeIfBareRows } from './tableizeHtml';
 interface ShowInSourceModalProps {
   open: boolean;
   importId: string | null;
+  /** The submission being viewed — scopes the source fetch so a stale/foreign
+   *  importId can't stream another submission's document. */
+  submissionId?: string | null;
   sectionId: string | null;
   /** Body text used as the fuzzy-match fallback when the anchor is missing. */
   matchText: string;
@@ -60,7 +63,7 @@ const HTML_CACHE = new Map<string, string>();
 // one network request instead of triggering N parallel downloads.
 const HTML_INFLIGHT = new Map<string, Promise<string>>();
 
-async function fetchOrUseCachedHtml(importId: string): Promise<string> {
+async function fetchOrUseCachedHtml(importId: string, submissionId?: string | null): Promise<string> {
   const cached = HTML_CACHE.get(importId);
   if (cached) return cached;
   const existing = HTML_INFLIGHT.get(importId);
@@ -70,7 +73,10 @@ async function fetchOrUseCachedHtml(importId: string): Promise<string> {
   // it (which is what was causing the "timeout exceeded" first-load errors).
   // The server's content negotiation falls back to JSON for legacy callers
   // that don't send Accept: text/html.
-  const p = api.get(`/api/imports/${importId}/content`, {
+  // submissionId scopes the request — the server refuses an import that
+  // belongs to a different submission (cross-submission leak guard).
+  const qs = submissionId ? `?submissionId=${encodeURIComponent(submissionId)}` : '';
+  const p = api.get(`/api/imports/${importId}/content${qs}`, {
     headers: { Accept: 'text/html' },
     responseType: 'text',
     // Skip JSON parsing on a 353 MB string — saves several seconds of CPU.
@@ -102,6 +108,7 @@ export function invalidateShowInSourceCache(importId: string): void {
 export function ShowInSourceModal({
   open,
   importId,
+  submissionId,
   sectionId,
   matchText,
   onClose,
@@ -139,7 +146,7 @@ export function ShowInSourceModal({
     }
 
     setState({ kind: 'loading' });
-    fetchOrUseCachedHtml(importId)
+    fetchOrUseCachedHtml(importId, submissionId)
       .then((html) => {
         if (cancelled) return;
         setState({ kind: 'ready', html, matchKind: 'missing' });
