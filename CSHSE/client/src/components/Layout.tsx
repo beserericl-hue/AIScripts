@@ -221,6 +221,16 @@ export default function Layout() {
   // impersonation banner's height is variable (that's why it overflowed before).
   const isEditorRoute = !!location.pathname.match(/^\/self-study\/[^/]+/);
 
+  // The editor is a fixed-height app (own internal scroll). Lock the document
+  // scroll while it's mounted so a stray overflowing descendant can't make the
+  // whole page scroll into empty grey below the viewport.
+  useEffect(() => {
+    if (!isEditorRoute) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isEditorRoute]);
+
   return (
     <div className={isEditorRoute ? 'h-screen flex flex-col overflow-hidden bg-gray-50' : 'min-h-screen bg-gray-50'}>
       {/* Impersonation Banner */}
