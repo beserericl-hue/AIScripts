@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     openai_api_key: str = ""
 
+    # Per-call timeout (seconds) for the OpenAI embeddings API. Tunable via the
+    # OPENAI_EMBED_TIMEOUT env var on the cshse-ai service without a code deploy.
+    # The client also retries transient timeouts with backoff.
+    openai_embed_timeout: float = Field(default=30.0)
+
     node_service_hmac_secret: str = ""
 
     cross_institution_search_enabled: bool = False

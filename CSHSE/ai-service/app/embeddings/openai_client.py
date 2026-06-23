@@ -5,6 +5,7 @@ abstraction if we want to add Voyage or local models.
 """
 from __future__ import annotations
 
+import os
 import random
 import time
 from typing import Sequence
@@ -29,12 +30,18 @@ _MAX_RETRIES = 5
 
 
 class EmbeddingClient:
-    def __init__(self, api_key: str, timeout: float = 30.0):
+    def __init__(self, api_key: str, timeout: float | None = None):
         if not api_key:
             raise ValueError("OPENAI_API_KEY required")
-        # CR-028 / prod hotfix 2026-06-23 — explicit per-call timeout (raised
-        # 15s -> 30s for headroom on larger batches) and SDK retries disabled so
-        # OUR backoff loop below is authoritative across every call site.
+        # CR-028 / prod hotfix 2026-06-23 — explicit per-call timeout (default
+        # 30s, up from 15s) tunable via OPENAI_EMBED_TIMEOUT without a redeploy.
+        # SDK retries are off so OUR backoff loop below is authoritative across
+        # every call site.
+        if timeout is None:
+            try:
+                timeout = float(os.getenv("OPENAI_EMBED_TIMEOUT", "30"))
+            except ValueError:
+                timeout = 30.0
         self._client = OpenAI(api_key=api_key, timeout=timeout, max_retries=0)
 
     def embed_batch(self, texts: Sequence[str]) -> list[list[float]]:
