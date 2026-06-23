@@ -37,11 +37,21 @@ What this walker does NOT do:
 """
 from __future__ import annotations
 
+import base64
 import re
 import uuid
 from dataclasses import dataclass, field
 
 from docx import Document
+
+# OOXML namespaces for the rich-HTML walk (hyperlinks + inline images).
+_W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+_R = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+_A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
+# Cap an inline (base64) image so a doc full of large scans can't blow the
+# import callback payload. Bigger images are noted and left to be attached via
+# the Supporting File Library.
+_MAX_INLINE_IMAGE_BYTES = 1_200_000
 
 from app.splitter.sections import Section, _heuristic_flags
 
@@ -160,6 +170,13 @@ class TemplateSection:
     # "See Appendix …" references found in this section's prose — surfaced as
     # PC import reminders (import that appendix doc as supporting evidence).
     appendix_refs: list[str] = field(default_factory=list)
+    # Rich-HTML body parts (paragraphs with hyperlinks/images + inline tables)
+    # in document order — the faithful narrative content for the editor.
+    body_html_parts: list[str] = field(default_factory=list)
+
+    @property
+    def body_html(self) -> str:
+        return "".join(self.body_html_parts).strip()
 
     @property
     def body_text(self) -> str:
@@ -229,10 +246,69 @@ def _table_to_html(table) -> str:
     return "<table>" + "".join(rows) + "</table>"
 
 
+def _run_inline_html(run_el, part) -> str:
+    """Text (with bold/italic) + any inline images for one ``<w:r>`` run."""
+    out: list[str] = []
+    rpr = run_el.find(f"{_W}rPr")
+    bold = rpr is not None and rpr.find(f"{_W}b") is not None
+    ital = rpr is not None and rpr.find(f"{_W}i") is not None
+    text = _esc("".join(t.text or "" for t in run_el.iter(f"{_W}t")))
+    if text:
+        if ital:
+            text = f"<em>{text}</em>"
+        if bold:
+            text = f"<strong>{text}</strong>"
+        out.append(text)
+    # Inline images: <a:blip r:embed="rIdN"> → the related image part.
+    for blip in run_el.iter(f"{_A}blip"):
+        rid = blip.get(f"{_R}embed")
+        if not rid:
+            continue
+        try:
+            image_part = part.related_parts[rid]
+            blob = image_part.blob
+            if len(blob) > _MAX_INLINE_IMAGE_BYTES:
+                out.append("<p><em>[image omitted — too large to inline; "
+                           "attach the original via the Supporting File Library]</em></p>")
+                continue
+            ct = getattr(image_part, "content_type", "image/png") or "image/png"
+            b64 = base64.b64encode(blob).decode("ascii")
+            out.append(f'<img src="data:{ct};base64,{b64}" alt=""/>')
+        except Exception:
+            pass
+    return "".join(out)
+
+
+def _paragraph_to_html(p) -> str:
+    """Inner HTML for one paragraph, preserving HYPERLINKS and inline IMAGES
+    (the template's plain-text walk dropped both — the #1 fidelity complaint).
+    """
+    part = p.part
+    out: list[str] = []
+    for child in p._p:
+        tag = child.tag
+        if tag == f"{_W}hyperlink":
+            rid = child.get(f"{_R}id")
+            url = None
+            if rid:
+                try:
+                    rel = part.rels[rid]
+                    url = rel.target_ref if rel.is_external else None
+                except Exception:
+                    url = None
+            inner = "".join(_run_inline_html(r, part) for r in child.findall(f"{_W}r"))
+            out.append(f'<a href="{_esc(url)}">{inner}</a>' if url else inner)
+        elif tag == f"{_W}r":
+            out.append(_run_inline_html(child, part))
+    return "".join(out)
+
+
 def _iter_block_items(doc):
-    """Yield ``("p", text)`` and ``("table", html, text)`` for every paragraph
-    and table in the document, IN DOCUMENT ORDER. ``doc.paragraphs`` alone drops
-    tables; we walk the body XML so embedded tables land under the right section.
+    """Yield ``("p", text, html)`` and ``("table", html, text)`` for every
+    paragraph and table in the document, IN DOCUMENT ORDER. ``doc.paragraphs``
+    alone drops tables AND flattens links/images to plain text; we walk the body
+    XML so embedded tables land under the right section and the per-paragraph
+    HTML keeps hyperlinks + inline images.
     """
     from docx.oxml.text.paragraph import CT_P
     from docx.oxml.table import CT_Tbl
@@ -241,7 +317,8 @@ def _iter_block_items(doc):
 
     for child in doc.element.body.iterchildren():
         if isinstance(child, CT_P):
-            yield ("p", _Paragraph(child, doc).text or "")
+            para = _Paragraph(child, doc)
+            yield ("p", para.text or "", _paragraph_to_html(para))
         elif isinstance(child, CT_Tbl):
             t = _Table(child, doc)
             yield ("table", _table_to_html(t), _table_to_text(t))
@@ -314,10 +391,19 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
             target = current_spec_section if current_spec_section is not None else current
             if target is not None:
                 target.evidence_tables.append({"html": block[1], "text": block[2]})
+            # Keep the table INLINE in the narrative too (fidelity — "the table
+            # is missing"). It lands in the section it physically sits under.
+            if current is not None and block[1]:
+                current.body_html_parts.append(block[1])
             continue
 
         text = (block[1] if block else "").strip()
+        para_html = block[2] if (block and len(block) > 2) else ""
         if not text:
+            # An image-only / blank paragraph has no text but may carry an
+            # embedded image — keep it in the narrative instead of dropping it.
+            if current is not None and "<img" in para_html:
+                current.body_html_parts.append(f"<p>{para_html}</p>")
             continue
 
         # Skip front-matter lines (template title, "Introduction and
@@ -385,6 +471,15 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
         if not stripped:
             continue
         current.body_paragraphs.append(stripped)
+        # Rich-HTML narrative: prefer the paragraph's HTML (keeps hyperlinks /
+        # inline images / bold-italic), with a leading "Response:" stripped to
+        # match body_paragraphs; fall back to escaped plain text.
+        para_html = block[2] if len(block) > 2 else ""
+        if para_html.strip():
+            para_html = re.sub(r"^\s*(?:<[^>]+>\s*)*Response\s*:\s*", "", para_html, flags=re.IGNORECASE)
+            current.body_html_parts.append(f"<p>{para_html}</p>")
+        else:
+            current.body_html_parts.append(f"<p>{_esc(stripped)}</p>")
 
     if current is not None:
         current.placeholder = _is_placeholder(current.body_paragraphs)
@@ -449,6 +544,10 @@ def walk_template_docx(
             flags["templateStandardHint"] = raw.standard_hint or ""
             flags["templateSpecHint"] = raw.spec_hint or ""
         flags["templateHeading"] = raw.heading[:200]
+        # The faithful narrative content: paragraphs with hyperlinks + inline
+        # images and tables, in document order. The renderer/editor prefers
+        # html_snippet when present (markdown stays plain for the matcher).
+        body_html = raw.body_html
         sections.append(
             Section(
                 id=f"{base_id}:tmpl:{uuid.uuid4().hex[:8]}",
@@ -459,11 +558,12 @@ def walk_template_docx(
                 byte_offset_end=len(md),
                 word_count=len(md.split()),
                 contains_table=flags.get("containsTable", False),
-                contains_image=flags.get("containsImage", False),
+                contains_image=("<img" in body_html) or flags.get("containsImage", False),
                 has_resume_signals=flags.get("hasResumeSignals", False),
                 has_syllabus_signals=flags.get("hasSyllabusSignals", False),
                 splitter_tier="template",
                 flags=flags,
+                html_snippet=(body_html or None),
             )
         )
     return sections, raw_sections

@@ -422,3 +422,47 @@ def test_walker_captures_embedded_table_and_appendix_refs(tmp_path):
     assert "Name" in spec.evidence_tables[0]["text"] and "Director" in spec.evidence_tables[0]["text"]
     assert "<table>" in spec.evidence_tables[0]["html"]
     assert spec.appendix_refs and "Appendix VII" in spec.appendix_refs[0]
+
+
+def test_rich_html_preserves_links_images_tables(tmp_path):
+    """Import fidelity: hyperlinks, inline images, and tables survive into the
+    section's html_snippet (the plain-text walk dropped all three)."""
+    import io, base64
+    from docx import Document as _D
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn as _qn
+
+    d = _D()
+    d.add_paragraph("I. GENERAL PROGRAM CHARACTERISTICS")
+    d.add_paragraph("Standard 1: The primary objective shall be to prepare professionals.")
+    d.add_paragraph("1a. The program is regionally accredited.")
+    d.add_paragraph("Response:")
+    p = d.add_paragraph("Accredited by ")
+    rid = p.part.relate_to(
+        "https://sacscoc.org/",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
+        is_external=True,
+    )
+    hl = OxmlElement("w:hyperlink"); hl.set(_qn("r:id"), rid)
+    r = OxmlElement("w:r"); t = OxmlElement("w:t"); t.text = "SACSCOC"; r.append(t); hl.append(r)
+    p._p.append(hl)
+    # image-only paragraph — a valid generated 1x1 PNG
+    import struct, zlib
+    def _png_1x1():
+        def _c(typ, data):
+            body = typ + data
+            return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body) & 0xffffffff)
+        ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
+        idat = zlib.compress(b"\x00\xff\x00\x00")
+        return b"\x89PNG\r\n\x1a\n" + _c(b"IHDR", ihdr) + _c(b"IDAT", idat) + _c(b"IEND", b"")
+    d.add_picture(io.BytesIO(_png_1x1()))
+    tb = d.add_table(rows=1, cols=2); tb.rows[0].cells[0].text = "Name"; tb.rows[0].cells[1].text = "Role"
+    docx = tmp_path / "rich.docx"; d.save(str(docx))
+
+    sections, _ = walk_template_docx(str(docx), base_id="t")
+    spec = next(s for s in sections if s.heading.startswith("1a."))
+    html = spec.html_snippet or ""
+    assert 'href="https://sacscoc.org/"' in html and "SACSCOC" in html   # hyperlink kept
+    assert '<img src="data:image/png;base64,' in html                    # inline image kept
+    assert "<table>" in html and "Name" in html                          # table inline
+    assert spec.contains_image is True
