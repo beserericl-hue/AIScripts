@@ -2454,7 +2454,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   }
 
   return (
-    <div className="self-study-editor flex flex-col bg-gray-50 h-[calc(100vh-64px)]">
+    <div className="self-study-editor flex flex-1 min-h-0 flex-col overflow-hidden bg-gray-50">
       {/* CR-005 / S2A.2 — read-only lockout banner. Shown when the PC's
           submission has progressed past draft (final-submitted, under
           review, etc.) so they understand why the editor is read-only
@@ -2838,7 +2838,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       {/* Main Content - flex container that includes import panel */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Main Editor/Content Area - shrinks when import panel is open */}
-        <div className="flex-1 flex min-w-0">
+        <div className="flex-1 flex min-w-0 min-h-0">
           {/* Standards Editor View */}
           {activeView === 'standards' && (
             <>
@@ -3066,7 +3066,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
           {/* Curriculum Matrix View */}
           {activeView === 'curriculum' && (
-            <main className="flex-1 overflow-hidden p-2">
+            <main className="flex-1 min-h-0 overflow-hidden p-2">
               <CurriculumMatrixEditor
                 submissionId={submissionId}
                 scrollToSpec={matrixScrollTarget}
@@ -3077,7 +3077,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
           {/* Supporting File Library View */}
           {activeView === 'files' && (
-            <main className="flex-1 overflow-hidden">
+            <main className="flex-1 min-h-0 overflow-hidden">
               <FileLibrary
                 submissionId={submissionId}
                 readOnly={isEditingDisabled}
@@ -3123,7 +3123,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
               flips us to the toolbar Review surface directly (no more
               wizard-internal Review/Matrix/Apply steps). */}
           {activeView === 'ai-import' && isProgramCoordinator && submissionId && (
-            <main className="flex-1 overflow-hidden p-2">
+            <main className="flex-1 min-h-0 overflow-hidden p-2">
               <AIImportWizard submissionId={submissionId} setActiveView={setActiveView} />
             </main>
           )}
@@ -3131,7 +3131,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           {/* CR-043 — Review surface, decoupled from the wizard.
               State comes from Submission.aiReviewState. */}
           {activeView === 'review-surface' && isProgramCoordinator && submissionId && (
-            <main className="flex flex-1 flex-col overflow-hidden">
+            <main className="flex flex-1 flex-col min-h-0 overflow-hidden">
               <ReviewSurface
                 submissionId={submissionId}
                 onClose={() => setActiveView('standards')}
@@ -3141,7 +3141,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
           {/* CR-043 — Matrix surface, decoupled from the wizard. */}
           {activeView === 'matrix-surface' && isProgramCoordinator && submissionId && (
-            <main className="flex flex-1 flex-col overflow-hidden">
+            <main className="flex flex-1 flex-col min-h-0 overflow-hidden">
               <MatrixSurface
                 submissionId={submissionId}
                 onClose={() => setActiveView('standards')}

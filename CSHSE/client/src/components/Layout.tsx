@@ -215,12 +215,17 @@ export default function Layout() {
   // Full-width routes (no max-w-7xl cap): the self-study editor AND the reader
   // report — both need the room for a wide narrative + checklist + comments.
   const isFullWidthRoute = location.pathname.match(/^\/(self-study|reader-report)\/[^/]+/);
+  // The self-study editor is a FIXED-HEIGHT app (its own internal scroll), not a
+  // scrolling page. Make the shell a flex column so the editor fills the space
+  // BELOW the banner + header — the editor can't hardcode the height because the
+  // impersonation banner's height is variable (that's why it overflowed before).
+  const isEditorRoute = !!location.pathname.match(/^\/self-study\/[^/]+/);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className={isEditorRoute ? 'h-screen flex flex-col overflow-hidden bg-gray-50' : 'min-h-screen bg-gray-50'}>
       {/* Impersonation Banner */}
       {impersonation.isImpersonating && (
-        <div className="bg-amber-500 text-white px-4 py-2">
+        <div className="flex-shrink-0 bg-amber-500 text-white px-4 py-2">
           <div className={isFullWidthRoute ? 'flex items-center justify-between' : 'max-w-7xl mx-auto flex items-center justify-between'}>
             <div className="flex items-center space-x-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -245,7 +250,7 @@ export default function Layout() {
       )}
 
       {/* Header */}
-      <header className="app-header">
+      <header className="app-header flex-shrink-0">
         <div className={isFullWidthRoute ? 'px-4' : 'app-header-content'}>
           <div className="app-header-inner">
             {/* Logo and Navigation */}
@@ -361,7 +366,7 @@ export default function Layout() {
       </header>
 
       {/* Main content - full width for self-study editor, constrained for other pages */}
-      <main className={isFullWidthRoute ? '' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8'}>
+      <main className={isEditorRoute ? 'flex-1 min-h-0 flex flex-col' : (isFullWidthRoute ? '' : 'max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8')}>
         <Outlet />
       </main>
 
