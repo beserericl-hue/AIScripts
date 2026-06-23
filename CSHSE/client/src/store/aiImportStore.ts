@@ -811,6 +811,46 @@ let _eventSource: EventSource | null = null;
 let _pollHandle: ReturnType<typeof setInterval> | null = null;
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+const _TERMINAL_STATES = ['parsed', 'failed', 'canceled', 'applied', 'finished'];
+// Bounds the "keep polling on parsed-but-empty" grace window so a genuine
+// empty (which the server rewrites to 'failed') can't loop forever.
+let _parsedEmptyPolls = 0;
+
+/** True when a snapshot carries ANY reviewable item (across every surface). */
+function snapshotHasItems(snap: any): boolean {
+  if (!snap) return false;
+  let n = 0;
+  for (const b of Object.values((snap.buckets || {}) as Record<string, any>)) {
+    n += ((b?.narratives?.length || 0) + (b?.evidenceText?.length || 0) + (b?.evidenceFiles?.length || 0));
+  }
+  n += (snap.tags?.length || 0) + (snap.matrices?.length || 0) +
+       (snap.cvs?.length || 0) + (snap.evidenceDocs?.length || 0);
+  for (const ib of Object.values((snap.introductions || {}) as Record<string, any>)) {
+    n += (ib?.items?.length || 0);
+  }
+  return n > 0;
+}
+
+/** Whether the SSE/poll transport should stop on this snapshot.
+ *
+ * The fix for the prod "AI returned zero items" strand: cshse-ai flips status
+ * to 'parsed' a beat BEFORE the terminal callback commits the buckets. If the
+ * SSE has dropped (common behind a prod proxy), the poll would catch that
+ * empty 'parsed' snapshot and stop — leaving the wizard at zero items even
+ * though the buckets land milliseconds later. So we keep listening on
+ * parsed-but-empty (bounded), and only stop once items have arrived.
+ */
+function shouldStopTransport(snap: any): boolean {
+  const status = snap?.status;
+  if (!_TERMINAL_STATES.includes(status)) { _parsedEmptyPolls = 0; return false; }
+  if (status !== 'parsed') { _parsedEmptyPolls = 0; return true; }
+  if (snapshotHasItems(snap)) { _parsedEmptyPolls = 0; return true; }
+  // parsed, but the buckets haven't arrived yet — keep polling for ~30s.
+  _parsedEmptyPolls += 1;
+  if (_parsedEmptyPolls > 15) { _parsedEmptyPolls = 0; return true; }
+  return false;
+}
+
 function _clearTransport(): void {
   if (_eventSource) {
     _eventSource.close();
@@ -2175,8 +2215,10 @@ export const useAIImportStore = create<AIImportState>()(
             try {
               const snap = JSON.parse(ev.data);
               get()._applySnapshot(snap);
-              // Close the stream on terminal states.
-              if (['parsed', 'failed', 'canceled', 'applied', 'finished'].includes(snap.status)) {
+              // Close the stream on terminal states — but NOT on a 'parsed'
+              // snapshot whose buckets haven't arrived yet (race vs the
+              // terminal callback). See shouldStopTransport.
+              if (shouldStopTransport(snap)) {
                 _clearTransport();
               }
             } catch (err) {
@@ -2232,8 +2274,9 @@ export const useAIImportStore = create<AIImportState>()(
         try {
           const res = await api.get(`/api/imports/${importId}/ai-status`);
           get()._applySnapshot(res.data);
-          // Stop polling once terminal.
-          if (['parsed', 'failed', 'canceled', 'applied', 'finished'].includes(res.data.status)) {
+          // Stop polling once terminal — but keep polling on a 'parsed'
+          // snapshot whose buckets haven't landed yet (see shouldStopTransport).
+          if (shouldStopTransport(res.data)) {
             _clearTransport();
           }
         } catch (err: any) {

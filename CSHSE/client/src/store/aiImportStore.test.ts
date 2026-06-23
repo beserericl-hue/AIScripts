@@ -311,3 +311,25 @@ describe('aiImportStore — CR-032 inline edit', () => {
     expect(after).toEqual(before);
   });
 });
+
+describe('aiImportStore — parsed-but-empty transport (prod zero-items strand)', () => {
+  beforeEach(reset);
+
+  it('a parsed snapshot WITH buckets populates the store (Open Review enabled)', () => {
+    useAIImportStore.getState()._applySnapshot({
+      status: 'parsed',
+      buckets: {
+        '1.a': {
+          standardCode: '1', specCode: 'a', standardTitle: 'T', specPrompt: 'p',
+          narratives: [{ sectionId: 's1', heading: 'h', snippet: 's', wordCount: 5, confidence: 0.9, acceptState: 'auto_accept', rationale: 'r' }],
+          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          coverageScore: null, coverageCovered: null, coverageGaps: [], coverageStrengths: []
+        }
+      },
+      tags: [], matrices: [], stages: []
+    } as any);
+    const s = useAIImportStore.getState();
+    expect(s.status).toBe('parsed');
+    expect(s.buckets['1.a'].narratives).toHaveLength(1);
+  });
+});

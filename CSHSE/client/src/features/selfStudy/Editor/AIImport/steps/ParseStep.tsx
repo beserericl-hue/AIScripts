@@ -128,6 +128,9 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
   const matrices = useAIImportStore((s) => s.matrices);
+  const cvs = useAIImportStore((s) => s.cvs);
+  const evidenceDocs = useAIImportStore((s) => s.evidenceDocs);
+  const introductions = useAIImportStore((s) => s.introductions);
   const totalReviewableItems =
     Object.values(buckets ?? {}).reduce(
       (n, b) =>
@@ -138,7 +141,11 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
       0
     ) +
     (tags?.length ?? 0) +
-    (matrices?.length ?? 0);
+    (matrices?.length ?? 0) +
+    (cvs?.length ?? 0) +
+    (evidenceDocs?.length ?? 0) +
+    // Introduction-only documents are still a successful parse.
+    Object.values(introductions ?? {}).reduce((n, ib: any) => n + (ib?.items?.length ?? 0), 0);
   const isEmptyParse = isReady && totalReviewableItems === 0;
 
   // Re-open SSE on mount if active; close on unmount.
