@@ -226,9 +226,14 @@ export default function Layout() {
   // whole page scroll into empty grey below the viewport.
   useEffect(() => {
     if (!isEditorRoute) return;
-    const prev = document.body.style.overflow;
+    const html = document.documentElement;
+    const prevBody = document.body.style.overflow;
+    const prevHtml = html.style.overflow;
+    // Lock BOTH — the scrolling element is <html> in standards mode, so body
+    // alone isn't enough.
     document.body.style.overflow = 'hidden';
-    return () => { document.body.style.overflow = prev; };
+    html.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prevBody; html.style.overflow = prevHtml; };
   }, [isEditorRoute]);
 
   return (
