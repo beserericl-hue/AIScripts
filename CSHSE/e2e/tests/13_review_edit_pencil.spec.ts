@@ -55,10 +55,17 @@ test.describe('CR-032 / Phase 2b — rich Edit pencil on Review cards', () => {
 
     // Save.
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForTimeout(800);
 
     // "edited" badge appears.
     await expect(page.locator('text=/edited/i').first()).toBeVisible({ timeout: 5000 });
+
+    // Wait for the store autosave to flush to the server (debounced) so the
+    // edit is durable, not browser-only, before we reload.
+    await expect(page.getByTestId('review-save-state')).toHaveAttribute(
+      'data-state',
+      'saved',
+      { timeout: 15_000 }
+    );
 
     // The persisted htmlSnippet is rich HTML (carries a tag), not flattened.
     const reviewState = await page.evaluate(async ({ base, subId }) => {

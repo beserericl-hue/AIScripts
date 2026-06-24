@@ -173,20 +173,45 @@ export async function gotoReviewStep(page: Page, seed: SeedResult): Promise<void
   await page.goto(`/self-study/${seed.submissionId}`);
   await page.waitForLoadState('networkidle');
 
-  // CR-043 — click the toolbar Review button. Multiple buttons match
-  // /review/i (header chrome can carry the word too), so scope to the
-  // toolbar by aria-label / button name with the "ready" chip suffix.
-  // Falls back to the first /^Review/ button in the toolbar nav.
-  const reviewBtn = page.getByRole('button', { name: /^Review\b/i }).first();
-  await expect(reviewBtn).toBeVisible({ timeout: 20_000 });
-  await reviewBtn.click();
+  // The onboarding tour (react-joyride) auto-starts on first visit and its
+  // overlay intercepts pointer events. Skip it if present so nav clicks land.
+  const tourSkip = page.getByTestId('tour-tooltip-skip');
+  if (await tourSkip.isVisible().catch(() => false)) {
+    await tourSkip.click().catch(() => {});
+    await page.waitForTimeout(300);
+  }
 
-  // Wait for the Review surface's heading to appear. The heading is
-  // a clean "Review" string — engineering CR-NNN identifiers were
-  // removed from the UI in 2026-05-26 follow-up.
-  await expect(
-    page.getByRole('heading', { name: /^Review$/i })
-  ).toBeVisible({ timeout: 15_000 });
+  // The editor auto-opens on the Review surface when un-triaged drafts remain
+  // (SelfStudyEditor deriveStepFromStatus), which the wizard_review_minimal
+  // fixture always has. Only navigate if it didn't land there on its own.
+  const reviewHeading = page.getByRole('heading', { name: /^Review$/i });
+  if (!(await reviewHeading.isVisible().catch(() => false))) {
+    // Nav (2026-06) — /self-study/:id lands on the submission hub
+    // (WorkflowSummary). Its "Spec items" tile calls onOpenReview() → the
+    // Review surface. Prefer it; fall back to the editor toolbar / More menu.
+    const specItemsTile = page.getByRole('button', { name: /Spec items/i }).first();
+    if (await specItemsTile.isVisible().catch(() => false)) {
+      await specItemsTile.click();
+    } else {
+      let reviewBtn = page.getByRole('button', { name: /^Review\b/i }).first();
+      if (!(await reviewBtn.isVisible().catch(() => false))) {
+        const moreBtn = page.getByTestId('nav-more');
+        if (await moreBtn.isVisible().catch(() => false)) {
+          await moreBtn.click();
+          await page.waitForTimeout(200);
+          reviewBtn = page
+            .getByTestId('nav-more-menu')
+            .getByRole('button', { name: /Review/i })
+            .first();
+        }
+      }
+      await expect(reviewBtn).toBeVisible({ timeout: 20_000 });
+      await reviewBtn.click();
+    }
+  }
+
+  // Wait for the Review surface's heading to appear.
+  await expect(reviewHeading).toBeVisible({ timeout: 15_000 });
 
   // The Review pane is master/detail: left rail lists specs, middle
   // pane shows cards for the currently-selected spec. Pick a tab whose
