@@ -39,7 +39,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
     // so this is the structurally invariant claim of the feature: "for
     // any spec the coordinator opens, every text-bearing card carries a
     // Discard button." The seed's first spec (1.a) has 2 narrative cards.
-    const editButtons = page.getByRole('button', { name: /^edit$/i });
+    const editButtons = page.getByRole('button', { name: /^compare$/i });
     const discardButtons = page.getByRole('button', { name: /^discard$/i });
     const editCount = await editButtons.count();
     const discardCount = await discardButtons.count();
@@ -60,7 +60,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
 
     // Count cards before discard
     const cardsBefore = await page
-      .getByRole('button', { name: /^edit$/i })
+      .getByRole('button', { name: /^compare$/i })
       .count();
     expect(cardsBefore).toBeGreaterThanOrEqual(1);
 
@@ -72,7 +72,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
     await page.waitForTimeout(500);
 
     const cardsAfter = await page
-      .getByRole('button', { name: /^edit$/i })
+      .getByRole('button', { name: /^compare$/i })
       .count();
     expect(cardsAfter).toBe(cardsBefore - 1);
   });
@@ -83,7 +83,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
     await gotoReviewStep(page, seed!);
 
     const cardsBefore = await page
-      .getByRole('button', { name: /^edit$/i })
+      .getByRole('button', { name: /^compare$/i })
       .count();
 
     page.once('dialog', (d) => d.dismiss());
@@ -91,7 +91,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
     await page.waitForTimeout(300);
 
     const cardsAfter = await page
-      .getByRole('button', { name: /^edit$/i })
+      .getByRole('button', { name: /^compare$/i })
       .count();
     expect(cardsAfter).toBe(cardsBefore);
   });
@@ -102,7 +102,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
     await gotoReviewStep(page, seed!);
 
     const cardsBefore = await page
-      .getByRole('button', { name: /^edit$/i })
+      .getByRole('button', { name: /^compare$/i })
       .count();
 
     page.once('dialog', (d) => d.accept());
@@ -116,7 +116,7 @@ test.describe('CR-033 — Discard button on Review cards', () => {
     await gotoReviewStep(page, seed!);
 
     const cardsAfter = await page
-      .getByRole('button', { name: /^edit$/i })
+      .getByRole('button', { name: /^compare$/i })
       .count();
     expect(cardsAfter).toBe(cardsBefore - 1);
   });
