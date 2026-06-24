@@ -38,6 +38,18 @@ test.describe('Review — Compare overlay editing', () => {
     await loginAsSeededViaSso(page, seed!);
     await gotoReviewStep(page, seed!);
 
+    // Dismiss any onboarding tour that auto-starts on the review surface — its
+    // overlay would intercept clicks on the cards.
+    for (let i = 0; i < 4; i++) {
+      const skip = page.getByTestId('tour-tooltip-skip');
+      if (await skip.isVisible().catch(() => false)) {
+        await skip.click().catch(() => {});
+        await page.waitForTimeout(300);
+      } else {
+        break;
+      }
+    }
+
     // URLs are visible in the MIDDLE pane: the card renders the rich htmlSnippet,
     // so the hyperlink shows (not flattened to plain text).
     await expect(

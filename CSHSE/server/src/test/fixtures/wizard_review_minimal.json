@@ -6,7 +6,8 @@
     "email": "coordinator@example.test",
     "name": "E2E Test Coordinator",
     "role": "program_coordinator",
-    "institutionName": "E2E Test University"
+    "institutionName": "E2E Test University",
+    "preferences": { "tours": { "welcome": true, "self-study": true } }
   },
   "submission": {
     "institutionName": "E2E Test University",

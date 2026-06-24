@@ -227,8 +227,9 @@ export async function gotoReviewStep(page: Page, seed: SeedResult): Promise<void
   // mis-fires when React re-renders the rail mid-click.
   await specsTabList.click({ force: true });
 
-  // Wait for at least one Review card to render.
+  // Wait for at least one Review card to render (cards expose a "Compare"
+  // action — the editing entry point).
   await expect(
-    page.getByRole('button', { name: /^edit$/i }).first()
+    page.getByRole('button', { name: /^compare$/i }).first()
   ).toBeVisible({ timeout: 30_000 });
 }
