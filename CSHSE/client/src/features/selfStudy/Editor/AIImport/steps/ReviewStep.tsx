@@ -313,23 +313,6 @@ function FullReviewStep(): JSX.Element {
   const clearApprovals = useCallback(() => {
     void persistAndApply([]);
   }, [persistAndApply]);
-  // "Approve all" = approve + move EVERYTHING across the whole review: every
-  // bucket item (narratives / evidence text / files), every CV / syllabus /
-  // paper, and every Introduction item. One click → all in the editor.
-  const approveEverything = useCallback(() => {
-    const ids = new Set<string>(approvedIds);
-    for (const b of Object.values(buckets)) {
-      for (const it of b.narratives) ids.add(it.sectionId);
-      for (const it of b.evidenceText) ids.add(it.sectionId);
-      for (const it of b.evidenceFiles) ids.add(it.sectionId);
-    }
-    for (const c of cvs) ids.add(c.sectionId);
-    for (const e of evidenceDocs) ids.add(e.sectionId);
-    for (const ib of Object.values(introductions)) {
-      for (const it of ib.items || []) ids.add(it.sectionId);
-    }
-    void persistAndApply(Array.from(ids));
-  }, [approvedIds, buckets, cvs, evidenceDocs, introductions, persistAndApply]);
 
   // One-click apply — counts the items waiting to be applied so the
   // confirm dialog tells the coordinator exactly what's going to land in
@@ -967,7 +950,6 @@ function FullReviewStep(): JSX.Element {
               approvedIds={approvedIds}
               onToggleApproval={toggleApproval}
               onApproveAll={approveAll}
-              onApproveEverything={approveEverything}
               onClearApprovals={clearApprovals}
               onJumpToMatrix={handleJumpToMatrix}
               onAppendUnplacedToSpec={handleAppendUnplacedToSpec}
