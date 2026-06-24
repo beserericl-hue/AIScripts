@@ -29,6 +29,7 @@
             "sectionId": "seed-narr-001",
             "heading": "Program overview",
             "snippet": "The Human Services BS program at E2E Test University prepares students for entry-level positions in social services through coursework, fieldwork, and capstone experiences. The program enrolls approximately 120 students per cohort and graduates 90% of admitted students within five years.",
+            "htmlSnippet": "<p>The Human Services BS program at <strong>E2E Test University</strong> prepares students for entry-level positions in social services. See the <a href=\"https://e2e.test/handbook\">program handbook</a> for details.</p>",
             "wordCount": 42,
             "confidence": 0.92,
             "acceptState": "auto_accepted",
