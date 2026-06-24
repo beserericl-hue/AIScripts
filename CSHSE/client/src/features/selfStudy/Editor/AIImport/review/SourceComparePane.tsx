@@ -41,15 +41,23 @@ export function SourceComparePane({
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Scroll the source pane so `el` sits near the top — set scrollTop directly
-  // (reliable across large documents, unlike smooth scrollIntoView).
+  // Scroll the source pane so `el` sits near the top. Set scrollTop directly
+  // (reliable across large documents, unlike smooth scrollIntoView). Deferred
+  // across two animation frames + a timeout so the 300KB document has finished
+  // laying out before we measure — otherwise the offset is computed against a
+  // not-yet-expanded DOM and the scroll lands at 0.
   const scrollToElement = (el: HTMLElement) => {
-    const sc = scrollRef.current;
-    if (!sc) {
-      el.scrollIntoView({ block: 'start' });
-      return;
-    }
-    sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 16;
+    const doScroll = () => {
+      const sc = scrollRef.current;
+      if (!sc) {
+        el.scrollIntoView({ block: 'start' });
+        return;
+      }
+      sc.scrollTop = sc.scrollTop + (el.getBoundingClientRect().top - sc.getBoundingClientRect().top) - 16;
+    };
+    requestAnimationFrame(() => requestAnimationFrame(doScroll));
+    window.setTimeout(doScroll, 350);
+    window.setTimeout(doScroll, 800);
   };
 
   useEffect(() => {
