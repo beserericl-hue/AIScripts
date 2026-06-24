@@ -164,7 +164,7 @@ export function SourceComparePane({
   }, [state.kind, sectionId, matchText]);
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col border-r border-gray-200 bg-gray-50">
+    <div data-build="srcscroll3" className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-gray-200 bg-gray-50">
       <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-1.5">
         <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
           Source document

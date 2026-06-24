@@ -136,7 +136,7 @@ export function CompareEditOverlay({
         {/* Body — two equal columns */}
         <div className="flex min-h-0 flex-1">
           {/* LEFT — editable imported content */}
-          <div className="flex min-w-0 flex-1 flex-col border-r border-gray-200">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-gray-200">
             <div className="flex items-center justify-between border-b border-gray-200 bg-cshse-50/40 px-4 py-1.5">
               <span className="text-xs font-semibold uppercase tracking-wide text-cshse-700">
                 Imported content — editable
@@ -181,7 +181,7 @@ export function CompareEditOverlay({
           </div>
 
           {/* RIGHT — source document */}
-          <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <SourceComparePane
               importId={sourceImportId || null}
               submissionId={submissionId}
