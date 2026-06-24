@@ -623,19 +623,20 @@ function FullReviewStep(): JSX.Element {
   );
 
   const handleEditSave = useCallback(
-    (sectionId: string, newText: string) => {
+    (sectionId: string, newText: string, newHtml?: string | null) => {
       const tag = tags.find((t) => t.sectionId === sectionId);
       if (tag) {
+        // Tags carry plain fullText only; HTML is ignored for the Unplaced rail.
         editTagAction(tag.tagId, newText);
       } else if (isIntroductionSection(sectionId)) {
         // CR-039 follow-on — intro items live outside the per-spec
-        // bucket; route to the intro-aware editor.
-        editIntroductionItem(sectionId, newText);
+        // bucket; route to the intro-aware editor. Phase 2b — pass rich HTML.
+        editIntroductionItem(sectionId, newText, newHtml);
       } else if (activeBucket) {
         const inNarr = activeBucket.narratives.some((i) => i.sectionId === sectionId);
         const kind: 'narratives' | 'evidenceText' = inNarr ? 'narratives' : 'evidenceText';
         const specKey = `${activeBucket.standardCode}.${activeBucket.specCode}`;
-        editBucketItem(specKey, sectionId, kind, newText);
+        editBucketItem(specKey, sectionId, kind, newText, newHtml);
       }
       setEditingSectionId(null);
     },

@@ -310,6 +310,55 @@ describe('aiImportStore — CR-032 inline edit', () => {
     const after = useAIImportStore.getState().buckets['1.a'].narratives[0];
     expect(after).toEqual(before);
   });
+
+  // Phase 2b — rich (HTML) editing. The contentEditable editor saves full
+  // format; the store must persist htmlSnippet AND preserve the AI's original
+  // HTML so Revert restores links/images/tables, not just plain text.
+  it('editBucketItem persists rich htmlSnippet + plain snippet', () => {
+    // Seed the item with the AI's faithful HTML (a hyperlink).
+    useAIImportStore.setState((st) => {
+      st.buckets['1.a'].narratives[0].htmlSnippet =
+        '<p>AI <a href="https://x.edu">link</a> text.</p>';
+      return { buckets: { ...st.buckets } };
+    });
+    const s = useAIImportStore.getState();
+    s.editBucketItem(
+      '1.a',
+      'sec-n1',
+      'narratives',
+      'Edited link text.',
+      '<p>Edited <a href="https://y.edu">link</a> text.</p>'
+    );
+    const item = useAIImportStore.getState().buckets['1.a'].narratives[0];
+    expect(item.snippet).toBe('Edited link text.');
+    expect(item.htmlSnippet).toBe('<p>Edited <a href="https://y.edu">link</a> text.</p>');
+    // First edit snapshots the original HTML for revert.
+    expect(item.originalHtml).toBe('<p>AI <a href="https://x.edu">link</a> text.</p>');
+  });
+
+  it('revertBucketItem restores the original rich HTML', () => {
+    useAIImportStore.setState((st) => {
+      st.buckets['1.a'].narratives[0].htmlSnippet = '<p>AI <strong>bold</strong>.</p>';
+      return { buckets: { ...st.buckets } };
+    });
+    const s = useAIImportStore.getState();
+    s.editBucketItem('1.a', 'sec-n1', 'narratives', 'plain', '<p>edited</p>');
+    s.revertBucketItem('1.a', 'sec-n1', 'narratives');
+    const item = useAIImportStore.getState().buckets['1.a'].narratives[0];
+    expect(item.htmlSnippet).toBe('<p>AI <strong>bold</strong>.</p>');
+    expect(item.originalHtml).toBeUndefined();
+  });
+
+  it('editBucketItem without HTML leaves htmlSnippet untouched (back-compat)', () => {
+    useAIImportStore.setState((st) => {
+      st.buckets['1.a'].narratives[0].htmlSnippet = '<p>keep me</p>';
+      return { buckets: { ...st.buckets } };
+    });
+    useAIImportStore.getState().editBucketItem('1.a', 'sec-n1', 'narratives', 'text only');
+    const item = useAIImportStore.getState().buckets['1.a'].narratives[0];
+    expect(item.htmlSnippet).toBe('<p>keep me</p>');
+    expect(item.snippet).toBe('text only');
+  });
 });
 
 describe('aiImportStore — parsed-but-empty transport (prod zero-items strand)', () => {

@@ -97,6 +97,9 @@ export type BucketItem = {
   // the "edited" badge on the card. Both undefined for never-edited
   // items (the AI's snippet is canonical).
   originalSnippet?: string;
+  // Phase 2b — the AI's original rich HTML before the first edit, so "Revert
+  // to AI original" restores full format (links/images/tables), not just text.
+  originalHtml?: string | null;
   editedAt?: number;
   // Coordinator-typed display name for this card. When set (non-empty), it
   // overrides the auto-derived label in the Review rail. Persisted with the
@@ -616,7 +619,11 @@ interface AIImportState {
     specKey: string,
     sectionId: string,
     kind: 'narratives' | 'evidenceText',
-    newSnippet: string
+    newSnippet: string,
+    // Phase 2b — rich edit. When present, replaces htmlSnippet too (the editor
+    // renders/saves full format: links, images, tables). Plain text stays in
+    // snippet for the matcher/coverage.
+    newHtml?: string | null
   ) => void;
   // CR-032 — same, for an unplaced Tag's fullText.
   editTag: (tagId: string, newText: string) => void;
@@ -624,7 +631,7 @@ interface AIImportState {
   // Introduction-bucket item by sectionId. The store walks every
   // introduction bucket so the caller doesn't need to know which one
   // owns the item (intro keys are e.g. `document` or `standard-3`).
-  editIntroductionItem: (sectionId: string, newSnippet: string) => void;
+  editIntroductionItem: (sectionId: string, newSnippet: string, newHtml?: string | null) => void;
   revertIntroductionItem: (sectionId: string) => void;
   // CR-032 — restore from originalSnippet; clears editedAt + originalSnippet.
   revertBucketItem: (
@@ -1286,7 +1293,7 @@ export const useAIImportStore = create<AIImportState>()(
       // the AI's current snippet into originalSnippet so a later
       // "Revert to AI original" can restore it. editedAt is stamped on
       // every edit so the UI badge knows the item has been touched.
-      editBucketItem: (specKey, sectionId, kind, newSnippet) =>
+      editBucketItem: (specKey, sectionId, kind, newSnippet, newHtml) =>
         set((s) => {
           const bucket = s.buckets[specKey];
           if (!bucket) return {} as Partial<AIImportState>;
@@ -1294,17 +1301,18 @@ export const useAIImportStore = create<AIImportState>()(
           const idx = list.findIndex((i) => i.sectionId === sectionId);
           if (idx < 0) return {} as Partial<AIImportState>;
           const existing = list[idx];
+          const firstEdit = existing.originalSnippet === undefined;
           const updated: BucketItem = {
             ...existing,
             snippet: newSnippet,
+            // Phase 2b — when the rich editor provides HTML, persist it so the
+            // editor materializes the edited full format (links/images/tables).
+            ...(newHtml !== undefined ? { htmlSnippet: newHtml } : {}),
             wordCount: newSnippet.trim() ? newSnippet.trim().split(/\s+/).length : 0,
-            // Preserve the AI's original snippet ONLY on first edit so a
-            // re-edit doesn't keep overwriting originalSnippet with a
-            // mid-edit value.
-            originalSnippet:
-              existing.originalSnippet !== undefined
-                ? existing.originalSnippet
-                : existing.snippet,
+            // Preserve the AI's original snippet + HTML ONLY on first edit so a
+            // re-edit doesn't keep overwriting the original with a mid-edit value.
+            originalSnippet: firstEdit ? existing.snippet : existing.originalSnippet,
+            originalHtml: firstEdit ? (existing.htmlSnippet ?? null) : existing.originalHtml,
             editedAt: Date.now(),
           };
           const newList = [...list];
@@ -1343,21 +1351,21 @@ export const useAIImportStore = create<AIImportState>()(
       // caller only has the sectionId; first match wins. Mirrors
       // editBucketItem's originalSnippet/editedAt bookkeeping so the
       // existing "edited" badge + Revert button light up the same way.
-      editIntroductionItem: (sectionId, newSnippet) =>
+      editIntroductionItem: (sectionId, newSnippet, newHtml) =>
         set((s) => {
           const intros = s.introductions;
           for (const [key, bucket] of Object.entries(intros)) {
             const idx = bucket.items.findIndex((i) => i.sectionId === sectionId);
             if (idx < 0) continue;
             const existing = bucket.items[idx];
+            const firstEdit = existing.originalSnippet === undefined;
             const updated: BucketItem = {
               ...existing,
               snippet: newSnippet,
+              ...(newHtml !== undefined ? { htmlSnippet: newHtml } : {}),
               wordCount: newSnippet.trim() ? newSnippet.trim().split(/\s+/).length : 0,
-              originalSnippet:
-                existing.originalSnippet !== undefined
-                  ? existing.originalSnippet
-                  : existing.snippet,
+              originalSnippet: firstEdit ? existing.snippet : existing.originalSnippet,
+              originalHtml: firstEdit ? (existing.htmlSnippet ?? null) : existing.originalHtml,
               editedAt: Date.now(),
             };
             const newItems = [...bucket.items];
@@ -1421,10 +1429,13 @@ export const useAIImportStore = create<AIImportState>()(
           const restored: BucketItem = {
             ...existing,
             snippet: existing.originalSnippet,
+            // Restore the AI's original rich HTML too (Phase 2b).
+            htmlSnippet: existing.originalHtml ?? null,
             wordCount: existing.originalSnippet.trim()
               ? existing.originalSnippet.trim().split(/\s+/).length
               : 0,
             originalSnippet: undefined,
+            originalHtml: undefined,
             editedAt: undefined,
           };
           const newList = [...list];

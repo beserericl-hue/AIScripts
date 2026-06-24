@@ -54,7 +54,7 @@ interface ItemPreviewProps {
   // actions wired in ReviewStep.
   editingSectionId?: string | null;
   onEditStart?: (sectionId: string) => void;
-  onEditSave?: (sectionId: string, newText: string) => void;
+  onEditSave?: (sectionId: string, newText: string, newHtml?: string | null) => void;
   onEditCancel?: () => void;
   onEditRevert?: (sectionId: string) => void;
 }
@@ -142,27 +142,36 @@ export function ItemPreview({
   onEditRevert
 }: ItemPreviewProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Phase 2b — the imported content is edited as RICH text (links / images /
+  // tables) in a large contentEditable, not a tiny plain-text box. The editor
+  // is uncontrolled (seeded once on edit-start); we read innerHTML/innerText
+  // on Save. `draft` only tracks the live word count.
+  const editorRef = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState<string>('');
 
   const found = findItem(bucket, tags, selectedSectionId, cvs, evidenceDocs, introductions);
   const isEditing = !!(selectedSectionId && editingSectionId === selectedSectionId);
 
-  // Local controlled textarea state. Initialized from the item's current
-  // snippet whenever edit mode opens; persists ONLY in this component
-  // until the coordinator clicks Save (which dispatches editBucketItem /
-  // editTag through onEditSave).
-  const [draft, setDraft] = useState<string>('');
+  const escapeHtml = (s: string) =>
+    (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
   useEffect(() => {
     // Edit mode only applies to bucket items (text / evidenceText / file)
-    // and tags. CV / evidenceDoc previews are read-only and short-circuit
-    // out before the editing-textarea ever mounts, so we narrow the type
-    // here.
+    // and tags. CV / evidenceDoc previews are read-only.
     if (isEditing && found && (found.kind === 'tag' || found.kind === 'text' || found.kind === 'evidenceText' || found.kind === 'file')) {
       const editable = found.item as BucketItem | Tag;
-      const initial = isTag(editable) ? editable.fullText : (editable as BucketItem).snippet;
-      setDraft(initial || '');
-      // Defer focus to the next paint so the textarea has mounted.
-      const id = window.setTimeout(() => textareaRef.current?.focus(), 0);
+      const plain = isTag(editable) ? editable.fullText : (editable as BucketItem).snippet;
+      const html = isTag(editable) ? null : (editable as BucketItem).htmlSnippet;
+      setDraft(plain || '');
+      // Seed the rich editor with the faithful HTML (full format) when present,
+      // else the plain text wrapped in a paragraph.
+      const seed = (html && html.trim()) ? html : `<p>${escapeHtml(plain || '')}</p>`;
+      const id = window.setTimeout(() => {
+        if (editorRef.current) {
+          editorRef.current.innerHTML = seed;
+          editorRef.current.focus();
+        }
+      }, 0);
       return () => window.clearTimeout(id);
     }
   }, [isEditing, selectedSectionId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -227,7 +236,6 @@ export function ItemPreview({
   const acceptState = isTag(item) ? item.acceptState : (item as BucketItem).acceptState;
   const band = confBand(confidence);
   // CR-032 — table-bearing items keep htmlSnippet; their pencil is disabled.
-  const hasHtmlTable = !isTag(item) && !!(item as BucketItem).htmlSnippet;
   const isEdited = (item as any).editedAt !== undefined && (item as any).originalSnippet !== undefined;
   const editingDraftWordCount = draft.trim() ? draft.trim().split(/\s+/).length : 0;
 
@@ -236,7 +244,9 @@ export function ItemPreview({
       ref={containerRef}
       tabIndex={-1}
       aria-label="AI evaluation panel"
-      className="flex h-full w-96 flex-col border-l border-gray-200 bg-white focus:outline-none"
+      className={`flex h-full flex-col border-l border-gray-200 bg-white focus:outline-none ${
+        isEditing ? 'w-[44rem] max-w-[60vw]' : 'w-96'
+      }`}
     >
       {/* Header — what the AI saw */}
       <div className="border-b border-gray-200 p-4 space-y-3">
@@ -284,13 +294,8 @@ export function ItemPreview({
               <button
                 type="button"
                 onClick={() => onEditStart(selectedSectionId!)}
-                disabled={hasHtmlTable}
-                title={
-                  hasHtmlTable
-                    ? 'This item contains a table. Edit it in the Standards editor after Apply.'
-                    : 'Edit this text before applying'
-                }
-                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                title="Edit this content — full format (links, images, tables) is preserved"
+                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
               >
                 <Pencil className="h-3 w-3" aria-hidden />
                 Edit
@@ -332,14 +337,23 @@ export function ItemPreview({
       {isEditing ? (
         <div className="flex flex-1 flex-col overflow-hidden p-4">
           <label className="mb-1 text-xs uppercase tracking-wide text-gray-500">
-            Edit the text below — delete sentences, add sentences, reword. Save when you're done.
+            Edit the imported text — full format. Links, images and tables are kept;
+            you can paste rich content from the source. Save when you're done.
           </label>
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            className="flex-1 resize-none rounded border border-gray-300 bg-white p-3 text-sm leading-relaxed text-gray-900 focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500"
+          {/* Phase 2b — large rich-text editor. Renders + edits the faithful
+              HTML (hyperlinks, inline images, tables). Pasting from the source
+              document keeps formatting. innerHTML is read on Save. */}
+          <div
+            ref={editorRef}
+            contentEditable
+            suppressContentEditableWarning
             spellCheck
+            onInput={() => setDraft(editorRef.current?.innerText || '')}
+            data-testid="rich-edit-area"
+            className="ai-html-snippet prose prose-sm max-w-none flex-1 overflow-auto rounded border border-gray-300 bg-white p-4 text-[15px] leading-relaxed text-gray-900 focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500
+              [&_a]:text-cshse-700 [&_a]:underline
+              [&_table]:border-collapse [&_table]:w-full [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1
+              [&_img]:max-w-full [&_img]:my-2"
           />
           <div className="mt-2 flex items-center justify-between text-xs text-gray-500">
             <span>{editingDraftWordCount} words</span>
@@ -382,7 +396,13 @@ export function ItemPreview({
               </button>
               <button
                 type="button"
-                onClick={() => onEditSave?.(selectedSectionId!, draft)}
+                onClick={() => {
+                  // Phase 2b — save the rich HTML (full format) + a plain-text
+                  // projection for the matcher/coverage.
+                  const html = editorRef.current?.innerHTML ?? '';
+                  const plain = (editorRef.current?.innerText ?? '').trim();
+                  onEditSave?.(selectedSectionId!, plain, html);
+                }}
                 className="inline-flex items-center gap-1 rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
               >
                 <Check className="h-3 w-3" aria-hidden />
