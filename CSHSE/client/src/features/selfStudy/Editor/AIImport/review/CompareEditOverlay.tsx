@@ -159,6 +159,25 @@ export function CompareEditOverlay({
                   [&_img]:max-w-full [&_img]:my-2"
               />
             </div>
+            {/* Always-visible Save bar for the editable LEFT window. */}
+            <div className="flex items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-4 py-2.5">
+              <span className="mr-auto text-xs text-gray-500">Edit or paste above, then save.</span>
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                <X className="h-4 w-4" aria-hidden /> Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                data-testid="compare-save-footer"
+                className="inline-flex items-center gap-1 rounded bg-emerald-600 px-5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700"
+              >
+                <Check className="h-4 w-4" aria-hidden /> Save changes
+              </button>
+            </div>
           </div>
 
           {/* RIGHT — source document */}

@@ -19,6 +19,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns } from 'lucide-react';
+import { openLinksInNewTab } from './linkNewTab';
 import {
   useAIImportStore,
   type BucketItem,
@@ -1582,8 +1583,9 @@ function ItemCard({
           )}
           {hasRichHtml ? (
             <div
+              onClick={openLinksInNewTab}
               className="ai-html-snippet prose prose-sm mt-3 max-h-[28rem] max-w-none overflow-auto rounded border border-gray-200 bg-white p-3 text-gray-800
-                [&_a]:text-cshse-700 [&_a]:underline [&_img]:max-w-full [&_img]:my-2
+                [&_a]:text-cshse-700 [&_a]:underline [&_a]:cursor-pointer [&_img]:max-w-full [&_img]:my-2
                 [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm
                 [&_td]:border [&_td]:border-gray-300 [&_td]:p-1.5 [&_td]:align-top
                 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-50 [&_th]:p-1.5 [&_th]:text-left [&_th]:font-semibold

@@ -10,6 +10,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { fetchOrUseCachedHtml } from './ShowInSourceModal';
+import { openLinksInNewTab } from './linkNewTab';
 
 interface SourceComparePaneProps {
   importId: string | null;
@@ -81,38 +82,55 @@ export function SourceComparePane({
       }
     }
 
-    const needle = normalizeForSearch((matchText || '').slice(0, 400));
-    if (needle.length >= 30) {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let node: Node | null;
+    // Slide the needle window across several start offsets — the AI often
+    // prepends a synthesized heading to the snippet, so offset 0 isn't always
+    // where the document text begins. Pick the offset whose longest prefix
+    // match is largest (ported from ShowInSourceModal).
+    const fullNeedle = normalizeForSearch((matchText || '').slice(0, 600));
+    if (fullNeedle.length >= 20) {
+      const minPrefix = 40;
+      const offsets = [0, 50, 100, 200, 300, 500].filter((o) => o + minPrefix < fullNeedle.length);
+      if (!offsets.includes(0)) offsets.unshift(0);
       let best: Node | null = null;
       let bestScore = 0;
-      while ((node = walker.nextNode())) {
-        const t = normalizeForSearch(node.textContent || '');
-        if (t.length < 30) continue;
-        let lo = 30;
-        let hi = Math.min(needle.length, t.length);
-        let cand = 0;
-        while (lo <= hi) {
-          const mid = (lo + hi) >> 1;
-          if (t.includes(needle.slice(0, mid))) {
-            cand = mid;
-            lo = mid + 1;
-          } else {
-            hi = mid - 1;
+      for (const offset of offsets) {
+        const needle = fullNeedle.slice(offset);
+        if (needle.length < minPrefix) continue;
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let node: Node | null;
+        while ((node = walker.nextNode())) {
+          const t = normalizeForSearch(node.textContent || '');
+          if (t.length < minPrefix) continue;
+          let lo = minPrefix;
+          let hi = Math.min(needle.length, t.length);
+          let cand = 0;
+          while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (t.includes(needle.slice(0, mid))) {
+              cand = mid;
+              lo = mid + 1;
+            } else {
+              hi = mid - 1;
+            }
+          }
+          if (cand > bestScore) {
+            bestScore = cand;
+            best = node;
+            if (cand >= Math.min(needle.length, 400)) break;
           }
         }
-        if (cand > bestScore) {
-          bestScore = cand;
-          best = node;
-          if (cand >= 300) break;
-        }
+        if (bestScore >= 200) break;
       }
       if (best) {
         const p = (best as Node).parentElement;
         if (p) {
-          p.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          p.style.outline = '2px solid #d97706';
+          // Scroll the match to the TOP of the source pane and highlight it
+          // prominently (orange box + tint) so it's obvious what to copy.
+          p.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          p.style.outline = '3px solid #d97706';
+          p.style.outlineOffset = '2px';
+          p.style.background = '#fef3c7';
+          p.style.borderRadius = '4px';
         }
         setMatchKind('fuzzy');
         return;
@@ -165,8 +183,9 @@ export function SourceComparePane({
         {state.kind === 'ready' && (
           <div
             ref={contentRef}
+            onClick={openLinksInNewTab}
             className="prose prose-sm max-w-none text-sm
-              [&_a]:text-cshse-700 [&_a]:underline
+              [&_a]:text-cshse-700 [&_a]:underline [&_a]:cursor-pointer
               [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1
               [&_img]:max-w-full"
             // eslint-disable-next-line react/no-danger
