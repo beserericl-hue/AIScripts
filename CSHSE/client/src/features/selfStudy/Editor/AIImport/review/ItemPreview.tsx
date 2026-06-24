@@ -18,7 +18,7 @@
  * The body text itself now lives in the middle ItemCardList cards.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { ExternalLink, Sparkles, Pencil, Check, X, Undo2, User, FileBox } from 'lucide-react';
+import { ExternalLink, Sparkles, Pencil, Check, X, Undo2, User, FileBox, Columns } from 'lucide-react';
 import {
   useAIImportStore,
   type BucketItem,
@@ -29,6 +29,7 @@ import {
   type IntroductionBucket,
 } from '../../../../../store/aiImportStore';
 import { ItemKind } from './ItemCardList';
+import { SourceComparePane } from './SourceComparePane';
 
 interface ItemPreviewProps {
   bucket: SpecBucket | null;
@@ -148,6 +149,9 @@ export function ItemPreview({
   // on Save. `draft` only tracks the live word count.
   const editorRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<string>('');
+  // Phase 2c — Compare mode: show the source document beside the editor.
+  const [compareMode, setCompareMode] = useState(false);
+  const previewSubmissionId = useAIImportStore((s) => s.submissionId);
 
   const found = findItem(bucket, tags, selectedSectionId, cvs, evidenceDocs, introductions);
   const isEditing = !!(selectedSectionId && editingSectionId === selectedSectionId);
@@ -245,7 +249,11 @@ export function ItemPreview({
       tabIndex={-1}
       aria-label="AI evaluation panel"
       className={`flex h-full flex-col border-l border-gray-200 bg-white focus:outline-none ${
-        isEditing ? 'w-[44rem] max-w-[60vw]' : 'w-96'
+        isEditing
+          ? compareMode
+            ? 'w-[72rem] max-w-[88vw]'
+            : 'w-[44rem] max-w-[60vw]'
+          : 'w-96'
       }`}
     >
       {/* Header — what the AI saw */}
@@ -301,6 +309,30 @@ export function ItemPreview({
                 Edit
               </button>
             )}
+            {/* Phase 2c — Compare toggle. Splits the editor to show the source
+                document beside the imported content so the coordinator can
+                verify fidelity + copy rich content across. */}
+            {isEditing && (
+              <button
+                type="button"
+                onClick={() => setCompareMode((v) => !v)}
+                aria-pressed={compareMode}
+                data-testid="compare-toggle"
+                title={
+                  compareMode
+                    ? 'Hide the source document'
+                    : 'Compare against the source document side-by-side'
+                }
+                className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-xs ${
+                  compareMode
+                    ? 'border-cshse-400 bg-cshse-50 text-cshse-700'
+                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <Columns className="h-3 w-3" aria-hidden />
+                {compareMode ? 'Comparing' : 'Compare'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -335,7 +367,19 @@ export function ItemPreview({
           edit textarea. Edit mode swallows the whole flex-1 region so the
           textarea has all available height. */}
       {isEditing ? (
-        <div className="flex flex-1 flex-col overflow-hidden p-4">
+        <div className="flex flex-1 overflow-hidden">
+          {/* Phase 2c — Compare mode renders the source document to the LEFT of
+              the editor. The editor column stays mounted across the toggle so
+              in-progress edits are never lost. */}
+          {compareMode && (
+            <SourceComparePane
+              importId={(item as any).sourceImportId || null}
+              submissionId={previewSubmissionId}
+              sectionId={selectedSectionId}
+              matchText={isTag(item) ? item.fullText : (item as BucketItem).snippet}
+            />
+          )}
+          <div className="flex min-w-0 flex-1 flex-col overflow-hidden p-4">
           <label className="mb-1 text-xs uppercase tracking-wide text-gray-500">
             Edit the imported text — full format. Links, images and tables are kept;
             you can paste rich content from the source. Save when you're done.
@@ -409,6 +453,7 @@ export function ItemPreview({
                 Save
               </button>
             </div>
+          </div>
           </div>
         </div>
       ) : (

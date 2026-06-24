@@ -63,7 +63,7 @@ const HTML_CACHE = new Map<string, string>();
 // one network request instead of triggering N parallel downloads.
 const HTML_INFLIGHT = new Map<string, Promise<string>>();
 
-async function fetchOrUseCachedHtml(importId: string, submissionId?: string | null): Promise<string> {
+export async function fetchOrUseCachedHtml(importId: string, submissionId?: string | null): Promise<string> {
   const cached = HTML_CACHE.get(importId);
   if (cached) return cached;
   const existing = HTML_INFLIGHT.get(importId);

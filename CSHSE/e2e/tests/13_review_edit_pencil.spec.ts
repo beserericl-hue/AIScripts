@@ -47,6 +47,18 @@ test.describe('CR-032 / Phase 2b — rich Edit pencil on Review cards', () => {
     await expect(editor.locator('a[href="https://e2e.test/handbook"]')).toBeVisible();
     await expect(editor.locator('strong')).toBeVisible();
 
+    // Phase 2c — the Compare toggle reveals the source document beside the
+    // editor (split view), and the editor stays mounted (edits never lost).
+    const compareToggle = page.getByTestId('compare-toggle');
+    await expect(compareToggle).toBeVisible();
+    await compareToggle.click();
+    await expect(page.getByTestId('compare-source-pane')).toBeVisible();
+    await expect(editor).toBeVisible(); // editor coexists with the source pane
+    // Toggle Compare back off — source pane goes away, editor remains.
+    await compareToggle.click();
+    await expect(page.getByTestId('compare-source-pane')).toHaveCount(0);
+    await expect(editor).toBeVisible();
+
     // Edit the text (contentEditable supports fill()); the surrounding rich
     // markup is preserved by the editor.
     await editor.click();
