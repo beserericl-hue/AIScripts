@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye } from 'lucide-react';
+import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns } from 'lucide-react';
 import {
   useAIImportStore,
   type BucketItem,
@@ -1287,7 +1287,11 @@ function ItemCard({
 }: ItemCardProps): JSX.Element {
   const band = confBand(item.confidence);
   const hasHtmlTable = !!(item.htmlSnippet && item.htmlSnippet.includes('<table'));
-  const tabular = !hasHtmlTable && looksTabular(item.snippet);
+  // Render the faithful HTML (links, images, bold, tables) whenever we have it —
+  // not just for tables — so URLs and pictures from the source are visible in
+  // the card, matching what the editor and source document show.
+  const hasRichHtml = !!(item.htmlSnippet && item.htmlSnippet.trim());
+  const tabular = !hasRichHtml && looksTabular(item.snippet);
   const moveSelectionToSpec = useAIImportStore((s) => s.moveSelectionToSpec);
   const [moveOpen, setMoveOpen] = React.useState(false);
   // "Move text" only makes sense for prose-bearing items (narratives / evidence
@@ -1440,15 +1444,10 @@ function ItemCard({
                   e.stopPropagation();
                   onEditStart(item.sectionId);
                 }}
-                disabled={hasHtmlTable}
-                title={
-                  hasHtmlTable
-                    ? 'This item contains a table. Edit it in the Standards editor after Apply.'
-                    : 'Edit this text before applying'
-                }
-                className={`${isEdited ? '' : 'ml-auto'} inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40`}
+                title="Compare with the source document side-by-side and edit (full format — links, images, tables)"
+                className={`${isEdited ? '' : 'ml-auto'} inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50`}
               >
-                <Pencil className="h-3 w-3" aria-hidden /> Edit
+                <Columns className="h-3 w-3" aria-hidden /> Compare
               </button>
             )}
             {/* Move part of this card into another subspec. The parser
@@ -1581,9 +1580,10 @@ function ItemCard({
           {item.rawHeading && item.rawHeading !== item.displayLabel && !isPlaceholderHeading(item.rawHeading) && (
             <div className="mt-0.5 text-sm italic text-gray-500">Source heading: {item.rawHeading}</div>
           )}
-          {hasHtmlTable ? (
+          {hasRichHtml ? (
             <div
               className="ai-html-snippet prose prose-sm mt-3 max-h-[28rem] max-w-none overflow-auto rounded border border-gray-200 bg-white p-3 text-gray-800
+                [&_a]:text-cshse-700 [&_a]:underline [&_img]:max-w-full [&_img]:my-2
                 [&_table]:w-full [&_table]:border-collapse [&_table]:text-sm
                 [&_td]:border [&_td]:border-gray-300 [&_td]:p-1.5 [&_td]:align-top
                 [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-50 [&_th]:p-1.5 [&_th]:text-left [&_th]:font-semibold

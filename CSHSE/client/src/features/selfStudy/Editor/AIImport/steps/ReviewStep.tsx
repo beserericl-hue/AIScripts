@@ -20,6 +20,7 @@ import { ItemCardList, type ItemKind } from '../review/ItemCardList';
 import { ItemPreview } from '../review/ItemPreview';
 import { ReassignPopup } from '../review/ReassignPopup';
 import { ShowInSourceModal } from '../review/ShowInSourceModal';
+import { CompareEditOverlay } from '../review/CompareEditOverlay';
 import { StandaloneCVReview } from '../review/StandaloneCVReview';
 import { MissingFragmentsView } from '../review/MissingFragmentsView';
 import { MISSING_FRAGMENTS_KEY } from '../review/SpecRail';
@@ -654,6 +655,50 @@ function FullReviewStep(): JSX.Element {
     []
   );
 
+  // Resolve the item the Compare overlay is editing (across spec buckets,
+  // unplaced tags, and introduction buckets) so the overlay can seed its
+  // editor + source pane.
+  const editItem = useMemo(() => {
+    if (!editingSectionId) return null;
+    for (const b of Object.values(buckets)) {
+      for (const it of [...b.narratives, ...b.evidenceText, ...b.evidenceFiles]) {
+        if (it.sectionId === editingSectionId) {
+          return {
+            heading: it.heading || '',
+            snippet: it.snippet || '',
+            htmlSnippet: it.htmlSnippet ?? null,
+            sourceImportId: (it as any).sourceImportId ?? null,
+            isEdited: (it as any).editedAt !== undefined && (it as any).originalSnippet !== undefined
+          };
+        }
+      }
+    }
+    for (const ib of Object.values(introductions)) {
+      for (const it of ib.items || []) {
+        if (it.sectionId === editingSectionId) {
+          return {
+            heading: it.heading || '',
+            snippet: it.snippet || '',
+            htmlSnippet: it.htmlSnippet ?? null,
+            sourceImportId: (it as any).sourceImportId ?? null,
+            isEdited: (it as any).editedAt !== undefined && (it as any).originalSnippet !== undefined
+          };
+        }
+      }
+    }
+    const tag = tags.find((t) => t.sectionId === editingSectionId);
+    if (tag) {
+      return {
+        heading: tag.sourceHeading || tag.summary || '',
+        snippet: tag.fullText || '',
+        htmlSnippet: (tag as any).htmlSnippet ?? null,
+        sourceImportId: (tag as any).sourceImportId ?? null,
+        isEdited: (tag as any).editedAt !== undefined && (tag as any).originalSnippet !== undefined
+      };
+    }
+    return null;
+  }, [editingSectionId, buckets, introductions, tags]);
+
   const handleShowInSource = useCallback(
     (sectionId: string) => {
       let matchText = '';
@@ -972,13 +1017,32 @@ function FullReviewStep(): JSX.Element {
           onChangeKind={handleChangeKind}
           onReassign={handleSinglePreviewReassign}
           onShowInSource={handleShowInSource}
-          editingSectionId={editingSectionId}
+          // Editing now lives in the CompareEditOverlay, so the right pane stays
+          // read-only (never resizes into an inline editor).
+          editingSectionId={null}
           onEditStart={handleEditStart}
           onEditSave={handleEditSave}
           onEditCancel={handleEditCancel}
           onEditRevert={handleEditRevert}
         />
       </div>
+
+      {/* Compare & edit — the single editing surface, opened by a card's
+          "Compare" button. Big side-by-side: editable imported content next to
+          the source document. Replaces the old narrow right-pane editor. */}
+      <CompareEditOverlay
+        open={!!editingSectionId && !!editItem}
+        sectionId={editingSectionId}
+        heading={editItem?.heading || ''}
+        snippet={editItem?.snippet || ''}
+        htmlSnippet={editItem?.htmlSnippet}
+        isEdited={editItem?.isEdited}
+        sourceImportId={editItem?.sourceImportId || importId}
+        submissionId={submissionId}
+        onSave={handleEditSave}
+        onRevert={handleEditRevert}
+        onClose={handleEditCancel}
+      />
 
       <ReassignPopup
         open={reassignOpen}

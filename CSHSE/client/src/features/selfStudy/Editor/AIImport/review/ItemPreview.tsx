@@ -294,45 +294,8 @@ export function ItemPreview({
                 Show in source
               </button>
             )}
-            {/* CR-032 — Edit button. Disabled for tables (route to Standards
-                editor after Apply) and during the parsing stage (snapshots
-                would clobber local state — though dirty flag would protect,
-                this is cleaner UX). */}
-            {!isEditing && onEditStart && (
-              <button
-                type="button"
-                onClick={() => onEditStart(selectedSectionId!)}
-                title="Edit this content — full format (links, images, tables) is preserved"
-                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-              >
-                <Pencil className="h-3 w-3" aria-hidden />
-                Edit
-              </button>
-            )}
-            {/* Phase 2c — Compare toggle. Splits the editor to show the source
-                document beside the imported content so the coordinator can
-                verify fidelity + copy rich content across. */}
-            {isEditing && (
-              <button
-                type="button"
-                onClick={() => setCompareMode((v) => !v)}
-                aria-pressed={compareMode}
-                data-testid="compare-toggle"
-                title={
-                  compareMode
-                    ? 'Hide the source document'
-                    : 'Compare against the source document side-by-side'
-                }
-                className={`inline-flex items-center gap-1 rounded border px-2 py-1 text-xs ${
-                  compareMode
-                    ? 'border-cshse-400 bg-cshse-50 text-cshse-700'
-                    : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <Columns className="h-3 w-3" aria-hidden />
-                {compareMode ? 'Comparing' : 'Compare'}
-              </button>
-            )}
+            {/* Editing happens in the Compare overlay, opened from the card's
+                "Compare" button — not here. The right pane stays read-only. */}
           </div>
         </div>
 
