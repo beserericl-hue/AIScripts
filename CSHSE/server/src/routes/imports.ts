@@ -74,6 +74,15 @@ const router = Router();
 router.post('/:importId/ai-event', receiveAIEventWebhook);
 router.post('/:importId/ai-callback', receiveAICallback);
 
+// Document images are referenced by <img src="/api/imports/:id/images/:file">
+// inside the rendered source-document HTML (Compare / Show-in-source). A browser
+// image request can't carry the Bearer token, so this route is mounted BEFORE
+// the authenticate gate — otherwise every embedded image 401s and renders
+// broken. The image_<uuid4>.ext filenames are unguessable, so a public-by-URL
+// image exposes nothing the auth-gated /content HTML doesn't already show an
+// authorized viewer.
+router.get('/:importId/images/:filename', getDocumentImage);
+
 // All other routes require user authentication.
 router.use(authenticate);
 
@@ -274,12 +283,8 @@ router.get('/:importId/full-section/:sectionId', getFullSectionContent);
  */
 router.get('/:importId/content', getDocumentContent);
 
-/**
- * @route   GET /api/imports/:importId/images/:filename
- * @desc    Serve an image from the temp folder
- * @access  Private
- */
-router.get('/:importId/images/:filename', getDocumentImage);
+// NOTE: GET /:importId/images/:filename is mounted ABOVE the authenticate gate
+// (see top of file) so embedded <img> tags load without a Bearer token.
 
 /**
  * @route   POST /api/imports/:importId/extract-section
