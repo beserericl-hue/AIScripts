@@ -120,7 +120,7 @@ test.describe('Review — Compare overlay editing', () => {
     // review pane (the spec rail) is still intact and the overlay is gone.
     await page.getByRole('button', { name: /^compare$/i }).first().click();
     await expect(page.getByTestId('compare-overlay')).toBeVisible();
-    await page.getByRole('button', { name: /^cancel$/i }).click();
+    await page.getByRole('button', { name: /^cancel$/i }).first().click();
     await expect(page.getByTestId('compare-overlay')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: /^Review$/i })).toBeVisible();
     await expect(page.locator('a[href="https://e2e.test/handbook"]').first()).toBeVisible();
