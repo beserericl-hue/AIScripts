@@ -2477,11 +2477,12 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           tab row, progress, and Submit button never overlap. At ≥1400px
           they sit on one line; below that the right cluster (progress +
           Submit) wraps below the tabs without losing any controls. */}
-      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-3">
+      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-2">
         {/* CR-045 — wizard phase indicator strip. Shows the PC where they
             are in the 4-step guided workflow. PC-only (the wizard
-            workflow doesn't apply to readers). */}
-        {isProgramCoordinator && (
+            workflow doesn't apply to readers). Hidden on the full-screen
+            Review/Matrix draft surfaces to reclaim vertical work area. */}
+        {isProgramCoordinator && activeView !== 'review-surface' && activeView !== 'matrix-surface' && (
           <PhaseIndicator
             activeView={activeView}
             setActiveView={setActiveView}

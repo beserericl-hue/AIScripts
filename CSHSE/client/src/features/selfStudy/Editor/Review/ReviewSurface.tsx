@@ -149,14 +149,15 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      <header className="flex items-center justify-between gap-2 border-b border-gray-200 bg-white px-6 py-2">
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">Review</h1>
-          <p className="text-xs text-gray-500">
-            Items live on the submission and survive wizard close + re-open.
-            Approve to push into the editor; discard to skip; clear to remove
-            from the rail entirely.
-          </p>
+      <header className="flex items-center justify-between gap-2 border-b border-gray-200 bg-white px-6 py-1.5">
+        <div className="flex items-center gap-2">
+          <h1 className="text-base font-semibold text-gray-900">Review</h1>
+          <span
+            className="text-xs text-gray-400"
+            title="Items live on the submission and survive close + re-open. Approve pushes into the editor; discard skips; clear removes from the rail."
+          >
+            ⓘ
+          </span>
           {/* CR-040 follow-on — redetect status banner. Shows the count
               of CVs / papers / syllabi the detector pass surfaced so
               the coordinator can verify the rail update + course-correct

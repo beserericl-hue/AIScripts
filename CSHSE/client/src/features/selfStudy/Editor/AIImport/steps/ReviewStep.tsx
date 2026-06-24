@@ -864,15 +864,13 @@ function FullReviewStep(): JSX.Element {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-3">
-        <div data-tour="review-summary">
-          <h2 className="text-lg font-semibold text-gray-900">Review recommendations</h2>
-          <p className="text-xs text-gray-500">
-            {applyTotals.narratives} narratives · {applyTotals.evidenceText} evidence text ·
-            {' '}{applyTotals.evidenceFiles} evidence files
-            {applyTotals.matrixCells > 0 && <> · {applyTotals.matrixCells} matrix cells</>}
-            {approvedIds.size > 0 && <> · {approvedIds.size} reviewed</>}
-          </p>
+      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-1.5">
+        <div data-tour="review-summary" className="text-xs text-gray-500">
+          <span className="font-medium text-gray-700">{applyTotals.narratives}</span> narratives ·{' '}
+          <span className="font-medium text-gray-700">{applyTotals.evidenceText}</span> evidence ·{' '}
+          <span className="font-medium text-gray-700">{applyTotals.evidenceFiles}</span> files
+          {applyTotals.matrixCells > 0 && <> · {applyTotals.matrixCells} matrix</>}
+          {approvedIds.size > 0 && <> · <span className="text-emerald-700">{approvedIds.size} reviewed</span></>}
         </div>
         <div className="flex items-center gap-2">
           {/* CR-041 US-6 — source-file filter. Visible only when in
