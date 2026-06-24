@@ -39,6 +39,18 @@ export function SourceComparePane({
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const [matchKind, setMatchKind] = useState<'anchor' | 'fuzzy' | 'missing'>('missing');
   const contentRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Scroll the source pane so `el` sits near the top — set scrollTop directly
+  // (reliable across large documents, unlike smooth scrollIntoView).
+  const scrollToElement = (el: HTMLElement) => {
+    const sc = scrollRef.current;
+    if (!sc) {
+      el.scrollIntoView({ block: 'start' });
+      return;
+    }
+    sc.scrollTop += el.getBoundingClientRect().top - sc.getBoundingClientRect().top - 16;
+  };
 
   useEffect(() => {
     if (!importId) {
@@ -75,8 +87,12 @@ export function SourceComparePane({
         `[data-section-id="${sectionId}"], #${CSS.escape(sectionId)}`
       );
       if (direct) {
-        (direct as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
-        (direct as HTMLElement).style.outline = '2px solid #006B3F';
+        const el = direct as HTMLElement;
+        el.style.outline = '3px solid #d97706';
+        el.style.outlineOffset = '2px';
+        el.style.background = '#fef3c7';
+        el.style.borderRadius = '4px';
+        scrollToElement(el);
         setMatchKind('anchor');
         return;
       }
@@ -124,13 +140,13 @@ export function SourceComparePane({
       if (best) {
         const p = (best as Node).parentElement;
         if (p) {
-          // Scroll the match to the TOP of the source pane and highlight it
-          // prominently (orange box + tint) so it's obvious what to copy.
-          p.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          // Highlight the match prominently (orange box + tint) and scroll it
+          // near the TOP of the source pane so it's obvious what to copy.
           p.style.outline = '3px solid #d97706';
           p.style.outlineOffset = '2px';
           p.style.background = '#fef3c7';
           p.style.borderRadius = '4px';
+          scrollToElement(p);
         }
         setMatchKind('fuzzy');
         return;
@@ -162,7 +178,7 @@ export function SourceComparePane({
         )}
         <span className="ml-auto text-[10px] text-gray-400">read-only · select to copy</span>
       </div>
-      <div className="flex-1 overflow-auto p-3" data-testid="compare-source-pane">
+      <div ref={scrollRef} className="flex-1 overflow-auto p-3" data-testid="compare-source-pane">
         {!importId && (
           <div className="rounded border border-dashed border-gray-300 bg-white p-3 text-xs italic text-gray-500">
             No source document is linked to this item.
