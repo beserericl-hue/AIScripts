@@ -174,7 +174,7 @@ describe('<ItemCardList />', () => {
         onApproveAll={onApproveAll}
       />
     );
-    await userEvent.click(screen.getByRole('button', { name: /Approve all/i }));
+    await userEvent.click(screen.getByTestId('approve-all'));
     // BucketItem.rowId === BucketItem.sectionId (see toCard).
     expect(onApproveAll).toHaveBeenCalledWith(['s1', 's2', 's3']);
   });

@@ -827,9 +827,9 @@ export function ItemCardList({
                 onClick={() => onApproveAll(items.map((r) => r.rowId))}
                 disabled={isPlaceholder || items.length === 0}
                 className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Approve only the items shown here (this spec) and move them to the editor. Other specs are untouched."
+                title="Approve every item shown for this subspecification and move them to the editor. Other subspecifications are untouched."
               >
-                <Check className="h-3 w-3" aria-hidden /> Approve all shown
+                <Check className="h-3 w-3" aria-hidden /> Approve This Subspecification
               </button>
               {approvedIds && approvedIds.size > 0 && onClearApprovals && (
                 <button
