@@ -80,9 +80,12 @@ function ensureItemSource(state: IAIReviewState, sectionId: string, src: IAIItem
 }
 
 /**
- * Same-source match: an item from a prior merge MATCHES the new import
- * iff its sourceFilename AND sourceContentHash both equal the new
- * import's. "EXACT DOCUMENT" per the CR.
+ * Same-source match: an item from a prior merge MATCHES the new import when it
+ * came from the same FILE — by filename (a re-imported, possibly EDITED, "v2"
+ * of the same document) OR by content hash (the same content under a different
+ * name). The template walker mints random sectionIds every import, so matching
+ * on sectionId alone let the same file's items pile up as duplicates; matching
+ * on the source means a re-import REPLACES its prior items instead of adding.
  */
 function isSameSource(
   state: IAIReviewState,
@@ -92,7 +95,7 @@ function isSameSource(
 ): boolean {
   const src = state.itemSources[sectionId];
   if (!src) return false;
-  return src.sourceFilename === newSourceFilename && src.sourceContentHash === newSourceHash;
+  return src.sourceFilename === newSourceFilename || src.sourceContentHash === newSourceHash;
 }
 
 function stampItem<T extends { sectionId?: string }>(it: T, source: IAIItemSource): T & {

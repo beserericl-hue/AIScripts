@@ -543,7 +543,7 @@ def walk_template_docx(
         else:
             flags["templateStandardHint"] = raw.standard_hint or ""
             flags["templateSpecHint"] = raw.spec_hint or ""
-        flags["templateHeading"] = raw.heading[:200]
+        flags["templateHeading"] = raw.heading[:300]
         # The faithful narrative content: paragraphs with hyperlinks + inline
         # images and tables, in document order. The renderer/editor prefers
         # html_snippet when present (markdown stays plain for the matcher).
@@ -551,7 +551,10 @@ def walk_template_docx(
         sections.append(
             Section(
                 id=f"{base_id}:tmpl:{uuid.uuid4().hex[:8]}",
-                heading=raw.heading[:200],
+                # Spec prompts / standard statements run long ("2b. Describe the
+                # institutional context …") — a 200-char cap chopped them mid-word
+                # ("text cut off"). 600 keeps the full prompt.
+                heading=raw.heading[:600],
                 heading_level=2,
                 markdown=md,
                 byte_offset_start=0,

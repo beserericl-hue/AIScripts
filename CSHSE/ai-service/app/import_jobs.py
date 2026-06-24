@@ -1382,7 +1382,7 @@ def _section_to_item(sec, rec) -> dict[str, Any]:
         snippet = snippet.split("\n", 2)[-1] if "\n" in snippet else ""
     return {
         "sectionId": sec.id,
-        "heading": sec.heading[:200],
+        "heading": sec.heading[:600],
         "snippet": snippet.strip(),
         # HTML preserved by table-aware walkers; renderer prefers this when present.
         "htmlSnippet": getattr(sec, "html_snippet", None),

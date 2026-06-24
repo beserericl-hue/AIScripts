@@ -817,12 +817,21 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
             `${importRecord.originalFilename}::${importRecord._id}`
           );
         }
+        // Auto-detect a re-import of the SAME file even when the coordinator
+        // didn't tick the reimport box (the common case: re-uploading the
+        // self-study). If any prior item came from this filename or content
+        // hash, treat it as a re-import so its items are REPLACED, not added
+        // (fixes duplicates on re-import).
+        const _srcFilename = importRecord.originalFilename || 'unknown.docx';
+        const _priorSameSource = Object.values((state as any).itemSources || {}).some(
+          (s: any) => s && (s.sourceFilename === _srcFilename || s.sourceContentHash === contentHash)
+        );
         const report = merge.mergeImportIntoReviewState(state, {
           importId: String(importRecord._id),
-          sourceFilename: importRecord.originalFilename || 'unknown.docx',
+          sourceFilename: _srcFilename,
           sourceContentHash: contentHash,
           importedAt: new Date(),
-          reimport: !!(importRecord as any).aiIsReimport,
+          reimport: !!(importRecord as any).aiIsReimport || _priorSameSource,
           buckets: importRecord.aiBuckets || {},
           tags: importRecord.aiTags || [],
           cvs: (importRecord as any).aiCVs || [],
