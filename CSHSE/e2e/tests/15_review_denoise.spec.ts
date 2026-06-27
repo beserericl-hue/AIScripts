@@ -43,6 +43,10 @@ test.describe('CR-064 — Review is de-noised', () => {
     // Review still works: a Compare action is present (the cards render).
     await expect(page.getByRole('button', { name: /^compare$/i }).first()).toBeVisible();
 
+    // CR-070 — inline "upload file for this spec" is available in the spec view.
+    await expect(page.getByText('Upload file for this spec')).toBeVisible();
+    await expect(page.getByTestId('spec-upload-input')).toBeAttached();
+
     // CR-066 — the spec-level approve button is renamed + reveals the outcome.
     await expect(page.getByTestId('approve-all')).toContainText(/Approve specification.*editor/i);
     await expect(page.getByText(/Approve This Subspecification/i)).toHaveCount(0);

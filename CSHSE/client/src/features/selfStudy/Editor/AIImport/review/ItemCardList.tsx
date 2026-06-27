@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns } from 'lucide-react';
+import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
 import {
   useAIImportStore,
@@ -237,6 +237,10 @@ interface ItemCardListProps {
   onToggleApproval?: (rowId: string) => void;
   onApproveAll?: (rowIds: string[]) => void;
   onClearApprovals?: () => void;
+  /** CR-070 — upload an appendix/evidence file for the selected spec inline. */
+  onUploadFile?: (file: File) => void;
+  uploadBusy?: boolean;
+  uploadMsg?: string | null;
   /** CR-024: jump to the matrix view scrolled to this spec's row. ReviewStep
    *  resolves the row anchor and dispatches selectMatrixRow. */
   onJumpToMatrix?: (specKey: string) => void;
@@ -456,6 +460,9 @@ export function ItemCardList({
   onToggleApproval,
   onApproveAll,
   onClearApprovals,
+  onUploadFile,
+  uploadBusy,
+  uploadMsg,
   onJumpToMatrix,
   onAppendUnplacedToSpec,
   onEditStart,
@@ -844,8 +851,40 @@ export function ItemCardList({
               )}
             </>
           )}
+          {/* CR-070 — attach the actual appendix/evidence file for THIS spec
+              without leaving Review (uploads to the Supporting File Library,
+              scoped to Std.Spec). Answers the "see Appendix C" reminders that
+              never carried the file. */}
+          {onUploadFile && (
+            <label
+              className={`inline-flex cursor-pointer items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-1 text-xs font-medium text-cshse-700 hover:bg-cshse-50 ${uploadBusy ? 'cursor-wait opacity-60' : ''}`}
+              title="Upload the appendix / evidence file for this specification straight into the Supporting File Library"
+            >
+              <Upload className="h-3 w-3" aria-hidden />
+              {uploadBusy ? 'Uploading…' : 'Upload file for this spec'}
+              <input
+                type="file"
+                data-testid="spec-upload-input"
+                className="hidden"
+                disabled={uploadBusy}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) onUploadFile(f);
+                  e.target.value = '';
+                }}
+              />
+            </label>
+          )}
         </div>
       </div>
+      {uploadMsg && (
+        <div
+          data-testid="spec-upload-msg"
+          className={`px-4 py-1 text-xs ${uploadMsg.startsWith('✓') ? 'text-emerald-700' : 'text-red-600'}`}
+        >
+          {uploadMsg}
+        </div>
+      )}
 
       {/* Per-spec matrix references — visible only when a real spec bucket is
           selected and at least one matrix has a row addressing this spec.

@@ -378,6 +378,9 @@ function FullReviewStep(): JSX.Element {
   const [typeFilter, setTypeFilter] = useState<
     'narratives' | 'evidenceText' | 'evidenceFiles' | null
   >(null);
+  // CR-070 — inline "upload file for this spec" status.
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const filteredBucket = useMemo(() => {
     if (!typeFilter) return null;
     const agg: any = {
@@ -700,6 +703,34 @@ function FullReviewStep(): JSX.Element {
       }
     },
     [tags, buckets, revertTagAction, revertBucketItem, isIntroductionSection, revertIntroductionItem]
+  );
+
+  // CR-070 — attach the actual appendix/evidence file for the current spec
+  // right here. The source's "see Appendix C" reminders never carried the file;
+  // this uploads it (scoped to Std.Spec) straight into the Supporting File
+  // Library, saving the round-trip out to the editor. Reuses evidence/upload.
+  const handleUploadForSpec = useCallback(
+    async (file: File) => {
+      if (!specBucket || !submissionId) return;
+      setUploadBusy(true);
+      setUploadMsg(null);
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('standardCode', specBucket.standardCode);
+        fd.append('specCode', specBucket.specCode);
+        fd.append('title', file.name);
+        await api.post(`/api/submissions/${submissionId}/evidence/upload`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        setUploadMsg(`✓ Attached "${file.name}" to ${specBucket.standardCode}.${specBucket.specCode}`);
+      } catch (e: any) {
+        setUploadMsg(e?.response?.data?.error || `Failed to upload "${file.name}"`);
+      } finally {
+        setUploadBusy(false);
+      }
+    },
+    [specBucket, submissionId]
   );
 
   const handleSinglePreviewReassign = useCallback(
@@ -1087,6 +1118,9 @@ function FullReviewStep(): JSX.Element {
               evidenceDocs={evidenceDocs}
               onShowInSource={handleShowInSource}
               onShowAiInfo={handleShowAiInfo}
+              onUploadFile={specBucket && !typeFilter ? handleUploadForSpec : undefined}
+              uploadBusy={uploadBusy}
+              uploadMsg={uploadMsg}
             />
           )}
         </main>
