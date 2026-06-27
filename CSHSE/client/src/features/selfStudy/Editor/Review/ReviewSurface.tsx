@@ -229,13 +229,9 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
               ? `✓ Finish review — exclude remaining (${unresolvedCount})`
               : '✓ Review complete'}
           </button>
-          <button
-            onClick={onClose}
-            data-tour="review-back-to-editor"
-            className="rounded border border-gray-300 bg-white px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            ◂ Back to editor
-          </button>
+          {/* CR-064 — "Back to editor" removed: confusing + redundant with the
+              top workflow tabs which already navigate. `onClose` stays wired for
+              the spec-approve → editor path. */}
         </div>
       </header>
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden">

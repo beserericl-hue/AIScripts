@@ -2667,10 +2667,15 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           {/* Right cluster: progress + submit. ml-auto pushes it right when
               there's room on the line; wraps to its own row when not. */}
           <div className="flex flex-wrap items-center gap-3 ml-auto shrink-0">
-            {/* Overall Progress */}
-            <ProgressIndicator submission={submission} />
+            {/* CR-064 — the self-study chrome (overall progress, Validate All,
+                the Validated counter, Submit Self-Study) is NOISE on the Review
+                surface (Monica: "just give me buttons for the editor"). Hide it
+                on the Review/Matrix surfaces; it belongs to the self-study phase. */}
+            {activeView !== 'review-surface' && activeView !== 'matrix-surface' && (
+              <ProgressIndicator submission={submission} />
+            )}
 
-            {isProgramCoordinator && (
+            {isProgramCoordinator && activeView !== 'review-surface' && activeView !== 'matrix-surface' && (
               <>
                 {/* CR-001 / S2A.4 — Both importers ship side-by-side.
                     "Import Document" tab above triggers the legacy
