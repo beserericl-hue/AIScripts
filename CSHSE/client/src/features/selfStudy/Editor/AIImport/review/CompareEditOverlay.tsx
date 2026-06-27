@@ -48,7 +48,36 @@ export function CompareEditOverlay({
   onClose
 }: CompareEditOverlayProps): JSX.Element | null {
   const editorRef = useRef<HTMLDivElement>(null);
+  const leftScrollRef = useRef<HTMLDivElement>(null);
   const [wordCount, setWordCount] = useState(0);
+  // CR-072 (P2) — opt-in synchronized scroll. Off by default so it never fights
+  // the user; when on, the two panes mirror scroll percentage.
+  const [syncScroll, setSyncScroll] = useState(false);
+
+  useEffect(() => {
+    if (!syncScroll) return;
+    const left = leftScrollRef.current;
+    const right = document.querySelector<HTMLElement>('[data-testid="compare-source-pane"]');
+    if (!left || !right) return;
+    let lock = false;
+    const mirror = (from: HTMLElement, to: HTMLElement) => {
+      if (lock) return;
+      lock = true;
+      const fromMax = from.scrollHeight - from.clientHeight;
+      const toMax = to.scrollHeight - to.clientHeight;
+      to.scrollTop = fromMax > 0 ? (from.scrollTop / fromMax) * toMax : 0;
+      // release on the next frame so the programmatic scroll doesn't echo back
+      requestAnimationFrame(() => { lock = false; });
+    };
+    const onLeft = () => mirror(left, right);
+    const onRight = () => mirror(right, left);
+    left.addEventListener('scroll', onLeft, { passive: true });
+    right.addEventListener('scroll', onRight, { passive: true });
+    return () => {
+      left.removeEventListener('scroll', onLeft);
+      right.removeEventListener('scroll', onRight);
+    };
+  }, [syncScroll]);
 
   // Seed the editor with the faithful HTML (full format) when the overlay opens
   // for a section. Keyed on sectionId so re-opening a different card re-seeds.
@@ -116,6 +145,20 @@ export function CompareEditOverlay({
               <Undo2 className="h-3.5 w-3.5" aria-hidden /> Revert to AI original
             </button>
           )}
+          {/* CR-072 (P2) — opt-in synchronized scroll between the two panes. */}
+          <label
+            className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+            title="Scroll both panes together"
+          >
+            <input
+              type="checkbox"
+              data-testid="compare-sync-scroll"
+              checked={syncScroll}
+              onChange={(e) => setSyncScroll(e.target.checked)}
+              className="rounded text-cshse-600 focus:ring-cshse-500"
+            />
+            Sync scroll
+          </label>
           <button
             type="button"
             onClick={onClose}
@@ -143,7 +186,7 @@ export function CompareEditOverlay({
               </span>
               <span className="text-[11px] text-gray-500">{wordCount} words · paste keeps formatting</span>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-4">
+            <div ref={leftScrollRef} className="min-h-0 flex-1 overflow-auto p-4">
               <div
                 ref={editorRef}
                 contentEditable

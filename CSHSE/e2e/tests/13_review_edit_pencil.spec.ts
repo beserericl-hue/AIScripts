@@ -120,6 +120,11 @@ test.describe('Review — Compare overlay editing', () => {
     // review pane (the spec rail) is still intact and the overlay is gone.
     await page.getByRole('button', { name: /^compare$/i }).first().click();
     await expect(page.getByTestId('compare-overlay')).toBeVisible();
+    // CR-072 (P2) — sync-scroll toggle is present + togglable (off by default).
+    const syncToggle = page.getByTestId('compare-sync-scroll');
+    await expect(syncToggle).not.toBeChecked();
+    await syncToggle.check();
+    await expect(syncToggle).toBeChecked();
     await page.getByRole('button', { name: /^cancel$/i }).first().click();
     await expect(page.getByTestId('compare-overlay')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: /^Review$/i })).toBeVisible();
