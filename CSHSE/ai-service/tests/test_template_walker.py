@@ -466,3 +466,82 @@ def test_rich_html_preserves_links_images_tables(tmp_path):
     assert '<img src="data:image/png;base64,' in html                    # inline image kept
     assert "<table>" in html and "Name" in html                          # table inline
     assert spec.contains_image is True
+
+
+def test_cr061_consolidates_subitems_into_spec_until_next_break():
+    """CR-061 — 'write everything until the next break': a spec owns ALL content
+    (sub-numbered items "1b 1.", bare list numbers "1."/"2.") until the NEXT
+    spec/standard heading, not until the next numbered line. Previously these
+    fragmented one spec across many sections (then mis-matched / dropped)."""
+    paras = [
+        "I. GENERAL PROGRAM CHARACTERISTICS",
+        "Standard 1: The primary objective shall be X.",
+        "1a. The program is part of a degree granting college.",
+        "Response:",
+        "KSU is accredited by SACSCOC.",
+        "1b. Provide evidence of the primary objective.",
+        "The HS program prepares students.",
+        "1b 1. A detailed description of the membership.",
+        "Members include faculty and staff.",
+        "1. The board met on December 1.",
+        "Minutes attached.",
+        "2. The committee met on March 1.",
+        "1c. Articulate how students are informed.",
+        "Students are informed via the catalog.",
+    ]
+    sections = walk_template_paragraphs(paras)
+    specs = {
+        (s.standard_hint, s.spec_hint): s
+        for s in sections
+        if s.standard_hint and s.spec_hint
+    }
+    # exactly one section per spec — no fragmentation
+    assert ("1", "a") in specs and ("1", "b") in specs and ("1", "c") in specs
+    b = specs[("1", "b")].body_text
+    # 1b owns everything until 1c: its own text + every sub-item
+    assert "prepares students" in b
+    assert "detailed description of the membership" in b   # "1b 1." sub-item kept
+    assert "board met on December 1" in b                  # bare "1." sub-item kept
+    assert "committee met on March 1" in b                 # bare "2." sub-item kept
+    # but NOT 1c's content (1c is the next break)
+    assert "informed via the catalog" not in b
+    assert "informed via the catalog" in specs[("1", "c")].body_text
+
+
+def test_cr062_consecutive_li_wrap_in_ul():
+    """CR-062 — consecutive <li> items wrap in one <ul>; links inside survive;
+    surrounding <p> paragraphs are untouched."""
+    from app.splitter.template_walker import TemplateSection
+    s = TemplateSection(
+        paragraph_index=0, heading="1a.", body_paragraphs=[],
+        standard_hint="1", spec_hint="a", placeholder=False,
+    )
+    s.body_html_parts = [
+        "<p>Intro</p>",
+        '<li><a href="https://x.edu">KSU Catalog</a></li>',
+        "<li>Student Handbook</li>",
+        "<p>After</p>",
+    ]
+    html = s.body_html
+    assert '<ul><li><a href="https://x.edu">KSU Catalog</a></li><li>Student Handbook</li></ul>' in html
+    assert "<p>Intro</p>" in html and "<p>After</p>" in html
+    assert html.count("<ul>") == 1
+
+
+def test_cr062_is_list_item_detects_numpr():
+    """CR-062 — _is_list_item flags Word numbered/bulleted paragraphs."""
+    import docx
+    from docx.oxml.ns import qn
+    from app.splitter.template_walker import _is_list_item
+    d = docx.Document()
+    p = d.add_paragraph("bullet")
+    pPr = p._p.get_or_add_pPr()
+    pPr.append(pPr.makeelement(qn("w:numPr"), {}))
+    assert _is_list_item(p._p) is True
+    assert _is_list_item(d.add_paragraph("plain")._p) is False
+
+
+def test_cr063_image_cap_raised_to_2mb():
+    """CR-063 — inline-image cap raised so realistic images aren't dropped."""
+    from app.splitter import template_walker
+    assert template_walker._MAX_INLINE_IMAGE_BYTES >= 2_000_000

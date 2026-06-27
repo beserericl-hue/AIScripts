@@ -51,7 +51,12 @@ _A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 # Cap an inline (base64) image so a doc full of large scans can't blow the
 # import callback payload. Bigger images are noted and left to be attached via
 # the Supporting File Library.
-_MAX_INLINE_IMAGE_BYTES = 1_200_000
+# CR-063 — inline images up to this size as base64 data URIs. Raised from
+# 1.2 MB → 2 MB so realistic embedded images (maps, charts, scanned letters)
+# are never dropped. Above this, base64 would risk the 16 MB Mongo doc limit on
+# aiReviewState, so a clear placeholder points the PC to the Supporting File
+# Library instead (a true never-drop route-store is a server-side follow-on).
+_MAX_INLINE_IMAGE_BYTES = 2_000_000
 
 from app.splitter.sections import Section, _heuristic_flags
 
@@ -176,7 +181,12 @@ class TemplateSection:
 
     @property
     def body_html(self) -> str:
-        return "".join(self.body_html_parts).strip()
+        html = "".join(self.body_html_parts).strip()
+        # CR-062 — wrap each run of consecutive <li> items in a <ul> so Word
+        # lists render as lists (with their hyperlinks intact) instead of a
+        # flat sequence of paragraphs.
+        html = re.sub(r"(?:<li>.*?</li>)+", lambda m: f"<ul>{m.group(0)}</ul>", html, flags=re.DOTALL)
+        return html
 
     @property
     def body_text(self) -> str:
@@ -318,10 +328,20 @@ def _iter_block_items(doc):
     for child in doc.element.body.iterchildren():
         if isinstance(child, CT_P):
             para = _Paragraph(child, doc)
-            yield ("p", para.text or "", _paragraph_to_html(para))
+            # CR-062 — flag list-item paragraphs (Word numbering) so the body
+            # walk can keep them as <li> inside a <ul> instead of flattening
+            # every list bullet into its own <p> (Monica: "this should be in a
+            # list form, but this is coming out in a paragraph form").
+            yield ("p", para.text or "", _paragraph_to_html(para), _is_list_item(child))
         elif isinstance(child, CT_Tbl):
             t = _Table(child, doc)
             yield ("table", _table_to_html(t), _table_to_text(t))
+
+
+def _is_list_item(p_el) -> bool:
+    """True when a paragraph carries Word list numbering (``w:pPr/w:numPr``)."""
+    pPr = p_el.find(f"{_W}pPr")
+    return pPr is not None and pPr.find(f"{_W}numPr") is not None
 
 
 def _is_placeholder(body_paragraphs: list[str]) -> bool:
@@ -355,6 +375,53 @@ def walk_template_paragraphs(
     and any caller that only has paragraph text.
     """
     return walk_template_blocks([("p", t) for t in paragraph_texts])
+
+
+def _is_real_break(
+    hit: tuple[str | None, str | None],
+    text: str,
+    current_spec_section: "TemplateSection | None",
+    in_introduction: bool,
+    has_standards_region: bool,
+) -> bool:
+    """Decide whether a heading-looking line actually STARTS a new section.
+
+    CR-061 — the governing import rule is *"write everything until the next
+    break"*: a spec owns all content from its heading until the **next spec or
+    standard**, not until the next numbered line. Inside the standards region,
+    a spec's body routinely contains sub-numbered items ("3b 1.", "4a 3."),
+    bare list numbers ("1.", "2." — advisory-board minutes, assessment lists),
+    and lettered items that previously each opened a NEW section — fragmenting
+    one spec across many sections that the matcher then assigned independently
+    (or dropped at low confidence). The fix: only a forward spec/standard
+    advance breaks; everything else accumulates as the current spec's body.
+    """
+    # The consolidation rule only applies inside the standards region of a full
+    # template. The Introduction region keeps its own segmentation (its "1." /
+    # "2a." prompts ARE its structure), and a bare fragment with no standards
+    # region at all (e.g. unit-test snippets, partial pastes) keeps the legacy
+    # behavior where every numbered heading cuts.
+    if in_introduction or not has_standards_region:
+        return True
+    std_hint, spec_hint = hit
+    # A Standard root ("Standard 4:" / bare "Standard 4") or a lettered group
+    # header ("A. Institutional Requirements") sits BETWEEN standards — always a
+    # break (the prior spec is already complete).
+    if re.match(r"^\s*Standard\b", text, re.IGNORECASE):
+        return True
+    if re.match(r"^\s*[A-Z]\.\s+[A-Z]", text):
+        return True
+    # A bare std-only number ("1.", "2.") with no spec letter is a sub-item of
+    # the current spec — accumulate, don't break.
+    if spec_hint is None:
+        return False
+    # A spec heading ("3b 1." etc.) that names the SAME spec already being
+    # processed is a sub-item — accumulate. Only a DIFFERENT spec breaks.
+    if current_spec_section is not None:
+        cur = (current_spec_section.standard_hint, current_spec_section.spec_hint)
+        if cur == (std_hint, spec_hint):
+            return False
+    return True
 
 
 def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
@@ -420,7 +487,9 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
             in_introduction = False
 
         hit = _match_heading(text)
-        if hit is not None:
+        if hit is not None and _is_real_break(
+            hit, text, current_spec_section, in_introduction, has_standards_region
+        ):
             # Close the previous section.
             if current is not None:
                 current.placeholder = _is_placeholder(current.body_paragraphs)
@@ -475,11 +544,12 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
         # inline images / bold-italic), with a leading "Response:" stripped to
         # match body_paragraphs; fall back to escaped plain text.
         para_html = block[2] if len(block) > 2 else ""
+        is_list = block[3] if len(block) > 3 else False
         if para_html.strip():
             para_html = re.sub(r"^\s*(?:<[^>]+>\s*)*Response\s*:\s*", "", para_html, flags=re.IGNORECASE)
-            current.body_html_parts.append(f"<p>{para_html}</p>")
+            current.body_html_parts.append(f"<li>{para_html}</li>" if is_list else f"<p>{para_html}</p>")
         else:
-            current.body_html_parts.append(f"<p>{_esc(stripped)}</p>")
+            current.body_html_parts.append(f"<li>{_esc(stripped)}</li>" if is_list else f"<p>{_esc(stripped)}</p>")
 
     if current is not None:
         current.placeholder = _is_placeholder(current.body_paragraphs)
