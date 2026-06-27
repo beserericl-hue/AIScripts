@@ -43,9 +43,10 @@ test.describe('CR-064 — Review is de-noised', () => {
     // Review still works: a Compare action is present (the cards render).
     await expect(page.getByRole('button', { name: /^compare$/i }).first()).toBeVisible();
 
-    // CR-070 — inline "upload file for this spec" is available in the spec view.
-    await expect(page.getByText('Upload file for this spec')).toBeVisible();
-    await expect(page.getByTestId('spec-upload-input')).toBeAttached();
+    // CR-070 — each card has a per-card "Import file" control (scoped to that
+    // card's own spec; opens a modal on use).
+    await expect(page.getByText('Import file').first()).toBeVisible();
+    await expect(page.getByTestId('card-upload-input').first()).toBeAttached();
 
     // CR-066 — the spec-level approve button is renamed + reveals the outcome.
     await expect(page.getByTestId('approve-all')).toContainText(/Approve specification.*editor/i);
@@ -70,5 +71,12 @@ test.describe('CR-064 — Review is de-noised', () => {
     await expect(page.getByText(/Showing all evidence across every spec/i)).toBeVisible();
     await page.getByTestId('back-to-specs').click();
     await expect(page.getByTestId('back-to-specs')).toHaveCount(0);
+
+    // CR-068 — selecting a spec/subspec in the rail ALSO exits the flat list
+    // (returns the UI to normal), so the rail is never a dead end.
+    await page.getByTestId('count-filter-evidence').click();
+    await expect(page.getByText(/Showing all evidence across every spec/i)).toBeVisible();
+    await page.getByRole('tab').filter({ hasText: /Document Introduction/i }).first().click();
+    await expect(page.getByText(/Showing all evidence across every spec/i)).toHaveCount(0);
   });
 });

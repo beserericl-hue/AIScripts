@@ -10,7 +10,8 @@
  * Step 5 commit lands.
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { Rocket, Loader2, X } from 'lucide-react';
+import axios from 'axios';
+import { Rocket, Loader2, X, Upload } from 'lucide-react';
 import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY } from '../review/SpecRail';
 // Any selectedSpecKey starting with '_' is a synthetic rail key (matrices,
@@ -208,8 +209,20 @@ function FullReviewStep(): JSX.Element {
   );
 
   const setMatrixScrollSpec = useAIImportStore((s) => s.setMatrixScrollSpec);
+
+  // CR-068 — flat cross-spec "all narratives / evidence / files" list filter.
+  // Declared here (above handleSelectSpec) so selecting a spec can clear it.
+  const [typeFilter, setTypeFilter] = useState<
+    'narratives' | 'evidenceText' | 'evidenceFiles' | null
+  >(null);
+
   const handleSelectSpec = useCallback(
     (key: string) => {
+      // CR-068 — picking a spec/subspec in the rail ALWAYS returns the UI to
+      // the normal per-spec view, exiting the flat "all narratives/evidence/
+      // files" list. (Previously the flat list overrode the rail selection, so
+      // the rail felt dead and there was no obvious way back.)
+      setTypeFilter(null);
       // For spec keys (not _matrices, _unplaced, _unwritten), pre-position
       // the matrices view if coverage exists. For the synthetic buckets we
       // leave the anchor alone.
@@ -371,16 +384,17 @@ function FullReviewStep(): JSX.Element {
       ? buckets[selectedSpecKey] || null
       : null;
 
-  // CR-068 — clickable header counts. When a type filter is active, aggregate
-  // EVERY item of that type across all specs into one flat list so the PC can
-  // QA them in a single pass ("see all evidences in one shot, without going
-  // standard by standard"). Reuses ItemCardList via a synthetic bucket.
-  const [typeFilter, setTypeFilter] = useState<
-    'narratives' | 'evidenceText' | 'evidenceFiles' | null
-  >(null);
-  // CR-070 — inline "upload file for this spec" status.
-  const [uploadBusy, setUploadBusy] = useState(false);
-  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  // CR-068 — clickable header counts aggregate EVERY item of that type across
+  // all specs into one flat list (typeFilter state is declared above so spec
+  // selection can clear it). Reuses ItemCardList via a synthetic bucket.
+  // CR-070 — per-card file upload modal state.
+  const [uploadState, setUploadState] = useState<{
+    status: 'uploading' | 'done' | 'error';
+    fileName: string;
+    std: string;
+    spec: string;
+    message?: string;
+  } | null>(null);
   const filteredBucket = useMemo(() => {
     if (!typeFilter) return null;
     const agg: any = {
@@ -705,32 +719,79 @@ function FullReviewStep(): JSX.Element {
     [tags, buckets, revertTagAction, revertBucketItem, isIntroductionSection, revertIntroductionItem]
   );
 
-  // CR-070 — attach the actual appendix/evidence file for the current spec
-  // right here. The source's "see Appendix C" reminders never carried the file;
-  // this uploads it (scoped to Std.Spec) straight into the Supporting File
-  // Library, saving the round-trip out to the editor. Reuses evidence/upload.
-  const handleUploadForSpec = useCallback(
-    async (file: File) => {
-      if (!specBucket || !submissionId) return;
-      setUploadBusy(true);
-      setUploadMsg(null);
+  // CR-070 — attach the actual appendix/evidence file for a specific CARD,
+  // scoped to THAT card's exact Std.Spec (resolved from its sectionId across all
+  // buckets — works from the flat "all evidence" list where every card belongs
+  // to a different spec). The source's "see Appendix C" reminders never carried
+  // the file; this uploads it straight into the Supporting File Library.
+  //
+  // IMPORTANT: uses a BARE axios call (not the shared `api`) so a 401 cannot
+  // trip the global interceptor that wipes auth + redirects to /login (which
+  // blanked the whole page). Errors surface in the modal instead.
+  const handleUploadForSection = useCallback(
+    async (file: File, sectionId: string) => {
+      if (!submissionId) return;
+      // Resolve the card's real spec from its sectionId.
+      let std = '';
+      let spec = '';
+      for (const [, b] of Object.entries(buckets)) {
+        const inBucket =
+          b.narratives.some((i) => i.sectionId === sectionId) ||
+          b.evidenceText.some((i) => i.sectionId === sectionId) ||
+          ((b.evidenceFiles as any[]) || []).some((i: any) => i.sectionId === sectionId);
+        if (inBucket) {
+          std = b.standardCode;
+          spec = b.specCode;
+          break;
+        }
+      }
+      if (!std) {
+        std = specBucket?.standardCode || '';
+        spec = specBucket?.specCode || '';
+      }
+      setUploadState({ status: 'uploading', fileName: file.name, std, spec });
       try {
         const fd = new FormData();
         fd.append('file', file);
-        fd.append('standardCode', specBucket.standardCode);
-        fd.append('specCode', specBucket.specCode);
+        fd.append('standardCode', std);
+        fd.append('specCode', spec);
         fd.append('title', file.name);
-        await api.post(`/api/submissions/${submissionId}/evidence/upload`, fd, {
-          headers: { 'Content-Type': 'multipart/form-data' },
+        const headers: Record<string, string> = { 'Content-Type': 'multipart/form-data' };
+        try {
+          const raw = localStorage.getItem('auth-storage');
+          if (raw) {
+            const { state } = JSON.parse(raw);
+            if (state?.token) headers.Authorization = `Bearer ${state.token}`;
+            const imp = state?.impersonation;
+            if (imp?.isImpersonating && imp.impersonatedRole) {
+              headers['X-Impersonated-Role'] = imp.impersonatedRole;
+              const u = imp.impersonatedUser;
+              if (u?.id) {
+                headers['X-Impersonated-User-Id'] = u.id;
+                const fn = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || '';
+                if (fn) headers['X-Impersonated-User-Name'] = encodeURIComponent(fn);
+              }
+            }
+          }
+        } catch {
+          /* ignore auth-storage parse errors */
+        }
+        const baseURL = import.meta.env.VITE_API_URL || '';
+        await axios.post(`${baseURL}/api/submissions/${submissionId}/evidence/upload`, fd, {
+          headers,
         });
-        setUploadMsg(`✓ Attached "${file.name}" to ${specBucket.standardCode}.${specBucket.specCode}`);
+        setUploadState({ status: 'done', fileName: file.name, std, spec });
       } catch (e: any) {
-        setUploadMsg(e?.response?.data?.error || `Failed to upload "${file.name}"`);
-      } finally {
-        setUploadBusy(false);
+        setUploadState({
+          status: 'error',
+          fileName: file.name,
+          std,
+          spec,
+          message: e?.response?.data?.error || e?.message || 'Upload failed',
+        });
       }
     },
-    [specBucket, submissionId]
+    [buckets, specBucket, submissionId]
   );
 
   const handleSinglePreviewReassign = useCallback(
@@ -1118,9 +1179,7 @@ function FullReviewStep(): JSX.Element {
               evidenceDocs={evidenceDocs}
               onShowInSource={handleShowInSource}
               onShowAiInfo={handleShowAiInfo}
-              onUploadFile={specBucket && !typeFilter ? handleUploadForSpec : undefined}
-              uploadBusy={uploadBusy}
-              uploadMsg={uploadMsg}
+              onUploadFile={handleUploadForSection}
             />
           )}
         </main>
@@ -1162,6 +1221,77 @@ function FullReviewStep(): JSX.Element {
               onEditCancel={handleEditCancel}
               onEditRevert={handleEditRevert}
             />
+          </div>
+        </div>
+      )}
+
+      {/* CR-070 — file upload modal. Visible UI for the per-card "Import file"
+          action: shows progress while uploading the appendix/evidence file into
+          the Supporting File Library, scoped to that card's exact spec, then a
+          clear success / error result. Never blanks the page. */}
+      {uploadState && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Upload file"
+          onClick={() => uploadState.status !== 'uploading' && setUploadState(null)}
+        >
+          <div
+            className="w-[30rem] max-w-full rounded-lg bg-white p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-center gap-2">
+              <Upload className="h-5 w-5 text-cshse-600" aria-hidden />
+              <h2 className="text-sm font-semibold text-gray-900">
+                {uploadState.status === 'uploading'
+                  ? 'Uploading file…'
+                  : uploadState.status === 'done'
+                  ? 'File uploaded'
+                  : 'Upload failed'}
+              </h2>
+            </div>
+            <p className="break-words text-sm text-gray-700">
+              <span className="font-medium">{uploadState.fileName}</span>
+              {uploadState.std && (
+                <>
+                  {' '}
+                  → specification{' '}
+                  <strong>
+                    {uploadState.std}
+                    {uploadState.spec ? `.${uploadState.spec}` : ''}
+                  </strong>
+                </>
+              )}
+            </p>
+            {uploadState.status === 'uploading' && (
+              <div className="mt-4 flex items-center gap-2 text-sm text-gray-600">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Uploading to the Supporting File Library…
+              </div>
+            )}
+            {uploadState.status === 'done' && (
+              <div className="mt-4 rounded bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                ✓ Attached to specification {uploadState.std}
+                {uploadState.spec ? `.${uploadState.spec}` : ''}. Find it in the
+                Supporting File Library.
+              </div>
+            )}
+            {uploadState.status === 'error' && (
+              <div className="mt-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">
+                {uploadState.message}
+              </div>
+            )}
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setUploadState(null)}
+                disabled={uploadState.status === 'uploading'}
+                className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {uploadState.status === 'uploading' ? 'Please wait…' : 'Close'}
+              </button>
+            </div>
           </div>
         </div>
       )}

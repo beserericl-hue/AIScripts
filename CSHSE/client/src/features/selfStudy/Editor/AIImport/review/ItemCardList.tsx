@@ -238,9 +238,9 @@ interface ItemCardListProps {
   onApproveAll?: (rowIds: string[]) => void;
   onClearApprovals?: () => void;
   /** CR-070 — upload an appendix/evidence file for the selected spec inline. */
-  onUploadFile?: (file: File) => void;
-  uploadBusy?: boolean;
-  uploadMsg?: string | null;
+  /** CR-070 — upload a file for a specific card; the parent resolves the
+   *  card's exact spec from the sectionId. */
+  onUploadFile?: (file: File, sectionId: string) => void;
   /** CR-024: jump to the matrix view scrolled to this spec's row. ReviewStep
    *  resolves the row anchor and dispatches selectMatrixRow. */
   onJumpToMatrix?: (specKey: string) => void;
@@ -461,8 +461,6 @@ export function ItemCardList({
   onApproveAll,
   onClearApprovals,
   onUploadFile,
-  uploadBusy,
-  uploadMsg,
   onJumpToMatrix,
   onAppendUnplacedToSpec,
   onEditStart,
@@ -851,40 +849,11 @@ export function ItemCardList({
               )}
             </>
           )}
-          {/* CR-070 — attach the actual appendix/evidence file for THIS spec
-              without leaving Review (uploads to the Supporting File Library,
-              scoped to Std.Spec). Answers the "see Appendix C" reminders that
-              never carried the file. */}
-          {onUploadFile && (
-            <label
-              className={`inline-flex cursor-pointer items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-1 text-xs font-medium text-cshse-700 hover:bg-cshse-50 ${uploadBusy ? 'cursor-wait opacity-60' : ''}`}
-              title="Upload the appendix / evidence file for this specification straight into the Supporting File Library"
-            >
-              <Upload className="h-3 w-3" aria-hidden />
-              {uploadBusy ? 'Uploading…' : 'Upload file for this spec'}
-              <input
-                type="file"
-                data-testid="spec-upload-input"
-                className="hidden"
-                disabled={uploadBusy}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) onUploadFile(f);
-                  e.target.value = '';
-                }}
-              />
-            </label>
-          )}
+          {/* CR-070 — the upload control moved ONTO each card (per-card "Import
+              file"), so a file lands on that card's exact spec. The spec-level
+              toolbar button was removed. */}
         </div>
       </div>
-      {uploadMsg && (
-        <div
-          data-testid="spec-upload-msg"
-          className={`px-4 py-1 text-xs ${uploadMsg.startsWith('✓') ? 'text-emerald-700' : 'text-red-600'}`}
-        >
-          {uploadMsg}
-        </div>
-      )}
 
       {/* Per-spec matrix references — visible only when a real spec bucket is
           selected and at least one matrix has a row addressing this spec.
@@ -1084,7 +1053,7 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
-              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
+              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo} onUploadFile={onUploadFile}
               editedSectionIds={editedSectionIds}
               bucketStandardCode={bucket?.standardCode ?? null}
               onMoveToIntroduction={onMoveToIntroduction}
@@ -1104,7 +1073,7 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
-              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
+              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo} onUploadFile={onUploadFile}
               editedSectionIds={editedSectionIds}
               bucketStandardCode={bucket?.standardCode ?? null}
               onMoveToIntroduction={onMoveToIntroduction}
@@ -1124,7 +1093,7 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
-              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
+              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo} onUploadFile={onUploadFile}
               editedSectionIds={editedSectionIds}
             />
             <KindSection
@@ -1147,7 +1116,7 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
-              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
+              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo} onUploadFile={onUploadFile}
               editedSectionIds={editedSectionIds}
             />
           </div>
@@ -1167,7 +1136,7 @@ export function ItemCardList({
                 onToggleApproval={onToggleApproval ? () => onToggleApproval(item.rowId) : undefined}
                 onChangeKind={onChangeKind}
                 onKeyDown={(e) => handleKeyDown(e, item, idx)}
-                onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
+                onEditStart={onEditStart} onShowAiInfo={onShowAiInfo} onUploadFile={onUploadFile}
                 isEdited={editedSectionIds.has(item.sectionId)}
                 bucketStandardCode={bucket?.standardCode ?? null}
                 onMoveToIntroduction={
@@ -1223,6 +1192,7 @@ interface KindSectionProps {
   // + tags).
   onEditStart?: (sectionId: string) => void;
   onShowAiInfo?: (sectionId: string) => void;
+  onUploadFile?: (file: File, sectionId: string) => void;
   /** Per-item "is this item currently edited?" lookup (by sectionId). */
   editedSectionIds?: Set<string>;
   // CR-039 — Move-to-Introduction pass-through.
@@ -1247,6 +1217,7 @@ function KindSection({
   onChangeKind,
   onEditStart,
   onShowAiInfo,
+  onUploadFile,
   editedSectionIds,
   bucketStandardCode,
   onMoveToIntroduction
@@ -1275,7 +1246,7 @@ function KindSection({
             onToggleApproval={onToggleApproval ? () => onToggleApproval(item.rowId) : undefined}
             onChangeKind={onChangeKind}
             onKeyDown={(e) => onKeyDown(e, item, idx)}
-            onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
+            onEditStart={onEditStart} onShowAiInfo={onShowAiInfo} onUploadFile={onUploadFile}
             isEdited={!!editedSectionIds?.has(item.sectionId)}
             bucketStandardCode={bucketStandardCode}
             onMoveToIntroduction={onMoveToIntroduction}
@@ -1303,6 +1274,7 @@ interface ItemCardProps {
   // selects the item and opens edit mode there.
   onEditStart?: (sectionId: string) => void;
   onShowAiInfo?: (sectionId: string) => void;
+  onUploadFile?: (file: File, sectionId: string) => void;
   isEdited?: boolean;
   // CR-039 — Move-to-Introduction action. Renders a small "→ Intro"
   // dropdown that lists Document Introduction + the current spec's
@@ -1327,6 +1299,7 @@ function ItemCard({
   onKeyDown,
   onEditStart,
   onShowAiInfo,
+  onUploadFile,
   isEdited,
   bucketStandardCode,
   onMoveToIntroduction
@@ -1511,6 +1484,30 @@ function ItemCard({
               >
                 ⓘ
               </button>
+            )}
+            {/* CR-070 — per-card "Import file". Uploads the appendix / evidence
+                file straight into the Supporting File Library, scoped to THIS
+                card's exact spec (the parent resolves it from the sectionId), so
+                it works from the flat "all evidence" list too. A modal shows
+                progress. */}
+            {onUploadFile && (
+              <label
+                onClick={(e) => e.stopPropagation()}
+                title="Import a file as supporting evidence for this card's specification"
+                className="inline-flex cursor-pointer items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-0.5 text-xs font-medium text-cshse-700 hover:bg-cshse-50"
+              >
+                <Upload className="h-3 w-3" aria-hidden /> Import file
+                <input
+                  type="file"
+                  data-testid="card-upload-input"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onUploadFile(f, item.sectionId);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
             )}
             {/* Move part of this card into another subspec. The parser
                 sometimes dumps a whole Standard into its first subspec; this
