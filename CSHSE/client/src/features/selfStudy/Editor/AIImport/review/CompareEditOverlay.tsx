@@ -51,10 +51,12 @@ export function CompareEditOverlay({
   const leftScrollRef = useRef<HTMLDivElement>(null);
   const [wordCount, setWordCount] = useState(0);
   // CR-072 (P2) — opt-in synchronized scroll. Off by default so it never fights
-  // the user. The left pane is a SHORT subset of the (much longer) source
-  // document, so a naive percentage mirror shows unrelated content. Instead we
-  // map the left pane's full scroll range onto the highlighted MATCHED SPAN in
-  // the source (data-compare-match-start/end), keeping the same passage aligned.
+  // the user. The two panes render the SAME passage at DIFFERENT heights (tables,
+  // line-wrapping, spacing differ), so a proportional map drifts — especially
+  // around tables. Instead we align on ACTUAL CONTENT: find the text block at the
+  // top of the pane being scrolled, find the same block in the other pane (by
+  // normalized-text key), and align those two exactly. Falls back to the matched
+  // span / percentage only when no text block matches.
   const [syncScroll, setSyncScroll] = useState(false);
 
   useEffect(() => {
@@ -65,8 +67,54 @@ export function CompareEditOverlay({
     let lock = false;
     const release = () => requestAnimationFrame(() => { lock = false; });
 
-    // Top/height of the highlighted matched span within the source scroll box.
-    const span = (): { top: number; height: number } | null => {
+    const BLOCK_SEL = 'p,li,td,th,h1,h2,h3,h4,h5,h6,blockquote,pre';
+    const norm = (s: string | null) =>
+      (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 48);
+
+    // Index the other pane's blocks by text key (first occurrence wins). Rebuilt
+    // lazily — content is static while the user is scrolling, not editing.
+    const buildIndex = (container: HTMLElement) => {
+      const m = new Map<string, HTMLElement>();
+      container.querySelectorAll<HTMLElement>(BLOCK_SEL).forEach((el) => {
+        const k = norm(el.textContent);
+        if (k.length >= 10 && !m.has(k)) m.set(k, el);
+      });
+      return m;
+    };
+    let leftIndex: Map<string, HTMLElement> | null = null;
+    let rightIndex: Map<string, HTMLElement> | null = null;
+
+    // Blocks of `container` at/below its viewport top, nearest the top first.
+    const topBlocks = (container: HTMLElement) => {
+      const cTop = container.getBoundingClientRect().top;
+      return Array.from(container.querySelectorAll<HTMLElement>(BLOCK_SEL))
+        .map((el) => ({ el, off: el.getBoundingClientRect().top - cTop }))
+        .filter((b) => b.off > -24 && norm(b.el.textContent).length >= 10)
+        .sort((a, b) => a.off - b.off)
+        .slice(0, 8);
+    };
+
+    // Scroll `to` so the block matching `from`'s top block sits at the same
+    // vertical offset. Returns true if a content anchor was found.
+    const alignByContent = (
+      from: HTMLElement,
+      to: HTMLElement,
+      toIndex: Map<string, HTMLElement>
+    ) => {
+      for (const b of topBlocks(from)) {
+        const srcEl = toIndex.get(norm(b.el.textContent));
+        if (!srcEl) continue;
+        const toTop = to.getBoundingClientRect().top;
+        const dTo = srcEl.getBoundingClientRect().top - toTop; // current offset
+        to.scrollTop += dTo - b.off; // make it equal b.off
+        return true;
+      }
+      return false;
+    };
+
+    // Fallback: map onto the highlighted matched span (handles the no-text-match
+    // case, e.g. heavily-edited left content).
+    const span = () => {
       const start = right.querySelector<HTMLElement>('[data-compare-match-start]');
       if (!start) return null;
       const end = right.querySelector<HTMLElement>('[data-compare-match-end]') || start;
@@ -75,42 +123,43 @@ export function CompareEditOverlay({
       const bottom = end.getBoundingClientRect().bottom - rTop + right.scrollTop;
       return { top, height: Math.max(1, bottom - top) };
     };
-    const PAD = 8;
 
     const onLeft = () => {
       if (lock) return;
       lock = true;
-      const s = span();
-      const leftMax = left.scrollHeight - left.clientHeight;
-      const f = leftMax > 0 ? left.scrollTop / leftMax : 0;
-      if (s) {
-        // f=0 → span top at view top; f=1 → span bottom at view bottom.
-        right.scrollTop = s.top - PAD + f * Math.max(0, s.height - right.clientHeight);
-      } else {
-        const toMax = right.scrollHeight - right.clientHeight;
-        right.scrollTop = f * toMax;
+      if (!rightIndex) rightIndex = buildIndex(right);
+      if (!alignByContent(left, right, rightIndex)) {
+        const s = span();
+        const leftMax = left.scrollHeight - left.clientHeight;
+        const f = leftMax > 0 ? left.scrollTop / leftMax : 0;
+        right.scrollTop = s
+          ? s.top - 8 + f * Math.max(0, s.height - right.clientHeight)
+          : f * (right.scrollHeight - right.clientHeight);
       }
       release();
     };
     const onRight = () => {
       if (lock) return;
       lock = true;
-      const s = span();
-      const leftMax = left.scrollHeight - left.clientHeight;
-      if (s) {
-        const denom = Math.max(1, s.height - right.clientHeight);
-        const f = Math.min(1, Math.max(0, (right.scrollTop - (s.top - PAD)) / denom));
-        left.scrollTop = f * leftMax;
-      } else {
-        const fromMax = right.scrollHeight - right.clientHeight;
-        left.scrollTop = fromMax > 0 ? (right.scrollTop / fromMax) * leftMax : 0;
+      if (!leftIndex) leftIndex = buildIndex(left);
+      if (!alignByContent(right, left, leftIndex)) {
+        const s = span();
+        const leftMax = left.scrollHeight - left.clientHeight;
+        if (s) {
+          const denom = Math.max(1, s.height - right.clientHeight);
+          const f = Math.min(1, Math.max(0, (right.scrollTop - (s.top - 8)) / denom));
+          left.scrollTop = f * leftMax;
+        } else {
+          const fromMax = right.scrollHeight - right.clientHeight;
+          left.scrollTop = fromMax > 0 ? (right.scrollTop / fromMax) * leftMax : 0;
+        }
       }
       release();
     };
 
     left.addEventListener('scroll', onLeft, { passive: true });
     right.addEventListener('scroll', onRight, { passive: true });
-    // Align immediately on enable so the matched span jumps into view.
+    // Align immediately on enable.
     onLeft();
     return () => {
       left.removeEventListener('scroll', onLeft);
