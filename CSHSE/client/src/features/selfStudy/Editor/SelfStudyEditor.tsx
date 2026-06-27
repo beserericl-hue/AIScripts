@@ -2954,9 +2954,29 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
               {/* Editor Content */}
               <div data-tour="ss-editor" className="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-auto p-4">
+                {/* CR-071 — empty-state hint. An un-populated spec is empty BY
+                    DESIGN until Approve in Review materializes content; say so
+                    explicitly so a blank editor doesn't read as a broken screen
+                    (Monica: "this should be empty … that looks like a mess"). */}
+                {selectedSpec &&
+                  getCurrentContent().trim().length === 0 &&
+                  getCurrentSupportingEvidence().trim().length === 0 && (
+                    <div
+                      data-testid="spec-empty-hint"
+                      className="mb-3 rounded border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs text-gray-500"
+                    >
+                      This specification has no content yet. Approve its items in{' '}
+                      <strong>Review</strong> to populate it here, or write directly below.
+                    </div>
+                  )}
                 {selectedSpec ? (
                   <NarrativeEditor
-                    key={`${selectedStandard}-${selectedSpec}-${editorRefreshKey}`}
+                    // CR-071 — remount when the freshly-refetched submission
+                    // changes the materialized content, so Open-Self-Study lands
+                    // clean on the FIRST click (no stale "already-transferred"
+                    // content needing a manual refresh). The signature folds in
+                    // content + evidence length so empty↔populated both remount.
+                    key={`${selectedStandard}-${selectedSpec}-${editorRefreshKey}-${getCurrentContent().length}:${getCurrentSupportingEvidence().length}`}
                     submissionId={submissionId}
                     standardCode={selectedStandard}
                     specCode={selectedSpec}
