@@ -276,26 +276,9 @@ export function ItemPreview({
             )}
           </div>
           <div className="flex items-center gap-2">
-            {/* CR-040 follow-on (2026-05-27) — "Show in source" promoted
-                from the bottom of the scrollable rationale region to
-                the always-visible header so it never scrolls below the
-                fold when the rationale text is long. User feedback:
-                "the see in original document badge is missing for this
-                entry. It sometimes shows below the screen and probably
-                needs to be at the top of the sidebar." */}
-            {!isEditing && (
-              <button
-                type="button"
-                onClick={() => onShowInSource(selectedSectionId!)}
-                title="Open the source document and jump to where this item came from"
-                className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-              >
-                <ExternalLink className="h-3 w-3" aria-hidden />
-                Show in source
-              </button>
-            )}
-            {/* Editing happens in the Compare overlay, opened from the card's
-                "Compare" button — not here. The right pane stays read-only. */}
+            {/* CR-065 — "Show in source" removed from the AI-evaluation modal:
+                the Compare overlay already shows the source document. This
+                panel is now read-only information only. */}
           </div>
         </div>
 
@@ -442,30 +425,9 @@ export function ItemPreview({
         </div>
       )}
 
-      {/* Action footer — hidden in edit mode; the textarea's own Save/Cancel
-          are the only actions while editing. */}
-      {!isEditing && (
-      <div className="border-t border-gray-200 bg-gray-50 p-4 space-y-2" data-tour="review-place-as">
-        <label className="block text-xs font-medium text-gray-700">Place this item as:</label>
-        <select
-          value={kind}
-          onChange={(e) => onChangeKind(selectedSectionId!, e.target.value as ItemKind | 'discard')}
-          className="block w-full rounded border border-gray-300 bg-white px-2 py-1 text-sm focus:border-cshse-500 focus:ring-1 focus:ring-cshse-500"
-        >
-          <option value="text">Narrative</option>
-          <option value="evidenceText">Supporting evidence text</option>
-          <option value="file">Supporting evidence file</option>
-          <option value="tag">Defer to tag list</option>
-          <option value="discard">Discard</option>
-        </select>
-        <button
-          onClick={() => onReassign(selectedSectionId!)}
-          className="w-full rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 hover:bg-gray-50"
-        >
-          Reassign to a different (Std, Spec)…
-        </button>
-      </div>
-      )}
+      {/* CR-065 — the "Place this item as" + "Reassign" controls were removed:
+          this panel is read-only information. Placement / reassignment live on
+          the card itself (kind dropdown + Move text + Reassign). */}
     </aside>
   );
 }

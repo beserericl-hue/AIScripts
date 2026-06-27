@@ -246,6 +246,7 @@ interface ItemCardListProps {
   /** CR-032: pencil click on a card. ReviewStep sets editingSectionId so the
    *  preview pane flips into edit mode for that item. */
   onEditStart?: (sectionId: string) => void;
+  onShowAiInfo?: (sectionId: string) => void;
   /** CR-039: Introduction buckets so ItemCardList can render them when an
    *  intro key is selected AND populate Reassign-to-Introduction targets. */
   introductions?: Record<string, IntroductionBucket>;
@@ -458,6 +459,7 @@ export function ItemCardList({
   onJumpToMatrix,
   onAppendUnplacedToSpec,
   onEditStart,
+  onShowAiInfo,
   introductions,
   onMoveToIntroduction,
   cvs,
@@ -827,9 +829,9 @@ export function ItemCardList({
                 onClick={() => onApproveAll(items.map((r) => r.rowId))}
                 disabled={isPlaceholder || items.length === 0}
                 className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Approve every item shown for this subspecification and move them to the editor. Other subspecifications are untouched."
+                title="Approve every item shown for this specification and move them to the Self-Study editor. Other specifications are untouched."
               >
-                <Check className="h-3 w-3" aria-hidden /> Approve This Subspecification
+                <Check className="h-3 w-3" aria-hidden /> Approve specification → editor
               </button>
               {approvedIds && approvedIds.size > 0 && onClearApprovals && (
                 <button
@@ -1043,7 +1045,7 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
-              onEditStart={onEditStart}
+              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
               editedSectionIds={editedSectionIds}
               bucketStandardCode={bucket?.standardCode ?? null}
               onMoveToIntroduction={onMoveToIntroduction}
@@ -1063,7 +1065,7 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
-              onEditStart={onEditStart}
+              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
               editedSectionIds={editedSectionIds}
               bucketStandardCode={bucket?.standardCode ?? null}
               onMoveToIntroduction={onMoveToIntroduction}
@@ -1083,7 +1085,7 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
-              onEditStart={onEditStart}
+              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
               editedSectionIds={editedSectionIds}
             />
             <KindSection
@@ -1106,7 +1108,7 @@ export function ItemCardList({
               approvedIds={approvedIds}
               onToggleApproval={onToggleApproval}
               onChangeKind={onChangeKind}
-              onEditStart={onEditStart}
+              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
               editedSectionIds={editedSectionIds}
             />
           </div>
@@ -1126,7 +1128,7 @@ export function ItemCardList({
                 onToggleApproval={onToggleApproval ? () => onToggleApproval(item.rowId) : undefined}
                 onChangeKind={onChangeKind}
                 onKeyDown={(e) => handleKeyDown(e, item, idx)}
-                onEditStart={onEditStart}
+                onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
                 isEdited={editedSectionIds.has(item.sectionId)}
                 bucketStandardCode={bucket?.standardCode ?? null}
                 onMoveToIntroduction={
@@ -1181,6 +1183,7 @@ interface KindSectionProps {
   // works on every text-bearing kind section (narratives + evidence-text
   // + tags).
   onEditStart?: (sectionId: string) => void;
+  onShowAiInfo?: (sectionId: string) => void;
   /** Per-item "is this item currently edited?" lookup (by sectionId). */
   editedSectionIds?: Set<string>;
   // CR-039 — Move-to-Introduction pass-through.
@@ -1204,6 +1207,7 @@ function KindSection({
   onToggleApproval,
   onChangeKind,
   onEditStart,
+  onShowAiInfo,
   editedSectionIds,
   bucketStandardCode,
   onMoveToIntroduction
@@ -1232,7 +1236,7 @@ function KindSection({
             onToggleApproval={onToggleApproval ? () => onToggleApproval(item.rowId) : undefined}
             onChangeKind={onChangeKind}
             onKeyDown={(e) => onKeyDown(e, item, idx)}
-            onEditStart={onEditStart}
+            onEditStart={onEditStart} onShowAiInfo={onShowAiInfo}
             isEdited={!!editedSectionIds?.has(item.sectionId)}
             bucketStandardCode={bucketStandardCode}
             onMoveToIntroduction={onMoveToIntroduction}
@@ -1259,6 +1263,7 @@ interface ItemCardProps {
   // edit mode lives in the right preview pane; clicking pencil both
   // selects the item and opens edit mode there.
   onEditStart?: (sectionId: string) => void;
+  onShowAiInfo?: (sectionId: string) => void;
   isEdited?: boolean;
   // CR-039 — Move-to-Introduction action. Renders a small "→ Intro"
   // dropdown that lists Document Introduction + the current spec's
@@ -1282,6 +1287,7 @@ function ItemCard({
   onChangeKind,
   onKeyDown,
   onEditStart,
+  onShowAiInfo,
   isEdited,
   bucketStandardCode,
   onMoveToIntroduction
@@ -1449,6 +1455,22 @@ function ItemCard({
                 className={`${isEdited ? '' : 'ml-auto'} inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-50`}
               >
                 <Columns className="h-3 w-3" aria-hidden /> Compare
+              </button>
+            )}
+            {/* CR-065 — "ⓘ" opens the read-only AI-evaluation modal (confidence,
+                rationale, classification) on demand, replacing the permanent
+                right sidebar. */}
+            {onShowAiInfo && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShowAiInfo(item.sectionId);
+                }}
+                title="AI evaluation — confidence, rationale, where it was pulled from"
+                aria-label="AI evaluation"
+                className="inline-flex items-center justify-center rounded border border-gray-300 bg-white px-1.5 py-0.5 text-xs font-semibold text-gray-500 hover:bg-gray-50"
+              >
+                ⓘ
               </button>
             )}
             {/* Move part of this card into another subspec. The parser

@@ -60,6 +60,26 @@ export function SourceComparePane({
     window.setTimeout(doScroll, 800);
   };
 
+  // CR-067 — highlight the ENTIRE matched span (the whole spec response), not
+  // just the first paragraph: from the match element forward through siblings
+  // until the next spec/standard heading, so the reviewer sees first word →
+  // last word and knows where it stops.
+  const highlightSpan = (startEl: HTMLElement) => {
+    const HEADING_RE = /^\s*(?:\d{1,2}[a-z]\.\s|Standard\s+\d)/i;
+    startEl.style.outline = '3px solid #d97706';
+    startEl.style.outlineOffset = '2px';
+    startEl.style.borderRadius = '4px';
+    let el: HTMLElement | null = startEl;
+    let count = 0;
+    while (el && count < 400) {
+      el.style.background = '#fef3c7';
+      const next = el.nextElementSibling as HTMLElement | null;
+      if (!next || HEADING_RE.test((next.textContent || '').trim())) break;
+      el = next;
+      count += 1;
+    }
+  };
+
   useEffect(() => {
     if (!importId) {
       setState({ kind: 'idle' });
@@ -96,10 +116,7 @@ export function SourceComparePane({
       );
       if (direct) {
         const el = direct as HTMLElement;
-        el.style.outline = '3px solid #d97706';
-        el.style.outlineOffset = '2px';
-        el.style.background = '#fef3c7';
-        el.style.borderRadius = '4px';
+        highlightSpan(el);
         scrollToElement(el);
         setMatchKind('anchor');
         return;
@@ -148,12 +165,9 @@ export function SourceComparePane({
       if (best) {
         const p = (best as Node).parentElement;
         if (p) {
-          // Highlight the match prominently (orange box + tint) and scroll it
-          // near the TOP of the source pane so it's obvious what to copy.
-          p.style.outline = '3px solid #d97706';
-          p.style.outlineOffset = '2px';
-          p.style.background = '#fef3c7';
-          p.style.borderRadius = '4px';
+          // CR-067 — highlight the whole matched span (orange box on the start
+          // + tint through to the next spec break) and scroll it near the TOP.
+          highlightSpan(p);
           scrollToElement(p);
         }
         setMatchKind('fuzzy');

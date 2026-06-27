@@ -10,7 +10,7 @@
  * Step 5 commit lands.
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { Rocket, Loader2 } from 'lucide-react';
+import { Rocket, Loader2, X } from 'lucide-react';
 import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY } from '../review/SpecRail';
 // Any selectedSpecKey starting with '_' is a synthetic rail key (matrices,
@@ -290,6 +290,16 @@ function FullReviewStep(): JSX.Element {
   // null means read-only. Set by handleEditStart (from a card's pencil),
   // cleared by handleEditCancel + handleEditSave.
   const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  // CR-065 — the AI-evaluation panel is an on-demand read-only modal, opened
+  // by the card's "ⓘ" button, instead of a permanent right column.
+  const [aiInfoOpen, setAiInfoOpen] = useState(false);
+  const handleShowAiInfo = useCallback(
+    (sectionId: string) => {
+      selectSection(sectionId);
+      setAiInfoOpen(true);
+    },
+    [selectSection]
+  );
   const toggleApproval = useCallback(
     (rowId: string) => {
       const next = new Set(approvedIds);
@@ -997,28 +1007,51 @@ function FullReviewStep(): JSX.Element {
               cvs={cvs}
               evidenceDocs={evidenceDocs}
               onShowInSource={handleShowInSource}
+              onShowAiInfo={handleShowAiInfo}
             />
           )}
         </main>
-        <ItemPreview
-          bucket={activeBucket}
-          selectedSectionId={selectedSectionId}
-          tags={tags}
-          cvs={cvs}
-          evidenceDocs={evidenceDocs}
-          introductions={introductions}
-          onChangeKind={handleChangeKind}
-          onReassign={handleSinglePreviewReassign}
-          onShowInSource={handleShowInSource}
-          // Editing now lives in the CompareEditOverlay, so the right pane stays
-          // read-only (never resizes into an inline editor).
-          editingSectionId={null}
-          onEditStart={handleEditStart}
-          onEditSave={handleEditSave}
-          onEditCancel={handleEditCancel}
-          onEditRevert={handleEditRevert}
-        />
       </div>
+
+      {/* CR-065 — AI evaluation is now an on-demand READ-ONLY modal (opened by
+          the "ⓘ" on a card), not a permanent right column. The cards + Compare
+          reclaim the full width. Placement/reassign live on the card. */}
+      {aiInfoOpen && selectedSectionId && (
+        <div
+          className="fixed inset-0 z-50 flex items-stretch justify-end bg-black/40"
+          role="dialog"
+          aria-modal="true"
+          aria-label="AI evaluation"
+          onClick={() => setAiInfoOpen(false)}
+        >
+          <div className="relative h-full" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setAiInfoOpen(false)}
+              aria-label="Close"
+              className="absolute right-2 top-2 z-10 rounded bg-white/90 p-1 text-gray-600 shadow hover:bg-gray-100"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+            <ItemPreview
+              bucket={activeBucket}
+              selectedSectionId={selectedSectionId}
+              tags={tags}
+              cvs={cvs}
+              evidenceDocs={evidenceDocs}
+              introductions={introductions}
+              onChangeKind={handleChangeKind}
+              onReassign={handleSinglePreviewReassign}
+              onShowInSource={handleShowInSource}
+              editingSectionId={null}
+              onEditStart={handleEditStart}
+              onEditSave={handleEditSave}
+              onEditCancel={handleEditCancel}
+              onEditRevert={handleEditRevert}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Compare & edit — the single editing surface, opened by a card's
           "Compare" button. Big side-by-side: editable imported content next to
