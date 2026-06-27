@@ -55,5 +55,16 @@ test.describe('CR-064 — Review is de-noised', () => {
     const modal = page.getByRole('dialog', { name: 'AI evaluation' });
     await expect(modal.getByText(/Show in source/i)).toHaveCount(0);
     await expect(modal.getByText(/Place this item as|Reassign to a different/i)).toHaveCount(0);
+    await modal.getByRole('button', { name: 'Close' }).click();
+
+    // CR-069 — the coverage legend is visible (dot ≠ match confidence).
+    await expect(page.getByText(/Coverage:/i)).toBeVisible();
+
+    // CR-068 — clicking a count shows a flat cross-spec list with a back affordance.
+    await page.getByTestId('count-filter-evidence').click();
+    await expect(page.getByTestId('back-to-specs')).toBeVisible();
+    await expect(page.getByText(/Showing all evidence across every spec/i)).toBeVisible();
+    await page.getByTestId('back-to-specs').click();
+    await expect(page.getByTestId('back-to-specs')).toHaveCount(0);
   });
 });

@@ -291,7 +291,7 @@ export function ItemPreview({
 
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className={`rounded border px-2 py-1.5 ${band.bgCls}`}>
-            <div className="uppercase tracking-wide text-[10px] text-gray-500">Confidence</div>
+            <div className="uppercase tracking-wide text-[10px] text-gray-500" title="How confident the AI is that this text belongs to this spec — NOT the spec's coverage status (the rail dot).">Match confidence</div>
             <div className={`mt-0.5 font-mono font-semibold ${band.textCls}`}>
               {confidence.toFixed(2)} <span className="font-sans text-[10px]">({band.label})</span>
             </div>

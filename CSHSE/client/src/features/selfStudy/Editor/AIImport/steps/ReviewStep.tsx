@@ -366,10 +366,40 @@ function FullReviewStep(): JSX.Element {
     setStep('apply');
   }, [apply, setStep]);
 
-  const activeBucket =
+  const specBucket =
     selectedSpecKey && !selectedSpecKey.startsWith('_')
       ? buckets[selectedSpecKey] || null
       : null;
+
+  // CR-068 — clickable header counts. When a type filter is active, aggregate
+  // EVERY item of that type across all specs into one flat list so the PC can
+  // QA them in a single pass ("see all evidences in one shot, without going
+  // standard by standard"). Reuses ItemCardList via a synthetic bucket.
+  const [typeFilter, setTypeFilter] = useState<
+    'narratives' | 'evidenceText' | 'evidenceFiles' | null
+  >(null);
+  const filteredBucket = useMemo(() => {
+    if (!typeFilter) return null;
+    const agg: any = {
+      standardCode: '',
+      specCode: '',
+      standardTitle: `All ${typeFilter === 'evidenceText' ? 'evidence' : typeFilter === 'evidenceFiles' ? 'files' : 'narratives'}`,
+      specPrompt: '',
+      narratives: [],
+      evidenceText: [],
+      evidenceFiles: [],
+      matrixCells: [],
+      coverageScore: null,
+      coverageCovered: null,
+      coverageGaps: [],
+      coverageStrengths: [],
+    };
+    for (const b of Object.values(buckets)) {
+      agg[typeFilter].push(...(((b as any)[typeFilter] as any[]) || []));
+    }
+    return agg;
+  }, [typeFilter, buckets]);
+  const activeBucket = filteredBucket || specBucket;
   // Suppress unused-imports lint when the old key references are pruned.
   void UNPLACED_KEY;
   void UNWRITTEN_KEY;
@@ -626,15 +656,24 @@ function FullReviewStep(): JSX.Element {
         // CR-039 follow-on — intro items live outside the per-spec
         // bucket; route to the intro-aware editor. Phase 2b — pass rich HTML.
         editIntroductionItem(sectionId, newText, newHtml);
-      } else if (activeBucket) {
-        const inNarr = activeBucket.narratives.some((i) => i.sectionId === sectionId);
-        const kind: 'narratives' | 'evidenceText' = inNarr ? 'narratives' : 'evidenceText';
-        const specKey = `${activeBucket.standardCode}.${activeBucket.specCode}`;
-        editBucketItem(specKey, sectionId, kind, newText, newHtml);
+      } else {
+        // Find the item's REAL spec by searching every bucket — works from the
+        // CR-068 flat list (where activeBucket is a synthetic cross-spec
+        // aggregate) as well as a normal single-spec view.
+        for (const [key, b] of Object.entries(buckets)) {
+          if (b.narratives.some((i) => i.sectionId === sectionId)) {
+            editBucketItem(key, sectionId, 'narratives', newText, newHtml);
+            break;
+          }
+          if (b.evidenceText.some((i) => i.sectionId === sectionId)) {
+            editBucketItem(key, sectionId, 'evidenceText', newText, newHtml);
+            break;
+          }
+        }
       }
       setEditingSectionId(null);
     },
-    [tags, activeBucket, editTagAction, editBucketItem, isIntroductionSection, editIntroductionItem]
+    [tags, buckets, editTagAction, editBucketItem, isIntroductionSection, editIntroductionItem]
   );
 
   const handleEditRevert = useCallback(
@@ -648,13 +687,19 @@ function FullReviewStep(): JSX.Element {
         revertIntroductionItem(sectionId);
         return;
       }
-      if (!activeBucket) return;
-      const inNarr = activeBucket.narratives.some((i) => i.sectionId === sectionId);
-      const kind: 'narratives' | 'evidenceText' = inNarr ? 'narratives' : 'evidenceText';
-      const specKey = `${activeBucket.standardCode}.${activeBucket.specCode}`;
-      revertBucketItem(specKey, sectionId, kind);
+      // Find the item's real spec across all buckets (CR-068 flat-list safe).
+      for (const [key, b] of Object.entries(buckets)) {
+        if (b.narratives.some((i) => i.sectionId === sectionId)) {
+          revertBucketItem(key, sectionId, 'narratives');
+          return;
+        }
+        if (b.evidenceText.some((i) => i.sectionId === sectionId)) {
+          revertBucketItem(key, sectionId, 'evidenceText');
+          return;
+        }
+      }
     },
-    [tags, activeBucket, revertTagAction, revertBucketItem, isIntroductionSection, revertIntroductionItem]
+    [tags, buckets, revertTagAction, revertBucketItem, isIntroductionSection, revertIntroductionItem]
   );
 
   const handleSinglePreviewReassign = useCallback(
@@ -904,10 +949,27 @@ function FullReviewStep(): JSX.Element {
   return (
     <div className="flex flex-1 min-h-0 flex-col">
       <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-1.5">
-        <div data-tour="review-summary" className="text-xs text-gray-500">
-          <span className="font-medium text-gray-700">{applyTotals.narratives}</span> narratives ·{' '}
-          <span className="font-medium text-gray-700">{applyTotals.evidenceText}</span> evidence ·{' '}
-          <span className="font-medium text-gray-700">{applyTotals.evidenceFiles}</span> files
+        {/* CR-068 — clickable counts. Each toggles a flat, cross-spec list of
+            that item type so the PC can QA all of one kind in a single pass. */}
+        <div data-tour="review-summary" className="flex items-center gap-1 text-xs text-gray-500">
+          {([
+            ['narratives', applyTotals.narratives, 'narratives'],
+            ['evidenceText', applyTotals.evidenceText, 'evidence'],
+            ['evidenceFiles', applyTotals.evidenceFiles, 'files'],
+          ] as const).map(([key, count, label], i) => (
+            <React.Fragment key={key}>
+              {i > 0 && <span aria-hidden>·</span>}
+              <button
+                type="button"
+                data-testid={`count-filter-${label}`}
+                onClick={() => setTypeFilter((f) => (f === key ? null : key))}
+                title={`Show all ${label} across every spec in one list`}
+                className={`rounded px-1 hover:bg-gray-100 ${typeFilter === key ? 'bg-cshse-100 text-cshse-800' : ''}`}
+              >
+                <span className="font-medium text-gray-700">{count}</span> {label}
+              </button>
+            </React.Fragment>
+          ))}
           {applyTotals.matrixCells > 0 && <> · {applyTotals.matrixCells} matrix</>}
           {approvedIds.size > 0 && <> · <span className="text-emerald-700">{approvedIds.size} reviewed</span></>}
         </div>
@@ -973,12 +1035,29 @@ function FullReviewStep(): JSX.Element {
           onAddFromSourceForIntro={handleAddFromSourceForIntro}
         />
         <main className="flex flex-1 flex-col overflow-hidden">
+          {/* CR-068 — flat cross-spec list banner. */}
+          {typeFilter && (
+            <div className="flex items-center justify-between border-b border-cshse-200 bg-cshse-50 px-4 py-1.5 text-xs text-cshse-800">
+              <span>
+                Showing <strong>all {filteredBucket?.standardTitle?.replace('All ', '')}</strong> across every spec ·{' '}
+                {(filteredBucket as any)?.[typeFilter]?.length ?? 0} items
+              </span>
+              <button
+                type="button"
+                data-testid="back-to-specs"
+                onClick={() => setTypeFilter(null)}
+                className="rounded border border-cshse-300 bg-white px-2 py-0.5 text-cshse-700 hover:bg-cshse-100"
+              >
+                ◂ Back to specs
+              </button>
+            </div>
+          )}
           {/* CR-040 Phase 3b — when the rail's "Missing from import"
               entry is selected, swap the middle pane for the
               MissingFragmentsView that surfaces every unaccounted-for
               section with Discard + Reassign actions. Apply is gated
               on resolution. */}
-          {selectedSpecKey === MISSING_FRAGMENTS_KEY ? (
+          {!typeFilter && selectedSpecKey === MISSING_FRAGMENTS_KEY ? (
             <MissingFragmentsView
               fragments={coverageReport?.missingFragments ?? []}
               resolvedIds={new Set(resolvedMissingFragmentIds)}

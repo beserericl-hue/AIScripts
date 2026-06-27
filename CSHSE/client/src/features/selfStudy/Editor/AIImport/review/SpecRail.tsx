@@ -147,6 +147,19 @@ export function SpecRail({
             className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-2 text-sm focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500"
           />
         </label>
+        {/* CR-069 — legend: the rail dot is the AI's COVERAGE/compliance read on
+            the spec (does the response satisfy the standard), NOT the per-card
+            match confidence. They were being confused (a 0.92-confidence card
+            under a red spec). */}
+        <div
+          className="mt-2 flex items-center gap-2 text-[10px] text-gray-500"
+          title="Spec coverage status from the AI review — distinct from a card's match-confidence score."
+        >
+          <span className="font-medium uppercase tracking-wide">Coverage:</span>
+          <span>🟢 covered</span>
+          <span>🟡 partial</span>
+          <span>🔴 gap</span>
+        </div>
       </div>
 
       <nav role="tablist" aria-orientation="vertical" data-tour="review-rail" className="flex-1 overflow-auto p-2 text-sm">
