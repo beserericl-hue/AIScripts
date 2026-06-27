@@ -905,7 +905,10 @@ function FullReviewStep(): JSX.Element {
           {/* CR-041 US-6 — source-file filter. Visible only when in
               batch mode (sourceOptions populated). Lets the PC scope
               SpecRail counts + visible cards to one source file. */}
-          {sourceOptions.length > 0 && (
+          {/* CR-064 — show the source filter ONLY for multi-file batch imports
+              (>1 source). A single-source import has nothing to filter, so the
+              "All sources (1)" control was pure noise. */}
+          {sourceOptions.length > 1 && (
             <label className="flex items-center gap-1 text-xs text-gray-700">
               <span>Filter by source:</span>
               <select
@@ -924,20 +927,10 @@ function FullReviewStep(): JSX.Element {
               </select>
             </label>
           )}
-          <button
-            onClick={() => setStep('parse')}
-            className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            ◂ Back
-          </button>
-          <button
-            onClick={() => setStep(matrices.length > 0 ? 'matrix' : 'apply')}
-            data-tour="review-next"
-            className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-            title="Walk through the matrix-column mapping and merge settings before applying"
-          >
-            Next: {matrices.length > 0 ? 'Matrix' : 'Apply'} ▸
-          </button>
+          {/* CR-064 — the wizard step-nav "◂ Back" / "Next: Apply ▸" buttons are
+              removed from the standalone Review surface: they were confusing
+              ("I don't know what that means") and Approve already writes to the
+              editor automatically. Navigation is the top workflow tabs. */}
           {/* "Apply to editor" was removed — Approve / Approve all now move the
               text straight into the standards editor automatically. */}
           <span
