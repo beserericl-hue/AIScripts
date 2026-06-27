@@ -84,14 +84,18 @@ export function CompareEditOverlay({
     let leftIndex: Map<string, HTMLElement> | null = null;
     let rightIndex: Map<string, HTMLElement> | null = null;
 
-    // Blocks of `container` at/below its viewport top, nearest the top first.
+    // Blocks of `container` nearest its viewport TOP EDGE (above or below),
+    // closest first. Looking slightly above the fold lets us ride THROUGH a
+    // table: its short numeric cells can't anchor, so we lock onto the nearest
+    // descriptive block (e.g. a row label or the paragraph just above it).
     const topBlocks = (container: HTMLElement) => {
       const cTop = container.getBoundingClientRect().top;
+      const h = container.clientHeight;
       return Array.from(container.querySelectorAll<HTMLElement>(BLOCK_SEL))
         .map((el) => ({ el, off: el.getBoundingClientRect().top - cTop }))
-        .filter((b) => b.off > -24 && norm(b.el.textContent).length >= 10)
-        .sort((a, b) => a.off - b.off)
-        .slice(0, 8);
+        .filter((b) => b.off > -h && b.off < h && norm(b.el.textContent).length >= 10)
+        .sort((a, b) => Math.abs(a.off) - Math.abs(b.off))
+        .slice(0, 10);
     };
 
     // Scroll `to` so the block matching `from`'s top block sits at the same
