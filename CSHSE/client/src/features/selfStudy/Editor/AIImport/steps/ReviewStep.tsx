@@ -1126,7 +1126,7 @@ function FullReviewStep(): JSX.Element {
           missingFragmentCount={coverageReport?.missingFragments?.length || 0}
           onAddFromSourceForIntro={handleAddFromSourceForIntro}
         />
-        <main className="flex flex-1 flex-col overflow-hidden">
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* CR-068 — flat cross-spec list banner. */}
           {typeFilter && (
             <div className="flex items-center justify-between border-b border-cshse-200 bg-cshse-50 px-4 py-1.5 text-xs text-cshse-800">

@@ -806,7 +806,7 @@ export function ItemCardList({
   }
 
   return (
-    <div className="flex h-full flex-1 flex-col bg-gray-50" data-tour="review-cards">
+    <div className="flex min-h-0 flex-1 flex-col bg-gray-50" data-tour="review-cards">
       {/* Bulk-action toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-2 text-sm" data-tour="review-bulk-toolbar">
         <div className="flex items-center gap-2">
@@ -1009,7 +1009,12 @@ export function ItemCardList({
       )}
 
       {/* Card list — grouped by kind for spec buckets, flat for Unplaced/Unwritten */}
-      <div ref={listRef} className="flex-1 overflow-auto p-4" aria-label="Items for selected spec">
+      <div
+        ref={listRef}
+        data-testid="review-cards-scroll"
+        className="min-h-0 flex-1 overflow-auto p-4"
+        aria-label="Items for selected spec"
+      >
         {items.length === 0 ? (
           <div className="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
             <div>
