@@ -273,6 +273,20 @@ export function WorkflowSummary({
             </div>
           </div>
         )}
+
+        {/* Explicit entry to the Review surface — mirrors "Open Self-Study"
+            below. The tiles/chips above also open Review, but a coordinator
+            with review data and no self-study yet needs an obvious button. */}
+        <div className="mt-5 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={() => onOpenReview()}
+            className="flex-shrink-0 flex items-center gap-2 px-4 py-2 text-sm text-primary-700 border border-primary-300 rounded-lg hover:bg-primary-50"
+          >
+            Open Review
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </SectionShell>
 
       {/* 3. SELF-STUDY ---------------------------------------------------- */}
