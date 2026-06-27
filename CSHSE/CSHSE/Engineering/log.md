@@ -2301,3 +2301,35 @@ Phase 3 is approved to build (gate rollout + dashboard assignment list); Phase 3
 - Institution roster UI (Phase 3b): add/remove PCs/readers/lead on each institution card via roleAssignments, Rule-1 guarded. Commit cdfb59d.
 - Dashboard role chips (decision 2): /auth/me returns roleAssignments; multi-institution users see clickable role@institution chips. Commit 0c69fd9.
 - Tests: cr060-multi-role.test.ts (10) green; regression (isolation, reader-access, cr055, cr057, submission-lockout, jv-filter, evidence-owner) green. Status → shipped (pending in-app sign-off).
+
+## 2026-06-16 — update | Email deliverability + JV discoverability + nav/board (prod)
+
+Beta hardening session — all shipped to production (`main`, commits `b359717..0d36dcf`).
+- Created [[email-deliverability]] (concept): SendGrid-primary send path (Postal fallback) after the self-hosted Postal Railway egress IP (`35.221.23.232`) was Spamhaus-listed and Microsoft/.edu HardFailed mail. Fixed branded From `cshse@courseworx.media`, trust footer with the CSHSE Tigard OR postal address (from the Member Handbook), and the Activity-API delivery check. Resent Kennesaw invites → all `delivered`.
+- Updated [[cr-019-joint-venture-pull-forward]]: discoverability follow-on — Joint Ventures tab in Admin Settings (`cb5b17b`) + optional JV dropdown in the institution Add/Edit modal (`5bd0bed`).
+- Updated [[cr-053-board-decisions-cycle-scheduler]]: documented the board-console data flow and the open gap — `spin-up-reaccreditations` / `run-cycle-reminders` have no Board-Console button and no in-process cron.
+- Also shipped: Resend-invitation toast-feedback fix + app rename to "CSHSE Self-Study Portal" (`f753b29`); nav always uses the "More" dropdown at every width via `OverflowNav` `alwaysCollapse` (`0d36dcf`).
+- Dev-only: drove submission `6a2c7538dee683457b24af0f` to `review_complete` to demo the board queue (prod board stays clean).
+
+## 2026-06-26 — ingest | Monica review-panel walkthrough → bugs + fix plan
+
+Ingested the Otter transcript + 84 screen-share screenshots from Eric + Monica Nandan's live **production** walkthrough of the Review panel (KSU self-study, submission `6a31f92483a01b1a6d930a4e`). Viewed the key screenshots to confirm each bug visually. No code changes — plan only.
+- Created [[monica-review-walkthrough-2026-06-26]] (review): **parser data-loss** (spec bodies reduced to their appendix-pointer line — image49/50; missing links + flattened lists — image45; inconsistent tables — image50/65), **UI-noise** (show only mode-relevant controls; consistent approve/validate terms; collapse AI-eval sidebar; move Report/Help out of the work area), **red-dot-vs-0.92-confidence** collision, **clickable-count** evidence/file checklist, **full-section** compare highlight, **inline appendix upload** at center-pane placeholders, and **Open-Self-Study munges the screen** (pre-approval content leak + wasted-space layout).
+- Created [[review-panel-ux-plan-2026-06-26]] (plan): P1 parser fidelity audit+fix · P2 mode-aware de-noise of Review · **P2.5 inline appendix upload at the center-pane placeholders (high-value time saver, front-loaded)** · P3 full-section highlight · P4 clickable count filters + indicator legend · P5 Open-Self-Study munge/leak.
+- Source: Google Drive docx `Re_ [EXTERNAL] Re_ Transcript from today_otter_ai_transcript.docx` (id `1-DWoOAl64mGkDTwCPesaylXYqPDa7MyC`). Complements (does not supersede) [[sprint-plan-2026-05-31]]. First real-user pass after this week's compare-overlay + source-doc image-auth fix shipped.
+
+## 2026-06-26 — setup | Wrote CRs cr-061…072 + the importer/review execution sprint
+
+Turned the Monica-walkthrough findings into change requests + a sequenced, verify-and-test sprint. **Importer fidelity is P0/blocking** per Eric ("a lot of missing material and missing links and images") with the governing rule **"write everything until the next break"** (a spec owns all content from its heading to the next spec break; the parser is skipping inside those boundaries).
+- Created 12 CRs: **cr-061** (no dropped content / deterministic span capture), **cr-062** (links + lists), **cr-063** (images + tables) — all **P0**; **cr-064** (mode-aware Review chrome, remove Back-to-editor), **cr-065** (AI-eval → read-only modal), **cr-066** (approve-specification rename), **cr-067** (full-section compare highlight), **cr-068** (clickable count filters), **cr-069** (dot-vs-confidence legend), **cr-070** (inline appendix upload — HIGH VALUE), **cr-071** (self-study munge/leak + de-noise) — P1; **cr-072** (compare sync-scroll) — P2.
+- Created [[importer-review-sprint-2026-06-26]] (plan): Sprint 1 = importer fidelity (audit → cr-061/062/063 → KSU regression → re-import dev+prod); Sprint 2 = Review/Self-Study de-noise + workflow (cr-064…071); Sprint 3 (opt) = cr-072. DoD per CR: made → verified → tested → demoed to Monica.
+- Updated [[change-requests/index]] (new dated section) + [[index]] (sprint under Plans). No code changes.
+
+## 2026-06-27 — update | Sprint 1 importer fidelity (CR-061/062/063) shipped
+
+Implemented + tested + deployed the importer-fidelity track. **Root cause** (from the audit): the walker fragmented each spec into many sections (sub-items "3b 1.", bare "1."/"2." each opened a new section), which the matcher then placed independently or dropped at low confidence — losing large amounts of content.
+- **[[cr-061-importer-no-dropped-content]]** — `_is_real_break` sequence gate in `app/splitter/template_walker.py`: in the standards region a spec owns everything until the **next spec/standard** ("write everything until the next break"); sub-items accumulate as body. Gated to the real standards region (intro + bare-fragment docs keep legacy segmentation).
+- **[[cr-062-importer-preserve-links-lists]]** — Word `w:numPr` list paragraphs render `<ul><li>…</li></ul>` with hyperlinks intact (KSU: 73 lists / 542 items).
+- **[[cr-063-importer-preserve-images-tables]]** — inline-image cap 1.2 MB → 2 MB.
+- +4 regression tests (33 pass). Commit `cced74d` (developer + main).
+- **Verified end-to-end**: deployed cshse-ai to dev + prod, re-imported KSU on both. On Monica's prod data, previously-dropped specs recovered — 5.c 0→11,083 chars (+7 links, +2 tables), 3.b→11,405, 6.a→22,806, 7.b→25,377, 8.b→20,263; totals 256K bucket chars, 223 links, 60 lists, images intact. Status → shipped.

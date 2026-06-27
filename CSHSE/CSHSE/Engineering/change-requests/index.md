@@ -23,6 +23,25 @@ All CRs are scoped to a single shippable behavior. Each is sourced from a timest
 | `rejected` | Considered + declined |
 | `superseded` | Replaced by another CR |
 
+## Monica review-panel walkthrough (2026-06-26)
+
+Remediation track from [[monica-review-walkthrough-2026-06-26]]; sequenced in [[importer-review-sprint-2026-06-26]]. **Importer fidelity (CR-061–063) is P0/blocking** — "a lot of missing material and missing links and images."
+
+| CR | Title | Priority | Status | Sprint |
+|---|---|---|---|---|
+| [[cr-061-importer-no-dropped-content]] | Importer must not drop spec-body content ("write everything until the next break") | **P0** | **shipped** | 1 |
+| [[cr-062-importer-preserve-links-lists]] | Preserve hyperlinks + list structure | **P0** | **shipped** | 1 |
+| [[cr-063-importer-preserve-images-tables]] | Preserve images + tables | **P0** | **shipped** | 1 |
+| [[cr-064-mode-aware-review-chrome]] | Mode-aware Review chrome (strip noise; remove Back-to-editor) | P1 | proposed | 2 |
+| [[cr-065-ai-eval-modal]] | AI-evaluation sidebar → read-only modal | P1 | proposed | 2 |
+| [[cr-066-approve-specification-rename]] | Clarify the spec-level approve action | P1 | proposed | 2 |
+| [[cr-067-full-section-compare-highlight]] | Highlight the full matched section in Compare | P1 | proposed | 2 |
+| [[cr-068-clickable-count-filters]] | Clickable count filters (narratives/evidence/files) | P1 | proposed | 2 |
+| [[cr-069-confidence-indicator-legend]] | Reconcile status dot vs confidence + legend | P1 | proposed | 2 |
+| [[cr-070-inline-appendix-upload]] | Inline appendix upload at center-pane placeholders (HIGH VALUE) | P1 | proposed | 2 |
+| [[cr-071-self-study-editor-munge-and-denoise]] | Self-Study editor: munge/leak fix + de-noise + empty state | P1 | proposed | 2 |
+| [[cr-072-compare-synchronized-scroll]] | Synchronized scroll in Compare | P2 | proposed | 3 (opt) |
+
 ## P0 — required before next reader cycle (Stevenson + Kennesaw beta)
 
 | CR | Title | Status | Source |

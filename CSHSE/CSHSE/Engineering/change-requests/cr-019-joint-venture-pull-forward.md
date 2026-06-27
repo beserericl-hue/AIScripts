@@ -12,9 +12,18 @@ last_reviewed: 2026-05-30
 revision_history:
   - 2026-05-20 — initial decision: rejected (no beta institution surfaced a JV need at the 2026-05-20 webinar).
   - 2026-05-30 — revived per user direction; revival rationale: JV is an expected requirement per the original product spec ([[product-requirements#u2-joint-ventures-institution-grouping]]) and the previously-superseded [[sprint-plan-2026-05-11#sprint-7]] full spec. Shipped same day.
+  - 2026-06-16 — discoverability follow-on (prod): admin reported "no way to add a JV." Feature was complete but only at `/admin/joint-ventures`. Surfaced as a Joint Ventures tab in Admin Settings (commit `cb5b17b`) + an optional JV dropdown in the institution Add/Edit modal (commit `5bd0bed`). Both live in production.
+last_reviewed_note: discoverability surfaces added 2026-06-16
 ---
 
 # CR-019 — Joint Venture grouping (revived 2026-05-30)
+
+## Update 2026-06-16 — discoverability (shipped to prod)
+
+The JV feature (model + 8 endpoints + create/list/archive UI) was complete but only reachable at the standalone `/admin/joint-ventures` route, so an admin in Admin Settings → Institutions saw no obvious way to define one. Two additive surfaces, no backend change:
+
+- Joint Ventures tab in `SettingsPage.tsx` (below Institutions) mounts the existing `JointVentureManagement` component. Commit `cb5b17b`.
+- Optional "Joint Venture" dropdown in the Add/Edit Institution modal (`InstitutionManagement.tsx`): lists active JVs + "None"; on save it syncs membership via the JV member endpoints (remove-from-current then add), surfacing the "one active JV per institution" conflict in the open modal; create flow adds after the institution is created. Commit `5bd0bed`.
 
 ## Status: shipped (2026-05-30)
 

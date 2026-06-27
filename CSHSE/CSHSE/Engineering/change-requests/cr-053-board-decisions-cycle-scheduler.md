@@ -25,6 +25,12 @@ shipped_notes: |
 
 # CR-053 — Board decisions + cycle scheduler
 
+## Note 2026-06-16 — board-console UI gap (open follow-up)
+
+Walked an admin through the Board Console (`/admin/board`). Confirmed the data flow: a self-study reaches the board only when the lead reader runs `finalizeCompilation` (`POST /api/submissions/:id/compilation/finalize`) → `status = review_complete` → appears in `GET /api/board/queue`; "Record decision" sets `compliant` (accept) / `non_compliant` (deny/suspend/revoke) / stays `review_complete` (table). "Upcoming cycles" is derived read-only from accept (`expiresAt`) + table (`reconsiderAt`) decisions within `withinDays` (default 365).
+
+**Gap (not yet built):** `POST /api/board/spin-up-reaccreditations` and `POST /api/board/run-cycle-reminders` are live + idempotent but have **no button in the Board Console and no in-process cron** — today they'd only fire from an external scheduler. Candidate follow-up: two admin buttons in `BoardConsole.tsx` and/or a nightly scheduler. (The auto-spin-up endpoint itself shipped in Sprint 12.1, superseding the "still deferred" line in `shipped_notes`.) See [[email-deliverability]] for the cycle-reminder send path.
+
 ## Problem statement
 
 Pre-Sprint-7 the only "decision" surface was a 3-outcome enum on `Submission.decision` (`approve | deny | conditional`) with no API to write it, no audit, and no cycle-management story. The board needs to record Accept / Table / Deny / Suspend / Revoke decisions with effective dates, get back a queue of submissions awaiting decision, and see a calendar of approaching re-accreditation cycles.
