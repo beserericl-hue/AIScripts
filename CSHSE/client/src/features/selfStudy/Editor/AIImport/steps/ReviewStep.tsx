@@ -10,7 +10,6 @@
  * Step 5 commit lands.
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import axios from 'axios';
 import { Rocket, Loader2, X, Upload } from 'lucide-react';
 import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY } from '../review/SpecRail';
@@ -731,14 +730,16 @@ function FullReviewStep(): JSX.Element {
   const handleUploadForSection = useCallback(
     async (file: File, sectionId: string) => {
       if (!submissionId) return;
-      // Resolve the card's real spec from its sectionId.
+      // Resolve the card's real spec from its sectionId. Null-safe — a
+      // malformed bucket must never throw here (that would crash the surface).
       let std = '';
       let spec = '';
-      for (const [, b] of Object.entries(buckets)) {
+      for (const [, b] of Object.entries(buckets || {})) {
+        if (!b) continue;
         const inBucket =
-          b.narratives.some((i) => i.sectionId === sectionId) ||
-          b.evidenceText.some((i) => i.sectionId === sectionId) ||
-          ((b.evidenceFiles as any[]) || []).some((i: any) => i.sectionId === sectionId);
+          (b.narratives || []).some((i) => i?.sectionId === sectionId) ||
+          (b.evidenceText || []).some((i) => i?.sectionId === sectionId) ||
+          ((b.evidenceFiles as any[]) || []).some((i: any) => i?.sectionId === sectionId);
         if (inBucket) {
           std = b.standardCode;
           spec = b.specCode;
@@ -756,30 +757,14 @@ function FullReviewStep(): JSX.Element {
         fd.append('standardCode', std);
         fd.append('specCode', spec);
         fd.append('title', file.name);
-        const headers: Record<string, string> = { 'Content-Type': 'multipart/form-data' };
-        try {
-          const raw = localStorage.getItem('auth-storage');
-          if (raw) {
-            const { state } = JSON.parse(raw);
-            if (state?.token) headers.Authorization = `Bearer ${state.token}`;
-            const imp = state?.impersonation;
-            if (imp?.isImpersonating && imp.impersonatedRole) {
-              headers['X-Impersonated-Role'] = imp.impersonatedRole;
-              const u = imp.impersonatedUser;
-              if (u?.id) {
-                headers['X-Impersonated-User-Id'] = u.id;
-                const fn = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email || '';
-                if (fn) headers['X-Impersonated-User-Name'] = encodeURIComponent(fn);
-              }
-            }
-          }
-        } catch {
-          /* ignore auth-storage parse errors */
-        }
-        const baseURL = import.meta.env.VITE_API_URL || '';
-        await axios.post(`${baseURL}/api/submissions/${submissionId}/evidence/upload`, fd, {
-          headers,
-        });
+        // Use the shared `api` so the request interceptor adds the correct
+        // auth + impersonation headers (matching every other request), and pass
+        // skipAuthRedirect so a 401 surfaces in THIS modal instead of wiping
+        // auth + redirecting to /login (which blanked the page).
+        await api.post(`/api/submissions/${submissionId}/evidence/upload`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          skipAuthRedirect: true,
+        } as any);
         setUploadState({ status: 'done', fileName: file.name, std, spec });
       } catch (e: any) {
         setUploadState({

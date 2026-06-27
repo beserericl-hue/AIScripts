@@ -38,6 +38,7 @@ import { ImportFilePanel } from './ImportFilePanel';
 // collapsible inside NarrativeEditor (single report per spec).
 import { SpecNotApplicable } from './SpecNotApplicable';
 import { ReviewSurface } from './Review/ReviewSurface';
+import { SurfaceErrorBoundary } from '../../../components/SurfaceErrorBoundary';
 import { MatrixSurface } from './Review/MatrixSurface';
 import { FinalSubmitModal } from './FinalSubmitModal';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
@@ -3158,10 +3159,12 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
               State comes from Submission.aiReviewState. */}
           {activeView === 'review-surface' && isProgramCoordinator && submissionId && (
             <main className="flex flex-1 flex-col min-h-0 overflow-hidden">
-              <ReviewSurface
-                submissionId={submissionId}
-                onClose={() => setActiveView('standards')}
-              />
+              <SurfaceErrorBoundary label="Review" onReset={() => window.location.reload()}>
+                <ReviewSurface
+                  submissionId={submissionId}
+                  onClose={() => setActiveView('standards')}
+                />
+              </SurfaceErrorBoundary>
             </main>
           )}
 

@@ -44,8 +44,12 @@ api.interceptors.response.use(
   (error) => {
     // Don't redirect to login for auth routes - let them handle their own errors
     const isAuthRoute = error.config?.url?.includes('/api/auth/');
+    // Opt-out flag: requests that handle their own 401 (e.g. the per-card file
+    // upload, which shows the error in a modal) must NOT trigger the global
+    // logout-and-redirect, which wipes auth and blanks the page.
+    const skipAuthRedirect = (error.config as any)?.skipAuthRedirect === true;
 
-    if (error.response?.status === 401 && !isAuthRoute) {
+    if (error.response?.status === 401 && !isAuthRoute && !skipAuthRedirect) {
       localStorage.removeItem('auth-storage');
       window.location.href = '/login';
     }
