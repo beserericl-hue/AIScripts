@@ -51,7 +51,10 @@ export function CompareEditOverlay({
   const leftScrollRef = useRef<HTMLDivElement>(null);
   const [wordCount, setWordCount] = useState(0);
   // CR-072 (P2) — opt-in synchronized scroll. Off by default so it never fights
-  // the user; when on, the two panes mirror scroll percentage.
+  // the user. The left pane is a SHORT subset of the (much longer) source
+  // document, so a naive percentage mirror shows unrelated content. Instead we
+  // map the left pane's full scroll range onto the highlighted MATCHED SPAN in
+  // the source (data-compare-match-start/end), keeping the same passage aligned.
   const [syncScroll, setSyncScroll] = useState(false);
 
   useEffect(() => {
@@ -60,19 +63,55 @@ export function CompareEditOverlay({
     const right = document.querySelector<HTMLElement>('[data-testid="compare-source-pane"]');
     if (!left || !right) return;
     let lock = false;
-    const mirror = (from: HTMLElement, to: HTMLElement) => {
+    const release = () => requestAnimationFrame(() => { lock = false; });
+
+    // Top/height of the highlighted matched span within the source scroll box.
+    const span = (): { top: number; height: number } | null => {
+      const start = right.querySelector<HTMLElement>('[data-compare-match-start]');
+      if (!start) return null;
+      const end = right.querySelector<HTMLElement>('[data-compare-match-end]') || start;
+      const rTop = right.getBoundingClientRect().top;
+      const top = start.getBoundingClientRect().top - rTop + right.scrollTop;
+      const bottom = end.getBoundingClientRect().bottom - rTop + right.scrollTop;
+      return { top, height: Math.max(1, bottom - top) };
+    };
+    const PAD = 8;
+
+    const onLeft = () => {
       if (lock) return;
       lock = true;
-      const fromMax = from.scrollHeight - from.clientHeight;
-      const toMax = to.scrollHeight - to.clientHeight;
-      to.scrollTop = fromMax > 0 ? (from.scrollTop / fromMax) * toMax : 0;
-      // release on the next frame so the programmatic scroll doesn't echo back
-      requestAnimationFrame(() => { lock = false; });
+      const s = span();
+      const leftMax = left.scrollHeight - left.clientHeight;
+      const f = leftMax > 0 ? left.scrollTop / leftMax : 0;
+      if (s) {
+        // f=0 → span top at view top; f=1 → span bottom at view bottom.
+        right.scrollTop = s.top - PAD + f * Math.max(0, s.height - right.clientHeight);
+      } else {
+        const toMax = right.scrollHeight - right.clientHeight;
+        right.scrollTop = f * toMax;
+      }
+      release();
     };
-    const onLeft = () => mirror(left, right);
-    const onRight = () => mirror(right, left);
+    const onRight = () => {
+      if (lock) return;
+      lock = true;
+      const s = span();
+      const leftMax = left.scrollHeight - left.clientHeight;
+      if (s) {
+        const denom = Math.max(1, s.height - right.clientHeight);
+        const f = Math.min(1, Math.max(0, (right.scrollTop - (s.top - PAD)) / denom));
+        left.scrollTop = f * leftMax;
+      } else {
+        const fromMax = right.scrollHeight - right.clientHeight;
+        left.scrollTop = fromMax > 0 ? (right.scrollTop / fromMax) * leftMax : 0;
+      }
+      release();
+    };
+
     left.addEventListener('scroll', onLeft, { passive: true });
     right.addEventListener('scroll', onRight, { passive: true });
+    // Align immediately on enable so the matched span jumps into view.
+    onLeft();
     return () => {
       left.removeEventListener('scroll', onLeft);
       right.removeEventListener('scroll', onRight);

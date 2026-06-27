@@ -66,18 +66,33 @@ export function SourceComparePane({
   // last word and knows where it stops.
   const highlightSpan = (startEl: HTMLElement) => {
     const HEADING_RE = /^\s*(?:\d{1,2}[a-z]\.\s|Standard\s+\d)/i;
+    // CR-072 — clear any previous span markers so sync-scroll always aligns on
+    // the CURRENT match, then stamp the start + end of the highlighted span so
+    // the Compare overlay can map the left pane's scroll onto exactly this
+    // region of the (much longer) source document.
+    const doc = startEl.ownerDocument;
+    doc
+      .querySelectorAll('[data-compare-match-start],[data-compare-match-end]')
+      .forEach((e) => {
+        e.removeAttribute('data-compare-match-start');
+        e.removeAttribute('data-compare-match-end');
+      });
     startEl.style.outline = '3px solid #d97706';
     startEl.style.outlineOffset = '2px';
     startEl.style.borderRadius = '4px';
+    startEl.setAttribute('data-compare-match-start', '1');
     let el: HTMLElement | null = startEl;
+    let last: HTMLElement = startEl;
     let count = 0;
     while (el && count < 400) {
       el.style.background = '#fef3c7';
+      last = el;
       const next = el.nextElementSibling as HTMLElement | null;
       if (!next || HEADING_RE.test((next.textContent || '').trim())) break;
       el = next;
       count += 1;
     }
+    last.setAttribute('data-compare-match-end', '1');
   };
 
   useEffect(() => {
