@@ -3,8 +3,9 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import {
+  BugReporter,
   BugReporterView,
   installConsoleErrorCapture,
   _getCapturedConsoleErrorsForTest,
@@ -23,17 +24,21 @@ beforeEach(() => {
 });
 
 describe('BugReporterView', () => {
-  it('renders the trigger button always; modal closed by default', () => {
+  it('renders NO floating trigger; modal closed by default', () => {
     render(<BugReporterView {...handlers} isOpen={false} description="" />);
-    expect(screen.getByTestId('bug-reporter-trigger')).toBeInTheDocument();
+    // The floating "Report issue" button was removed — it now lives in the
+    // header Settings menu (Layout), opened via the open-bug-reporter event.
+    expect(screen.queryByTestId('bug-reporter-trigger')).not.toBeInTheDocument();
     expect(screen.queryByTestId('bug-reporter-modal')).not.toBeInTheDocument();
   });
 
-  it('clicking the trigger fires onOpen', () => {
-    const onOpen = vi.fn();
-    render(<BugReporterView {...handlers} onOpen={onOpen} isOpen={false} description="" />);
-    fireEvent.click(screen.getByTestId('bug-reporter-trigger'));
-    expect(onOpen).toHaveBeenCalled();
+  it('opens the modal when the open-bug-reporter event fires', () => {
+    render(<BugReporter />);
+    expect(screen.queryByTestId('bug-reporter-modal')).not.toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new Event('open-bug-reporter'));
+    });
+    expect(screen.getByTestId('bug-reporter-modal')).toBeInTheDocument();
   });
 
   it('opens the modal with description input + Send button disabled when empty', () => {

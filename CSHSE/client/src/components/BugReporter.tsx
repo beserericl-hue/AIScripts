@@ -101,18 +101,12 @@ export function BugReporterView({
   reference,
   error,
 }: BugReporterViewProps): JSX.Element {
+  // CR (Monica) — "Report issue" no longer floats over the work area; it is
+  // opened from the header Settings menu. `onOpen` is kept on the props so the
+  // view stays controllable in tests, but there is no floating trigger button.
+  void onOpen;
   return (
     <>
-      <button
-        type="button"
-        data-testid="bug-reporter-trigger"
-        onClick={onOpen}
-        title="Report an issue"
-        className="fixed bottom-4 right-4 z-50 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900 shadow-md hover:bg-amber-100"
-      >
-        <Bug className="h-4 w-4" aria-hidden />
-        <span>Report issue</span>
-      </button>
       {isOpen && (
         <div
           data-testid="bug-reporter-modal"
@@ -206,11 +200,18 @@ export function BugReporter(): JSX.Element {
     installConsoleErrorCapture();
   }, []);
 
-  const onOpen = () => {
+  const onOpen = React.useCallback(() => {
     setError(null);
     setReference(null);
     setIsOpen(true);
-  };
+  }, []);
+
+  // The header Settings menu opens the reporter via this event (the floating
+  // button was removed at Monica's request).
+  React.useEffect(() => {
+    window.addEventListener('open-bug-reporter', onOpen);
+    return () => window.removeEventListener('open-bug-reporter', onOpen);
+  }, [onOpen]);
   const onClose = () => {
     setIsOpen(false);
     // Defer clearing the description so a "thanks" view doesn't lose context

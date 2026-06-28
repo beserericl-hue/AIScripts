@@ -35,7 +35,13 @@ export function FilePreviewModal({
   const [loading, setLoading] = useState(true);
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // PDFs render in their NATIVE format (the browser's built-in viewer) instead
+  // of a messy extracted-text dump, which confused users.
+  const isPdf =
+    (mimeType || '').toLowerCase().includes('pdf') || /\.pdf$/i.test(fileName || '');
   const [savingSummary, setSavingSummary] = useState(false);
   const [summarySaved, setSummarySaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -44,17 +50,38 @@ export function FilePreviewModal({
     let cancelled = false;
 
     async function fetchPreview() {
+      // 1) Text-extraction preview (summary + html) — best effort. For PDFs and
+      //    images we can still render the native file even if this fails, so a
+      //    preview error here is not fatal.
+      let data: PreviewResponse | null = null;
       try {
         const response = await api.get(
           `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}/preview`
         );
         if (cancelled) return;
-
-        const data: PreviewResponse = response.data;
+        data = response.data;
         setPreview(data);
+      } catch (err: any) {
+        if (cancelled) return;
+        if (!isPdf) {
+          setError(err.response?.data?.error || 'Failed to load preview');
+          setLoading(false);
+          return;
+        }
+      }
 
-        // For images, fetch the blob via download endpoint
-        if (data.previewable && data.contentType === 'image') {
+      // 2) Native file blob. PDFs render in the browser's PDF viewer; images
+      //    render inline.
+      try {
+        if (isPdf) {
+          const pdfResponse = await api.get(
+            `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}/download`,
+            { responseType: 'blob' }
+          );
+          if (cancelled) return;
+          const blob = new Blob([pdfResponse.data], { type: 'application/pdf' });
+          setPdfUrl(URL.createObjectURL(blob));
+        } else if (data?.previewable && data.contentType === 'image') {
           const imgResponse = await api.get(
             `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}/download`,
             { responseType: 'blob' }
@@ -67,7 +94,7 @@ export function FilePreviewModal({
         }
       } catch (err: any) {
         if (cancelled) return;
-        setError(err.response?.data?.error || 'Failed to load preview');
+        if (!data) setError(err.response?.data?.error || 'Failed to load preview');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -78,6 +105,7 @@ export function FilePreviewModal({
     return () => {
       cancelled = true;
       if (imageUrl) URL.revokeObjectURL(imageUrl);
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     };
   }, [submissionId, evidenceId]);
 
@@ -188,7 +216,33 @@ export function FilePreviewModal({
             </div>
           )}
 
-          {!loading && !error && preview && !preview.previewable && (
+          {/* Native PDF — render the real file in the browser's PDF viewer. */}
+          {!loading && !error && isPdf && (
+            <>
+              {pdfUrl ? (
+                <iframe
+                  src={pdfUrl}
+                  title={fileName}
+                  data-testid="pdf-native-preview"
+                  className="w-full h-[72vh] rounded-lg border border-gray-200 bg-gray-50"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <AlertTriangle className="w-10 h-10 text-amber-500 mb-3" />
+                  <p className="text-sm text-gray-700 mb-4">Couldn’t load the PDF preview.</p>
+                  <button
+                    onClick={handleDownload}
+                    className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-teal-600 rounded-lg hover:bg-teal-700 transition-colors"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download File Instead
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+
+          {!loading && !error && !isPdf && preview && !preview.previewable && (
             <div className="flex flex-col items-center justify-center py-16">
               <AlertTriangle className="w-10 h-10 text-amber-500 mb-3" />
               <p className="text-sm font-medium text-gray-700 mb-1">
@@ -207,7 +261,7 @@ export function FilePreviewModal({
             </div>
           )}
 
-          {!loading && !error && preview?.previewable && (
+          {!loading && !error && !isPdf && preview?.previewable && (
             <>
               {/* Summary box */}
               {preview.summary && (
