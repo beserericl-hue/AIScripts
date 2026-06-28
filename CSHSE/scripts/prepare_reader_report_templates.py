@@ -42,9 +42,10 @@ LEVELS = {
         # curriculum-matrix intro, Standards 11-18.
         "keys": [None,"1","2","3","4","5","6","7","8","9","10",
                  None,"11","12","13","14","15","16","17","18"],
-        # Masters header is a single tab-delimited paragraph with multiple
-        # labels; filling it would clobber the other fields, so skip it.
-        "no_header": True,
+        # Masters header is a SINGLE tab-delimited paragraph carrying several
+        # labels. docx.patchDocument replaces {{tokens}} INLINE (verified), so we
+        # insert them after their labels without disturbing the other fields.
+        "multi_label_header": True,
     },
 }
 
@@ -98,6 +99,33 @@ def fill_header(doc, label, token):
             return True
     return False
 
+def fill_multi_label_header(doc):
+    """Masters header is ONE paragraph with several tab-separated labels
+    ("Institution's Name: \\t Program's Name: \\t Program Director's Name \\t
+    Reader's Name ... Date:"). Insert {{inst_name}} / {{prog_name}} INLINE right
+    after their labels — patchDocument replaces tokens in place, so the other
+    labels are preserved. Handles straight (') and curly (’) apostrophes."""
+    inst = prog = False
+    for p in doc.paragraphs:
+        t = p.text
+        if ("Institution" in t and "Program" in t and "Name" in t
+                and "{{inst_name}}" not in t):
+            new, n1 = re.subn(r"(Institution[’']s Name:)", r"\1 {{inst_name}}", t, count=1)
+            new, n2 = re.subn(r"(Program[’']s Name:)", r"\1 {{prog_name}}", new, count=1)
+            inst, prog = bool(n1), bool(n2)
+            # rebuild as a single run, preserving the first run's font/weight
+            first = p.runs[0] if p.runs else None
+            for r in list(p.runs):
+                r._r.getparent().remove(r._r)
+            run = p.add_run(new)
+            if first is not None:
+                run.bold = first.bold
+                run.italic = first.italic
+                if first.font.size: run.font.size = first.font.size
+                if first.font.name: run.font.name = first.font.name
+            return inst, prog
+    return inst, prog
+
 def tables(doc):
     for blk in doc.element.body.iterchildren():
         if blk.tag == qn("w:tbl"):
@@ -125,7 +153,9 @@ def process(level, cfg):
         if noncomp is not None: prepend_run(noncomp, f"{{{{n_{key}}}}} ")
         if comm is not None:  comm.add_paragraph(f"{{{{cm_{key}}}}}")
         filled += 1
-    if cfg.get("no_header"):
+    if cfg.get("multi_label_header"):
+        ih, ph = fill_multi_label_header(doc)
+    elif cfg.get("no_header"):
         ih = ph = False
     else:
         ih = fill_header(doc, "Institution’s Name:", "{{inst_name}}")

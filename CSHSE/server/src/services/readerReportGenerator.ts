@@ -38,8 +38,9 @@ const VERDICT_LABEL: Record<string, string> = {
 };
 
 // Degree level -> templated file + the ordered standard keys the template marks.
-// (Mirrors scripts/prepare_reader_report_templates.py.) Masters has no template
-// yet → procedural fallback.
+// (Mirrors scripts/prepare_reader_report_templates.py.) All three levels —
+// associate, baccalaureate AND masters — are placeholder-templated now; the
+// procedural builder below is only a safety fallback if a template is missing.
 const STDS_1_20 = Array.from({ length: 20 }, (_, i) => String(i + 1));
 const STDS_1_18 = Array.from({ length: 18 }, (_, i) => String(i + 1));
 const LEVELS: Record<string, { file: string; stds: string[]; title: string }> = {
@@ -190,7 +191,8 @@ async function buildTemplatedDocx(
   return patchDocument({ outputType: 'nodebuffer', data: tpl, patches, keepOriginalStyles: true }) as Promise<Buffer>;
 }
 
-/** Procedural fallback DOCX (masters — no template yet). Same checklist shape. */
+/** Procedural fallback DOCX — used only if a level's template file is missing
+ *  (all three levels ship a template). Same checklist shape. */
 async function buildProceduralDocx(data: ReportData, rollup: Map<string, StandardRollup>, levelTitle: string): Promise<Buffer> {
   const children: Paragraph[] = [];
   children.push(new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun(`CSHSE Self-Study Reader Report — ${levelTitle}`)] }));
@@ -325,7 +327,8 @@ export async function generateAndStoreReaderReport(
     docxBuf = await buildTemplatedDocx(cfg, data, rollup);
     templated = true;
   } else {
-    // masters (or missing template) → procedural checklist fallback
+    // No template file on disk (shouldn't happen — all 3 levels ship one) →
+    // procedural checklist fallback.
     docxBuf = await buildProceduralDocx(data, rollup, levelTitle);
   }
   const pdfBuf = await buildChecklistPdf(data, rollup, levelTitle);
