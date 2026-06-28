@@ -767,12 +767,23 @@ function FullReviewStep(): JSX.Element {
         } as any);
         setUploadState({ status: 'done', fileName: file.name, std, spec });
       } catch (e: any) {
+        // The server may return its error as an OBJECT ({ message, code,
+        // errorId }), not a string. Always coerce to a string — rendering an
+        // object as a React child throws (React error #31) and crashed the
+        // surface.
+        const data = e?.response?.data;
+        const rawErr = data?.error;
+        const message =
+          (typeof rawErr === 'string' ? rawErr : rawErr?.message) ||
+          (typeof data?.message === 'string' ? data.message : undefined) ||
+          e?.message ||
+          'Upload failed';
         setUploadState({
           status: 'error',
           fileName: file.name,
           std,
           spec,
-          message: e?.response?.data?.error || e?.message || 'Upload failed',
+          message: String(message),
         });
       }
     },
@@ -1264,7 +1275,9 @@ function FullReviewStep(): JSX.Element {
             )}
             {uploadState.status === 'error' && (
               <div className="mt-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">
-                {uploadState.message}
+                {typeof uploadState.message === 'string'
+                  ? uploadState.message
+                  : JSON.stringify(uploadState.message)}
               </div>
             )}
             <div className="mt-5 flex justify-end">

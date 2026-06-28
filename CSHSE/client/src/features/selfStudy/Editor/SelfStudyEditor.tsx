@@ -530,9 +530,22 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     // precedence and is handled by the deepLink effect below, so we defer
     // to 'standards' whenever a view param is present.
     try {
-      const hasViewParam =
-        typeof window !== 'undefined' &&
-        !!new URLSearchParams(window.location.search).get('view');
+      const viewParam =
+        typeof window !== 'undefined'
+          ? new URLSearchParams(window.location.search).get('view')
+          : null;
+      const hasViewParam = !!viewParam;
+      // A view param in the URL (a deep-link OR a reload that preserved the
+      // last view — see the sync effect below) RESTORES that surface, so a hard
+      // refresh keeps the user where they were instead of dropping them on
+      // Standards.
+      if (viewParam === 'standards') return 'standards';
+      if (viewParam === 'curriculum' || viewParam === 'matrix') return 'curriculum';
+      if (viewParam === 'matrix-surface') return 'matrix-surface';
+      if (viewParam === 'files') return 'files';
+      if (viewParam === 'introduction') return 'introduction';
+      if (isProgramCoordinator && viewParam === 'review') return 'review-surface';
+      if (isProgramCoordinator && viewParam === 'import') return 'ai-import';
       if (isProgramCoordinator && submissionId && !hasViewParam) {
         const s = useAIImportStore.getState();
         // CR-048 — open on Review only when UN-TRIAGED drafts remain.
@@ -640,13 +653,41 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     } else {
       return;
     }
-    // Strip the params so a manual refresh / Back doesn't re-trigger.
+    // Strip the ONE-TIME targets (specKey + scroll anchors) so they don't
+    // re-fire on refresh/Back, but KEEP `view` so a hard reload restores the
+    // surface the user was on (the sync effect below keeps it current).
     const next = new URLSearchParams(deepLinkParams);
-    next.delete('view');
     next.delete('specKey');
+    next.delete('std');
+    next.delete('spec');
     setDeepLinkParams(next, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Keep the URL's `?view=` in sync with the active surface so a hard reload
+  // (incl. the ErrorBoundary's "Reload this view") lands back on the SAME view
+  // instead of the Standards default. Uses replaceState so it doesn't churn the
+  // router or add history entries.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const param =
+      activeView === 'review-surface'
+        ? 'review'
+        : activeView === 'ai-import'
+        ? 'import'
+        : activeView === 'matrix-surface'
+        ? 'matrix-surface'
+        : activeView;
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get('view') !== param) {
+      sp.set('view', param);
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${window.location.pathname}?${sp.toString()}`
+      );
+    }
+  }, [activeView]);
   // When the user clicks "View in matrix" from a spec, we stash the target
   // (std, spec) here and switch to the curriculum view. CurriculumMatrixEditor
   // consumes the target via `scrollToSpec` and clears the state after it has

@@ -54,4 +54,38 @@ test.describe('CR-070 — per-card file upload is crash-safe', () => {
 
     expect(pageErrors, `no uncaught page errors: ${pageErrors.join(' | ')}`).toEqual([]);
   });
+
+  test('an OBJECT error from the server renders as a string, not a render crash', async ({ page }) => {
+    test.setTimeout(60_000);
+    const pageErrors: string[] = [];
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+    await loginAsSeededViaSso(page, seed!);
+    await gotoReviewStep(page, seed!);
+
+    // Force the server to return its error as an OBJECT — this is what crashed
+    // the Review surface with React error #31 (objects are not valid children).
+    await page.route('**/evidence/upload', (route) =>
+      route.fulfill({
+        status: 422,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { message: 'Unsupported file type', code: 'BAD_TYPE', errorId: 'abc123' } }),
+      })
+    );
+
+    await page.getByTestId('card-upload-input').first().setInputFiles({
+      name: 'bad.exe',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from('MZ'),
+    });
+
+    const dialog = page.getByRole('dialog', { name: /Upload file/i });
+    await expect(dialog).toBeVisible();
+    // The string message is shown — NOT a crash.
+    await expect(dialog).toContainText(/Upload failed/i);
+    await expect(dialog).toContainText(/Unsupported file type/i);
+    // The surface did not crash to the ErrorBoundary fallback.
+    await expect(page.getByTestId('surface-error')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: /^Review$/i })).toBeVisible();
+    expect(pageErrors, `no uncaught page errors: ${pageErrors.join(' | ')}`).toEqual([]);
+  });
 });
