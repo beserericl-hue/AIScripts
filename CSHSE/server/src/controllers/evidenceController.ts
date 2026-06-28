@@ -135,9 +135,14 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
   // endpoints). For a real reader, impersonation is absent and this is their id.
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
+  // See uploadEvidence — an impersonating superuser keeps `realIsSuperuser`.
+  const realIsSuperuser = (req.user as any)?.realIsSuperuser;
 
-  console.log('[Evidence] listEvidence called:', { submissionId, standardCode, specCode, evidenceType, userId, userRole, isSuperuser });
+  console.log('[Evidence] listEvidence called:', { submissionId, standardCode, specCode, evidenceType, userId, userRole, isSuperuser, realIsSuperuser });
 
   if (!userId || !userRole) {
     console.warn('[Evidence] listEvidence: No auth - userId:', userId, 'userRole:', userRole);
@@ -150,7 +155,7 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
     userRole,
     submissionId,
     undefined,
-    isSuperuser
+    isSuperuser || realIsSuperuser
   );
 
   if (!hasAccess) {
@@ -200,14 +205,24 @@ export const getEvidence = asyncHandler(async (req: AuthenticatedRequest, res: R
   const { submissionId, evidenceId } = req.params;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
+  const realIsSuperuser = (req.user as any)?.realIsSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
   }
 
   // Verify access
-  const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId);
+  const { hasAccess } = await verifyEvidenceAccess(
+    userId,
+    userRole,
+    submissionId,
+    undefined,
+    isSuperuser || realIsSuperuser
+  );
   if (!hasAccess) {
     throw new AuthorizationError('You do not have access to this evidence');
   }
@@ -237,12 +252,22 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const file = req.file;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
+  // A superuser impersonating a non-admin role has its effective isSuperuser
+  // dropped (so impersonated readers are scoped) — but `realIsSuperuser`
+  // preserves the true flag. An impersonator (real superuser) AND program
+  // coordinators must be able to upload evidence, so treat the real superuser
+  // as full access here too.
+  const realIsSuperuser = (req.user as any)?.realIsSuperuser;
+  const fullAccess = isSuperuser || realIsSuperuser;
 
   console.log('[Evidence] uploadEvidence called:', {
     submissionId, standardCode, specCode, replaceExisting,
     filename: file?.originalname, size: file?.size, mimetype: file?.mimetype,
-    userId, userRole, isSuperuser
+    userId, userRole, isSuperuser, realIsSuperuser
   });
 
   if (!userId || !userRole) {
@@ -250,8 +275,8 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new AuthorizationError('Authentication required');
   }
 
-  // Only program coordinators, admins, and superusers can upload
-  if (!isSuperuser && userRole !== 'program_coordinator' && userRole !== 'admin') {
+  // Only program coordinators, admins, and (real) superusers can upload
+  if (!fullAccess && userRole !== 'program_coordinator' && userRole !== 'admin') {
     console.warn('[Evidence] uploadEvidence: Unauthorized role:', userRole);
     throw new AuthorizationError('Only program coordinators can upload evidence');
   }
@@ -261,13 +286,14 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new ValidationError('No file uploaded');
   }
 
-  // Verify access
+  // Verify access — pass the real-superuser-aware flag so an impersonating
+  // superuser (and admins/superusers) get access alongside the owner PC.
   const { hasAccess, submission, institution } = await verifyEvidenceAccess(
     userId,
     userRole,
     submissionId,
     undefined,
-    isSuperuser
+    fullAccess
   );
 
   if (!hasAccess) {
@@ -437,7 +463,10 @@ export const addUrlEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { standardCode, specCode, url, title, description } = req.body;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -509,7 +538,10 @@ export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { standardCode, specCode, description, title } = req.body;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -517,7 +549,7 @@ export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res
 
   // Verify access — superusers bypass institution check
   if (!isSuperuser) {
-    const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId);
+    const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId, undefined, isSuperuser);
     if (!hasAccess) {
       throw new AuthorizationError('You do not have access to update this evidence');
     }
@@ -582,7 +614,10 @@ export const deleteEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { submissionId, evidenceId } = req.params;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
 
   console.log('[Evidence] deleteEvidence called:', { submissionId, evidenceId, userId, userRole, isSuperuser });
 
@@ -636,7 +671,10 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
   const { submissionId, evidenceId } = req.params;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
 
   console.log('[Evidence] downloadEvidence called:', { submissionId, evidenceId, userId, userRole, isSuperuser });
 
@@ -752,7 +790,10 @@ export const linkEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
   const { standardCode, specCode } = req.body;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -762,7 +803,7 @@ export const linkEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
     throw new ValidationError('standardCode and specCode are required');
   }
 
-  const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId);
+  const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId, undefined, isSuperuser);
   if (!hasAccess) {
     throw new AuthorizationError('You do not have access to link this evidence');
   }
@@ -798,13 +839,16 @@ export const unlinkEvidence = asyncHandler(async (req: AuthenticatedRequest, res
   const { submissionId, evidenceId } = req.params;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
   }
 
-  const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId);
+  const { hasAccess } = await verifyEvidenceAccess(userId, userRole, submissionId, undefined, isSuperuser);
   if (!hasAccess) {
     throw new AuthorizationError('You do not have access to unlink this evidence');
   }
@@ -840,7 +884,10 @@ export const getEvidenceStats = asyncHandler(async (req: AuthenticatedRequest, r
   const { submissionId } = req.params;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
@@ -946,7 +993,10 @@ export const previewEvidence = asyncHandler(async (req: AuthenticatedRequest, re
   const { submissionId, evidenceId } = req.params;
   const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
   const userRole = req.user?.role;
-  const isSuperuser = req.user?.isSuperuser;
+  // Treat an impersonating superuser (realIsSuperuser, kept when effective
+  // isSuperuser is dropped during impersonation) as a superuser for evidence
+  // access — PCs AND impersonators must be able to manage evidence.
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
 
   if (!userId || !userRole) {
     throw new AuthorizationError('Authentication required');
