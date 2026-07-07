@@ -14,6 +14,7 @@ import {
   getInvitations,
   createInvitation,
   createActiveUser,
+  convertPendingToMemberclick,
   verifyInvitation,
   acceptInvitation,
   resendInvitation,
@@ -69,6 +70,14 @@ router.post('/invite', createInvitation);
  * @access  Private (Admin only)
  */
 router.post('/create-active', requireAdmin, createActiveUser);
+
+/**
+ * @route   POST /api/users/convert-pending-to-memberclick
+ * @desc    One-time reconcile: convert all pending invitations into active
+ *          MemberClick-only users; backfill existing users to 'both'.
+ * @access  Private (Admin only)
+ */
+router.post('/convert-pending-to-memberclick', requireAdmin, convertPendingToMemberclick);
 
 /**
  * @route   POST /api/users/invitations/:id/resend

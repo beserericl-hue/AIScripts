@@ -36,6 +36,9 @@ interface User {
   institutionId?: string;
   institutionName?: string;
   isSuperuser?: boolean;
+  // How the account signs in: 'both' (MemberClick or the password UI) or
+  // 'memberclick-only' (MemberClick SSO only — no password).
+  loginMethod?: 'both' | 'memberclick-only';
   // CR-060 — per-institution roles (PC at A, Reader/Lead at B). May be absent on
   // legacy records that predate the migration.
   roleAssignments?: RoleAssignment[];
@@ -381,6 +384,22 @@ export function UserManagement() {
                           {statusIcons[user.status]}
                         </div>
                         <p className="text-sm text-gray-500">{user.email}</p>
+                        {/* How this account signs in. */}
+                        {user.loginMethod === 'memberclick-only' ? (
+                          <span
+                            className="mt-1 inline-block rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700"
+                            title="Signs in through MemberClick only (no password)"
+                          >
+                            MemberClick only
+                          </span>
+                        ) : (
+                          <span
+                            className="mt-1 inline-block rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[11px] text-gray-500"
+                            title="Can sign in through MemberClick or the CSHSE password login"
+                          >
+                            MemberClick or password
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3">

@@ -53,6 +53,10 @@ export interface IUser extends Document {
   assignedSubmissions: mongoose.Types.ObjectId[];
   isActive: boolean;
   isSuperuser: boolean; // Superuser has visibility to everything in the system
+  // How this account may sign in:
+  //   'both'            — MemberClick SSO OR the CSHSE password UI (has a password)
+  //   'memberclick-only'— MemberClick SSO only (no password; e.g. bulk-added members)
+  loginMethod: 'both' | 'memberclick-only';
   lastLogin?: Date;
   invitedAt?: Date;
   invitedBy?: mongoose.Types.ObjectId;
@@ -170,6 +174,11 @@ const UserSchema = new Schema<IUser>({
     type: Boolean,
     default: false,
     index: true
+  },
+  loginMethod: {
+    type: String,
+    enum: ['both', 'memberclick-only'],
+    default: 'both'
   },
   lastLogin: Date,
   invitedAt: Date,

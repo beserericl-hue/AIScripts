@@ -456,6 +456,8 @@ export const createActiveUser = async (req: AuthenticatedRequest, res: Response)
       institutionId: inst,
       isActive: true,
       status: 'active',
+      // No password is set here, so this account signs in via MemberClick only.
+      loginMethod: 'memberclick-only',
       provisionedBy: { type: 'manual', at: new Date() },
     });
     await user.save();
@@ -475,5 +477,81 @@ export const createActiveUser = async (req: AuthenticatedRequest, res: Response)
   } catch (error) {
     console.error('createActiveUser error:', error);
     return res.status(500).json({ error: 'Failed to add user' });
+  }
+};
+
+/**
+ * One-time reconcile: convert every PENDING invitation into an ACTIVE,
+ * MemberClick-only user so they can sign in via SSO immediately (no email,
+ * no verification). Also backfills existing users' loginMethod to 'both'
+ * (MemberClick OR the CSHSE password UI). Idempotent + admin/superuser only.
+ *
+ * @route POST /api/users/convert-pending-to-memberclick
+ */
+export const convertPendingToMemberclick = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const isSuper = (req.user as any)?.isSuperuser || (req.user as any)?.realIsSuperuser;
+    if (req.user?.role !== 'admin' && !isSuper) {
+      return res.status(403).json({ error: 'Only an administrator can run this' });
+    }
+
+    // 1) Backfill: any existing user without loginMethod signs in either way.
+    const backfill = await User.updateMany(
+      { loginMethod: { $exists: false } },
+      { $set: { loginMethod: 'both' } }
+    );
+
+    // 2) Convert each pending invitation -> active MemberClick-only user.
+    const pending = await Invitation.find({ status: 'pending' });
+    const created: string[] = [];
+    const linkedExisting: string[] = [];
+    for (const inv of pending) {
+      const email = (inv.email || '').toLowerCase().trim();
+      if (!email) continue;
+      let user = await User.findOne({ email });
+      if (!user) {
+        const parts = (inv.name || '').trim().split(/\s+/);
+        const firstName = parts.shift() || email.split('@')[0];
+        const lastName = parts.join(' ') || '(pending)';
+        user = new User({
+          email,
+          firstName,
+          lastName,
+          role: inv.role || 'program_coordinator',
+          institutionId: inv.institutionId || undefined,
+          isActive: true,
+          status: 'active',
+          loginMethod: 'memberclick-only',
+          provisionedBy: { type: 'manual', at: new Date() },
+        });
+        await user.save();
+        created.push(email);
+      } else {
+        // Already a user — just make sure they're MemberClick-capable + active.
+        if (!user.isActive) user.isActive = true;
+        if (user.status !== 'active') user.status = 'active';
+        await user.save();
+        linkedExisting.push(email);
+      }
+      // Retire the invitation so it leaves the Pending list.
+      inv.status = 'accepted';
+      await inv.save();
+    }
+
+    const pendingRemaining = await Invitation.countDocuments({ status: 'pending' });
+    console.log(
+      `[users] convertPendingToMemberclick created=${created.length} linked=${linkedExisting.length} backfilled=${backfill.modifiedCount} pendingRemaining=${pendingRemaining}`
+    );
+    return res.json({
+      createdCount: created.length,
+      created,
+      linkedExistingCount: linkedExisting.length,
+      linkedExisting,
+      backfilledToBoth: backfill.modifiedCount,
+      pendingRemaining,
+    });
+  } catch (error) {
+    console.error('convertPendingToMemberclick error:', error);
+    return res.status(500).json({ error: 'Failed to convert pending invitations' });
   }
 };
