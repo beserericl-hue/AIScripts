@@ -13,6 +13,7 @@ import {
 import {
   getInvitations,
   createInvitation,
+  createActiveUser,
   verifyInvitation,
   acceptInvitation,
   resendInvitation,
@@ -60,6 +61,14 @@ router.get('/invitations', getInvitations);
  * @access  Private (Admin, Lead Reader for readers)
  */
 router.post('/invite', createInvitation);
+
+/**
+ * @route   POST /api/users/create-active
+ * @desc    Add an ACTIVE user directly — no invitation email / verification.
+ *          They can sign in immediately via SSO (MemberClick).
+ * @access  Private (Admin only)
+ */
+router.post('/create-active', requireAdmin, createActiveUser);
 
 /**
  * @route   POST /api/users/invitations/:id/resend

@@ -403,3 +403,77 @@ export const revokeInvitation = async (req: AuthenticatedRequest, res: Response)
     return res.status(500).json({ error: 'Failed to revoke invitation' });
   }
 };
+
+/**
+ * Create an ACTIVE user directly — no invitation email, no email verification.
+ * The user can sign in immediately via SSO (MemberClick). Admin / superuser
+ * only. This registers the email (so SSO matches on it) and — because it is a
+ * `manual` provision — trusts the email's domain for the MemberClick relay.
+ *
+ * @route POST /api/users/create-active
+ */
+export const createActiveUser = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const requesterRole = req.user?.role;
+    const isSuper = (req.user as any)?.isSuperuser || (req.user as any)?.realIsSuperuser;
+    if (requesterRole !== 'admin' && !isSuper) {
+      return res.status(403).json({ error: 'Only an administrator can add users directly' });
+    }
+
+    const { email, firstName, lastName, role, institutionId } = req.body || {};
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+    const cleanEmail = email.toLowerCase().trim();
+    if (!/^[\w.+\-]+@([\w-]+\.)+[\w-]{2,}$/.test(cleanEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
+    }
+
+    const allowedRoles = ['program_coordinator', 'reader', 'lead_reader', 'admin'];
+    const finalRole = allowedRoles.includes(role) ? role : 'reader';
+    // Mirror the invite rules: only a real admin can mint admins / coordinators.
+    if ((finalRole === 'admin' || finalRole === 'program_coordinator') && requesterRole !== 'admin' && !isSuper) {
+      return res.status(403).json({ error: `Only an admin can add a ${finalRole}` });
+    }
+
+    const existing = await User.findOne({ email: cleanEmail });
+    if (existing) {
+      return res.status(409).json({ error: 'A user with this email already exists' });
+    }
+
+    // MemberClick refreshes the real name on first login; a placeholder keeps
+    // the required fields satisfied until then.
+    const fn = (firstName && String(firstName).trim()) || cleanEmail.split('@')[0];
+    const ln = (lastName && String(lastName).trim()) || '(pending)';
+    let inst: any = undefined;
+    if (institutionId && mongoose.Types.ObjectId.isValid(institutionId)) inst = institutionId;
+
+    const user = new User({
+      email: cleanEmail,
+      firstName: fn,
+      lastName: ln,
+      role: finalRole,
+      institutionId: inst,
+      isActive: true,
+      status: 'active',
+      provisionedBy: { type: 'manual', at: new Date() },
+    });
+    await user.save();
+    console.log(`[users] createActiveUser email=${cleanEmail} role=${finalRole} by=${req.user?.id}`);
+
+    return res.status(201).json({
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        status: user.status,
+        isActive: user.isActive,
+      },
+    });
+  } catch (error) {
+    console.error('createActiveUser error:', error);
+    return res.status(500).json({ error: 'Failed to add user' });
+  }
+};

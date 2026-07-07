@@ -35,6 +35,40 @@ import { User } from '../models/User';
 import { APIKey } from '../models/APIKey';
 import { getDerivedDomainAllowlist, problemDetails } from './ssoController';
 
+/**
+ * Friendly, end-user-facing page shown to a member who reached CSHSE via
+ * MemberClick but has no active CSHSE account yet (their institution's domain
+ * isn't onboarded, OR their exact email hasn't been invited). Replaces the raw
+ * JSON error a member would otherwise see.
+ */
+export function notInvitedPage(requestId?: string): string {
+  const ref = requestId
+    ? `<p style="color:#9ca3af;font-size:11px;margin-top:22px;">Reference: ${requestId}</p>`
+    : '';
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Invitation required — CSHSE Self-Study Portal</title>
+</head>
+<body style="margin:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <div style="max-width:520px;margin:14vh auto;padding:0 20px;">
+    <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;padding:36px 32px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+      <h1 style="color:#0f766e;font-size:20px;margin:0 0 14px;">Invitation required</h1>
+      <p style="color:#334155;font-size:15px;line-height:1.65;margin:0;">
+        You need to be invited into the new Self-Study Portal.<br /><br />
+        Please contact <strong>Amy Primm</strong>
+        (<a href="mailto:info@cshse.org" style="color:#0f766e;text-decoration:none;">info@cshse.org</a>)
+        to be invited.
+      </p>
+      ${ref}
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 // ----------------------------------------------------------- ticket store
 
 interface TicketRecord {
@@ -197,9 +231,7 @@ export async function ssoRedeemTicket(req: Request, res: Response): Promise<Resp
   const user = await User.findOne({ email: rec.email, isActive: true });
   if (!user) {
     console.log(`[sso-ticket] event=redeem outcome=user-not-found email=${rec.email} ip=${ip}`);
-    return res.status(403).type('text/html').send(
-      '<html><body><h1>User not provisioned</h1><p>No active CSHSE account found for this email. Ask an administrator to invite you first.</p></body></html>'
-    );
+    return res.status(403).type('text/html').send(notInvitedPage());
   }
   user.lastLogin = new Date();
   await user.save();
@@ -299,11 +331,7 @@ export async function ssoFromMemberClick(req: Request, res: Response): Promise<R
   const allowlist = await getDerivedDomainAllowlist();
   if (!allowlist.has(domain)) {
     console.log(`[memberclick] outcome=domain-not-trusted domain=${domain} request_id=${requestId}`);
-    return res.status(403).json({
-      error: 'sso-domain-not-yet-trusted',
-      message: 'Your institution has not yet been onboarded to CSHSE. Ask your CSHSE administrator to invite at least one user from your institution.',
-      request_id: requestId,
-    });
+    return res.status(403).type('text/html').send(notInvitedPage(requestId));
   }
 
   // All defenses passed — mint a ticket internally and redirect.

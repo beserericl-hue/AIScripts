@@ -15,10 +15,16 @@
  */
 import { Router } from 'express';
 import { ssoRedeemTicket, ssoFromMemberClick } from '../controllers/ssoTicketController';
+import { memberclickLogin, memberclickCallback } from '../controllers/memberclickOAuthController';
 
 const router = Router();
 
 router.get('/v1/start', ssoRedeemTicket);
 router.post('/v1/from-memberclick', ssoFromMemberClick);
+
+// MemberClick OAuth (the reliable per-member SSO). The member-portal link points
+// at /login; MemberClick sends them back to /callback already identified.
+router.get('/v1/memberclick/login', memberclickLogin);
+router.get('/v1/memberclick/callback', memberclickCallback);
 
 export default router;

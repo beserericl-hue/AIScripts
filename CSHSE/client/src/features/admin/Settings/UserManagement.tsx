@@ -85,7 +85,10 @@ export function UserManagement() {
     email: '',
     name: '',
     role: 'reader',
-    institutionId: ''
+    institutionId: '',
+    // When true, add the user immediately as ACTIVE with NO invitation email —
+    // they sign in via MemberClick SSO. Registers the email + trusts the domain.
+    noEmail: false
   });
   // CR-060 — manage-roles modal state.
   const [roleUser, setRoleUser] = useState<User | null>(null);
@@ -133,6 +136,21 @@ export function UserManagement() {
   // Create invitation mutation
   const inviteMutation = useMutation({
     mutationFn: async (data: typeof inviteForm) => {
+      if (data.noEmail) {
+        // Direct active-user creation — no email, no verification. Split the
+        // single name field into first/last for the server.
+        const parts = (data.name || '').trim().split(/\s+/);
+        const firstName = parts.shift() || '';
+        const lastName = parts.join(' ');
+        const response = await api.post('/api/users/create-active', {
+          email: data.email,
+          firstName,
+          lastName,
+          role: data.role,
+          institutionId: data.institutionId || undefined
+        });
+        return response.data;
+      }
       const response = await api.post('/api/users/invite', data);
       return response.data;
     },
@@ -140,7 +158,7 @@ export function UserManagement() {
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setShowInviteModal(false);
-      setInviteForm({ email: '', name: '', role: 'reader', institutionId: '' });
+      setInviteForm({ email: '', name: '', role: 'reader', institutionId: '', noEmail: false });
     }
   });
 
@@ -600,6 +618,25 @@ export function UserManagement() {
                   </select>
                 </div>
               )}
+
+              {/* Add immediately, no email — for members who sign in via
+                  MemberClick SSO. Registers the email + trusts the domain so
+                  their sign-in works right away, no verification step. */}
+              <label className="flex items-start gap-2 rounded-lg border border-gray-200 bg-gray-50 p-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={inviteForm.noEmail}
+                  onChange={(e) => setInviteForm({ ...inviteForm, noEmail: e.target.checked })}
+                  className="mt-0.5 rounded text-teal-600 focus:ring-teal-500"
+                />
+                <span className="text-sm text-gray-700">
+                  <span className="font-medium">Add now without an email</span>
+                  <span className="block text-xs text-gray-500">
+                    Creates the account immediately (no invitation email / verification).
+                    Use for members who sign in through MemberClick.
+                  </span>
+                </span>
+              </label>
             </div>
 
             <div className="flex justify-end gap-3 p-4 border-t border-gray-200 bg-gray-50">
@@ -619,7 +656,7 @@ export function UserManagement() {
                 ) : (
                   <Mail className="w-4 h-4" />
                 )}
-                Send Invitation
+                {inviteForm.noEmail ? 'Add user' : 'Send Invitation'}
               </button>
             </div>
           </div>

@@ -180,7 +180,9 @@ describe('CR-042 Phase B — /sso/v1/from-memberclick relay', () => {
       .post('/sso/v1/from-memberclick')
       .send({ email: 'someone@unknown-domain.test' });
     expect(res.status).toBe(403);
-    expect(res.body.error).toMatch(/sso-domain-not-yet-trusted/);
+    // Now returns a friendly HTML "Invitation required" page (not raw JSON).
+    expect(res.text).toMatch(/invited/i);
+    expect(res.text).toMatch(/Amy Primm/);
   });
 
   it('rejects when MEMBERCLICK_SHARED_SECRET is set + signature missing', async () => {
