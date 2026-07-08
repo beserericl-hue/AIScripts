@@ -136,7 +136,7 @@ export function memberclickLogin(req: Request, res: Response): void {
   const c = oauthCfg();
   if (!c.clientId || !c.redirectUri.startsWith('http')) {
     res
-      .status(503)
+      .status(200)
       .type('text/html')
       .send(
         messagePage(
@@ -196,12 +196,15 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
       code,
       redirect_uri: c.redirectUri,
       client_id: c.clientId,
-      client_secret: c.clientSecret,
     });
+    // MemberClick requires the client credentials via HTTP Basic auth on the
+    // token endpoint (body-only client_secret gets 401 Unauthorized).
+    const basicAuth = Buffer.from(`${c.clientId}:${c.clientSecret}`).toString('base64');
     const tokenResp = await axios.post(c.tokenUrl, body.toString(), {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         Accept: 'application/json',
+        Authorization: `Basic ${basicAuth}`,
       },
       timeout: 15000,
       validateStatus: () => true,
@@ -214,7 +217,7 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
         ).slice(0, 240)}`
       );
       res
-        .status(502)
+        .status(400)
         .type('text/html')
         .send(
           messagePage(
@@ -234,7 +237,7 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
     if (me.status >= 400) {
       console.log(`[mc-oauth] userinfo-failed status=${me.status} body=${JSON.stringify(me.data).slice(0, 200)}`);
       res
-        .status(502)
+        .status(400)
         .type('text/html')
         .send(messagePage('Sign-in error', 'We could not read your MemberClick profile. Please contact your CSHSE administrator.'));
       return;
@@ -243,7 +246,7 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
     if (!email) {
       console.log(`[mc-oauth] no-email profile-keys=${Object.keys(me.data || {}).slice(0, 25).join(',')}`);
       res
-        .status(502)
+        .status(400)
         .type('text/html')
         .send(messagePage('Sign-in error', 'We could not read your email from MemberClick. Please contact your CSHSE administrator.'));
       return;
@@ -282,7 +285,7 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
       : String(e?.message || e);
     console.log(`[mc-oauth] callback-exception ${detail}`);
     res
-      .status(502)
+      .status(400)
       .type('text/html')
       .send(
         messagePage(
