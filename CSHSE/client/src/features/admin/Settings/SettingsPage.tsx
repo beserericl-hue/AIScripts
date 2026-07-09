@@ -116,9 +116,10 @@ export function SettingsPage() {
         return isActuallySuperuser;
       }
       if (item.access === 'admin') {
-        // Admin role or SU impersonating admin can see users/institutions
-        // But NOT actual SU (they should use webhook/api-keys)
-        return !isActuallySuperuser && (effectiveRole === 'admin' || isImpersonatingAdmin);
+        // Admin role, SU impersonating admin, OR an actual superuser. A real
+        // superuser has full visibility and manages the superuser list from the
+        // Users screen, so they must be able to open these admin sections.
+        return effectiveRole === 'admin' || isImpersonatingAdmin || isActuallySuperuser;
       }
       return true;
     });
