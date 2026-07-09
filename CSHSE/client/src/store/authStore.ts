@@ -309,5 +309,29 @@ export const useAuthStore = create<AuthState>()(
   )
 );
 
+// SSO handoff — the server (MemberClick OAuth callback and the ticket flow)
+// 303-redirects the signed-in member to `${returnTo}#token=<JWT>`. Consume that
+// fragment BEFORE checkAuth so the freshly-minted session takes effect instead
+// of the (possibly empty/expired) persisted token. Without this the token in the
+// URL is thrown away, ProtectedRoute sees no auth, and the user lands on /login.
+if (typeof window !== 'undefined') {
+  try {
+    const m = (window.location.hash || '').match(/[#&]token=([^&]+)/);
+    if (m && m[1]) {
+      const token = decodeURIComponent(m[1]);
+      useAuthStore.setState({ token, isAuthenticated: false, isLoading: true });
+      // Strip the token from the address bar so it isn't bookmarked, shared,
+      // or left in browser history.
+      window.history.replaceState(
+        null,
+        '',
+        window.location.pathname + window.location.search
+      );
+    }
+  } catch {
+    // Fall through to the normal persisted-token path.
+  }
+}
+
 // Check auth on app load
 useAuthStore.getState().checkAuth();
