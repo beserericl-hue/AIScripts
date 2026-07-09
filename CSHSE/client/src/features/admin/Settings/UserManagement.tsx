@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../services/api';
 import { useToastStore } from '../../../store/toastStore';
+import { useAuthStore } from '../../../store/authStore';
 import {
   Users,
   UserPlus,
@@ -16,7 +17,8 @@ import {
   XCircle,
   Loader2,
   Send,
-  Building2
+  Building2,
+  ShieldCheck
 } from 'lucide-react';
 
 interface RoleAssignment {
@@ -133,6 +135,68 @@ export function UserManagement() {
     queryFn: async () => {
       const response = await api.get('/api/institutions');
       return response.data;
+    }
+  });
+
+  // ── Superuser management (visible only to a real, non-impersonating superuser) ──
+  const canManageSuperusers = useAuthStore(
+    (s) => s.user?.isSuperuser === true && !s.impersonation.isImpersonating
+  );
+  const currentUserId = useAuthStore((s) => s.user?.id);
+  const [suPick, setSuPick] = useState('');
+
+  // Current superusers (independent of the role filter / pagination above).
+  const { data: superusersData } = useQuery({
+    queryKey: ['superusers'],
+    enabled: canManageSuperusers,
+    queryFn: async () => {
+      const response = await api.get('/api/users/superusers');
+      return response.data;
+    }
+  });
+
+  // Every user (unfiltered) so the "Add superuser" picker can offer non-superusers.
+  const { data: allUsersData } = useQuery({
+    queryKey: ['users-all-for-su'],
+    enabled: canManageSuperusers,
+    queryFn: async () => {
+      const response = await api.get('/api/users?limit=500');
+      return response.data;
+    }
+  });
+
+  const invalidateSuperuserViews = () => {
+    queryClient.invalidateQueries({ queryKey: ['superusers'] });
+    queryClient.invalidateQueries({ queryKey: ['users-all-for-su'] });
+    queryClient.invalidateQueries({ queryKey: ['users'] });
+  };
+
+  const grantSuperuserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await api.post(`/api/users/${userId}/superuser`);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      invalidateSuperuserViews();
+      setSuPick('');
+      pushToast(data?.message || 'Superuser granted', 'success');
+    },
+    onError: (err: any) => {
+      pushToast(err?.response?.data?.error || 'Failed to grant superuser', 'error');
+    }
+  });
+
+  const revokeSuperuserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await api.delete(`/api/users/${userId}/superuser`);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      invalidateSuperuserViews();
+      pushToast(data?.message || 'Superuser removed', 'success');
+    },
+    onError: (err: any) => {
+      pushToast(err?.response?.data?.error || 'Failed to remove superuser', 'error');
     }
   });
 
@@ -276,6 +340,96 @@ export function UserManagement() {
 
   return (
     <div className="space-y-6">
+      {/* Superusers — visible only to a real, non-impersonating superuser. */}
+      {canManageSuperusers && (() => {
+        const superusers: Array<{ id: string; email: string; name: string; role: string; isBootstrap: boolean }> =
+          superusersData?.superusers || [];
+        const allUsers: User[] = allUsersData?.users || [];
+        const candidates = allUsers
+          .filter((u) => !u.isSuperuser)
+          .sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+        return (
+          <div className="bg-white rounded-lg shadow-sm border border-purple-200">
+            <div className="flex items-center gap-3 p-6 border-b border-gray-200">
+              <ShieldCheck className="w-6 h-6 text-purple-600" />
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Superusers</h2>
+                <p className="text-sm text-gray-500">
+                  Full system access and the ability to impersonate any user. Only superusers can see or change this. Grant sparingly.
+                </p>
+              </div>
+            </div>
+
+            <div className="divide-y divide-gray-100">
+              {superusers.map((su) => {
+                const isSelf = String(su.id) === String(currentUserId);
+                const locked = isSelf || su.isBootstrap;
+                return (
+                  <div key={su.id} className="flex items-center justify-between px-6 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center text-purple-700 font-medium">
+                        {(su.name || su.email).charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-gray-900">{su.name || su.email}</span>
+                          {isSelf && (
+                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">You</span>
+                          )}
+                          {su.isBootstrap && (
+                            <span className="text-[11px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Built-in</span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-500">{su.email}</div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => revokeSuperuserMutation.mutate(su.id)}
+                      disabled={locked || revokeSuperuserMutation.isPending}
+                      title={
+                        isSelf
+                          ? 'You cannot remove your own superuser access'
+                          : su.isBootstrap
+                          ? 'Built-in superuser (set via server config) — cannot be removed here'
+                          : 'Remove superuser'
+                      }
+                      className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-md border border-gray-200 text-gray-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-600 disabled:hover:border-gray-200"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Remove
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* Add a superuser */}
+              <div className="flex items-center gap-3 px-6 py-4 bg-gray-50">
+                <select
+                  value={suPick}
+                  onChange={(e) => setSuPick(e.target.value)}
+                  className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                >
+                  <option value="">Select a user to make a superuser…</option>
+                  {candidates.map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {(u.name || `${u.firstName} ${u.lastName}`).trim()} — {u.email}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => suPick && grantSuperuserMutation.mutate(suPick)}
+                  disabled={!suPick || grantSuperuserMutation.isPending}
+                  className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  Make superuser
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">

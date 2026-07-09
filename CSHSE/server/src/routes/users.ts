@@ -8,7 +8,10 @@ import {
   getReadersCommittee,
   assignToSubmission,
   removeFromSubmission,
-  setUserRoleAssignments
+  setUserRoleAssignments,
+  listSuperusers,
+  grantSuperuser,
+  revokeSuperuser
 } from '../controllers/userController';
 import {
   getInvitations,
@@ -20,7 +23,7 @@ import {
   resendInvitation,
   revokeInvitation
 } from '../controllers/invitationController';
-import { authenticate, requireAdmin } from '../middleware/auth';
+import { authenticate, requireAdmin, requireSuperuser } from '../middleware/auth';
 
 const router = Router();
 
@@ -44,6 +47,13 @@ router.get('/', getUsers);
  * @access  Private (Admin, Lead Reader)
  */
 router.get('/readers-committee', getReadersCommittee);
+
+/**
+ * @route   GET /api/users/superusers
+ * @desc    List current superusers
+ * @access  Private (Superuser only)
+ */
+router.get('/superusers', requireSuperuser, listSuperusers);
 
 // ============================================
 // INVITATION ROUTES (must be before /:id routes)
@@ -117,6 +127,20 @@ router.put('/:id', updateUser);
  * @access  Private (Admin only)
  */
 router.put('/:id/role-assignments', requireAdmin, setUserRoleAssignments);
+
+/**
+ * @route   POST /api/users/:id/superuser
+ * @desc    Grant superuser (global access + impersonation)
+ * @access  Private (Superuser only)
+ */
+router.post('/:id/superuser', requireSuperuser, grantSuperuser);
+
+/**
+ * @route   DELETE /api/users/:id/superuser
+ * @desc    Revoke superuser (cannot revoke self or the bootstrap account)
+ * @access  Private (Superuser only)
+ */
+router.delete('/:id/superuser', requireSuperuser, revokeSuperuser);
 
 /**
  * @route   DELETE /api/users/:id

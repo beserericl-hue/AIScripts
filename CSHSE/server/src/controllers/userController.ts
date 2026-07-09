@@ -489,3 +489,115 @@ export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Res
     return res.status(500).json({ error: 'Failed to update role assignments' });
   }
 };
+
+// ============================================================
+// Superuser management (superuser-only; routes gate on requireSuperuser)
+// ============================================================
+
+// Every permission in the system — a superuser holds all of them (mirrors
+// services/superuserInit.ts so a granted superuser is fully functional).
+const ALL_PERMISSIONS = [
+  'edit_self_study',
+  'view_comments',
+  'add_comments',
+  'manage_users',
+  'manage_institutions',
+  'assign_readers',
+  'schedule_site_visits',
+  'approve_changes',
+] as const;
+
+/** True if `email` is the env-bootstrap superuser (SU_EMAIL). That account is
+ *  re-promoted on every server start, so revoking it is futile — we protect it. */
+function isBootstrapSuperuserEmail(email?: string): boolean {
+  const su = (process.env.SU_EMAIL || '').trim().toLowerCase();
+  return !!su && !!email && email.trim().toLowerCase() === su;
+}
+
+function superuserSummary(u: any) {
+  return {
+    id: u._id,
+    email: u.email,
+    name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+    role: u.role,
+    isSuperuser: u.isSuperuser === true,
+    isBootstrap: isBootstrapSuperuserEmail(u.email),
+  };
+}
+
+/** GET /api/users/superusers — list current superusers (superuser-only). */
+export const listSuperusers = async (_req: AuthenticatedRequest, res: Response) => {
+  try {
+    const supers = await User.find({ isSuperuser: true })
+      .select('email firstName lastName role isSuperuser')
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+    return res.json({ superusers: supers.map(superuserSummary) });
+  } catch (error) {
+    console.error('List superusers error:', error);
+    return res.status(500).json({ error: 'Failed to list superusers' });
+  }
+};
+
+/** POST /api/users/:id/superuser — grant superuser (superuser-only).
+ *  A superuser is global admin with all permissions, so we align those fields
+ *  the same way the bootstrap does, guaranteeing the account actually works. */
+export const grantSuperuser = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (user.isSuperuser) {
+      return res.json({ message: 'Already a superuser', user: superuserSummary(user) });
+    }
+
+    user.isSuperuser = true;
+    user.role = 'admin';
+    user.status = 'active' as any;
+    user.isActive = true;
+    user.permissions = [...ALL_PERMISSIONS] as any;
+    await user.save();
+
+    console.log(
+      `[superuser] GRANTED to ${user.email} by ${req.user?.id} (${req.user?.name})`
+    );
+    return res.json({ message: 'Superuser granted', user: superuserSummary(user) });
+  } catch (error) {
+    console.error('Grant superuser error:', error);
+    return res.status(500).json({ error: 'Failed to grant superuser' });
+  }
+};
+
+/** DELETE /api/users/:id/superuser — revoke superuser (superuser-only).
+ *  Cannot revoke yourself (no accidental lockout) or the env-bootstrap account
+ *  (it returns on the next restart anyway). Role/permissions are left as admin;
+ *  further downgrade is done through the normal role UI. */
+export const revokeSuperuser = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    if (String(user._id) === String(req.user?.id)) {
+      return res.status(400).json({ error: 'You cannot remove your own superuser access.' });
+    }
+    if (isBootstrapSuperuserEmail(user.email)) {
+      return res.status(400).json({
+        error: 'This is the built-in bootstrap superuser (set via server config) and cannot be removed here.',
+      });
+    }
+    if (!user.isSuperuser) {
+      return res.json({ message: 'Not a superuser', user: superuserSummary(user) });
+    }
+
+    user.isSuperuser = false;
+    await user.save();
+
+    console.log(
+      `[superuser] REVOKED from ${user.email} by ${req.user?.id} (${req.user?.name})`
+    );
+    return res.json({ message: 'Superuser removed', user: superuserSummary(user) });
+  } catch (error) {
+    console.error('Revoke superuser error:', error);
+    return res.status(500).json({ error: 'Failed to remove superuser' });
+  }
+};
