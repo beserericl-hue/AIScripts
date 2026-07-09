@@ -14,10 +14,6 @@ COPY client/package*.json ./
 RUN npm ci
 
 # Copy client source
-# cache-bust 2026-07-09: force a fresh context checksum (Railway BuildKit cache
-# poisoned with a stale "/client not found" ref).
-ARG CLIENT_CACHEBUST=2026-07-09a
-RUN echo "client cachebust ${CLIENT_CACHEBUST}"
 COPY client/ ./
 
 # Build client
