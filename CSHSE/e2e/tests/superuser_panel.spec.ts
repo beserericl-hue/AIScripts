@@ -31,7 +31,9 @@ test('Superusers panel renders for a superuser and lists granted users', async (
 
   // The superuser-only panel and its controls.
   await expect(page.getByRole('heading', { name: 'Superusers' })).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText('Select a user to make a superuser')).toBeVisible();
-  // The bootstrap superuser is always present.
+  await expect(page.getByRole('button', { name: /Make superuser/i })).toBeVisible();
+  // The bootstrap superuser is always present in the list.
   await expect(page.getByText(EMAIL, { exact: false }).first()).toBeVisible();
+  // Amy was granted superuser, so she shows up in the list too.
+  await expect(page.getByText('aprimm@updatemanagement.com').first()).toBeVisible();
 });
