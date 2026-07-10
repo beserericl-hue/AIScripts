@@ -393,6 +393,26 @@ describe('mergeImportIntoReviewState — reimport strict-match', () => {
     expect(state.buckets['1.a'].narratives.length).toBe(2);
   });
 
+  it('merges into a PARTIAL state (buckets/itemSources undefined) without throwing', () => {
+    // Regression: a submission whose aiReviewState was cleared/partially written
+    // left `buckets` undefined; the merge then threw ("Cannot read properties of
+    // undefined") and the import silently failed to land ("AI returned zero
+    // items"). The merge must normalize and still add the incoming content.
+    const partial: any = { ownerSubmissionId: 'sub-1', lastUpdatedAt: new Date() };
+    expect(() =>
+      mergeImportIntoReviewState(
+        partial,
+        makeInputs({
+          sourceFilename: 'doc.pdf',
+          sourceContentHash: 'h1',
+          buckets: makeBucket('1.a', [{ sectionId: 'sec-1' }]),
+        })
+      )
+    ).not.toThrow();
+    expect(partial.buckets['1.a'].narratives.length).toBe(1);
+    expect(Array.isArray(partial.mergeLog)).toBe(true);
+  });
+
   it('AC#5: items from a DIFFERENT source survive reimport-replace', () => {
     const state = buildEmptyReviewState();
     mergeImportIntoReviewState(

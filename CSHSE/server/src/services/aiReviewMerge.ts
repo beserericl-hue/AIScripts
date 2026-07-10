@@ -123,6 +123,21 @@ export function mergeImportIntoReviewState(
   state: IAIReviewState,
   inputs: ImportInputs
 ): MergeReport {
+  // Normalize a possibly-partial state so the merge can never throw on a
+  // missing collection (e.g. a submission whose aiReviewState was cleared or
+  // partially written left `buckets` undefined — the merge then threw and the
+  // import silently failed to land, showing "AI returned zero items").
+  if (!state.buckets || typeof state.buckets !== 'object') state.buckets = {} as any;
+  if (!Array.isArray(state.tags)) state.tags = [] as any;
+  if (!Array.isArray(state.cvs)) state.cvs = [] as any;
+  if (!Array.isArray(state.evidenceDocs)) state.evidenceDocs = [] as any;
+  if (!state.introductions || typeof state.introductions !== 'object') state.introductions = {} as any;
+  if (!Array.isArray(state.placeholderSections)) state.placeholderSections = [] as any;
+  if (!state.itemSources || typeof state.itemSources !== 'object') state.itemSources = {} as any;
+  if (!Array.isArray(state.approvedIds)) state.approvedIds = [] as any;
+  if (!Array.isArray(state.discardedIds)) state.discardedIds = [] as any;
+  if (!Array.isArray(state.mergeLog)) state.mergeLog = [] as any;
+
   const source: IAIItemSource = {
     importId: inputs.importId,
     sourceFilename: inputs.sourceFilename,
