@@ -707,7 +707,11 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             ref_stds = code_to_stds.get(entry.code, [])
             route_std = ref_stds[0] if ref_stds else None
             evidence_docs.append({
-                "sectionId": f"{job.job_id}:mccap:{entry.code}",
+                # STABLE per (submission, appendix code) — NOT job-specific — so a
+                # re-import yields the same sectionId → the review-state merge
+                # replaces it and materialize UPSERTS the same `rev:` evidence
+                # record instead of creating a duplicate.
+                "sectionId": f"mccap:{job.submission_id}:{entry.code}",
                 "docSubKind": "paper",
                 "title": f"Appendix {entry.code}: {entry.title}",
                 "summary": f"Appendix section {entry.section} — {entry.kind}. "
