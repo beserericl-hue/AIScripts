@@ -536,6 +536,41 @@ def _norm_space(s: str) -> str:
     return re.sub(r"\s+", " ", s or "").strip()
 
 
+def _ocr_pdf_bytes(pdf_bytes: bytes, max_pages: int = 40, dpi: int = 200) -> str:
+    """OCR a (scanned) PDF's pages → text, for the HIDDEN AI-scoring layer only.
+
+    Rasterizes with PyMuPDF (no poppler needed) and reads with tesseract via
+    pytesseract. Fully optional: if any dependency or the tesseract binary is
+    missing, returns "" so the pipeline degrades gracefully to the embedded
+    text layer. Capped at ``max_pages`` to bound wall-time on large scans.
+    """
+    try:
+        import fitz  # PyMuPDF
+        import pytesseract
+        from PIL import Image
+    except Exception:  # noqa: BLE001
+        return ""
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception:  # noqa: BLE001
+        return ""
+    out: list[str] = []
+    for i, page in enumerate(doc):
+        if i >= max_pages:
+            break
+        try:
+            pix = page.get_pixmap(dpi=dpi)
+            img = Image.open(io.BytesIO(pix.tobytes("png")))
+            out.append(pytesseract.image_to_string(img) or "")
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        doc.close()
+    except Exception:  # noqa: BLE001
+        pass
+    return "\n".join(out).strip()
+
+
 def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
     """MCC narrative (third format) path — maps the PDF into the existing wizard
     review shapes so the current Review UI renders it unchanged:
@@ -697,13 +732,20 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             except Exception as exc:  # noqa: BLE001
                 bucket_name, key = None, None
                 job.warnings.append(f"Appendix {entry.code}: S3 upload failed ({exc}).")
-            # Hidden text layer for AI scoring (pypdf text; OCR is a follow-up
-            # for pure scans). Never surfaced to the reader.
+            # Hidden text layer for AI scoring. Never surfaced to the reader.
+            # Prefer the embedded text layer (fast); fall back to OCR when the
+            # slice is a scan (thin/empty text) so the AI can still read it.
             try:
                 _sl = _PdfReader(io.BytesIO(pdf_bytes))
                 extracted = "\n".join((p.extract_text() or "") for p in _sl.pages).strip()
             except Exception:  # noqa: BLE001
                 extracted = ""
+            n_pages = max(1, entry.page_end - entry.page_start)
+            ocr_used = False
+            if len(extracted) < 40 * n_pages:  # avg < 40 chars/page ⇒ scanned
+                ocr_text = _ocr_pdf_bytes(pdf_bytes)
+                if len(ocr_text) > len(extracted):
+                    extracted, ocr_used = ocr_text, True
             ref_stds = code_to_stds.get(entry.code, [])
             route_std = ref_stds[0] if ref_stds else None
             evidence_docs.append({
@@ -734,6 +776,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 # HIDDEN — AI-eval only, never rendered to the reader.
                 "extractedText": extracted[:200000],
                 "hasText": bool(extracted),
+                "ocr": ocr_used,
             })
             if key:
                 uploaded += 1

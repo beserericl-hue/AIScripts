@@ -178,6 +178,60 @@ def test_evaluate_section_single_spec():
     assert "regionally accredited" in fake.prompts[0]
 
 
+def test_evaluate_section_judges_spec_with_files_and_scraped_web_links():
+    """Pass/fail requirement: the evaluator judges a spec against its criteria
+    (spec + subspec) using the supporting-evidence text (appendix FILE text, incl.
+    OCR), the submitted file list, AND the TEXT of scraped WEB LINKS it actually
+    visits. This proves every input the reader requires reaches the model."""
+    from app.section_eval.scrape import LinkResult
+
+    visited: list[str] = []
+
+    def fake_scrape(url: str):
+        visited.append(url)  # the evaluator actually "visits" the link
+        return LinkResult(
+            url=url,
+            evaluable=True,
+            text="ACCREDITATION PAGE: The program is regionally accredited by the Higher Learning Commission.",
+        )
+
+    fake = _FakeAnthropic(verdict="pass")
+    out = evaluate_section(
+        institution_id="inst-1",
+        submission_id="sub-1",
+        specs=[{"standardCode": "1", "specCode": "a", "criteria": "Program is part of a regionally accredited institution."}],
+        narrative_html='<p>See our <a href="https://mccneb.edu/accreditation">accreditation page</a>.</p>',
+        supporting_evidence_text=["Appendix A2 (OCR text): Higher Learning Commission accreditation letter, 2024."],
+        files=[{"filename": "Appendix A2 - Accreditation.pdf", "s3Key": "imports/mcc/x/A2.pdf"}],
+        web_links=["https://mccneb.edu/accreditation"],
+        scrape_fn=fake_scrape,
+        anthropic=fake,
+        settings=Settings(anthropic_api_key="test"),
+    )
+
+    # 1) the web link was actually fetched/visited.
+    assert visited == ["https://mccneb.edu/accreditation"]
+    # 2) the response reports the scraped link (evaluable).
+    assert any(l["url"] == "https://mccneb.edu/accreditation" and l["evaluable"] for l in out["links"])
+
+    prompt = fake.prompts[0]
+    # 3) spec + subspec criteria reached the model.
+    assert "regionally accredited institution" in prompt
+    assert "Standard 1.a" in prompt
+    # 4) the appendix FILE text (OCR-derived evidence) reached the model.
+    assert "Higher Learning Commission accreditation letter" in prompt
+    # 5) the submitted file is listed.
+    assert "Appendix A2 - Accreditation.pdf" in prompt
+    # 6) the SCRAPED WEB-LINK TEXT (page content) reached the model.
+    assert "regionally accredited by the Higher Learning Commission" in prompt
+
+    row = out["perSpec"][0]
+    assert row["sourcesUsed"]["files"] == 1
+    assert row["sourcesUsed"]["links"] == 1
+    assert row["sourcesUsed"]["evidence"] == 1
+    assert row["verdict"] == "pass"
+
+
 def test_evaluate_section_many_specs():
     fake = _FakeAnthropic(verdict="needs_improvement")
     out = evaluate_section(
