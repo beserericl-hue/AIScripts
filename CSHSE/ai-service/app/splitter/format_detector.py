@@ -196,9 +196,21 @@ def _detect_format_pdf(pdf_path: str) -> FormatDetection:
 
     from app.splitter.mcc_narrative_walker import detect_mcc_signals, is_mcc_narrative
 
+    # Only SAMPLE pages — joining text from all pages of a 900+ page,
+    # 16MB self-study exhausts memory on a constrained container and the
+    # worker is OOM-killed mid-detect (stage sticks on "running" forever).
+    # is_mcc_narrative needs >=10 'Standard #N' markers (front matter) plus
+    # the Appendix Index (back matter), so the head + tail is sufficient.
     try:
         reader = PdfReader(pdf_path)
-        text = "\n".join((p.extract_text() or "") for p in reader.pages)
+        pages = reader.pages
+        n = len(pages)
+        HEAD, TAIL = 80, 80
+        if n <= HEAD + TAIL:
+            idxs = range(n)
+        else:
+            idxs = list(range(HEAD)) + list(range(n - TAIL, n))
+        text = "\n".join((pages[i].extract_text() or "") for i in idxs)
     except Exception as exc:  # noqa: BLE001
         text = ""
     signals = detect_mcc_signals(text)
