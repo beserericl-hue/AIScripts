@@ -2153,10 +2153,12 @@ export const useAIImportStore = create<AIImportState>()(
             snap.coverageReport !== undefined
               ? (snap.coverageReport as AICoverageReport | null)
               : current.coverageReport,
-          // A freshly-parsed snapshot's buckets belong to the submission being
-          // parsed — mark the store loaded for it so autosave may write (and so
-          // it can never be mistaken for another submission's content).
-          loadedForSubmissionId: current.submissionId ?? current.loadedForSubmissionId,
+          // NOTE: we deliberately do NOT set loadedForSubmissionId here. The
+          // /ai-status snapshot does not carry the server-merged buckets, so the
+          // store may still be empty right after parse. Enabling autosave now
+          // would let it write EMPTY buckets over the freshly-merged server
+          // state (data loss). loadedForSubmissionId is set only by
+          // loadPersistedReviewState, which fetches the real merged content.
         });
       },
 

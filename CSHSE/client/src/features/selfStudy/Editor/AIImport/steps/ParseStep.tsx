@@ -21,7 +21,7 @@
  *    renders a red panel with the error message and a "Start over"
  *    action; never the optimistic "Waiting for a worker…" view.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Circle, Loader2, X, AlertTriangle, Clock } from 'lucide-react';
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 
@@ -147,6 +147,24 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
     // Introduction-only documents are still a successful parse.
     Object.values(introductions ?? {}).reduce((n, ib: any) => n + (ib?.items?.length ?? 0), 0);
   const isEmptyParse = isReady && totalReviewableItems === 0;
+
+  // After parse completes, hydrate the store from the SERVER-merged review
+  // state. The /ai-status snapshot does not carry the merged buckets (they are
+  // written to Submission.aiReviewState by the import callback), so without this
+  // the wizard would show "zero items" even though the parse succeeded. This
+  // also sets loadedForSubmissionId so autosave is safe. Runs once per parse.
+  const submissionId = useAIImportStore((s) => s.submissionId);
+  const loadPersistedReviewState = useAIImportStore((s) => s.loadPersistedReviewState);
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (isReady && submissionId && totalReviewableItems === 0 && !hydratedRef.current) {
+      hydratedRef.current = true;
+      loadPersistedReviewState().catch(() => {
+        /* surfaced via the store's error handling */
+      });
+    }
+    if (!isReady) hydratedRef.current = false; // reset for a fresh parse
+  }, [isReady, submissionId, totalReviewableItems, loadPersistedReviewState]);
 
   // Re-open SSE on mount if active; close on unmount.
   useEffect(() => {
