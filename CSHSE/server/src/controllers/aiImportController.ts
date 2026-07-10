@@ -30,6 +30,7 @@ import { SupportingEvidence } from '../models/SupportingEvidence';
 // silently no-op'd the CR-043 merge with a 'Cannot find module' that
 // the surrounding try/catch swallowed).
 import * as aiReviewMerge from '../services/aiReviewMerge';
+import * as gridFsService from '../services/gridFsService';
 // Static import to mirror the batchAdvancer fix — runtime require()
 // silently no-op'd under vitest because the .ts extension didn't
 // resolve. ESM partial-binding handles the circular reference because
@@ -763,6 +764,28 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   importRecord.aiCompletedAt = new Date();
   importRecord.aiQueuePosition = null;
   importRecord.aiQueueDepth = null;
+
+  // MCC — store the clean, link-anchored source HTML the walker rebuilt as
+  // this import's GridFS content, OVERWRITING the legacy flattened PDF parse.
+  // The Review "Compare / Show in source" pane serves this from
+  // /api/imports/:id/content, so the source pane now renders formatted text
+  // with working links and data-section-id anchors that match the imported
+  // panes exactly (instead of run-on text with no links / no anchors).
+  if (typeof payload.sourceHtml === 'string' && payload.sourceHtml.length > 0) {
+    try {
+      await gridFsService.storeHtmlContent(String(importRecord._id), payload.sourceHtml);
+      importRecord.extractedContent = {
+        ...(importRecord.extractedContent || {}),
+        metadata: {
+          ...((importRecord.extractedContent as any)?.metadata || {}),
+          htmlStoredInGridFS: true,
+        },
+      } as any;
+      importRecord.markModified('extractedContent');
+    } catch (srcErr) {
+      console.warn('[ai-callback] storing MCC source HTML failed (non-fatal):', srcErr);
+    }
+  }
   // CR-043 race fix — defer the importRecord.save() that flips
   // aiStatus visible to the poller until AFTER the merge has committed
   // submissionDoc.aiReviewState. Without this, a fast poll between the

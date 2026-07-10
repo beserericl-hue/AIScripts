@@ -170,6 +170,13 @@ class JobRecord:
     # and the appendix catalog with page ranges. cshse-server materializes
     # standard narratives + appendix PDF slices + reference→standard tags.
     mcc: dict | None = None
+    # MCC — a CLEAN source HTML rebuilt from the walker output (headings +
+    # link-anchored paragraphs, each spec/intro chunk wrapped in a
+    # data-section-id div matching its narrative). The server stores it as the
+    # import's GridFS content so the Review "Compare / Show in source" pane
+    # renders formatted source with working links that matches the imported
+    # panes exactly — instead of the legacy flattened run-on PDF parse.
+    source_html: str | None = None
     started_at: float | None = None
     completed_at: float | None = None
 
@@ -208,6 +215,10 @@ class JobRecord:
             "coverageReport": self.coverage_report or {},
             # MCC third-format structured payload (null for the other formats).
             "mcc": self.mcc or None,
+            # MCC clean source HTML (null until built at the end of the MCC
+            # pipeline, so progress snapshots stay small; only the terminal
+            # callback carries it).
+            "sourceHtml": self.source_html,
         }
 
 
@@ -660,6 +671,19 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
     }
     _stage_done(job, "mcc_introduction", f"{len(result.introduction)} chars")
 
+    # Clean source-HTML reconstruction (for the Compare / Show-in-source pane).
+    # Built in document order, reusing each chunk's exact sectionId +
+    # htmlSnippet so the source pane matches the imported panes verbatim and
+    # the compare anchor lands precisely on the spec.
+    def _esc(s: str) -> str:
+        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    _intro_item = job.introductions["document"]["items"][0]
+    source_parts: list[str] = [
+        f'<section data-section-id="{_esc(_intro_item["sectionId"])}">'
+        f'<h1>Program Introduction</h1>{_intro_item["htmlSnippet"]}</section>'
+    ]
+
     # ---- Pass 3: place each standard's OWN sub-points on the matching spec ---
     # The MCC narrative follows the CSHSE Handbook order, so the institution's
     # sub-point letter (a., b., …) maps 1:1 to the canonical spec letter
@@ -719,6 +743,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             job.introductions[key]["items"].append(item)
         else:
             job.introductions[key] = {"scope": "standard", "standardCode": std_code, "items": [item]}
+        return item
 
     # Document-introduction references (e.g. "MCC Education Guide appendix A1").
     _note_refs(result.intro_references, None, None)
@@ -727,16 +752,23 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
     for std in result.standards:
         std_code = str(std.n)
         spec_letters = specs_by_std.get(std_code) or {}
+        _std_title = getattr(std, "section_title", None) or getattr(std, "title", "") or ""
+        source_parts.append(
+            f'<h1>Standard #{_esc(std_code)}'
+            f'{": " + _esc(_std_title) if _std_title else ""}</h1>'
+        )
         for (letter, heading, body) in _split_standard_by_letter(std.text):
             refs = _parse_refs(body)
             spec = spec_letters.get(letter) if letter else None
+            chunk_html = _text_to_html(body, std.link_map)
             if spec is not None:
+                section_id = f"{job.job_id}:mccn:{std_code}:{letter}"
                 bk = _bucket(std_code, spec)
                 bk["narratives"].append({
-                    "sectionId": f"{job.job_id}:mccn:{std_code}:{letter}",
+                    "sectionId": section_id,
                     "heading": heading,
                     "snippet": body[:4000],
-                    "htmlSnippet": _text_to_html(body, std.link_map),
+                    "htmlSnippet": chunk_html,
                     "wordCount": len(body.split()),
                     "confidence": 0.95,
                     "acceptState": "review_unknown",
@@ -746,9 +778,14 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             else:
                 # Framing / shall statement / a letter with no canonical spec →
                 # the Standard introduction so nothing is lost.
-                _add_std_intro(std_code, heading, body, std.link_map,
-                               "Standard framing / overview (not a lettered specification).")
+                item = _add_std_intro(std_code, heading, body, std.link_map,
+                                      "Standard framing / overview (not a lettered specification).")
+                section_id = item["sectionId"]
                 _note_refs(refs, std_code, None)
+            source_parts.append(
+                f'<section data-section-id="{_esc(section_id)}">'
+                f'<h2>{_esc(heading)}</h2>{chunk_html}</section>'
+            )
         done += 1
         if done % 5 == 0:
             for s in reversed(job.stages):
@@ -841,6 +878,24 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             job.warnings.append(f"Appendix {entry.code}: slice/upload error ({exc}).")
     job.evidence_docs = evidence_docs
     _stage_done(job, "mcc_appendix_files", f"{uploaded}/{len(evidence_docs)} appendices uploaded to S3")
+
+    # ---- Assemble the clean source HTML (Compare / Show-in-source pane) ------
+    if evidence_docs:
+        rows = "".join(
+            f'<li><strong>{_esc(e["mccCode"])}</strong> — {_esc(e["title"].split(": ",1)[-1])}'
+            + (f' → Spec {_esc(str(e["resolvedStd"]))}.{_esc(str(e["resolvedSpec"]))}' if e.get("resolvedStd") and e.get("resolvedSpec") else "")
+            + "</li>"
+            for e in evidence_docs
+        )
+        source_parts.append(f"<h1>Appendix Index</h1><ul>{rows}</ul>")
+    job.source_html = (
+        '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+        "body{font-family:Arial,sans-serif;line-height:1.6;padding:20px;max-width:100%;}"
+        "h1{color:#1a365d;border-bottom:2px solid #e2e8f0;padding-bottom:8px;margin-top:28px;}"
+        "h2{color:#2d3748;margin-top:20px;} p{margin:8px 0;} a{color:#2563eb;}"
+        "ul,ol{margin:8px 0;padding-left:24px;} section{margin-bottom:8px;}"
+        "</style></head><body>" + "".join(source_parts) + "</body></html>"
+    )
 
 
 class _MccSubspecRecommender:
