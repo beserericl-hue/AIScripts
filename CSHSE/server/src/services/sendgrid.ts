@@ -30,6 +30,8 @@ export interface SendEmailInput {
   replyTo?: string;
   cc?: string | string[];
   bcc?: string | string[];
+  /** File attachments (e.g. a bug-report screenshot). `data` is base64. */
+  attachments?: Array<{ name: string; contentType: string; data: string }>;
 }
 
 function asArray(v?: string | string[]): string[] {
@@ -82,6 +84,14 @@ export async function sendEmail(input: SendEmailInput): Promise<{ messageId: str
     content,
   };
   if (input.replyTo) body.reply_to = { email: input.replyTo };
+  if (input.attachments?.length) {
+    body.attachments = input.attachments.map((a) => ({
+      content: a.data,
+      filename: a.name,
+      type: a.contentType,
+      disposition: 'attachment',
+    }));
+  }
 
   const recipientsForLog = to.join(',');
   let lastErr: unknown;

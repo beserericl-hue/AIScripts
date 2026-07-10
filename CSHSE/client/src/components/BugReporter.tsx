@@ -88,6 +88,13 @@ export interface BugReporterViewProps {
   submitting?: boolean;
   reference?: string | null;
   error?: string | null;
+  /** The image that will be sent (attached or auto-captured), if any. */
+  imageDataUrl?: string | null;
+  /** True when the shown image is the auto-capture (vs a user attachment). */
+  isAutoCapture?: boolean;
+  onAttachImage?: (file: File | null | undefined) => void;
+  onRemoveImage?: () => void;
+  onPaste?: (e: React.ClipboardEvent) => void;
 }
 
 export function BugReporterView({
@@ -100,6 +107,11 @@ export function BugReporterView({
   submitting,
   reference,
   error,
+  imageDataUrl,
+  isAutoCapture,
+  onAttachImage,
+  onRemoveImage,
+  onPaste,
 }: BugReporterViewProps): JSX.Element {
   // CR (Monica) — "Report issue" no longer floats over the work area; it is
   // opened from the header Settings menu. `onOpen` is kept on the props so the
@@ -155,11 +167,55 @@ export function BugReporterView({
                     data-testid="bug-reporter-description"
                     value={description}
                     onChange={(e) => onChangeDescription(e.target.value)}
+                    onPaste={onPaste}
                     rows={5}
-                    placeholder="Example: I clicked Save and nothing happened."
+                    placeholder="Example: I clicked Save and nothing happened. (You can paste a screenshot here.)"
                     className="mt-0.5 w-full rounded border border-slate-300 px-2 py-1 text-xs"
                   />
                 </label>
+
+                {/* Screenshot: an auto-capture is included by default; the user
+                    can attach/paste their own image, which replaces it. */}
+                <div className="mt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-700">Screenshot</span>
+                    <label className="cursor-pointer rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-700 hover:bg-slate-100">
+                      {imageDataUrl ? 'Replace image' : 'Attach image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        data-testid="bug-reporter-image-input"
+                        className="hidden"
+                        onChange={(e) => onAttachImage?.(e.target.files?.[0])}
+                      />
+                    </label>
+                  </div>
+                  {imageDataUrl ? (
+                    <div className="mt-1 flex items-start gap-2">
+                      <img
+                        src={imageDataUrl}
+                        alt="Screenshot to send"
+                        data-testid="bug-reporter-image-preview"
+                        className="max-h-28 rounded border border-slate-200"
+                      />
+                      <div className="text-[11px] text-slate-500">
+                        {isAutoCapture ? 'Auto-captured from this page.' : 'Your attached screenshot.'}
+                        <button
+                          type="button"
+                          onClick={onRemoveImage}
+                          className="ml-1 text-slate-400 underline hover:text-slate-600"
+                        >
+                          remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      No image yet — attach a file or paste one into the box above.
+                    </p>
+                  )}
+                </div>
+
                 <div className="mt-3 flex justify-end gap-2">
                   <button
                     type="button"
@@ -188,12 +244,19 @@ export function BugReporterView({
   );
 }
 
+const MAX_IMAGE_BYTES = 3_000_000; // matches the server cap
+
 export function BugReporter(): JSX.Element {
   const [isOpen, setIsOpen] = React.useState(false);
   const [description, setDescription] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
   const [reference, setReference] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  // The image that ships with the report: a user-attached screenshot wins;
+  // otherwise the auto-capture of the page taken at open time (before the modal
+  // covered it, so it shows the actual problem).
+  const [attached, setAttached] = React.useState<string | null>(null);
+  const [autoShot, setAutoShot] = React.useState<string | null>(null);
 
   // Install the console-error capture once.
   React.useEffect(() => {
@@ -203,8 +266,41 @@ export function BugReporter(): JSX.Element {
   const onOpen = React.useCallback(() => {
     setError(null);
     setReference(null);
-    setIsOpen(true);
+    setAttached(null);
+    setAutoShot(null);
+    // Capture the page BEFORE showing the modal so the shot isn't just the
+    // dialog's dark backdrop. Fail-soft — the reporter opens regardless.
+    captureScreenshot()
+      .then((shot) => setAutoShot(shot))
+      .catch(() => setAutoShot(null))
+      .finally(() => setIsOpen(true));
   }, []);
+
+  // Accept an attached image (from the file picker or a clipboard paste).
+  const acceptImageFile = React.useCallback((file: File | null | undefined) => {
+    if (!file || !file.type.startsWith('image/')) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      setError('That image is larger than 3 MB — please attach a smaller screenshot.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setError(null);
+      setAttached(typeof reader.result === 'string' ? reader.result : null);
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const onPaste = React.useCallback(
+    (e: React.ClipboardEvent) => {
+      const item = Array.from(e.clipboardData?.items || []).find((i) => i.type.startsWith('image/'));
+      if (item) {
+        e.preventDefault();
+        acceptImageFile(item.getAsFile());
+      }
+    },
+    [acceptImageFile]
+  );
 
   // The header Settings menu opens the reporter via this event (the floating
   // button was removed at Monica's request).
@@ -228,9 +324,9 @@ export function BugReporter(): JSX.Element {
     setError(null);
     try {
       const buildSha = (import.meta as any).env?.VITE_BUILD_SHA || 'dev';
-      // CR-016 / S13d — flag-gated auto-screenshot. Returns null when the flag
-      // is off or capture fails; the report sends regardless.
-      const screenshot = await captureScreenshot();
+      // A user-attached screenshot wins; otherwise the auto-capture taken at
+      // open time. Either way the report carries an image when one is available.
+      const screenshot = attached || autoShot;
       const res = await api.post('/api/bug-reports', {
         description,
         route: window.location.pathname + window.location.search,
@@ -259,6 +355,11 @@ export function BugReporter(): JSX.Element {
       submitting={submitting}
       reference={reference}
       error={error}
+      imageDataUrl={attached || autoShot}
+      isAutoCapture={!attached && !!autoShot}
+      onAttachImage={acceptImageFile}
+      onRemoveImage={() => setAttached(null)}
+      onPaste={onPaste}
     />
   );
 }

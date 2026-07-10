@@ -29,6 +29,15 @@ ${ORG_EMAIL} · ${ORG_WEBSITE}
 This is an automated message from the CSHSE Self-Study Portal.
 Questions? Reply to this email or contact ${ORG_EMAIL}.`;
 
+export interface EmailAttachment {
+  /** File name shown in the email (e.g. "screenshot.png"). */
+  name: string;
+  /** MIME type (e.g. "image/png"). */
+  contentType: string;
+  /** base64-encoded bytes (no data: prefix). */
+  data: string;
+}
+
 export interface EmailOptions {
   to: string | string[];
   subject: string;
@@ -36,6 +45,7 @@ export interface EmailOptions {
   html?: string;
   /** Per-user identity — replies route here; From stays branded (cshse@…). */
   replyTo?: string;
+  attachments?: EmailAttachment[];
 }
 
 export interface InvitationEmailData {
@@ -115,6 +125,7 @@ class EmailService {
         html: options.html,
         text: options.text,
         replyTo: options.replyTo,
+        attachments: options.attachments,
       });
       console.log(`Email sent to ${options.to}: ${options.subject} (${provider} ${messageId})`);
       return true;
@@ -422,6 +433,97 @@ ${BRAND_FOOTER_TEXT}
       html,
       text: message + (actionUrl ? `\n\n${actionText}: ${actionUrl}` : '') + `\n\n${BRAND_FOOTER_TEXT}`,
       replyTo
+    });
+  }
+
+  /**
+   * Email an in-app bug report (text + optional screenshot) to the support
+   * inboxes. The reporter's email becomes the Reply-To so support can respond
+   * directly. Fail-soft — the report is already persisted; a mail hiccup must
+   * not fail the request.
+   */
+  async sendBugReportEmail(data: {
+    reference: string;
+    description: string;
+    route: string;
+    userAgent: string;
+    buildSha?: string;
+    reporterName?: string;
+    reporterEmail?: string;
+    reporterRole?: string;
+    recentConsoleErrors?: Array<{ message: string; ts?: Date | string }>;
+    /** data:image/...;base64,... URL captured on the client. */
+    screenshot?: string;
+    createdAt?: Date;
+  }): Promise<boolean> {
+    const to = ['eric@agileadtesting.com', 'info@cshse.org'];
+    const esc = (s: string) =>
+      String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const when = (data.createdAt || new Date()).toLocaleString('en-US');
+    const errorsList = (data.recentConsoleErrors || []).slice(-10);
+
+    // Parse the screenshot data URL into a real file attachment.
+    let attachments: EmailAttachment[] | undefined;
+    let inlineNote = 'No screenshot was attached.';
+    if (data.screenshot) {
+      const m = /^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i.exec(data.screenshot);
+      if (m) {
+        const contentType = m[1].toLowerCase();
+        const ext = contentType.split('/')[1].replace('jpeg', 'jpg');
+        attachments = [{ name: `screenshot-${data.reference}.${ext}`, contentType, data: m[3] }];
+        inlineNote = 'A screenshot is attached to this email.';
+      }
+    }
+
+    const text = [
+      `New bug report from the CSHSE Self-Study Portal`,
+      ``,
+      `Reference: ${data.reference}`,
+      `When: ${when}`,
+      `Reporter: ${data.reporterName || 'unknown'}${data.reporterEmail ? ` <${data.reporterEmail}>` : ''}${data.reporterRole ? ` (${data.reporterRole})` : ''}`,
+      `Page: ${data.route}`,
+      `Build: ${data.buildSha || 'n/a'}`,
+      `Browser: ${data.userAgent}`,
+      ``,
+      `What happened:`,
+      data.description,
+      ``,
+      errorsList.length ? `Recent console errors:\n${errorsList.map((e) => `- ${e.message}`).join('\n')}` : `No recent console errors captured.`,
+      ``,
+      inlineNote,
+      ``,
+      BRAND_FOOTER_TEXT,
+    ].join('\n');
+
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+        <div style="background-color: #7f1d1d; color: white; padding: 16px 20px;">
+          <h1 style="margin: 0; font-size: 18px;">🐛 New bug report — CSHSE Self-Study Portal</h1>
+        </div>
+        <div style="padding: 20px; background-color: #f8f9fa;">
+          <table style="font-size: 14px; color: #1f2937; border-collapse: collapse;">
+            <tr><td style="padding:2px 10px 2px 0; color:#6b7280;">Reference</td><td><code>${esc(data.reference)}</code></td></tr>
+            <tr><td style="padding:2px 10px 2px 0; color:#6b7280;">When</td><td>${esc(when)}</td></tr>
+            <tr><td style="padding:2px 10px 2px 0; color:#6b7280;">Reporter</td><td>${esc(data.reporterName || 'unknown')}${data.reporterEmail ? ` &lt;${esc(data.reporterEmail)}&gt;` : ''}${data.reporterRole ? ` (${esc(data.reporterRole)})` : ''}</td></tr>
+            <tr><td style="padding:2px 10px 2px 0; color:#6b7280;">Page</td><td>${esc(data.route)}</td></tr>
+            <tr><td style="padding:2px 10px 2px 0; color:#6b7280;">Build</td><td>${esc(data.buildSha || 'n/a')}</td></tr>
+            <tr><td style="padding:2px 10px 2px 0; color:#6b7280; vertical-align:top;">Browser</td><td style="color:#6b7280;">${esc(data.userAgent)}</td></tr>
+          </table>
+          <h3 style="color:#1a365d; margin:18px 0 6px;">What happened</h3>
+          <div style="background:#fff; border:1px solid #e5e7eb; border-radius:6px; padding:12px; white-space:pre-wrap;">${esc(data.description)}</div>
+          ${errorsList.length ? `<h3 style="color:#1a365d; margin:18px 0 6px;">Recent console errors</h3><ul style="font-size:13px; color:#374151;">${errorsList.map((e) => `<li><code>${esc(String(e.message))}</code></li>`).join('')}</ul>` : ''}
+          <p style="font-size:13px; color:#6b7280; margin-top:16px;">${esc(inlineNote)}</p>
+        </div>
+        ${BRAND_FOOTER_HTML}
+      </div>`;
+
+    return this.sendEmail({
+      to,
+      subject: `🐛 Bug report: ${(data.description || '').slice(0, 60)}${(data.description || '').length > 60 ? '…' : ''} [${data.route}]`,
+      html,
+      text,
+      replyTo: data.reporterEmail,
+      attachments,
     });
   }
 

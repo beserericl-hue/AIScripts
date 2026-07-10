@@ -23,16 +23,23 @@ export const SCREENSHOT_FLAG_KEY = 'cshse:bug-screenshot';
  * throw on localStorage access.
  */
 export function isScreenshotEnabled(): boolean {
+  // Auto-capture is ON by default now (bug reports must carry an image). It can
+  // still be turned OFF explicitly via the build env or a per-browser opt-out.
   try {
-    if ((import.meta as any).env?.VITE_ENABLE_BUG_SCREENSHOT === 'true') return true;
+    const env = (import.meta as any).env?.VITE_ENABLE_BUG_SCREENSHOT;
+    if (env === 'false') return false;
+    if (env === 'true') return true;
   } catch {
     /* ignore env access issues */
   }
   try {
-    return typeof localStorage !== 'undefined' && localStorage.getItem(SCREENSHOT_FLAG_KEY) === 'on';
+    if (typeof localStorage !== 'undefined' && localStorage.getItem(SCREENSHOT_FLAG_KEY) === 'off') {
+      return false;
+    }
   } catch {
-    return false;
+    /* ignore localStorage access issues */
   }
+  return true;
 }
 
 /**

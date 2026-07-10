@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { BugReport } from '../models/BugReport';
+import { emailService } from '../services/emailService';
 
 // ---------------------------------------------------------------------------
 // CR-016 / Sprint 7.2 — In-app bug reports.
@@ -100,6 +101,25 @@ export const createBugReport = async (req: AuthenticatedRequest, res: Response) 
       screenshot,
       status: 'new'
     });
+
+    // Email the report (text + screenshot) to the support inboxes. Fire-and-
+    // forget: the report is already persisted, so a mail hiccup must not fail
+    // the request (the user still gets their reference).
+    emailService
+      .sendBugReportEmail({
+        reference: String(report._id),
+        description: report.description,
+        route: report.route,
+        userAgent: report.userAgent,
+        buildSha: report.buildSha,
+        reporterName: report.reporterName,
+        reporterEmail: report.reporterEmail,
+        reporterRole: report.reporterRole,
+        recentConsoleErrors: errs,
+        screenshot,
+        createdAt: report.createdAt,
+      })
+      .catch((e) => console.error('[bug-report] email send failed (non-fatal):', e));
 
     return res.status(201).json({
       reference: String(report._id),
