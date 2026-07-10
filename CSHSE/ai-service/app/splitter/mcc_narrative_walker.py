@@ -127,6 +127,7 @@ class MccStandard:
     shall_statement: str = ""
     text: str = ""
     references: list[MccReference] = field(default_factory=list)
+    links: list[str] = field(default_factory=list)  # clickable hrefs (PDF URI annots)
     page_start: Optional[int] = None
     page_end: Optional[int] = None
 
@@ -140,6 +141,7 @@ class MccStandard:
                 {"kind": r.kind, "code": r.code, "url": r.url, "label": r.label, "raw": r.raw}
                 for r in self.references
             ],
+            "links": list(self.links),
             "pageStart": self.page_start,
             "pageEnd": self.page_end,
         }
@@ -480,6 +482,11 @@ def walk_mcc_pdf(pdf_path: str, expected_standards: int = 20) -> MccParseResult:
     pages_text = _page_texts_from_reader(reader)
     result = build_skeleton(pages_text, expected_standards=expected_standards)
 
+    # Clickable links per standard (from PDF URI annotations on its page range).
+    for std in result.standards:
+        if std.page_start is not None:
+            std.links = extract_uri_links(reader, std.page_start, (std.page_end or std.page_start) + 1)
+
     codes = {e.code for e in result.appendix_catalog}
     ranges = locate_appendix_content(pages_text, codes)
     for entry in result.appendix_catalog:
@@ -512,6 +519,35 @@ def walk_mcc_pdf(pdf_path: str, expected_standards: int = 20) -> MccParseResult:
                 )
         i = j
     return result
+
+
+def extract_uri_links(reader, page_start: int, page_end: int) -> list[str]:
+    """Collect the hrefs of every hyperlink (PDF /URI annotation) on the given
+    page range, de-duplicated in document order. pypdf plain-text extraction
+    drops hyperlinks, so we read the annotations directly to keep links
+    clickable in the Review + Self-Study editors."""
+    uris: list[str] = []
+    seen: set[str] = set()
+    for i in range(max(0, page_start or 0), min(page_end or 0, len(reader.pages))):
+        try:
+            annots = reader.pages[i].get("/Annots")
+        except Exception:  # noqa: BLE001
+            annots = None
+        if not annots:
+            continue
+        for a in annots:
+            try:
+                obj = a.get_object()
+                action = obj.get("/A")
+                uri = action.get("/URI") if action else None
+                if uri:
+                    uri = str(uri).strip()
+                    if uri and uri not in seen:
+                        seen.add(uri)
+                        uris.append(uri)
+            except Exception:  # noqa: BLE001
+                continue
+    return uris
 
 
 def slice_pdf_pages(pdf_path: str, page_start: int, page_end: int) -> bytes:

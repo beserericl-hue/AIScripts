@@ -20,8 +20,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import io
 import json
 import os
+import re
 import tempfile
 import time
 import traceback
@@ -306,6 +308,24 @@ def _resolve_s3_to_local(s3_key: str, out_path: Path) -> None:
     s3.download_file(bucket, s3_key, str(out_path))
 
 
+def _upload_bytes_to_s3(s3_key: str, data: bytes, content_type: str) -> tuple[str, str]:
+    """Upload ``data`` to the CSHSE bucket at ``s3_key``. Returns (bucket, key).
+
+    Used by the MCC pipeline to store each appendix as its own native PDF slice
+    so the server can back a SupportingEvidence record with storageType='s3'
+    (viewed natively — no OCR-flattening for the human).
+    """
+    bucket = os.environ.get("CSHSE_S3_BUCKET", "cshse-filestorage-qlyj5pn")
+    endpoint = os.environ.get("AWS_ENDPOINT_URL_S3") or os.environ.get("AWS_ENDPOINT_URL")
+    s3 = boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        config=BotoConfig(s3={"addressing_style": "path"}),
+    )
+    s3.put_object(Bucket=bucket, Key=s3_key, Body=data, ContentType=content_type)
+    return bucket, s3_key
+
+
 def _stage_started(job: JobRecord, name: str, detail: str = "") -> None:
     stage = StageProgress(name=name, state="running", detail=detail, started_at=_iso(_now()))
     job.stages.append(stage)
@@ -453,17 +473,90 @@ def _run_pipeline(job: JobRecord) -> None:
             pass
 
 
+def _html_escape(s: str) -> str:
+    return (
+        (s or "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+_URL_INLINE_RE = re.compile(r"(https?://[^\s)]+)")
+
+
+def _text_to_html(text: str, links: list[str] | None = None) -> str:
+    """Escape narrative text, auto-link inline URLs, and append any additional
+    hyperlinks (from PDF annotations) as a clickable list — so links survive
+    into the Review + Self-Study editors."""
+    paras = [p.strip() for p in re.split(r"\n\s*\n", text or "") if p.strip()]
+    html_paras = []
+    for p in paras:
+        esc = _html_escape(p).replace("\n", "<br/>")
+        esc = _URL_INLINE_RE.sub(r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', esc)
+        html_paras.append(f"<p>{esc}</p>")
+    body = "".join(html_paras) or "<p></p>"
+    extra = [u for u in (links or []) if u and u not in text]
+    if extra:
+        items = "".join(
+            f'<li><a href="{_html_escape(u)}" target="_blank" rel="noopener noreferrer">{_html_escape(u)}</a></li>'
+            for u in extra
+        )
+        body += f'<p><strong>Links:</strong></p><ul>{items}</ul>'
+    return body
+
+
+def _split_standard_into_chunks(std_text: str) -> list[tuple[str, str]]:
+    """Split a standard's narrative into (heading, body) chunks on the
+    institution's own sub-points (``a.``, ``b.``, ``b.1.`` …). Falls back to a
+    single chunk when there are no sub-points. Nothing is dropped."""
+    lines = (std_text or "").splitlines()
+    # Drop the first line (the "Standard #N …" shall line) — it's the framing.
+    if lines and re.match(r"\s*Standard\s*#\s*\d+", lines[0]):
+        lines = lines[1:]
+    chunks: list[tuple[str, str]] = []
+    cur_head = "Overview"
+    cur_body: list[str] = []
+    point_re = re.compile(r"^\s*([a-z]\.(?:\d+\.)?)\s+(.*)$")
+    for line in lines:
+        m = point_re.match(line)
+        if m:
+            if cur_body:
+                chunks.append((cur_head, "\n".join(cur_body).strip()))
+            cur_head = _norm_space(line)[:120]
+            cur_body = [m.group(2)]
+        else:
+            cur_body.append(line)
+    if cur_body:
+        chunks.append((cur_head, "\n".join(cur_body).strip()))
+    return [(h, b) for (h, b) in chunks if b.strip()]
+
+
+def _norm_space(s: str) -> str:
+    return re.sub(r"\s+", " ", s or "").strip()
+
+
 def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
-    """MCC narrative (third format) path.
+    """MCC narrative (third format) path — maps the PDF into the existing wizard
+    review shapes so the current Review UI renders it unchanged:
 
-    Runs the PDF walker (Pass 1 + Pass 2) and publishes the structured payload
-    in ``job.mcc``. Also seeds the Introduction bucket from the single
-    ``documentIntroduction`` blob. Appendix PDF slicing + hidden OCR text +
-    Pass 3 sub-spec recommendation are done by the server / matcher from this
-    payload (the appendix page ranges are all here).
+      * ``introductions.document`` ← the single documentIntroduction blob.
+      * ``buckets["<std>.<spec>"]`` ← each standard's narrative chunks placed on
+        the canonical Associate sub-specs (Pass 3: embedding-scored within the
+        known standard, with a deterministic fallback so content is never lost).
+      * ``evidenceDocs[]`` ← each appendix sliced to its own **native PDF**,
+        uploaded to S3 (storageType='s3'), routed to the standard(s) that cite
+        it; ``extractedText`` rides along as HIDDEN metadata for AI scoring.
+      * ``job.mcc`` ← the full structured walker output (diagnostics + server).
     """
-    from app.splitter.mcc_narrative_walker import walk_mcc_pdf
+    import uuid as _uuid
 
+    from app.splitter.mcc_narrative_walker import walk_mcc_pdf, slice_pdf_pages, extract_uri_links
+    from app.standards.loader import load_specifications
+
+    settings = get_settings()
+
+    # ---- Pass 1 + 2 -----------------------------------------------------
     _stage_started(job, "mcc_walker", "reading PDF (pypdf)")
     result = walk_mcc_pdf(str(src_path), expected_standards=20)
     job.mcc = result.to_dict()
@@ -476,8 +569,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
         f"({located} page-located), {result.page_count} pages",
     )
 
-    # Seed the Introduction rail from the single documentIntroduction blob
-    # (headings preserved). The server maps this to Submission.documentIntroduction.
+    # ---- Introduction ---------------------------------------------------
     _stage_started(job, "mcc_introduction", "")
     job.introductions = {
         "document": {
@@ -485,15 +577,223 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             "standardCode": None,
             "items": [
                 {
-                    "id": f"{job.job_id}-intro",
-                    "scope": "document",
-                    "text": result.introduction,
-                    "source": "mcc_narrative",
+                    "sectionId": f"{job.job_id}:mccintro",
+                    "heading": "Program Introduction",
+                    "snippet": result.introduction[:4000],
+                    "htmlSnippet": _text_to_html(result.introduction),
+                    "wordCount": len(result.introduction.split()),
+                    "confidence": None,
+                    "acceptState": "review_unknown",
+                    "rationale": "MCC General Introduction (headings preserved).",
                 }
             ],
         }
     }
     _stage_done(job, "mcc_introduction", f"{len(result.introduction)} chars")
+
+    # ---- Pass 3: place standard narratives on canonical sub-specs -------
+    _stage_started(job, "mcc_subspec_match", f"0 / {len(result.standards)}")
+    specs = load_specifications(job.program_level)
+    specs_by_std: dict[str, list] = {}
+    for sp in specs:
+        specs_by_std.setdefault(str(sp.standard_code), []).append(sp)
+
+    buckets: dict[str, dict[str, Any]] = {}
+
+    def _bucket(std_code: str, spec) -> dict[str, Any]:
+        key = f"{std_code}.{spec.spec_code}"
+        if key not in buckets:
+            buckets[key] = {
+                "standardCode": std_code,
+                "specCode": spec.spec_code,
+                "standardTitle": spec.standard_title,
+                "specPrompt": spec.spec_text,
+                "narratives": [],
+                "evidenceText": [],
+                "evidenceFiles": [],
+                "matrixCells": [],
+                "coverageScore": None,
+                "coverageCovered": None,
+                "coverageGaps": [],
+                "coverageStrengths": [],
+            }
+        return buckets[key]
+
+    # Optional embedding recommender (best sub-spec within the standard, w/ a
+    # confidence). Guarded — a missing key / API hiccup falls back to round-robin
+    # so an import NEVER fails or drops content.
+    recommender = _MccSubspecRecommender(settings, specs_by_std)
+
+    done = 0
+    for std in result.standards:
+        std_code = str(std.n)
+        std_specs = specs_by_std.get(std_code) or []
+        chunks = _split_standard_into_chunks(std.text)
+        if not std_specs:
+            # No canonical specs for this standard — stash whole narrative under
+            # the standard introduction so nothing is lost.
+            job.introductions[f"standard-{std_code}"] = {
+                "scope": "standard",
+                "standardCode": std_code,
+                "items": [{
+                    "sectionId": f"{job.job_id}:mccstd:{std_code}",
+                    "heading": std.section_title or f"Standard {std_code}",
+                    "snippet": std.text[:4000],
+                    "htmlSnippet": _text_to_html(std.text, std.links),
+                    "wordCount": len(std.text.split()),
+                    "confidence": None,
+                    "acceptState": "review_unknown",
+                    "rationale": "No canonical sub-specs loaded for this standard.",
+                }],
+            }
+            done += 1
+            continue
+        for ci, (head, body) in enumerate(chunks):
+            spec, conf, rationale = recommender.pick(std_code, f"{head}\n{body}")
+            if spec is None:
+                spec = std_specs[ci % len(std_specs)]
+                conf, rationale = None, "Placed by position (recommender unavailable); confirm sub-spec."
+            bk = _bucket(std_code, spec)
+            links = std.links if ci == 0 else []
+            bk["narratives"].append({
+                "sectionId": f"{job.job_id}:mccn:{std_code}:{_uuid.uuid4().hex[:8]}",
+                "heading": head,
+                "snippet": body[:2000],
+                "htmlSnippet": _text_to_html(body, links),
+                "wordCount": len(body.split()),
+                "confidence": conf,
+                "acceptState": "review_unknown",
+                "rationale": rationale,
+            })
+        done += 1
+        if done % 5 == 0:
+            _stage_started(job, "mcc_subspec_match", f"{done} / {len(result.standards)}")
+    job.buckets = buckets
+    _stage_done(job, "mcc_subspec_match", f"{len(buckets)} spec buckets filled")
+
+    # ---- Appendix files: slice → S3 → evidenceDocs + tag to standards ---
+    _stage_started(job, "mcc_appendix_files", f"0 / {located}")
+    # Map appendix code → standards that reference it (for routing/tagging).
+    code_to_stds: dict[str, list[str]] = {}
+    for std in result.standards:
+        for ref in std.references:
+            if ref.kind == "file" and ref.code:
+                code_to_stds.setdefault(ref.code, [])
+                if str(std.n) not in code_to_stds[ref.code]:
+                    code_to_stds[ref.code].append(str(std.n))
+
+    from pypdf import PdfReader as _PdfReader
+
+    evidence_docs: list[dict[str, Any]] = []
+    uploaded = 0
+    for entry in result.appendix_catalog:
+        if entry.page_start is None or entry.page_end is None:
+            continue
+        try:
+            pdf_bytes = slice_pdf_pages(str(src_path), entry.page_start, entry.page_end)
+            s3_key = f"imports/mcc/{job.submission_id}/{job.import_id}/appendix-{entry.code}.pdf"
+            try:
+                bucket_name, key = _upload_bytes_to_s3(s3_key, pdf_bytes, "application/pdf")
+            except Exception as exc:  # noqa: BLE001
+                bucket_name, key = None, None
+                job.warnings.append(f"Appendix {entry.code}: S3 upload failed ({exc}).")
+            # Hidden text layer for AI scoring (pypdf text; OCR is a follow-up
+            # for pure scans). Never surfaced to the reader.
+            try:
+                _sl = _PdfReader(io.BytesIO(pdf_bytes))
+                extracted = "\n".join((p.extract_text() or "") for p in _sl.pages).strip()
+            except Exception:  # noqa: BLE001
+                extracted = ""
+            ref_stds = code_to_stds.get(entry.code, [])
+            route_std = ref_stds[0] if ref_stds else None
+            evidence_docs.append({
+                "sectionId": f"{job.job_id}:mccap:{entry.code}",
+                "docSubKind": "paper",
+                "title": f"Appendix {entry.code}: {entry.title}",
+                "summary": f"Appendix section {entry.section} — {entry.kind}. "
+                           + (f"Referenced by Standard(s) {', '.join(ref_stds)}." if ref_stds else "Not referenced inline."),
+                "byteOffsetStart": None,
+                "pageCountEstimate": (entry.page_end - entry.page_start),
+                "imageCount": 0,
+                "courseCode": None,
+                "points": None,
+                "s3Key": key,
+                "s3Bucket": bucket_name,
+                "fileSize": len(pdf_bytes),
+                "sha256": None,
+                "mimeType": "application/pdf",
+                "fileName": f"Appendix {entry.code} - {entry.title}.pdf"[:180],
+                "mccCode": entry.code,
+                "mccKind": entry.kind,
+                "routing": {"std": route_std, "spec": None, "source": "mcc"},
+                "referencedByStandards": ref_stds,
+                # HIDDEN — AI-eval only, never rendered to the reader.
+                "extractedText": extracted[:200000],
+                "hasText": bool(extracted),
+            })
+            if key:
+                uploaded += 1
+        except Exception as exc:  # noqa: BLE001
+            job.warnings.append(f"Appendix {entry.code}: slice/upload error ({exc}).")
+    job.evidence_docs = evidence_docs
+    _stage_done(job, "mcc_appendix_files", f"{uploaded}/{len(evidence_docs)} appendices uploaded to S3")
+
+
+class _MccSubspecRecommender:
+    """Best canonical sub-spec (within a known standard) for a narrative chunk,
+    scored by embedding cosine similarity → confidence. Fully optional: if the
+    embedding client can't be built or a call fails, ``pick`` returns
+    ``(None, None, "")`` and the caller falls back to positional placement."""
+
+    def __init__(self, settings, specs_by_std: dict[str, list]):
+        self._specs_by_std = specs_by_std
+        self._embedder = None
+        self._spec_vecs: dict[str, list[tuple[Any, list[float]]]] = {}
+        try:
+            from app.embeddings.openai_client import EmbeddingClient
+            self._embedder = EmbeddingClient(settings.openai_api_key)
+        except Exception:  # noqa: BLE001
+            self._embedder = None
+
+    def _vecs_for(self, std_code: str):
+        if std_code in self._spec_vecs:
+            return self._spec_vecs[std_code]
+        specs = self._specs_by_std.get(std_code) or []
+        out: list[tuple[Any, list[float]]] = []
+        if self._embedder is not None and specs:
+            try:
+                for sp in specs:
+                    v = self._embedder.embed_one(sp.spec_text[:1500])
+                    out.append((sp, v))
+            except Exception:  # noqa: BLE001
+                out = []
+        self._spec_vecs[std_code] = out
+        return out
+
+    def pick(self, std_code: str, chunk_text: str):
+        vecs = self._vecs_for(std_code)
+        if not vecs or self._embedder is None:
+            return None, None, ""
+        try:
+            q = self._embedder.embed_one(chunk_text[:1500])
+        except Exception:  # noqa: BLE001
+            return None, None, ""
+
+        def _cos(a, b):
+            import math
+            dot = sum(x * y for x, y in zip(a, b))
+            na = math.sqrt(sum(x * x for x in a)) or 1.0
+            nb = math.sqrt(sum(y * y for y in b)) or 1.0
+            return dot / (na * nb)
+
+        scored = sorted(((sp, _cos(q, v)) for sp, v in vecs), key=lambda t: t[1], reverse=True)
+        best_spec, best = scored[0]
+        conf = round(max(0.0, min(1.0, (best + 1) / 2)), 2)  # cosine[-1,1] → [0,1]
+        rationale = (
+            f"Best match to Specification {std_code}.{best_spec.spec_code} "
+            f"(“{best_spec.spec_text[:80]}…”) by semantic similarity. Confirm or reassign."
+        )
+        return best_spec, conf, rationale
 
 
 def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
