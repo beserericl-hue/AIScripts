@@ -702,7 +702,14 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             })
         done += 1
         if done % 5 == 0:
-            _stage_started(job, "mcc_subspec_match", f"{done} / {len(result.standards)}")
+            # Update the SINGLE running stage in place — re-calling
+            # _stage_started() would append duplicate "running" rows that never
+            # complete (leaving stuck spinners in the wizard).
+            for s in reversed(job.stages):
+                if s.name == "mcc_subspec_match":
+                    s.detail = f"{done} / {len(result.standards)}"
+                    break
+            _publish_status(job)
     job.buckets = buckets
     _stage_done(job, "mcc_subspec_match", f"{len(buckets)} spec buckets filled")
 
