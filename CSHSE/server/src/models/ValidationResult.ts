@@ -14,6 +14,10 @@ export interface IValidationResultData {
   verdict?: 'pass' | 'needs_improvement' | 'fail';
   rationale?: string;
   criteriaCoverage?: Array<{ criterion: string; met: boolean; note?: string }>;
+  // The web links the AI evaluator actually visited when judging this spec
+  // (fetched + read). `evaluable:false` = the page couldn't be read as text
+  // (e.g. an image/PDF) and was flagged for a human to open, not failed.
+  webLinksEvaluated?: Array<{ url: string; evaluable: boolean; reason?: string }>;
   // CR-049 Phase 4b — a reader can override the AI verdict; `verdict` then
   // holds the reader's judgement and these record the override.
   readerOverridden?: boolean;
@@ -58,6 +62,11 @@ const ValidationResultDataSchema = new Schema<IValidationResultData>({
     criterion: String,
     met: Boolean,
     note: String
+  }],
+  webLinksEvaluated: [{
+    url: String,
+    evaluable: Boolean,
+    reason: String
   }],
   readerOverridden: { type: Boolean, default: false },
   readerOverrideNote: String

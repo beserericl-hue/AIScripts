@@ -279,13 +279,19 @@ export function UploadStep(): JSX.Element {
           <span>This is a re-import of an existing self-study</span>
         </label>
         <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={forceFormat === 'template'}
-            onChange={(e) => setForceFormat(e.target.checked ? 'template' : null)}
-            className="rounded text-cshse-600 focus:ring-cshse-500"
-          />
-          <span>Treat this upload as template format (skip auto-detect)</span>
+          <span className="text-gray-600">Format</span>
+          <select
+            value={forceFormat ?? 'auto'}
+            onChange={(e) =>
+              setForceFormat(e.target.value === 'auto' ? null : (e.target.value as any))
+            }
+            className="rounded border-gray-300 text-sm focus:ring-cshse-500"
+          >
+            <option value="auto">Auto-detect (recommended)</option>
+            <option value="template">CSHSE template (spec-as-outline)</option>
+            <option value="self_study">Free-form self-study</option>
+            <option value="mcc_narrative">Narrative PDF (Standard #N + Appendix Index)</option>
+          </select>
         </label>
       </div>
 

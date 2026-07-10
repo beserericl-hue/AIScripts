@@ -165,10 +165,46 @@ export class ValidationService {
       /* context is best-effort */
     }
 
+    // The AI reader must actually VISIT the web links this spec cites (CR-049
+    // scraper). Collect hrefs + bare URLs from the spec narrative and any
+    // URL-type supporting evidence, then hand them to the evaluator, which
+    // fetches each page and judges its text against the spec criteria. Without
+    // this the scraper never runs (no URLs are passed) and web evidence is
+    // ignored. Bounded so one link-heavy spec can't blow the eval budget.
+    const webLinks: string[] = [];
+    try {
+      const seen = new Set<string>();
+      const pushUrl = (u?: string) => {
+        const url = (u || '').trim().replace(/[)>.,;'"]+$/, '');
+        if (!/^https?:\/\//i.test(url) || seen.has(url) || webLinks.length >= 8) return;
+        seen.add(url);
+        webLinks.push(url);
+      };
+      const hay = narrativeText || '';
+      let m: RegExpExecArray | null;
+      const hrefRe = /href\s*=\s*["']([^"']+)["']/gi;
+      while ((m = hrefRe.exec(hay)) !== null) pushUrl(m[1]);
+      for (const u of hay.match(/https?:\/\/[^\s"'<>)]+/gi) || []) pushUrl(u);
+      // URL-type supporting evidence cards for this spec.
+      const urlEv: any[] = await SupportingEvidence.find({
+        submissionId,
+        isDeleted: { $ne: true },
+        evidenceType: 'url',
+        $or: [{ standardCode, specCode }, { standardCode: { $in: [null, ''] } }],
+      })
+        .select('url')
+        .limit(8)
+        .lean();
+      for (const e of urlEv) pushUrl(e?.url);
+    } catch {
+      /* link collection is best-effort */
+    }
+
     let verdict: 'pass' | 'needs_improvement' | 'fail' = 'needs_improvement';
     let rationale = '';
     let suggestions: string[] = [];
     let criteriaCoverage: Array<{ criterion: string; met: boolean; note?: string }> = [];
+    let scrapedLinks: Array<{ url: string; evaluable: boolean; reason?: string }> = [];
     try {
       const out = await evaluateSection({
         institutionId,
@@ -176,8 +212,10 @@ export class ValidationService {
         programLevel,
         specs: [{ standardCode, specCode, criteria }],
         narrativeHtml: narrativeText,
-        supportingEvidenceText: evidenceTexts
+        supportingEvidenceText: evidenceTexts,
+        webLinks
       });
+      scrapedLinks = out?.links || [];
       const row = out?.perSpec?.[0];
       if (row) {
         verdict = row.verdict;
@@ -201,7 +239,8 @@ export class ValidationService {
       rationale,
       missingElements: suggestions,
       suggestions,
-      criteriaCoverage
+      criteriaCoverage,
+      webLinksEvaluated: scrapedLinks
     };
 
     // Persist so the client poll + reader report can consume it. We capture

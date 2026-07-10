@@ -302,7 +302,7 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
           <div className="flex items-center gap-2 font-medium text-cshse-700">
             <span>🧭 Format detection</span>
             <span className="rounded bg-cshse-100 px-2 py-0.5 text-xs">
-              {format.format} · conf {format.confidence.toFixed(2)}
+              {(({ template: 'CSHSE template', self_study: 'Free-form self-study', mcc_narrative: 'Narrative PDF (Standard #N)' } as Record<string, string>)[format.format] || format.format)} · conf {format.confidence.toFixed(2)}
             </span>
           </div>
           <div className="mt-1 text-xs text-cshse-700">{format.reasoning}</div>
