@@ -82,7 +82,7 @@ class StartImportRequest(BaseModel):
     submissionId: str
     importId: str
     programLevel: str = Field(default="bachelors")
-    forceFormat: str | None = Field(default=None, description="'template' | 'self_study' to skip auto-detect.")
+    forceFormat: str | None = Field(default=None, description="'template' | 'self_study' | 'mcc_narrative' to skip auto-detect.")
     callbackUrl: str = Field(..., description="Terminal-state webhook on the CSHSE server.")
     eventCallbackUrl: str = Field(..., description="Per-stage progress webhook on the CSHSE server.")
     institutionId: str | None = Field(
@@ -156,7 +156,7 @@ async def start_import(req: StartImportRequest, request: Request) -> dict:
 
     if req.programLevel not in ("associate", "bachelors", "masters"):
         raise HTTPException(status_code=400, detail=f"invalid programLevel: {req.programLevel}")
-    if req.forceFormat is not None and req.forceFormat not in ("template", "self_study"):
+    if req.forceFormat is not None and req.forceFormat not in ("template", "self_study", "mcc_narrative"):
         raise HTTPException(status_code=400, detail=f"invalid forceFormat: {req.forceFormat}")
 
     snapshot = enqueue_job(
