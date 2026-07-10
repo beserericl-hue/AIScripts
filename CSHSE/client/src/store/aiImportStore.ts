@@ -379,6 +379,10 @@ interface AIImportState {
   // Identity
   importId: string | null;
   submissionId: string | null;
+  // The submission the in-memory review buckets were last LOADED for. The
+  // autosave refuses to write unless this equals `submissionId`, so a stale
+  // store can never bleed one submission's content onto another.
+  loadedForSubmissionId: string | null;
   jobId: string | null;
   step: WizardStep;
   status: WizardStatus;
@@ -703,6 +707,7 @@ interface AIImportState {
 const initialState = {
   importId: null,
   submissionId: null,
+  loadedForSubmissionId: null,
   jobId: null,
   step: 'upload' as WizardStep,
   status: 'idle' as WizardStatus,
@@ -927,6 +932,19 @@ export const useAIImportStore = create<AIImportState>()(
         const run = async (): Promise<boolean> => {
           const s = get();
           if (!s.submissionId) return false; // wizard-only run
+          // DATA ISOLATION: never push the in-memory review buckets to a
+          // submission they were not loaded from. When the user switches
+          // submissions the buckets briefly belong to the PREVIOUS one; writing
+          // them to the new submission would bleed one institution's document
+          // onto another. Only autosave once the store has been (re)loaded for
+          // the current submission. (`loadedForSubmissionId` is set by
+          // loadPersistedReviewState and cleared by setSubmissionId.)
+          if (s.loadedForSubmissionId !== s.submissionId) {
+            console.warn(
+              `[save-state] skipped — store loaded for ${s.loadedForSubmissionId} but current submission is ${s.submissionId}`
+            );
+            return false;
+          }
           try {
             await api.post(`/api/submissions/${s.submissionId}/review/save-state`, {
               buckets: s.buckets,
@@ -1241,7 +1259,28 @@ export const useAIImportStore = create<AIImportState>()(
             dirty: true
           };
         }),
-      setSubmissionId: (id) => set({ submissionId: id }),
+      setSubmissionId: (id) =>
+    set((s) => {
+      if (s.submissionId === id) return { submissionId: id } as any;
+      // Switching submissions: DROP the previous submission's review content so
+      // it can never be autosaved onto the new one, and mark the store as
+      // "not yet loaded" for the new submission until loadPersistedReviewState
+      // repopulates it.
+      return {
+        submissionId: id,
+        loadedForSubmissionId: null,
+        dirty: false,
+        buckets: {},
+        tags: [],
+        cvs: [],
+        evidenceDocs: [],
+        introductions: {},
+        placeholderSections: [],
+        matrices: [],
+        approvedIds: [],
+        discardedIds: [],
+      } as any;
+    }),
       setUploadFile: (f) => set({ uploadFile: f, uploadProgress: 0 }),
       setProgramLevel: (l) => set({ programLevel: l }),
       setIsReimport: (v) => set({ isReimport: v }),
@@ -1537,8 +1576,14 @@ export const useAIImportStore = create<AIImportState>()(
                 state.resolvedMissingFragmentIds ?? get().resolvedMissingFragmentIds,
               approvedIds: state.approvedIds || [],
               discardedIds: state.discardedIds || [],
-              importId: derivedImportId ?? current.importId
+              importId: derivedImportId ?? current.importId,
+              // The store is now loaded FOR this submission — autosave may write.
+              loadedForSubmissionId: submissionId,
             });
+          } else if (get().submissionId === submissionId) {
+            // No server-side review state yet (fresh submission). Still mark it
+            // loaded so the user can build + autosave content for THIS one.
+            set({ loadedForSubmissionId: submissionId });
           }
           if (matrixState) {
             const current = get();
@@ -2107,7 +2152,11 @@ export const useAIImportStore = create<AIImportState>()(
           coverageReport:
             snap.coverageReport !== undefined
               ? (snap.coverageReport as AICoverageReport | null)
-              : current.coverageReport
+              : current.coverageReport,
+          // A freshly-parsed snapshot's buckets belong to the submission being
+          // parsed — mark the store loaded for it so autosave may write (and so
+          // it can never be mistaken for another submission's content).
+          loadedForSubmissionId: current.submissionId ?? current.loadedForSubmissionId,
         });
       },
 

@@ -435,6 +435,66 @@ export async function saveReviewState(req: AuthenticatedRequest, res: Response):
     (submission as any).aiReviewState = state;
   }
   const body = req.body || {};
+
+  // ── DATA ISOLATION GUARD ────────────────────────────────────────────────
+  // A submission's review state may ONLY hold content that originated from an
+  // import of THIS submission. Every merged review item is stamped with its
+  // `sourceImportId`; every import belongs to exactly one submission. Reject a
+  // save whose items carry an import origin from a DIFFERENT submission — this
+  // is what stops a stale browser store from bleeding one institution's parsed
+  // document onto another submission (cross-institution data leak).
+  const referencedImportIds = new Set<string>();
+  const noteOrigin = (v: any) => {
+    const id = v && (v.sourceImportId || v.importId);
+    if (id) referencedImportIds.add(String(id));
+  };
+  for (const b of Object.values((body.buckets || {}) as Record<string, any>)) {
+    (b?.narratives || []).forEach(noteOrigin);
+    (b?.evidenceText || []).forEach(noteOrigin);
+    (b?.evidenceFiles || []).forEach(noteOrigin);
+  }
+  (body.tags || []).forEach(noteOrigin);
+  (body.cvs || []).forEach(noteOrigin);
+  (body.evidenceDocs || []).forEach(noteOrigin);
+  for (const b of Object.values((body.introductions || {}) as Record<string, any>)) {
+    (b?.items || []).forEach(noteOrigin);
+  }
+  if (referencedImportIds.size > 0) {
+    const validIds = [...referencedImportIds].filter((id) =>
+      mongoose.Types.ObjectId.isValid(id)
+    );
+    const imports = validIds.length
+      ? await SelfStudyImport.find({ _id: { $in: validIds } })
+          .select('_id submissionId')
+          .lean()
+      : [];
+    const foreign = imports.filter(
+      (imp: any) => String(imp.submissionId) !== String(submission._id)
+    );
+    if (foreign.length > 0) {
+      console.error(
+        `[save-state BLOCKED — data isolation] submission ${submission._id} ` +
+          `(institution ${(submission as any).institutionId}) received review content ` +
+          `from foreign import(s) ${foreign
+            .map((i: any) => `${i._id}->submission:${i.submissionId}`)
+            .join(', ')} by user ${req.user?.id} (${req.user?.role}). Rejected.`
+      );
+      res.status(409).json({
+        error:
+          'This content does not belong to this submission and was blocked to protect ' +
+          'institution data. Please reload the page before continuing.',
+        code: 'CROSS_SUBMISSION_CONTENT_BLOCKED',
+      });
+      return;
+    }
+  }
+  // Stamp the owner so the origin is auditable + future reads can double-check.
+  (state as any).ownerSubmissionId = String(submission._id);
+  (state as any).ownerInstitutionId = (submission as any).institutionId
+    ? String((submission as any).institutionId)
+    : null;
+  // ────────────────────────────────────────────────────────────────────────
+
   let touched = 0;
   for (const f of SAVEABLE_FIELDS) {
     if (body[f] !== undefined) {
