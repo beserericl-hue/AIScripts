@@ -128,6 +128,8 @@ class MccStandard:
     text: str = ""
     references: list[MccReference] = field(default_factory=list)
     links: list[str] = field(default_factory=list)  # clickable hrefs (PDF URI annots)
+    # link TEXT -> href, so inline "Supporting Link: <text>" becomes a real <a>.
+    link_map: dict = field(default_factory=dict)
     page_start: Optional[int] = None
     page_end: Optional[int] = None
 
@@ -142,6 +144,7 @@ class MccStandard:
                 for r in self.references
             ],
             "links": list(self.links),
+            "linkMap": dict(self.link_map),
             "pageStart": self.page_start,
             "pageEnd": self.page_end,
         }
@@ -485,7 +488,9 @@ def walk_mcc_pdf(pdf_path: str, expected_standards: int = 20) -> MccParseResult:
     # Clickable links per standard (from PDF URI annotations on its page range).
     for std in result.standards:
         if std.page_start is not None:
-            std.links = extract_uri_links(reader, std.page_start, (std.page_end or std.page_start) + 1)
+            end = (std.page_end or std.page_start) + 1
+            std.links = extract_uri_links(reader, std.page_start, end)
+            std.link_map = extract_link_map(pdf_path, std.page_start, end)
 
     codes = {e.code for e in result.appendix_catalog}
     ranges = locate_appendix_content(pages_text, codes)
@@ -548,6 +553,42 @@ def extract_uri_links(reader, page_start: int, page_end: int) -> list[str]:
             except Exception:  # noqa: BLE001
                 continue
     return uris
+
+
+def extract_link_map(pdf_path: str, page_start: int, page_end: int) -> dict:
+    """Map each hyperlink's visible TEXT -> its href over a page range, using
+    PyMuPDF (which exposes both the link rect and the text under it). pypdf drops
+    hyperlinks entirely, so this is how "(Supporting Link: MCC Accreditation
+    Page)" becomes a real clickable link in the imported narrative. Returns {}
+    if PyMuPDF is unavailable (graceful — the text is still imported, just not
+    linked)."""
+    try:
+        import fitz  # PyMuPDF
+    except Exception:  # noqa: BLE001
+        return {}
+    out: dict[str, str] = {}
+    try:
+        doc = fitz.open(pdf_path)
+    except Exception:  # noqa: BLE001
+        return {}
+    for i in range(max(0, page_start or 0), min((page_end or 0), len(doc))):
+        try:
+            page = doc[i]
+            for link in page.get_links():
+                uri = link.get("uri")
+                if not uri:
+                    continue
+                text = (page.get_textbox(link["from"]) or "").strip()
+                text = re.sub(r"\s+", " ", text)
+                if text and text not in out:
+                    out[text] = uri
+        except Exception:  # noqa: BLE001
+            continue
+    try:
+        doc.close()
+    except Exception:  # noqa: BLE001
+        pass
+    return out
 
 
 def slice_pdf_pages(pdf_path: str, page_start: int, page_end: int) -> bytes:

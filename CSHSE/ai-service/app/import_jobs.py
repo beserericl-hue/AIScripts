@@ -485,51 +485,82 @@ def _html_escape(s: str) -> str:
 _URL_INLINE_RE = re.compile(r"(https?://[^\s)]+)")
 
 
-def _text_to_html(text: str, links: list[str] | None = None) -> str:
-    """Escape narrative text, auto-link inline URLs, and append any additional
-    hyperlinks (from PDF annotations) as a clickable list — so links survive
-    into the Review + Self-Study editors."""
+def _anchor(href: str, label: str) -> str:
+    return (
+        f'<a href="{_html_escape(href)}" target="_blank" rel="noopener noreferrer">'
+        f"{_html_escape(label)}</a>"
+    )
+
+
+def _text_to_html(text: str, link_map: dict | None = None) -> str:
+    """Escape narrative text and make its links CLICKABLE, preserving the
+    document's own link text:
+      * every hyperlink whose visible text appears in this passage (from the PDF
+        link map, text->href) becomes a real ``<a>`` on that exact text — so
+        "(Supporting Link: MCC Accreditation Page)" links to the accreditation
+        page, matching the source document;
+      * bare ``http(s)://`` URLs are auto-linked too.
+    Paragraphs and line breaks are kept so the imported content matches the
+    source formatting."""
+    link_map = link_map or {}
+    # Longest link texts first so a short one can't shadow a longer overlapping one.
+    ordered = sorted((t for t in link_map if t and t.strip()), key=len, reverse=True)
+
+    def render_para(p: str) -> str:
+        # Split the paragraph on the known link texts, escaping the non-link
+        # spans and anchoring the link spans (case-insensitive, whitespace-loose).
+        if ordered:
+            pattern = "|".join(re.escape(t) for t in ordered)
+            parts = re.split(f"({pattern})", p)
+        else:
+            parts = [p]
+        out = []
+        for seg in parts:
+            if seg in link_map:
+                out.append(_anchor(link_map[seg], seg))
+            else:
+                esc = _html_escape(seg).replace("\n", "<br/>")
+                esc = _URL_INLINE_RE.sub(lambda m: _anchor(m.group(1), m.group(1)), esc)
+                out.append(esc)
+        return "".join(out)
+
     paras = [p.strip() for p in re.split(r"\n\s*\n", text or "") if p.strip()]
-    html_paras = []
-    for p in paras:
-        esc = _html_escape(p).replace("\n", "<br/>")
-        esc = _URL_INLINE_RE.sub(r'<a href="\1" target="_blank" rel="noopener noreferrer">\1</a>', esc)
-        html_paras.append(f"<p>{esc}</p>")
-    body = "".join(html_paras) or "<p></p>"
-    extra = [u for u in (links or []) if u and u not in text]
-    if extra:
-        items = "".join(
-            f'<li><a href="{_html_escape(u)}" target="_blank" rel="noopener noreferrer">{_html_escape(u)}</a></li>'
-            for u in extra
-        )
-        body += f'<p><strong>Links:</strong></p><ul>{items}</ul>'
-    return body
+    html_paras = [f"<p>{render_para(p)}</p>" for p in paras]
+    return "".join(html_paras) or "<p></p>"
 
 
-def _split_standard_into_chunks(std_text: str) -> list[tuple[str, str]]:
-    """Split a standard's narrative into (heading, body) chunks on the
-    institution's own sub-points (``a.``, ``b.``, ``b.1.`` …). Falls back to a
-    single chunk when there are no sub-points. Nothing is dropped."""
+def _split_standard_by_letter(std_text: str) -> list[tuple[str | None, str, str]]:
+    """Split a standard's narrative into (letter, heading, body) chunks on the
+    institution's OWN top-level sub-points (``a.``, ``b.`` …). The MCC document
+    follows the CSHSE Handbook order, so its sub-point letter maps 1:1 to the
+    CSHSE specification letter (``a`` → ``<std>.a``). Dotted sub-points
+    (``b.1.``, ``b.2.``) fold into their parent letter so a spec keeps ALL of its
+    content. Text before the first letter (the shall statement / framing) is
+    returned with letter=None. Nothing is dropped."""
     lines = (std_text or "").splitlines()
-    # Drop the first line (the "Standard #N …" shall line) — it's the framing.
     if lines and re.match(r"\s*Standard\s*#\s*\d+", lines[0]):
         lines = lines[1:]
-    chunks: list[tuple[str, str]] = []
+    chunks: list[tuple[str | None, str, list[str]]] = []
+    cur_letter: str | None = None
     cur_head = "Overview"
     cur_body: list[str] = []
-    point_re = re.compile(r"^\s*([a-z]\.(?:\d+\.)?)\s+(.*)$")
+    # Only a TOP-LEVEL "a. " opens a new spec chunk. A dotted "a.1." stays inside
+    # the current chunk (it's a sub-point of the same spec).
+    top_re = re.compile(r"^\s*([a-z])\.\s+(?=[A-Za-z(])")
+    dotted_re = re.compile(r"^\s*[a-z]\.\d")
     for line in lines:
-        m = point_re.match(line)
-        if m:
+        m = top_re.match(line)
+        if m and not dotted_re.match(line):
             if cur_body:
-                chunks.append((cur_head, "\n".join(cur_body).strip()))
+                chunks.append((cur_letter, cur_head, cur_body))
+            cur_letter = m.group(1)
             cur_head = _norm_space(line)[:120]
-            cur_body = [m.group(2)]
+            cur_body = [line[m.end():]]
         else:
             cur_body.append(line)
     if cur_body:
-        chunks.append((cur_head, "\n".join(cur_body).strip()))
-    return [(h, b) for (h, b) in chunks if b.strip()]
+        chunks.append((cur_letter, cur_head, cur_body))
+    return [(lt, h, "\n".join(b).strip()) for (lt, h, b) in chunks if "\n".join(b).strip()]
 
 
 def _norm_space(s: str) -> str:
@@ -606,6 +637,9 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
 
     # ---- Introduction ---------------------------------------------------
     _stage_started(job, "mcc_introduction", "")
+    from app.splitter.mcc_narrative_walker import extract_link_map as _extract_link_map
+    _intro_end = result.standards[0].page_start if (result.standards and result.standards[0].page_start) else 12
+    intro_link_map = _extract_link_map(str(src_path), 0, _intro_end)
     job.introductions = {
         "document": {
             "scope": "document",
@@ -615,7 +649,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                     "sectionId": f"{job.job_id}:mccintro",
                     "heading": "Program Introduction",
                     "snippet": result.introduction[:4000],
-                    "htmlSnippet": _text_to_html(result.introduction),
+                    "htmlSnippet": _text_to_html(result.introduction, intro_link_map),
                     "wordCount": len(result.introduction.split()),
                     "confidence": None,
                     "acceptState": "review_unknown",
@@ -626,14 +660,34 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
     }
     _stage_done(job, "mcc_introduction", f"{len(result.introduction)} chars")
 
-    # ---- Pass 3: place standard narratives on canonical sub-specs -------
+    # ---- Pass 3: place each standard's OWN sub-points on the matching spec ---
+    # The MCC narrative follows the CSHSE Handbook order, so the institution's
+    # sub-point letter (a., b., …) maps 1:1 to the canonical spec letter
+    # (<std>.a). Deterministic + exact — the imported spec content is verbatim
+    # the document's sub-point, so the Compare view matches the source.
+    from app.splitter.mcc_narrative_walker import parse_references as _parse_refs
+
     _stage_started(job, "mcc_subspec_match", f"0 / {len(result.standards)}")
     specs = load_specifications(job.program_level)
-    specs_by_std: dict[str, list] = {}
+    specs_by_std: dict[str, dict[str, Any]] = {}
     for sp in specs:
-        specs_by_std.setdefault(str(sp.standard_code), []).append(sp)
+        specs_by_std.setdefault(str(sp.standard_code), {})[sp.spec_code] = sp
 
     buckets: dict[str, dict[str, Any]] = {}
+    # appendix code -> (std, spec) of the FIRST sub-point that cites it (drives the
+    # file card's Standard/Sub-standard fields) and code -> {all standards} (for
+    # the "referenced by" summary).
+    code_to_spec: dict[str, tuple[str | None, str | None]] = {}
+    code_to_stds: dict[str, list[str]] = {}
+
+    def _note_refs(refs, std_code, letter):
+        for ref in refs:
+            if ref.kind == "file" and ref.code:
+                code_to_stds.setdefault(ref.code, [])
+                if std_code and std_code not in code_to_stds[ref.code]:
+                    code_to_stds[ref.code].append(std_code)
+                if ref.code not in code_to_spec:
+                    code_to_spec[ref.code] = (std_code, letter)
 
     def _bucket(std_code: str, spec) -> dict[str, Any]:
         key = f"{std_code}.{spec.spec_code}"
@@ -643,68 +697,60 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 "specCode": spec.spec_code,
                 "standardTitle": spec.standard_title,
                 "specPrompt": spec.spec_text,
-                "narratives": [],
-                "evidenceText": [],
-                "evidenceFiles": [],
-                "matrixCells": [],
-                "coverageScore": None,
-                "coverageCovered": None,
-                "coverageGaps": [],
-                "coverageStrengths": [],
+                "narratives": [], "evidenceText": [], "evidenceFiles": [],
+                "matrixCells": [], "coverageScore": None, "coverageCovered": None,
+                "coverageGaps": [], "coverageStrengths": [],
             }
         return buckets[key]
 
-    # Optional embedding recommender (best sub-spec within the standard, w/ a
-    # confidence). Guarded — a missing key / API hiccup falls back to round-robin
-    # so an import NEVER fails or drops content.
-    recommender = _MccSubspecRecommender(settings, specs_by_std)
+    def _add_std_intro(std_code: str, heading: str, body: str, link_map: dict, rationale: str):
+        key = f"standard-{std_code}"
+        item = {
+            "sectionId": f"{job.job_id}:mccstdintro:{std_code}:{_uuid.uuid4().hex[:6]}",
+            "heading": heading,
+            "snippet": body[:4000],
+            "htmlSnippet": _text_to_html(body, link_map),
+            "wordCount": len(body.split()),
+            "confidence": None,
+            "acceptState": "review_unknown",
+            "rationale": rationale,
+        }
+        if key in job.introductions:
+            job.introductions[key]["items"].append(item)
+        else:
+            job.introductions[key] = {"scope": "standard", "standardCode": std_code, "items": [item]}
+
+    # Document-introduction references (e.g. "MCC Education Guide appendix A1").
+    _note_refs(result.intro_references, None, None)
 
     done = 0
     for std in result.standards:
         std_code = str(std.n)
-        std_specs = specs_by_std.get(std_code) or []
-        chunks = _split_standard_into_chunks(std.text)
-        if not std_specs:
-            # No canonical specs for this standard — stash whole narrative under
-            # the standard introduction so nothing is lost.
-            job.introductions[f"standard-{std_code}"] = {
-                "scope": "standard",
-                "standardCode": std_code,
-                "items": [{
-                    "sectionId": f"{job.job_id}:mccstd:{std_code}",
-                    "heading": std.section_title or f"Standard {std_code}",
-                    "snippet": std.text[:4000],
-                    "htmlSnippet": _text_to_html(std.text, std.links),
-                    "wordCount": len(std.text.split()),
-                    "confidence": None,
+        spec_letters = specs_by_std.get(std_code) or {}
+        for (letter, heading, body) in _split_standard_by_letter(std.text):
+            refs = _parse_refs(body)
+            spec = spec_letters.get(letter) if letter else None
+            if spec is not None:
+                bk = _bucket(std_code, spec)
+                bk["narratives"].append({
+                    "sectionId": f"{job.job_id}:mccn:{std_code}:{letter}",
+                    "heading": heading,
+                    "snippet": body[:4000],
+                    "htmlSnippet": _text_to_html(body, std.link_map),
+                    "wordCount": len(body.split()),
+                    "confidence": 0.95,
                     "acceptState": "review_unknown",
-                    "rationale": "No canonical sub-specs loaded for this standard.",
-                }],
-            }
-            done += 1
-            continue
-        for ci, (head, body) in enumerate(chunks):
-            spec, conf, rationale = recommender.pick(std_code, f"{head}\n{body}")
-            if spec is None:
-                spec = std_specs[ci % len(std_specs)]
-                conf, rationale = None, "Placed by position (recommender unavailable); confirm sub-spec."
-            bk = _bucket(std_code, spec)
-            links = std.links if ci == 0 else []
-            bk["narratives"].append({
-                "sectionId": f"{job.job_id}:mccn:{std_code}:{_uuid.uuid4().hex[:8]}",
-                "heading": head,
-                "snippet": body[:2000],
-                "htmlSnippet": _text_to_html(body, links),
-                "wordCount": len(body.split()),
-                "confidence": conf,
-                "acceptState": "review_unknown",
-                "rationale": rationale,
-            })
+                    "rationale": f"Matched to Specification {std_code}.{letter} by the document's own sub-point letter (“{spec.spec_text[:70]}…”).",
+                })
+                _note_refs(refs, std_code, letter)
+            else:
+                # Framing / shall statement / a letter with no canonical spec →
+                # the Standard introduction so nothing is lost.
+                _add_std_intro(std_code, heading, body, std.link_map,
+                               "Standard framing / overview (not a lettered specification).")
+                _note_refs(refs, std_code, None)
         done += 1
         if done % 5 == 0:
-            # Update the SINGLE running stage in place — re-calling
-            # _stage_started() would append duplicate "running" rows that never
-            # complete (leaving stuck spinners in the wizard).
             for s in reversed(job.stages):
                 if s.name == "mcc_subspec_match":
                     s.detail = f"{done} / {len(result.standards)}"
@@ -713,16 +759,8 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
     job.buckets = buckets
     _stage_done(job, "mcc_subspec_match", f"{len(buckets)} spec buckets filled")
 
-    # ---- Appendix files: slice → S3 → evidenceDocs + tag to standards ---
+    # ---- Appendix files: slice → S3 → evidenceDocs + tag to standard/sub-spec -
     _stage_started(job, "mcc_appendix_files", f"0 / {located}")
-    # Map appendix code → standards that reference it (for routing/tagging).
-    code_to_stds: dict[str, list[str]] = {}
-    for std in result.standards:
-        for ref in std.references:
-            if ref.kind == "file" and ref.code:
-                code_to_stds.setdefault(ref.code, [])
-                if str(std.n) not in code_to_stds[ref.code]:
-                    code_to_stds[ref.code].append(str(std.n))
 
     from pypdf import PdfReader as _PdfReader
 
@@ -754,7 +792,16 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 if len(ocr_text) > len(extracted):
                     extracted, ocr_used = ocr_text, True
             ref_stds = code_to_stds.get(entry.code, [])
-            route_std = ref_stds[0] if ref_stds else None
+            # Standard + sub-standard from the sub-point that CITES this appendix
+            # in the narrative — this is the "third pass" the file cards need so
+            # they pre-fill and a reader sees the file under the right spec.
+            route_std, route_spec = code_to_spec.get(entry.code, (None, None))
+            ref_summary = (
+                f"Referenced by Standard {route_std}"
+                + (f".{route_spec}" if route_spec else "")
+                + (f" (and {', '.join(s for s in ref_stds if s != route_std)})" if len([s for s in ref_stds if s != route_std]) else "")
+                + "."
+            ) if route_std else "Referenced in the program introduction." if entry.code in code_to_spec else "Not referenced inline."
             evidence_docs.append({
                 # STABLE per (submission, appendix code) — NOT job-specific — so a
                 # re-import yields the same sectionId → the review-state merge
@@ -763,8 +810,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 "sectionId": f"mccap:{job.submission_id}:{entry.code}",
                 "docSubKind": "paper",
                 "title": f"Appendix {entry.code}: {entry.title}",
-                "summary": f"Appendix section {entry.section} — {entry.kind}. "
-                           + (f"Referenced by Standard(s) {', '.join(ref_stds)}." if ref_stds else "Not referenced inline."),
+                "summary": f"Appendix section {entry.section} — {entry.kind}. " + ref_summary,
                 "byteOffsetStart": None,
                 "pageCountEstimate": (entry.page_end - entry.page_start),
                 "imageCount": 0,
@@ -778,7 +824,11 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 "fileName": f"Appendix {entry.code} - {entry.title}.pdf"[:180],
                 "mccCode": entry.code,
                 "mccKind": entry.kind,
-                "routing": {"std": route_std, "spec": None, "source": "mcc"},
+                # The client's file card reads resolvedStd/resolvedSpec to pre-fill
+                # the Standard / Sub-standard selectors; routing mirrors it.
+                "resolvedStd": route_std,
+                "resolvedSpec": route_spec,
+                "routing": {"std": route_std, "spec": route_spec, "source": "mcc"},
                 "referencedByStandards": ref_stds,
                 # HIDDEN — AI-eval only, never rendered to the reader.
                 "extractedText": extracted[:200000],
