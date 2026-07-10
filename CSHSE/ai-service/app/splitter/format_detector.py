@@ -35,7 +35,7 @@ from typing import Literal
 
 from docx import Document
 
-Format = Literal["template", "self_study"]
+Format = Literal["template", "self_study", "mcc_narrative"]
 
 # Title strings that appear early in the CSHSE Self-Study Template DOCX
 # and its sibling Reader Report templates. Case-insensitive match.
@@ -167,7 +167,61 @@ def detect_format_from_paragraphs(
 
 
 def detect_format(docx_path: str, head_paragraphs: int = 20) -> FormatDetection:
-    """Open ``docx_path`` and run the format detector against its paragraphs."""
+    """Sniff a file and return its format verdict.
+
+    Handles both DOCX (the original two formats) and **PDF** (the MCC
+    independent-narrative format). The MCC document is a single large PDF, so
+    when the bytes are a PDF we extract its text and run the MCC signal check
+    before anything else.
+    """
+    try:
+        with open(docx_path, "rb") as fh:
+            head = fh.read(5)
+    except OSError:
+        head = b""
+
+    if head.startswith(b"%PDF"):
+        return _detect_format_pdf(docx_path)
+
     doc = Document(docx_path)
     paragraphs = [(p.text or "") for p in doc.paragraphs]
     return detect_format_from_paragraphs(paragraphs, head_paragraphs=head_paragraphs)
+
+
+def _detect_format_pdf(pdf_path: str) -> FormatDetection:
+    """PDF branch. MCC narrative when the ``Standard #N`` + Appendix-Index
+    signals fire; otherwise fall back to free-form ``self_study`` (a PDF
+    self-study without those markers still has the broader pipeline)."""
+    from pypdf import PdfReader
+
+    from app.splitter.mcc_narrative_walker import detect_mcc_signals, is_mcc_narrative
+
+    try:
+        reader = PdfReader(pdf_path)
+        text = "\n".join((p.extract_text() or "") for p in reader.pages)
+    except Exception as exc:  # noqa: BLE001
+        text = ""
+    signals = detect_mcc_signals(text)
+    if is_mcc_narrative(signals):
+        return FormatDetection(
+            format="mcc_narrative",
+            confidence=0.95,
+            signals={
+                "standard_hash_markers": signals["standard_hash_markers"],
+                "has_appendix_index": signals["has_appendix_index"],
+                "supporting_document_refs": signals["supporting_document_refs"],
+                "is_pdf": True,
+            },
+            reasoning=(
+                f"{signals['standard_hash_markers']} 'Standard #N' markers + "
+                f"Appendix Index={signals['has_appendix_index']} + "
+                f"{signals['supporting_document_refs']} supporting-document refs — "
+                "MCC independent-narrative PDF."
+            ),
+        )
+    return FormatDetection(
+        format="self_study",
+        confidence=0.60,
+        signals={"is_pdf": True, **{k: int(v) if isinstance(v, bool) else v for k, v in signals.items()}},
+        reasoning="PDF without MCC markers; defaulting to free-form self-study.",
+    )

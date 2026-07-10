@@ -163,6 +163,11 @@ class JobRecord:
     # destination + a list of unassigned sections so the wizard can
     # surface a "Missing from import" rail entry.
     coverage_report: dict | None = None
+    # MCC third-format payload (mcc_narrative). Structured walker output:
+    # introduction, 20 standards (section title + shall + text + references),
+    # and the appendix catalog with page ranges. cshse-server materializes
+    # standard narratives + appendix PDF slices + reference→standard tags.
+    mcc: dict | None = None
     started_at: float | None = None
     completed_at: float | None = None
 
@@ -199,6 +204,8 @@ class JobRecord:
             # CR-040 Phase 3 — coverage report (per-destination counts +
             # missing fragments).
             "coverageReport": self.coverage_report or {},
+            # MCC third-format structured payload (null for the other formats).
+            "mcc": self.mcc or None,
         }
 
 
@@ -358,7 +365,7 @@ def _run_pipeline(job: JobRecord) -> None:
         # Stage 2: format detection
         _stage_started(job, "format_detect", "")
         from app.splitter.format_detector import detect_format
-        if job.force_format in ("template", "self_study"):
+        if job.force_format in ("template", "self_study", "mcc_narrative"):
             from app.splitter.format_detector import FormatDetection
             job.format = FormatVerdict(
                 format=job.force_format,
@@ -377,7 +384,9 @@ def _run_pipeline(job: JobRecord) -> None:
         _stage_done(job, "format_detect", f"{job.format.format} ({job.format.confidence:.2f})")
 
         # Stages 3-N: dispatch to the right pipeline.
-        if job.format.format == "template":
+        if job.format.format == "mcc_narrative":
+            _run_mcc_pipeline(job, docx_path)
+        elif job.format.format == "template":
             _run_template_pipeline(job, docx_path)
         else:
             _run_self_study_pipeline(job, docx_path)
@@ -408,6 +417,9 @@ def _run_pipeline(job: JobRecord) -> None:
                 + len(job.cvs or [])
                 + len(job.evidence_docs or [])
                 + len(job.introduction_hints or {})
+                # MCC payload: standards + appendix files count as content.
+                + len((job.mcc or {}).get("standards") or [])
+                + len((job.mcc or {}).get("appendixCatalog") or [])
             )
             if content_total == 0:
                 job.errors.append(
@@ -439,6 +451,49 @@ def _run_pipeline(job: JobRecord) -> None:
             shutil.rmtree(tmp_dir, ignore_errors=True)
         except Exception:  # noqa: BLE001
             pass
+
+
+def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
+    """MCC narrative (third format) path.
+
+    Runs the PDF walker (Pass 1 + Pass 2) and publishes the structured payload
+    in ``job.mcc``. Also seeds the Introduction bucket from the single
+    ``documentIntroduction`` blob. Appendix PDF slicing + hidden OCR text +
+    Pass 3 sub-spec recommendation are done by the server / matcher from this
+    payload (the appendix page ranges are all here).
+    """
+    from app.splitter.mcc_narrative_walker import walk_mcc_pdf
+
+    _stage_started(job, "mcc_walker", "reading PDF (pypdf)")
+    result = walk_mcc_pdf(str(src_path), expected_standards=20)
+    job.mcc = result.to_dict()
+    job.warnings.extend(result.warnings)
+    located = sum(1 for e in result.appendix_catalog if e.page_start is not None)
+    _stage_done(
+        job,
+        "mcc_walker",
+        f"{len(result.standards)} standards, {len(result.appendix_catalog)} appendices "
+        f"({located} page-located), {result.page_count} pages",
+    )
+
+    # Seed the Introduction rail from the single documentIntroduction blob
+    # (headings preserved). The server maps this to Submission.documentIntroduction.
+    _stage_started(job, "mcc_introduction", "")
+    job.introductions = {
+        "document": {
+            "scope": "document",
+            "standardCode": None,
+            "items": [
+                {
+                    "id": f"{job.job_id}-intro",
+                    "scope": "document",
+                    "text": result.introduction,
+                    "source": "mcc_narrative",
+                }
+            ],
+        }
+    }
+    _stage_done(job, "mcc_introduction", f"{len(result.introduction)} chars")
 
 
 def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
