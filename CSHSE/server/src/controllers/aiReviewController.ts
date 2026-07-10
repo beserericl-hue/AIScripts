@@ -24,6 +24,7 @@ import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SelfStudyImport } from '../models/SelfStudyImport';
+import { Assignment } from '../models/Assignment';
 import { buildEmptyReviewState } from '../services/aiReviewMerge';
 import { ValidationService } from '../services/validationService';
 import { applyAIImportCore } from './aiImportController';
@@ -42,23 +43,54 @@ async function _loadOwnedSubmission(
     res.status(404).json({ error: 'Submission not found' });
     return null;
   }
-  // CR-043 AC#10 — cross-PC isolation. Admins + superusers bypass; readers
-  // and lead readers get downstream ACLs; for a program_coordinator the
-  // submission must be theirs (creator scoping) OR same institution.
+  // DATA ISOLATION — a submission's review data may only be reached by:
+  //   • an admin / superuser (elevated), OR
+  //   • a program coordinator who owns it OR is in the same institution, OR
+  //   • a reader / lead reader with an ACTIVE assignment to it (or the legacy
+  //     institution-level assignment).
+  // Everyone else is 403'd. (Impersonation swaps req.user to the effective
+  // identity, so user.id / user.institutionId are already the acting user's.)
   const user: any = req.user;
   const isElevated = user?.role === 'admin' || user?.isSuperuser === true;
-  if (!isElevated && user?.role === 'program_coordinator') {
-    const isOwner = submission.submitterId?.toString() === (user.id || user._id);
-    const sameInstitution =
-      user.institutionId &&
-      submission.institutionId &&
-      submission.institutionId.toString() === user.institutionId;
+  if (isElevated) return submission;
+
+  const uid = String(user?.id || user?._id || '');
+  const sameInstitution =
+    user?.institutionId &&
+    submission.institutionId &&
+    submission.institutionId.toString() === String(user.institutionId);
+
+  if (user?.role === 'program_coordinator') {
+    const isOwner = submission.submitterId?.toString() === uid;
     if (!isOwner && !sameInstitution) {
-      res.status(403).json({ error: 'Forbidden: cross-PC access' });
+      res.status(403).json({ error: 'Forbidden: cross-institution access' });
       return null;
     }
+    return submission;
   }
-  return submission;
+
+  if (user?.role === 'reader' || user?.role === 'lead_reader') {
+    const hasAssignment = await Assignment.exists({
+      submissionId: submission._id,
+      userId: uid,
+      status: 'active',
+    });
+    const sub: any = submission;
+    const legacyAssigned =
+      (Array.isArray(sub.assignedReaderIds) && sub.assignedReaderIds.some((id: any) => id?.toString() === uid)) ||
+      (Array.isArray(sub.assignedReaders) && sub.assignedReaders.some((id: any) => id?.toString() === uid)) ||
+      sub.assignedLeadReaderId?.toString() === uid ||
+      sub.leadReader?.toString() === uid;
+    if (!hasAssignment && !legacyAssigned) {
+      res.status(403).json({ error: 'Forbidden: not assigned to this submission' });
+      return null;
+    }
+    return submission;
+  }
+
+  // Any other non-elevated role has no business here.
+  res.status(403).json({ error: 'Forbidden' });
+  return null;
 }
 
 /**

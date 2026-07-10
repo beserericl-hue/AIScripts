@@ -69,6 +69,19 @@ describe('save-state data isolation', () => {
     expect(fresh.aiReviewState?.buckets?.['1.a']).toBeUndefined();
   });
 
+  it('a reader NOT assigned to the submission cannot read its review state (403)', async () => {
+    const instA = new mongoose.Types.ObjectId();
+    const instB = new mongoose.Types.ObjectId();
+    const { user: pc } = await createUser({ role: 'program_coordinator', institutionId: instA });
+    const mine = await sub(instA, pc._id);
+    const { user: outsideReader } = await createUser({ role: 'reader', institutionId: instB });
+
+    const res = await request(app)
+      .get(`/api/submissions/${mine._id}/review`)
+      .set('Authorization', `Bearer ${signTokenFor(outsideReader as any)}`);
+    expect(res.status).toBe(403);
+  });
+
   it('ALLOWS content whose import belongs to this submission (200)', async () => {
     const instA = new mongoose.Types.ObjectId();
     const { user: pc } = await createUser({ role: 'program_coordinator', institutionId: instA });
