@@ -419,7 +419,7 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
     res.status(400).json({ error: `Invalid programLevel: ${programLevel}` });
     return;
   }
-  if (forceFormat !== null && !['template', 'self_study'].includes(forceFormat)) {
+  if (forceFormat !== null && !['template', 'self_study', 'mcc_narrative'].includes(forceFormat)) {
     res.status(400).json({ error: `Invalid forceFormat: ${forceFormat}` });
     return;
   }
@@ -1861,7 +1861,7 @@ export async function redetectImport(req: AuthenticatedRequest, res: Response): 
 export async function restartAIImport(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
   const { forceFormat = null } = req.body || {};
-  if (forceFormat !== null && !['template', 'self_study'].includes(forceFormat)) {
+  if (forceFormat !== null && !['template', 'self_study', 'mcc_narrative'].includes(forceFormat)) {
     res.status(400).json({ error: `Invalid forceFormat: ${forceFormat}` });
     return;
   }

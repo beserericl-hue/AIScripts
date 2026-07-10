@@ -43,7 +43,7 @@ export type ProgramLevel = 'associate' | 'bachelors' | 'masters';
 export type SectionKind = 'text' | 'evidenceText' | 'file' | 'matrix' | 'tag' | 'discard';
 
 export type FormatVerdict = {
-  format: 'template' | 'self_study';
+  format: 'template' | 'self_study' | 'mcc_narrative';
   confidence: number;
   signals: Record<string, number | boolean>;
   reasoning: string;
@@ -388,7 +388,7 @@ interface AIImportState {
   uploadProgress: number;
   programLevel: ProgramLevel;
   isReimport: boolean;
-  forceFormat: 'template' | 'self_study' | null;
+  forceFormat: 'template' | 'self_study' | 'mcc_narrative' | null;
   // When set, the upload is filed straight into the File Library as a CV /
   // Syllabus / Project (no AI parsing). See startUpload + UploadStep.
   documentKind: 'cv' | 'syllabus' | 'project' | null;
@@ -598,7 +598,7 @@ interface AIImportState {
   setUploadFile: (f: File | null) => void;
   setProgramLevel: (l: ProgramLevel) => void;
   setIsReimport: (v: boolean) => void;
-  setForceFormat: (f: 'template' | 'self_study' | null) => void;
+  setForceFormat: (f: 'template' | 'self_study' | 'mcc_narrative' | null) => void;
   setDocumentKind: (k: 'cv' | 'syllabus' | 'project' | null) => void;
   clearDirectStored: () => void;
   selectSpec: (key: string) => void;

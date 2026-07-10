@@ -579,7 +579,7 @@ async function materializeApprovedToEditor(
   //  (c) Existing records are now UPSERTED (not skipped): re-running set-approved
   //      heals records created before this fix (adds text + (std, spec) when the
   //      coordinator later assigns one), instead of leaving them content-less.
-  const fileItems: Array<{ sectionId: string; std?: string; spec?: string; title: string; body: string; html?: string | null; kind: string }> = [];
+  const fileItems: Array<{ sectionId: string; std?: string; spec?: string; title: string; body: string; html?: string | null; kind: string; s3Key?: string; s3Bucket?: string; mimeType?: string; fileName?: string; fileSize?: number; aiText?: string }> = [];
   for (const bucket of Object.values(buckets) as any[]) {
     for (const it of bucket.evidenceFiles || []) {
       if (approved.has(it.sectionId)) {
@@ -599,7 +599,23 @@ async function materializeApprovedToEditor(
   for (const e of state.evidenceDocs || []) {
     if (approved.has(e.sectionId)) {
       const body = evidenceBodyText(e.htmlSnippet, e.snippet || e.summary);
-      fileItems.push({ sectionId: e.sectionId, std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec, title: e.title || 'Evidence document', body, html: e.htmlSnippet, kind: e.docSubKind || 'paper' });
+      fileItems.push({
+        sectionId: e.sectionId,
+        std: e.resolvedStd || e.routing?.std,
+        spec: e.resolvedSpec || e.routing?.spec,
+        title: e.title || 'Evidence document',
+        body,
+        html: e.htmlSnippet,
+        kind: e.docSubKind || 'paper',
+        // MCC appendix files arrive pre-sliced as native PDFs already in S3.
+        // Carry the S3 handle + the HIDDEN extracted text (AI-eval only).
+        s3Key: e.s3Key || undefined,
+        s3Bucket: e.s3Bucket || undefined,
+        mimeType: e.mimeType || undefined,
+        fileName: e.fileName || undefined,
+        fileSize: e.fileSize || undefined,
+        aiText: (e as any).extractedText || undefined,
+      });
     }
   }
   // Record a stat even when nothing matched, so the set-approved response can
@@ -621,6 +637,59 @@ async function materializeApprovedToEditor(
       // The AI evaluator reads `metadata.description` / `description` for the
       // evidence text — store the real body there so the file is visible to it.
       const bodyText = (fi.body || '').trim();
+
+      // ── MCC appendix: a native PDF already sliced + uploaded to S3. Store it
+      // as an S3-backed SupportingEvidence (viewed natively — NOT flattened to
+      // a synthesized .docx). The HIDDEN extracted text goes to
+      // metadata.description so the AI evaluator can read the file; the reader
+      // only ever opens the actual PDF.
+      if (fi.s3Key && (fi.mimeType || '').includes('pdf')) {
+        const pdfName = (fi.fileName || `${String(fi.title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'appendix'}.pdf`);
+        const aiText = (fi.aiText || bodyText || '').trim();
+        const existingPdf: any = await SupportingEvidence.findOne({ submissionId: submission._id, tags: tag, isDeleted: false });
+        const fileData = {
+          filename: pdfName,
+          originalName: pdfName,
+          mimeType: 'application/pdf',
+          size: fi.fileSize || 0,
+          s3Key: fi.s3Key,
+          s3Bucket: fi.s3Bucket,
+          storageType: 's3' as const,
+          uploadedAt: new Date(),
+          uploadedBy: userId || submission.submitterId,
+        };
+        if (existingPdf) {
+          existingPdf.standardCode = fi.std || undefined;
+          existingPdf.specCode = fi.spec || undefined;
+          existingPdf.description = fi.title;
+          existingPdf.metadata = { ...(existingPdf.metadata || {}), description: aiText };
+          existingPdf.markModified('metadata');
+          existingPdf.file = { ...(existingPdf.file || {}), ...fileData } as any;
+          existingPdf.markModified('file');
+          await existingPdf.save();
+          _evUpdated += 1;
+        } else {
+          await SupportingEvidence.create({
+            institutionId: submission.institutionId,
+            submissionId: submission._id,
+            uploadedBy: userId || submission.submitterId,
+            standardCode: fi.std || undefined,
+            specCode: fi.spec || undefined,
+            evidenceType: 'document',
+            file: fileData as any,
+            description: fi.title,
+            // HIDDEN AI-readable text (extracted/OCR); reader sees the PDF only.
+            metadata: { description: aiText },
+            versionNumber: 1, isCurrentVersion: true, isDeleted: false,
+            linkedNarratives: [],
+            tags: ['ai-import', 'mcc-appendix', `kind:${fi.kind}`, tag],
+          });
+          _evCreated += 1;
+        }
+        if (fi.std && fi.spec) affected.push({ std: fi.std, spec: fi.spec });
+        continue;
+      }
+
       // Build the .docx with REAL tables when the source has them (evidence is
       // frequently tabular). Mammoth round-trips real Word tables back to <table>
       // so the File-Library preview is readable instead of a run-on paragraph.
