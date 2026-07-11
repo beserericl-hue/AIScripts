@@ -307,7 +307,7 @@ export function SpecRail({
               >
                 <span className="flex items-center gap-1.5">
                   <FileBox className="h-3.5 w-3.5 text-cshse-700" aria-hidden />
-                  <span className="font-medium">Papers / Projects</span>
+                  <span className="font-medium">Papers / Projects / Appendices</span>
                 </span>
                 <span
                   className={`rounded px-1.5 text-xs ${
