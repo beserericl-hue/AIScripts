@@ -64,12 +64,13 @@ export function SourceComparePane({
   // just the first paragraph: from the match element forward through siblings
   // until the next spec/standard heading, so the reviewer sees first word →
   // last word and knows where it stops.
-  const highlightSpan = (startEl: HTMLElement) => {
+  const highlightSpan = (startEl: HTMLElement, extendThroughSiblings = true) => {
     const HEADING_RE = /^\s*(?:\d{1,2}[a-z]\.\s|Standard\s+\d)/i;
     // CR-072 — clear any previous span markers so sync-scroll always aligns on
     // the CURRENT match, then stamp the start + end of the highlighted span so
     // the Compare overlay can map the left pane's scroll onto exactly this
-    // region of the (much longer) source document.
+    // region of the (much longer) source document. Also clear any prior yellow
+    // background so an old, larger highlight never lingers under the new one.
     const doc = startEl.ownerDocument;
     doc
       .querySelectorAll('[data-compare-match-start],[data-compare-match-end]')
@@ -77,15 +78,31 @@ export function SourceComparePane({
         e.removeAttribute('data-compare-match-start');
         e.removeAttribute('data-compare-match-end');
       });
+    doc.querySelectorAll('[data-compare-hl]').forEach((e) => {
+      (e as HTMLElement).style.background = '';
+      (e as HTMLElement).style.outline = '';
+      e.removeAttribute('data-compare-hl');
+    });
     startEl.style.outline = '3px solid #d97706';
     startEl.style.outlineOffset = '2px';
     startEl.style.borderRadius = '4px';
     startEl.setAttribute('data-compare-match-start', '1');
+    startEl.setAttribute('data-compare-hl', '1');
+    startEl.style.background = '#fef3c7';
+    // When the match is a self-contained section (the clean rebuilt source
+    // wraps each spec/intro chunk in its own <section data-section-id>), the
+    // section IS the whole answer — highlight ONLY it so the yellow matches the
+    // review-window text exactly and does not spill into the next spec.
+    if (!extendThroughSiblings) {
+      startEl.setAttribute('data-compare-match-end', '1');
+      return;
+    }
     let el: HTMLElement | null = startEl;
     let last: HTMLElement = startEl;
     let count = 0;
     while (el && count < 400) {
       el.style.background = '#fef3c7';
+      el.setAttribute('data-compare-hl', '1');
       last = el;
       const next = el.nextElementSibling as HTMLElement | null;
       if (!next || HEADING_RE.test((next.textContent || '').trim())) break;
@@ -131,7 +148,10 @@ export function SourceComparePane({
       );
       if (direct) {
         const el = direct as HTMLElement;
-        highlightSpan(el);
+        // A data-section-id anchor wraps the ENTIRE chunk in the clean rebuilt
+        // source, so highlight only it (no sibling spill into the next spec).
+        const selfContained = el.tagName === 'SECTION' || el.hasAttribute('data-section-id');
+        highlightSpan(el, !selfContained);
         scrollToElement(el);
         setMatchKind('anchor');
         return;

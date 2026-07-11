@@ -680,6 +680,26 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
     from app.splitter.mcc_narrative_walker import extract_link_map as _extract_link_map
     _intro_end = result.standards[0].page_start if (result.standards and result.standards[0].page_start) else 12
     intro_link_map = _extract_link_map(str(src_path), 0, _intro_end)
+
+    # Trim a trailing Standard-1 section header that bled into the introduction
+    # from the document's Part/Standard lead-in — e.g. the intro text ends with
+    # "…Disability Support Services)\n\nI. General Program Characteristics\n
+    # A. Institutional Requirements and Primary Program Objective". That header
+    # IS Standard 1's section_title; leaving it in the intro duplicates the
+    # heading and makes the Compare view look misaligned (the reviewer sees the
+    # Standard-1 title inside the previous section, and Standard 1 seems to be
+    # "missing its title"). Cut the intro back to the end of its own content.
+    intro_text = result.introduction
+    if result.standards:
+        _st = (getattr(result.standards[0], "section_title", "") or "").strip()
+        if _st and _st in intro_text[-400:]:
+            _head = intro_text[: intro_text.rfind(_st)].rstrip()
+            # also drop a preceding roman-numeral Part header line if present
+            _m = re.search(r"\n\s*[IVXLC]+\.\s+\S[^\n]*$", _head)
+            if _m:
+                _head = _head[: _m.start()]
+            intro_text = _head.rstrip()
+
     job.introductions = {
         "document": {
             "scope": "document",
@@ -688,9 +708,9 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 {
                     "sectionId": f"{job.job_id}:mccintro",
                     "heading": "Program Introduction",
-                    "snippet": result.introduction[:4000],
-                    "htmlSnippet": _text_to_html(result.introduction, intro_link_map),
-                    "wordCount": len(result.introduction.split()),
+                    "snippet": intro_text[:4000],
+                    "htmlSnippet": _text_to_html(intro_text, intro_link_map),
+                    "wordCount": len(intro_text.split()),
                     "confidence": None,
                     "acceptState": "review_unknown",
                     "rationale": "MCC General Introduction (headings preserved).",
@@ -698,7 +718,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             ],
         }
     }
-    _stage_done(job, "mcc_introduction", f"{len(result.introduction)} chars")
+    _stage_done(job, "mcc_introduction", f"{len(intro_text)} chars")
 
     # Clean source-HTML reconstruction (for the Compare / Show-in-source pane).
     # Built in document order, reusing each chunk's exact sectionId +
@@ -868,6 +888,13 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 + (f" (and {', '.join(s for s in ref_stds if s != route_std)})" if len([s for s in ref_stds if s != route_std]) else "")
                 + "."
             ) if route_std else "Referenced in the program introduction." if entry.code in code_to_spec else "Not referenced inline."
+            # Classification flags the file card uses:
+            #  - intro_ref: cited only in the program introduction (no lettered
+            #    spec) → the card offers/pre-selects the "Introduction" option.
+            #  - is_matrix: a curriculum-matrix appendix → also surfaced for the
+            #    Curriculum Matrices section.
+            intro_ref = route_std is None and entry.code in code_to_spec
+            is_matrix = "curriculum matrix" in (entry.title or "").lower() or entry.kind == "matrix"
             evidence_docs.append({
                 # STABLE per (submission, appendix code) — NOT job-specific — so a
                 # re-import yields the same sectionId → the review-state merge
@@ -892,9 +919,19 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 "mccKind": entry.kind,
                 # The client's file card reads resolvedStd/resolvedSpec to pre-fill
                 # the Standard / Sub-standard selectors; routing mirrors it.
-                "resolvedStd": route_std,
+                "resolvedStd": "introduction" if intro_ref else route_std,
                 "resolvedSpec": route_spec,
-                "routing": {"std": route_std, "spec": route_spec, "source": "mcc"},
+                # intro-referenced files pre-classify to "Introduction"; the
+                # client dropdown reads resolvedStd=='introduction'.
+                "routing": {
+                    "std": route_std,
+                    "spec": route_spec,
+                    "source": "mcc",
+                    "introduction": intro_ref,
+                    "isCurriculumMatrix": is_matrix,
+                },
+                "introductionRef": intro_ref,
+                "isCurriculumMatrix": is_matrix,
                 "referencedByStandards": ref_stds,
                 # HIDDEN — AI-eval only, never rendered to the reader.
                 "extractedText": extracted[:200000],

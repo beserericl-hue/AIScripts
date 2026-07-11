@@ -129,6 +129,10 @@ function SpecAssignControls({
           className="mt-0.5 w-full rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500"
         >
           <option value="">— standard —</option>
+          {/* A file cited only in the program introduction (not under a
+              lettered spec) is classified here — the MCC parser pre-selects it
+              for such appendices (A1/A2/A3 …). */}
+          <option value="introduction">Introduction (referenced in program intro)</option>
           {standards.map((s) => (
             <option key={s.std} value={s.std}>
               {s.std} — {s.title}
@@ -159,7 +163,7 @@ function SpecAssignControls({
           data-testid={`${idPrefix}-spec`}
           value={spec ?? ''}
           onChange={(e) => commit(std ?? '', e.target.value)}
-          disabled={!std || specOptions.length === 0}
+          disabled={!std || std === 'introduction' || specOptions.length === 0}
           className="mt-0.5 w-full rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500 disabled:bg-gray-100"
         >
           <option value="">— substandard —</option>

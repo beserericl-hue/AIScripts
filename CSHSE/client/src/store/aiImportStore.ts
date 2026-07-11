@@ -2180,7 +2180,21 @@ export const useAIImportStore = create<AIImportState>()(
           status: 'uploading',
           uploadProgress: 0,
           errors: [],
-          dirty: false
+          dirty: false,
+          // Clear the PREVIOUS parse's on-screen diagnostics so the Parse screen
+          // starts completely fresh — no leftover pipeline stages, format-
+          // detection banner, or placeholder sections from the last import.
+          // (These are ephemeral, never persisted to localStorage, so they can
+          // only be this same session's prior parse — not another user's.)
+          // Review CONTENT (buckets/tags/cvs/evidenceDocs/introductions) is
+          // preserved per CR-043 — the server-side merge is the source of truth.
+          format: null,
+          pipelineStages: [],
+          placeholderSections: [],
+          jobId: null,
+          queuePosition: null,
+          queueDepth: null,
+          etaSeconds: null
         });
 
         const form = new FormData();

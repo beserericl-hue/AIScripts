@@ -146,7 +146,12 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
     (evidenceDocs?.length ?? 0) +
     // Introduction-only documents are still a successful parse.
     Object.values(introductions ?? {}).reduce((n, ib: any) => n + (ib?.items?.length ?? 0), 0);
-  const isEmptyParse = isReady && totalReviewableItems === 0;
+  // Only declare a parse "empty" AFTER we've tried to hydrate the merged review
+  // state from the server. Otherwise the scary "AI returned zero items" banner
+  // FLASHES for a moment right after the parse completes (the /ai-status
+  // snapshot doesn't carry the merged buckets yet) before hydration fills them.
+  const [hydrationSettled, setHydrationSettled] = useState(false);
+  const isEmptyParse = isReady && totalReviewableItems === 0 && hydrationSettled;
 
   // After parse completes, hydrate the store from the SERVER-merged review
   // state. The /ai-status snapshot does not carry the merged buckets (they are
@@ -159,11 +164,20 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
   useEffect(() => {
     if (isReady && submissionId && totalReviewableItems === 0 && !hydratedRef.current) {
       hydratedRef.current = true;
-      loadPersistedReviewState().catch(() => {
-        /* surfaced via the store's error handling */
-      });
+      loadPersistedReviewState()
+        .catch(() => {
+          /* surfaced via the store's error handling */
+        })
+        .finally(() => setHydrationSettled(true));
+    } else if (isReady && totalReviewableItems > 0) {
+      // Content is already present — no hydration needed; it's definitively
+      // not empty.
+      setHydrationSettled(true);
     }
-    if (!isReady) hydratedRef.current = false; // reset for a fresh parse
+    if (!isReady) {
+      hydratedRef.current = false; // reset for a fresh parse
+      setHydrationSettled(false); // a new parse is not "settled-empty" yet
+    }
   }, [isReady, submissionId, totalReviewableItems, loadPersistedReviewState]);
 
   // Re-open SSE on mount if active; close on unmount.

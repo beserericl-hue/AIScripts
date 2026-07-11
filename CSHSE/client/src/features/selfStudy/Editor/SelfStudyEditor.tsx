@@ -304,9 +304,17 @@ function AIImportTabButton({
     badge = { text: `${placeholderCount} unwritten`, cls: 'bg-yellow-100 text-yellow-800' };
   }
 
+  // A non-impersonating superuser cannot import (they must impersonate a PC —
+  // matches the server-side requireCanImport 403). Disable with a clear reason.
+  const authUser = useAuthStore((s) => s.user);
+  const isImpersonating = useAuthStore((s) => s.impersonation.isImpersonating);
+  const canImport = !(authUser?.isSuperuser === true && !isImpersonating);
+
   return (
     <button
+      disabled={!canImport}
       onClick={() => {
+        if (!canImport) return;
         // "Upload Files" means "start a NEW import" — always land the
         // coordinator on the Upload step with a clean form, regardless
         // of any prior or in-flight run.
@@ -327,9 +335,13 @@ function AIImportTabButton({
         setActiveView('ai-import');
       }}
       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-        activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
+        !canImport
+          ? 'text-gray-300 cursor-not-allowed'
+          : activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
       }`}
-      title="Upload Files — drag or select your self-study document(s) and let the AI parse, tag, and place the content. This is step 1 of the guided import."
+      title={canImport
+        ? 'Upload Files — drag or select your self-study document(s) and let the AI parse, tag, and place the content. This is step 1 of the guided import.'
+        : 'A superuser must impersonate a Program Coordinator to import. Use Switch Role to view as a PC, then upload.'}
     >
       <Upload className="w-4 h-4 flex-shrink-0" />
       Upload Files
@@ -492,6 +504,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const isProgramCoordinator = userRole === 'program_coordinator';
   const isReviewer = userRole === 'reader' || userRole === 'lead_reader';
   const isReadOnly = !isProgramCoordinator;
+  // A non-impersonating superuser cannot import (server enforces requireCanImport).
+  const _authUser = useAuthStore((s) => s.user);
+  const _isImpersonating = useAuthStore((s) => s.impersonation.isImpersonating);
+  const canImport = !(_authUser?.isSuperuser === true && !_isImpersonating);
 
   // CR-045 — per-PC preference: hide the legacy paste-and-tag importer.
   // Defaults true (clean single-importer toolbar) when the user has no
@@ -2586,14 +2602,19 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                         narrative or as a file summary). Replaces the legacy
                         per-standard "Import Document" editor. */}
                     <button
-                      onClick={() => setShowImportFile((v) => !v)}
+                      onClick={() => { if (canImport) setShowImportFile((v) => !v); }}
+                      disabled={!canImport}
                       data-testid="import-file-button"
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                        showImportFile
+                        !canImport
+                          ? 'text-gray-300 cursor-not-allowed'
+                          : showImportFile
                           ? 'bg-teal-100 text-teal-700'
                           : 'text-gray-600 hover:bg-gray-100'
                       }`}
-                      title="Import file — bring in one CV, syllabus, project, or section draft and paste its content into a standard or as supporting evidence."
+                      title={canImport
+                        ? 'Import file — bring in one CV, syllabus, project, or section draft and paste its content into a standard or as supporting evidence.'
+                        : 'A superuser must impersonate a Program Coordinator to import. Use Switch Role to view as a PC.'}
                     >
                       <FileUp className="w-4 h-4 flex-shrink-0" />
                       Import file
