@@ -503,6 +503,31 @@ def _anchor(href: str, label: str) -> str:
     )
 
 
+# A line that STARTS a new list item / sub-point — the only place we keep a
+# hard break when reflowing PDF-wrapped text.
+_LIST_MARK_RE = re.compile(
+    r"^(?:[a-z]\.\d+[.)]?|[ivxlc]+[.)]|\d+[.)]|[-•*•]\s|\([a-z0-9]+\))",
+    re.I,
+)
+
+
+def _reflow(paragraph: str) -> str:
+    """Join PDF hard-wrapped lines back into flowing prose.
+
+    PDF text extraction breaks a sentence at every visual line, so the raw
+    text has a newline every ~12 words. Rendering those as <br/> makes the
+    narrative look choppy and "compressed". Reflow: collapse a line into the
+    previous one with a space, EXCEPT when the line clearly starts a new list
+    item / sub-point (kept as a real break so lists stay readable)."""
+    lines = [ln.strip() for ln in paragraph.split("\n") if ln.strip()]
+    if not lines:
+        return ""
+    out = [lines[0]]
+    for ln in lines[1:]:
+        out.append(("\n" if _LIST_MARK_RE.match(ln) else " ") + ln)
+    return "".join(out)
+
+
 def _text_to_html(text: str, link_map: dict | None = None) -> str:
     """Escape narrative text and make its links CLICKABLE, preserving the
     document's own link text:
@@ -511,15 +536,19 @@ def _text_to_html(text: str, link_map: dict | None = None) -> str:
         "(Supporting Link: MCC Accreditation Page)" links to the accreditation
         page, matching the source document;
       * bare ``http(s)://`` URLs are auto-linked too.
-    Paragraphs and line breaks are kept so the imported content matches the
-    source formatting."""
-    link_map = link_map or {}
-    # Longest link texts first so a short one can't shadow a longer overlapping one.
-    ordered = sorted((t for t in link_map if t and t.strip()), key=len, reverse=True)
+    PDF hard line-wraps are reflowed into flowing paragraphs (see ``_reflow``);
+    only blank-line paragraph breaks and genuine list items keep a break."""
+    # Collapse whitespace in link-text keys so they still match the reflowed
+    # (single-spaced) body text. Longest first so a short text can't shadow a
+    # longer overlapping one.
+    link_map = {
+        _norm_space(k): v for (k, v) in (link_map or {}).items() if k and k.strip()
+    }
+    ordered = sorted(link_map.keys(), key=len, reverse=True)
 
     def render_para(p: str) -> str:
         # Split the paragraph on the known link texts, escaping the non-link
-        # spans and anchoring the link spans (case-insensitive, whitespace-loose).
+        # spans and anchoring the link spans.
         if ordered:
             pattern = "|".join(re.escape(t) for t in ordered)
             parts = re.split(f"({pattern})", p)
@@ -535,8 +564,8 @@ def _text_to_html(text: str, link_map: dict | None = None) -> str:
                 out.append(esc)
         return "".join(out)
 
-    paras = [p.strip() for p in re.split(r"\n\s*\n", text or "") if p.strip()]
-    html_paras = [f"<p>{render_para(p)}</p>" for p in paras]
+    paras = [_reflow(p) for p in re.split(r"\n\s*\n", text or "") if p.strip()]
+    html_paras = [f"<p>{render_para(p)}</p>" for p in paras if p]
     return "".join(html_paras) or "<p></p>"
 
 
