@@ -3,7 +3,7 @@ import { Submission, ISubmission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 // CR-060 — multi-role access: role-by-institution resolution.
 import { hasRoleAt, isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
-import { requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
 import { ValidationResult } from '../models/ValidationResult';
 import { ValidationService } from '../services/validationService';
 import { emailService } from '../services/emailService';
@@ -1605,12 +1605,43 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
     if (!institutionName || !programName) {
       return res.status(400).json({ error: 'Institution name and program name are required' });
     }
-    // SECURITY (isolation audit) — a submission may only be created for an
-    // institution the caller coordinates (or by an admin). Prevents attributing
-    // a submission to — and repointing currentSubmissionId of — another tenant.
-    if (institutionId && !isGlobalAdmin(req.user) &&
-        !hasRoleAt(req.user, 'program_coordinator', String(institutionId))) {
-      return res.status(403).json({ error: 'Forbidden: you cannot create a submission for this institution' });
+    // SECURITY + IMPERSONATION-CORRECTNESS. The submission's institution must be
+    // one the EFFECTIVE caller coordinates — NOT whatever the client posted.
+    //
+    // A superuser impersonating a PC fully assumes that PC's identity (id +
+    // institutionId). This is how a superuser helps a PC import: the resulting
+    // self-study must belong to the PC's institution so the PC (and the
+    // superuser impersonating them again) can see it. Previously the submission
+    // took req.body.institutionId verbatim, so if the client had a different
+    // institution selected the import was parked at an institution the PC can't
+    // access. Now:
+    //   - a real admin/superuser (not impersonating a PC) may target any
+    //     institution they name (or default to their own);
+    //   - everyone else (a PC, or a superuser impersonating a PC) is attributed
+    //     to an institution they coordinate — the requested one if they
+    //     coordinate it (multi-institution PCs), otherwise their own. Never
+    //     another tenant's, never orphaned when they have an institution.
+    // A non-impersonating superuser may VIEW everything but must impersonate a
+    // Program Coordinator to import — data must be owned by a real user/role/
+    // institution, never by a floating superuser.
+    if (!requireCanImport(req as any, res)) return;
+
+    const requestedInst = institutionId ? String(institutionId) : null;
+    const ownInst = req.user?.institutionId ? String(req.user.institutionId) : null;
+    let effectiveInstitutionId: string | null;
+    if (isGlobalAdmin(req.user)) {
+      effectiveInstitutionId = requestedInst || ownInst;
+    } else if (requestedInst && hasRoleAt(req.user, 'program_coordinator', requestedInst)) {
+      effectiveInstitutionId = requestedInst;
+    } else {
+      effectiveInstitutionId = ownInst;
+    }
+    // Every self-study must belong to an institution so the tenant gate can
+    // protect it — no orphaned (institution-less) submissions.
+    if (!effectiveInstitutionId) {
+      return res.status(403).json({
+        error: 'A self-study must belong to a Program-Coordinator institution. Impersonate a PC (with an institution) to import.',
+      });
     }
 
     // Initialize standards status for 21 standards
@@ -1632,7 +1663,7 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
 
     const submission = new Submission({
       submissionId,
-      institutionId,
+      institutionId: effectiveInstitutionId,
       institutionName,
       programName,
       programLevel: programLevel || 'bachelors',
@@ -1653,8 +1684,8 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
     await submission.save();
 
     // Link institution to this submission so evidence access works
-    if (institutionId) {
-      await Institution.findByIdAndUpdate(institutionId, {
+    if (effectiveInstitutionId) {
+      await Institution.findByIdAndUpdate(effectiveInstitutionId, {
         currentSubmissionId: submission._id
       });
     }

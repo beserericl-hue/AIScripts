@@ -95,6 +95,29 @@ export async function requireSubmissionAccess(
 }
 
 /**
+ * IMPORT-OWNERSHIP rule. Creating/importing a self-study writes data that must
+ * be OWNED by a real user + role + institution so it is protected by the tenant
+ * gate. A non-impersonating superuser is not tied to an institution — as
+ * themselves they may VIEW everything but must NOT import; they have to
+ * impersonate a Program Coordinator first (which fully assumes that PC's
+ * identity + institution). Admins/PCs import normally (they resolve to an
+ * institution). Returns true when the caller may import, else writes 403.
+ */
+export function requireCanImport(req: AuthenticatedRequest, res: Response): boolean {
+  const impersonating = !!req.user?.impersonation;
+  // `isSuperuser` here is the EFFECTIVE flag: false while impersonating a
+  // non-admin, true only when acting as a full (non-impersonating) superuser.
+  if (req.user?.isSuperuser === true && !impersonating) {
+    res.status(403).json({
+      error:
+        'A superuser must impersonate a Program Coordinator to import. As yourself you can view everything, but you cannot create or import a self-study.',
+    });
+    return false;
+  }
+  return true;
+}
+
+/**
  * Guard for import-scoped handlers: resolves the SelfStudyImport's parent
  * submission and applies the same tenant gate. Returns the import doc when
  * allowed, else writes 404/403 and returns null.

@@ -14,7 +14,7 @@ import { saveWithRetry, withRetry } from '../utils/dbRetry';
 import * as tempFileService from '../services/tempFileService';
 import * as gridFsService from '../services/gridFsService';
 import { recordVersion } from '../services/documentVersionService';
-import { requireImportAccess, requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { requireImportAccess, requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
 import { AuthenticatedRequest } from '../middleware/auth';
 import fs from 'fs/promises';
 import { createReadStream } from 'fs';
@@ -192,6 +192,8 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
       return res.status(400).json({ error: 'Submission ID is required' });
     }
 
+    // A non-impersonating superuser must impersonate a PC to import.
+    if (!requireCanImport(req, res)) return;
     const _sub = await requireSubmissionAccess(req, res, req.body?.submissionId);
     if (!_sub) return;
 

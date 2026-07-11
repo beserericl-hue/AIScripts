@@ -51,7 +51,7 @@ import {
   ExpectedSectionType
 } from '../models/ImportCorrection';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { requireImportAccess } from '../services/submissionAccessGuard';
+import { requireImportAccess, requireCanImport } from '../services/submissionAccessGuard';
 
 // CR-040 Phase 2c — escape user-supplied strings for the evidenceDoc
 // HTML wrapper we generate at Apply time. Captures the five characters
@@ -415,6 +415,8 @@ export async function startAIImportForBatch(
 
 export async function startAIImport(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
+  // A non-impersonating superuser must impersonate a PC to import.
+  if (!requireCanImport(req, res)) return;
   const _imp = await requireImportAccess(req, res, req.params.importId);
   if (!_imp) return;
   const { programLevel = 'bachelors', forceFormat = null, isReimport = false } = req.body || {};

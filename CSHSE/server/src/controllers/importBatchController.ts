@@ -21,6 +21,7 @@ import { Submission } from '../models/Submission';
 import { recordVersion } from '../services/documentVersionService';
 import { startBatch } from '../services/batchAdvancer';
 import { applyAIImportCore } from './aiImportController';
+import { requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
 
 interface AuthenticatedRequest extends Request {
   user?: { id: string; name?: string; role?: string };
@@ -42,6 +43,11 @@ export async function createImportBatch(
       res.status(404).json({ error: 'Submission not found' });
       return;
     }
+    // SECURITY + import-ownership: only someone who can access this submission
+    // may batch-import into it, and a non-impersonating superuser must
+    // impersonate a PC first.
+    if (!requireCanImport(req as any, res)) return;
+    if (!(await requireSubmissionAccess(req as any, res, submission))) return;
     const userId = req.user?.id;
     if (!userId) {
       res.status(401).json({ error: 'Authenticated user required' });
