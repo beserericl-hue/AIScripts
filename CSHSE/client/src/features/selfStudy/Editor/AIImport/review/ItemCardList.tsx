@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload } from 'lucide-react';
+import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
 import {
   useAIImportStore,
@@ -181,6 +181,142 @@ function SpecAssignControls({
         </p>
       )}
     </div>
+  );
+}
+
+// ------------------------------------------------ FindReferencesButton
+// Search the imported Introduction + every standard/substandard narrative for
+// this file's appendix code and/or title (e.g. a "(Supporting Document: … MCC
+// Education Guide appendix A1)" note) and let the coordinator place the file at
+// whatever location(s) reference it. This is the manual fallback for when the
+// parser missed a reference (or a duplicate), so a file never gets stranded.
+interface RefHit {
+  std: string; // 'introduction' or a standard number
+  spec: string; // '' for introduction / standard-level
+  label: string;
+  excerpt: string;
+}
+
+function stripHtml(s: string): string {
+  return (s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function excerptAround(text: string, needle: string): string {
+  const plain = stripHtml(text);
+  const i = plain.toLowerCase().indexOf(needle.toLowerCase());
+  if (i < 0) return plain.slice(0, 120);
+  return (i > 30 ? '…' : '') + plain.slice(Math.max(0, i - 30), i + needle.length + 70) + '…';
+}
+
+function FindReferencesButton({
+  doc,
+  onPlace
+}: {
+  doc: any;
+  onPlace: (std: string, spec: string) => void;
+}): JSX.Element {
+  const buckets = useAIImportStore((s) => s.buckets);
+  const introductions = useAIImportStore((s) => s.introductions);
+  const persistEvidenceRouting = useAIImportStore((s) => s.persistEvidenceRouting);
+  const [open, setOpen] = React.useState(false);
+  const [hits, setHits] = React.useState<RefHit[] | null>(null);
+
+  const runSearch = React.useCallback(() => {
+    const code = String(doc.mccCode || '').trim().toLowerCase();
+    // Title without the "Appendix A1:" prefix, for a phrase match.
+    const title = String(doc.title || '')
+      .replace(/^appendix\s+\S+:\s*/i, '')
+      .trim()
+      .toLowerCase();
+    // A location matches if it names "appendix <code>" or the full title phrase.
+    const matches = (hay: string): boolean => {
+      const s = hay.toLowerCase();
+      if (code && (s.includes(`appendix ${code}`) || s.includes(`appendix ${code} `) || s.includes(` ${code} `))) return true;
+      if (title.length >= 10 && s.includes(title)) return true;
+      return false;
+    };
+    const found: RefHit[] = [];
+    for (const [k, ib] of Object.entries(introductions || {})) {
+      for (const it of ((ib as any)?.items || [])) {
+        const hay = `${it.heading || ''} ${stripHtml(it.snippet || it.htmlSnippet || '')}`;
+        if (matches(hay)) {
+          found.push({
+            std: 'introduction', spec: '',
+            label: k === 'document' ? 'Document Introduction' : `Standard ${String(k).replace('standard-', '')} Introduction`,
+            excerpt: excerptAround(it.snippet || it.htmlSnippet || '', code ? `appendix ${code}` : title)
+          });
+          break;
+        }
+      }
+    }
+    for (const [key, b] of Object.entries(buckets || {})) {
+      const [std, spec] = key.split('.');
+      for (const n of ((b as any)?.narratives || [])) {
+        const hay = `${n.heading || ''} ${stripHtml(n.snippet || n.htmlSnippet || '')}`;
+        if (matches(hay)) {
+          found.push({
+            std, spec, label: `Standard ${std}.${spec}`,
+            excerpt: excerptAround(n.snippet || n.htmlSnippet || '', code ? `appendix ${code}` : title)
+          });
+          break;
+        }
+      }
+    }
+    setHits(found);
+    setOpen(true);
+  }, [doc, buckets, introductions]);
+
+  const place = (h: RefHit) => {
+    onPlace(h.std, h.spec);
+    persistEvidenceRouting(doc.sectionId, h.std, h.spec).catch(() => undefined);
+    setOpen(false);
+  };
+
+  return (
+    <span className="relative" onClick={(e) => e.stopPropagation()}>
+      <button
+        type="button"
+        data-testid={`evdoc-find-refs-${doc.sectionId}`}
+        onClick={(e) => { e.stopPropagation(); runSearch(); }}
+        title="Search the imported introduction + standard narratives for where this file is referenced, then place it there."
+        className="inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2 py-0.5 text-[10px] font-medium text-amber-800 hover:bg-amber-50"
+      >
+        <Search className="h-3 w-3" aria-hidden /> Find references
+      </button>
+      {open && hits && (
+        <div
+          className="absolute left-0 z-20 mt-1 w-80 rounded-lg border border-gray-200 bg-white p-2 shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-gray-700">
+              {hits.length} reference{hits.length === 1 ? '' : 's'} found
+            </span>
+            <button type="button" onClick={() => setOpen(false)} className="text-[11px] text-gray-400 hover:text-gray-700">✕</button>
+          </div>
+          {hits.length === 0 ? (
+            <p className="text-[11px] text-gray-500">
+              No mention of “{doc.mccCode || doc.title}” found in the imported introduction or standards. Assign it manually below.
+            </p>
+          ) : (
+            <ul className="max-h-56 space-y-1 overflow-auto">
+              {hits.map((h, i) => (
+                <li key={`${h.std}.${h.spec}.${i}`}>
+                  <button
+                    type="button"
+                    onClick={() => place(h)}
+                    className="w-full rounded border border-gray-200 px-2 py-1 text-left hover:border-cshse-400 hover:bg-cshse-50"
+                  >
+                    <div className="text-[11px] font-semibold text-cshse-700">Place at {h.label}</div>
+                    <div className="text-[10px] text-gray-500 line-clamp-2">{h.excerpt}</div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </span>
   );
 }
 
@@ -2222,8 +2358,10 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
             {d.summary && (
               <p className="mt-2 text-xs text-gray-700 line-clamp-3">{d.summary}</p>
             )}
-            <div className="mt-2 flex items-center gap-2 text-[11px] text-gray-500">
-              {d.resolvedStd && d.resolvedSpec ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+              {d.resolvedStd === 'introduction' ? (
+                <span className="font-mono text-cshse-700">→ Introduction</span>
+              ) : d.resolvedStd && d.resolvedSpec ? (
                 <span className="font-mono text-cshse-700">
                   → Spec {d.resolvedStd}.{d.resolvedSpec}
                 </span>
@@ -2232,6 +2370,15 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
                   Unassigned
                 </span>
               )}
+              {/* Find where this file is referenced in the imported intro +
+                  standard/substandard narratives, and place it there. Helps
+                  when the parser missed a "(Supporting Document …)" reference. */}
+              <FindReferencesButton
+                doc={d}
+                onPlace={(std, spec) => {
+                  updateEvidenceDocRouting(d.sectionId, std, spec);
+                }}
+              />
               {/* CR-051 Sprint 7 polish — inline "View source" button. */}
               {onShowInSource && (
                 <button
