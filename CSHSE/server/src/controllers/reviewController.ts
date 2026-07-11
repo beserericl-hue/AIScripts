@@ -6,6 +6,7 @@ import { User } from '../models/User';
 import { Assignment } from '../models/Assignment';
 import { recordAuditEvent } from '../services/auditLog';
 import { notify } from '../services/notificationService';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -77,6 +78,11 @@ export const getReview = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ error: 'Review not found' });
     }
 
+    // SECURITY (cross-tenant isolation) — gate on the parent submission. The
+    // reviewer reading their OWN review still passes via their active Assignment.
+    const _sub = await requireSubmissionAccess(req as any, res, String((review.submissionId as any)?._id || review.submissionId));
+    if (!_sub) return;
+
     // Check authorization (only assigned reader or admin can view)
     if (
       review.reviewerId._id.toString() !== req.user?.id &&
@@ -104,6 +110,11 @@ export const getReviewWorkspace = async (req: AuthenticatedRequest, res: Respons
     if (!review) {
       return res.status(404).json({ error: 'Review not found' });
     }
+
+    // SECURITY (cross-tenant isolation) — gate on the parent submission. The
+    // reviewer accessing their OWN review still passes via their active Assignment.
+    const _sub = await requireSubmissionAccess(req as any, res, String((review.submissionId as any)?._id || review.submissionId));
+    if (!_sub) return;
 
     // Check authorization
     if (
@@ -537,6 +548,11 @@ export const getReviewProgress = async (req: AuthenticatedRequest, res: Response
       return res.status(404).json({ error: 'Review not found' });
     }
 
+    // SECURITY (cross-tenant isolation) — gate on the parent submission. The
+    // reviewer reading their OWN review still passes via their active Assignment.
+    const _sub = await requireSubmissionAccess(req as any, res, String((review.submissionId as any)?._id || review.submissionId));
+    if (!_sub) return;
+
     // Build detailed progress by standard
     const standardProgress = review.assessments.map(assessment => {
       const total = assessment.specifications.length;
@@ -867,6 +883,10 @@ export const requestAssignmentChange = async (req: AuthenticatedRequest, res: Re
 export const getSubmissionReviews = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
+
+    // SECURITY (cross-tenant isolation) — gate on the submission first.
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId);
+    if (!_sub) return;
 
     if (req.user?.role !== 'admin' && req.user?.role !== 'lead_reader') {
       return res.status(403).json({ error: 'Not authorized to view all reviews' });

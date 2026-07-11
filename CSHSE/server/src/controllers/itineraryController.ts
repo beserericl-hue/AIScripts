@@ -14,6 +14,8 @@ import { SiteVisit } from '../models/SiteVisit';
 import { SiteVisitChecklistItem } from '../models/SiteVisitChecklistItem';
 import { User } from '../models/User';
 import { recordAuditEvent } from '../services/auditLog';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 // ---------------------------------------------------------------------------
 // CR-013 / Sprint 6.2 — Site-visit itinerary co-edit + DOCX export.
@@ -27,18 +29,6 @@ import { recordAuditEvent } from '../services/auditLog';
 // site visit AND the submission's PC (the submitter) can update.
 // Other readers + board see read-only. Admin / superuser bypass.
 // ---------------------------------------------------------------------------
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role: string;
-    name?: string;
-    firstName?: string;
-    lastName?: string;
-    email?: string;
-    isSuperuser?: boolean;
-  };
-}
 
 function _actorName(req: AuthenticatedRequest): string {
   if (req.user?.name) return req.user.name;
@@ -137,8 +127,10 @@ function _canRead(req: AuthenticatedRequest, submission: any, siteVisit: any): b
   if (role === 'lead_reader' || role === 'reader') {
     if (siteVisit && String(siteVisit.leadReaderId) === uid) return true;
     if (siteVisit && Array.isArray(siteVisit.readerIds) && siteVisit.readerIds.some((r: any) => String(r) === uid)) return true;
-    // Allow any reader to read once status >= submitted (board context).
-    return ['submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant'].includes(submission.status);
+    // SECURITY: no "any reader once submitted" fallback — cross-tenant leak.
+    // Authoritative access is enforced by requireSubmissionAccess in the
+    // handlers (assigned Assignment / PC-at-institution / admin).
+    return false;
   }
   return false;
 }
@@ -146,6 +138,7 @@ function _canRead(req: AuthenticatedRequest, submission: any, siteVisit: any): b
 export const getItinerary = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
     const submission = await Submission.findById(submissionId).lean();
     if (!submission) return res.status(404).json({ error: 'Submission not found' });
     const siteVisit = await _findActiveSiteVisit(submissionId);
@@ -221,6 +214,7 @@ export const replaceAgenda = async (req: AuthenticatedRequest, res: Response) =>
 export const exportItineraryDocx = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
     const submission = await Submission.findById(submissionId).lean();
     if (!submission) return res.status(404).json({ error: 'Submission not found' });
     const siteVisit = await _findActiveSiteVisit(submissionId);

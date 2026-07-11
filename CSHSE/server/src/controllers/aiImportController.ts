@@ -51,6 +51,7 @@ import {
   ExpectedSectionType
 } from '../models/ImportCorrection';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { requireImportAccess } from '../services/submissionAccessGuard';
 
 // CR-040 Phase 2c — escape user-supplied strings for the evidenceDoc
 // HTML wrapper we generate at Apply time. Captures the five characters
@@ -414,6 +415,8 @@ export async function startAIImportForBatch(
 
 export async function startAIImport(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const { programLevel = 'bachelors', forceFormat = null, isReimport = false } = req.body || {};
 
   if (!['associate', 'bachelors', 'masters'].includes(programLevel)) {
@@ -520,6 +523,8 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
 
 export async function getAIImportStatus(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const importRecord = await SelfStudyImport.findById(importId);
   if (!importRecord) {
     res.status(404).json({ error: 'Import not found' });
@@ -534,6 +539,11 @@ export async function getAIImportStatus(req: AuthenticatedRequest, res: Response
 
 export async function streamAIImportEvents(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
+  // Gate BEFORE any SSE headers/events are written — otherwise a foreign
+  // caller would receive an event stream (and the initial snapshot) for
+  // another institution's import.
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const importRecord = await SelfStudyImport.findById(importId);
   if (!importRecord) {
     res.status(404).json({ error: 'Import not found' });
@@ -1145,6 +1155,8 @@ async function _applyAIImportWrites(args: {
 
 export async function applyAIImport(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const payload: ApplyPayload = req.body || {};
 
   const importRecord = await SelfStudyImport.findById(importId);
@@ -1713,6 +1725,8 @@ async function _runApplyBody(args: {
 export async function redetectImport(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
   try {
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       res.status(404).json({ error: 'Import not found' });
@@ -1883,6 +1897,8 @@ export async function redetectImport(req: AuthenticatedRequest, res: Response): 
 
 export async function restartAIImport(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const { forceFormat = null } = req.body || {};
   if (forceFormat !== null && !['template', 'self_study', 'mcc_narrative'].includes(forceFormat)) {
     res.status(400).json({ error: `Invalid forceFormat: ${forceFormat}` });
@@ -1987,6 +2003,8 @@ export async function createImportCorrection(
   res: Response
 ): Promise<void> {
   const { importId } = req.params;
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const payload = (req.body || {}) as CorrectionPayload;
 
   if (!payload.sourceText || !payload.expectedStd || !payload.expectedSpec) {
@@ -2057,6 +2075,8 @@ export async function listImportCorrections(
   res: Response
 ): Promise<void> {
   const { importId } = req.params;
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const importRecord = await SelfStudyImport.findById(importId);
   if (!importRecord) {
     res.status(404).json({ error: 'Import not found' });
@@ -2098,6 +2118,8 @@ export async function listImportCorrections(
  */
 export async function inferMatrixColumns(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const { matrixSlug } = req.body || {};
   if (!matrixSlug) {
     res.status(400).json({ error: 'matrixSlug is required' });
@@ -2181,6 +2203,8 @@ export async function inferMatrixColumns(req: AuthenticatedRequest, res: Respons
  */
 export async function confirmMatrixColumn(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const { matrixSlug, columnIndex, course, priorConfidence } = req.body || {};
 
   if (!matrixSlug || typeof columnIndex !== 'number' || !course) {
@@ -2237,6 +2261,8 @@ export async function confirmMatrixColumn(req: AuthenticatedRequest, res: Respon
  */
 export async function inferMatrixRowSpec(req: AuthenticatedRequest, res: Response): Promise<void> {
   const { importId } = req.params;
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
   const { rowPrompt, standardCode } = req.body || {};
 
   if (!rowPrompt || !standardCode) {

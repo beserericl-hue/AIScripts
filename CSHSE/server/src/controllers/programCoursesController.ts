@@ -7,6 +7,7 @@ import mongoose from 'mongoose';
 import { ProgramCourse } from '../models/ProgramCourse';
 import { Submission } from '../models/Submission';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 function normalizeCode(code: string): string {
   return code.trim().replace(/\s+/g, ' ').toUpperCase();
@@ -18,6 +19,8 @@ export async function listProgramCourses(req: AuthenticatedRequest, res: Respons
     res.status(400).json({ error: 'Invalid submissionId' });
     return;
   }
+  const _sub = await requireSubmissionAccess(req, res, req.params.submissionId);
+  if (!_sub) return;
   const submission = await Submission.findById(submissionId).select('institutionId');
   if (!submission?.institutionId) {
     res.status(404).json({ error: 'Submission or institution not found' });
@@ -58,6 +61,8 @@ export async function createProgramCourse(req: AuthenticatedRequest, res: Respon
 
   const code = normalizeCode(courseCode);
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId);
+    if (!_sub) return;
     const course = await ProgramCourse.findOneAndUpdate(
       { institutionId: submission.institutionId, courseCode: code, submissionId },
       {

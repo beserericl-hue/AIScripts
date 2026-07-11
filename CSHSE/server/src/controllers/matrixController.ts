@@ -1,16 +1,11 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { CurriculumMatrix, ICurriculumMatrix } from '../models/CurriculumMatrix';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission } from '../models/Submission';
 import { parseMatrixHtml } from '../services/matrixHtmlParser';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 import mongoose from 'mongoose';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role: string;
-  };
-}
 
 /**
  * Get curriculum matrix for a submission
@@ -18,6 +13,8 @@ interface AuthenticatedRequest extends Request {
 export const getMatrix = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId, matrixId } = req.params;
+
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
 
     let matrix;
     if (matrixId) {
@@ -58,6 +55,8 @@ export const getMatrix = async (req: AuthenticatedRequest, res: Response) => {
 export const getAllMatrices = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
+
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
 
     // AUTHORITATIVE SOURCE first — the AI parser's own `aiMatrices` (the real,
     // full curriculum matrices, e.g. HS-courses + non-HS-courses) from the most
@@ -151,6 +150,8 @@ export const addCourse = async (req: AuthenticatedRequest, res: Response) => {
       return res.status(404).json({ error: 'Matrix not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
+
     // Check for duplicate
     const exists = matrix.courses.some(
       c => c.coursePrefix === coursePrefix && c.courseNumber === courseNumber
@@ -199,6 +200,8 @@ export const removeCourse = async (req: AuthenticatedRequest, res: Response) => 
     if (!matrix) {
       return res.status(404).json({ error: 'Matrix not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
 
     // Remove course
     const courseIndex = matrix.courses.findIndex(c => c.id === courseId);
@@ -257,6 +260,8 @@ export const updateAssessment = async (req: AuthenticatedRequest, res: Response)
     if (!matrix) {
       return res.status(404).json({ error: 'Matrix not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
 
     // Verify course exists
     const courseExists = matrix.courses.some(c => c.id === courseId);
@@ -336,6 +341,8 @@ export const reorderCourses = async (req: AuthenticatedRequest, res: Response) =
       return res.status(404).json({ error: 'Matrix not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
+
     // Reorder courses based on provided IDs
     courseIds.forEach((courseId, index) => {
       const course = matrix.courses.find(c => c.id === courseId);
@@ -371,6 +378,8 @@ export const importMatrix = async (req: AuthenticatedRequest, res: Response) => 
     if (!matrix) {
       return res.status(404).json({ error: 'Matrix not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
 
     // Add courses
     if (Array.isArray(courses)) {
@@ -468,6 +477,8 @@ export const exportMatrix = async (req: AuthenticatedRequest, res: Response) => 
       return res.status(404).json({ error: 'Matrix not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
+
     if (format === 'csv') {
       // Build CSV
       const headers = ['Standard', 'Specification', ...matrix.courses.map(
@@ -528,6 +539,8 @@ export const addRawContent = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Matrix not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
+
     // Initialize rawContent array if needed
     if (!matrix.rawContent) {
       matrix.rawContent = [];
@@ -566,6 +579,8 @@ export const parseMatrixContent = async (req: AuthenticatedRequest, res: Respons
   try {
     const { matrixId } = req.params;
     const { rawContentId, htmlContent, defaultStandardCode } = req.body;
+
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
 
     let html: string;
 
@@ -612,6 +627,8 @@ export const duplicateStandardRow = async (req: AuthenticatedRequest, res: Respo
     if (!matrix) {
       return res.status(404).json({ error: 'Matrix not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
 
     // Find max existing rowIndex for this standard/spec
     const existingRows = matrix.standards.filter(
@@ -664,6 +681,8 @@ export const removeStandardRow = async (req: AuthenticatedRequest, res: Response
       return res.status(404).json({ error: 'Matrix not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
+
     const idx = matrix.standards.findIndex(
       s => s.standardCode === standardCode && s.specCode === specCode && (s.rowIndex || 0) === rowIndex
     );
@@ -697,6 +716,8 @@ export const deleteRawContent = async (req: AuthenticatedRequest, res: Response)
     if (!matrix) {
       return res.status(404).json({ error: 'Matrix not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req, res, String(matrix.submissionId)); if (!_sub) return;
 
     if (!matrix.rawContent) {
       return res.status(404).json({ error: 'No raw content found' });

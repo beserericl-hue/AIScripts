@@ -3,6 +3,7 @@ import { Submission, ISubmission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 // CR-060 — multi-role access: role-by-institution resolution.
 import { hasRoleAt, isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 import { ValidationResult } from '../models/ValidationResult';
 import { ValidationService } from '../services/validationService';
 import { emailService } from '../services/emailService';
@@ -189,6 +190,9 @@ export const getSubmissionProgress = async (req: AuthenticatedRequest, res: Resp
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
+    // SECURITY (isolation audit) — was ungated: any user could read any
+    // institution's progress rollup. Gate on the loaded submission.
+    if (!(await requireSubmissionAccess(req as any, res, submission))) return;
 
     // Calculate overall progress
     const statusEntries: any[] = submission.standardsStatus
@@ -381,6 +385,11 @@ export const saveIntroduction = async (req: AuthenticatedRequest, res: Response)
     const submission = await Submission.findById(submissionId);
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
+    }
+    // SECURITY (isolation audit) — was ungated: any user could overwrite any
+    // institution's introduction. Restrict to admin / PC-at-institution.
+    if (!pcCanWrite(req.user, submission)) {
+      return res.status(403).json({ error: 'Forbidden: not authorized to edit this submission' });
     }
     if (scope === 'document') {
       submission.documentIntroduction = content;
@@ -607,6 +616,10 @@ export const submitStandard = async (req: AuthenticatedRequest, res: Response) =
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
+    // SECURITY (isolation audit) — restrict to admin / PC-at-institution.
+    if (!pcCanWrite(req.user, submission)) {
+      return res.status(403).json({ error: 'Forbidden: not authorized to edit this submission' });
+    }
 
     // Get all narratives for this standard from the Map
     const standardNarrativesMap = submission.narratives?.get(standardCode);
@@ -801,6 +814,10 @@ export const revalidateFailed = async (req: AuthenticatedRequest, res: Response)
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
+    // SECURITY (isolation audit) — restrict to admin / PC-at-institution.
+    if (!pcCanWrite(req.user, submission)) {
+      return res.status(403).json({ error: 'Forbidden: not authorized to edit this submission' });
+    }
 
     // Get failed validation results
     const failedResults = await ValidationResult.find({
@@ -900,6 +917,9 @@ export const getFailedValidations = async (req: AuthenticatedRequest, res: Respo
   try {
     const { submissionId } = req.params;
     const { standardCode } = req.query;
+    // SECURITY (isolation audit) — was ungated: any user could read any
+    // institution's failed-validation rationales.
+    if (!(await requireSubmissionAccess(req as any, res, submissionId))) return;
 
     const filter: any = {
       submissionId,
@@ -941,6 +961,8 @@ export const getSpecEvaluation = async (req: AuthenticatedRequest, res: Response
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
+    // SECURITY (isolation audit) — the loaded institutionId was never checked.
+    if (!(await requireSubmissionAccess(req as any, res, submission))) return;
     const latest = await validationService.getLatestValidation(submissionId, standardCode, specCode);
     return res.json({
       evaluation: latest?.result ?? null,
@@ -1011,7 +1033,10 @@ export const recordSectionEvalOverride = async (req: AuthenticatedRequest, res: 
       return res.status(403).json({ error: 'Only readers may override an evaluation' });
     }
 
-    const submission = await Submission.findById(submissionId).select('institutionId programLevel').lean();
+    const submission = await Submission.findById(submissionId).select('institutionId programLevel submitterId').lean();
+    // SECURITY (isolation audit) — a reader may only override a spec on a
+    // submission they are assigned to (or admin / PC-at-institution).
+    if (submission && !(await requireSubmissionAccess(req as any, res, submission))) return;
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
@@ -1067,6 +1092,10 @@ export const markStandardComplete = async (req: AuthenticatedRequest, res: Respo
     const submission = await Submission.findById(submissionId);
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
+    }
+    // SECURITY (isolation audit) — restrict to admin / PC-at-institution.
+    if (!pcCanWrite(req.user, submission)) {
+      return res.status(403).json({ error: 'Forbidden: not authorized to edit this submission' });
     }
 
     // Atomic $set bypasses Mongoose 8 Map bug
@@ -1575,6 +1604,13 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
 
     if (!institutionName || !programName) {
       return res.status(400).json({ error: 'Institution name and program name are required' });
+    }
+    // SECURITY (isolation audit) — a submission may only be created for an
+    // institution the caller coordinates (or by an admin). Prevents attributing
+    // a submission to — and repointing currentSubmissionId of — another tenant.
+    if (institutionId && !isGlobalAdmin(req.user) &&
+        !hasRoleAt(req.user, 'program_coordinator', String(institutionId))) {
+      return res.status(403).json({ error: 'Forbidden: you cannot create a submission for this institution' });
     }
 
     // Initialize standards status for 21 standards

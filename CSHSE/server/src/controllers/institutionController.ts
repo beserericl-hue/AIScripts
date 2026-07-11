@@ -5,6 +5,7 @@ import { User } from '../models/User';
 import { Spec } from '../models/Spec';
 import mongoose from 'mongoose';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { isGlobalAdmin, accessibleInstitutionIds } from '../services/roleResolver';
 
 /**
  * Get all institutions
@@ -14,6 +15,13 @@ export const getInstitutions = async (req: AuthenticatedRequest, res: Response) 
     const { type, hasActiveSubmission, status, programCoordinatorId, page = '1', limit = '50' } = req.query;
 
     const query: any = {};
+    // SECURITY (isolation audit) — was unscoped: any authenticated user listed
+    // every institution + coordinator/lead PII. Non-admins are restricted to
+    // the institutions they have a role at.
+    if (!isGlobalAdmin(req.user)) {
+      const allowed = accessibleInstitutionIds(req.user).map((s) => new mongoose.Types.ObjectId(String(s)));
+      query._id = { $in: allowed };
+    }
     if (type) query.type = type;
     if (status) query.status = status;
     if (programCoordinatorId) query.programCoordinatorId = programCoordinatorId;
@@ -57,6 +65,15 @@ export const getInstitutions = async (req: AuthenticatedRequest, res: Response) 
 export const getInstitution = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { id } = req.params;
+
+    // SECURITY (isolation audit) — was unscoped: any authenticated user read
+    // any institution incl. its full current submission + coordinator PII.
+    if (!isGlobalAdmin(req.user)) {
+      const allowed = accessibleInstitutionIds(req.user).map((s) => String(s));
+      if (!allowed.includes(String(id))) {
+        return res.status(403).json({ error: 'Access denied' });
+      }
+    }
 
     const institution = await Institution.findById(id)
       .populate('programCoordinatorId', 'firstName lastName email')

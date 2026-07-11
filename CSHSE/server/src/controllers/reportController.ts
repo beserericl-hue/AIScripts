@@ -9,6 +9,7 @@ import { generateAndStoreReaderReport, getReaderReportStructure, renderReaderRep
 import { ReaderReport } from '../models/ReaderReport';
 import { Assignment } from '../models/Assignment';
 import { isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 /**
  * CR-003 / S11.1 — build the per-spec 0-3 score map for a reader's report,
@@ -50,6 +51,8 @@ export const generateReaderReportPDF = async (req: AuthenticatedRequest, res: Re
     if (!review) {
       return res.status(404).json({ error: 'Review not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req as any, res, String(review.submissionId)); if (!_sub) return;
 
     // Check authorization
     if (review.reviewerId.toString() !== req.user?.id && !isLeadOrAdmin(req)) {
@@ -135,6 +138,8 @@ export const generateAllReaderReportsPDF = async (req: AuthenticatedRequest, res
   try {
     const { submissionId } = req.params;
 
+    const _sub = await requireSubmissionAccess(req as any, res, submissionId); if (!_sub) return;
+
     if (!isLeadOrAdmin(req)) {
       return res.status(403).json({ error: 'Not authorized' });
     }
@@ -186,6 +191,8 @@ export const previewReaderReport = async (req: AuthenticatedRequest, res: Respon
     if (!review) {
       return res.status(404).json({ error: 'Review not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req as any, res, String(review.submissionId)); if (!_sub) return;
 
     // Check authorization
     if (
@@ -284,6 +291,7 @@ export const generateReaderReportNow = async (req: AuthenticatedRequest, res: Re
     if (!mongoose.Types.ObjectId.isValid(submissionId)) {
       return res.status(400).json({ error: 'Invalid submission id' });
     }
+    const _sub = await requireSubmissionAccess(req as any, res, submissionId); if (!_sub) return;
     const result = await generateAndStoreReaderReport(submissionId, req.user?.id);
     if (!result.pdf && !result.docx) {
       return res.status(404).json({ error: 'Submission not found' });

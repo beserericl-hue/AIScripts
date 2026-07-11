@@ -1,17 +1,11 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { SiteVisit } from '../models/SiteVisit';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { User } from '../models/User';
 import mongoose from 'mongoose';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    name: string;
-    role: string;
-  };
-}
+import { AuthenticatedRequest } from '../middleware/auth';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 /**
  * Get all site visits
@@ -59,6 +53,10 @@ export const getSiteVisits = async (req: AuthenticatedRequest, res: Response) =>
       if (user?.institutionId) {
         query.institutionId = user.institutionId;
       }
+    } else if (userRole !== 'admin' && !req.user?.isSuperuser) {
+      // Any other (or role-less) caller has no scoped branch — deny rather than
+      // fall through to an unfiltered / attacker-`?institutionId=`-filtered list.
+      return res.status(403).json({ error: 'Not authorized to list site visits' });
     }
 
     const pageNum = parseInt(page as string, 10);
@@ -115,6 +113,14 @@ export const getSiteVisit = async (req: AuthenticatedRequest, res: Response) => 
       return res.status(404).json({ error: 'Site visit not found' });
     }
 
+    // submissionId is populated here, so resolve its id (fall back to the raw ref).
+    const _sub = await requireSubmissionAccess(
+      req,
+      res,
+      String((siteVisit.submissionId as any)?._id || siteVisit.submissionId)
+    );
+    if (!_sub) return;
+
     return res.json(siteVisit);
   } catch (error) {
     console.error('Get site visit error:', error);
@@ -147,6 +153,9 @@ export const scheduleSiteVisit = async (req: AuthenticatedRequest, res: Response
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req, res, String(submission._id));
+    if (!_sub) return;
 
     // Create site visit
     const siteVisit = new SiteVisit({
@@ -225,6 +234,9 @@ export const updateSiteVisit = async (req: AuthenticatedRequest, res: Response) 
       return res.status(404).json({ error: 'Site visit not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req, res, String(siteVisit.submissionId));
+    if (!_sub) return;
+
     // Track date changes
     const previousDate = siteVisit.scheduledDate;
     let dateChanged = false;
@@ -288,6 +300,9 @@ export const cancelSiteVisit = async (req: AuthenticatedRequest, res: Response) 
     if (!siteVisit) {
       return res.status(404).json({ error: 'Site visit not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req, res, String(siteVisit.submissionId));
+    if (!_sub) return;
 
     siteVisit.status = 'cancelled';
     siteVisit.changeHistory.push({

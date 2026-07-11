@@ -9,6 +9,7 @@ import { SiteVisitChecklistItem } from '../models/SiteVisitChecklistItem';
 import { recordAuditEvent } from '../services/auditLog';
 import { notify } from '../services/notificationService';
 import { generateSuggestionsDocx, SuggestionsMode } from '../services/suggestionsDocx';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 // ---------------------------------------------------------------------------
 // CR-009 / Sprint 5.1 — lead-reader compilation surface.
@@ -145,6 +146,7 @@ async function syncChecklistForFinalScore(opts: {
  */
 export const getCompilation = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (!isLeadOrAdmin(req)) {
       return res.status(403).json({ error: 'Only lead readers and admins can view the compilation' });
     }
@@ -257,6 +259,7 @@ export const getCompilation = async (req: AuthenticatedRequest, res: Response) =
  */
 export const getFinalScoresForReader = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     const role = req.user?.role;
     const elevated = isLeadOrAdmin(req);
 
@@ -335,6 +338,7 @@ export const getFinalScoresForReader = async (req: AuthenticatedRequest, res: Re
  */
 export const setFinalScore = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (!isLeadOrAdmin(req)) {
       return res.status(403).json({ error: 'Only lead readers and admins can set a final score' });
     }
@@ -415,6 +419,7 @@ export const setFinalScore = async (req: AuthenticatedRequest, res: Response) =>
  */
 export const clearFinalScore = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (!isLeadOrAdmin(req)) {
       return res.status(403).json({ error: 'Only lead readers and admins can clear a final score' });
     }
@@ -475,6 +480,7 @@ export const clearFinalScore = async (req: AuthenticatedRequest, res: Response) 
  */
 export const exportSuggestionsDoc = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (!isLeadOrAdmin(req)) {
       return res.status(403).json({ error: 'Only lead readers and admins can export suggestions' });
     }
@@ -525,6 +531,7 @@ export const exportSuggestionsDoc = async (req: AuthenticatedRequest, res: Respo
  */
 export const finalizeCompilation = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (!isLeadOrAdmin(req)) {
       return res.status(403).json({ error: 'Only lead readers and admins can send a review to the board' });
     }

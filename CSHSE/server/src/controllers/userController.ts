@@ -44,10 +44,28 @@ export const getUsers = async (req: AuthenticatedRequest, res: Response) => {
       }
     }
 
-    // Apply filters
-    if (role) query.role = role;
-    if (institutionId) query.institutionId = institutionId;
+    // Apply client filters WITHOUT escaping the role-based scope above.
+    // SECURITY (isolation audit): these previously OVERWROTE query.role /
+    // query.institutionId, letting a PC pass ?institutionId=<other institution>
+    // to enumerate any institution's users, and a lead_reader pass ?role=admin
+    // to enumerate admin/superuser accounts. Now a client filter may only
+    // NARROW within the already-computed scope.
     if (status) query.status = status;
+    if (role) {
+      if (query.role?.$in && !query.role.$in.includes(role)) {
+        return res.json({ users: [], total: 0, page: parseInt(page as string, 10) || 1, pages: 0 });
+      }
+      query.role = role;
+    }
+    if (institutionId) {
+      if (query.institutionId?.$in) {
+        const allowed = query.institutionId.$in.map((o: any) => o.toString());
+        if (!allowed.includes(String(institutionId))) {
+          return res.json({ users: [], total: 0, page: parseInt(page as string, 10) || 1, pages: 0 });
+        }
+      }
+      query.institutionId = institutionId;
+    }
 
     const pageNum = parseInt(page as string, 10);
     const limitNum = parseInt(limit as string, 10);
@@ -110,10 +128,23 @@ export const getUser = async (req: AuthenticatedRequest, res: Response) => {
     const populatedInstitution = user.institutionId as any;
     const institutionIdStr = populatedInstitution?._id?.toString() || populatedInstitution?.toString() || null;
 
-    if (userRole !== 'admin') {
-      if (userRole === 'program_coordinator' && institutionIdStr !== req.user?.institutionId) {
-        return res.status(403).json({ error: 'Access denied' });
-      }
+    // SECURITY (isolation audit) — DEFAULT DENY. Previously only a PC was
+    // blocked cross-institution; a reader/lead_reader fell through and could
+    // read ANY user's PII (incl. admins/superusers and other institutions' PCs)
+    // by id. Now: admin/superuser, self, PC-at-same-institution, or a
+    // reader/lead viewing another reader/lead (committee) only.
+    const isSelf = String((user as any)._id) === String(req.user?.id);
+    const isAdmin = userRole === 'admin' || (req.user as any)?.isSuperuser === true;
+    const targetRole = (user as any).role;
+    let allowed = isAdmin || isSelf;
+    if (!allowed && userRole === 'program_coordinator') {
+      allowed = institutionIdStr === req.user?.institutionId;
+    }
+    if (!allowed && (userRole === 'lead_reader' || userRole === 'reader')) {
+      allowed = targetRole === 'reader' || targetRole === 'lead_reader';
+    }
+    if (!allowed) {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     return res.json({
@@ -156,10 +187,20 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     // Fields that only admin can update
     const adminOnlyFields = ['role', 'status', 'permissions', 'institutionId', 'isActive'];
 
+    // SECURITY (isolation audit) — fields that must NEVER be settable through
+    // this generic endpoint. `isSuperuser` was previously writable by any admin
+    // (privilege escalation: a plain admin could POST {isSuperuser:true} on
+    // itself); superuser is managed ONLY via the requireSuperuser-gated
+    // /users/:id/superuser routes. roleAssignments has its own gated endpoint.
+    const forbiddenFields = new Set(['isSuperuser', 'roleAssignments', 'superuser']);
+
     // Apply updates
     Object.keys(updates).forEach(key => {
       if (key === '_id' || key === 'passwordHash' || key === 'email') {
         return; // Skip immutable fields
+      }
+      if (forbiddenFields.has(key)) {
+        return; // Never settable here — use the dedicated gated endpoints.
       }
 
       if (isSelf && !selfUpdateFields.includes(key) && userRole !== 'admin') {

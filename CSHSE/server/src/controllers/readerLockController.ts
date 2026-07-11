@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Submission } from '../models/Submission';
 import { recordAuditEvent } from '../services/auditLog';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 import mongoose from 'mongoose';
 
 interface AuthenticatedRequest extends Request {
@@ -16,6 +17,7 @@ interface AuthenticatedRequest extends Request {
  */
 export const getLockStatus = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     const { submissionId } = req.params;
 
     const submission = await Submission.findById(submissionId)
@@ -73,6 +75,7 @@ export const getLockStatus = async (req: AuthenticatedRequest, res: Response) =>
  */
 export const lockSubmission = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     const { submissionId } = req.params;
     const { reason } = req.body; // 'reader_review' or 'lead_reader_review'
 
@@ -154,6 +157,7 @@ export const lockSubmission = async (req: AuthenticatedRequest, res: Response) =
  */
 export const unlockSubmission = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     const { submissionId } = req.params;
 
     const submission = await Submission.findById(submissionId);
@@ -229,6 +233,7 @@ export const unlockSubmission = async (req: AuthenticatedRequest, res: Response)
  */
 export const sendBackForCorrection = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     const { submissionId } = req.params;
     const { reason } = req.body;
 

@@ -5,6 +5,7 @@ import { LeadReaderCompilation } from '../models/LeadReaderCompilation';
 import { Review } from '../models/Review';
 import { Submission } from '../models/Submission';
 import { User } from '../models/User';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -63,6 +64,7 @@ export const getReadyForCompilation = async (req: AuthenticatedRequest, res: Res
       return res.status(403).json({ error: 'Not authorized' });
     }
 
+    // AUDIT: cross-institution list — lead reviewers see all submitted studies by design; not tenant-scoped
     // Find submissions where all reviews are submitted
     const submissionsWithReviews = await Submission.aggregate([
       { $match: { status: { $in: ['readers_assigned', 'under_review', 'review_complete'] } } },
@@ -132,6 +134,8 @@ export const getReadyForCompilation = async (req: AuthenticatedRequest, res: Res
 export const createOrGetCompilation = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
+
+    const _sub = await requireSubmissionAccess(req as any, res, submissionId); if (!_sub) return;
 
     if (req.user?.role !== 'lead_reader' && req.user?.role !== 'admin') {
       return res.status(403).json({ error: 'Not authorized' });
@@ -235,6 +239,8 @@ export const getComparisonView = async (req: AuthenticatedRequest, res: Response
       return res.status(404).json({ error: 'Compilation not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req as any, res, String(compilation.submissionId)); if (!_sub) return;
+
     let assessments = compilation.compiledAssessments;
 
     // Filter by standard if specified
@@ -272,6 +278,8 @@ export const getDisagreements = async (req: AuthenticatedRequest, res: Response)
     if (!compilation) {
       return res.status(404).json({ error: 'Compilation not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req as any, res, String(compilation.submissionId)); if (!_sub) return;
 
     const disagreements = compilation.getDisagreements();
 
@@ -534,6 +542,8 @@ export const createCommentThread = async (req: AuthenticatedRequest, res: Respon
       return res.status(404).json({ error: 'Compilation not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req as any, res, String(compilation.submissionId)); if (!_sub) return;
+
     const thread = {
       threadId: uuidv4(),
       standardCode,
@@ -576,6 +586,8 @@ export const addThreadMessage = async (req: AuthenticatedRequest, res: Response)
       return res.status(404).json({ error: 'Compilation not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req as any, res, String(compilation.submissionId)); if (!_sub) return;
+
     const thread = compilation.commentThreads.find(t => t.threadId === threadId);
     if (!thread) {
       return res.status(404).json({ error: 'Thread not found' });
@@ -609,6 +621,8 @@ export const toggleThreadResolved = async (req: AuthenticatedRequest, res: Respo
     if (!compilation) {
       return res.status(404).json({ error: 'Compilation not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req as any, res, String(compilation.submissionId)); if (!_sub) return;
 
     const thread = compilation.commentThreads.find(t => t.threadId === threadId);
     if (!thread) {
@@ -664,6 +678,8 @@ export const exportCompilation = async (req: AuthenticatedRequest, res: Response
     if (!compilation) {
       return res.status(404).json({ error: 'Compilation not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req as any, res, String(compilation.submissionId)); if (!_sub) return;
 
     if (format === 'csv') {
       // Build CSV

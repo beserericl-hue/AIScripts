@@ -3,15 +3,9 @@ import { ChangeRequest } from '../models/ChangeRequest';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { SiteVisit } from '../models/SiteVisit';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { AuthenticatedRequest } from '../middleware/auth';
 import mongoose from 'mongoose';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    name: string;
-    role: string;
-  };
-}
 
 /**
  * Get all change requests
@@ -28,8 +22,11 @@ export const getChangeRequests = async (req: AuthenticatedRequest, res: Response
     if (type) query.type = type;
     if (status) query.status = status;
 
-    // Filter based on role
-    if (userRole === 'program_coordinator') {
+    // Filter based on role. Admin and lead_reader see all institutions' change
+    // requests (board oversight). EVERY other role — program_coordinator and any
+    // plain reader/other role — is scoped to only their OWN requests, so no role
+    // can enumerate another institution's change requests.
+    if (userRole !== 'admin' && userRole !== 'lead_reader') {
       query.requestedBy = userId;
     }
 
@@ -79,6 +76,25 @@ export const getChangeRequest = async (req: AuthenticatedRequest, res: Response)
       return res.status(404).json({ error: 'Change request not found' });
     }
 
+    // SECURITY — cross-tenant gate. The CR is populated with its submission,
+    // so pass that doc straight to the guard (it derives the institution from
+    // the submission itself, never from the client).
+    const cr: any = changeRequest;
+    if (cr.submissionId) {
+      const _sub = await requireSubmissionAccess(req, res, cr.submissionId);
+      if (!_sub) return;
+    } else {
+      // No submission link (e.g. a standalone request): only admin/lead or the
+      // requester themselves may read it.
+      const role = req.user?.role;
+      const isAdminLead = role === 'admin' || role === 'lead_reader';
+      const requesterId = String(cr.requestedBy?._id || cr.requestedBy || '');
+      const isRequester = requesterId === String(req.user?.id || '');
+      if (!isAdminLead && !isRequester) {
+        return res.status(403).json({ error: 'Forbidden: you do not have access to this change request' });
+      }
+    }
+
     return res.json(changeRequest);
   } catch (error) {
     console.error('Get change request error:', error);
@@ -96,6 +112,11 @@ export const createChangeRequest = async (req: AuthenticatedRequest, res: Respon
     }
 
     const { submissionId, type, requestedValue, reason, siteVisitId } = req.body;
+
+    // SECURITY — a PC may only file a change request against a submission they
+    // can actually access (their own institution's).
+    const _sub = await requireSubmissionAccess(req, res, submissionId);
+    if (!_sub) return;
 
     // Get submission info
     const submission = await Submission.findById(submissionId);

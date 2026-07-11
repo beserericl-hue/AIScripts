@@ -7,6 +7,7 @@ import {
 import { Submission } from '../models/Submission';
 import { recordAuditEvent } from '../services/auditLog';
 import { generateChecklistDocx } from '../services/siteVisitChecklistDocx';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 // ---------------------------------------------------------------------------
 // CR-012 / Sprint 6.1 — site-visit partial-compliance checklist.
@@ -63,6 +64,7 @@ function _actorName(req: AuthenticatedRequest): string {
 
 export const listChecklist = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (_denyIfPC(req, res)) return;
     if (!_canRead(req.user?.role || '') && !req.user?.isSuperuser) {
       return res.status(403).json({ error: 'Not authorized' });
@@ -104,6 +106,7 @@ export const listChecklist = async (req: AuthenticatedRequest, res: Response) =>
 
 export const addManualChecklistItem = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (_denyIfPC(req, res)) return;
     if (!_canWrite(req.user?.role || '', req.user?.isSuperuser)) {
       return res.status(403).json({ error: 'Only lead readers and admins can add manual items' });
@@ -150,6 +153,7 @@ export const addManualChecklistItem = async (req: AuthenticatedRequest, res: Res
 
 export const verifyChecklistItem = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (_denyIfPC(req, res)) return;
     if (!_canRead(req.user?.role || '') && !req.user?.isSuperuser) {
       return res.status(403).json({ error: 'Not authorized' });
@@ -204,6 +208,7 @@ export const verifyChecklistItem = async (req: AuthenticatedRequest, res: Respon
 
 export const deleteChecklistItem = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (_denyIfPC(req, res)) return;
     if (!_canWrite(req.user?.role || '', req.user?.isSuperuser)) {
       return res.status(403).json({ error: 'Only lead readers and admins can delete checklist items' });
@@ -221,6 +226,7 @@ export const deleteChecklistItem = async (req: AuthenticatedRequest, res: Respon
 
 export const exportChecklistDocx = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId); if (!_sub) return;
     if (_denyIfPC(req, res)) return;
     if (!_canRead(req.user?.role || '') && !req.user?.isSuperuser) {
       return res.status(403).json({ error: 'Not authorized' });

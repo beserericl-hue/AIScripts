@@ -1,6 +1,8 @@
-import { Request, Response } from 'express';
+import { Response } from 'express';
 import { Submission } from '../models/Submission';
 import { recommendEvidence } from '../services/cshseAiClient';
+import { AuthenticatedRequest } from '../middleware/auth';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 // ---------------------------------------------------------------------------
 // CR-018 / Sprint 4.1 finish — reader-side evidence-recommendations caller.
@@ -20,15 +22,6 @@ import { recommendEvidence } from '../services/cshseAiClient';
 // error. The reader UI fail-softs to "No recommendations available."
 // ---------------------------------------------------------------------------
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role: string;
-    institutionId?: string;
-    isSuperuser?: boolean;
-  };
-}
-
 function _canRead(role: string): boolean {
   return role === 'reader' || role === 'lead_reader' || role === 'admin';
 }
@@ -38,6 +31,8 @@ export const getEvidenceRecommendations = async (
   res: Response
 ) => {
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId);
+    if (!_sub) return;
     if (!_canRead(req.user?.role || '') && !req.user?.isSuperuser) {
       return res.status(403).json({ error: 'Not authorized' });
     }

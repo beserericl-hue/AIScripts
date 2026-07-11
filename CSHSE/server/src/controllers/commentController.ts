@@ -5,17 +5,10 @@ import { serializeCommentsForViewer } from '../services/commentSerializer';
 import { recordAuditEvent } from '../services/auditLog';
 import { notify } from '../services/notificationService';
 import { uploadFile, downloadFile, deleteFile } from '../services/s3Service';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { AuthenticatedRequest } from '../middleware/auth';
 import mongoose from 'mongoose';
 import path from 'path';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    name: string;
-    role: string;
-    isSuperuser?: boolean;
-  };
-}
 
 /**
  * Get all comments for a submission
@@ -28,6 +21,7 @@ export const getComments = async (req: AuthenticatedRequest, res: Response) => {
     // the PC, breaking the comment-thread loop. The serializer below is the
     // single redaction point — every PC-visible comment-returning path
     // must funnel through it.
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
     const { submissionId } = req.params;
     const { standardCode, specCode, page = '1', limit = '50' } = req.query;
     const role = req.user?.role || '';
@@ -88,6 +82,7 @@ export const getComments = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const getCommentSummary = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
     // Comments are never visible to program coordinators
     if (req.user?.role === 'program_coordinator') {
       return res.json({ total: 0, unresolved: 0, bySection: [] });
@@ -274,6 +269,8 @@ export const deleteComment = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Comment not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req, res, String(comment.submissionId)); if (!_sub) return;
+
     // Author or lead reader can delete
     const isAuthor = comment.authorId.toString() === req.user!.id;
     const isLeadReader = req.user!.role === 'lead_reader';
@@ -305,6 +302,8 @@ export const addReply = async (req: AuthenticatedRequest, res: Response) => {
     if (!comment) {
       return res.status(404).json({ error: 'Comment not found' });
     }
+
+    const _sub = await requireSubmissionAccess(req, res, String(comment.submissionId)); if (!_sub) return;
 
     // Program coordinators cannot see or interact with comments (superusers bypass)
     if (req.user?.role === 'program_coordinator' && !req.user?.isSuperuser) {
@@ -399,6 +398,8 @@ export const toggleResolve = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Comment not found' });
     }
 
+    const _sub = await requireSubmissionAccess(req, res, String(comment.submissionId)); if (!_sub) return;
+
     comment.isResolved = !comment.isResolved;
     if (comment.isResolved) {
       comment.resolvedBy = new mongoose.Types.ObjectId(req.user!.id);
@@ -425,6 +426,7 @@ export const toggleResolve = async (req: AuthenticatedRequest, res: Response) =>
  */
 export const getCommentsForNavigation = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
     // Comments are never visible to program coordinators
     if (req.user?.role === 'program_coordinator') {
       return res.json({ comments: [], pagination: { page: 1, limit: 10, total: 0, totalPages: 0, hasFirst: false, hasPrevious: false, hasNext: false, hasLast: false }, navigation: { first: 1, previous: 1, next: 1, last: 1 } });
@@ -504,6 +506,8 @@ export const relayComment = async (req: AuthenticatedRequest, res: Response) => 
     const comment = await Comment.findById(commentId);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
 
+    const _sub = await requireSubmissionAccess(req, res, String(comment.submissionId)); if (!_sub) return;
+
     const sanitized = typeof relayedText === 'string' ? relayedText.trim().slice(0, 8000) : undefined;
     const label = typeof pcLabel === 'string' ? pcLabel.trim().slice(0, 64) : undefined;
 
@@ -571,6 +575,8 @@ export const unrelayComment = async (req: AuthenticatedRequest, res: Response) =
     const comment = await Comment.findById(commentId);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
 
+    const _sub = await requireSubmissionAccess(req, res, String(comment.submissionId)); if (!_sub) return;
+
     comment.relayed = false;
     comment.relayedAt = undefined;
     comment.relayedBy = undefined;
@@ -602,6 +608,8 @@ export const escalateComment = async (req: AuthenticatedRequest, res: Response) 
     const comment = await Comment.findById(commentId);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
 
+    const _sub = await requireSubmissionAccess(req, res, String(comment.submissionId)); if (!_sub) return;
+
     comment.boardEscalated = true;
     await comment.save();
 
@@ -631,6 +639,7 @@ export const escalateComment = async (req: AuthenticatedRequest, res: Response) 
  */
 export const getRelayQueue = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
     if (!_canRelay(req.user?.role, req.user?.isSuperuser as any)) {
       return res.status(403).json({ error: 'Only lead readers, admin, or the board can view the relay queue' });
     }
@@ -710,6 +719,8 @@ export const uploadCommentAttachment = async (req: AuthenticatedRequest, res: Re
     const comment = await Comment.findById(commentId);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
 
+    const _sub = await requireSubmissionAccess(req, res, String(comment.submissionId)); if (!_sub) return;
+
     const key = _commentS3Key(String(comment._id), file.originalname);
     await uploadFile(key, file.buffer, file.mimetype);
 
@@ -751,6 +762,8 @@ export const downloadCommentAttachment = async (req: AuthenticatedRequest, res: 
     const comment = await Comment.findById(commentId);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
 
+    const _sub = await requireSubmissionAccess(req, res, String(comment.submissionId)); if (!_sub) return;
+
     const role = req.user?.role || '';
     if (!_canReadAttachment(role, comment) && !req.user?.isSuperuser) {
       return res.status(403).json({ error: 'Not allowed' });
@@ -776,6 +789,8 @@ export const deleteCommentAttachment = async (req: AuthenticatedRequest, res: Re
 
     const comment = await Comment.findById(commentId);
     if (!comment) return res.status(404).json({ error: 'Comment not found' });
+
+    const _sub = await requireSubmissionAccess(req, res, String(comment.submissionId)); if (!_sub) return;
 
     const att = comment.attachments.find((a: any) => String(a._id) === String(attachmentId));
     if (!att) return res.status(404).json({ error: 'Attachment not found' });

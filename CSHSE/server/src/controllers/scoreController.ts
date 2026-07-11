@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Score } from '../models/Score';
 import { isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -41,6 +42,10 @@ function isLeadOrAdminAnywhere(u: AuthenticatedRequest['user']): boolean {
  */
 export const upsertScore = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // SECURITY (cross-tenant isolation) — gate on the submission first.
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId);
+    if (!_sub) return;
+
     if (!canScore(req.user)) {
       return res.status(403).json({ error: 'Only readers and lead readers can score' });
     }
@@ -100,6 +105,10 @@ export const upsertScore = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const deleteScore = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // SECURITY (cross-tenant isolation) — gate on the submission first.
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId);
+    if (!_sub) return;
+
     if (!canScore(req.user)) {
       return res.status(403).json({ error: 'Only readers and lead readers can manage scores' });
     }
@@ -128,6 +137,10 @@ export const deleteScore = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const getScores = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // SECURITY (cross-tenant isolation) — gate on the submission first.
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId);
+    if (!_sub) return;
+
     // CR-060 — non-reviewers (PC-only / no role) see no scores.
     if (!canScore(req.user)) {
       return res.json({ scores: [] });
@@ -162,6 +175,10 @@ export const getScores = async (req: AuthenticatedRequest, res: Response) => {
  */
 export const getScoreSummary = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    // SECURITY (cross-tenant isolation) — gate on the submission first.
+    const _sub = await requireSubmissionAccess(req as any, res, req.params.submissionId);
+    if (!_sub) return;
+
     // CR-060 — non-reviewers (PC-only / no role) get no score summary.
     if (!canScore(req.user)) {
       return res.json({ bySpec: {}, byStandard: {}, global: null });

@@ -2,13 +2,8 @@ import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { validationService } from '../services/validationService';
 import { WebhookSettings } from '../models/WebhookSettings';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role: string;
-  };
-}
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { AuthenticatedRequest } from '../middleware/auth';
 
 /**
  * CR-054 — validate a single section in-process via cshse-ai (`validateSection`),
@@ -18,6 +13,7 @@ interface AuthenticatedRequest extends Request {
  */
 export const runSectionValidation = async (req: AuthenticatedRequest, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.body?.submissionId); if (!_sub) return;
     const { submissionId, standardCode, specCode, narrativeText } = req.body;
 
     if (!submissionId || !standardCode || !specCode) {
@@ -194,6 +190,7 @@ export const testWebhookConnection = async (req: Request, res: Response) => {
  */
 export const getValidationStatus = async (req: Request, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
     const { submissionId, standardCode, specCode } = req.params;
 
     const result = await validationService.getLatestValidation(
@@ -228,6 +225,7 @@ export const getValidationStatus = async (req: Request, res: Response) => {
  */
 export const getLatestValidation = async (req: Request, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.query.submissionId as string); if (!_sub) return;
     const { submissionId, standardCode, specCode } = req.query;
 
     if (!submissionId || !standardCode) {
@@ -266,6 +264,7 @@ export const getLatestValidation = async (req: Request, res: Response) => {
  */
 export const getStandardValidation = async (req: Request, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
     const { submissionId, standardCode } = req.params;
 
     // Get all validations for this standard
@@ -303,6 +302,7 @@ export const getStandardValidation = async (req: Request, res: Response) => {
  */
 export const getFailedSections = async (req: Request, res: Response) => {
   try {
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId); if (!_sub) return;
     const { submissionId } = req.params;
     const { standardCodes } = req.query;
 

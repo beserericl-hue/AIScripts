@@ -14,6 +14,8 @@ import { saveWithRetry, withRetry } from '../utils/dbRetry';
 import * as tempFileService from '../services/tempFileService';
 import * as gridFsService from '../services/gridFsService';
 import { recordVersion } from '../services/documentVersionService';
+import { requireImportAccess, requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { AuthenticatedRequest } from '../middleware/auth';
 import fs from 'fs/promises';
 import { createReadStream } from 'fs';
 
@@ -174,14 +176,6 @@ function getCallbackUrl(req: Request, callbackPath: string): string {
   return `${protocol}://${host}${callbackPath}`;
 }
 
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    role: string;
-    name?: string;
-  };
-}
-
 /**
  * Upload and process a self-study document
  */
@@ -197,6 +191,9 @@ export const uploadDocument = async (req: AuthenticatedRequest, res: Response) =
     if (!submissionId) {
       return res.status(400).json({ error: 'Submission ID is required' });
     }
+
+    const _sub = await requireSubmissionAccess(req, res, req.body?.submissionId);
+    if (!_sub) return;
 
     // Verify submission exists
     const submission = await Submission.findById(submissionId);
@@ -1220,6 +1217,9 @@ export const checkExistingImport = async (req: Request, res: Response) => {
   try {
     const { submissionId } = req.params;
 
+    const _sub = await requireSubmissionAccess(req, res, req.params.submissionId);
+    if (!_sub) return;
+
     // Find any in-progress imports for this submission
     // Status 'uploading', 'processing', or 'awaiting_selection' means work in progress
     const existingImport = await SelfStudyImport.findOne({
@@ -1261,6 +1261,9 @@ export const discardImport = async (req: AuthenticatedRequest, res: Response) =>
   try {
     const { importId } = req.params;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       return res.status(404).json({ error: 'Import not found' });
@@ -1294,6 +1297,9 @@ export const discardImport = async (req: AuthenticatedRequest, res: Response) =>
 export const getImport = async (req: Request, res: Response) => {
   try {
     const { importId } = req.params;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
@@ -1438,6 +1444,9 @@ export const getExtractedSections = async (req: Request, res: Response) => {
   try {
     const { importId } = req.params;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       return res.status(404).json({ error: 'Import not found' });
@@ -1489,6 +1498,9 @@ export const getSectionContent = async (req: AuthenticatedRequest, res: Response
   try {
     const { importId, sectionId } = req.params;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       return res.status(404).json({ error: 'Import not found' });
@@ -1535,6 +1547,9 @@ export const mapSection = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
     const { extractedSectionId, standardCode, specCode, fieldType } = req.body;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
@@ -1625,6 +1640,9 @@ async function materializeImportedMatrices(importRecord: any, userId?: string): 
 export const applyMappings = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     debugLog('applyMappings called', { importId });
 
@@ -1770,6 +1788,9 @@ export const getUnmappedContent = async (req: Request, res: Response) => {
   try {
     const { importId } = req.params;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       return res.status(404).json({ error: 'Import not found' });
@@ -1816,6 +1837,9 @@ export const handleUnmapped = async (req: AuthenticatedRequest, res: Response) =
   try {
     const { importId, sectionId } = req.params;
     const { action, standardCode, specCode, toSupportingEvidence, toCurriculumMatrix, matrixType } = req.body;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     debugLog('handleUnmapped called', { importId, sectionId, action, standardCode, specCode, toSupportingEvidence, toCurriculumMatrix, matrixType });
 
@@ -2021,6 +2045,9 @@ export const cancelImport = async (req: AuthenticatedRequest, res: Response) => 
   try {
     const { importId } = req.params;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     debugLog('Cancel import requested', { importId, userId: req.user?.id });
 
     const importRecord = await SelfStudyImport.findById(importId);
@@ -2103,6 +2130,9 @@ export const getDetectedSections = async (req: Request, res: Response) => {
     const { importId } = req.params;
     console.log('[Import] getDetectedSections called for import:', importId);
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId)
       .select('detectedSections appendix status parsingProgress originalFilename');
 
@@ -2170,6 +2200,9 @@ export const updateSectionSelections = async (req: AuthenticatedRequest, res: Re
   try {
     const { importId } = req.params;
     const { selections } = req.body; // Array of { id: string, isSelected: boolean }
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     if (!selections || !Array.isArray(selections)) {
       return res.status(400).json({ error: 'Selections array is required' });
@@ -2242,6 +2275,9 @@ export const updateSectionSelections = async (req: AuthenticatedRequest, res: Re
 export const confirmSectionSelections = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
@@ -2379,6 +2415,9 @@ export const getAppendix = async (req: Request, res: Response) => {
   try {
     const { importId } = req.params;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId)
       .select('appendix');
 
@@ -2406,6 +2445,9 @@ export const getAppendix = async (req: Request, res: Response) => {
 export const getFullSectionContent = async (req: Request, res: Response) => {
   try {
     const { importId, sectionId } = req.params;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     const importRecord = await SelfStudyImport.findById(importId)
       .select('detectedSections appendix');
@@ -2462,6 +2504,9 @@ export const getDocumentContent = async (req: Request, res: Response) => {
   try {
     const { importId } = req.params;
     debugLog('getDocumentContent called', { importId });
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     // Content negotiation: when the caller asks for `text/html` we stream
     // the raw HTML straight from GridFS without buffering the whole 353 MB
@@ -2612,6 +2657,9 @@ export const syncDocumentHtml = async (req: AuthenticatedRequest, res: Response)
     const { importId } = req.params;
     const { html } = req.body;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     if (!html || typeof html !== 'string') {
       return res.status(400).json({ error: 'html is required' });
     }
@@ -2645,6 +2693,9 @@ export const extractSection = async (req: AuthenticatedRequest, res: Response) =
   try {
     const { importId } = req.params;
     const { htmlContent: providedHtml, sectionType, standardCode, specCode, title, appliedDirectly, textStartOffset, textLength } = req.body;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     // Validate input
     if (!sectionType || !['standard', 'matrix', 'appendix', 'skip'].includes(sectionType)) {
@@ -2743,6 +2794,9 @@ export const insertPlaceholderMarker = async (req: AuthenticatedRequest, res: Re
     const { importId } = req.params;
     const { sectionId, title, sectionType, contentLength, textStartOffset, textLength } = req.body;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     console.log(`[Import] insert-marker request: sectionId=${sectionId}, title="${title}", type=${sectionType}, offset=${textStartOffset}, length=${textLength}`);
 
     if (!sectionId || typeof textStartOffset !== 'number' || typeof textLength !== 'number') {
@@ -2801,6 +2855,9 @@ export const getTaggedSections = async (req: Request, res: Response) => {
   try {
     const { importId } = req.params;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId)
       .select('detectedSections status originalFilename');
 
@@ -2853,6 +2910,9 @@ export const getTaggedSectionContent = async (req: Request, res: Response) => {
   try {
     const { importId, sectionId } = req.params;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId)
       .select('detectedSections');
 
@@ -2897,6 +2957,9 @@ export const updateTaggedSection = async (req: Request, res: Response) => {
     const { importId, sectionId } = req.params;
     const { appliedDirectly } = req.body;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       return res.status(404).json({ error: 'Import not found' });
@@ -2927,6 +2990,9 @@ export const updateTaggedSection = async (req: Request, res: Response) => {
 export const deleteTaggedSection = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId, sectionId } = req.params;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
@@ -3003,6 +3069,9 @@ export const debugImport = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { importId } = req.params;
 
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
+
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
       return res.status(404).json({ error: 'Import not found' });
@@ -3047,6 +3116,9 @@ export const repairDocument = async (req: AuthenticatedRequest, res: Response) =
   try {
     const { importId } = req.params;
     const file = req.file;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     if (!file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -3346,6 +3418,9 @@ export const finishTagging = async (req: AuthenticatedRequest, res: Response) =>
   try {
     const { importId } = req.params;
     const { processWithAI } = req.body;
+
+    const _imp = await requireImportAccess(req, res, req.params.importId);
+    if (!_imp) return;
 
     const importRecord = await SelfStudyImport.findById(importId);
     if (!importRecord) {
