@@ -1643,6 +1643,15 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
         error: 'A self-study must belong to a Program-Coordinator institution. Impersonate a PC (with an institution) to import.',
       });
     }
+    // Authoring a self-study is a PROGRAM COORDINATOR action. Only a PC at the
+    // resolved institution (or an admin, or a superuser impersonating that PC)
+    // may create one — readers/lead_readers review, they do not author.
+    if (!isGlobalAdmin(req.user) &&
+        !hasRoleAt(req.user, 'program_coordinator', effectiveInstitutionId)) {
+      return res.status(403).json({
+        error: 'Only a Program Coordinator for this institution may create a self-study.',
+      });
+    }
 
     // Initialize standards status for 21 standards
     const standardsStatus: Record<string, any> = {};

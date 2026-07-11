@@ -115,6 +115,16 @@ test.describe('cross-tenant isolation', () => {
       for (const w of writes()) {
         if (w.p.endsWith('/upload')) continue; // needs multipart; covered by narrative/introduction writes
         const r = await api[w.m](w.p, { headers: h, data: w.d });
+        if (w.p === '/api/submissions') {
+          // Creating a self-study is a legit PC action, but it must NEVER land
+          // at institution A. A leak = the created submission is attributed to A.
+          if (!DENIED.includes(r.status())) {
+            const created = await r.json().catch(() => ({}));
+            const inst = String((created.submission ?? created)?.institutionId ?? '');
+            if (inst === String(instA)) leaks.push(`[${atk.name}] WRITE created submission at inst A`);
+          }
+          continue;
+        }
         if (!DENIED.includes(r.status())) leaks.push(`[${atk.name}] WRITE ${r.status()} ${w.m.toUpperCase()} ${w.p}`);
       }
       // LIST must not contain A's submission.
