@@ -20,6 +20,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
+import { api } from '../../../../../services/api';
 import {
   useAIImportStore,
   type BucketItem,
@@ -2379,21 +2380,38 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
                   updateEvidenceDocRouting(d.sectionId, std, spec);
                 }}
               />
-              {/* CR-051 Sprint 7 polish — inline "View source" button. */}
-              {onShowInSource && (
-                <button
-                  type="button"
-                  data-testid={`evdoc-view-source-${d.sectionId}`}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onShowInSource(d.sectionId);
-                  }}
-                  title="Open the source-document fragment for this evidence doc"
-                  className="ml-auto inline-flex items-center gap-1 rounded border border-indigo-300 bg-white px-2 py-0.5 text-[10px] font-medium text-indigo-700 hover:bg-indigo-50"
-                >
-                  <Eye className="h-3 w-3" aria-hidden /> View source
-                </button>
-              )}
+              {/* "View source" opens THIS appendix's OWN stored file (the native
+                  PDF sliced out at import and saved to S3), viewed as a PDF —
+                  so you see exactly that appendix, not the whole self-study
+                  where you can't tell where one file ends and the next begins.
+                  Falls back to the source-document fragment if the stored file
+                  can't be fetched. */}
+              <button
+                type="button"
+                data-testid={`evdoc-view-source-${d.sectionId}`}
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (submissionId && d.s3Key) {
+                    try {
+                      const resp = await api.get(
+                        `/api/submissions/${submissionId}/review/evidence-doc/${d.sectionId}/file`,
+                        { responseType: 'blob' }
+                      );
+                      const url = URL.createObjectURL(resp.data as Blob);
+                      window.open(url, '_blank', 'noopener,noreferrer');
+                      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+                      return;
+                    } catch {
+                      /* fall through to the source-document fragment */
+                    }
+                  }
+                  onShowInSource?.(d.sectionId);
+                }}
+                title="Open this appendix's stored file (PDF) as it is saved in the library."
+                className="ml-auto inline-flex items-center gap-1 rounded border border-indigo-300 bg-white px-2 py-0.5 text-[10px] font-medium text-indigo-700 hover:bg-indigo-50"
+              >
+                <Eye className="h-3 w-3" aria-hidden /> View file
+              </button>
               {/* CR-040 Phase 2c — View-file button. Enabled once the
                   server has packaged the evidenceDoc into a
                   SupportingEvidence record at Apply time and stamped

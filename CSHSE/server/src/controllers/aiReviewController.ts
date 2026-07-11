@@ -28,6 +28,7 @@ import { Assignment } from '../models/Assignment';
 import { buildEmptyReviewState } from '../services/aiReviewMerge';
 import { ValidationService } from '../services/validationService';
 import { applyAIImportCore } from './aiImportController';
+import { downloadFileAsBuffer } from '../services/s3Service';
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -268,6 +269,43 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
     aiReviewState: state,
     aiMatrixState: matrixState
   });
+}
+
+/**
+ * GET /api/submissions/:submissionId/review/evidence-doc/:sectionId/file
+ *
+ * Streams the appendix's OWN stored file (the native PDF the MCC pipeline
+ * sliced out and uploaded to S3) so "View source" on an appendix card shows
+ * exactly that appendix as its own PDF — not the whole self-study HTML where
+ * you can't tell where one appendix ends and the next begins. Access-gated by
+ * _loadOwnedSubmission; the S3 key comes from the persisted review state, never
+ * from the client.
+ */
+export async function getReviewEvidenceDocFile(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const { sectionId } = req.params;
+  const state = (submission as any).aiReviewState;
+  const doc = ((state?.evidenceDocs as any[]) || []).find((e) => e?.sectionId === sectionId);
+  if (!doc) {
+    res.status(404).json({ error: 'Evidence file not found in this submission’s review state' });
+    return;
+  }
+  if (!doc.s3Key) {
+    res.status(404).json({ error: 'This appendix has no stored file yet (S3 upload may have failed at import).' });
+    return;
+  }
+  try {
+    const buf = await downloadFileAsBuffer(String(doc.s3Key));
+    const name = String(doc.fileName || `${doc.mccCode || 'appendix'}.pdf`).replace(/[\r\n"]/g, '');
+    res.setHeader('Content-Type', String(doc.mimeType || 'application/pdf'));
+    res.setHeader('Content-Disposition', `inline; filename="${name}"`);
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(buf);
+  } catch (err: any) {
+    console.error('[getReviewEvidenceDocFile] S3 fetch failed:', err?.message || err);
+    res.status(502).json({ error: 'Could not fetch the stored file from storage.' });
+  }
 }
 
 /** POST /api/submissions/:submissionId/review/approve */

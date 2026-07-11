@@ -112,10 +112,12 @@ import {
   getMatrixState,
   setMatrixRowEdit,
   evaluateAllSpecs,
-  getEvalProgress
+  getEvalProgress,
+  getReviewEvidenceDocFile,
 } from '../controllers/aiReviewController';
 
 router.get('/:submissionId/review', getReviewState);
+router.get('/:submissionId/review/evidence-doc/:sectionId/file', getReviewEvidenceDocFile);
 router.post('/:submissionId/review/approve', submissionLockout, approveItem);
 router.post('/:submissionId/review/discard', submissionLockout, discardItem);
 router.post('/:submissionId/review/clear-item', submissionLockout, clearItem);
