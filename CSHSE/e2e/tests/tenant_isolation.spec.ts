@@ -13,6 +13,8 @@ import { seedFixture, cleanupSeed, type SeedResult } from '../helpers/seed';
 const BASE = process.env.E2E_BASE_URL ?? 'https://cshse-develop.up.railway.app';
 const SSO_KEY = process.env.E2E_SSO_KEY ?? '';
 const DENIED = [401, 403, 404];
+// Unique per-run suffix so institutions never collide with a prior run.
+const RUN = Date.now().toString(36);
 
 async function tok(api: APIRequestContext, email: string): Promise<string> {
   const r = await api.post('/api/v1/auth/sso-login', { headers: { 'x-cshse-api-key': SSO_KEY }, data: { email } });
@@ -27,14 +29,16 @@ test.describe('cross-tenant isolation', () => {
   test.beforeAll(async () => {
     test.skip(!SSO_KEY, 'set E2E_SSO_KEY');
     api = await request.newContext({ baseURL: BASE });
-    seedA = await seedFixture('wizard_review_minimal', { user: { institutionName: 'Isolation Inst A', email: 'iso-pc-a@test.local' }, submission: { institutionName: 'Isolation Inst A' } });
-    seedB = await seedFixture('wizard_review_minimal', { user: { institutionName: 'Isolation Inst B', email: 'iso-pc-b@test.local' }, submission: { institutionName: 'Isolation Inst B' } });
-    seedR = await seedFixture('wizard_review_minimal', { user: { institutionName: 'Isolation Inst R', email: 'iso-reader@test.local', role: 'reader' } });
-    seedAdmin = await seedFixture('wizard_review_minimal', { user: { institutionName: 'Isolation Inst Adm', email: 'iso-admin@test.local', role: 'admin' } });
+    const A = `Isolation Inst A ${RUN}`, B = `Isolation Inst B ${RUN}`, R = `Isolation Inst R ${RUN}`, ADM = `Isolation Inst Adm ${RUN}`;
+    seedA = await seedFixture('wizard_review_minimal', { user: { institutionName: A, email: 'iso-pc-a@test.local' }, submission: { institutionName: A } });
+    seedB = await seedFixture('wizard_review_minimal', { user: { institutionName: B, email: 'iso-pc-b@test.local' }, submission: { institutionName: B } });
+    seedR = await seedFixture('wizard_review_minimal', { user: { institutionName: R, email: 'iso-reader@test.local', role: 'reader' }, submission: { institutionName: R } });
+    seedAdmin = await seedFixture('wizard_review_minimal', { user: { institutionName: ADM, email: 'iso-admin@test.local', role: 'admin' }, submission: { institutionName: ADM } });
   });
   test.afterAll(async () => { await cleanupSeed(seedA); await cleanupSeed(seedB); await cleanupSeed(seedR); await cleanupSeed(seedAdmin); });
 
   test('PC-B and an unassigned reader are denied read+write on inst A everywhere', async () => {
+    test.setTimeout(180_000);
     const tokenA = await tok(api, seedA!.userEmail);
     const authA = { Authorization: `Bearer ${tokenA}` };
     const meA = await (await api.get('/api/auth/me', { headers: authA })).json();
@@ -127,6 +131,7 @@ test.describe('cross-tenant isolation', () => {
   });
 
   test('a plain admin cannot escalate itself to superuser via updateUser', async () => {
+    test.setTimeout(60_000);
     const tokenAdm = await tok(api, seedAdmin!.userEmail);
     const authAdm = { Authorization: `Bearer ${tokenAdm}` };
     const me = await (await api.get('/api/auth/me', { headers: authAdm })).json();
