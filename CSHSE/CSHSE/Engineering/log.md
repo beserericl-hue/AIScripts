@@ -8,6 +8,24 @@ type: log
 
 Append-only. Format: `## [YYYY-MM-DD] <action> | <subject>` followed by free-form body.
 
+## [2026-05-25] update | Marketing plan v3 — folds in every shipped feature since 2026-05-23
+
+Rewrote [[../Marketing/marketing-plan-2026-05-11]] to reflect the current shipped state. Same 11 scenes, same ~3:30 runtime (505 words vs prior 512), operator-runnable production plan unchanged. New/revised beats:
+
+- **Scene 2** now literal (not aspirational) on MemberClick SSO (CR-042 shipped); adds the nav "More" dropdown consistency reveal (2026-06-16).
+- **Scene 3** rebuilt around multi-file batched upload (CR-041 US-1 → US-10) — drops four Stevenson section splits at once, shows queued list + hold-for-review checkbox + per-file Parse rows.
+- **Scene 4** compressed to also show three new content-kind detectors (CR-033 CVs, CR-039 Introductions, CR-040 papers + syllabi) plus the coverage-verifier badge (CR-040 Phase 3b).
+- **Scene 6** rewritten around the persisted Review workspace on the toolbar (CR-043): filter by source file, edit + hard-refresh persistence, approve-count on the toolbar button, and a strict-match reimport demo showing "nothing duplicated / nothing overwritten."
+- **Scene 7** now applies from the persisted Review endpoint rather than the wizard's ApplyStep.
+- **Scene 8** adds the Introduction editor at the top of each Standard (CR-039 Phase 2c part 2), the "View file" affordance on CV / paper / syllabus rows (CR-033 + CR-040), and briefly surfaces the "Missing from import" rail entry when present.
+- **Scene 10** extended to include the new Board Console (`/admin/board`) — Awaiting Decision queue, Record Decision modal, Upcoming Cycles auto-populate.
+- **Scene 11** closes on Council operations: help chat + Joint Ventures management (CR-019) + SendGrid deliverable email (2026-06-16).
+- App name shortened to **CSHSE Self-Study Portal** throughout (2026-06-16).
+- Fixtures updated: Scene 3 uses the Stevenson splits at `~/Desktop/CSHSE/` produced by `CSHSE/scripts/split_stevenson_for_multifile_test.py`.
+- Required app states grew from 4 (PC / Reader / Lead Reader / Admin) to 5 (adds Council Admin for the Board Console beat).
+
+Script word count verified at 505 (target ~512). Same runtime budget; the multi-file capture in Scene 3 does add ~5 min of recording waits — production time estimate bumped from 8h → 10h.
+
 ## [2026-05-25] ingest | CR-043 + CR-044 regression test plan written + ready to execute
 
 The CR-043/CR-044 acceptance gap was 10 of 14 acceptance criteria implemented-but-not-tested, plus zero unit coverage on `aiReviewMerge.ts` (the heart of the CR). User direction: close the gap with a full regression suite, including Stevenson real-file integration driven via `page.setInputFiles()` (no drag/drop).
@@ -2333,3 +2351,24 @@ Implemented + tested + deployed the importer-fidelity track. **Root cause** (fro
 - **[[cr-063-importer-preserve-images-tables]]** — inline-image cap 1.2 MB → 2 MB.
 - +4 regression tests (33 pass). Commit `cced74d` (developer + main).
 - **Verified end-to-end**: deployed cshse-ai to dev + prod, re-imported KSU on both. On Monica's prod data, previously-dropped specs recovered — 5.c 0→11,083 chars (+7 links, +2 tables), 3.b→11,405, 6.a→22,806, 7.b→25,377, 8.b→20,263; totals 256K bucket chars, 223 links, 60 lists, images intact. Status → shipped.
+
+## [2026-06-27] update | Sprint 2 Review de-noise — CR-064→069 shipped to prod
+Updated: cr-064/065/066/067/068/069 status → shipped.
+Context: Implemented + E2E-verified (e2e/tests/15_review_denoise.spec.ts, 13 compare) on develop, then pushed developer→main + railway up CSHSE production. CR-064 mode-aware chrome; CR-065 AI-eval read-only modal (ⓘ); CR-066 "Approve specification → editor"; CR-067 full-section compare highlight; CR-068 clickable count filters (flat cross-spec list + back-to-specs); CR-069 coverage legend + "Match confidence" relabel. Remaining Sprint 2: CR-070 inline appendix upload, CR-071 self-study editor munge/de-noise, CR-072 (P2) compare sync-scroll.
+
+## [2026-06-27] update | Sprint 2 COMPLETE — CR-070/071/072 shipped to prod
+Updated: cr-070/071/072 status → shipped. All 9 sprint CRs (061→072) now live on prod (cshse.courseworx.media).
+Context: CR-070 inline "upload file for this spec" (evidence/upload scoped to Std.Spec; e2e spec 15). CR-071 Open-Self-Study munge fix — NarrativeEditor now remounts when the mount-refetch returns fresh materialized content (key folds in content+evidence length), so the editor lands clean on first click without a manual refresh; + empty-state hint for un-populated specs (e2e specs 58/60 green, proving the remount-key is safe). CR-072 (P2) opt-in "Sync scroll" toggle in Compare (e2e spec 13). Importer/Review-de-noise sprint fully delivered + verified.
+
+## [2026-07-09] ingest | MCC narrative — third import format parsing rules + tests
+Created: [[mcc-narrative-import-parser]] (concept, DRAFT for review).
+Updated: index.md (added the page under the import/parser concepts).
+Context: Read the real 883-page `Final Self Study June 2026 - Complete_vDRM.pdf` (pdftotext -layout → /tmp/mcc_selfstudy.txt) and validated a full ruleset for the MCC independent-narrative format: 20 `Standard #N` anchors (L435→L3417), numbered intro 1–8 + Glossary, back-of-doc Appendix Index (Sections A–G, codes A1–G3 with bundled sub-documents; A4/B9 absent), inline reference grammar (`Supporting Document…appendix <CODE>` = file, incl. no-space `appendixG1` and multi-code parentheticals; `Supporting Link` = external URL/link, not a file), and an embedded/scanned appendix tail (pages 91→883, no MCC footer). Three-pass model per the user: (1) skeleton table, (2) content separation + **appendix files stored as native PDF page-slices** (per user: view natively, never OCR-flatten), (3) reference→standard cataloging with user placement + AI sub-spec recommendation. 4 open questions for sign-off before any dev code.
+
+## [2026-07-10] update | MCC narrative parser — 5 open questions answered, spec ready
+Updated: [[mcc-narrative-import-parser]] (DRAFT → SPEC), index.md.
+Context: User answered all 5 sign-off questions. Decisions folded in: (1) appendix pageEnd = next appendix start, no manual step; (2) Pass 3 = confidence-scored recommend-then-confirm — AI compares narrative + referenced files to each canonical sub-spec DEFINITION, recommends placement w/ confidence + rationale, user accepts/reassigns; referenced appendices tagged to standard+sub-spec so readers open them inline AND the AI score reads the file's text to judge compliance; (3) single documentIntroduction w/ headings; (4) preserve ALL links, clickable in Review + Self-Study editors; (5) preserve group heading as standard section title. New implication: appendix files need DUAL representation — native-PDF display copy (view natively) + text/OCR layer (so the scorer can read scanned appendices). Added tests T-32/34/50-53/60-61/70. Awaiting go-ahead to build (additive; dev-first).
+
+## [2026-07-10] update | MCC parser — OCR is hidden AI-only metadata
+Updated: [[mcc-narrative-import-parser]] (§Pass 2.3, §8, T-34/T-35).
+Context: User clarified the OCR/text layer must NOT be visible to end users — it is metadata fed only to the AI evaluation; the reader sees the actual PDF only. Spec now states the `extractedText` sidecar is hidden metadata, never serialized to reader/self-study/evidence surfaces (no card, preview, block, or download); added T-35 to assert no user-facing API exposes it.

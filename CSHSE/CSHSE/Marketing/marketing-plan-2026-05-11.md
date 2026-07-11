@@ -1,22 +1,22 @@
 ---
-name: Marketing Plan — 2026-05-11 (revised 2026-05-23)
-description: Case-study reference video for the CSHSE Accreditation Self-Study Portal. ~3:30 Heygen narration + screen-capture B-roll. Headlines the AI Import Wizard. No CTA, no signup — CSHSE is members-only.
+name: Marketing Plan — 2026-05-11 (revised 2026-05-25)
+description: Case-study reference video for the CSHSE Self-Study Portal. ~3:30 Heygen narration + screen-capture B-roll. Headlines the AI Import Wizard (now multi-file + persisted Review workspace) plus Council operations — Board Console, Joint Ventures, reliable email. No CTA, no signup — CSHSE is members-only.
 type: marketing
 audience: existing CSHSE member institutions + Council staff (reference, not prospect-facing)
-horizon: case-study reference video — one asset (3:50 video + filming instructions any operator can follow)
+horizon: case-study reference video — one asset (~3:30 video + filming instructions any operator can follow)
 status: ready-to-record
 plan_date: 2026-05-11
-last_reviewed: 2026-05-23
-revision: 2026-05-23 — rewritten to lead with AI Import Wizard; folded in all features shipped through morning of 2026-05-23 (CR-031 unplaced context, CR-032 inline edit, CR-033 discard button, table preservation in + Add from source, slid-window Show in source). Removed all newsletter, subscribe, and "request a walkthrough" CTAs — CSHSE has no signup; this is a member case study only. Made every section operator-runnable from a fresh computer with no local-dev setup.
+last_reviewed: 2026-05-25
+revision: 2026-05-25 — updated to reflect everything shipped since 2026-05-23 (CR-033 CV cards; CR-039 Standard Introductions; CR-040 papers/syllabi + coverage verifier; CR-041 multi-file batched import; CR-042 MemberClick SSO; CR-043 persistent Review + Matrix on the toolbar; CR-044 typography parity; the 2026-06-16 Board Console + Joint Ventures + SendGrid email deliverability). Same 11 scenes, same ~3:30 runtime; script rewritten to lead with the multi-file wizard + toolbar Review workspace, and to close on Council operations (Board Console + JV) that the prior cut didn't cover.
 ---
 
 # Marketing Plan — Case Study Reference Video
 
-Production-ready package for a ~3:30 case-study reference video showing the CSHSE Accreditation Self-Study Portal as it exists in the deployed environment. Designed so a contractor or staff member on any computer — with browser access and the deployed-app credentials — can complete the recording without engineering involvement.
+Production-ready package for a ~3:30 case-study reference video showing the CSHSE Self-Study Portal as it exists in the deployed environment. Designed so a contractor or staff member on any computer — with browser access and the deployed-app credentials — can complete the recording without engineering involvement.
 
-> **Product name:** CSHSE Accreditation Self-Study Portal
+> **Product name:** CSHSE Self-Study Portal
 > **Full org name:** Council for Standards in Human Service Education (CSHSE)
-> **Target run time:** ~3:30 · Heygen avatar narration at ~150 wpm · 512 words
+> **Target run time:** ~3:30 · Heygen avatar narration at ~150 wpm · 506 words
 > **B-roll source:** screen captures from the running deployed app at https://cshse-develop.up.railway.app
 > **Distribution:** case study reference for existing CSHSE members. NOT a sales / prospect asset. NO signup, newsletter, or CTA copy.
 
@@ -28,7 +28,7 @@ For technical context on what the product actually does, see [[overview]], [[pro
 
 **Accreditation, simplified.**
 
-The CSHSE Accreditation Self-Study Portal — a purpose-built workspace for the **Council for Standards in Human Service Education** and its member institutions.
+The CSHSE Self-Study Portal — a purpose-built workspace for the **Council for Standards in Human Service Education** and its member institutions.
 
 ### Body
 
@@ -36,14 +36,19 @@ The Portal turns the most paperwork-intensive part of accreditation into a guide
 
 ### What's in v1
 
-- **AI Import Wizard** — Upload an existing self-study Word document; the Portal reads it, organizes the contents against the CSHSE National Standards, and lets the coordinator review every placement before committing. Edit, discard, or re-route any item inline. Tables and matrices preserved end-to-end.
-- **Self-Study Editor** — Rich-text per-Standard narrative editing with the Standard's text right beside you, two-second auto-save, and structured curriculum-matrix and supporting-evidence views.
-- **Reader workspace** — Split-screen Yes / No / Not-Applicable assessments, inline comments anchored to specific passages, dual-approval change requests.
-- **Lead Reader compilation** — Disagreement detection across reviewers, bulk final determinations.
-- **Site visits, change requests, and Board-decision automation** — all on a single audited trail.
+- **AI Import Wizard, multi-file** — Drop one Word document or drop many at once (per-author sections, bulk syllabi, faculty CVs, appendix papers). The Portal reads, organizes, and merges every file into a single Review. Every item is stamped with the filename it came from.
+- **Persistent Review workspace** — Review lives on the submission, not inside the wizard. Close the wizard, refresh the browser, drop another file — your approvals, edits, and discards persist. Re-importing a file replaces only that exact document's items; everything else stays as you left it.
+- **Faculty CVs · Standard Introductions · Papers · Syllabi** — Detected in the source document and packaged as first-class supporting-evidence files, each with a "View file" affordance.
+- **Coverage verifier** — Confirms every byte of the source is accounted for; surfaces a "Missing from import" bucket for anything the parser flagged.
+- **Self-Study Editor** — Rich-text per-Standard narrative editing with Standard-level Introductions at the top of each Standard, the Standard's text beside you, two-second auto-save, and a structured curriculum matrix.
+- **Reader + Lead Reader workspace** — Split-screen Yes / No / Not-Applicable assessments, inline comments anchored to passages, disagreement detection at compilation.
+- **Council Board Console** — Awaiting-decision queue, one-click decision recording, an upcoming-cycles view that fills automatically for every accepted program.
+- **Joint Ventures** — First-class support for institutions running shared programs; assign membership right from the Add-Institution form.
+- **MemberClick single sign-on** — One CSHSE membership, one identity, across every role.
+- **Reliable email** — Invitations, notifications, and resends go through SendGrid; every message carries the CSHSE trust footer.
 - **Member Handbook chat** — Trained on the CSHSE Member Handbook; answers your "how do I" questions twenty-four seven.
 
-**Built for:** Program Coordinators · Readers · Lead Readers · CSHSE administrators.
+**Built for:** Program Coordinators · Readers · Lead Readers · CSHSE administrators · Council Board.
 
 **SaaS-hosted. Role-secured. Audit-logged.**
 
@@ -51,59 +56,53 @@ The Portal turns the most paperwork-intensive part of accreditation into a guide
 
 ## 2. Heygen Master Script (paste-ready, single block)
 
-Paste this directly into Heygen as one script. 512 words. ~3:24 at 150 wpm, ~3:40 at 140 wpm. Plan on ~3:30 with natural pacing.
+Paste this directly into Heygen as one script. **506 words. ~3:22 at 150 wpm, ~3:37 at 140 wpm. Plan on ~3:30 with natural pacing.**
 
 ```
 For accredited Human Services programs, the self-study cycle is intense. Hundreds of pages, dozens of Standards, every five years. The Council for Standards in Human Service Education — CSHSE — has been working with its member institutions to reduce that overhead. This is what they built.
 
-The CSHSE Accreditation Self-Study Portal is a purpose-built workspace where Program Coordinators, Readers, Lead Readers, and Council staff work together on one secure platform. Member institutions sign in through the existing CSHSE member portal — no separate account to maintain.
+The CSHSE Self-Study Portal is a purpose-built workspace for Program Coordinators, Readers, Lead Readers, and Council staff. Sign in through your existing CSHSE membership — one login, one identity, across every role on every submission.
 
-The heart of the Portal is the AI Import Wizard. Instead of formatting a self-study by hand, a coordinator drops their existing Word document — even a three-hundred-page one — and the Wizard reads, organizes, and routes everything against the CSHSE National Standards.
+The AI Import Wizard sits at the heart of the Portal. Drop one Word document — or drop many at once. Each file processes independently, then merges into one combined Review. Add files mid-run. Every card is stamped with its source filename. Hold Review open until every file finishes, or watch it stream in live.
 
-The Document Reader extracts the document's structure. The AI then places each paragraph into the Standard and sub-specification it best matches, using both meaning and the context around it. Tables, syllabi, and curriculum matrices keep their structure throughout.
+The Document Reader extracts structure. Dedicated detectors pull faculty CVs, Standard Introductions, and appendix papers and syllabi out as first-class supporting-evidence files. A coverage verifier then confirms every byte of the source is accounted for — nothing lost, nothing invented.
 
-For faculty curriculum matrices, the Wizard reviews each row one at a time and infers the right sub-specification from the matrix codes. The coordinator keeps, retags, or removes rows individually — no more giant spreadsheets to fix by hand.
+For faculty curriculum matrices, the Wizard walks each row one at a time, inferring the sub-specification from the matrix codes. Keep, retag, or remove any row. The structured Curriculum Matrix populates automatically — no giant spreadsheet to fix by hand.
 
-Then comes the Review screen, where the coordinator stays in full control. Every placed item appears as a card under its target Standard and sub-specification, color-coded by confidence.
+Then comes the Review workspace — now a first-class toolbar surface, not a step inside the wizard. Every item lives on the submission itself. Close the wizard, drop another file, refresh the browser — nothing loses your work. Edit cards in place, verify against the original document, filter by source file, and approve item by item. Re-importing a file replaces only that exact document's items — everything else stays as you left it. Nothing duplicated. Nothing overwritten.
 
-For each card the coordinator can — edit the text in place to trim what isn't needed, discard cards the AI placed incorrectly, click "Show in source" to verify against the original document, or use "Add from source" to pull in text the AI may have missed. Anything the AI couldn't confidently place lands in a separate "Unplaced" bucket, with context showing where it sat in the document so it's easy to triage.
+When you're ready, one click applies every approved item into the Self-Study Editor. Narratives populated. Curriculum matrix populated. Introductions written. Supporting evidence linked. Un-approved items stay in Review for the next round.
 
-Every edit, every discard, every move survives a browser refresh. Nothing is lost mid-review.
+From there, the Self-Study Editor is where the coordinator polishes the response — Standard-level Introductions at the top of each Standard, rich-text editing beside the Standard's text, two-second auto-save. The Supporting File Library holds every syllabus, paper, CV, and evidence document — versioned, audit-trailed.
 
-Once the coordinator approves the review, a single click applies everything to the Self-Study Editor — narratives populated, curriculum matrix populated, supporting evidence linked to the right specifications.
+When the self-study is submitted, assigned Readers open a split-screen workspace. They mark each sub-specification Yes, No, or Not Applicable, comment inline anchored to specific passages, and request changes through a dual-approval workflow.
 
-From there, the Self-Study Editor is where the coordinator polishes the response — rich-text editing with the Standard's text beside them, two-second auto-save, and the curriculum matrix as a structured spreadsheet. Supporting evidence — syllabi, advisory minutes, surveys, signed certificate pages — lives in the Supporting File Library, organized by Standard, versioned, audit-trailed.
+The Lead Reader compiles every Reader's input, highlights disagreements, and sets the final determination. From there it flows to the Council Board's Awaiting Decision queue, where staff record the outcome — accepted, tabled, denied. Every accepted program's next reaccreditation cycle appears automatically in the upcoming-cycles view. Every step, audit-trailed.
 
-When the self-study is submitted, assigned Readers open a split-screen workspace. They mark each sub-specification Yes, No, or Not Applicable, leave comments anchored to specific passages, and request changes through a dual-approval workflow.
-
-The Lead Reader compiles every Reader's input, highlights disagreements, and sets a final determination ready for the Council Board. Site visits, change requests, and Board decisions all flow through the same audited trail.
-
-For coordinators who need help mid-flow, the built-in chat reads from the CSHSE Member Handbook and answers questions in plain English — twenty-four seven.
-
-This is the CSHSE Self-Study Portal — built for the Council, by people who understand what accreditation actually feels like.
+Around every workflow — a help chat trained on the CSHSE Member Handbook, Joint Ventures management for institutions running shared programs, and deliverable email through SendGrid so invitations and notifications actually reach the inbox. This is the CSHSE Self-Study Portal — built for the Council, by people who understand what accreditation actually feels like.
 ```
 
 ---
 
 ## 3. Scene-by-Scene Production Plan
 
-11 scenes, each between 15 and 35 seconds. Narration cell is paste-ready for per-scene Heygen production (recommended for cleaner narration-to-video sync — see §5 for the per-scene blocks).
+11 scenes, each between 15 and 45 seconds. Narration cell is paste-ready for per-scene Heygen production (recommended for cleaner narration-to-video sync — see §5 for the per-scene blocks).
 
 | # | Time | Scene | Narration (recap) | B-roll directions | Text overlay |
 |---|------|-------|-------------------|-------------------|--------------|
 | 1 | 0:00–0:20 | **Hook + CSHSE intro** | Hundreds of pages, dozens of Standards, every five years. CSHSE has been working to reduce that overhead. | Static title-card screenshot — open the deployed landing page or `Dashboard` view. 8-second slow Ken-Burns zoom (1.0 → 1.05). | Title: **"Accreditation, simplified."** Sub: *"A CSHSE member case study."* |
-| 2 | 0:20–0:35 | **Portal intro + sign-in** | A purpose-built workspace. Member institutions sign in through the existing CSHSE member portal. | Open `/login` → enter test coordinator email → land on Dashboard. Show the four role chips (PC, Reader, Lead Reader, Admin) appear in sequence. | Lower-third: **"Council for Standards in Human Service Education"** Pulse-highlights on each role name. |
-| 3 | 0:35–0:55 | **AI Import Wizard — Upload** | The heart of the Portal is the AI Import Wizard. Drop your existing Word document. | Open the Self-Study Editor → click **Importer Wizard** → land on Step 1 (Upload). Drag a sample `.docx` into the dropzone. Click **Start**. | Overlay during drop: *"Drag a .docx file here"* On Start click: *"AI Import Wizard — Step 1 of 5"* |
-| 4 | 0:55–1:30 | **Parse → Match (Document Reader)** | The Document Reader extracts structure. The AI places each paragraph into the matching Standard. Tables, syllabi, matrices preserved. | Record Step 2 (Parse) — show all five stages ticking green: Document Reader → Reading structure → Building chunks → Embedding → Indexing. Cut to Step 3 (Match) — show the confidence bucket distribution. | Overlay above stage list: *"5-stage Document Reader pipeline"* Highlight as each green check appears. |
-| 5 | 1:30–1:55 | **Matrix step — row-by-row** | For faculty matrices, the Wizard reviews each row one at a time and infers the right sub-spec. Keep, retag, or remove individually. | Step 4 (Matrix) — show a row card with the original document row highlighted in yellow + the inferred sub-spec chip (e.g., "Spec 11.b"). Click **Keep this row**. Advance to next row. Click **Remove this row** on one. Open dropdown to **Retag** another. | Overlay: *"Faculty matrices — one row at a time"* On Keep: *"Cells preserved in the Curriculum Matrix"* |
-| 6 | 1:55–2:35 | **Review step — coordinator in control** | Every placed item appears as a card, color-coded by confidence. Edit, Discard, Show in source, Add from source, Unplaced bucket — every edit survives a refresh. | Step 5 (Review) — open SpecRail; click into Spec 1.a. Show 3 narrative cards with green confidence stripes. **(a) Click pencil → trim a sentence → Save** — show the "edited" badge appear. **(b) Click Discard on a low-confidence card → confirm** → card disappears. **(c) Click Show in source on another card → modal opens scrolled to the matching paragraph** (highlighted amber). **(d) Click + Add from source on an empty spec → highlight a sentence in the modal → confirm** → new card appears. **(e) Click Unplaced bucket → show one item with the neighbor-context panel showing the spec just above it.** **(f) Hard-refresh the browser → return to Review → all changes persist.** | Overlays as actions happen: *"Edit in place"* · *"Discard with one click"* · *"Verify against the source"* · *"Add what the AI missed"* · *"Unplaced — with context"* · *"Every change persists"* |
-| 7 | 2:35–2:50 | **Apply — commit to the Self-Study** | One click applies everything to the Self-Study Editor. | Step 6 (Apply) — show the diff modal totals ("212 narratives · 64 evidence text · 9 evidence files · 412 matrix cells"). Click **Apply to editor**. Land on the populated Self-Study Editor. | Overlay on Apply click: *"One click — narratives, matrix, evidence — all populated."* |
-| 8 | 2:50–3:10 | **Self-Study Editor + Matrix + File Library** | Rich-text editing with the Standard beside you, auto-save, structured matrix, organized files. | Self-Study Editor top nav — click **Standards** (show TipTap narrative + Spec side panel + Saved indicator). Click **Curriculum Matrix** (show the populated structured matrix). Click **Supporting File Library** (show files organized by Standard with version badges). | Overlay: *"Two-second auto-save"* (on Saved indicator) · *"Versioned. Audit-trailed."* (on file library) |
-| 9 | 3:10–3:30 | **Reader workspace** | Assigned Readers see a split-screen workspace. Mark Y/N/NA. Comments anchored to passages. Dual-approval change requests. | Sign in as Reader role (use a separate browser window if convenient). Open an assigned submission → split-screen view. Right-click a sentence → **Add comment**. Click a Y/N/NA pill on a sub-specification. | Type comment: *"Please cite the advisory minutes referenced here."* Overlay on Y/N/NA: *"Compliance assessment per sub-specification"* |
-| 10 | 3:30–3:45 | **Lead Reader compilation** | Lead Reader compiles every Reader's input, highlights disagreements, sets the final determination. | Sign in as Lead Reader (separate browser window). Open the Lead Reader Compilation view. Show the disagreement-detection list (Reader A "Yes", Reader B "No" on the same sub-spec). Click **Set Final Determination → Met**. | Overlay: *"Disagreements surfaced automatically"* On final determination: *"Sent to the Council Board"* |
-| 11 | 3:45–3:55 | **Help chat + close** | Built-in chat reads from the CSHSE Member Handbook. Built for the Council, by people who understand what accreditation actually feels like. | Back in Coordinator view → click the HelpChat floating bubble (bottom-right). Type a question. Show the AI response streaming. End on a clean Dashboard view with a slow zoom-out. | Type into chat: *"What is the 45-day reader deadline?"* Final card: *"CSHSE Accreditation Self-Study Portal — Council for Standards in Human Service Education"* |
+| 2 | 0:20–0:35 | **Portal intro + MemberClick SSO** | A purpose-built workspace. Sign in through your existing CSHSE membership — one login, one identity, across every role. | Open `/login` → click the **"Sign in with CSHSE membership"** button (the SSO entry point) → land on Dashboard. Reveal the top-right avatar showing the coordinator's name. Pan across the top nav; briefly open the **"More"** dropdown to show it collapses cleanly at every width. | Lower-third: **"Council for Standards in Human Service Education"** Sub: *"One login. Every role."* |
+| 3 | 0:35–1:05 | **AI Import Wizard — multi-file drop** | The AI Import Wizard sits at the heart of the Portal. Drop one Word document — or drop many at once. Each file processes independently, then merges into one Review. Add files mid-run. Every card is stamped with its source filename. Hold Review open until every file finishes, or watch it stream in live. | Open the Self-Study Editor → click **Importer Wizard**. Drag **four** of the Stevenson section splits from `~/Desktop/CSHSE/` into the dropzone (standards-01-05 + 06-09 + 10-13 + 14-21). Show the queued-file list appear (filename + size for each). Show the **"Hold review until all files have processed"** checkbox — leave it checked. Click **Start**. Cut to Parse step showing **per-file progress rows** ticking through queued → parsing → completed. | *"Drop one — or drop many"* On queued list: *"Batched Review. One coordinated pass."* On the hold-for-review checkbox: *"Wait for the full picture, or stream it in live."* |
+| 4 | 1:05–1:30 | **Parse → Content-kind detectors + Coverage** | The Document Reader extracts structure. Detectors pull faculty CVs, Standard Introductions, and appendix papers and syllabi out as first-class supporting-evidence files. A coverage verifier then confirms every byte of the source is accounted for — nothing lost, nothing invented. | Parse step — pan down the pipeline stage list. Highlight each of these stages as they tick green: `document_reader → deep_walker → cv_detector → introduction_detector → evidence_doc_detector → matcher → coverage_verifier`. Cut to the **Coverage badge** (green pill: "COVERAGE: 99.4% · 3 fragments"). | Overlay as stages tick: *"CVs"* → *"Introductions"* → *"Papers & Syllabi"* → *"Every byte accounted for"* On coverage badge: *"Coverage verifier — nothing lost, nothing invented"* |
+| 5 | 1:30–1:50 | **Matrix step — row-by-row** | For faculty curriculum matrices, the Wizard walks each row one at a time, inferring the sub-specification from the matrix codes. Keep, retag, or remove any row. The structured Curriculum Matrix populates automatically. | Matrix step — first row card visible with inferred sub-spec chip ("Spec 11.b"), original-document row highlighted amber. Click **Keep this row**. Advance. Click **Retag** dropdown → pick a different sub-spec → save. Click **Remove** on a third row. | Overlay: *"Faculty matrices — one row at a time"* On Keep click: *"Cells preserved in the Curriculum Matrix"* |
+| 6 | 1:50–2:35 | **Persistent Review workspace (CR-043)** | Now a first-class toolbar surface, not a step inside the wizard. Every item lives on the submission itself. Close the wizard, drop another file, refresh the browser — nothing loses your work. Edit, verify, filter by source file, approve item by item. Re-importing a file replaces only that exact document's items. Nothing duplicated. Nothing overwritten. | Close the wizard panel. Show the **toolbar Review button** enabling with a green "ready" pill. Click it → land on the persisted **Review workspace** (heading: *"Review"*). Scroll SpecRail; click Spec 1.a. Show narrative cards with **source-file chips** (📄 standards-1-5-DepartmentChair.docx). **(a) Filter by source** — open the "Filter by source" dropdown, pick one filename, watch counts collapse to just that file's items. Clear the filter. **(b) Edit + persist** — click a card's Edit pencil → trim a sentence → Save → hard-refresh the browser → return to Review via the toolbar → edit preserved. **(c) Approve one card** → the toolbar Review button's counter ticks: "1 approved". **(d) Reimport demo** — reopen the wizard, drop standards-01-05.docx AGAIN with "reimport" checked → Parse → return to Review; the file-A items are the new versions (approval was cleared, needs re-confirm); the file-B / file-C / file-D items are untouched. | Overlays as actions happen: *"Review — persisted on the submission"* · *"Filter by source file"* · *"Edit survives refresh"* · *"Reimport: strict-match replace. No duplicates."* |
+| 7 | 2:35–2:50 | **Apply from the persisted Review** | One click applies every approved item into the Self-Study Editor. Narratives populated. Curriculum matrix populated. Introductions written. Supporting evidence linked. Un-approved items stay in Review for the next round. | On the toolbar Review workspace, click **Apply to editor**. Show the diff modal totals (narratives + evidence text + evidence files + matrix cells + introductions). Confirm → land on the populated Self-Study Editor. Reopen Review; show only the un-approved items remain. | Overlay on Apply click: *"Approved items only — the rest stays for the next round."* |
+| 8 | 2:50–3:10 | **Editor + Introductions + File Library + Missing-from-import** | Standard-level Introductions at the top of each Standard, rich-text editing beside the Standard's text, two-second auto-save. Supporting File Library holds every syllabus, paper, CV, and evidence document — versioned, audit-trailed. | Self-Study Editor top nav — click **Standards**. Open Standard 1. Show the **Introduction editor** at the top of the standard (CR-039 IntroductionEditor). Then show one populated spec narrative with the Saved indicator. Click **Curriculum Matrix** — pan across the structured matrix. Click **Supporting File Library** → expand Standard 7 → show CV file rows with **"View file"** buttons (CR-033) → expand Standard 21 → show paper + syllabus file rows (CR-040) each with their "View file" affordance. If Missing-from-import fragments exist, briefly show the red "Missing from import" rail entry. | Overlays: *"Standard Introductions"* · *"Two-second auto-save"* · *"CVs · Papers · Syllabi — 'View file'"* · *"Versioned. Audit-trailed."* |
+| 9 | 3:10–3:25 | **Reader workspace** | Assigned Readers see a split-screen workspace. Mark Y / N / NA. Comments anchored to passages. Dual-approval change requests. | Sign in as Reader in a second browser window. Open assigned submission → split-screen view. Right-click a sentence → **Add comment** → type → submit. Click Y / N / NA pill. | Type comment: *"Please cite the advisory minutes referenced here."* Overlay on Y/N/NA: *"Compliance assessment per sub-specification"* |
+| 10 | 3:25–3:50 | **Lead Reader → Board Console** | Lead Reader compiles every Reader's input, highlights disagreements, sets the final determination. It flows to the Council Board's Awaiting Decision queue, where staff record the outcome — accepted, tabled, denied. Every accepted program's next reaccreditation cycle appears automatically. Every step, audit-trailed. | Switch to Lead Reader → open Compilation view → show disagreement-detection list → click **Complete review & send to board**. Cut to Admin/Council-staff view → open **`/admin/board`** → show the **Awaiting Decision queue** with the just-submitted program at the top. Click a row → **Record Decision** modal → pick **Accept** → confirm. Scroll to the **Upcoming Cycles** section → show the new entry has automatically appeared with an effective date + expiry (default +7 years). | Overlays: *"Disagreements surfaced automatically"* · *"Board Console — Awaiting Decision"* · *"Upcoming Cycles — filled automatically"* |
+| 11 | 3:50–4:00 | **Council ops + close** | Around every workflow — help chat, Joint Ventures, deliverable email. Built for the Council, by people who understand what accreditation actually feels like. | Back in Coordinator view → click the HelpChat floating bubble → type a Handbook question → show streaming response. Cut briefly to Admin → Settings → **Joint Ventures** tab → show a JV with two member institutions. Optional: cut to Admin → Users → send an invitation → show the SendGrid success toast + a preview of the trust-footer email. End on a clean Dashboard view with a slow zoom-out. | Overlays: *"Handbook chat — 24/7"* · *"Joint Ventures — shared programs, first-class support"* · *"Reliable email via SendGrid"* Final card: **"CSHSE Self-Study Portal — Council for Standards in Human Service Education"** |
 
-Note Scene 6 is intentionally the longest. The Review screen is the place where the AI Import Wizard's value lives — the coordinator stays in control over every placement, with multiple recovery affordances. Six sub-actions are filmed in sequence; allow that scene to breathe.
+Note Scene 6 remains intentionally the longest — the persistent Review workspace is the architectural change that makes the multi-author, multi-file workflow work. Four sub-actions are filmed in sequence (filter · edit + refresh · approve · reimport); let that scene breathe. Scene 10 is the second-longest to accommodate both the Lead Reader compilation AND the new Board Console decision-recording beat.
 
 ---
 
@@ -124,16 +123,17 @@ Designed so a contractor on a fresh laptop can complete the recording without an
 
 ### 4.2 Accounts you need (request from the CSHSE admin before you start)
 
-You need credentials for **four roles** in the deployed dev environment. The CSHSE administrator can issue these via the existing Admin → Users → Invite flow. Email + password, or a single SSO-enabled MemberClick test account (once CR-042 ships).
+You need credentials for **five roles** in the deployed environment. The CSHSE administrator can issue these via the existing Admin → Users → Invite flow. Email + password, or a single SSO-enabled MemberClick test account.
 
 | Role | What it's for | Recording uses |
 |---|---|---|
 | Program Coordinator | The PC view (most of the video) | Scenes 2–8, 11 |
 | Reader | Reader workspace | Scene 9 |
 | Lead Reader | Lead Reader compilation | Scene 10 |
-| Admin | Optional — for impersonation if separate Reader/Lead-Reader logins are unavailable | Fallback for Scenes 9–10 |
+| Council Admin / Superuser | Board Console, Joint Ventures, invitation send | Scene 10 (Board Console), Scene 11 (JV + email) |
+| Admin (impersonation fallback) | Optional — for impersonation if separate Reader/Lead-Reader logins are unavailable | Fallback for Scenes 9–10 |
 
-Have the credentials in a password manager (1Password, Bitwarden, Apple Keychain) ready to copy-paste. Never type passwords into the visible screen during recording.
+Have the credentials in a password manager (1Password, Bitwarden, Apple Keychain) ready to copy-paste. Never type passwords into the visible screen during recording — if you're demoing MemberClick SSO, use the SSO redirect flow instead (see §4.5 first-run checklist).
 
 ### 4.3 Test data you need in the environment
 
@@ -141,14 +141,29 @@ The CSHSE administrator should pre-seed:
 
 - **One test institution** ("E2E Test University" or similar) with a real BACCALAUREATE or ASSOCIATE program.
 - **One test submission** in `in_progress` status for that institution, assigned to the test PC + 2 test Readers + 1 test Lead Reader.
-- **At least one prior import already applied** so the Self-Study Editor (Scene 8) and the Reader/Lead-Reader views (Scenes 9–10) have realistic content to display.
+- **A second test submission** driven all the way to `review_complete` status for the Board Console demo (Scene 10). See `session_context.md` for how one was staged on dev (`POST /submit` + `POST /compilation/finalize`).
+- **At least one prior import already applied** so the Self-Study Editor (Scene 8) has realistic content to display — including at least one Standard-level Introduction, one CV in the Supporting File Library, and one paper or syllabus file.
+- **A second institution paired via Joint Venture** with the test institution (Scene 11 — Council ops overview).
 
-A sample `.docx` file for the import demo. Two good choices already in the repo:
+**Sample DOCX files for the multi-file import demo (Scene 3).** Run the Stevenson splitter once against the Stevenson self-study to produce a folder of section-scoped files:
 
-- `CSHSE/docs/ASSOCIATE Self_Study_Reader Report template_ Associate degree July 2025.docx` — ~150 pages, full structure.
-- `CSHSE/docs/Sample to Council from KSU.docx` — real-world submission, more compact.
+```bash
+python3 CSHSE/scripts/split_stevenson_for_multifile_test.py \
+    ~/Desktop/CSHSE/"2024 CSHSE Self-Study Stevenson University.docx"
+```
 
-Download whichever is preferred to the recording computer's Desktop in advance.
+Recording uses these four splits (already produced) — pick any four consecutive standards ranges from:
+
+- `2024 CSHSE Self-Study Stevenson University__01-standards-01-05.docx`
+- `2024 CSHSE Self-Study Stevenson University__02-standards-06-09.docx`
+- `2024 CSHSE Self-Study Stevenson University__03-standards-10-13.docx`
+- `2024 CSHSE Self-Study Stevenson University__04-standards-14-21.docx`
+
+For the CV / paper / syllabus close-ups in Scene 4 + Scene 8, the same splitter output includes:
+
+- `__cv-only__barry-w-thomas.docx`, `__cv-only__carol-a-dietrich.docx`, etc.
+- `__paper__sample-country-report.docx`
+- `__syllabus__chs-105-human-services-social-policy.docx`
 
 ### 4.4 Environment
 
@@ -163,10 +178,11 @@ Download whichever is preferred to the recording computer's Desktop in advance.
 
 1. Open Chrome (incognito), full-screen, 100% zoom.
 2. Open `https://cshse-develop.up.railway.app/login`.
-3. Sign in as the Program Coordinator test account. Confirm you land on the Dashboard.
+3. Click the **"Sign in with CSHSE membership"** button (MemberClick SSO). Confirm you return to the Portal with the test coordinator identity and land on the Dashboard. (If the SSO test account isn't provisioned, fall back to the email + password test login — the video's Scene 2 direction still works; only the on-screen button label differs.)
 4. Click into the test submission. Confirm the Self-Study Editor opens.
-5. Click the **Importer Wizard** button. Confirm Step 1 (Upload) loads with an empty dropzone.
-6. Sign out. You're ready to record Scene 2.
+5. Confirm the **Review** and **Matrix** toolbar buttons are present. If a prior import has been applied, they should be enabled with a "ready" pill.
+6. Click the **Importer Wizard** button. Confirm the Upload step opens with an empty dropzone.
+7. Sign out. You're ready to record Scene 2.
 
 ---
 
@@ -183,67 +199,61 @@ For accredited Human Services programs, the self-study cycle is intense. Hundred
 ### Scene 2
 
 ```
-The CSHSE Accreditation Self-Study Portal is a purpose-built workspace where Program Coordinators, Readers, Lead Readers, and Council staff work together on one secure platform. Member institutions sign in through the existing CSHSE member portal — no separate account to maintain.
+The CSHSE Self-Study Portal is a purpose-built workspace for Program Coordinators, Readers, Lead Readers, and Council staff. Sign in through your existing CSHSE membership — one login, one identity, across every role on every submission.
 ```
 
 ### Scene 3
 
 ```
-The heart of the Portal is the AI Import Wizard. Instead of formatting a self-study by hand, a coordinator drops their existing Word document — even a three-hundred-page one — and the Wizard reads, organizes, and routes everything against the CSHSE National Standards.
+The AI Import Wizard sits at the heart of the Portal. Drop one Word document — or drop many at once. Each file processes independently, then merges into one combined Review. Add files mid-run. Every card is stamped with its source filename. Hold Review open until every file finishes, or watch it stream in live.
 ```
 
 ### Scene 4
 
 ```
-The Document Reader extracts the document's structure. The AI then places each paragraph into the Standard and sub-specification it best matches, using both meaning and the context around it. Tables, syllabi, and curriculum matrices keep their structure throughout.
+The Document Reader extracts structure. Dedicated detectors pull faculty CVs, Standard Introductions, and appendix papers and syllabi out as first-class supporting-evidence files. A coverage verifier then confirms every byte of the source is accounted for — nothing lost, nothing invented.
 ```
 
 ### Scene 5
 
 ```
-For faculty curriculum matrices, the Wizard reviews each row one at a time and infers the right sub-specification from the matrix codes. The coordinator keeps, retags, or removes rows individually — no more giant spreadsheets to fix by hand.
+For faculty curriculum matrices, the Wizard walks each row one at a time, inferring the sub-specification from the matrix codes. Keep, retag, or remove any row. The structured Curriculum Matrix populates automatically — no giant spreadsheet to fix by hand.
 ```
 
 ### Scene 6
 
 ```
-Then comes the Review screen, where the coordinator stays in full control. Every placed item appears as a card under its target Standard and sub-specification, color-coded by confidence.
-
-For each card the coordinator can — edit the text in place to trim what isn't needed, discard cards the AI placed incorrectly, click "Show in source" to verify against the original document, or use "Add from source" to pull in text the AI may have missed. Anything the AI couldn't confidently place lands in a separate "Unplaced" bucket, with context showing where it sat in the document so it's easy to triage.
-
-Every edit, every discard, every move survives a browser refresh. Nothing is lost mid-review.
+Then comes the Review workspace — now a first-class toolbar surface, not a step inside the wizard. Every item lives on the submission itself. Close the wizard, drop another file, refresh the browser — nothing loses your work. Edit cards in place, verify against the original document, filter by source file, and approve item by item. Re-importing a file replaces only that exact document's items — everything else stays as you left it. Nothing duplicated. Nothing overwritten.
 ```
 
 ### Scene 7
 
 ```
-Once the coordinator approves the review, a single click applies everything to the Self-Study Editor — narratives populated, curriculum matrix populated, supporting evidence linked to the right specifications.
+When you're ready, one click applies every approved item into the Self-Study Editor. Narratives populated. Curriculum matrix populated. Introductions written. Supporting evidence linked. Un-approved items stay in Review for the next round.
 ```
 
 ### Scene 8
 
 ```
-From there, the Self-Study Editor is where the coordinator polishes the response — rich-text editing with the Standard's text beside them, two-second auto-save, and the curriculum matrix as a structured spreadsheet. Supporting evidence — syllabi, advisory minutes, surveys, signed certificate pages — lives in the Supporting File Library, organized by Standard, versioned, audit-trailed.
+From there, the Self-Study Editor is where the coordinator polishes the response — Standard-level Introductions at the top of each Standard, rich-text editing beside the Standard's text, two-second auto-save. The Supporting File Library holds every syllabus, paper, CV, and evidence document — versioned, audit-trailed.
 ```
 
 ### Scene 9
 
 ```
-When the self-study is submitted, assigned Readers open a split-screen workspace. They mark each sub-specification Yes, No, or Not Applicable, leave comments anchored to specific passages, and request changes through a dual-approval workflow.
+When the self-study is submitted, assigned Readers open a split-screen workspace. They mark each sub-specification Yes, No, or Not Applicable, comment inline anchored to specific passages, and request changes through a dual-approval workflow.
 ```
 
 ### Scene 10
 
 ```
-The Lead Reader compiles every Reader's input, highlights disagreements, and sets a final determination ready for the Council Board. Site visits, change requests, and Board decisions all flow through the same audited trail.
+The Lead Reader compiles every Reader's input, highlights disagreements, and sets the final determination. From there it flows to the Council Board's Awaiting Decision queue, where staff record the outcome — accepted, tabled, denied. Every accepted program's next reaccreditation cycle appears automatically in the upcoming-cycles view. Every step, audit-trailed.
 ```
 
 ### Scene 11
 
 ```
-For coordinators who need help mid-flow, the built-in chat reads from the CSHSE Member Handbook and answers questions in plain English — twenty-four seven.
-
-This is the CSHSE Self-Study Portal — built for the Council, by people who understand what accreditation actually feels like.
+Around every workflow — a help chat trained on the CSHSE Member Handbook, Joint Ventures management for institutions running shared programs, and deliverable email through SendGrid so invitations and notifications actually reach the inbox. This is the CSHSE Self-Study Portal — built for the Council, by people who understand what accreditation actually feels like.
 ```
 
 ---
@@ -257,75 +267,87 @@ Run through this list during recording. Tick each item off as you go.
 - [ ] One static screenshot of the Dashboard (Program Coordinator view, no test data leaking).
 - [ ] In the editor: apply a slow zoom (1.0 → 1.05 scale over 8 s).
 
-### Scene 2 — Sign-in + Dashboard (15 s)
+### Scene 2 — Sign-in + Dashboard + Nav consistency (15 s)
 
-- [ ] Record from clean `/login` page → coordinator signs in → Dashboard appears.
-- [ ] Hide the password as you type (use a fake account with a 1-char password, OR paste from clipboard with an off-screen cursor pause).
+- [ ] Record from clean `/login` page → click the **"Sign in with CSHSE membership"** button → land on Dashboard.
+- [ ] Reveal the top-right avatar showing the coordinator's identity (proves the SSO round-trip worked).
+- [ ] Briefly click the top nav's **"More"** dropdown to show it collapses cleanly (2026-06-16 consistency change).
 
-### Scene 3 — Wizard upload (20 s)
+### Scene 3 — Wizard multi-file drop (30 s)
 
 - [ ] Open the Self-Study Editor.
-- [ ] Click **Importer Wizard** → land on Step 1 (Upload).
-- [ ] Drag the pre-downloaded sample `.docx` into the dropzone.
-- [ ] Click **Start**.
+- [ ] Click **Importer Wizard** → land on the Upload step.
+- [ ] Drag **four** Stevenson section splits (standards-01-05 + 06-09 + 10-13 + 14-21) into the dropzone in one motion (or one after another).
+- [ ] Show the queued-file list appear (filename + size for each).
+- [ ] Show the **"Hold review until all files have processed"** checkbox — keep it checked.
+- [ ] Click **Start** → cut to Parse step showing per-file rows.
 
-### Scene 4 — Parse + Match (35 s)
+### Scene 4 — Parse + Content-kind detectors + Coverage (25 s)
 
-- [ ] Record Step 2 (Parse) — wait for all five stages to tick green. (If the matcher is slow, you can speed up the recording 2× in the editor.)
-- [ ] Wait for Step 3 (Match) screen to appear.
-- [ ] Show the bucket distribution summary at the top.
+- [ ] Pan down the pipeline stage list. Show `cv_detector`, `introduction_detector`, `evidence_doc_detector` each ticking green in turn.
+- [ ] Show the coverage badge appear (green pill: "COVERAGE: 99.4% · 3 fragments" or whatever the run produces).
+- [ ] Optional: hover the coverage badge to show the "boundary warnings" hover text if applicable.
 
-### Scene 5 — Matrix step (25 s)
+### Scene 5 — Matrix step (20 s)
 
-- [ ] Step 4 (Matrix) — first row card visible with inferred sub-spec chip.
+- [ ] Matrix step — first row card visible with inferred sub-spec chip.
 - [ ] Click **Keep this row** → advance.
-- [ ] Click **Remove this row** on row 2 → advance.
-- [ ] Click **Retag** dropdown on row 3 → pick a different sub-spec → save.
+- [ ] Click **Retag** dropdown → pick a different sub-spec → save.
+- [ ] Click **Remove this row** on a third row.
 
-### Scene 6 — Review screen (40 s — the longest scene, six sub-actions)
+### Scene 6 — Persistent Review workspace (45 s — the longest scene, four sub-actions)
 
-- [ ] (a) **Edit pencil** — click on a card's pencil → textarea opens → trim one sentence → click Save → "edited" badge appears.
-- [ ] (b) **Discard** — click red Discard button → accept the browser confirm dialog → card disappears.
-- [ ] (c) **Show in source** — click on another card to select it → click **Show in source** in the right pane → modal opens scrolled to the matching paragraph (highlighted amber).
-- [ ] (d) **+ Add from source** — close that modal → click into an empty spec → click **+ Add from source** → in the modal, highlight a paragraph → click **Use this passage** → new card appears.
-- [ ] (e) **Unplaced bucket** — scroll the SpecRail to the bottom → click **Unplaced** → show one item with the "Nearest placed neighbor" panel.
-- [ ] (f) **Persistence** — press `Cmd+R` / `Ctrl+R` to hard-refresh → re-navigate to Review → confirm all changes from (a)–(d) are still there.
+- [ ] Close the wizard panel by clicking outside it or hitting Escape.
+- [ ] Show the top-nav **Review** toolbar button enabling with a green "ready" pill.
+- [ ] Click **Review** → land on the persisted Review workspace (heading: *"Review"*).
+- [ ] Scroll SpecRail; click Spec 1.a. Show narrative cards with **source-file chips** (📄 filename).
+- [ ] (a) **Filter by source** — open the "Filter by source" dropdown, pick one filename, watch counts collapse. Clear the filter.
+- [ ] (b) **Edit + persist** — click a card's Edit pencil → trim one sentence → Save → `Cmd+R` / `Ctrl+R` hard-refresh → re-open Review via the toolbar → confirm the edit is still there.
+- [ ] (c) **Approve one card** → confirm the toolbar Review button's counter shows *"1 approved"*.
+- [ ] (d) **Reimport demo** — reopen the wizard, drop `__01-standards-01-05.docx` AGAIN, check the **"This is a reimport"** checkbox, click Start → wait for parse → return to Review. Show the file-A items are the new versions; the file-B/C/D items are untouched.
 
-### Scene 7 — Apply (15 s)
+### Scene 7 — Apply from Review (15 s)
 
-- [ ] Navigate to Step 6 (Apply).
-- [ ] Show the diff modal totals.
-- [ ] Click **Apply to editor**.
+- [ ] On the toolbar Review workspace, click **Apply to editor**.
+- [ ] Show the diff modal totals (narratives · evidence text · evidence files · matrix cells · introductions).
+- [ ] Click **Confirm — send to editor**.
 - [ ] Land on the Self-Study Editor with content populated.
+- [ ] Briefly re-open Review to show un-approved items still there.
 
-### Scene 8 — Self-Study Editor + Matrix + File Library (20 s)
+### Scene 8 — Editor + Introductions + File Library (20 s)
 
-- [ ] Click **Standards** tab → show one populated narrative with the Saved indicator.
-- [ ] Click **Curriculum Matrix** tab → pan across the populated structured matrix.
-- [ ] Click **Supporting File Library** tab → expand one Standard → show file rows with version badges.
+- [ ] Click **Standards** → open Standard 1 → show the **Introduction editor** at the top of the standard.
+- [ ] Show one populated spec narrative with the Saved indicator.
+- [ ] Click **Curriculum Matrix** → pan across the populated structured matrix.
+- [ ] Click **Supporting File Library** → expand Standard 7 → show one CV file row with **"View file"** button.
+- [ ] Expand Standard 21 → show a paper file row + a syllabus file row, each with "View file".
+- [ ] If any "Missing from import" fragments exist, briefly show the red rail entry (optional if empty).
 
-### Scene 9 — Reader workspace (20 s)
+### Scene 9 — Reader workspace (15 s)
 
 - [ ] Open a SECOND browser window (not tab — full window) in incognito mode.
-- [ ] Sign in as the Reader test account.
+- [ ] Sign in as the Reader test account (via MemberClick SSO or fallback login).
 - [ ] Open the assigned submission.
 - [ ] Record the split-screen view.
 - [ ] Right-click a sentence → **Add comment** → type → submit.
 - [ ] Click a Y/N/NA pill on one sub-specification.
 
-### Scene 10 — Lead Reader compilation (15 s)
+### Scene 10 — Lead Reader → Board Console (25 s)
 
 - [ ] In the second browser window, sign out + sign in as Lead Reader.
-- [ ] Open the Lead Reader Compilation view.
-- [ ] Show the disagreement-detection list with at least one disagreement.
-- [ ] Click **Set Final Determination → Met**.
+- [ ] Open the Lead Reader Compilation view → show the disagreement-detection list.
+- [ ] Click **Complete review & send to board** → confirm the submission moves to `review_complete`.
+- [ ] Cut to a third browser window signed in as Council Admin.
+- [ ] Navigate to **`/admin/board`** → show the Awaiting Decision queue with the just-submitted program at the top.
+- [ ] Click the row → **Record Decision** modal → pick **Accept** → confirm.
+- [ ] Scroll to **Upcoming Cycles** → show the new entry appearing with effective + expiry dates.
 
-### Scene 11 — Help chat (10 s)
+### Scene 11 — Council ops + close (10 s)
 
 - [ ] Switch back to the Coordinator browser window.
-- [ ] Click the HelpChat floating bubble.
-- [ ] Type the question shown in the Scene 11 narration table.
-- [ ] Wait for the AI response to stream.
+- [ ] Click the HelpChat floating bubble → type a Handbook question → wait for streaming response.
+- [ ] Cut briefly to Admin → Settings → **Joint Ventures** tab → show a JV with two member institutions.
+- [ ] Optional: cut to Admin → Users → send an invitation → show the SendGrid success toast + a preview of the email with the trust footer.
 - [ ] End on a Dashboard view with a slow zoom-out (1.0 → 0.95 over 4 s).
 
 ---
@@ -336,7 +358,8 @@ Run through this list during recording. Tick each item off as you go.
 - **Lower-third overlays:** use the "Text overlay" column from §3 for each scene. Hold each overlay for 3 seconds.
 - **Audio:** Heygen produces the avatar voiceover separately. Sync it to the B-roll in DaVinci Resolve. Add light background music at −25 dB. Royalty-free tracks: YouTube Audio Library or Pixabay Music.
 - **Color:** keep saturation consistent. If you record across multiple sessions, use the same browser theme + light mode (light mode reads better on small previews).
-- **Speed adjustments:** the Parse step (Scene 4) is the only place where speeding up footage 2× is acceptable — the stage spinner is genuine waiting time that doesn't carry meaning frame-by-frame. Everything else stays at native speed.
+- **Speed adjustments:** the Parse step in Scene 4 is the only place where speeding up footage 2× is acceptable — the stage spinner is genuine waiting time that doesn't carry meaning frame-by-frame. Everything else stays at native speed. The multi-file Parse in Scene 3 is also speedable if per-file rows sit at "queued" for more than 4 seconds each.
+- **Reimport demo cadence (Scene 6d):** you don't need to wait for the actual parser to finish during recording. Record the pre-parse state, cut, then record the post-parse Review state as a separate clip. Splice with a whip-pan or crossfade.
 
 ---
 
@@ -344,16 +367,16 @@ Run through this list during recording. Tick each item off as you go.
 
 | Asset | Count | Notes |
 |---|---|---|
-| Total run time | ~3:30 | Heygen pacing at 140-150 wpm; 3:24 at 150, 3:40 at 140 |
-| Word count (narration) | 512 | Master script word count (verified) |
-| Scenes | 11 | Average ~21 s per scene; Scene 6 is the longest at 40 s |
+| Total run time | ~3:30 | Heygen pacing at 140-150 wpm; 3:22 at 150, 3:37 at 140 |
+| Word count (narration) | 506 | Master script word count (verified) |
+| Scenes | 11 | Average ~22 s per scene; Scene 6 is the longest at 45 s; Scene 10 at 25 s |
 | Static screenshots needed | 1 | Scene 1 only (Dashboard) |
 | Screen-record clips needed | 10 | Scenes 2–11 |
-| Required app states | 4 | Coordinator login, Reader login, Lead Reader login (Admin optional) |
+| Required app states | 5 | Coordinator, Reader, Lead Reader, Council Admin (Board Console), Admin (JV + email) |
 | External assets | 1 | Background music (YouTube Audio Library) |
-| Estimated production time | ~8 hours | Recording (3h, including retakes) + editing in DaVinci Resolve (5h) |
-| App URL | https://cshse-develop.up.railway.app | Production / dev environment |
-| Sample DOCX | `CSHSE/docs/ASSOCIATE Self_Study_Reader Report template_ Associate degree July 2025.docx` | Download to recording machine's Desktop before starting |
+| Estimated production time | ~10 hours | Recording (4h including retakes + multi-file Parse waits) + editing in DaVinci Resolve (6h) |
+| App URL | https://cshse-develop.up.railway.app | Deployed dev environment |
+| Sample DOCX (multi-file demo) | `~/Desktop/CSHSE/2024 CSHSE Self-Study Stevenson University__*.docx` | 4 Stevenson section splits + optional CV/paper/syllabus splits; run `CSHSE/scripts/split_stevenson_for_multifile_test.py` once to produce them |
 
 ---
 
@@ -373,21 +396,23 @@ Run through this list during recording. Tick each item off as you go.
 
 These features exist or are in flight but are not in the video. They'd extend the runtime past 4:00 and dilute the core story.
 
-- **CR-033 CV detection** — proposed, not yet shipped.
-- **CR-039 Standard Introductions** — proposed, not yet shipped.
-- **CR-040 Appendix papers + syllabi as supporting-evidence files** — proposed, not yet shipped.
-- **CR-041 Multi-file batch upload** — proposed, not yet shipped.
-- **CR-042 MemberClick public SSO API** — proposed; once shipped, Scene 2's "sign in through the existing CSHSE member portal" line becomes literal rather than aspirational.
-- **CR-035 Curriculum Matrix structured population** — proposed; until it lands, Scene 7's diff-modal totals should NOT include the "412 matrix cells" line; substitute "narratives + evidence + files populated."
+- **Coverage <90% hard-block calibration** — CR-040 Phase 3b follow-on; needs real-doc calibration data before the coverage badge takes on a hard block-review behavior.
+- **Reader-scoring `scoreEvidence` caller** — CR-024 Sprint 4 part 2; the contract is ready, but the Reader-scoring UI itself is a follow-on CR.
+- **Wizard Stepper collapse to one-button handoff** — CR-043 shipped with the wizard's internal Review/Matrix/Apply tabs preserved as backwards-compat fallbacks. Once existing specs are ported to the new toolbar surface (~1 day of work), the wizard internals can be deleted and Scene 6 gets slightly cleaner. Not a re-record trigger.
+- **CR-003 0-3 compliance rubric** — proposed; when it lands, Scene 9's "Yes / No / Not Applicable" line evolves to "Non-compliant, Partial, Largely compliant, Fully compliant."
+- **CR-004 comment threading with identity redaction** — proposed; when it lands, Scene 9's Reader comment demo gains a Julia-as-relay beat.
+- **CR-005 PC lockout on final submit** — proposed; adds a lockout confirmation step to Scene 7 when it lands.
+- **CR-006 two-stage submission** — proposed; changes Scene 8's flow to include per-Standard submit.
 - **Compliance & security beat** (encryption, audit log, role-based access) — defer to a separate Compliance & Security explainer video.
 
-When any of these ship, re-record only the affected scene and reissue the video with a "v1.1 — 2026-MM-DD" suffix in the file name.
+When any of these ship, re-record only the affected scene and reissue the video with a "v1.2 — 2026-MM-DD" suffix in the file name.
 
 ---
 
 ## 11. Revision log
 
-- **2026-05-23** — Full rewrite. Replaced 9-scene v1.0 plan (which led with import as one of several features) with 11-scene case-study plan that leads with the AI Import Wizard and dedicates Scene 6 (40 s) to the coordinator-control affordances shipped in CRs 031–033 (Unplaced context, Edit pencil, Discard button, Show-in-source with heading-strip, + Add from source with table preservation, hard-refresh persistence). Removed all newsletter / subscribe / "request a walkthrough" CTAs — CSHSE is members-only and this is a reference asset, not a prospect funnel. Made the entire production plan operable from any computer with browser access and credentials; no local-dev setup required.
+- **2026-05-25** — Rewritten to match everything shipped since 2026-05-23. Same 11 scenes, same ~3:30 runtime (~506 words vs prior 512), same operator-runnable production plan. Changes: **Scene 2** now names MemberClick SSO literally (CR-042 shipped) and adds the nav-consistency reveal (2026-06-16). **Scene 3** rebuilt around the multi-file batched upload (CR-041 US-1 through US-10) — drops four Stevenson section splits at once, shows queued list + hold-for-review checkbox + per-file Parse rows. **Scene 4** compressed to add three new content-kind detectors (CR-033 CVs, CR-039 Introductions, CR-040 papers + syllabi) plus the coverage-verifier badge (CR-040 Phase 3b). **Scene 6** rewritten around the persisted Review workspace on the toolbar (CR-043): filter by source file (CR-041 US-6), edit + hard-refresh persistence, approve-count on the toolbar button, and a strict-match reimport demo showing "nothing duplicated / nothing overwritten." **Scene 7** now applies from the persisted Review (CR-043 apply endpoint) rather than from the wizard's internal ApplyStep. **Scene 8** adds the Introduction editor at the top of each Standard (CR-039 Phase 2c part 2), the "View file" affordance on CV / paper / syllabus rows (CR-033 + CR-040), and briefly surfaces the "Missing from import" rail entry when present. **Scene 10** extended to include the new Board Console (`/admin/board`) — Awaiting Decision queue, Record Decision modal, Upcoming Cycles auto-populate. **Scene 11** rewritten to close on Council operations: help chat + Joint Ventures management (CR-019) + SendGrid deliverable email (2026-06-16). App name shortened to **CSHSE Self-Study Portal** throughout (2026-06-16). Fixtures updated: the multi-file Scene 3 uses the Stevenson splits from `~/Desktop/CSHSE/` produced by `CSHSE/scripts/split_stevenson_for_multifile_test.py` — see §4.3.
+- **2026-05-23** — Full rewrite. Replaced 9-scene v1.0 plan (which led with import as one of several features) with 11-scene case-study plan that leads with the AI Import Wizard and dedicates Scene 6 (40 s) to the coordinator-control affordances shipped in CRs 031–033. Removed all newsletter / subscribe / "request a walkthrough" CTAs — CSHSE is members-only and this is a reference asset, not a prospect funnel. Made the entire production plan operable from any computer with browser access and credentials; no local-dev setup required.
 - **2026-05-11** — Original plan (preserved in git history at commits before 2026-05-23).
 
 ## Related
@@ -396,7 +421,10 @@ When any of these ship, re-record only the affected scene and reissue the video 
 - [[product-requirements]] — what the Handbook says it must support; ground-truth for marketing claims
 - [[../Engineering/wizard-user-guide-2026-05-20]] — coordinator-facing wizard user guide; informed Scenes 4–7
 - [[../Engineering/ai-import-wizard-e2e-coverage-review-2026-05-22]] — full feature inventory the script drew from
-- [[../Engineering/change-requests/cr-031-unplaced-neighbor-context]] — Scene 6 (e) reference
-- [[../Engineering/change-requests/cr-032-inline-edit-review-cards]] — Scene 6 (a) reference
-- [[../Engineering/change-requests/cr-033-cv-supporting-evidence]] — proposed; out of scope for this video; deferred to v1.1
+- [[../Engineering/change-requests/cr-041-multi-file-drag-drop-with-batch-review]] — Scene 3 reference (multi-file drop)
+- [[../Engineering/change-requests/cr-043-decouple-review-from-wizard-persist-across-reimport]] — Scene 6 + Scene 7 reference (persisted Review + Matrix on the toolbar)
+- [[../Engineering/change-requests/cr-039-standard-introduction-buckets]] — Scene 4 + Scene 8 reference (Introduction detectors + editor)
+- [[../Engineering/change-requests/cr-040-appendix-papers-as-supporting-evidence-files]] — Scene 4 + Scene 8 reference (papers + syllabi + coverage verifier)
+- [[../Engineering/change-requests/cr-033-cv-supporting-evidence]] — Scene 4 + Scene 8 reference (faculty CVs)
+- [[../Engineering/change-requests/cr-042-memberclick-sso-api-entry-point]] — Scene 2 reference (MemberClick SSO)
 - [[../Engineering/change-requests/index]] — what's shipped vs. what's not
