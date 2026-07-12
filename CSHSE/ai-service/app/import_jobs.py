@@ -747,10 +747,17 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
         specs_by_std.setdefault(str(sp.standard_code), {})[sp.spec_code] = sp
 
     buckets: dict[str, dict[str, Any]] = {}
-    # appendix code -> (std, spec) of the FIRST sub-point that cites it (drives the
-    # file card's Standard/Sub-standard fields) and code -> {all standards} (for
-    # the "referenced by" summary).
+    # THIRD PASS bookkeeping. The reference pass reads every "(Supporting
+    # Document: … appendix <CODE>)" note in every sub-point and links each
+    # appendix to EVERY specification that lists it — not just the first. An
+    # appendix cited in 1.b's program overview AND in 4.a's curriculum evidence
+    # must appear under BOTH (first-citing-only made 1.b hoard 20 files while
+    # the specs that actually rely on them showed none).
+    #   code_to_spec  → the FIRST citing (std, spec) — the file card's default.
+    #   code_to_specs → ALL citing (std, spec) pairs — drives multi-spec linking.
+    #   code_to_stds  → all standards (for the "referenced by" summary).
     code_to_spec: dict[str, tuple[str | None, str | None]] = {}
+    code_to_specs: dict[str, list[tuple[str, str]]] = {}
     code_to_stds: dict[str, list[str]] = {}
 
     def _note_refs(refs, std_code, letter):
@@ -761,6 +768,11 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                     code_to_stds[ref.code].append(std_code)
                 if ref.code not in code_to_spec:
                     code_to_spec[ref.code] = (std_code, letter)
+                if std_code and letter:
+                    pair = (std_code, letter)
+                    lst = code_to_specs.setdefault(ref.code, [])
+                    if pair not in lst:
+                        lst.append(pair)
 
     def _bucket(std_code: str, spec) -> dict[str, Any]:
         key = f"{std_code}.{spec.spec_code}"
@@ -882,12 +894,15 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             # in the narrative — this is the "third pass" the file cards need so
             # they pre-fill and a reader sees the file under the right spec.
             route_std, route_spec = code_to_spec.get(entry.code, (None, None))
+            # EVERY spec that lists this appendix (third-pass multi-link).
+            ref_specs = code_to_specs.get(entry.code, [])
+            ref_specs_labels = [f"{s}.{p}" for (s, p) in ref_specs]
             ref_summary = (
-                f"Referenced by Standard {route_std}"
-                + (f".{route_spec}" if route_spec else "")
-                + (f" (and {', '.join(s for s in ref_stds if s != route_std)})" if len([s for s in ref_stds if s != route_std]) else "")
-                + "."
-            ) if route_std else "Referenced in the program introduction." if entry.code in code_to_spec else "Not referenced inline."
+                f"Referenced by {', '.join(ref_specs_labels)}."
+                if ref_specs_labels
+                else "Referenced in the program introduction." if entry.code in code_to_spec
+                else "Not referenced inline."
+            )
             # Classification flags the file card uses:
             #  - intro_ref: cited only in the program introduction (no lettered
             #    spec) → the card offers/pre-selects the "Introduction" option.
@@ -933,6 +948,11 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 "introductionRef": intro_ref,
                 "isCurriculumMatrix": is_matrix,
                 "referencedByStandards": ref_stds,
+                # THIRD PASS — every specification that lists this appendix in a
+                # "(Supporting Document …)" note. Materialize links the file under
+                # EACH of these specs in the File Library, so a spec shows exactly
+                # the documents its own text cites (no more, no fewer).
+                "referencedBySpecs": [{"std": s, "spec": p} for (s, p) in ref_specs],
                 # HIDDEN — AI-eval only, never rendered to the reader.
                 "extractedText": extracted[:200000],
                 "hasText": bool(extracted),
@@ -944,6 +964,19 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             job.warnings.append(f"Appendix {entry.code}: slice/upload error ({exc}).")
     job.evidence_docs = evidence_docs
     _stage_done(job, "mcc_appendix_files", f"{uploaded}/{len(evidence_docs)} appendices uploaded to S3")
+
+    # ---- THIRD PASS (visible): reference linking ------------------------------
+    # Report the reference pass explicitly so the coordinator can SEE it ran and
+    # how it linked each appendix to the specs that cite it in the text.
+    _total_links = sum(len(v) for v in code_to_specs.values())
+    _multi = sum(1 for v in code_to_specs.values() if len(v) > 1)
+    _stage_started(job, "mcc_reference_pass", "reading (Supporting Document) notes")
+    _stage_done(
+        job,
+        "mcc_reference_pass",
+        f"{_total_links} appendix→spec links across {len(code_to_specs)} files "
+        f"({_multi} cited by more than one spec)",
+    )
 
     # ---- Assemble the clean source HTML (Compare / Show-in-source pane) ------
     if evidence_docs:

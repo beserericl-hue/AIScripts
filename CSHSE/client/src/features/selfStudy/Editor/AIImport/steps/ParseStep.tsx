@@ -42,6 +42,11 @@ const STAGE_LABELS: Record<string, string> = {
   coverage_review: 'Reviewing coverage',
   gap_fill: 'Filling coverage gaps',
   matrix_extract: 'Extracting matrices',
+  mcc_walker: 'Reading document (pass 1)',
+  mcc_introduction: 'Extracting introduction (pass 2)',
+  mcc_subspec_match: 'Placing narratives on specs (pass 2)',
+  mcc_appendix_files: 'Storing appendix files (S3)',
+  mcc_reference_pass: 'Linking references (pass 3)',
 };
 
 function stageLabel(name: string): string {

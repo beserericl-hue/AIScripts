@@ -727,25 +727,36 @@ async function materializeApprovedToEditor(
     }
   }
   for (const e of state.evidenceDocs || []) {
-    if (approved.has(e.sectionId)) {
-      const body = evidenceBodyText(e.htmlSnippet, e.snippet || e.summary);
-      fileItems.push({
-        sectionId: e.sectionId,
-        std: e.resolvedStd || e.routing?.std,
-        spec: e.resolvedSpec || e.routing?.spec,
-        title: e.title || 'Evidence document',
-        body,
-        html: e.htmlSnippet,
-        kind: e.docSubKind || 'paper',
-        // MCC appendix files arrive pre-sliced as native PDFs already in S3.
-        // Carry the S3 handle + the HIDDEN extracted text (AI-eval only).
-        s3Key: e.s3Key || undefined,
-        s3Bucket: e.s3Bucket || undefined,
-        mimeType: e.mimeType || undefined,
-        fileName: e.fileName || undefined,
-        fileSize: e.fileSize || undefined,
-        aiText: (e as any).extractedText || undefined,
-      });
+    if (!approved.has(e.sectionId)) continue;
+    const body = evidenceBodyText(e.htmlSnippet, e.snippet || e.summary);
+    const common = {
+      title: e.title || 'Evidence document',
+      body,
+      html: e.htmlSnippet,
+      kind: e.docSubKind || 'paper',
+      // MCC appendix files arrive pre-sliced as native PDFs already in S3.
+      // Carry the S3 handle + the HIDDEN extracted text (AI-eval only).
+      s3Key: e.s3Key || undefined,
+      s3Bucket: e.s3Bucket || undefined,
+      mimeType: e.mimeType || undefined,
+      fileName: e.fileName || undefined,
+      fileSize: e.fileSize || undefined,
+      aiText: (e as any).extractedText || undefined,
+    };
+    // THIRD PASS multi-link: materialize the file under EVERY spec its text
+    // cites (referencedBySpecs), so each spec's File Library shows exactly the
+    // documents it references — not just the first-citing spec. Falls back to
+    // the single resolved routing (incl. 'introduction' / unassigned) when the
+    // parser produced no multi-spec list (CVs, non-MCC docs, intro-only files).
+    const specs: Array<{ std?: string; spec?: string }> =
+      Array.isArray((e as any).referencedBySpecs) && (e as any).referencedBySpecs.length
+        ? (e as any).referencedBySpecs.map((r: any) => ({ std: String(r.std), spec: String(r.spec) }))
+        : [{ std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec }];
+    for (const { std, spec } of specs) {
+      // Distinct rev tag per (file, spec) so one appendix can appear under every
+      // citing spec without colliding on the upsert key.
+      const perSpecId = specs.length > 1 && std && spec ? `${e.sectionId}::${std}.${spec}` : e.sectionId;
+      fileItems.push({ sectionId: perSpecId, std, spec, ...common });
     }
   }
   // Record a stat even when nothing matched, so the set-approved response can
