@@ -277,7 +277,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
 
   const expandAll = () => {
     if (standards) {
-      setExpandedStandards(new Set(standards.map((s) => s.code)));
+      setExpandedStandards(new Set(['introduction', ...standards.map((s) => s.code)]));
     }
   };
 
@@ -568,6 +568,42 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
                 No files uploaded for this standard yet.
               </div>
             )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Files whose classification is the program introduction (standardCode
+  // 'introduction') don't belong to any numbered standard, so they get their
+  // own section at the top — otherwise intro-referenced appendices are stored
+  // but never shown in the library.
+  const renderIntroductionAccordion = () => {
+    const introFiles = Object.values(evidenceByStandard['introduction'] || {}).flat();
+    if (introFiles.length === 0) return null;
+    const isExpanded = expandedStandards.has('introduction');
+    return (
+      <div key="introduction" className="border border-gray-200 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleStandard('introduction')}
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors whitespace-nowrap"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
+          )}
+          <span className="text-sm font-semibold text-gray-800 flex-shrink-0">Introduction</span>
+          <span className="text-sm text-gray-500 truncate flex-1">
+            Files referenced in the program introduction
+          </span>
+          <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full whitespace-nowrap">
+            {introFiles.length} file{introFiles.length !== 1 ? 's' : ''}
+          </span>
+        </button>
+        {isExpanded && (
+          <div className="px-4 pb-4 pt-3 border-t border-gray-100">
+            {introFiles.map(renderEvidenceItem)}
           </div>
         )}
       </div>
@@ -956,6 +992,8 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
           </div>
         ) : (
           <div className="space-y-2">
+            {/* Introduction — files referenced in the program introduction */}
+            {renderIntroductionAccordion()}
             {/* Part I */}
             <div className="mb-4">
               <h3 className="text-xs font-bold uppercase text-gray-400 tracking-wider mb-2 px-1">
