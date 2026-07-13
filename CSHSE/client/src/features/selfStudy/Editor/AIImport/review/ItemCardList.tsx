@@ -783,6 +783,24 @@ export function ItemCardList({
     return flattenBucket(bucket);
   }, [selectedKey, bucket, unplacedTags, placeholders, activeIntroBucket]);
 
+  // When the coordinator is on a specification (e.g. "1.a"), the top button
+  // approves the WHOLE standard — every subspecification a–f — not just the
+  // one on screen. Collect the rowIds across all of that standard's buckets.
+  const currentStandard = useMemo<string | null>(
+    () => (/^\d+\.[a-z0-9]+$/i.test(selectedKey) ? selectedKey.split('.')[0] : null),
+    [selectedKey]
+  );
+  const standardApproveIds = useMemo<string[]>(() => {
+    if (!currentStandard) return items.map((r) => r.rowId);
+    const ids: string[] = [];
+    for (const [key, b] of Object.entries(allBuckets || {})) {
+      if (key.split('.')[0] === currentStandard) {
+        for (const r of flattenBucket(b as any)) ids.push(r.rowId);
+      }
+    }
+    return ids;
+  }, [currentStandard, allBuckets, items]);
+
   // CR-032 — set of sectionIds whose underlying BucketItem / Tag has been
   // edited (editedAt !== undefined). Used by KindSection to render the
   // "edited" badge on cards.
@@ -972,12 +990,15 @@ export function ItemCardList({
             <>
               <button
                 data-testid="approve-all"
-                onClick={() => onApproveAll(items.map((r) => r.rowId))}
-                disabled={isPlaceholder || items.length === 0}
+                onClick={() => onApproveAll(standardApproveIds)}
+                disabled={isPlaceholder || standardApproveIds.length === 0}
                 className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
-                title="Approve every item shown for this specification and move them to the Self-Study editor. Other specifications are untouched."
+                title={currentStandard
+                  ? `Approve EVERY item across all specifications of Standard ${currentStandard} (a–f) and move them to the Self-Study editor. To approve just one subspecification, use the “Reviewed” button on its card.`
+                  : 'Approve every item shown and move them to the Self-Study editor.'}
               >
-                <Check className="h-3 w-3" aria-hidden /> Approve specification → editor
+                <Check className="h-3 w-3" aria-hidden />{' '}
+                {currentStandard ? `Approve all of Standard ${currentStandard} → editor` : 'Approve all shown → editor'}
               </button>
               {approvedIds && approvedIds.size > 0 && onClearApprovals && (
                 <button
