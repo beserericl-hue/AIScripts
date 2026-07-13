@@ -174,6 +174,25 @@ export function NarrativeEditor({
     : null;
   const hasAiReport = !!verdictUI && (!!feedback || suggestions.length > 0 || missingElements.length > 0 || criteriaCoverage.length > 0);
 
+  // Open hyperlinks from inside the (editable) narrative on click. The Link
+  // extension keeps openOnClick:false so the edit surface never NAVIGATES AWAY
+  // and loses unsaved work; instead we open the href in a NEW TAB. Works in
+  // both edit and read-only mode. Returns true so the editor doesn't just drop
+  // a caret with no feedback when the coordinator clicks a link.
+  const openLinkOnClick = useCallback(
+    (_view: unknown, _pos: number, event: MouseEvent): boolean => {
+      const el = event.target as HTMLElement | null;
+      const anchor = el?.closest?.('a[href]') as HTMLAnchorElement | null;
+      const href = anchor?.getAttribute('href');
+      if (href) {
+        window.open(href, '_blank', 'noopener,noreferrer');
+        return true;
+      }
+      return false;
+    },
+    []
+  );
+
   // Initialize TipTap editor with Word paste support
   const editor = useEditor({
     extensions: [
@@ -257,6 +276,7 @@ export function NarrativeEditor({
     },
     // Handle paste from Word/external sources
     editorProps: {
+      handleClick: openLinkOnClick,
       handlePaste: (view, event) => {
         // Let TipTap handle the paste by default
         // The extensions will handle formatting preservation
@@ -369,6 +389,9 @@ export function NarrativeEditor({
         const text = editor.state.doc.textBetween(from, to, ' ');
         onSelectionChange?.({ text, from, to });
       }
+    },
+    editorProps: {
+      handleClick: openLinkOnClick,
     },
   });
 
