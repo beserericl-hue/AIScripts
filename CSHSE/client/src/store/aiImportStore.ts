@@ -957,6 +957,11 @@ export const useAIImportStore = create<AIImportState>()(
             return false;
           }
           try {
+            // Hard network timeout: without it a hung POST (large payload +
+            // busy server) NEVER settles, and because this is a SHARED chained
+            // promise (_reviewSaveQueue) every later save — and any Approve that
+            // awaits a flush — hangs forever too (prod: the Approve-all button
+            // stuck on "Approving…"). 25s → reject → chain progresses.
             await api.post(`/api/submissions/${s.submissionId}/review/save-state`, {
               buckets: s.buckets,
               tags: s.tags,
@@ -965,7 +970,7 @@ export const useAIImportStore = create<AIImportState>()(
               introductions: s.introductions,
               placeholderSections: s.placeholderSections,
               resolvedMissingFragmentIds: s.resolvedMissingFragmentIds,
-            });
+            }, { timeout: 25000 });
             set({ dirty: false });
             return true;
           } catch (err) {

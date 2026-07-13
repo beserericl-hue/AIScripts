@@ -934,9 +934,14 @@ export function ItemCardList({
   const handleApproveAll = useCallback(async () => {
     if (!onApproveAll || approvingAll) return;
     setApprovingAll(true);
+    // Safety net: the button MUST re-enable even if the approve promise never
+    // settles (prod bug: a hung save-state POST froze it on "Approving…"). Cap
+    // the disabled state at 90s regardless of what the round-trip does.
+    const safety = setTimeout(() => setApprovingAll(false), 90000);
     try {
       await onApproveAll(standardApproveIds);
     } finally {
+      clearTimeout(safety);
       setApprovingAll(false);
     }
   }, [onApproveAll, approvingAll, standardApproveIds]);

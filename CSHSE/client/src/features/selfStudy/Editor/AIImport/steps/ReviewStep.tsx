@@ -294,7 +294,16 @@ function FullReviewStep(): JSX.Element {
   // persist the approved set (which triggers the apply).
   const persistAndApply = useCallback(
     async (next: string[]) => {
-      await saveReviewStateToServer();
+      // Flush pending rail edits BEST-EFFORT so the server applies the latest
+      // content — but never let a slow/stuck save-state chain block the approve
+      // (it shares a promise queue; a hung POST would otherwise hang forever and
+      // freeze the Approve-all button on "Approving…"). Cap the flush, then
+      // always run the materialize + AI-review enqueue (persistApprovedIds
+      // try/catches internally, so it always settles).
+      await Promise.race([
+        saveReviewStateToServer().catch(() => false),
+        new Promise((resolve) => setTimeout(resolve, 12000)),
+      ]);
       await persistApprovedIds(next);
     },
     [saveReviewStateToServer, persistApprovedIds]
