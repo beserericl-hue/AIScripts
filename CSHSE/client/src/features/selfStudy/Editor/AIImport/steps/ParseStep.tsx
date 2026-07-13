@@ -158,32 +158,46 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
   const [hydrationSettled, setHydrationSettled] = useState(false);
   const isEmptyParse = isReady && totalReviewableItems === 0 && hydrationSettled;
 
-  // After parse completes, hydrate the store from the SERVER-merged review
-  // state. The /ai-status snapshot does not carry the merged buckets (they are
-  // written to Submission.aiReviewState by the import callback), so without this
-  // the wizard would show "zero items" even though the parse succeeded. This
-  // also sets loadedForSubmissionId so autosave is safe. Runs once per parse.
+  // After parse completes, hydrate the store from the SERVER-merged review state
+  // (Submission.aiReviewState) — the /ai-status snapshot mirrors the import
+  // record, which for MCC has no buckets. The client can see status='parsed'
+  // (from the cshse-ai job) a beat BEFORE the server's callback finishes merging
+  // into aiReviewState, so a single fetch can come back empty. We therefore
+  // RETRY the fetch (up to HYDRATE_MAX, ~15s) until content appears, and only
+  // then declare the parse truly empty. Without this retry a successful MCC
+  // parse falsely showed "AI returned zero items" with Open Review disabled.
+  const HYDRATE_MAX = 10;
   const submissionId = useAIImportStore((s) => s.submissionId);
   const loadPersistedReviewState = useAIImportStore((s) => s.loadPersistedReviewState);
-  const hydratedRef = useRef(false);
+  const [hydrateTick, setHydrateTick] = useState(0);
   useEffect(() => {
-    if (isReady && submissionId && totalReviewableItems === 0 && !hydratedRef.current) {
-      hydratedRef.current = true;
-      loadPersistedReviewState()
-        .catch(() => {
-          /* surfaced via the store's error handling */
-        })
-        .finally(() => setHydrationSettled(true));
-    } else if (isReady && totalReviewableItems > 0) {
-      // Content is already present — no hydration needed; it's definitively
-      // not empty.
-      setHydrationSettled(true);
-    }
     if (!isReady) {
-      hydratedRef.current = false; // reset for a fresh parse
-      setHydrationSettled(false); // a new parse is not "settled-empty" yet
+      setHydrationSettled(false);
+      setHydrateTick(0);
+      return;
     }
-  }, [isReady, submissionId, totalReviewableItems, loadPersistedReviewState]);
+    if (totalReviewableItems > 0) {
+      // Content is present — definitively not empty.
+      setHydrationSettled(true);
+      return;
+    }
+    if (!submissionId || hydrateTick >= HYDRATE_MAX) {
+      // Tried enough times and it's still empty → a genuinely empty parse.
+      setHydrationSettled(true);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(async () => {
+      await loadPersistedReviewState().catch(() => undefined);
+      // Bump the tick to re-run this effect; if content arrived
+      // totalReviewableItems>0 will settle it, else it retries.
+      if (!cancelled) setHydrateTick((n) => n + 1);
+    }, hydrateTick === 0 ? 0 : 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [isReady, submissionId, totalReviewableItems, hydrateTick, loadPersistedReviewState]);
 
   // Re-open SSE on mount if active; close on unmount.
   useEffect(() => {

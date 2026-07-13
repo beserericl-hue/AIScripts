@@ -60,7 +60,8 @@ test('wizard: a successful MCC parse enables Open Review (no false "zero items")
     await page.screenshot({ path: 'test-results/wizard-open-review.png' });
 
     // And the server actually has the parsed content (belt + suspenders).
-    const rs = (((await (await api.get(`/api/submissions/${sub}`, { headers: auth })).json()).submission) as any).aiReviewState ?? {};
+    const body = await (await api.get(`/api/submissions/${sub}`, { headers: auth })).json();
+    const rs = ((body.submission ?? body) as any).aiReviewState ?? {};
     expect(Object.keys(rs.buckets ?? {}).length, 'server has parsed buckets').toBeGreaterThan(0);
   } finally {
     await cleanupSeed(seed);
