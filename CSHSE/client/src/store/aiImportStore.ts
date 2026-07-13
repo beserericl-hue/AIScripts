@@ -2053,6 +2053,18 @@ export const useAIImportStore = create<AIImportState>()(
         // pre-Apply edits live client-side. localStorage carries them
         // through a hard refresh via the partialize block above.
         const keepLocalBuckets = current.dirty === true;
+        // Prefer the snapshot value ONLY when it actually has content; an empty
+        // {}/[] snapshot field must NOT overwrite already-loaded local content
+        // (the MCC snapshot mirrors the import record, which has no buckets).
+        const takeNonEmpty = <T,>(snapVal: T | undefined | null, curVal: T): T => {
+          if (snapVal == null) return curVal;
+          const size = Array.isArray(snapVal)
+            ? snapVal.length
+            : typeof snapVal === 'object'
+              ? Object.keys(snapVal as Record<string, unknown>).length
+              : 1;
+          return size > 0 ? snapVal : curVal;
+        };
 
         // CR-033/039/040 Phase 2c — seed Introduction buckets from
         // aiIntroductionHints (when present and not edited locally). Each
@@ -2125,19 +2137,28 @@ export const useAIImportStore = create<AIImportState>()(
           etaSeconds: snap.etaSeconds ?? null,
           format: snap.format ?? current.format,
           pipelineStages: snap.stages ?? current.pipelineStages,
-          buckets: keepLocalBuckets ? current.buckets : (snap.buckets ?? current.buckets),
-          tags: keepLocalBuckets ? current.tags : (snap.tags ?? current.tags),
-          matrices: keepLocalBuckets ? current.matrices : (snap.matrices ?? current.matrices),
+          // NEVER overwrite existing content with an EMPTY snapshot field. The
+          // /ai-status snapshot mirrors the IMPORT RECORD, and the MCC pipeline
+          // merges its output into Submission.aiReviewState (NOT the import
+          // record's aiBuckets), so the MCC snapshot's buckets/cvs/evidenceDocs
+          // are `{}`/`[]`. `?? current` did NOT guard this ({} is not nullish),
+          // so a parsed MCC import clobbered the store to empty and the wizard
+          // showed "AI returned zero items" even though 77 buckets landed on the
+          // submission. `takeNonEmpty` keeps the local (hydrated) value whenever
+          // the snapshot field is empty; a real non-empty snapshot still applies.
+          buckets: keepLocalBuckets ? current.buckets : takeNonEmpty(snap.buckets, current.buckets),
+          tags: keepLocalBuckets ? current.tags : takeNonEmpty(snap.tags, current.tags),
+          matrices: keepLocalBuckets ? current.matrices : takeNonEmpty(snap.matrices, current.matrices),
           placeholderSections: keepLocalBuckets
             ? current.placeholderSections
-            : (snap.placeholderSections ?? current.placeholderSections),
+            : takeNonEmpty(snap.placeholderSections, current.placeholderSections),
           errors: snap.errors ?? current.errors,
           step: deriveStepFromStatus(snap.status, current.step),
           // CR-033 / CR-040 / CR-039 Phase 2c — detector outputs.
-          cvs: keepLocalBuckets ? current.cvs : (snap.cvs ?? current.cvs),
+          cvs: keepLocalBuckets ? current.cvs : takeNonEmpty(snap.cvs, current.cvs),
           evidenceDocs: keepLocalBuckets
             ? current.evidenceDocs
-            : (snap.evidenceDocs ?? current.evidenceDocs),
+            : takeNonEmpty(snap.evidenceDocs, current.evidenceDocs),
           introductions: nextIntroductions,
           // CR-033 Phase 2c part 2 — standalone-CV mode is a server-side
           // determination; mirror it onto the client so ReviewStep can
