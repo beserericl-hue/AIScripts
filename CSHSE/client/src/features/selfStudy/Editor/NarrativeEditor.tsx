@@ -174,6 +174,24 @@ export function NarrativeEditor({
     : null;
   const hasAiReport = !!verdictUI && (!!feedback || suggestions.length > 0 || missingElements.length > 0 || criteriaCoverage.length > 0);
 
+  // Open a hyperlink clicked inside the editor in a NEW TAB. TipTap's
+  // openOnClick is unreliable in this build (it never fires window.open even
+  // when the click reaches the anchor), so we bind a plain DOM click listener
+  // via editorProps.handleDOMEvents. This works in edit + read-only mode and
+  // never navigates the edit surface away (target=_blank / new window), so no
+  // unsaved work is lost.
+  const openAnchorFromEvent = useCallback((_view: unknown, event: MouseEvent): boolean => {
+    const el = event.target as HTMLElement | null;
+    const anchor = el?.closest?.('a[href]') as HTMLAnchorElement | null;
+    const href = anchor?.getAttribute('href');
+    if (href) {
+      event.preventDefault();
+      window.open(href, '_blank', 'noopener,noreferrer');
+      return true;
+    }
+    return false;
+  }, []);
+
   // Initialize TipTap editor with Word paste support
   const editor = useEditor({
     extensions: [
@@ -205,11 +223,10 @@ export function NarrativeEditor({
       // paste, and URLs typed inline. defendOnNavigate stops the editor
       // from following the link inside the edit surface.
       Link.configure({
-        // Links open in a NEW TAB on click (target=_blank below) so the
-        // coordinator can follow a supporting link without navigating the edit
-        // surface away and losing work. TipTap's own click handler is used
-        // (reliable) rather than a custom handleClick.
-        openOnClick: true,
+        // openOnClick stays false (it doesn't reliably fire here); links are
+        // opened by our handleDOMEvents.click handler below, which opens them
+        // in a new tab so the edit surface never navigates away.
+        openOnClick: false,
         autolink: true,
         linkOnPaste: true,
         protocols: ['http', 'https', 'mailto', 'tel'],
@@ -261,6 +278,7 @@ export function NarrativeEditor({
     },
     // Handle paste from Word/external sources
     editorProps: {
+      handleDOMEvents: { click: openAnchorFromEvent },
       handlePaste: (view, event) => {
         // Let TipTap handle the paste by default
         // The extensions will handle formatting preservation
@@ -328,11 +346,10 @@ export function NarrativeEditor({
       // paste, and URLs typed inline. defendOnNavigate stops the editor
       // from following the link inside the edit surface.
       Link.configure({
-        // Links open in a NEW TAB on click (target=_blank below) so the
-        // coordinator can follow a supporting link without navigating the edit
-        // surface away and losing work. TipTap's own click handler is used
-        // (reliable) rather than a custom handleClick.
-        openOnClick: true,
+        // openOnClick stays false (it doesn't reliably fire here); links are
+        // opened by our handleDOMEvents.click handler below, which opens them
+        // in a new tab so the edit surface never navigates away.
+        openOnClick: false,
         autolink: true,
         linkOnPaste: true,
         protocols: ['http', 'https', 'mailto', 'tel'],
@@ -379,6 +396,7 @@ export function NarrativeEditor({
       }
     },
     editorProps: {
+      handleDOMEvents: { click: openAnchorFromEvent },
     },
   });
 

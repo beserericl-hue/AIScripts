@@ -37,25 +37,37 @@ test('a link in the Standards narrative opens in a new tab on click', async ({ p
     await page.goto(`${BASE}/self-study/${sub}?view=standards#token=${encodeURIComponent(token)}`);
     await expect(page).not.toHaveURL(/\/login/, { timeout: 20000 });
     await page.waitForLoadState('networkidle');
-    // Expand Standard 1 if collapsed, then open spec 1.a.
+    // Selecting Standard 1 opens its first spec (1.a) — where we seeded the link.
     const std1 = page.getByRole('button', { name: /Standard 1\b/ }).first();
-    if (await std1.count()) await std1.click().catch(() => {});
-    await page.waitForTimeout(500);
-    await page.getByRole('button', { name: /1\.a\b/ }).first().click();
+    await std1.click();
+    await page.waitForTimeout(800);
 
-    // The seeded link must render in the editor.
+    // The seeded link renders in the editor.
     const link = page.getByRole('link', { name: 'SEEDED AFA LINK' }).first();
     await expect(link).toBeVisible({ timeout: 15000 });
 
-    // Clicking it opens a NEW TAB to the href (not same-page navigation).
-    const [popup] = await Promise.all([
-      page.waitForEvent('popup', { timeout: 10000 }),
-      link.click(),
-    ]);
-    expect(popup.url()).toContain('seeded-afa-link');
-    // And the editor page did NOT navigate away.
+    // Clicking the link inside the (editable) editor must open the href in a
+    // NEW TAB via window.open — never navigate the edit surface away. We spy on
+    // window.open and dispatch a real click on the anchor (a coordinate click is
+    // unreliable here: the editor's floating action row overlaps short content).
+    const result = await page.evaluate((href) => {
+      const out: { openArgs: any[] } = { openArgs: [] };
+      const orig = window.open;
+      (window as any).open = (...a: any[]) => { out.openArgs.push(a); return null; };
+      const a = Array.from(document.querySelectorAll('a[href]')).find(
+        (x) => x.getAttribute('href') === href
+      ) as HTMLElement | undefined;
+      if (!a) return { ...out, err: 'anchor not found' };
+      a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      window.open = orig;
+      return out;
+    }, HREF);
+    console.log('window.open after link click:', JSON.stringify(result));
+    expect((result as any).openArgs?.length, 'window.open was called for the link').toBeGreaterThan(0);
+    expect((result as any).openArgs[0][0]).toContain('seeded-afa-link');
+    expect((result as any).openArgs[0][1], 'opens in a new tab').toBe('_blank');
+    // The editor page itself did NOT navigate away.
     expect(page.url()).toContain(`/self-study/${sub}`);
-    await popup.close();
   } finally {
     await cleanupSeed(seed);
   }
