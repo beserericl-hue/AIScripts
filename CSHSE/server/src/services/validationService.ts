@@ -318,12 +318,23 @@ export class ValidationService {
       modified: result.modifiedCount
     });
 
-    // Re-fetch to recalculate progress (reads the atomically-updated data)
+    // Re-fetch to recalculate progress (reads the atomically-updated data),
+    // then persist ONLY selfStudyProgress with an atomic $set.
+    //
+    // BUG FIX 2026-07-13 (prod: Approve-all → editor showed empty/partial) —
+    // this used `submission.save()`, which rewrites the ENTIRE document from a
+    // snapshot loaded here. The eval-queue worker runs this continuously (in
+    // batches) while a coordinator's Approve-all is materializing narratives; a
+    // stale full-save then clobbered the just-written narratives (lost update).
+    // Writing only the computed selfStudyProgress field leaves narratives (and
+    // every other field) untouched.
     const submission = await Submission.findById(submissionId);
     if (submission) {
       submission.recalculateProgress();
-      submission.markModified('selfStudyProgress');
-      await submission.save();
+      await Submission.updateOne(
+        { _id: submissionId },
+        { $set: { selfStudyProgress: submission.selfStudyProgress } }
+      );
     }
   }
 
