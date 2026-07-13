@@ -52,8 +52,17 @@ test('Approve all of Standard 1 moves every subspec (a–f) to the editor', asyn
     const approveBtn = page.getByTestId('approve-all');
     await expect(approveBtn).toBeVisible({ timeout: 10000 });
     await expect(approveBtn).toContainText(/Approve all of Standard 1 → editor/);
+    await expect(approveBtn).toBeEnabled();
     await page.screenshot({ path: 'test-results/approve-standard-button.png' });
     await approveBtn.click();
+
+    // Immediate click feedback: the button disables + shows "Approving…" while
+    // the approve + eval-queue round-trip is in flight (prevents double-click).
+    await expect(approveBtn, 'button disables on click').toBeDisabled({ timeout: 5000 });
+    await expect(approveBtn, 'button shows in-progress label').toContainText(/Approving Standard 1…/, { timeout: 5000 });
+    await page.screenshot({ path: 'test-results/approve-standard-inprogress.png' });
+    // …and re-enables once the round-trip completes.
+    await expect(approveBtn, 'button re-enables when done').toBeEnabled({ timeout: 30_000 });
 
     // The materialize round-trip (save review state → set-approved → recompute
     // narratives for every approved spec) is async; poll the editor content

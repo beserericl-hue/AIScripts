@@ -353,14 +353,15 @@ function FullReviewStep(): JSX.Element {
     prevBgRunningRef.current = running;
   }, [bgReview.data?.running, loadPersistedReviewState]);
   const approveAll = useCallback(
-    (rowIds: string[]) => {
+    async (rowIds: string[]) => {
       const next = new Set(approvedIds);
       for (const id of rowIds) next.add(id);
       // Materialize to the editor, THEN start watching the background AI-review
       // queue the server just filled (set-approved enqueues affected specs).
-      void persistAndApply(Array.from(next)).then(() => {
-        queryClient.invalidateQueries({ queryKey: ['eval-progress', submissionId] });
-      });
+      // Returns the promise so the button can show an in-progress state and
+      // stay disabled until the approve + eval-queue round-trip completes.
+      await persistAndApply(Array.from(next));
+      queryClient.invalidateQueries({ queryKey: ['eval-progress', submissionId] });
     },
     [approvedIds, persistAndApply, queryClient, submissionId]
   );

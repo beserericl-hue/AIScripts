@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search } from 'lucide-react';
+import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search, Loader2 } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
 import { api } from '../../../../../services/api';
 import {
@@ -376,7 +376,7 @@ interface ItemCardListProps {
   /** Coordinator workflow tracker — set of rowIds explicitly marked as reviewed. */
   approvedIds?: Set<string>;
   onToggleApproval?: (rowId: string) => void;
-  onApproveAll?: (rowIds: string[]) => void;
+  onApproveAll?: (rowIds: string[]) => void | Promise<void>;
   onClearApprovals?: () => void;
   /** CR-070 — upload an appendix/evidence file for the selected spec inline. */
   /** CR-070 — upload a file for a specific card; the parent resolves the
@@ -800,6 +800,19 @@ export function ItemCardList({
     }
     return ids;
   }, [currentStandard, allBuckets, items]);
+  // Immediate click feedback: disable + show "Approving…" while the approve +
+  // background-eval-queue round-trip is in flight, so the coordinator can't
+  // double-click. Re-enabled once the AI review has been queued.
+  const [approvingAll, setApprovingAll] = useState(false);
+  const handleApproveAll = useCallback(async () => {
+    if (!onApproveAll || approvingAll) return;
+    setApprovingAll(true);
+    try {
+      await onApproveAll(standardApproveIds);
+    } finally {
+      setApprovingAll(false);
+    }
+  }, [onApproveAll, approvingAll, standardApproveIds]);
 
   // CR-032 — set of sectionIds whose underlying BucketItem / Tag has been
   // edited (editedAt !== undefined). Used by KindSection to render the
@@ -990,15 +1003,25 @@ export function ItemCardList({
             <>
               <button
                 data-testid="approve-all"
-                onClick={() => onApproveAll(standardApproveIds)}
-                disabled={isPlaceholder || standardApproveIds.length === 0}
+                onClick={handleApproveAll}
+                aria-busy={approvingAll}
+                disabled={isPlaceholder || approvingAll || standardApproveIds.length === 0}
                 className="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
                 title={currentStandard
                   ? `Approve EVERY item across all specifications of Standard ${currentStandard} (a–f) and move them to the Self-Study editor. To approve just one subspecification, use the “Reviewed” button on its card.`
                   : 'Approve every item shown and move them to the Self-Study editor.'}
               >
-                <Check className="h-3 w-3" aria-hidden />{' '}
-                {currentStandard ? `Approve all of Standard ${currentStandard} → editor` : 'Approve all shown → editor'}
+                {approvingAll ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden />{' '}
+                    {currentStandard ? `Approving Standard ${currentStandard}…` : 'Approving…'}
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3 w-3" aria-hidden />{' '}
+                    {currentStandard ? `Approve all of Standard ${currentStandard} → editor` : 'Approve all shown → editor'}
+                  </>
+                )}
               </button>
               {approvedIds && approvedIds.size > 0 && onClearApprovals && (
                 <button
@@ -2045,7 +2068,7 @@ interface CVsViewProps {
   // coordinator can see at a glance which CVs are approved.
   approvedIds?: Set<string>;
   onToggleApproval?: (rowId: string) => void;
-  onApproveAll?: (rowIds: string[]) => void;
+  onApproveAll?: (rowIds: string[]) => void | Promise<void>;
   onClearApprovals?: () => void;
 }
 
@@ -2242,7 +2265,7 @@ interface EvidenceDocsViewProps {
   // coordinator sees at a glance which evidence docs are approved.
   approvedIds?: Set<string>;
   onToggleApproval?: (rowId: string) => void;
-  onApproveAll?: (rowIds: string[]) => void;
+  onApproveAll?: (rowIds: string[]) => void | Promise<void>;
   onClearApprovals?: () => void;
 }
 
