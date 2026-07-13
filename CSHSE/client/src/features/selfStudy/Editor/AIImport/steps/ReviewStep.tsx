@@ -346,8 +346,13 @@ function FullReviewStep(): JSX.Element {
     queryFn: async () =>
       (await api.get(`/api/submissions/${submissionId}/review/eval-progress`)).data,
     enabled: !!submissionId,
-    refetchInterval: (q: any) => (q?.state?.data?.running ? 3000 : false),
-    refetchOnWindowFocus: false,
+    // Poll fast (3s) while a review is running so the "X/Y reviewed" counter
+    // ticks; keep a slow idle poll (12s) so a queue started elsewhere (another
+    // tab, or a prior approve) still surfaces the indicator WITHOUT a hard
+    // refresh — the coordinator reported it only appeared after a reload.
+    refetchInterval: (q: any) => (q?.state?.data?.running ? 3000 : 12000),
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
   });
   // When the background queue drains (running true → false), reload the
   // persisted review state so freshly-computed AI verdicts + coverage icons

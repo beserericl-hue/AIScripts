@@ -910,13 +910,17 @@ export function ItemCardList({
     return flattenBucket(bucket);
   }, [selectedKey, bucket, unplacedTags, placeholders, activeIntroBucket]);
 
-  // When the coordinator is on a specification (e.g. "1.a"), the top button
-  // approves the WHOLE standard — every subspecification a–f — not just the
-  // one on screen. Collect the rowIds across all of that standard's buckets.
-  const currentStandard = useMemo<string | null>(
-    () => (/^\d+\.[a-z0-9]+$/i.test(selectedKey) ? selectedKey.split('.')[0] : null),
-    [selectedKey]
-  );
+  // When the coordinator is on a specification (e.g. "1.a") OR that standard's
+  // Introduction (rail key "_intro:standard-1"), the top button approves the
+  // WHOLE standard — every subspecification a–f AND the standard's Introduction
+  // — not just the one on screen. Collect ids across all of that standard's
+  // buckets + its introduction items.
+  const currentStandard = useMemo<string | null>(() => {
+    if (/^\d+\.[a-z0-9]+$/i.test(selectedKey)) return selectedKey.split('.')[0];
+    const introMatch = /^_intro:standard-(\d+)$/.exec(selectedKey);
+    if (introMatch) return introMatch[1];
+    return null;
+  }, [selectedKey]);
   const standardApproveIds = useMemo<string[]>(() => {
     if (!currentStandard) return items.map((r) => r.rowId);
     const ids: string[] = [];
@@ -925,8 +929,12 @@ export function ItemCardList({
         for (const r of flattenBucket(b as any)) ids.push(r.rowId);
       }
     }
+    // The Standard's Introduction is part of the standard — include its items so
+    // "Approve all of Standard N" moves the intro to the editor too.
+    const introItems = introductions?.[`standard-${currentStandard}`]?.items ?? [];
+    for (const it of introItems) ids.push(it.sectionId);
     return ids;
-  }, [currentStandard, allBuckets, items]);
+  }, [currentStandard, allBuckets, items, introductions]);
   // Immediate click feedback: disable + show "Approving…" while the approve +
   // background-eval-queue round-trip is in flight, so the coordinator can't
   // double-click. Re-enabled once the AI review has been queued.
