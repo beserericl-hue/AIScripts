@@ -207,6 +207,12 @@ export type EvidenceDocItem = {
   fileSize?: number;
   resolvedStd?: string;
   resolvedSpec?: string;
+  // MULTI-REFERENCE — one appendix / evidence doc can be linked under several
+  // specs (e.g. Appendix A10 → Introduction AND Standard 1.e). The server's
+  // materialize path (setApproved) fans out over this list, creating one
+  // SupportingEvidence per referenced spec. Persisted via
+  // setEvidenceDocReferences → POST .../review/evidence-doc-references.
+  referencedBySpecs?: Array<{ std: string; spec?: string }>;
   // Routing the server consumes at Apply time. aiImportController stamps
   // SupportingEvidence.standardCode/specCode from `routing.std` / `routing.spec`
   // (line ~1508). The detector leaves this unset; the coordinator fills it in
@@ -574,6 +580,11 @@ interface AIImportState {
   // which the server's apply path reads to stamp SupportingEvidence
   // standardCode/specCode (aiImportController.ts ~1508).
   updateEvidenceDocRouting: (sectionId: string, std: string, spec: string) => void;
+  // Set the FULL list of Standard/Substandard references for one evidence doc
+  // (chips + Add-reference UI). Optimistically updates the local item's
+  // referencedBySpecs (and mirrors references[0] onto resolvedStd/resolvedSpec
+  // for the single-dropdown prefill), then persists to the server.
+  setEvidenceDocReferences: (sectionId: string, references: Array<{ std: string; spec?: string }>) => void;
   // Persist a CV/evidence-doc Standard+Substandard assignment to the server so
   // it survives reload + Re-run detectors. No-op when there's no submissionId
   // (wizard-only run). Resolves to true on success, false on failure.
@@ -1042,6 +1053,43 @@ export const useAIImportStore = create<AIImportState>()(
           ),
           dirty: true
         })),
+      setEvidenceDocReferences: (sectionId, references) => {
+        // Normalize + dedupe (keep only entries with a std) so the local copy
+        // matches what the server stores.
+        const seen = new Set<string>();
+        const refs: Array<{ std: string; spec?: string }> = [];
+        for (const r of references || []) {
+          if (!r || !r.std) continue;
+          const std = String(r.std);
+          const spec = r.spec ? String(r.spec) : undefined;
+          const key = `${std}::${spec ?? ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          refs.push({ std, spec });
+        }
+        const first = refs[0];
+        set((s) => ({
+          evidenceDocs: s.evidenceDocs.map((d) =>
+            d.sectionId === sectionId
+              ? {
+                  ...d,
+                  referencedBySpecs: refs,
+                  // Mirror the first reference onto the single-routing fields so
+                  // the primary dropdown + apply fallback stay in sync.
+                  resolvedStd: first?.std,
+                  resolvedSpec: first?.spec,
+                  routing: { ...(d.routing || {}), std: first?.std, spec: first?.spec, source: 'coordinator' }
+                }
+              : d
+          ),
+          dirty: true
+        }));
+        const submissionId = get().submissionId;
+        if (!submissionId) return; // wizard-only run — nothing to persist
+        void api
+          .post(`/api/submissions/${submissionId}/review/evidence-doc-references`, { sectionId, references: refs })
+          .catch((err) => console.warn('[evidence-doc-references] persist failed:', err));
+      },
       persistEvidenceRouting: async (sectionId, std, spec) => {
         const submissionId = get().submissionId;
         if (!submissionId) return false; // wizard-only run — nothing to persist

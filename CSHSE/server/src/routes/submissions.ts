@@ -104,6 +104,7 @@ import {
   discardItem,
   clearItem,
   routeEvidence,
+  setEvidenceDocReferences,
   splitReviewItem,
   setApprovedIds,
   saveReviewState,
@@ -124,6 +125,9 @@ router.post('/:submissionId/review/clear-item', submissionLockout, clearItem);
 // Persist a CV/Syllabi/Paper Standard+Substandard assignment so it survives
 // reload + Re-run detectors (lived only in the browser store before).
 router.post('/:submissionId/review/route-evidence', submissionLockout, routeEvidence);
+// Persist MULTIPLE Standard/Substandard references for one appendix/evidence doc
+// so a single file can be linked under several specs (chips + Add-reference UI).
+router.post('/:submissionId/review/evidence-doc-references', submissionLockout, setEvidenceDocReferences);
 // Move part of a mis-parsed card into another subspec (split source + add new).
 router.post('/:submissionId/review/split-item', submissionLockout, splitReviewItem);
 // Persist the whole approved-id set (Approve / Approve-all / Clear).

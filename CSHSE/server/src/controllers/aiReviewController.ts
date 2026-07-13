@@ -467,6 +467,78 @@ export async function routeEvidence(req: AuthenticatedRequest, res: Response): P
 }
 
 /**
+ * POST /api/submissions/:submissionId/review/evidence-doc-references
+ *
+ * Persist MULTIPLE Standard/Substandard references for a single appendix /
+ * evidence doc (or CV) so one file can be linked under several specs (e.g.
+ * Appendix A10 → both the Introduction AND Standard 1.e). Mirrors
+ * routeEvidence, but writes `referencedBySpecs: [{std, spec}]` — the list the
+ * materialize path (setApproved) fans out over to create one SupportingEvidence
+ * per referenced spec. Back-compat: also mirrors the FIRST reference onto
+ * resolvedStd/resolvedSpec/routing so the single-dropdown prefill + fallback
+ * still work when the list is empty.
+ */
+export async function setEvidenceDocReferences(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const { sectionId, references } = req.body || {};
+  if (!sectionId || typeof sectionId !== 'string') {
+    res.status(400).json({ error: 'sectionId is required' });
+    return;
+  }
+  const state = (submission as any).aiReviewState;
+  if (!state) {
+    res.status(409).json({ error: 'aiReviewState is empty' });
+    return;
+  }
+
+  // Normalize + dedupe the incoming references (keep only entries with a std).
+  const seen = new Set<string>();
+  const refs: Array<{ std: string; spec?: string }> = [];
+  for (const r of Array.isArray(references) ? references : []) {
+    if (!r || !r.std) continue;
+    const std = String(r.std);
+    const spec = r.spec ? String(r.spec) : undefined;
+    const key = `${std}::${spec ?? ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    refs.push({ std, spec });
+  }
+
+  const first = refs[0];
+
+  const apply = (item: any): boolean => {
+    if (!item || item.sectionId !== sectionId) return false;
+    item.referencedBySpecs = refs;
+    // Back-compat: keep the single-routing display fields + apply fallback in
+    // sync with the FIRST reference (or clear them when the list is empty).
+    item.resolvedStd = first?.std;
+    item.resolvedSpec = first?.spec;
+    item.routing = {
+      ...(item.routing || {}),
+      std: first?.std,
+      spec: first?.spec,
+      source: 'coordinator',
+    };
+    return true;
+  };
+
+  let found = false;
+  for (const c of state.cvs || []) if (apply(c)) found = true;
+  for (const e of state.evidenceDocs || []) if (apply(e)) found = true;
+
+  if (!found) {
+    res.status(404).json({ error: 'No CV or evidence doc with that sectionId' });
+    return;
+  }
+
+  state.lastUpdatedAt = new Date();
+  (submission as any).markModified('aiReviewState');
+  await submission.save();
+  res.json({ ok: true, sectionId, referencedBySpecs: refs });
+}
+
+/**
  * POST /api/submissions/:submissionId/review/save-state
  *
  * Autosave the review-rail CONTENT so every coordinator action on the Review
@@ -750,7 +822,12 @@ async function materializeApprovedToEditor(
     // parser produced no multi-spec list (CVs, non-MCC docs, intro-only files).
     const specs: Array<{ std?: string; spec?: string }> =
       Array.isArray((e as any).referencedBySpecs) && (e as any).referencedBySpecs.length
-        ? (e as any).referencedBySpecs.map((r: any) => ({ std: String(r.std), spec: String(r.spec) }))
+        ? (e as any).referencedBySpecs.map((r: any) => ({
+            std: String(r.std),
+            // An 'introduction' reference has no substandard — must stay
+            // undefined, NOT the literal string "undefined".
+            spec: r.spec != null && r.spec !== '' ? String(r.spec) : undefined,
+          }))
         : [{ std: e.resolvedStd || e.routing?.std, spec: e.resolvedSpec || e.routing?.spec }];
     for (const { std, spec } of specs) {
       // Distinct rev tag per (file, spec) so one appendix can appear under every

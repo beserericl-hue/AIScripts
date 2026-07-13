@@ -185,6 +185,133 @@ function SpecAssignControls({
   );
 }
 
+// ------------------------------------------------ EvidenceDocReferences
+//
+// Multi-reference editor for one appendix / evidence doc. Renders a chip per
+// existing reference (with a ✕ to remove it) plus an "+ Add reference" picker
+// (Standard + Substandard) so a single file can be linked under MULTIPLE specs
+// (e.g. Appendix A10 → Introduction AND Standard 1.e). Each change writes the
+// full list via setEvidenceDocReferences (optimistic local + server persist);
+// the server's materialize path fans out over referencedBySpecs at Apply.
+
+interface EvidenceDocReferencesProps {
+  sectionId: string;
+  references: Array<{ std: string; spec?: string }>;
+  onChange: (references: Array<{ std: string; spec?: string }>) => void;
+}
+
+function refLabel(std: string, spec?: string): string {
+  if (std === 'introduction') return 'Introduction';
+  if (spec) return `${std}.${spec}`;
+  return `Standard ${std}`;
+}
+
+function EvidenceDocReferences({ sectionId, references, onChange }: EvidenceDocReferencesProps): JSX.Element {
+  const { standards, error } = useStandardsCatalog();
+  const [pickStd, setPickStd] = React.useState('');
+  const [pickSpec, setPickSpec] = React.useState('');
+  const stdEntry = standards.find((s) => s.std === pickStd);
+  const specOptions = stdEntry?.specsForStd ?? [];
+
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
+  const removeAt = (idx: number) => {
+    onChange(references.filter((_, i) => i !== idx));
+  };
+
+  const add = () => {
+    if (!pickStd) return;
+    const spec = pickStd === 'introduction' ? undefined : pickSpec || undefined;
+    // Dedupe against the existing list.
+    const exists = references.some((r) => r.std === pickStd && (r.spec ?? '') === (spec ?? ''));
+    const next = exists ? references : [...references, { std: pickStd, spec }];
+    onChange(next);
+    setPickStd('');
+    setPickSpec('');
+  };
+
+  return (
+    <div className="mt-2" onClick={stop} onKeyDown={stop}>
+      <p className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+        Referenced in
+      </p>
+      <div data-testid="evdoc-references" className="mt-1 flex flex-wrap items-center gap-1">
+        {references.length === 0 && (
+          <span className="text-[11px] text-gray-400">No references yet</span>
+        )}
+        {references.map((r, i) => (
+          <span
+            key={`${r.std}.${r.spec ?? ''}-${i}`}
+            className="inline-flex items-center gap-1 rounded-full border border-cshse-200 bg-cshse-50 px-2 py-0.5 text-[11px] font-medium text-cshse-800"
+          >
+            {refLabel(r.std, r.spec)}
+            <button
+              type="button"
+              onClick={() => removeAt(i)}
+              className="text-cshse-500 hover:text-red-600"
+              aria-label={`Remove reference ${refLabel(r.std, r.spec)}`}
+              title="Remove this reference"
+            >
+              ✕
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="mt-1.5 grid grid-cols-[1fr_1fr_auto] items-end gap-1.5">
+        <select
+          value={pickStd}
+          onChange={(e) => {
+            const newStd = e.target.value;
+            setPickStd(newStd);
+            const firstSpec = standards.find((s) => s.std === newStd)?.specsForStd[0]?.spec;
+            setPickSpec(firstSpec ?? '');
+          }}
+          className="rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500"
+          aria-label="Reference standard"
+        >
+          <option value="">— standard —</option>
+          <option value="introduction">Introduction (referenced in program intro)</option>
+          {standards.map((s) => (
+            <option key={s.std} value={s.std}>
+              {s.std} — {s.title}
+            </option>
+          ))}
+        </select>
+        <select
+          value={pickSpec}
+          onChange={(e) => setPickSpec(e.target.value)}
+          disabled={!pickStd || pickStd === 'introduction' || specOptions.length === 0}
+          className="rounded border border-gray-300 px-1.5 py-1 text-xs focus:border-cshse-500 focus:outline-none focus:ring-1 focus:ring-cshse-500 disabled:bg-gray-100"
+          aria-label="Reference substandard"
+        >
+          <option value="">— substandard —</option>
+          {specOptions.map((opt) => (
+            <option key={opt.spec} value={opt.spec}>
+              {pickStd}.{opt.spec}
+              {opt.title ? ` — ${opt.title}` : ''}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          data-testid="evdoc-add-reference"
+          onClick={add}
+          disabled={!pickStd}
+          className="rounded border border-cshse-300 bg-cshse-50 px-2 py-1 text-xs font-medium text-cshse-700 hover:bg-cshse-100 disabled:opacity-50"
+          title="Add this standard/substandard as another reference for this file"
+        >
+          + Add
+        </button>
+      </div>
+      {error && (
+        <p className="mt-1 text-[10px] text-amber-700">
+          Couldn{"'"}t load the standards list ({error}). Reload to add references.
+        </p>
+      )}
+    </div>
+  );
+}
+
 // ------------------------------------------------ FindReferencesButton
 // Search the imported Introduction + every standard/substandard narrative for
 // this file's appendix code and/or title (e.g. a "(Supporting Document: … MCC
@@ -2279,6 +2406,7 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
   const selectSection = useAIImportStore((s) => s.selectSection);
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
   const updateEvidenceDocRouting = useAIImportStore((s) => s.updateEvidenceDocRouting);
+  const setEvidenceDocReferences = useAIImportStore((s) => s.setEvidenceDocReferences);
   if (docs.length === 0) {
     return (
       <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
@@ -2490,6 +2618,23 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
               std={d.resolvedStd}
               spec={d.resolvedSpec}
               onChange={(std, spec) => updateEvidenceDocRouting(d.sectionId, std, spec)}
+            />
+            {/* Multi-reference — attach THIS file to additional specs (chips +
+                Add-reference). The server fans out over referencedBySpecs at
+                Apply so the file appears under every referenced spec's library. */}
+            <EvidenceDocReferences
+              sectionId={d.sectionId}
+              references={
+                // Seed the chips from the existing single routing when the
+                // parser produced no multi-spec list, so the CURRENT reference
+                // (e.g. an intro-only appendix) shows and adding APPENDS to it.
+                d.referencedBySpecs && d.referencedBySpecs.length
+                  ? d.referencedBySpecs
+                  : d.resolvedStd
+                  ? [{ std: d.resolvedStd, spec: d.resolvedSpec }]
+                  : []
+              }
+              onChange={(refs) => setEvidenceDocReferences(d.sectionId, refs)}
             />
           </li>
           );
