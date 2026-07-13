@@ -316,9 +316,16 @@ export const saveNarrative = async (req: AuthenticatedRequest, res: Response) =>
       linkedDocuments: existingNarrative?.linkedDocuments || [],
       supportingEvidenceText: hasSupportingEvidence ? supportingEvidenceText : (existingNarrative?.supportingEvidenceText || '')
     });
+    // BUG FIX 2026-07-13 — DATA LOSS: mutating the nested Map via .get(std).set(spec)
+    // and only calling markModified('narratives') does NOT persist in Mongoose 8
+    // (submission.save() wrote nothing, so manual editor edits were silently lost).
+    // Re-SET the top-level key AFTER the nested mutation — the same pattern the
+    // (working) approve→materialize path uses — so Mongoose tracks the change.
+    submission.narratives.set(standardCode, standardNarratives);
 
     // CRITICAL: Mark nested maps as modified for Mongoose to save them
     submission.markModified('narratives');
+    submission.markModified(`narratives.${standardCode}`);
     await submission.save();
 
     // Use atomic $set for standardsStatus (Mongoose Map.set() doesn't persist in Mongoose 8)
