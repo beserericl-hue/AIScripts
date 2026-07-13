@@ -10,7 +10,8 @@
  * Step 5 commit lands.
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { Rocket, Loader2, X, Upload } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Rocket, Loader2, X, Upload, Sparkles } from 'lucide-react';
 import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
 import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY } from '../review/SpecRail';
 // Any selectedSpecKey starting with '_' is a synthetic rail key (matrices,
@@ -173,6 +174,7 @@ function FullReviewStep(): JSX.Element {
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
   const importId = useAIImportStore((s) => s.importId);
   const submissionId = useAIImportStore((s) => s.submissionId);
+  const queryClient = useQueryClient();
   const matrices = useAIImportStore((s) => s.matrices);
   const setStep = useAIImportStore((s) => s.setStep);
   const selectSpec = useAIImportStore((s) => s.selectSpec);
@@ -325,13 +327,42 @@ function FullReviewStep(): JSX.Element {
     },
     [approvedIds, persistAndApply]
   );
+  // Background AI review: the server's set-approved handler queues every
+  // affected spec for AI evaluation as soon as the text is materialized. This
+  // query polls that queue so the coordinator sees the review running in the
+  // background (and each spec is marked reviewed as its evaluation finishes)
+  // WITHOUT waiting on the round-trip. Mirrors SelfStudyEditor's poller.
+  const bgReview = useQuery<{ total: number; remaining: number; done: number; running: boolean }>({
+    queryKey: ['eval-progress', submissionId],
+    queryFn: async () =>
+      (await api.get(`/api/submissions/${submissionId}/review/eval-progress`)).data,
+    enabled: !!submissionId,
+    refetchInterval: (q: any) => (q?.state?.data?.running ? 3000 : false),
+    refetchOnWindowFocus: false,
+  });
+  // When the background queue drains (running true → false), reload the
+  // persisted review state so freshly-computed AI verdicts + coverage icons
+  // appear and the specs read as reviewed.
+  const loadPersistedReviewState = useAIImportStore((s) => s.loadPersistedReviewState);
+  const prevBgRunningRef = React.useRef(false);
+  React.useEffect(() => {
+    const running = !!bgReview.data?.running;
+    if (prevBgRunningRef.current && !running) {
+      void loadPersistedReviewState();
+    }
+    prevBgRunningRef.current = running;
+  }, [bgReview.data?.running, loadPersistedReviewState]);
   const approveAll = useCallback(
     (rowIds: string[]) => {
       const next = new Set(approvedIds);
       for (const id of rowIds) next.add(id);
-      void persistAndApply(Array.from(next));
+      // Materialize to the editor, THEN start watching the background AI-review
+      // queue the server just filled (set-approved enqueues affected specs).
+      void persistAndApply(Array.from(next)).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['eval-progress', submissionId] });
+      });
     },
-    [approvedIds, persistAndApply]
+    [approvedIds, persistAndApply, queryClient, submissionId]
   );
   const clearApprovals = useCallback(() => {
     void persistAndApply([]);
@@ -1093,14 +1124,28 @@ function FullReviewStep(): JSX.Element {
               editor automatically. Navigation is the top workflow tabs. */}
           {/* "Apply to editor" was removed — Approve / Approve all now move the
               text straight into the standards editor automatically. */}
-          <span
-            data-tour="review-apply"
-            data-testid="approve-auto-apply-hint"
-            className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700"
-            title="Approving an item writes it into the standards editor automatically — no separate Apply step."
-          >
-            <Rocket className="h-3.5 w-3.5" aria-hidden /> Approve → saved to editor
-          </span>
+          {/* Background AI review is running (queued by the last Approve-all).
+              The coordinator is told it continues in the background and that
+              each spec is marked reviewed as its evaluation finishes. */}
+          {bgReview.data?.running ? (
+            <span
+              data-testid="bg-review-indicator"
+              className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700"
+              title="Your approved text is already in the editor. The AI review runs in the background — each specification is marked reviewed as its evaluation finishes. You can keep working."
+            >
+              <Sparkles className="h-3.5 w-3.5 animate-pulse" aria-hidden /> AI review running in the
+              background — {bgReview.data.done}/{bgReview.data.total} reviewed
+            </span>
+          ) : (
+            <span
+              data-tour="review-apply"
+              data-testid="approve-auto-apply-hint"
+              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700"
+              title="Approving an item writes it into the standards editor automatically — no separate Apply step."
+            >
+              <Rocket className="h-3.5 w-3.5" aria-hidden /> Approve → saved to editor
+            </span>
+          )}
         </div>
       </div>
 
