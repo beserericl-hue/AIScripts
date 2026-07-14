@@ -60,7 +60,12 @@ export function CompareEditOverlay({
   const [syncScroll, setSyncScroll] = useState(false);
 
   useEffect(() => {
-    if (!syncScroll) return;
+    // Depend on `open` + `sectionId` (not just syncScroll): the panes unmount
+    // when the overlay closes, so on REOPEN we must re-bind the scroll listeners
+    // to the fresh DOM. Without this the sync worked once, then silently stopped
+    // after the first close (listeners bound to removed nodes) — user had to
+    // close/reopen to recover.
+    if (!syncScroll || !open) return;
     const left = leftScrollRef.current;
     const right = document.querySelector<HTMLElement>('[data-testid="compare-source-pane"]');
     if (!left || !right) return;
@@ -169,7 +174,7 @@ export function CompareEditOverlay({
       left.removeEventListener('scroll', onLeft);
       right.removeEventListener('scroll', onRight);
     };
-  }, [syncScroll]);
+  }, [syncScroll, open, sectionId]);
 
   // Seed the editor with the faithful HTML (full format) when the overlay opens
   // for a section. Keyed on sectionId so re-opening a different card re-seeds.
