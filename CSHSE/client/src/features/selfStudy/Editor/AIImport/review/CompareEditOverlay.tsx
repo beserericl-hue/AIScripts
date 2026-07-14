@@ -283,7 +283,7 @@ export function CompareEditOverlay({
               </span>
               <span className="text-[11px] text-gray-500">{wordCount} words · paste keeps formatting</span>
             </div>
-            <div ref={leftScrollRef} className="min-h-0 flex-1 overflow-auto p-4">
+            <div ref={leftScrollRef} data-testid="compare-imported-pane" className="min-h-0 flex-1 overflow-auto p-4">
               <div
                 ref={editorRef}
                 contentEditable
