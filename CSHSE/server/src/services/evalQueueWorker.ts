@@ -42,12 +42,25 @@ export async function processEvalQueueTick(): Promise<void> {
       const entry = stdMap?.get?.(spec);
       return entry?.content || '';
     };
+    const parse = (key: string) => {
+      const dot = key.indexOf('.');
+      return { std: key.slice(0, dot), spec: key.slice(dot + 1) };
+    };
+
+    // Only evaluate specs that actually have narrative content. An empty spec is
+    // "not started", NOT a validation failure — validating it wastes an AI call
+    // and produces a misleading "Failed" verdict (user-reported: "AI failing
+    // obviously from no data in the spec"). This happens when a spec is still
+    // queued but its narrative was cleared/lost. Empty specs are dropped from the
+    // queue below WITHOUT validation; a later Approve re-enqueues them with text.
+    const withContent = batch.filter((key) => {
+      const { std, spec } = parse(key);
+      return getContent(std, spec).trim().length > 0;
+    });
 
     await Promise.allSettled(
-      batch.map((key) => {
-        const dot = key.indexOf('.');
-        const std = key.slice(0, dot);
-        const spec = key.slice(dot + 1);
+      withContent.map((key) => {
+        const { std, spec } = parse(key);
         return Promise.race([
           svc.validateSection({
             submissionId: String(sub._id),
@@ -61,8 +74,9 @@ export async function processEvalQueueTick(): Promise<void> {
       })
     );
 
-    // Atomically remove the processed batch (won't clobber validateSection's
-    // own standardsStatus writes on this submission).
+    // Atomically remove the WHOLE processed batch — including the empty specs we
+    // deliberately skipped — so the queue drains instead of spinning on them.
+    // (Won't clobber validateSection's own standardsStatus writes.)
     await Submission.updateOne(
       { _id: sub._id },
       { $pull: { aiEvalQueue: { $in: batch } } }

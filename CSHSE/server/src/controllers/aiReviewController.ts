@@ -649,8 +649,19 @@ export async function saveReviewState(req: AuthenticatedRequest, res: Response):
     return;
   }
   state.lastUpdatedAt = new Date();
-  (submission as any).markModified('aiReviewState');
-  await submission.save();
+  // BUG FIX 2026-07-13 (prod: "Approve all → Standard didn't copy over") —
+  // this used submission.save(), which rewrites the ENTIRE document from the
+  // snapshot loaded at the top of this handler. save-state is fired on every
+  // Approve; when it lands AFTER the concurrent set-approved materialize, its
+  // stale narratives snapshot clobbered the just-written narratives (lost
+  // update — exactly what wiped Standard 2). Write ONLY aiReviewState with an
+  // atomic $set so narratives (and every other field) are never touched.
+  const plainState =
+    typeof (state as any)?.toObject === 'function' ? (state as any).toObject() : state;
+  await Submission.updateOne(
+    { _id: submission._id },
+    { $set: { aiReviewState: plainState } }
+  );
   res.json({ ok: true, saved: touched });
 }
 
