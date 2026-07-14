@@ -34,6 +34,19 @@ interface AuthenticatedRequest extends Request {
   user?: any;
 }
 
+/**
+ * Persist ONLY aiReviewState with an atomic $set — NEVER re-save the whole
+ * submission. A full submission.save() rewrites narratives from whatever
+ * snapshot the handler loaded; if it lands during a concurrent Approve→
+ * materialize, it clobbers the just-written narratives (prod: Standard 2 "did
+ * not copy over"). Every review-item handler that touches only aiReviewState
+ * uses this so no background/foreground write can lose narratives.
+ */
+async function persistAiReviewState(submission: any, state: any): Promise<void> {
+  const plain = state && typeof state.toObject === 'function' ? state.toObject() : state;
+  await Submission.updateOne({ _id: submission._id }, { $set: { aiReviewState: plain } });
+}
+
 async function _loadOwnedSubmission(
   req: AuthenticatedRequest,
   res: Response
@@ -329,8 +342,7 @@ export async function approveItem(req: AuthenticatedRequest, res: Response): Pro
     state.discardedIds = (state.discardedIds || []).filter((id: string) => id !== sectionId);
   }
   state.lastUpdatedAt = new Date();
-  (submission as any).markModified('aiReviewState');
-  await submission.save();
+  await persistAiReviewState(submission, state);
   res.json({ ok: true, approvedIds: state.approvedIds });
 }
 
@@ -354,8 +366,7 @@ export async function discardItem(req: AuthenticatedRequest, res: Response): Pro
     state.approvedIds = (state.approvedIds || []).filter((id: string) => id !== sectionId);
   }
   state.lastUpdatedAt = new Date();
-  (submission as any).markModified('aiReviewState');
-  await submission.save();
+  await persistAiReviewState(submission, state);
   res.json({ ok: true, discardedIds: state.discardedIds });
 }
 
@@ -403,8 +414,7 @@ export async function clearItem(req: AuthenticatedRequest, res: Response): Promi
   delete (state.itemSources || {})[sectionId];
   state.lastUpdatedAt = new Date();
 
-  (submission as any).markModified('aiReviewState');
-  await submission.save();
+  await persistAiReviewState(submission, state);
   res.json({ ok: true });
 }
 
@@ -461,8 +471,7 @@ export async function routeEvidence(req: AuthenticatedRequest, res: Response): P
   }
 
   state.lastUpdatedAt = new Date();
-  (submission as any).markModified('aiReviewState');
-  await submission.save();
+  await persistAiReviewState(submission, state);
   res.json({ ok: true, sectionId, resolvedStd: stdVal, resolvedSpec: specVal });
 }
 
@@ -533,8 +542,7 @@ export async function setEvidenceDocReferences(req: AuthenticatedRequest, res: R
   }
 
   state.lastUpdatedAt = new Date();
-  (submission as any).markModified('aiReviewState');
-  await submission.save();
+  await persistAiReviewState(submission, state);
   res.json({ ok: true, sectionId, referencedBySpecs: refs });
 }
 
@@ -1449,8 +1457,7 @@ export async function splitReviewItem(req: AuthenticatedRequest, res: Response):
   }
 
   state.lastUpdatedAt = new Date();
-  (submission as any).markModified('aiReviewState');
-  await submission.save();
+  await persistAiReviewState(submission, state);
   res.json({ ok: true, newSectionId, targetKey });
 }
 
@@ -1483,8 +1490,7 @@ export async function finishReview(req: AuthenticatedRequest, res: Response): Pr
   }
   state.discardedIds = Array.from(discarded);
   state.lastUpdatedAt = new Date();
-  (submission as any).markModified('aiReviewState');
-  await submission.save();
+  await persistAiReviewState(submission, state);
   res.json({ ok: true, discardedIds: state.discardedIds, newlyDiscarded });
 }
 
