@@ -46,6 +46,8 @@ import {
   Trash2,
   Eye,
   X,
+  Maximize2,
+  Minimize2,
 } from 'lucide-react';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useValidationStatus } from '../../../hooks/useValidationStatus';
@@ -157,6 +159,18 @@ export function NarrativeEditor({
 
   // State for clear section confirmation
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  // Full-screen editor: on short screens the flex-1 editor pane collapses to a
+  // couple of lines. This pops the WHOLE editor (narrative + supporting text)
+  // into a full-viewport overlay so PCs — and readers / lead readers (read-only)
+  // — can actually read and edit the text. Toggling only repositions the root
+  // via CSS, so the TipTap instance + content are preserved (no remount).
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpanded(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expanded]);
   // AI report is shown in a popup that opens ONLY when the user clicks the
   // verdict pill. Default CLOSED so it never pops up on its own.
   const [aiReportOpen, setAiReportOpen] = useState(false);
@@ -581,15 +595,35 @@ export function NarrativeEditor({
   }
 
   return (
-    <div className="narrative-editor flex flex-col h-full">
+    <div
+      className={
+        expanded
+          ? 'narrative-editor flex flex-col fixed inset-0 z-[60] bg-white p-3 sm:p-5 overflow-auto'
+          : 'narrative-editor flex flex-col h-full'
+      }
+    >
       {/* Standard and Specification Guidance */}
       <div className="bg-teal-50 border border-teal-200 rounded-lg p-4 mb-4 space-y-3">
         {/* Standard Header */}
-        <div>
-          <h4 className="text-sm font-bold text-teal-900 mb-1">
-            Standard {standardCode}: {standardTitle}
-          </h4>
-          <p className="text-sm text-teal-800">{standardDescription}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h4 className="text-sm font-bold text-teal-900 mb-1">
+              Standard {standardCode}: {standardTitle}
+            </h4>
+            <p className="text-sm text-teal-800">{standardDescription}</p>
+          </div>
+          {/* Full-screen toggle — visible to every role (PC + readers) so the
+              narrative + supporting text can be read/edited on small screens. */}
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            data-testid="editor-fullscreen-toggle"
+            className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-md border border-teal-300 bg-white px-2.5 py-1.5 text-xs font-medium text-teal-800 hover:bg-teal-100"
+            title={expanded ? 'Exit full screen (Esc)' : 'Open the editor full screen to read and edit the full text'}
+          >
+            {expanded ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+            {expanded ? 'Exit full screen' : 'Full screen'}
+          </button>
         </div>
 
         {/* Specification */}
@@ -1081,7 +1115,7 @@ export function NarrativeEditor({
       </BubbleMenu>}
 
       {/* Editor Content */}
-      <div className={`editor-content flex-1 border border-gray-200 overflow-auto max-w-full ${readOnly ? 'rounded-lg' : 'rounded-b-lg'}`}>
+      <div className={`editor-content flex-1 border border-gray-200 overflow-auto max-w-full ${expanded ? 'min-h-0' : 'min-h-[240px]'} ${readOnly ? 'rounded-lg' : 'rounded-b-lg'}`}>
         <EditorContent
           editor={editor}
           className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:max-w-full [&_.ProseMirror_table]:!table-auto [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[300px] [&_.ProseMirror]:overflow-x-auto"
