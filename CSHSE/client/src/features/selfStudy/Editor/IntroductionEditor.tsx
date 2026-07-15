@@ -18,7 +18,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import Link from '@tiptap/extension-link';
-import { Save, CheckCircle, AlertCircle, BookOpen } from 'lucide-react';
+import { Save, CheckCircle, AlertCircle, BookOpen, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '../../../services/api';
 
 export interface IntroductionEditorProps {
@@ -45,6 +45,16 @@ export function IntroductionEditor({
 }: IntroductionEditorProps): JSX.Element {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Full-screen editing (parity with the narrative editor) — pops the whole
+  // introduction into a full-viewport overlay so it's readable/editable on small
+  // screens, for PCs and read-only readers alike. CSS-only, so no remount.
+  const [expanded, setExpanded] = useState(false);
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpanded(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [expanded]);
 
   // Debounced-autosave plumbing. latestHtmlRef holds the most recent content so
   // an unmount flush can persist it WITHOUT touching a possibly-destroyed
@@ -157,40 +167,59 @@ export function IntroductionEditor({
   if (!editor) return <div className="p-4 text-sm text-gray-500">Loading…</div>;
 
   return (
-    <section className="rounded-lg border border-cshse-200 bg-cshse-50/50 p-4">
-      <header className="mb-2 flex items-center justify-between">
+    <section
+      className={
+        expanded
+          ? 'fixed inset-0 z-[60] flex flex-col bg-white p-4 sm:p-5 overflow-hidden'
+          : 'rounded-lg border border-cshse-200 bg-cshse-50/50 p-4'
+      }
+    >
+      <header className="mb-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-semibold text-cshse-800">
           <BookOpen className="h-4 w-4" aria-hidden />
           {scope === 'document'
             ? 'Document Introduction'
             : `Standard ${standardCode} — Introduction`}
         </div>
-        {!readOnly && (
-          <div className="flex items-center gap-2">
-            {saveState === 'saving' && (
-              <span className="text-xs text-gray-500">Saving…</span>
-            )}
-            {saveState === 'saved' && (
-              <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
-                <CheckCircle className="h-3.5 w-3.5" aria-hidden /> Saved
-              </span>
-            )}
-            {saveState === 'error' && (
-              <span className="inline-flex items-center gap-1 text-xs text-red-700">
-                <AlertCircle className="h-3.5 w-3.5" aria-hidden /> {errorMsg}
-              </span>
-            )}
-            <button
-              onClick={handleSave}
-              disabled={saveState === 'saving'}
-              className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-1 text-xs font-medium text-cshse-800 hover:bg-cshse-100 disabled:opacity-50"
-            >
-              <Save className="h-3.5 w-3.5" aria-hidden /> Save
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {!readOnly && (
+            <>
+              {saveState === 'saving' && (
+                <span className="text-xs text-gray-500">Saving…</span>
+              )}
+              {saveState === 'saved' && (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+                  <CheckCircle className="h-3.5 w-3.5" aria-hidden /> Saved
+                </span>
+              )}
+              {saveState === 'error' && (
+                <span className="inline-flex items-center gap-1 text-xs text-red-700">
+                  <AlertCircle className="h-3.5 w-3.5" aria-hidden /> {errorMsg}
+                </span>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={saveState === 'saving'}
+                className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-1 text-xs font-medium text-cshse-800 hover:bg-cshse-100 disabled:opacity-50"
+              >
+                <Save className="h-3.5 w-3.5" aria-hidden /> Save
+              </button>
+            </>
+          )}
+          {/* Full-screen toggle — visible to every role (PC + readers). */}
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            data-testid="intro-fullscreen-toggle"
+            className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-1 text-xs font-medium text-cshse-800 hover:bg-cshse-100"
+            title={expanded ? 'Exit full screen (Esc)' : 'Open the Introduction full screen to read and edit'}
+          >
+            {expanded ? <Minimize2 className="h-3.5 w-3.5" aria-hidden /> : <Maximize2 className="h-3.5 w-3.5" aria-hidden />}
+            {expanded ? 'Exit full screen' : 'Full screen'}
+          </button>
+        </div>
       </header>
-      <div className="rounded border border-gray-200 bg-white px-3 py-2">
+      <div className={`rounded border border-gray-200 bg-white px-3 py-2 ${expanded ? 'flex-1 min-h-0 overflow-auto' : 'min-h-[240px] overflow-auto'}`}>
         <EditorContent
           editor={editor}
           className="prose prose-sm max-w-none focus:outline-none"

@@ -59,6 +59,19 @@ test('editor Full screen toggle fills the viewport on a small screen', async ({ 
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
     await expect(page.getByTestId('editor-fullscreen-toggle').first()).toContainText(/Full screen/);
+
+    // --- Introduction editor: same Full screen toggle ---
+    await page.goto(`${BASE}/self-study/${sub}?view=introduction#token=${encodeURIComponent(token)}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1200);
+    const introToggle = page.getByTestId('intro-fullscreen-toggle').first();
+    await expect(introToggle, 'Intro Full screen toggle present').toBeVisible({ timeout: 15000 });
+    await introToggle.click();
+    await page.waitForTimeout(400);
+    const ibox = await page.locator('section:has([data-testid="intro-fullscreen-toggle"])').first().boundingBox();
+    console.log('intro editor box after expand:', ibox);
+    expect(ibox!.width).toBeGreaterThan(vp.width * 0.9);
+    expect(ibox!.height).toBeGreaterThan(vp.height * 0.9);
     await ctx.close();
   } finally {
     await cleanupSeed(seed);
