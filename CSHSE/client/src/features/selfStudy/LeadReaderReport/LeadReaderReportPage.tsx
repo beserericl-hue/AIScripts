@@ -268,7 +268,17 @@ export function LeadReaderReportPage({ submissionId }: { submissionId: string })
     );
   }
 
-  const sys = system!;
+  // `system` is populated by the seed effect on the render AFTER the query
+  // resolves, so guard the gap (otherwise sys.institutionName crashes the page).
+  if (!system) {
+    return (
+      <div className="flex items-center gap-2 p-6 text-slate-600">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>Loading Lead Reader Report…</span>
+      </div>
+    );
+  }
+  const sys = system;
 
   return (
     <div
