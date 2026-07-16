@@ -25,7 +25,8 @@ export type EditorActiveView =
   | 'introduction'
   | 'ai-import'
   | 'review-surface'
-  | 'matrix-surface';
+  | 'matrix-surface'
+  | 'lead-reader-report';
 
 type Phase = 'import' | 'drafts' | 'self-study' | 'submit';
 

@@ -43,6 +43,7 @@ import { MatrixSurface } from './Review/MatrixSurface';
 import { FinalSubmitModal } from './FinalSubmitModal';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
 import { FileLibrary } from '../FileLibrary';
+import { LeadReaderReportPage } from '../LeadReaderReport/LeadReaderReportPage';
 import { CommentSidebar } from '../../comments';
 import { DocumentViewer, SectionTagger, TaggedSectionsList, SubExtractionViewerModal, type SectionMetadata, type TaggedSection, type SelectionData, type SavedSectionInfo } from './components';
 import { Wizard as AIImportWizard } from './AIImport';
@@ -266,8 +267,8 @@ function AIImportTabButton({
   setActiveView,
   showAiBadge = false
 }: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
+  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report') => void;
   // CR-045 — show the purple "AI" badge only when the legacy importer is
   // ALSO visible (so the two need disambiguating). When legacy is hidden
   // this is the only importer and the badge is noise.
@@ -372,8 +373,8 @@ function ReviewSurfaceButton({
   activeView,
   setActiveView
 }: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
+  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report') => void;
 }) {
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
@@ -432,8 +433,8 @@ function MatrixSurfaceButton({
   activeView,
   setActiveView
 }: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface') => void;
+  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report';
+  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report') => void;
 }) {
   const matrices = useAIImportStore((s) => s.matrices);
   const hasContent = matrices.length > 0;
@@ -508,6 +509,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const _authUser = useAuthStore((s) => s.user);
   const _isImpersonating = useAuthStore((s) => s.impersonation.isImpersonating);
   const canImport = !(_authUser?.isSuperuser === true && !_isImpersonating);
+  // Lead Reader Report — a board-facing document distinct from the reader
+  // report. Visible only to the assigned lead reader, admins and superusers.
+  // (The server also enforces this; the nav gate just hides the entry point.)
+  const canViewLeadReaderReport =
+    userRole === 'lead_reader' || userRole === 'admin' || _authUser?.isSuperuser === true;
 
   // CR-045 — per-PC preference: hide the legacy paste-and-tag importer.
   // Defaults true (clean single-importer toolbar) when the user has no
@@ -532,7 +538,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [selectedStandard, setSelectedStandard] = useState('1');
   const [selectedSpec, setSelectedSpec] = useState<string | null>('a');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface'>(() => {
+  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report'>(() => {
     // Open the editor on the step that matches where the PC is in the
     // IMPORT → DRAFTS → SELF-STUDY → SUBMIT workflow. When un-applied
     // drafts are still waiting in Review (an import has parsed but its
@@ -560,6 +566,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       if (viewParam === 'matrix-surface') return 'matrix-surface';
       if (viewParam === 'files') return 'files';
       if (viewParam === 'introduction') return 'introduction';
+      if (canViewLeadReaderReport && viewParam === 'lead-reader-report') return 'lead-reader-report';
       if (isProgramCoordinator && viewParam === 'review') return 'review-surface';
       if (isProgramCoordinator && viewParam === 'import') return 'ai-import';
       if (isProgramCoordinator && submissionId && !hasViewParam) {
@@ -658,6 +665,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     } else if (view === 'files') {
       setActiveView('files');
       if (dlStd && dlSpec) setFileScrollTarget({ std: dlStd, spec: dlSpec });
+    } else if (canViewLeadReaderReport && view === 'lead-reader-report') {
+      setActiveView('lead-reader-report');
     } else if (isProgramCoordinator && view === 'review') {
       setActiveView('review-surface');
       const specKey = deepLinkParams.get('specKey');
@@ -2696,6 +2705,24 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     <FolderOpen className="w-4 h-4 flex-shrink-0" />
                     Supporting File Library
                   </button>
+                  {/* Lead Reader Report — the board-facing "Report to VPA to
+                      Request Board Action". Lead reader (assigned) + admin /
+                      superuser only. Renders in-place as its own ?view. */}
+                  {canViewLeadReaderReport && (
+                    <button
+                      data-testid="nav-lead-reader-report"
+                      onClick={() => setActiveView('lead-reader-report')}
+                      title="Lead Reader Report to VPA to Request Board Action — the board-facing recommendation document"
+                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                        activeView === 'lead-reader-report'
+                          ? 'bg-teal-100 text-teal-700'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <ClipboardList className="w-4 h-4 flex-shrink-0" />
+                      Lead Reader Report
+                    </button>
+                  )}
                   {/* Reader Report — reader/lead-reader ONLY. Opens the dedicated
                       Reader Report screen to view, edit and save the compliance
                       checklist; from there they return here to comment. */}
@@ -3237,6 +3264,16 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 submissionId={submissionId}
                 onClose={() => setActiveView('standards')}
               />
+            </main>
+          )}
+
+          {/* Lead Reader Report — board-facing "Report to VPA to Request Board
+              Action". Lead reader (assigned) + admin / superuser only. */}
+          {activeView === 'lead-reader-report' && canViewLeadReaderReport && submissionId && (
+            <main className="flex-1 min-h-0 overflow-auto">
+              <SurfaceErrorBoundary label="Lead Reader Report" onReset={() => window.location.reload()}>
+                <LeadReaderReportPage submissionId={submissionId} />
+              </SurfaceErrorBoundary>
             </main>
           )}
         </div>

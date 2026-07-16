@@ -26,7 +26,8 @@ type ActiveView =
   | 'files'
   | 'ai-import'
   | 'review-surface'
-  | 'matrix-surface';
+  | 'matrix-surface'
+  | 'lead-reader-report';
 
 interface WizardProps {
   submissionId: string;
