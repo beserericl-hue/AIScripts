@@ -1,0 +1,1391 @@
+{
+  "associate": {
+    "1": {
+      "title": "Institutional Requirements and Primary Program Objective",
+      "specs": {
+        "a": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Provide evidence that the program is part of a degree granting college or university that is regionally accredited."
+        },
+        "b": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Provide evidence that the development of competent human services professionals is the primary objective of the program and the basis for the degree program title, design, goals and curriculum, teaching methodology, and program administration (e.g. through documents such as catalog, brochures, course syllabi, website, and marketing materials)."
+        },
+        "c": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Articulate how students are informed of the curricular and program expectations and requirements prior to admission."
+        },
+        "d": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Provide a brief history of the program."
+        },
+        "e": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Describe the student population including the number, gender, race, ethnicity and age of students, as well as the numbers of full time, part time, and students graduating each year."
+        },
+        "f": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Provide a complete program description, courses required, time to completion, and other program details (refer to catalogs and other appendices)."
+        }
+      }
+    },
+    "2": {
+      "title": "Philosophical Base of Programs",
+      "specs": {
+        "a": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Include a mission statement for the program."
+        },
+        "b": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Demonstrate alignment with the mission of the units in which the program is housed (e.g., department, college, university, etc.)"
+        },
+        "c": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Provide a brief description of the major knowledge base and theories from which the curriculum draws to support the conceptual framework (e.g. counseling theories, biopsychosocial, systems theory, change theory, etc.)."
+        },
+        "d": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Describe the multidisciplinary, interdisciplinary, or transdisciplinary approach to knowledge, theories, and skills included in the curriculum."
+        },
+        "e": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Provide a matrix mapping the curriculum Standards (11-20) and Specifications to required courses. The information provided on the matrix must clearly reflect congruence with the information provided in the Self-Study narrative and the syllabi. NOTE: The Matrix must include required courses for all students that contribute to compliance with the Curriculum Standards and their Specifications. If a program has specific concentrations, identify the specific core courses in the concentration that comply with a Standard and its Specifications."
+        }
+      }
+    },
+    "3": {
+      "title": "Community Assessment",
+      "specs": {
+        "a": {
+          "title": "Community Assessment",
+          "criteria": "If the program is less than five years old, provide documentation that supported the initial development of the human services program (such as a community needs assessment)."
+        },
+        "b": {
+          "title": "Community Assessment",
+          "criteria": "An Advisory Committee shall be established to provide feedback regarding local, state, and national trends and needs, policy changes, and to act as an advocate for the program. The committee should include individuals representing the human services field, such as field experience agencies, employing agencies, citizen advocacy groups, alums, current students, adjunct faculty, and other persons related to the field of human services. Provide the following: 1. A detailed description of the membership of the Advisory Committee (e.g. names, agencies, roles, relationship to program, etc.), 1. Minutes of advisory committee meetings from the last two years 2. A narrative or table of how the committee interfaces with the program in relationship to specific issues."
+        },
+        "c": {
+          "title": "Community Assessment",
+          "criteria": "Describe other mechanisms, if any, used to respond to changing needs in the human services field."
+        }
+      }
+    },
+    "4": {
+      "title": "Program Evaluation",
+      "specs": {
+        "a": {
+          "title": "Program Evaluation",
+          "criteria": "The program has clear, measurable student learning outcomes that align with the standards and an assessment plan that has been implemented. Provide the following: 1. Measurable student learning outcomes 2. Assessment plan (include timelines) 3. Examples of assessment tools )e.g. rubrics, exams, portfolios, surveys, capstone evaluations, etc.). 4. A description of how the evaluation may or may not have resulted in any change."
+        },
+        "b": {
+          "title": "Program Evaluation",
+          "criteria": "The program shall conduct a formal program evaluation at least every five years. The formal evaluation shall include student surveys, agency surveys, graduate follow-up surveys, active participation of the advisory committee, involvement of agencies where students are in field placements, course and faculty evaluations, and evaluative data mandated or conducted by the institution. Provide the following: 1. A history of program evaluations 2. A description of the methodology 3. A summative analysis of the most recent evaluation 4. A description of how and in what way the evaluation resulted in any change."
+        },
+        "c": {
+          "title": "Program Evaluation",
+          "criteria": "The program must provide reliable information on its performance, including student achievement, to the public for the last two years. [NOTE: This Specification relates to accreditation standards or policies that require institutions or programs to provide timely, readily accessible, accurate, and consistent aggregate information to the public about institutional or programmatic performance and student achievement, as the institution or program determines such information. (Paragraph 12 (B)(1), 2019 CHEA Recognition Policy and Procedures)] Provide the following: 1. An active link to student achievement indicators on the Program’s website. 2. Aggregate data as evidence of student achievement. Include as many of the following as available: enrollment trends, retention, student learning outcomes, graduation rates, grade point average, student satisfaction, agency feedback, graduate transfer rates, graduate school or employment data, and alum surveys."
+        }
+      }
+    },
+    "5": {
+      "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+      "specs": {
+        "a": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of policies regarding the selection and admission of students."
+        },
+        "b": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of policies and procedures for referring students for personal and academic assistance. These policies must be consistent with the institution’s policies."
+        },
+        "c": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of written policies and procedures describing the due process for probation, remediation, dismissal, appeal, and grievance procedures affecting students."
+        },
+        "d": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of program policies and procedures for assessing and managing student attributes, characteristics, and behaviors (“fitness for the profession”) that are important for the success of human service professionals."
+        }
+      }
+    },
+    "6": {
+      "title": "Credentials of Human Services Faculty",
+      "specs": {
+        "a": {
+          "title": "Credentials of Human Services Faculty",
+          "criteria": "Include curriculum vitae of full-time and part-time faculty who teach human services courses. The vitae must demonstrate that: 1. Faculty have education in various disciplines and experience in human services or related fields 2. Teaching faculty have no less than one degree above the level of certificate or degree in which they teach. It is recommended that faculty have no less than a master’s degree."
+        }
+      }
+    },
+    "7": {
+      "title": "Personnel Roles, Responsibilities, and Evaluation",
+      "specs": {
+        "a": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Document that faculty have the ultimate responsibility for setting policies and determining the content, implementation, and evaluation of the curriculum."
+        },
+        "b": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Essential program roles include administration, curriculum development and review, instruction, field supervision, program planning, program evaluation, student advising, and student evaluation. Provide the following: A brief description of how these essential roles are fulfilled in the program A table matching faculty and staff positions and names with these roles."
+        },
+        "c": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Describe the process for faculty and staff evaluation. Documentation may come from a variety of sources and may include, among others, student evaluations, administrative review, comments from field placement agencies, and peer review."
+        },
+        "d": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Document how the evaluative process is used to identify strengths and limitations and how it is incorporated in specific procedures for improvement."
+        },
+        "e": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Describe how faculty and staff are provided opportunities for relevant professional development."
+        }
+      }
+    },
+    "8": {
+      "title": "Cultural Competence",
+      "specs": {
+        "a": {
+          "title": "Cultural Competence",
+          "criteria": "Demonstrate how the program 1. Includes intercultural fluency, and accessibility principles in program policies, procedures, and practices. 2. Includes intercultural fluency, and accessibility training for faculty and staff"
+        },
+        "b": {
+          "title": "Cultural Competence",
+          "criteria": "Demonstrate how the curriculum integrates culturally inclusive appropriate standards: 1. Includes but is not limited to student self-awareness of own culture, biases, prejudice, and belief systems and stereotyping. 2. Includes the development of awareness, knowledge, and skills of intercultural fluency, accessibility, and culture."
+        }
+      }
+    },
+    "9": {
+      "title": "Program Support",
+      "specs": {
+        "a": {
+          "title": "Program Support",
+          "criteria": "Include budgetary information that demonstrates sufficient funding, faculty, and staff to provide an ongoing and stable program."
+        },
+        "b": {
+          "title": "Program Support",
+          "criteria": "Describe how program and field experience coordination is considered in calculating the teaching loads of faculty. It is recommended that consideration be given to distance between sites, expectations of observation, documentation requirements, number of students enrolled in the field experience, and the characteristics of the student population."
+        },
+        "c": {
+          "title": "Program Support",
+          "criteria": "Describe how the program has adequate professional support staff to meet the needs of students, faculty, and administration."
+        },
+        "d": {
+          "title": "Program Support",
+          "criteria": "Describe how there is adequate resource support (e.g., technology, library, computer labs, etc.) to meet the needs of students, faculty, and administration."
+        },
+        "e": {
+          "title": "Program Support",
+          "criteria": "Describe office, classroom, meeting, and informal gathering spaces and how they meet the needs of students, faculty, and administration."
+        }
+      }
+    },
+    "10": {
+      "title": "Evaluation of Transfer Credits and Prior Learning",
+      "specs": {
+        "a": {
+          "title": "Evaluation of Transfer Credits and Prior Learning",
+          "criteria": "Describe formal policies and procedures, and informal practices for the transfer of credits and evaluation of prior learning."
+        },
+        "b": {
+          "title": "Evaluation of Transfer Credits and Prior Learning",
+          "criteria": "Describe how students receive this information. II. CURRICULUM: ASSOCIATE DEGREE"
+        }
+      }
+    },
+    "11": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The historical roots of human services as a discipline and profession."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Historical and current legislation affecting human service delivery."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "How public and private attitudes influence legislation and the interpretation of policies related to human services."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The broader sociopolitical issues that affect human service systems 2. Human Systems Context: The human services professional must demonstrate an understanding of the structure and dynamics of organizations, communities, and society as well as the nature of individuals and groups. This understanding is prerequisite to the determination of appropriate responses to human needs."
+        }
+      }
+    },
+    "12": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Theories of human development."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Small groups: 1. Overview of how small groups are used in human services settings. 2. Theories of group dynamics 3. Group facilitation skills."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Changing family structures and roles."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "An introduction to the organizational structures of communities."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "An understanding of the capacities, limitations, and resiliency of human systems."
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Emphasis on context and the role of intercultural fluency, including cultural group membership and individual identities in determining and meeting human needs. 3. Human Service Delivery Systems Context: The demand for services and the funding of educational programs has been closely related to identifiable human conditions including, among others: aging, delinquency, crime, poverty, mental illness, physical illness, chemical dependency, and disabilities. The needs that arise in these conditions provide the focus for the human services profession."
+        }
+      }
+    },
+    "13": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The range and characteristics of human services delivery systems and organizations."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The range of populations served, and needs addressed by human services."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The major models used to conceptualize and integrate prevention, maintenance, intervention, rehabilitation, and healthy functioning. 4. Discipline Inquiry and Information Literacy Context: The delivery of human services depends on the appropriate integration of various forms of information."
+        }
+      }
+    },
+    "14": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Obtain, synthesize, and clearly report information from various sources."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Assess the quality of information from various sources, including but not limited to print, audio, video, web, and social media, and understand its application."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Upholding confidentiality and using appropriate means to share information."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Using technology, including artificial intelligence, to locate, evaluate, and disseminate information. 5. Program Planning and Evaluation Context: A major component of the human services profession involves the assessment of the needs of clients and client groups and the planning of programs and interventions that will assist clients and client groups in promoting optimal functioning, growth, and goal attainment. At regular intervals, the outcomes must be evaluated, and necessary adjustments made to the plan, both at an individual client and program level."
+        }
+      }
+    },
+    "15": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Knowledge and skills to analyze and assess the needs of clients or client groups."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Skills to develop goals, and design and implement a plan of action."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Skills to evaluate the outcomes of the plan and the impact on the client or client group. 6. Client Interventions and Strategies Context: Human service professionals function as change agents and must therefore attain and develop a core of knowledge, theory, and skills to provide direct services and interventions to clients and client groups."
+        }
+      }
+    },
+    "16": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Theory and knowledge bases of prevention, intervention, and maintenance strategies."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Assess and analyze the needs of clients or client groups through observation, interviewing, active listening, consultation, and research."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Knowledge and skill development in 1. Case Management: a. Intake interviewing b. Helping skills c. Identification and use of appropriate resources and referrals 2. Group facilitation 3. Use of consultation. 7. Interpersonal Communication Context: The ability to create genuine and empathic relationships with others is central to the human services profession. These skills apply to all levels of education, and a greater proficiency is expected at each progressively higher level."
+        }
+      }
+    },
+    "17": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Clarifying expectations."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Dealing effectively with conflict."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Establishing rapport with clients."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Developing and sustaining behaviors that are congruent with the values and ethical standards outlined by the National Organization for Human Services/Council for Standards in Human Service Education (available at https://www.nationalhumanservices.org/ethical-standards-for- hsprofessionals). 8. Client-Related Values and Attitudes Context: There are values and ethics intrinsic to the human services profession that have been agreed to as governing principles of professional practice."
+        }
+      }
+    },
+    "18": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The least intrusive intervention in the least restrictive environment."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Client self-determination."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Confidentiality of information."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The worth and uniqueness of individuals based on intercultural fluency, including how they identify and the cultural groups to which they belong."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Belief that individuals, service systems, and society can change."
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Interdisciplinary team approaches to problem solving."
+        },
+        "g": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Appropriate professional boundaries."
+        },
+        "h": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Integration of the ethical standards outlined by the National Organization for Human Services (NOHS) and the Council for Standards in Human Service Education (available at 9. Self-Development Context: Human services professionals use their experience and knowledge for understanding and helping clients. This requires awareness of one’s own values, cultural bias, philosophies, personality, and style in the effective use of the professional self. It also requires an understanding of how these personal characteristics affect clients."
+        }
+      }
+    },
+    "19": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Conscious use of self."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Clarification of personal and professional values."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Awareness of intercultural fluency."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Strategies for self-care."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Reflection on professional self (e.g., journaling, development of a portfolio, or project demonstrating competency)."
+        }
+      }
+    },
+    "20": {
+      "title": "Field Experience",
+      "specs": {
+        "a": {
+          "title": "Field Experience",
+          "criteria": "Provide a brief description of the overall process and structure of the fieldwork learning experience."
+        },
+        "b": {
+          "title": "Field Experience",
+          "criteria": "Provide evidence that one academic credit is awarded for no less than three hours of field experience per week."
+        },
+        "c": {
+          "title": "Field Experience",
+          "criteria": "Demonstrate that students are exposed to human services agencies and clients (assigned visitation, observation, assisting staff, etc.) early in the program."
+        },
+        "d": {
+          "title": "Field Experience",
+          "criteria": "Provide a copy of the current manual and guidelines that are given to students advising them of field placement requirements and policies."
+        },
+        "e": {
+          "title": "Field Experience",
+          "criteria": "Provide documentation of written learning agreements with field agencies that specify the student's role, activities, anticipated learning outcomes, supervision, and field instruction. The agreement must be signed by the appropriate agency representative or fieldwork supervisor, seminar instructor, and student."
+        },
+        "f": {
+          "title": "Field Experience",
+          "criteria": "Provide syllabi for required seminars. Seminars must meet no less than every two weeks. Seminar hours must not be included in field experience hours."
+        },
+        "g": {
+          "title": "Field Experience",
+          "criteria": "Provide evidence that the required field experience is no less than 250 clock hours."
+        },
+        "h": {
+          "title": "Field Experience",
+          "criteria": "Demonstrate how the field experience provides students with an opportunity to progress from: 1. Observation to 2. Directly supervised client contacts to 3. Indirectly supervised client contact."
+        },
+        "i": {
+          "title": "Field Experience",
+          "criteria": "Demonstrate that field supervisors have no less than the same degree the program awards. It is strongly recommended that field supervisors have no less than one level of degree above the level of degree in Human Services or a related field."
+        },
+        "j": {
+          "title": "Field Experience",
+          "criteria": "Demonstrate that the program continually monitors the progress of each student and performs no less than one site visit to each field placement site per quarter or semester. The visit can be held as a direct site visit or with appropriate technology. The technology that is used should ensure that the field placement supervisor and student can be identified."
+        }
+      }
+    }
+  },
+  "baccalaureate": {
+    "1": {
+      "title": "Institutional Requirements and Primary",
+      "specs": {
+        "a": {
+          "title": "Institutional Requirements and Primary",
+          "criteria": "The program is part of a degree granting college or university that is regionally accredited."
+        },
+        "b": {
+          "title": "Institutional Requirements and Primary",
+          "criteria": "Provide evidence that the development of competent human services professionals is the primary objective of the program and the basis for the degree program title, design, goals and curriculum, teaching methodology, and program administration (e.g. through documents such as catalog, brochures, course syllabi, website, and marketing materials)."
+        },
+        "c": {
+          "title": "Institutional Requirements and Primary",
+          "criteria": "Articulate how students are informed of the curricular and program expectations and requirements prior to admission."
+        },
+        "d": {
+          "title": "Institutional Requirements and Primary",
+          "criteria": "Provide a brief history of the program."
+        },
+        "e": {
+          "title": "Institutional Requirements and Primary",
+          "criteria": "Describe the student population including the number, gender, race, ethnicity and age of students of students, as well as the numbers of full time, part time, and students graduating each year."
+        },
+        "f": {
+          "title": "Institutional Requirements and Primary",
+          "criteria": "Provide a complete program description, courses required, time to completion, and other program details (refer to catalogs and other appendices)."
+        }
+      }
+    },
+    "2": {
+      "title": "Philosophical Base of Programs",
+      "specs": {
+        "a": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Include a mission statement for the program."
+        },
+        "b": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Demonstrate alignment with the mission of the units in which the program is housed (e.g., department, college, university, etc.)"
+        },
+        "c": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Provide a brief description of the major knowledge base and theories from which the curriculum draws to support the conceptual framework (e.g. counseling theories, biopsychosocial, systems theory, change theory, etc.)."
+        },
+        "d": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Describe the multidisciplinary, interdisciplinary, or transdisciplinary approach to knowledge, theories, and skills included in the curriculum."
+        },
+        "e": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Provide a matrix mapping the curriculum Standards (11-20) and Specifications to required courses. The information provided on the matrix must clearly reflect congruence with the information provided in the Self-Study narrative and the syllabi."
+        }
+      }
+    },
+    "3": {
+      "title": "Community Assessment",
+      "specs": {
+        "a": {
+          "title": "Community Assessment",
+          "criteria": "If the program is less than five years old, provide documentation that supported the initial development of the human services program (such as a community needs assessment)."
+        },
+        "b": {
+          "title": "Community Assessment",
+          "criteria": "An Advisory Committee shall be established to provide feedback regarding local, state, and national trends and needs, policy changes, and to act as an advocate for the program. The committee should include individuals representing the human services field, such as field experience agencies, employing agencies, citizen advocacy groups, alums, current students, adjunct faculty, and other persons related to the field of human services. Provide the following: 1. A detailed description of the membership of the Advisory Committee (e.g. names, agencies, roles, relationship to program, etc.), 2. Minutes of advisory committee meetings from the last two years. 3. A narrative or table of how the committee interfaces with the program in relationship to specific issues."
+        },
+        "c": {
+          "title": "Community Assessment",
+          "criteria": "Describe other mechanisms, if any, used to respond to changing needs in the human services field."
+        }
+      }
+    },
+    "4": {
+      "title": "Program Evaluation",
+      "specs": {
+        "a": {
+          "title": "Program Evaluation",
+          "criteria": "The program has clear, measurable student learning outcomes that align with the standards and an assessment plan that has been implemented. Provide the following: 1. Measurable student learning outcomes 2. Assessment plan (include timelines) 3. Examples of assessment tools (e.g. rubrics, exams, portfolios, surveys, capstone evaluations, etc.). 4. A description of how the evaluation may or may not have resulted in any change"
+        },
+        "b": {
+          "title": "Program Evaluation",
+          "criteria": "The program shall conduct a formal program evaluation at least every five years. The formal evaluation shall include student surveys, agency surveys, graduate follow-up surveys, active participation of the advisory committee, involvement of agencies where students are in field placements, course and faculty evaluations, and evaluative data mandated or conducted by the institution. Provide the following: 1. A history of program evaluations 2. A description of the methodology 3. A summative analysis of the most recent evaluation 4. A description of how and in what way the evaluation resulted in any change."
+        },
+        "c": {
+          "title": "Program Evaluation",
+          "criteria": "The program must provide reliable information on its performance, including student achievement, to the public for the last two years. [NOTE: This Specification relates to accreditation standards or policies that require institutions or programs to provide timely, readily accessible, accurate, and consistent aggregate information to the public about institutional or programmatic performance and student achievement, as the institution or program determines such information. (Paragraph 12 (B)(1), 2019 CHEA Recognition Policy and Procedures)] Provide the following: 1. An active link to student achievement indicators on the Program’s website. 2. Aggregate data as evidence of student achievement. Include as many of the following as available: enrollment trends, retention, student learning outcomes, graduation rates, grade point average, student satisfaction, agency feedback, graduate transfer rates, graduate school or employment data, and alum surveys."
+        }
+      }
+    },
+    "5": {
+      "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+      "specs": {
+        "a": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of policies regarding the selection and admission of students."
+        },
+        "b": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of policies and procedures for referring students for personal and academic assistance. These policies must be consistent with the institution’s policies."
+        },
+        "c": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of written policies and procedures describing the due process for probation, remediation, dismissal, appeal, and grievance procedures affecting students."
+        },
+        "d": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of program policies and procedures for assessing and managing student attributes, characteristics, and behaviors (“fitness for the profession”) that are important for the success of human service professionals."
+        }
+      }
+    },
+    "6": {
+      "title": "Credentials of Human Services Faculty",
+      "specs": {
+        "a": {
+          "title": "Credentials of Human Services Faculty",
+          "criteria": "Include curriculum vitae of full-time and part-time faculty who teach human services courses. The vitae must demonstrate that: 1. Faculty have education in various disciplines and experience in human services or related fields 2. Teaching faculty have no less than one degree above the level of certificate or degree in which they teach. It is recommended that faculty have no less than a master’s degree."
+        }
+      }
+    },
+    "7": {
+      "title": "Personnel Roles, Responsibilities, and Evaluation",
+      "specs": {
+        "a": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Document that faculty have the ultimate responsibility for setting policies and determining the content, implementation, and evaluation of the curriculum."
+        },
+        "b": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Essential program roles include administration, curriculum development and review, instruction, field supervision, program planning, program evaluation, student advising, and student evaluation. Provide the following: 1. A brief description of how these essential roles are fulfilled in the program 2. A table matching faculty and staff positions and names with these roles."
+        },
+        "c": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Describe the process for faculty and staff evaluation. Documentation may come from a variety of sources and may include, among others, student evaluations, administrative review, comments from field placement agencies, and peer review."
+        },
+        "d": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Document how the evaluative process is used to identify strengths and limitations and how it is incorporated in specific procedures for improvement."
+        },
+        "e": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Describe how faculty and staff are provided opportunities for relevant professional development."
+        }
+      }
+    },
+    "8": {
+      "title": "Cultural Competence",
+      "specs": {
+        "a": {
+          "title": "Cultural Competence",
+          "criteria": "Demonstrate how the program 1. Includes intercultural fluency, and accessibility principles in program policies, procedures, and practices. 2. Includes intercultural fluency, and accessibility principles training for faculty and staff"
+        },
+        "b": {
+          "title": "Cultural Competence",
+          "criteria": "Demonstrate how the curriculum integrates culturally and inclusively appropriate standards: 1. Includes but is not limited to student self-awareness of their own culture, biases, prejudice, and belief systems, and stereotyping. 2. Includes the development of awareness, knowledge, and skills of intercultural fluency, accessibility, and culture."
+        }
+      }
+    },
+    "9": {
+      "title": "Program Support",
+      "specs": {
+        "a": {
+          "title": "Program Support",
+          "criteria": "Include budgetary information that demonstrates sufficient funding, faculty, and staff to provide an ongoing and stable program."
+        },
+        "b": {
+          "title": "Program Support",
+          "criteria": "Describe how program and field experience coordination is considered in calculating the teaching loads of faculty. It is recommended that consideration be given to distance between sites, expectations of observation, documentation requirements, number of students enrolled in the field experience, and the characteristics of the student population."
+        },
+        "c": {
+          "title": "Program Support",
+          "criteria": "Describe how the program has adequate professional support staff to meet the needs of students, faculty, and administration."
+        },
+        "d": {
+          "title": "Program Support",
+          "criteria": "Describe how there is adequate resource support (e.g., technology, library, computer labs, etc.) to meet the needs of students, faculty, and administration."
+        },
+        "e": {
+          "title": "Program Support",
+          "criteria": "Describe office, classroom, meeting, and informal gathering spaces and how they meet the needs of students, faculty, and administration."
+        }
+      }
+    },
+    "10": {
+      "title": "Evaluation of Transfer Credits and Prior Learning",
+      "specs": {
+        "a": {
+          "title": "Evaluation of Transfer Credits and Prior Learning",
+          "criteria": "Describe formal policies and procedures, and informal practices for the transfer of credits and evaluation of prior learning."
+        },
+        "b": {
+          "title": "Evaluation of Transfer Credits and Prior Learning",
+          "criteria": "Describe how students receive this information. II. CURRICULUM: BACCALAUREATE DEGREE"
+        }
+      }
+    },
+    "11": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The historical roots of human services as a discipline and a profession."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Historical and current legislation impacting human service delivery."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "How public and private attitudes influence legislation and the interpretation of policies related to human services."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The broader sociopolitical issues that affect human service systems. 2. Human Systems Context: The human services professional must demonstrate an understanding of the structure and dynamics of organizations, communities, and society as well as the nature of individuals and groups. This understanding is prerequisite to the determination of appropriate responses to human needs."
+        }
+      }
+    },
+    "12": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Theories of human development."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Small groups: 1. Overview of how small groups are used in human services settings 2. Theories of group dynamics 3. Group facilitation skills."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Changing family structures and roles."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "An introduction to the organizational structures of communities."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "An understanding of the capacities, limitations, and resiliency of human systems."
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Emphasis on context and the role of intercultural fluency, including cultural group membership and individual identities in determining and meeting human needs."
+        },
+        "g": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Processes to effect social change through advocacy work at all levels of society including community development, community and grassroots organizing, and local and global activism."
+        },
+        "h": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Processes to analyze, interpret, and effect policies and laws at local, state, and national levels that influence services delivery systems. 3. Human Service Delivery Systems Context: The demand for services and the funding of educational programs has been closely related to identifiable human conditions including, among others: aging, delinquency, crime, poverty, mental illness, physical illness, chemical dependency, and disabilities. The needs that arise in these conditions provide the focus for the human services profession."
+        }
+      }
+    },
+    "13": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The range and characteristics of human service delivery systems and organizations."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The range of populations served, and needs addressed by human services professionals."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The major models used to conceptualize and integrate prevention, maintenance, intervention, rehabilitation, and healthy functioning."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "An understanding of systemic causes of poverty and its implications."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "An understanding of national and global social policies and their influence on human service delivery."
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Constituency building and other advocacy skills such as lobbying, grassroots movements, and community development and organizing. 4. Discipline Inquiry and Information Literacy Context: The delivery of human services depends on the appropriate integration of various forms of information."
+        }
+      }
+    },
+    "14": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Obtain, synthesize, and report information from various sources."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Assess the quality of information from various sources, including but not limited to print, audio, video, web, and social media, and understand its application."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Upholding confidentiality and using appropriate means to share information."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Using technology, including artificial intelligence, to locate, evaluate, and disseminate information. 5. Program Planning and Evaluation Context: A significant component of the human services profession involves assessing the needs of clients and client groups, and planning programs and interventions to assist them in promoting optimal functioning, growth, and goal attainment. At regular intervals, the outcomes must be evaluated, and necessary adjustments made to the plan, both at an individual client and program level."
+        }
+      }
+    },
+    "15": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Knowledge and skills to analyze and assess the needs of clients or client groups."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Skills to develop goals, design and implement a plan of action."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Skills to evaluate the outcomes of the plan and the impact on the client or client group. 6. Client Interventions and Strategies Context: Human service professionals function as change agents and must therefore attain and develop a core of knowledge, theory, and skills to provide direct services and interventions to clients and client groups."
+        }
+      }
+    },
+    "16": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Theory and knowledge bases of prevention, intervention, and maintenance strategies."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Intake interviewing"
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Assess and analyze the needs of clients or client groups through observation, interviewing, active listening, consultation, and research."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Helping skills:"
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Knowledge and skill development in: 1. Case management"
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Identification and use of appropriate resources and referrals. 2. Group facilitation 3. Use of consultation 7. Interpersonal Communication Context: The ability to create genuine and empathic relationships with others is central to the human services profession. These skills are applicable to all levels of education, and a greater proficiency is expected at each progressively higher level."
+        }
+      }
+    },
+    "17": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Clarifying expectations."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Dealing effectively with conflict."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Establishing rapport with clients."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Developing and sustaining behaviors that are congruent with the values and ethical standards outlined by the National Organization for Human Services/Council for Standards in Human Service Education (available at https://www.nationalhumanservices.org/ethical-standards-for- hsprofessionals). 8. Administrative Context: A holistic approach to human services recognizes direct and indirect services as components of the same system. Administrative support (indirect service) is essential to the effective delivery of direct services to clients or client groups."
+        }
+      }
+    },
+    "18": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Principles of leadership and management."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Human resources and volunteer management."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Grant writing, fundraising, and other funding sources."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Legal, ethical, and regulatory issues, and risk management."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Budget and financial management. 9. Client-Related Values and Attitudes Context: There are values and ethics intrinsic to the human services profession that have been agreed to as governing principles of professional practice."
+        }
+      }
+    },
+    "19": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The least intrusive intervention in the least restrictive environment."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Client self-determination."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Confidentiality of information."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The worth and uniqueness of individuals based on intercultural fluency, including how they identify and the cultural groups to which they belong."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Belief that individuals, service systems, and society can change."
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Interdisciplinary team approaches to problem solving."
+        },
+        "g": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Appropriate professional boundaries."
+        },
+        "h": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Integration of the ethical standards outlined by the National Organization for Human Services/Council for Standards in Human Service Education (available at 10. Self-Development Context: Human services professionals use their experience and knowledge to understand and help clients. This requires awareness of one’s values, cultural bias, philosophies, personality, and style in the effective use of the professional self. It also requires an understanding of how these personal characteristics affect clients."
+        }
+      }
+    },
+    "20": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Conscious use of self."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Clarification of personal and professional values."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Awareness of intercultural fluency as outlined in Standard 19.d."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Strategies for self-care."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Reflection on professional self (e.g., journaling, development of a portfolio, or project demonstrating competency)."
+        }
+      }
+    },
+    "21": {
+      "title": "Field Experience",
+      "specs": {
+        "a": {
+          "title": "Field Experience",
+          "criteria": "Provide a brief description of the overall process and structure of the fieldwork learning experience."
+        },
+        "b": {
+          "title": "Field Experience",
+          "criteria": "Provide evidence that one academic credit is awarded for no less than three hours of field experience per week."
+        },
+        "c": {
+          "title": "Field Experience",
+          "criteria": "Demonstrate that students are exposed to human services agencies and clients (assigned visitation, observation, assisting staff, etc.) early in the program."
+        },
+        "d": {
+          "title": "Field Experience",
+          "criteria": "Provide a copy of the current manual and guidelines that are given to students advising them of field placement requirements and policies."
+        },
+        "e": {
+          "title": "Field Experience",
+          "criteria": "Provide documentation of written learning agreements with field agencies that specify the student's role, activities, anticipated learning outcomes, supervision, and field instruction. The agreement must be signed by the appropriate agency representative and/or fieldwork supervisor, seminar instructor, and student."
+        },
+        "f": {
+          "title": "Field Experience",
+          "criteria": "Provide syllabi for required seminars. Seminars must meet at least every two weeks. Seminar hours must not be included in field experience hours."
+        },
+        "g": {
+          "title": "Field Experience",
+          "criteria": "Provide evidence that required field experience is no less than 350 (may include 250 from associate level) clock hours of field experience with at least 100 of these clock hours occurring in the junior and senior years."
+        },
+        "h": {
+          "title": "Field Experience",
+          "criteria": "Demonstrate how the field experience provides the student with an opportunity to progress from: 1. Observation to 2. Directly supervised client contacts to 3. Indirectly supervised client contacts to 4. An independent caseload OR assignment of administrative responsibility."
+        },
+        "i": {
+          "title": "Field Experience",
+          "criteria": "Demonstrate that field supervisors have a degree at least as high as the one awarded by the program. It is strongly recommended that field supervisors hold at least one degree level above the degree in Human Services or a related field."
+        },
+        "j": {
+          "title": "Field Experience",
+          "criteria": "Demonstrate that the program continually monitors the progress of each student and performs no less than one site visit to each field placement site per quarter or semester. The visit can be held as a direct site visit or with appropriate technology. The technology used should ensure that both the field placement supervisor and the student can be identified."
+        }
+      }
+    }
+  },
+  "masters": {
+    "1": {
+      "title": "Institutional Requirements and Primary Program Objective",
+      "specs": {
+        "a": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "The program is part of a degree-granting college or university that is regionally accredited."
+        },
+        "b": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Provide evidence that the development of competent human services professionals is the primary objective of the program and the basis for the degree program title, design, goals, and curriculum, teaching methodology, and program administration (e.g., through documents such as catalog, brochures, course syllabi, website, and marketing materials)."
+        },
+        "c": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Articulate how students are informed of the curricular and program expectations and requirements prior to admission."
+        },
+        "d": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Provide a brief history of the program."
+        },
+        "e": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Describe the student population, including the numbers of full-time, part-time, and students graduating each year."
+        },
+        "f": {
+          "title": "Institutional Requirements and Primary Program Objective",
+          "criteria": "Provide a complete program description, courses required, suggested time for completion, and other program details (refer to catalogs and other appendices)."
+        }
+      }
+    },
+    "2": {
+      "title": "Philosophical Base of Programs",
+      "specs": {
+        "a": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Include a mission statement for the program."
+        },
+        "b": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Demonstrate alignment with the mission of the units in which the program is housed (e.g., department, college, university, etc.)."
+        },
+        "c": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Provide a brief description of the major knowledge base and theories from which the curriculum draws to support the conceptual framework (e.g. counseling theories, biopsychosocial model, systems theory, change theory, etc.)."
+        },
+        "d": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Describe the multidisciplinary, interdisciplinary, or transdisciplinary approach to knowledge, theories, and skills included in the curriculum."
+        },
+        "e": {
+          "title": "Philosophical Base of Programs",
+          "criteria": "Provide a matrix mapping the curriculum Standards (11-18) and Specifications to required courses. The information provided on the matrix must clearly align with the information presented in the self-study narrative and the syllabi. NOTE: The Matrix must include required courses for all students that contribute to compliance with the Curriculum Standards and their Specifications. If a program has specific concentrations, identify the specific core courses in the concentration that comply with a Standard and its Specifications."
+        }
+      }
+    },
+    "3": {
+      "title": "Community Assessment",
+      "specs": {
+        "a": {
+          "title": "Community Assessment",
+          "criteria": "If the program is less than five years old, provide documentation that supported the initial development of the human services program (such as a community needs assessment)."
+        },
+        "b": {
+          "title": "Community Assessment",
+          "criteria": "An Advisory Committee shall be established to provide feedback on local, state, and national trends and needs, as well as policy changes, and to act as an advocate for the program. The committee should include individuals representing the human services field, such as: field experience agencies, employing agencies, citizen advocacy groups, alumni, current students, adjunct faculty, and other people related to the field of human services."
+        },
+        "c": {
+          "title": "Community Assessment",
+          "criteria": "Provide the following: 1. A detailed description of the membership of the Advisory Committee (e.g., names, agencies, roles, relationship to program, etc.), 2. Minutes of advisory committee meetings from the last two years 3. A narrative or table of how the committee interfaces with the program in relation to specific issues."
+        },
+        "d": {
+          "title": "Community Assessment",
+          "criteria": "Describe other mechanisms, if any, used to respond to changing needs in the human services field."
+        }
+      }
+    },
+    "4": {
+      "title": "Program Evaluation",
+      "specs": {
+        "a": {
+          "title": "Program Evaluation",
+          "criteria": "The program has clear, measurable student learning outcomes that align with the standards and an assessment plan that has been implemented. Provide the following: 1. Measurable student learning outcomes 2. Assessment plan (including timelines) 3. Examples of assessment tools (e.g., rubrics, exams, portfolios, surveys, capstone evaluations, etc.)."
+        },
+        "b": {
+          "title": "Program Evaluation",
+          "criteria": "The program must conduct a formal program evaluation at least every five years. The formal evaluation shall include student surveys, agency surveys, graduate follow-up surveys (directed to both graduates and their employers), active participation of the advisory committee, involvement of agencies where students are in field placements, course and faculty evaluations, and evaluative data mandated or conducted by the institution. Provide the following: 1. A history of program evaluations 2. A description of the methodology 3. A summative analysis of the most recent evaluation 4. A description of how and in what way the evaluation resulted in any change."
+        },
+        "c": {
+          "title": "Program Evaluation",
+          "criteria": "The program must provide reliable information on its performance (including student achievement data) to the public from the last two years. [NOTE: This Specification relates to accreditation standards or policies that require institutions or programs to provide timely, readily accessible, accurate, and consistent aggregate information to the public about institutional or programmatic performance and student achievement, as the institution or program determines such information. (Paragraph 12 (B)(1), 2019 CHEA Recognition Policy and Procedures)] Provide the following: 1. An active link to student achievement indicators on the Program’s website. 2. . Aggregate data as evidence of student achievement. Include as many of the following as available: enrollment trends, retention, student learning outcomes, graduation rates, grade point average, student satisfaction, agency feedback, graduate transfer rates, graduate school or employment data, and alum surveys"
+        }
+      }
+    },
+    "5": {
+      "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+      "specs": {
+        "a": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of policies regarding the selection and admission of students."
+        },
+        "b": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of policies and procedures for referring students for personal and academic assistance. These policies must be consistent with the institution’s policies."
+        },
+        "c": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of written policies and procedures describing the due process for remediation, probation, dismissal, appeal, and grievance procedures affecting students."
+        },
+        "d": {
+          "title": "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+          "criteria": "Provide documentation of program policies and procedures for assessing and managing student attributes, characteristics, and behaviors (“fitness for the profession”) that are important for the success of human service professionals"
+        }
+      }
+    },
+    "6": {
+      "title": "Credentials of Human Service Faculty",
+      "specs": {
+        "a": {
+          "title": "Credentials of Human Service Faculty",
+          "criteria": "Include the curriculum vitae of full-time and part-time faculty who teach human services courses. The vitae must demonstrate that: 1. Faculty have education in various disciplines and experience in human services or related fields. 2. If students choose a field placement as one of their graduation requirements, the involvement of field placement staff should meet the same educational requirements as teaching faculty. 3. Teaching faculty should have no less than the actual certificate or degree in which they teach. It is recommended that faculty have a doctoral degree."
+        }
+      }
+    },
+    "7": {
+      "title": "Personnel Roles, Responsibilities, and Evaluation",
+      "specs": {
+        "a": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Document that the program has ultimate responsibility for setting policies and determining the content, implementation, and evaluation of the curriculum."
+        },
+        "b": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Essential program roles include administration, curriculum development and review, instruction, field supervision, program planning, program evaluation, student advising, and student evaluation. 1. Provide a brief description of how these essential roles are fulfilled in the program. 2. Provide a table matching faculty and staff positions and names with these roles."
+        },
+        "c": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Describe the process for faculty and staff evaluation. Documentation may come from a variety of sources and may include, among others, student evaluations, administrative review, comments from field placement agencies, and peer review."
+        },
+        "d": {
+          "title": "Personnel Roles, Responsibilities, and Evaluation",
+          "criteria": "Describe how faculty and staff are provided opportunities for relevant professional development."
+        }
+      }
+    },
+    "8": {
+      "title": "Cultural Competence",
+      "specs": {
+        "a": {
+          "title": "Cultural Competence",
+          "criteria": "Demonstrate how the program 1. Includes intercultural fluency, and accessibility principles in program policies, procedures, and practices. 2. Includes intercultural fluency, accessibility principles training for faculty and staff"
+        },
+        "b": {
+          "title": "Cultural Competence",
+          "criteria": "Demonstrate how the curriculum integrates culturally inclusive, appropriate standards: 1. Includes but is not limited to student self-awareness of their own culture, biases, prejudice, and belief systems, and stereotyping. 2. Includes the development of awareness, knowledge, and skills of intercultural fluency, accessibility, and culture."
+        }
+      }
+    },
+    "9": {
+      "title": "Program Support",
+      "specs": {
+        "a": {
+          "title": "Program Support",
+          "criteria": "Include budgetary information that demonstrates sufficient funding, faculty, and staff to provide an ongoing and stable program."
+        },
+        "b": {
+          "title": "Program Support",
+          "criteria": "Describe how program and field experience responsibilities are considered in calculating the teaching loads of faculty."
+        },
+        "c": {
+          "title": "Program Support",
+          "criteria": "Describe how the program has adequate professional support staff to meet the needs of students, faculty, and administration."
+        },
+        "d": {
+          "title": "Program Support",
+          "criteria": "Describe how there is adequate resource support (e.g., technology, library, computer labs, etc.) to meet the needs of students, faculty, and administration."
+        }
+      }
+    },
+    "10": {
+      "title": "Evaluation of Transfer Credits",
+      "specs": {
+        "a": {
+          "title": "Evaluation of Transfer Credits",
+          "criteria": "Describe formal policies and procedures, and informal practices for the transfer of credits"
+        },
+        "b": {
+          "title": "Evaluation of Transfer Credits",
+          "criteria": "Describe how students receive this information. Curriculum Standards - Master’s Degree A master’s degree program in Human Services requires scholarly and professional activities designed to advance the student substantially beyond the educational requirements of a baccalaureate degree program. The degree is structured to prepare students for professional practice through the creative application of knowledge, theory, and skills. The curriculum provides opportunity for a broad conceptual mastery of the field through an understanding of subject matter, bibliographical resources, theory, practice, and scholarly research. The curriculum aims to develop in students the capacity to interpret, analyze, synthesize, and communicate knowledge, as well as the skills necessary to practice and advance the profession effectively. The master’s degree in human services differs from a counseling degree in that graduates are prepared to contribute to positive change through a wide range of service and administrative roles within organizations, rather than delivering therapeutic services."
+        }
+      }
+    },
+    "11": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Historical and current legislation affecting human services delivery."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "How public and private attitudes influence legislation, and the interpretation of policies related to human services."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Exposure to a spectrum of socio-political ideologies and how they influence human service delivery."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Skills to analyze and interpret historical data for application in advocacy and social change. 2. Human Systems Context: The human services professional must understand the structure and dynamics of organizations, communities, and society as well as the nature of individuals and groups. This understanding is a prerequisite to the determination of appropriate responses to human needs."
+        }
+      }
+    },
+    "12": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Overview of how administrators may work with groups such as boards of directors, community groups, public officials, or client/consumer advisory groups."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "An introduction to the organizational structures of communities."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "An understanding of the capacities, limitations, and resiliency of human systems."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Emphasis on context and the role of intercultural fluency, including cultural group membership and individual identities in determining and meeting human needs."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Processes to effect social change through advocacy work at all levels of society including community development, community and grassroots organizing, and local and global activism. 3. Human Services Delivery Systems Context: The demands for services, funding of educational programs, social justice, and advocacy have been closely related but not limited to aging, delinquency, crime, poverty, mental illness, physical illness, chemical dependency, and disabilities. The needs that arise provide the focus for the human services profession."
+        }
+      }
+    },
+    "13": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The range and characteristics of human services delivery systems and organizations."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The range of populations served, and needs addressed by human services."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "The major models used to conceptualize and integrate prevention, maintenance, intervention, rehabilitation, and healthy functioning."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Economic and social class systems, including systemic causes of poverty."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Political and ideological aspects of human services."
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Local and Global Influences on Human Service Delivery."
+        },
+        "g": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Skills to effect and influence social policy."
+        },
+        "h": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Dealing effectively with conflict on varying levels of human service delivery systems 4. Disciplined Inquiry and Information Literacy Context: The delivery of effective human services depends on the appropriate integration of various forms of information."
+        }
+      }
+    },
+    "14": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Knowledge and skills to obtain information through observation and research."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Respect for confidentiality and the appropriate and ethical use of professionally relevant data."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Knowledge and skills to assess the significance, relevance, timeliness, adequacy, accuracy, and validity of information provided by others, including social media sources and artificial intelligence technology."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Knowledge and skills to compile, synthesize, and categorize information and present it orally and/or in writing to clients, colleagues, or other members of related services systems and to utilize the information for community education and public relations."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Information literacy encompasses the skills necessary to effectively locate, evaluate, and utilize information from library databases, the World Wide Web, and other electronic resources."
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Familiarity with methods, statistics, quantitative and qualitative research, and the application of technology."
+        },
+        "g": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Critical thinking for analysis, problem solving, synthesis, decision making, and predicting outcomes."
+        },
+        "h": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Inclusion of a culminating capstone experience, e.g. research project, scholarly paper, or action research project. 5. Program Planning and Evaluation Context: A major component of the human services profession involves assessing the needs of clients and client groups, and planning programs and interventions to assist them in promoting optimal functioning, growth, and goal attainment. At regular intervals, the outcomes must be evaluated, and necessary adjustments made to the plan, both at an individual client and program level."
+        }
+      }
+    },
+    "15": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Program planning and design."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Program implementation."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Program evaluation."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Knowledge, theory, and skills to perform a community-needs assessment. 6. Administrative Leadership Context: A holistic approach to human services recognizes direct and indirect services as components of the same system. Administrative support (indirect service) is essential to the effective delivery of direct services to clients or client groups"
+        }
+      }
+    },
+    "16": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Organizational management."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Employment and supervision of staff."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Operational and strategic planning, including assessment practices."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Developing budgets and monitoring expenditures."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Fund development and fundraising (grants, special events, major gifts, etc.) and contract negotiation"
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Legal/regulatory issues and risk management, including issues related to nonprofit status."
+        },
+        "g": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Supporting the professional development of staff."
+        },
+        "h": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Recruiting and managing volunteers."
+        },
+        "i": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Constituency building and other advocacy techniques such as lobbying, grassroots movements, and community development and organizing."
+        },
+        "j": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Understanding the mission, vision, and ethical responsibilities of organizations and society as outlined by the Ethical Standards of the National Organization for Human Services (available at https://www.nationalhumanservices.org/ethical-standards-for-hs- professionals). 7. Legal and Ethical Practices Context: An understanding of laws, legal issues, and professional ethics as they relate to human services is necessary for informed practices and the protection of the rights of others."
+        }
+      }
+    },
+    "17": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Respect for and maintaining the confidentiality of information."
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Recognition that individuals, service systems, and society change."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Interprofessional approaches to problem solving."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Respect for appropriate professional boundaries."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Maintaining behavior that is congruent with the values and ethics of the profession as outlined by the Ethical Standards of the National Organization for Human Services (available at https://www.nationalhumanservices.org/ethical-standards-for-hs- professionals)."
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Clarification of values."
+        },
+        "g": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Differentiation between ethical and legal standards. 8. Culminating Experiences Context: Culminating experiences are learning experiences in a human services delivery organization. It is a process of experiential learning that integrates the knowledge, theory, skills, and professional behaviors that are concurrently taught in the classroom. CSHSE requires master’s degree students to complete a learning experience that demonstrates competency in translating theory into practice, such as fieldwork experiences, a thesis, or an action research project. All options require a self-reflection process."
+        }
+      }
+    },
+    "18": {
+      "title": "Knowledge, Theory, Skills, and Values",
+      "specs": {
+        "a": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Demonstrate that students are adequately exposed to human services agencies and clients (assigned visitation, observation, assisting staff, etc.)"
+        },
+        "b": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Demonstrate criteria, policies, and procedures for determining when a student is required to complete a fieldwork experience. Fieldwork may be waived if the student has extensive experience, provided specific criteria, policies, and procedures are followed and documented. For those who qualify to have fieldwork waived, they must complete a capstone project, thesis, or an action research project."
+        },
+        "c": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "If a fieldwork experience is required, 1. Provide a copy of the current manual and guidelines that are given to students, advising them of field placement requirements. 2. Provide documentation of written agreements with field agencies that specify the student's role, activities, outcomes, supervision, and field instruction. 3. Provide syllabi for required seminars. Seminar hours are not included in field experience hours. 4. Provide evidence that a minimum of one academic credit is awarded for each three hours of weekly field experience. 5. Demonstrate that field experience is structured with clear learning outcomes and methods of evaluation."
+        },
+        "d": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "If a fieldwork experience is required, 1. Demonstrate that the field supervisors have a minimum of a master’s degree or comparable years of professional experience. It is strongly recommended that field supervisors have no less than 10 years of professional experience if they do not hold a master’s degree. 2. Demonstrate that the program continually monitors the progress of each student and performs no less than one site visit to each field placement site per quarter or semester. The visit can be held as a direct site visit or with appropriate technology. The technology used should ensure that both the field placement supervisor and the student can be identified. 3. Demonstrate that there is a written plan of learning objectives, activities, and outcomes for each student that was conjointly developed and agreed to by the student, the program, and the agency supervisor. 4. the program shall provide a minimum of 100 clock hours of field experience in a human service setting. 5. The program shall provide a capstone experience, either a thesis, action research, or a program development/evaluation proposal, that demonstrates conceptual mastery of the professional practice. Demonstrate the rationale for the selected capstone experience option."
+        },
+        "e": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "If fieldwork experience is waived, the program shall provide a capstone experience, either a thesis or action research, that demonstrates conceptual mastery of the professional practice. Provide the specific criteria and expectations for completing the selected capstone experience."
+        },
+        "f": {
+          "title": "Knowledge, Theory, Skills, and Values",
+          "criteria": "Demonstrate that a reflection on professional self (e.g., journaling, development of a portfolio, or project demonstrating competency) is included for the selected capstone experience: fieldwork, thesis, or action research."
+        }
+      }
+    }
+  }
+}

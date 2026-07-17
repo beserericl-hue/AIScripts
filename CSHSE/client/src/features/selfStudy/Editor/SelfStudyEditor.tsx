@@ -862,11 +862,14 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     prevEvalRunningRef.current = running;
   }, [evalProgress?.running, queryClient, submissionId]);
 
-  // Fetch standards definitions
+  // Fetch standards definitions for THIS submission's degree level (associate /
+  // baccalaureate / masters). The official CSHSE standards differ by level, so
+  // titles + criteria must match the institution's declared programLevel; the
+  // server resolves the level from the submission.
   const { data: standards, isLoading: loadingStandards, isError: standardsError } = useQuery<StandardDefinition[]>({
-    queryKey: ['standards'],
+    queryKey: ['standards', submissionId],
     queryFn: async () => {
-      const response = await api.get(`/api/standards`);
+      const response = await api.get(`/api/standards`, { params: { submissionId } });
       return response.data;
     },
   });

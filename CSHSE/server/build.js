@@ -56,6 +56,19 @@ async function build() {
     console.log(`Copied ${assetsCopied} asset(s) to dist/assets`);
   }
 
+  // Level-aware standards catalog: levelStandards.ts `require`s this JSON at
+  // runtime (transpile mode, not bundled), so mirror src/data/*.json into
+  // dist/data so the require resolves in the built tree.
+  const dataJsonCopied = (await glob('src/data/*.json')).reduce((n, srcFile) => {
+    const destFile = path.join('dist', path.relative('src', srcFile));
+    fs.mkdirSync(path.dirname(destFile), { recursive: true });
+    fs.copyFileSync(srcFile, destFile);
+    return n + 1;
+  }, 0);
+  if (dataJsonCopied > 0) {
+    console.log(`Copied ${dataJsonCopied} data JSON file(s) to dist/data`);
+  }
+
   console.log('Build complete!');
 }
 

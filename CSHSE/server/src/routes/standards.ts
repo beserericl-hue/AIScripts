@@ -1,16 +1,32 @@
 import { Router, Request, Response } from 'express';
 import { getAllStandards, getStandardByCode, getStandardsByPart } from '../data/standards';
+import { getLevelStandards } from '../data/levelStandards';
+import { Submission } from '../models/Submission';
 
 const router = Router();
 
 /**
  * GET /api/standards
- * Returns all CSHSE standards with their specifications
+ * Returns all CSHSE standards with their specifications.
+ *
+ * Level-aware: pass ?level=associate|baccalaureate|masters (or ?submissionId=…
+ * to resolve the level from the submission) to get that degree level's official
+ * standard titles + specification criteria. Without either param it falls back
+ * to the legacy flat catalog so existing callers keep working.
  */
-router.get('/', (_req: Request, res: Response) => {
+router.get('/', async (req: Request, res: Response) => {
   try {
-    const standards = getAllStandards();
-    return res.json(standards);
+    let level = typeof req.query.level === 'string' ? req.query.level : '';
+    const submissionId = typeof req.query.submissionId === 'string' ? req.query.submissionId : '';
+    if (!level && submissionId) {
+      const sub = await Submission.findById(submissionId).select('programLevel').lean();
+      level = (sub as any)?.programLevel || '';
+    }
+    if (level) {
+      const levelStds = getLevelStandards(level);
+      if (levelStds) return res.json(levelStds);
+    }
+    return res.json(getAllStandards());
   } catch (error) {
     console.error('Get standards error:', error);
     return res.status(500).json({ error: 'Failed to get standards' });

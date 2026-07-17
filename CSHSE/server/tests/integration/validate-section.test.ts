@@ -93,6 +93,88 @@ describe('CR-049 — ValidationService.validateSection', () => {
   });
 });
 
+describe('Level-aware rubric — criteria come from the institution degree level', () => {
+  async function makeSub(programLevel: string, narratives: any) {
+    return await Submission.create({
+      submissionId: `LVL-${programLevel}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      institutionName: 'Level U',
+      institutionId: new mongoose.Types.ObjectId(),
+      programName: 'HS',
+      programLevel,
+      submitterId: new mongoose.Types.ObjectId(),
+      type: 'initial',
+      status: 'submitted',
+      narratives,
+    });
+  }
+
+  /** Capture the `criteria` string handed to cshse-ai for the evaluated spec. */
+  function spyCaptureCriteria(): { get: () => string } {
+    let captured = '';
+    vi.spyOn(cshseAiClient, 'evaluateSection').mockImplementation(async (req: any) => {
+      captured = req?.specs?.[0]?.criteria || '';
+      return {
+        perSpec: [{
+          standardCode: req.specs[0].standardCode,
+          specCode: req.specs[0].specCode,
+          verdict: 'pass',
+          rationale: 'ok',
+          criteriaCoverage: [],
+          improvementSuggestions: [],
+          sourcesUsed: {},
+        }],
+        links: [],
+      } as any;
+    });
+    return { get: () => captured };
+  }
+
+  it('associate Standard 4.a is judged against PROGRAM EVALUATION, not Budgetary Support', async () => {
+    const cap = spyCaptureCriteria();
+    const sub: any = await makeSub('associate', {
+      '4': { a: { content: '<p>Our measurable student learning outcomes and assessment plan…</p>' } },
+    });
+    await svc.validateSection({
+      submissionId: String(sub._id),
+      standardCode: '4',
+      specCode: 'a',
+      narrativeText: '<p>SLOs + assessment plan</p>',
+    });
+    const criteria = cap.get().toLowerCase();
+    expect(criteria).toContain('student learning outcomes'); // Program Evaluation 4.a
+    expect(criteria).not.toContain('budget'); // NOT the legacy Budgetary Support rubric
+  });
+
+  it('bachelors Standard 9.a is judged against Program Support (budgetary info)', async () => {
+    const cap = spyCaptureCriteria();
+    const sub: any = await makeSub('bachelors', {
+      '9': { a: { content: '<p>Budget lines and staffing…</p>' } },
+    });
+    await svc.validateSection({
+      submissionId: String(sub._id),
+      standardCode: '9',
+      specCode: 'a',
+      narrativeText: '<p>funding</p>',
+    });
+    expect(cap.get().toLowerCase()).toContain('budgetary information'); // Std 9 Program Support
+  });
+
+  it('masters Standard 13 (colon-less header in the PDF) has a real rubric', async () => {
+    const cap = spyCaptureCriteria();
+    const sub: any = await makeSub('masters', {
+      '13': { a: { content: '<p>Human services delivery systems…</p>' } },
+    });
+    await svc.validateSection({
+      submissionId: String(sub._id),
+      standardCode: '13',
+      specCode: 'a',
+      narrativeText: '<p>delivery systems</p>',
+    });
+    expect(cap.get().length).toBeGreaterThan(20);
+    expect(cap.get().toLowerCase()).toContain('human services delivery');
+  });
+});
+
 describe('CR-049 Phase 4a — runReaderReportSeed', () => {
   it('evaluates only specs with content + persists a ValidationResult each', async () => {
     vi.spyOn(cshseAiClient, 'evaluateSection').mockImplementation(async (req: any) => ({

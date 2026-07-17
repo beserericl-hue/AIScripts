@@ -2396,6 +2396,26 @@ function CVsView({ cvs, onShowInSource, approvedIds, onToggleApproval, onApprove
 //
 // CR-040 Phase 2c — same shape as CVsView for appendix papers + syllabi.
 
+/**
+ * Every (standard, spec) a doc is indexed under — its coordinator routing, the
+ * detector's resolved route, and every multi-reference entry. Used by the
+ * document search so "show docs indexed for Standard 4 / 4.a" matches whichever
+ * way the doc was linked. `spec` is '' when the doc is routed to the whole
+ * standard.
+ */
+function docStdSpecs(d: EvidenceDocItem): Array<{ std: string; spec: string }> {
+  const out: Array<{ std: string; spec: string }> = [];
+  const push = (std?: string, spec?: string) => {
+    const s = String(std || '').trim();
+    if (!s) return;
+    out.push({ std: s, spec: String(spec || '').trim() });
+  };
+  push(d.routing?.std, d.routing?.spec);
+  push(d.resolvedStd, d.resolvedSpec);
+  (d.referencedBySpecs || []).forEach((r) => push(r.std, r.spec));
+  return out;
+}
+
 interface EvidenceDocsViewProps {
   docs: EvidenceDocItem[];
   /** CR-051 Sprint 7 polish — inline "View source" button on each card. */
@@ -2420,6 +2440,59 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
   const updateEvidenceDocRouting = useAIImportStore((s) => s.updateEvidenceDocRouting);
   const setEvidenceDocReferences = useAIImportStore((s) => s.setEvidenceDocReferences);
+
+  // Document search — filter the list to the docs indexed for a given Standard /
+  // Subspecification, and/or a free-text match on title/summary/filename. Lets
+  // the coordinator confirm which documents actually landed under (say) 4.a.
+  const [docQuery, setDocQuery] = React.useState('');
+  const [stdFilter, setStdFilter] = React.useState('');
+  const [specFilter, setSpecFilter] = React.useState('');
+
+  // Standards that at least one doc is routed to (for the Standard dropdown),
+  // numeric-sorted. Subspec options are the specs present under the chosen std.
+  const stdOptions = React.useMemo(() => {
+    const set = new Set<string>();
+    docs.forEach((d) => docStdSpecs(d).forEach((r) => set.add(r.std)));
+    return Array.from(set).sort((a, b) => Number(a) - Number(b));
+  }, [docs]);
+  const specOptions = React.useMemo(() => {
+    if (!stdFilter) return [] as string[];
+    const set = new Set<string>();
+    docs.forEach((d) =>
+      docStdSpecs(d).forEach((r) => {
+        if (r.std === stdFilter && r.spec) set.add(r.spec);
+      })
+    );
+    return Array.from(set).sort();
+  }, [docs, stdFilter]);
+
+  const filteredDocs = React.useMemo(() => {
+    const q = docQuery.trim().toLowerCase();
+    return docs.filter((d) => {
+      if (stdFilter) {
+        const routes = docStdSpecs(d);
+        const hit = routes.some(
+          (r) => r.std === stdFilter && (!specFilter || r.spec === specFilter)
+        );
+        if (!hit) return false;
+      }
+      if (q) {
+        const hay = [d.title, d.summary, d.sourceFilename, d.fileName, d.courseCode, d.subject]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [docs, docQuery, stdFilter, specFilter]);
+  const isFiltering = !!(stdFilter || docQuery.trim());
+  const clearFilters = () => {
+    setDocQuery('');
+    setStdFilter('');
+    setSpecFilter('');
+  };
+
   if (docs.length === 0) {
     return (
       <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
@@ -2427,16 +2500,16 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
       </div>
     );
   }
-  const papers = docs.filter((d) => d.docSubKind === 'paper');
-  const syllabi = docs.filter((d) => d.docSubKind === 'syllabus');
+  const papers = filteredDocs.filter((d) => d.docSubKind === 'paper');
+  const syllabi = filteredDocs.filter((d) => d.docSubKind === 'syllabus');
   const anyApplied = docs.some((d) => d.fileId);
-  const approvedCount = docs.filter((d) => approvedIds?.has(d.sectionId)).length;
-  const allApproved = docs.length > 0 && docs.every((d) => approvedIds?.has(d.sectionId));
+  const approvedCount = filteredDocs.filter((d) => approvedIds?.has(d.sectionId)).length;
+  const allApproved = filteredDocs.length > 0 && filteredDocs.every((d) => approvedIds?.has(d.sectionId));
   const toggleAllDocs = () => {
     if (allApproved) {
-      docs.forEach((d) => onToggleApproval?.(d.sectionId));
+      filteredDocs.forEach((d) => onToggleApproval?.(d.sectionId));
     } else {
-      const toAdd = docs.filter((d) => !approvedIds?.has(d.sectionId)).map((d) => d.sectionId);
+      const toAdd = filteredDocs.filter((d) => !approvedIds?.has(d.sectionId)).map((d) => d.sectionId);
       if (onApproveAll) onApproveAll(toAdd);
       else toAdd.forEach((id) => onToggleApproval?.(id));
     }
@@ -2450,6 +2523,11 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
             {syllabi.length} syllab{syllabi.length === 1 ? 'us' : 'i'}
           </span>
           <span className="ml-1 text-emerald-700">· {approvedCount} approved</span>
+          {isFiltering && (
+            <span className="ml-1 text-cshse-700" data-testid="evdocs-filter-count">
+              · showing {filteredDocs.length} of {docs.length}
+            </span>
+          )}
           <span className="ml-2 text-xs text-gray-500">
             {anyApplied
               ? 'Check a card to approve it; "Download .docx" opens the captured evidence.'
@@ -2478,8 +2556,73 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
           </div>
         )}
       </div>
+      {/* Document search — find the docs indexed for a Standard / Subspec, or by text. */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 bg-gray-50 px-4 py-2 text-xs">
+        <span className="font-medium text-gray-600">Find documents:</span>
+        <input
+          type="search"
+          data-testid="evdocs-search"
+          value={docQuery}
+          onChange={(e) => setDocQuery(e.target.value)}
+          placeholder="title, filename, course…"
+          className="min-w-[10rem] flex-1 rounded border border-gray-300 bg-white px-2 py-1 text-xs focus:border-cshse-400 focus:outline-none"
+        />
+        <label className="flex items-center gap-1 text-gray-600">
+          <span>Standard</span>
+          <select
+            data-testid="evdocs-std-filter"
+            value={stdFilter}
+            onChange={(e) => {
+              setStdFilter(e.target.value);
+              setSpecFilter('');
+            }}
+            className="rounded border border-gray-300 bg-white px-1.5 py-1 text-xs focus:border-cshse-400 focus:outline-none"
+          >
+            <option value="">any</option>
+            {stdOptions.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1 text-gray-600">
+          <span>Subspec</span>
+          <select
+            data-testid="evdocs-spec-filter"
+            value={specFilter}
+            onChange={(e) => setSpecFilter(e.target.value)}
+            disabled={!stdFilter || specOptions.length === 0}
+            className="rounded border border-gray-300 bg-white px-1.5 py-1 text-xs focus:border-cshse-400 focus:outline-none disabled:bg-gray-100 disabled:text-gray-400"
+          >
+            <option value="">any</option>
+            {specOptions.map((s) => (
+              <option key={s} value={s}>
+                {stdFilter}.{s}
+              </option>
+            ))}
+          </select>
+        </label>
+        {isFiltering || specFilter ? (
+          <button
+            data-testid="evdocs-clear-filters"
+            onClick={clearFilters}
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-600 hover:bg-gray-100"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+      {filteredDocs.length === 0 ? (
+        <div
+          data-testid="evdocs-no-matches"
+          className="flex flex-1 items-center justify-center p-6 text-center text-sm text-gray-500"
+        >
+          No documents match this filter{stdFilter ? ` (Standard ${stdFilter}${specFilter ? `.${specFilter}` : ''})` : ''}.
+        </div>
+      ) : (
       <ul className="flex-1 space-y-3 overflow-auto p-4">
-        {docs.map((d) => {
+        {filteredDocs.map((d) => {
           const isSelected = selectedSectionId === d.sectionId;
           const approved = !!approvedIds?.has(d.sectionId);
           return (
@@ -2653,6 +2796,7 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
           );
         })}
       </ul>
+      )}
     </div>
   );
 }

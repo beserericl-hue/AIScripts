@@ -3,6 +3,7 @@ import { ValidationResult, IValidationResult, IValidationResultData } from '../m
 import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getStandardByCode } from '../data/standards';
+import { getSpecCriteria } from '../data/levelStandards';
 import { evaluateSection } from './cshseAiClient';
 
 // CR-054 — the legacy n8n `triggerValidation` path (and its
@@ -90,10 +91,15 @@ export class ValidationService {
     const { submissionId, standardCode, specCode } = opts;
     const validationType = opts.validationType || 'submit';
 
-    // Rubric criteria text for this spec.
+    // Rubric criteria text for this spec. Seeded from the legacy flat catalog and
+    // OVERRIDDEN below with the institution's level-specific criteria once the
+    // submission's programLevel is known (the official CSHSE standards differ by
+    // degree level — e.g. associate Standard 4 is "Program Evaluation", not
+    // "Budgetary Support"). Without this, correct narratives are judged against
+    // the wrong rubric and systematically fail.
     const standard = getStandardByCode(standardCode);
     const spec = standard?.specifications?.find((s) => s.code === specCode);
-    const criteria = spec?.text || '';
+    let criteria = spec?.text || '';
 
     // institutionId + programLevel + supporting-evidence text for the AI
     // prompt (best-effort). programLevel scopes the corrections RAG so
@@ -111,6 +117,16 @@ export class ValidationService {
         .lean();
       institutionId = submission?.institutionId?.toString() || '';
       if (submission?.programLevel) programLevel = submission.programLevel;
+      // Select the rubric from the institution's degree level (the two sources
+      // the evaluation must use: the Standard + its reader-report criteria).
+      const levelCrit = getSpecCriteria(programLevel, standardCode, specCode);
+      if (levelCrit?.criteria) {
+        criteria = levelCrit.criteria;
+        console.log(
+          `[ValidationService] rubric ${standardCode}.${specCode} level=${programLevel} ` +
+            `source=${levelCrit.source} ("${(levelCrit.standardTitle || '').slice(0, 40)}")`
+        );
+      }
       if (!narrativeText && submission?.narratives) {
         const narr: any = submission.narratives;
         const stdNarr = narr instanceof Map ? narr.get(standardCode) : narr?.[standardCode];
