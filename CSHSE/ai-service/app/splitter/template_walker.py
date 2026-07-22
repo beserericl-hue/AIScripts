@@ -256,6 +256,272 @@ def _table_to_html(table) -> str:
     return "<table>" + "".join(rows) + "</table>"
 
 
+# ---------------------------------------------------------------- tabular template
+#
+# Many institutions submit the OFFICIAL CSHSE template with its TABLES intact —
+# one table per Standard, the "Standard N:" heading + lettered specs (a./b./…) +
+# each "Response:" all inside table CELLS. (Kennesaw removed the tables, leaving
+# a paragraph template; several schools keep them.) The paragraph walk can't see
+# cell content, so we DECOMPOSE each standard/spec response table back into the
+# paragraph-block stream the existing walker already understands. Non-standard
+# tables (matrix grids, credit-hour tables, rosters) are left as opaque evidence
+# tables — exactly as before — so the Kennesaw + MCC paths are unaffected.
+
+_STD_HEADER_CELL_RE = re.compile(r"^\s*Standard\s+(?P<std>\d{1,2})\s*:", re.IGNORECASE)
+_SPEC_LETTER_CELL_RE = re.compile(r"^\s*(?P<letter>[a-j])[.)]?\s*$", re.IGNORECASE)
+_INTRO_NUM_CELL_RE = re.compile(r"^\s*(?P<num>\d{1,2})[.)]?\s*$")
+_GLOSSARY_RE = re.compile(r"glossary", re.IGNORECASE)
+
+
+def _cell_text(cell) -> str:
+    return (cell.text or "").strip()
+
+
+def _cell_html(cell) -> str:
+    """Rich inner HTML for a table cell — joins each paragraph's HTML (keeping
+    hyperlinks + inline images), each wrapped in <p>."""
+    parts = []
+    for p in cell.paragraphs:
+        h = _paragraph_to_html(p)
+        if h.strip():
+            parts.append(f"<p>{h}</p>")
+    return "".join(parts)
+
+
+_RESP_STANDALONE_RE = re.compile(r"^\s*Response\s*:?\.?\s*$", re.IGNORECASE)
+_RESP_INLINE_RE = re.compile(r"\bResponse\s*:\s*", re.IGNORECASE)
+
+
+def _para_body_block(p) -> tuple:
+    """A ('p', text, html, is_list) body block for one cell paragraph, keeping
+    hyperlinks / inline images / list formatting."""
+    text = (p.text or "").strip()
+    html = _paragraph_to_html(p)
+    is_list = _is_list_item(p._p)
+    if html.strip():
+        return ("p", text, f"<li>{html}</li>" if is_list else f"<p>{html}</p>", is_list)
+    return ("p", text, f"<p>{_esc(text)}</p>", is_list)
+
+
+def _split_cell(cell) -> tuple[str, list[tuple]]:
+    """Split a spec cell into ``(prompt_text, body_blocks)`` where body_blocks are
+    the institution's answer paragraphs (as ('p', text, html, is_list) blocks).
+
+    Robust to the three answer shapes seen in real templates:
+      * a standalone ``Response:`` / ``Response`` marker paragraph,
+      * an inline ``… Response: …`` inside a paragraph, and
+      * NO marker at all — the institution wrote the answer directly under the
+        Handbook prompt (first paragraph is the prompt, the rest is the answer).
+    """
+    paras = list(cell.paragraphs)
+    # 1) standalone "Response" / "Response:" marker paragraph
+    for i, p in enumerate(paras):
+        if _RESP_STANDALONE_RE.match(p.text or ""):
+            prompt = " ".join((q.text or "").strip() for q in paras[:i] if (q.text or "").strip())
+            body = [_para_body_block(q) for q in paras[i + 1:] if (q.text or "").strip()]
+            return (prompt.strip(), body)
+    # 2) inline "Response:" inside a paragraph
+    for i, p in enumerate(paras):
+        t = p.text or ""
+        m = _RESP_INLINE_RE.search(t)
+        if m:
+            pre = " ".join((q.text or "").strip() for q in paras[:i] if (q.text or "").strip())
+            prompt = (pre + " " + t[: m.start()]).strip()
+            after = t[m.end():].strip()
+            body: list[tuple] = []
+            if after:
+                body.append(("p", after, f"<p>{_esc(after)}</p>", False))
+            body += [_para_body_block(q) for q in paras[i + 1:] if (q.text or "").strip()]
+            return (prompt, body)
+    # 3) no marker — first non-empty paragraph is the prompt, the rest the answer
+    nonempty = [p for p in paras if (p.text or "").strip()]
+    if not nonempty:
+        return ("", [])
+    prompt = (nonempty[0].text or "").strip()
+    body = [_para_body_block(p) for p in nonempty[1:]]
+    return (prompt, body)
+
+
+def _looks_like_standard_table(table) -> bool:
+    """True when any cell in the table opens with ``Standard N:`` — i.e. this is a
+    per-Standard response table of the tabular official template."""
+    try:
+        for row in table.rows:
+            for cell in row.cells:
+                if _STD_HEADER_CELL_RE.match(_cell_text(cell)):
+                    return True
+    except Exception:  # noqa: BLE001
+        pass
+    return False
+
+
+def _first_spec_letter(table) -> str | None:
+    for row in table.rows:
+        m = _SPEC_LETTER_CELL_RE.match(_cell_text(row.cells[0]))
+        if m:
+            return m.group("letter").lower()
+    return None
+
+
+def _is_marker_only(text: str) -> bool:
+    """True when a cell holds ONLY a spec letter / sub-number / std header — no
+    real content. Some tables duplicate the ``a.`` marker across two columns
+    (AACC Standard 16 is 3-wide: ``a. | a. | <prompt+response>``)."""
+    t = (text or "").strip()
+    if not t:
+        return True
+    return bool(
+        _SPEC_LETTER_CELL_RE.match(t)
+        or _INTRO_NUM_CELL_RE.match(t)
+        or _STD_HEADER_CELL_RE.match(t)
+    )
+
+
+def _content_cell(row):
+    """The cell in a row that holds the prompt/response — the LAST cell that
+    isn't a bare marker. Handles 2-column (``a. | content``) and 3-column
+    (``a. | a. | content``) response tables alike."""
+    cells = list(row.cells)
+    for c in reversed(cells):
+        if not _is_marker_only(_cell_text(c)):
+            return c
+    return cells[-1]
+
+
+def _decompose_response_table(table, state: dict) -> list[tuple] | None:
+    """Decompose a per-Standard response table into ('p', text, html, is_list)
+    blocks the paragraph walker understands. Returns ``None`` when the table is
+    NOT a standard/spec response table (glossary, matrix, roster, credit grid) so
+    the caller keeps it as an opaque evidence table.
+
+    Handles the two real-world wrinkles:
+      * headerless CONTINUATION tables — Standards 5 and 10 in the AACC template
+        have no ``Standard N:`` header cell. A headerless table whose first spec
+        letter is ``a`` opens the NEXT sequential standard; one that resumes at a
+        later letter continues the CURRENT standard.
+      * sub-numbered items (``1.``, ``2.``) and wrapped rows accumulate as the
+        current spec's body (never a new spec).
+    """
+    rows = list(table.rows)
+    if not rows:
+        return None
+
+    header_std = None
+    header_text = None
+    for r in rows:
+        for c in r.cells:
+            m = _STD_HEADER_CELL_RE.match(_cell_text(c))
+            if m:
+                header_std = m.group("std")
+                header_text = _cell_text(c)
+                break
+        if header_std:
+            break
+
+    if header_std is None:
+        first_letter = _first_spec_letter(table)
+        if first_letter is None:
+            return None  # not a spec/standard table
+        last = state.get("last_std")
+        if first_letter == "a" and last:
+            std = str(int(last) + 1)          # headerless → next sequential standard
+        elif last:
+            std = str(last)                   # headerless continuation of current std
+        else:
+            return None                        # no standard context yet → not a spec table
+    else:
+        std = header_std
+
+    state["last_std"] = std
+    state["seen_standard"] = True
+
+    blocks: list[tuple] = []
+    if header_std is not None and header_text:
+        # Standard ROOT — the normative "shall" statement; routes to that
+        # Standard's introduction (standardIntroductions[N]).
+        blocks.append(("p", header_text, f"<p>{_esc(header_text)}</p>", False))
+
+    cur_letter = None
+    for r in rows:
+        c0 = _cell_text(r.cells[0])
+        if _STD_HEADER_CELL_RE.match(c0):
+            continue  # header row already emitted
+        # The content cell is the last non-marker cell (2-col: "a. | content";
+        # 3-col: "a. | a. | content"). A merged single-column row keeps it in
+        # cell 0 → no letter marker → continuation.
+        content_cell = _content_cell(r)
+        if len(r.cells) == 1:
+            c0 = ""
+
+        lm = _SPEC_LETTER_CELL_RE.match(c0)
+        if lm:
+            cur_letter = lm.group("letter").lower()
+            prompt, body = _split_cell(content_cell)
+            # Dotted std.letter form so _match_heading resolves BOTH std + spec.
+            blocks.append(("p", f"{std}.{cur_letter}. {prompt}".rstrip(), "", False))
+            blocks.extend(body)
+            continue
+
+        # Continuation row: a sub-numbered item ("1.", "2.") or a wrapped line —
+        # accumulate as the CURRENT spec's body (never a new spec). Keep the
+        # first-cell marker text (e.g. "2.") in front of the body line.
+        if cur_letter is not None:
+            paras = [p for p in content_cell.paragraphs if (p.text or "").strip()]
+            for k, p in enumerate(paras):
+                if _RESP_STANDALONE_RE.match(p.text or ""):
+                    continue
+                blk = _para_body_block(p)
+                if k == 0 and c0:
+                    blk = ("p", f"{c0} {blk[1]}".strip(), f"<p>{_esc(c0)} </p>{blk[2]}", blk[3])
+                blocks.append(blk)
+
+    return blocks
+
+
+def _decompose_intro_table(table) -> list[tuple]:
+    """Decompose a FRONT-matter table (Glossary, "General Program
+    Characteristics" numbered prompts) into intro blocks. These sit before the
+    first Standard, so the walker's introduction region routes them to the
+    Document Introduction — never to a Standard."""
+    rows = list(table.rows)
+    if not rows:
+        return []
+    blocks: list[tuple] = []
+    first_cell = _cell_text(rows[0].cells[0])
+    if _GLOSSARY_RE.search(first_cell):
+        # A. <Title> matches the walker's intro heading pattern, so the glossary
+        # opens an intro section and its term rows land under it.
+        blocks.append(("p", "A. Glossary of Terms", "<p><strong>Glossary of Terms</strong></p>", False))
+        for r in rows:
+            term = _cell_text(r.cells[0])
+            defn = _cell_text(r.cells[1]) if len(r.cells) > 1 else ""
+            if _GLOSSARY_RE.search(term) or (not term and not defn):
+                continue
+            line = f"{term}: {defn}".strip(": ").strip()
+            if line:
+                blocks.append(("p", line, f"<p>{_esc(line)}</p>", False))
+        return blocks
+
+    # General Program Characteristics: numbered/lettered prompts with Responses.
+    for r in rows:
+        c0 = _cell_text(r.cells[0])
+        content_cell = r.cells[1] if len(r.cells) > 1 else r.cells[0]
+        c1 = _cell_text(content_cell)
+        if len(r.cells) == 1:
+            c0 = ""
+        if not c0 and not c1:
+            continue
+        if c0 and (_INTRO_NUM_CELL_RE.match(c0) or _SPEC_LETTER_CELL_RE.match(c0)):
+            prompt, body = _split_cell(content_cell)
+            blocks.append(("p", f"{c0} {prompt}".strip(), "", False))
+            blocks.extend(body)
+        else:
+            for p in content_cell.paragraphs:
+                if (p.text or "").strip():
+                    blocks.append(_para_body_block(p))
+    return blocks
+
+
 def _run_inline_html(run_el, part) -> str:
     """Text (with bold/italic) + any inline images for one ``<w:r>`` run."""
     out: list[str] = []
@@ -325,9 +591,22 @@ def _iter_block_items(doc):
     from docx.table import Table as _Table
     from docx.text.paragraph import Paragraph as _Paragraph
 
+    # Tabular official template? Only then do we decompose per-Standard response
+    # tables + route front-matter tables to the Introduction. A paragraph
+    # template (Kennesaw) or a doc with only evidence tables has no standard
+    # tables, so this whole branch is skipped and tables stay opaque evidence —
+    # existing behavior preserved.
+    has_standard_tables = any(_looks_like_standard_table(t) for t in doc.tables)
+    state = {"last_std": None, "seen_standard": False}
+
     for child in doc.element.body.iterchildren():
         if isinstance(child, CT_P):
             para = _Paragraph(child, doc)
+            # A paragraph "Standard N:" heading (paragraph template) also marks
+            # that we've entered the standards region — so later evidence tables
+            # aren't mistaken for front matter.
+            if _STD_HEADER_CELL_RE.match((para.text or "").strip()):
+                state["seen_standard"] = True
             # CR-062 — flag list-item paragraphs (Word numbering) so the body
             # walk can keep them as <li> inside a <ul> instead of flattening
             # every list bullet into its own <p> (Monica: "this should be in a
@@ -335,6 +614,17 @@ def _iter_block_items(doc):
             yield ("p", para.text or "", _paragraph_to_html(para), _is_list_item(child))
         elif isinstance(child, CT_Tbl):
             t = _Table(child, doc)
+            if has_standard_tables:
+                std_blocks = _decompose_response_table(t, state)
+                if std_blocks is not None:
+                    yield from std_blocks
+                    continue
+                if not state["seen_standard"]:
+                    # Front-matter table (Glossary / General Program
+                    # Characteristics) → Document Introduction.
+                    yield from _decompose_intro_table(t)
+                    continue
+            # Non-standard table (or paragraph template): opaque evidence table.
             yield ("table", _table_to_html(t), _table_to_text(t))
 
 

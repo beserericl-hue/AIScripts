@@ -61,6 +61,7 @@ _TEMPLATE_HEADING_RES = [
         re.I,
     ),                                                      # "Standard 1, Specification a"
     re.compile(r"^\s*Standard\s+\d{1,2}\s*[a-h]\.", re.I),  # "Standard 12b."
+    re.compile(r"^\s*Standard\s+\d{1,2}\s*:", re.I),        # "Standard 1: The program shall…"
 ]
 
 # Strong self-study signals: counts of these indicate the document is a
@@ -185,7 +186,34 @@ def detect_format(docx_path: str, head_paragraphs: int = 20) -> FormatDetection:
 
     doc = Document(docx_path)
     paragraphs = [(p.text or "") for p in doc.paragraphs]
+    # Many institutions submit the OFFICIAL CSHSE template with its TABLES intact
+    # (one table per Standard; the "Standard N:", lettered specs, and "Response:"
+    # all live in table CELLS). python-docx's doc.paragraphs excludes cell text,
+    # so a purely tabular template looks empty of template signals and would
+    # misclassify as free-form self_study. Fold each cell's paragraphs into the
+    # signal stream (in document order) so the template markers are seen.
+    cell_paras = _table_cell_paragraphs(doc)
+    if cell_paras:
+        paragraphs = paragraphs + cell_paras
     return detect_format_from_paragraphs(paragraphs, head_paragraphs=head_paragraphs)
+
+
+def _table_cell_paragraphs(doc) -> list[str]:
+    """Every table-cell paragraph's text, in document order — so the template
+    detector sees ``Standard N:`` / lettered-spec / ``Response:`` markers that
+    live inside table cells (the tabular official template)."""
+    out: list[str] = []
+    try:
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        t = p.text or ""
+                        if t.strip():
+                            out.append(t)
+    except Exception:  # noqa: BLE001 — detection must never raise
+        return []
+    return out
 
 
 def _detect_format_pdf(pdf_path: str) -> FormatDetection:
