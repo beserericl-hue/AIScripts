@@ -1222,20 +1222,33 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
         std_hint = (sec.flags or {}).get("templateStandardHint")
         spec_hint = (sec.flags or {}).get("templateSpecHint")
         if std_hint and spec_hint:
-            hbucket = buckets.get(f"{std_hint}.{spec_hint}")
-            if hbucket is not None:
-                item = _section_to_item(sec, rec)
-                stype = rec.section_type if rec is not None else "narrative_response"
-                if stype == "supporting_evidence":
-                    if sec.word_count >= 250 and rec is not None and rec.primary_confidence >= 0.70:
-                        hbucket["evidenceFiles"].append(item)
-                    else:
-                        hbucket["evidenceText"].append(item)
-                elif sec.word_count >= 1000:
-                    hbucket["evidenceText"].append(item)
+            hkey = f"{std_hint}.{spec_hint}"
+            hbucket = buckets.get(hkey)
+            if hbucket is None:
+                # The template document defines a spec the level catalog lacks
+                # (the ai-service associate catalog is derived from baccalaureate
+                # and misses some specs, e.g. Field Experience 20.f–j). Trust the
+                # document — create the bucket so no content is dropped. Robust
+                # to whatever spec layout a school's official template uses.
+                hbucket = {
+                    "standardCode": std_hint, "specCode": spec_hint,
+                    "standardTitle": "", "specPrompt": (sec.heading or "")[:600],
+                    "narratives": [], "evidenceText": [], "evidenceFiles": [],
+                    "matrixCells": [], "coverageScore": None, "coverageCovered": None,
+                    "coverageGaps": [], "coverageStrengths": [],
+                }
+                buckets[hkey] = hbucket
+            item = _section_to_item(sec, rec)
+            # A template RESPONSE is the spec's narrative regardless of length;
+            # only a matcher-classified supporting-evidence block is evidence.
+            if rec is not None and rec.section_type == "supporting_evidence":
+                if sec.word_count >= 250 and rec.primary_confidence >= 0.70:
+                    hbucket["evidenceFiles"].append(item)
                 else:
-                    hbucket["narratives"].append(item)
-                continue
+                    hbucket["evidenceText"].append(item)
+            else:
+                hbucket["narratives"].append(item)
+            continue
 
         if rec is None or rec.primary_standard is None or rec.primary_spec is None:
             tags.append(_recommendation_to_tag(sec, rec))
