@@ -1211,6 +1211,32 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
             ib["items"].append(_section_to_item(sec, rec))
             intro_routed_count += 1
             continue
+
+        # TEMPLATE structure is AUTHORITATIVE for routing. When the walker knows
+        # the exact std + spec from the document (a table/heading literally
+        # labels "Standard 6" → spec "a."), route there directly — do NOT let the
+        # semantic matcher second-guess it (which otherwise sends low-confidence
+        # sections to Unplaced or the wrong spec, so whole specs went missing on
+        # the tabular official template). The matcher's section_type is still
+        # used to sort narrative vs supporting-evidence within the bucket.
+        std_hint = (sec.flags or {}).get("templateStandardHint")
+        spec_hint = (sec.flags or {}).get("templateSpecHint")
+        if std_hint and spec_hint:
+            hbucket = buckets.get(f"{std_hint}.{spec_hint}")
+            if hbucket is not None:
+                item = _section_to_item(sec, rec)
+                stype = rec.section_type if rec is not None else "narrative_response"
+                if stype == "supporting_evidence":
+                    if sec.word_count >= 250 and rec is not None and rec.primary_confidence >= 0.70:
+                        hbucket["evidenceFiles"].append(item)
+                    else:
+                        hbucket["evidenceText"].append(item)
+                elif sec.word_count >= 1000:
+                    hbucket["evidenceText"].append(item)
+                else:
+                    hbucket["narratives"].append(item)
+                continue
+
         if rec is None or rec.primary_standard is None or rec.primary_spec is None:
             tags.append(_recommendation_to_tag(sec, rec))
             continue
