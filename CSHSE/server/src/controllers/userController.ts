@@ -484,6 +484,14 @@ export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Res
       user.role = primary.role as any;
       user.institutionId = primary.institutionId;
       user.institutionName = primary.institutionName;
+    } else {
+      // No assignments remain — clear the legacy institution binding. Users
+      // added via the legacy role/institutionId fields (not roleAssignments)
+      // keep those fields set; without clearing them the roster re-derives a
+      // phantom role from them and the "×" (remove) button appears to do
+      // nothing. Clearing institutionId drops the user out of every roster.
+      user.institutionId = undefined as any;
+      user.institutionName = undefined as any;
     }
     user.markModified('roleAssignments');
     await user.save();

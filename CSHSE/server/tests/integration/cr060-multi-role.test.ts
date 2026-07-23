@@ -87,6 +87,31 @@ describe('CR-060 — multi-role per user', () => {
     expect(pairs).toContain(`reader@${B._id}`);
   });
 
+  // ---- Roster "×" fix: removing the last role clears the legacy binding ----
+  it('removing the last role clears legacy role/institutionId so the roster drops the user', async () => {
+    const { token } = await admin();
+    const A = await makeInstitution('A');
+    const { user } = await createUser({ role: 'program_coordinator' });
+    // Simulate a user added via the LEGACY fields only (role + institutionId,
+    // no roleAssignments) — the case where the roster "×" appeared to do nothing.
+    await User.updateOne(
+      { _id: user._id },
+      { $set: { role: 'program_coordinator', institutionId: A._id }, $unset: { roleAssignments: '' } }
+    );
+
+    const res = await request(app)
+      .put(`/api/users/${user._id}/role-assignments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ roleAssignments: [] });
+
+    expect(res.status).toBe(200);
+    const saved = await User.findById(user._id).lean();
+    expect(saved!.roleAssignments || []).toHaveLength(0);
+    // Legacy institution binding cleared → the client roster no longer derives a
+    // phantom PC from it, so the user disappears from the institution list.
+    expect(saved!.institutionId ?? null).toBeNull();
+  });
+
   // ---- Requirement: Rule 1 — no PC + reviewer in the SAME institution ----
   it('rejects PC + Reader at the SAME institution (Rule 1)', async () => {
     const { token } = await admin();
