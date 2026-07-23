@@ -364,6 +364,63 @@ def _iso(t: float) -> str:
     return _dt.datetime.fromtimestamp(t, tz=_dt.timezone.utc).isoformat()
 
 
+def _ensure_all_items_anchored(job: "JobRecord") -> None:
+    """Guarantee the Compare source HTML has a ``data-section-id`` anchor for
+    EVERY review item — narrative, supporting-evidence, or introduction — no
+    matter which pipeline or which section it was parsed into.
+
+    The Compare pane locates an item by matching its ``sectionId`` to a
+    ``data-section-id`` anchor in the source document; without that anchor it
+    falls back to a fuzzy text search and, for short/reformatted items, shows
+    "section not located — showing top". The template pipeline builds no source
+    HTML at all and MCC anchors only its narratives, so evidence items went
+    unanchored. This appends an anchored ``<section>`` for any item whose id is
+    not already present, leaving richly-formatted existing anchors untouched.
+    """
+    import re as _re
+
+    html = job.source_html or ""
+    have: set[str] = set(_re.findall(r'data-section-id="([^"]+)"', html))
+    extra: list[str] = []
+
+    def _emit(item: dict) -> None:
+        sid = (item or {}).get("sectionId")
+        if not sid or sid in have:
+            return
+        have.add(sid)
+        heading = _html_escape((item.get("heading") or "").strip())
+        body = item.get("htmlSnippet")
+        if not (isinstance(body, str) and body.strip()):
+            body = "<p>" + _html_escape((item.get("snippet") or "").strip()) + "</p>"
+        head_html = f"<h3>{heading}</h3>" if heading else ""
+        extra.append(f'<section data-section-id="{_html_escape(sid)}">{head_html}{body}</section>')
+
+    for ib in (job.introductions or {}).values():
+        for item in (ib or {}).get("items", []) or []:
+            _emit(item)
+    for bk in (job.buckets or {}).values():
+        for kind in ("narratives", "evidenceText", "evidenceFiles"):
+            for item in (bk or {}).get(kind, []) or []:
+                _emit(item)
+    for item in (job.tags or []):
+        _emit(item)
+
+    if not extra:
+        return
+    block = '<div data-anchors="review-items">' + "".join(extra) + "</div>"
+    if "</body>" in html:
+        job.source_html = html.replace("</body>", block + "</body>", 1)
+    elif html.strip():
+        job.source_html = html + block
+    else:
+        job.source_html = (
+            '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>'
+            'body{font-family:Arial,sans-serif;line-height:1.6;padding:20px;max-width:100%;}'
+            'section{margin:0 0 1.25rem;}h3{margin:0 0 .35rem;font-size:1rem;}'
+            '</style></head><body>' + block + '</body></html>'
+        )
+
+
 def _run_pipeline(job: JobRecord) -> None:
     """The actual pipeline body. Runs in a worker thread.
 
@@ -421,6 +478,17 @@ def _run_pipeline(job: JobRecord) -> None:
             _run_template_pipeline(job, docx_path)
         else:
             _run_self_study_pipeline(job, docx_path)
+
+        # Compare relies on a data-section-id anchor per item. Template builds no
+        # source HTML and MCC anchors only narratives — ensure EVERY item is
+        # anchored so the Compare pane locates it (never "section not located").
+        # Scoped to the DOCX pipelines whose source HTML is job.source_html; the
+        # self-study path serves the original upload HTML and is left untouched.
+        if job.status not in ("failed", "canceled") and job.format.format in ("template", "mcc_narrative"):
+            try:
+                _ensure_all_items_anchored(job)
+            except Exception as exc:  # noqa: BLE001 — never sink the import
+                job.warnings.append(f"anchor-source: {type(exc).__name__}: {exc}")
 
         if job.status not in ("failed", "canceled"):
             # CR-037 Defense 1 — ai-service self-validates before the
