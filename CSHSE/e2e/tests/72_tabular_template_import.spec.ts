@@ -66,15 +66,22 @@ test('tabular template imports every standard/spec; intro routes to intro', asyn
     }, { timeout: 240_000, intervals: [4000] }).toMatch(/^(parsed|completed|failed)$/);
     expect(last, 'parse must not fail').not.toBe('failed');
 
-    const body = await (await api.get(`/api/submissions/${sub}`, { headers: auth })).json();
-    const rs = ((body.submission ?? body) as any).aiReviewState ?? {};
-    const buckets = rs.buckets ?? {};
-    const intro = rs.introductions ?? {};
+    // The importer writes aiStatus='parsed' a beat before aiReviewState is
+    // committed — re-fetch until the buckets are populated (avoids the race).
+    let buckets: any = {};
+    let intro: any = {};
     const bucketText = (k: string) => {
       const b = buckets[k] || {};
       const it = (b.narratives || [])[0] || (b.evidenceText || [])[0];
       return strip(it?.htmlSnippet || it?.snippet || '');
     };
+    await expect.poll(async () => {
+      const body = await (await api.get(`/api/submissions/${sub}`, { headers: auth })).json();
+      const rs = ((body.submission ?? body) as any).aiReviewState ?? {};
+      buckets = rs.buckets ?? {};
+      intro = rs.introductions ?? {};
+      return bucketText('4.a');
+    }, { timeout: 30_000, intervals: [2000] }).toMatch(/measurable student learning outcomes/i);
 
     // 1) Standard 4 — all three answer shapes captured under the RIGHT spec.
     expect(bucketText('4.a'), 'Std 4.a = SLO response').toMatch(/measurable student learning outcomes/i);
