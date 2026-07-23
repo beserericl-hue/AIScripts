@@ -102,7 +102,34 @@ test('tabular template imports every standard/spec; intro routes to intro', asyn
     expect(introText, 'intro holds the major-program-changes prompt').toMatch(/major program changes/i);
     expect(introText).toMatch(/Associate of Applied Sciences/i);
 
-    console.log('Tabular template: Std 4/5/6 routed, intro→intro, headerless + 3-col handled ✓');
+    // 5) COMPARE anchors — the source HTML must carry a data-section-id anchor
+    //    for EVERY review item (narrative, supporting-evidence, intro). Without
+    //    it the Compare pane can't locate the item ("section not located —
+    //    showing top"). This is the regression that was missing.
+    const srcHtml = await (await api.get(`/api/imports/${importId}/content?submissionId=${sub}`, {
+      headers: { ...auth, Accept: 'text/html' },
+    })).text();
+    const anchors = new Set([...srcHtml.matchAll(/data-section-id="([^"]+)"/g)].map((m) => m[1]));
+    expect(anchors.size, 'source HTML has section anchors').toBeGreaterThan(3);
+    const itemIds: string[] = [];
+    for (const bk of Object.values(buckets) as any[]) {
+      for (const kind of ['narratives', 'evidenceText', 'evidenceFiles']) {
+        for (const it of bk?.[kind] || []) if (it?.sectionId) itemIds.push(it.sectionId);
+      }
+    }
+    for (const ib of Object.values(intro) as any[]) {
+      for (const it of ib?.items || []) if (it?.sectionId) itemIds.push(it.sectionId);
+    }
+    const missing = itemIds.filter((id) => !anchors.has(id));
+    expect(itemIds.length, 'review has items to anchor').toBeGreaterThan(5);
+    expect(missing, `EVERY review item must be anchored in the source (missing ${missing.length}/${itemIds.length})`).toEqual([]);
+    // A narrative AND a short evidence item both resolve to an anchor.
+    const narrId = buckets['4.a']?.narratives?.[0]?.sectionId;
+    const evId = (Object.values(buckets) as any[]).flatMap((b) => b?.evidenceText || []).find((e: any) => e?.sectionId)?.sectionId;
+    expect(narrId && anchors.has(narrId), 'narrative 4.a anchored').toBeTruthy();
+    if (evId) expect(anchors.has(evId), 'a supporting-evidence item is anchored').toBeTruthy();
+
+    console.log(`Tabular template: routing ✓ | Compare anchors: ${itemIds.length}/${itemIds.length} items anchored ✓`);
   } finally {
     await cleanupSeed(seed);
   }

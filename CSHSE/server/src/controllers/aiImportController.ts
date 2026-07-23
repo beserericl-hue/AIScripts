@@ -1973,6 +1973,102 @@ export async function restartAIImport(req: AuthenticatedRequest, res: Response):
 }
 
 // ============================================================================
+// POST /api/imports/:importId/reanchor-source — repair Compare anchors
+// ============================================================================
+//
+// The Compare pane locates a review item by matching its sectionId to a
+// data-section-id anchor in the stored source HTML. Older imports (template
+// path built NO source HTML; MCC anchored only narratives) left items
+// unanchored, so Compare showed "section not located — showing top". This
+// rebuilds/repairs the source HTML from the CURRENT aiReviewState — anchoring
+// EVERY narrative/evidence/intro item — WITHOUT re-parsing (no cost, preserves
+// all review + editor state). Mirrors ai-service `_ensure_all_items_anchored`.
+
+function _escHtml(s: string): string {
+  return (s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+export async function reanchorImportSource(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
+  const importId = req.params.importId;
+  try {
+    const importRecord = await SelfStudyImport.findById(importId).select('submissionId').lean();
+    if (!importRecord) {
+      res.status(404).json({ error: 'Import not found' });
+      return;
+    }
+    const sub: any = await Submission.findById((importRecord as any).submissionId)
+      .select('aiReviewState')
+      .lean();
+    const rs: any = sub?.aiReviewState || {};
+
+    let html = '';
+    try {
+      html = await gridFsService.getHtmlContent(importId);
+    } catch {
+      html = '';
+    }
+    const hadAnchors = /data-section-id=/.test(html);
+    const have = new Set<string>(
+      [...html.matchAll(/data-section-id="([^"]+)"/g)].map((m) => m[1])
+    );
+    const parts: string[] = [];
+    const emit = (it: any) => {
+      const sid = it?.sectionId;
+      if (!sid || have.has(sid)) return;
+      have.add(sid);
+      const heading = _escHtml(String(it.heading || '').trim());
+      const raw = it.htmlSnippet;
+      const body =
+        typeof raw === 'string' && raw.trim()
+          ? raw
+          : `<p>${_escHtml(String(it.snippet || '').trim())}</p>`;
+      parts.push(
+        `<section data-section-id="${_escHtml(sid)}">${heading ? `<h3>${heading}</h3>` : ''}${body}</section>`
+      );
+    };
+    for (const ib of Object.values(rs.introductions || {})) {
+      for (const it of ((ib as any)?.items || [])) emit(it);
+    }
+    for (const bk of Object.values(rs.buckets || {})) {
+      for (const kind of ['narratives', 'evidenceText', 'evidenceFiles']) {
+        for (const it of ((bk as any)?.[kind] || [])) emit(it);
+      }
+    }
+    for (const it of rs.tags || []) emit(it);
+
+    if (parts.length === 0) {
+      res.json({ ok: true, added: 0, totalAnchors: have.size, changed: false });
+      return;
+    }
+    const block = `<div data-anchors="review-items">${parts.join('')}</div>`;
+    let out: string;
+    if (!hadAnchors) {
+      // Template / raw-HTML import → clean anchored rebuild (matches new imports).
+      out =
+        '<!DOCTYPE html><html><head><meta charset="UTF-8"><style>' +
+        'body{font-family:Arial,sans-serif;line-height:1.6;padding:20px;max-width:100%;}' +
+        'section{margin:0 0 1.25rem;}h3{margin:0 0 .35rem;font-size:1rem;}' +
+        '</style></head><body>' + parts.join('') + '</body></html>';
+    } else if (html.includes('</body>')) {
+      out = html.replace('</body>', block + '</body>');
+    } else {
+      out = html + block;
+    }
+    await gridFsService.storeHtmlContent(importId, out);
+    res.json({ ok: true, added: parts.length, totalAnchors: have.size, changed: true, rebuilt: !hadAnchors });
+  } catch (err: any) {
+    console.error('[reanchor-source] failed:', err);
+    res.status(500).json({ error: 'reanchor failed', detail: err?.message || String(err) });
+  }
+}
+
+// ============================================================================
 // POST /api/imports/:importId/corrections — coordinator-supplied corrections
 // ============================================================================
 //

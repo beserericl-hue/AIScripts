@@ -41,6 +41,7 @@ import {
   receiveAICallback,
   applyAIImport,
   restartAIImport,
+  reanchorImportSource,
   redetectImport,
   createImportCorrection,
   listImportCorrections,
@@ -215,6 +216,8 @@ router.get('/:importId/ai-status', getAIImportStatus);
 router.get('/:importId/ai-events', streamAIImportEvents);
 router.post('/:importId/apply-ai', applyAIImport);
 router.post('/:importId/restart-ai', restartAIImport);
+// POST reanchor-source — repair Compare data-section-id anchors from current review state
+router.post('/:importId/reanchor-source', reanchorImportSource);
 // CR-040 follow-on — re-run standalone detectors (CVs / papers / syllabi
 // / introductions) without re-uploading or re-running the matcher. Used
 // by the Review surface "Re-run detectors" button.
