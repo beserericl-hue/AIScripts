@@ -1245,15 +1245,14 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
                 }
                 buckets[hkey] = hbucket
             item = _section_to_item(sec, rec)
-            # A template RESPONSE is the spec's narrative regardless of length;
-            # only a matcher-classified supporting-evidence block is evidence.
-            if rec is not None and rec.section_type == "supporting_evidence":
-                if sec.word_count >= 250 and rec.primary_confidence >= 0.70:
-                    hbucket["evidenceFiles"].append(item)
-                else:
-                    hbucket["evidenceText"].append(item)
-            else:
-                hbucket["narratives"].append(item)
+            # A template hint-routed section IS the spec's Response prose (the
+            # walker produces one section per spec: prompt heading + response
+            # body). It's the NARRATIVE regardless of the matcher's section_type —
+            # the matcher misreads some responses (e.g. an accreditation answer)
+            # as "supporting_evidence", which dropped them out of the narrative.
+            # Genuine evidence (embedded tables, "See Appendix" files) is attached
+            # to the bucket separately by the deterministic pass below.
+            hbucket["narratives"].append(item)
             continue
 
         if rec is None or rec.primary_standard is None or rec.primary_spec is None:
