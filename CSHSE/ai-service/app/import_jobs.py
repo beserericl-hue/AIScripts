@@ -1189,13 +1189,19 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     for sec in sections:
         rec = recommendations.get(sec.id)
         walker_hint = (sec.flags or {}).get("templateIntroductionHint")
+        # An explicit spec hint (the document literally labels this "Standard N,
+        # spec x.") is AUTHORITATIVE — a matcher that misreads a short response as
+        # "introduction" must NOT steal it into the Introduction. Only the walker's
+        # own templateIntroductionHint may route a hinted section to intro.
+        flags = sec.flags or {}
+        has_spec_hint = bool(flags.get("templateStandardHint") and flags.get("templateSpecHint"))
         intro_hint = walker_hint or (job.introduction_hints or {}).get(sec.id)
-        if not intro_hint and rec is not None and rec.section_type == "introduction":
+        if not intro_hint and not has_spec_hint and rec is not None and rec.section_type == "introduction":
             intro_hint = (
                 f"introduction:standard-{rec.primary_standard}"
                 if rec.primary_standard else "introduction:document"
             )
-        if intro_hint and (
+        if intro_hint and (walker_hint or not has_spec_hint) and (
             walker_hint
             or rec is None
             or rec.section_type == "introduction"
