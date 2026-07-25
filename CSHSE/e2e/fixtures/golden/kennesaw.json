@@ -1,0 +1,93 @@
+{
+  "name": "kennesaw",
+  "format": "template",
+  "programLevel": "bachelors",
+  "coverage": {
+    "byStandard": {
+      "1": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e",
+        "f"
+      ],
+      "2": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "3": [
+        "a",
+        "b",
+        "c"
+      ],
+      "4": [
+        "a",
+        "b",
+        "c"
+      ],
+      "5": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "6": [
+        "a"
+      ],
+      "7": [
+        "a",
+        "b",
+        "d",
+        "e"
+      ],
+      "8": [
+        "a",
+        "b"
+      ],
+      "9": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "e"
+      ],
+      "10": [
+        "a",
+        "b"
+      ]
+    },
+    "specsWithContent": 35,
+    "standards": [
+      "1",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9",
+      "10"
+    ],
+    "unplacedTags": 10
+  },
+  "fileTypes": {
+    "evidenceFiles": 5,
+    "evidenceText": 117,
+    "cvs": 0,
+    "evidenceDocs": 0,
+    "matrices": 0,
+    "docSubKinds": {}
+  },
+  "anchors": {
+    "totalItems": 194,
+    "missing": 0,
+    "ok": true
+  },
+  "introDocItems": 17,
+  "introStdKeys": 10
+}
