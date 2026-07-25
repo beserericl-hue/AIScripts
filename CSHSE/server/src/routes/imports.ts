@@ -42,6 +42,7 @@ import {
   applyAIImport,
   restartAIImport,
   reanchorImportSource,
+  contractCheckImport,
   redetectImport,
   createImportCorrection,
   listImportCorrections,
@@ -218,6 +219,8 @@ router.post('/:importId/apply-ai', applyAIImport);
 router.post('/:importId/restart-ai', restartAIImport);
 // POST reanchor-source — repair Compare data-section-id anchors from current review state
 router.post('/:importId/reanchor-source', reanchorImportSource);
+// POST contract-check — run the §7 required-output contract verifier over this import
+router.post('/:importId/contract-check', contractCheckImport);
 // CR-040 follow-on — re-run standalone detectors (CVs / papers / syllabi
 // / introductions) without re-uploading or re-running the matcher. Used
 // by the Review surface "Re-run detectors" button.

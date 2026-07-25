@@ -1992,6 +1992,23 @@ function _escHtml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
+// POST /api/imports/:importId/contract-check — run the §7 required-output
+// contract checker (CR-073 verifier) over this import's parse result + source
+// HTML. Returns the ContractResult (anchors gate + coverage/file-type/loss
+// metrics + findings). Used by the golden regression tests + Parser Train.
+export async function contractCheckImport(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const _imp = await requireImportAccess(req, res, req.params.importId);
+  if (!_imp) return;
+  try {
+    const { checkParserContract } = await import('../services/parserContract');
+    const result = await checkParserContract(req.params.importId);
+    res.json(result);
+  } catch (err: any) {
+    console.error('[contract-check] failed:', err);
+    res.status(500).json({ error: 'contract-check failed', detail: err?.message || String(err) });
+  }
+}
+
 export async function reanchorImportSource(req: AuthenticatedRequest, res: Response): Promise<void> {
   const _imp = await requireImportAccess(req, res, req.params.importId);
   if (!_imp) return;
