@@ -52,6 +52,7 @@ import {
 } from '../models/ImportCorrection';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { requireImportAccess, requireCanImport } from '../services/submissionAccessGuard';
+import { checkParserContract } from '../services/parserContract';
 
 // CR-040 Phase 2c — escape user-supplied strings for the evidenceDoc
 // HTML wrapper we generate at Apply time. Captures the five characters
@@ -2000,7 +2001,6 @@ export async function contractCheckImport(req: AuthenticatedRequest, res: Respon
   const _imp = await requireImportAccess(req, res, req.params.importId);
   if (!_imp) return;
   try {
-    const { checkParserContract } = await import('../services/parserContract');
     const result = await checkParserContract(req.params.importId);
     res.json(result);
   } catch (err: any) {
