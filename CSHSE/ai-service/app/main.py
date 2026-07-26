@@ -27,6 +27,25 @@ def health() -> dict:
     }
 
 
+@app.get("/health/rules")
+def health_rules(format: str = "template", institutionId: str | None = None, programLevel: str | None = None) -> dict:
+    """CR-073 — verify the rule ENGINE can reach the parserRules store and see
+    the rules it would apply for a given format/institution. Diagnostic only."""
+    from app.rules.engine import _client, fetch_active_rules
+    s = get_settings()
+    client = _client()
+    mongo_ok = client is not None
+    rules = fetch_active_rules(format, institutionId, programLevel)
+    return {
+        "mongoConfigured": bool(s.mongo_url),
+        "mongoReachable": mongo_ok,
+        "activeRuleCount": len(rules),
+        "ruleIds": [r.get("ruleId") for r in rules][:50],
+        "format": format,
+        "institutionId": institutionId,
+    }
+
+
 @app.get("/health/qdrant")
 def health_qdrant() -> dict:
     s = get_settings()
