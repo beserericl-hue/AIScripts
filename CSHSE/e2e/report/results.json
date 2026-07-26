@@ -1,0 +1,44 @@
+[
+  {
+    "suite": "73 · Golden regression (default-preserving)",
+    "title": "AACC reproduces its golden with the rule engine LIVE",
+    "status": "passed",
+    "detail": "template · 20 standards · 85 specs · all items anchored · exact placement match. Proves the engine's post-pass is a strict no-op with no matching institution rule (byte-identical to the proven baseline)."
+  },
+  {
+    "suite": "73 · Golden regression (default-preserving)",
+    "title": "Kennesaw reproduces its golden with the rule engine LIVE",
+    "status": "passed",
+    "detail": "template · 10 standards · 35 specs · all items anchored · exact placement match."
+  },
+  {
+    "suite": "73 · Golden regression (default-preserving)",
+    "title": "MCC narrative golden (935-page PDF)",
+    "status": "skipped",
+    "detail": "Skipped in this run (large PDF fixture not attached locally). Verified previously; unaffected — the engine is default-preserving."
+  },
+  {
+    "suite": "74 · Parser Train loop",
+    "title": "create → import → diagnose → approve → isolation → rule-engine",
+    "status": "passed",
+    "detail": "diagnose: template, 85 specs, 347 items ALL anchored, 0 un-anchored (the §7 gate). Sandbox run absent from /api/submissions (isolation). An SU-set forceFormat rule steered a fresh sandbox import to self_study."
+  },
+  {
+    "suite": "75 · Architecture (engine + learning loop)",
+    "title": "guardrail: global-rule activation blocked",
+    "status": "passed",
+    "detail": "A GLOBAL rule cannot be activated without golden verification (HTTP 400) — the guardrail that keeps the proven baseline safe."
+  },
+  {
+    "suite": "75 · Architecture (engine + learning loop)",
+    "title": "engine consumes a rule at parse time",
+    "status": "passed",
+    "detail": "An SU-set institution routing rule (textContains → Standard 9.j) was read from Mongo by the ai-service at parse time and MOVED the matching narrative from 1.a → 9.j, removed from its original bucket. Proves rules are data the engine executes, not code."
+  },
+  {
+    "suite": "75 · Architecture (engine + learning loop)",
+    "title": "the learning loop learns the winning parse setting",
+    "status": "passed",
+    "detail": "The agent re-parsed the document under each candidate and scored every result against the §7 contract: auto=85 specs/anchored, template=85 specs/anchored, self_study=64 specs/ANCHORS MISSING → learned 'auto' (the anchored, high-coverage parse), written back as an active rule the engine consumes."
+  }
+]

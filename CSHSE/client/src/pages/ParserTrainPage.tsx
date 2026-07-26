@@ -92,7 +92,10 @@ export default function ParserTrainPage() {
       const fd = new FormData();
       fd.append('submissionId', run.submissionId);
       fd.append('file', f);
-      const up = await api.post('/api/imports/upload', fd, { headers: IMPERSONATE(run.pcUserId) });
+      // Override the axios default Content-Type: application/json — setting it to
+      // undefined lets the browser set multipart/form-data WITH the boundary, so
+      // multer actually receives the file (otherwise: "No file uploaded").
+      const up = await api.post('/api/imports/upload', fd, { headers: { ...IMPERSONATE(run.pcUserId), 'Content-Type': undefined } as any });
       const impId = up.data.importId;
       setImportId(impId);
       setBusy('Starting parser…');
