@@ -1508,6 +1508,10 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
     const { status, limit = 10, offset = 0, institutionId, jointVentureId } = req.query;
 
     const filter: any = {};
+    // CR-073 Parser Train — sandbox training runs are never real submissions;
+    // exclude them from EVERY list (admin, PC, reader) so they can't affect or
+    // be confused with institutions' actual self-studies.
+    filter.trainingRun = { $ne: true };
 
     // CR-017 Gap 1 — Force program coordinators to their own institution,
     // regardless of what `?institutionId=` they pass. The earlier logic

@@ -94,7 +94,7 @@ const ParserRuleSchema = new Schema<IParserRule>(
       wrap: { type: String, default: 'section' },
       idFrom: { type: String, default: 'sectionId' },
     },
-    examples: { type: [Schema.Types.Mixed], default: [] },
+    examples: { type: [Schema.Types.Mixed] as any, default: [] },
     confidence: { type: Number },
     contractChecks: { type: Schema.Types.Mixed },
     metrics: { type: Schema.Types.Mixed, default: {} },

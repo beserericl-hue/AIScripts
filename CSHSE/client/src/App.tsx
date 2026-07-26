@@ -15,6 +15,7 @@ import SiteVisitChecklistPage from './pages/SiteVisitChecklistPage';
 import SiteVisitItineraryPage from './pages/SiteVisitItineraryPage';
 import RelayConsolePage from './pages/RelayConsolePage';
 import MessagesPage from './pages/MessagesPage';
+import ParserTrainPage from './pages/ParserTrainPage';
 import Layout from './components/Layout';
 // CR-052 — Tour + Hint providers wrap the protected (logged-in) subtree.
 import { TourProvider } from './features/tour/TourProvider';
@@ -116,6 +117,8 @@ function App() {
         <Route path="relay/:submissionId" element={<RelayConsolePage />} />
         {/* CR-010 / S12.2 — reader/lead-reader Messages (DM) view, scoped to a submission. */}
         <Route path="messages/:submissionId" element={<MessagesPage />} />
+        {/* CR-073 — Parser Train (superuser-only; access gated inside the page). */}
+        <Route path="parser-train" element={<ParserTrainPage />} />
         <Route path="admin/*" element={<AdminPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

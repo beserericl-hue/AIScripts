@@ -53,6 +53,7 @@ import {
 import { AuthenticatedRequest } from '../middleware/auth';
 import { requireImportAccess, requireCanImport } from '../services/submissionAccessGuard';
 import { checkParserContract } from '../services/parserContract';
+import { resolveForceFormat } from '../services/parserRuleEngine';
 
 // CR-040 Phase 2c — escape user-supplied strings for the evidenceDoc
 // HTML wrapper we generate at Apply time. Captures the five characters
@@ -190,6 +191,10 @@ function buildSnapshotFromImport(importRecord: any): object {
     queueDepth: importRecord.aiQueueDepth ?? null,
     etaSeconds: importRecord.aiEtaSeconds ?? null,
     format: importRecord.aiFormat ?? null,
+    // CR-073 — the effective forceFormat the server dispatched with (after the
+    // Parser Train rule-engine hook). null = auto-detect. Lets the training UI /
+    // E2E confirm an activated rule steered this import without a full re-parse.
+    forceFormat: importRecord.aiForceFormat ?? null,
     stages: importRecord.aiStages || [],
     buckets: importRecord.aiBuckets || null,
     tags: importRecord.aiTags || null,
@@ -380,11 +385,14 @@ export async function startAIImportForBatch(
   const institutionIdStr = submissionDoc?.institutionId
     ? String(submissionDoc.institutionId)
     : null;
+  // CR-073 rule-engine hook — an SU-activated Parser Train rule may override
+  // forceFormat for this institution (default-preserving: no rule → unchanged).
+  const { forceFormat: effForceFormat } = await resolveForceFormat(institutionIdStr || undefined, programLevel, forceFormat);
   await SelfStudyImport.findByIdAndUpdate(importId, {
     $set: {
       aiStatus: 'queued',
       aiProgramLevel: programLevel,
-      aiForceFormat: forceFormat,
+      aiForceFormat: effForceFormat,
       aiS3Key: s3Key,
       aiStartedAt: new Date(),
       aiStages: [],
@@ -398,7 +406,7 @@ export async function startAIImportForBatch(
     submissionId: String(initial.submissionId),
     importId,
     programLevel,
-    forceFormat,
+    forceFormat: effForceFormat,
     callbackUrl,
     eventCallbackUrl,
     institutionId: institutionIdStr
@@ -449,12 +457,17 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
     .lean();
   const institutionIdStr = submissionDoc?.institutionId ? String(submissionDoc.institutionId) : null;
 
+  // CR-073 rule-engine hook — an SU-activated Parser Train rule may override
+  // forceFormat for this institution (default-preserving: no rule → unchanged).
+  const { forceFormat: effForceFormat, appliedRuleId } = await resolveForceFormat(institutionIdStr || undefined, programLevel, forceFormat);
+  if (appliedRuleId) console.log(`[startAIImport] Parser Train rule ${appliedRuleId} → forceFormat=${effForceFormat} for institution ${institutionIdStr}`);
+
   // Mark queued atomically before dispatching to the AI service.
   await SelfStudyImport.findByIdAndUpdate(importId, {
     $set: {
       aiStatus: 'queued',
       aiProgramLevel: programLevel,
-      aiForceFormat: forceFormat,
+      aiForceFormat: effForceFormat,
       aiIsReimport: !!isReimport,
       aiS3Key: s3Key,
       aiStartedAt: new Date(),
@@ -472,7 +485,7 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
       submissionId: submissionIdStr,
       importId: String(importId),
       programLevel,
-      forceFormat,
+      forceFormat: effForceFormat,
       callbackUrl,
       eventCallbackUrl,
       institutionId: institutionIdStr
@@ -1942,12 +1955,15 @@ export async function restartAIImport(req: AuthenticatedRequest, res: Response):
     const institutionIdStr = submissionDoc2?.institutionId
       ? String(submissionDoc2.institutionId)
       : null;
+    // CR-073 rule-engine hook (default-preserving: no active rule → unchanged).
+    const { forceFormat: effForceFormat } = await resolveForceFormat(institutionIdStr || undefined, importRecord.aiProgramLevel || undefined, forceFormat);
+    importRecord.aiForceFormat = effForceFormat as any;
     const snapshot = await postToAIService('/ai/import/start', {
       s3Key: importRecord.aiS3Key,
       submissionId: String(importRecord.submissionId),
       importId: String(importId),
       programLevel: importRecord.aiProgramLevel || 'bachelors',
-      forceFormat,
+      forceFormat: effForceFormat,
       callbackUrl,
       eventCallbackUrl,
       institutionId: institutionIdStr

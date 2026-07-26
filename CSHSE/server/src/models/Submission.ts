@@ -168,6 +168,9 @@ export interface ISubmission extends Document {
   // Used as the idempotency key for the reaccreditation auto-spin-up scan
   // (one reaccreditation per prior cycle).
   reaccreditationOf?: mongoose.Types.ObjectId;
+  // CR-073 Parser Train — a sandbox training run (never a real institution's
+  // self-study). Excluded from every submission list; owned by the SU who ran it.
+  trainingRun?: boolean;
   status: SubmissionStatus;
   narratives: Map<string, Map<string, INarrativeContent>>;
   documents: IDocumentRef[];
@@ -331,6 +334,8 @@ const SubmissionSchema = new Schema<ISubmission>({
     default: undefined,
     index: true
   },
+  // CR-073 Parser Train sandbox run (excluded from every list).
+  trainingRun: { type: Boolean, default: undefined, index: true },
   status: {
     type: String,
     enum: [

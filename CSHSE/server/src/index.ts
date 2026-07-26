@@ -17,6 +17,7 @@ import { startEvalQueueWorker } from './services/evalQueueWorker';
 
 // Import routes
 import importsRouter from './routes/imports';
+import parserTrainRouter from './routes/parserTrain';
 import webhooksRouter from './routes/webhooks';
 import reviewsRouter from './routes/reviews';
 import leadReviewsRouter from './routes/leadReviews';
@@ -179,6 +180,7 @@ if (testRouter) {
 
 // All other routes (protected)
 app.use('/api/imports', importsRouter);
+app.use('/api/parser-train', parserTrainRouter);
 app.use('/api/webhooks', webhooksRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/lead-reviews', leadReviewsRouter);
