@@ -34,7 +34,7 @@ async function ensureSandbox() {
   let inst: any = await Institution.findOne({ name: SANDBOX_INST_NAME });
   if (!inst) {
     inst = await Institution.create({
-      name: SANDBOX_INST_NAME, type: 'community_college',
+      name: SANDBOX_INST_NAME, type: 'college',
       address: { street: '1 Sandbox Way', city: 'Train', state: 'NA', zip: '00000', country: 'USA' },
       primaryContact: { name: 'Parser Train', email: SANDBOX_PC_EMAIL, phone: '000-000-0000' },
     });
