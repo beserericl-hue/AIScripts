@@ -21,6 +21,7 @@ interface RunRow { _id: string; submissionId: string; programLevel: Level; statu
 
 interface Contract {
   ok: boolean;
+  format: string;
   anchors: { ok: boolean; totalItems: number; anchored: number; missing: Array<{ sectionId: string; where?: string }> };
   coverage: { specsWithContent: number; byStandard: Record<string, string[]>; catalogSpecs: number };
   fileTypes: Record<string, number>;
@@ -219,7 +220,7 @@ export default function ParserTrainPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-md border border-gray-200 p-3">
-                  <div className="font-medium text-gray-900">Placement</div>
+                  <div className="font-medium text-gray-900">Placement <span className="font-normal text-gray-400">· {contract.format || 'format n/a'}</span></div>
                   <div className="text-gray-600">Specs with content: {contract.coverage.specsWithContent} / {contract.coverage.catalogSpecs} catalog</div>
                   <div className="mt-1 text-xs text-gray-500">
                     Standards: {Object.keys(contract.coverage.byStandard).sort((a, b) => +a - +b).join(', ')}

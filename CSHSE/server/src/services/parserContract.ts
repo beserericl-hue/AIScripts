@@ -28,6 +28,7 @@ export interface ContractResult {
   importId: string;
   submissionId: string;
   programLevel: string;
+  format: string; // detected/used parser format (template | self_study | mcc_narrative)
   anchors: {
     ok: boolean;
     totalItems: number;
@@ -79,7 +80,7 @@ function collectItems(rs: any): ContractItem[] {
 }
 
 export async function checkParserContract(importId: string): Promise<ContractResult> {
-  const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
+  const imp: any = await SelfStudyImport.findById(importId).select('submissionId aiFormat').lean();
   if (!imp) throw new Error('import not found');
   const sub: any = await Submission.findById(imp.submissionId).select('aiReviewState programLevel').lean();
   const rs: any = sub?.aiReviewState || {};
@@ -162,6 +163,7 @@ export async function checkParserContract(importId: string): Promise<ContractRes
     importId: String(importId),
     submissionId: String(imp.submissionId),
     programLevel: normalizeLevel(programLevel),
+    format: String(imp.aiFormat || ''),
     anchors: { ok: anchorsOk, totalItems: items.length, anchored: items.length - missing.length, missing },
     coverage: { specsWithContent, byStandard, unplacedTags, catalogSpecs },
     fileTypes: { evidenceFiles: evFiles, evidenceText: evText, cvs: (rs.cvs || []).length, evidenceDocs: evidenceDocs.length, matrices: (rs.matrices || []).length, docSubKinds },
