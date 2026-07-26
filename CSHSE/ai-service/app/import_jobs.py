@@ -513,15 +513,17 @@ def _run_pipeline(job: JobRecord) -> None:
         if job.status not in ("failed", "canceled") and getattr(job, "rule_engine", None):
             try:
                 summary = job.rule_engine.apply_post_pass(job)
-                if summary.get("moved") or summary.get("reclassified"):
-                    print(
-                        f"[import_jobs] rule-engine post-pass: moved={summary['moved']} "
-                        f"reclassified={summary['reclassified']} "
-                        f"rules={summary['appliedRuleIds']}"
-                    )
+                # CR-073 — always surface the post-pass outcome in warnings (JSON-only,
+                # support channel) so the Parser Train agent / E2E can confirm the
+                # engine consumed a rule without reading service logs.
+                job.warnings.append(
+                    f"rule-engine post-pass: rules={len(job.rule_engine._rules)} "
+                    f"moved={summary.get('moved', 0)} reclassified={summary.get('reclassified', 0)} "
+                    f"applied={summary.get('appliedRuleIds', [])}"
+                )
             except Exception as exc:  # noqa: BLE001 — never sink the import
                 job.warnings.append(
-                    f"rule-engine post-pass: {type(exc).__name__}: {exc}"
+                    f"rule-engine post-pass ERROR: {type(exc).__name__}: {exc}"
                 )
 
         # Compare relies on a data-section-id anchor per item. Template builds no
