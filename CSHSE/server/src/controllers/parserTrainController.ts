@@ -21,8 +21,9 @@ import { Institution } from '../models/Institution';
 import { User } from '../models/User';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { ParserRule } from '../models/ParserRule';
+import { ParserTrainGuard, GOLDEN_GUARD_TTL_MS } from '../models/ParserTrainGuard';
 import { checkParserContract } from '../services/parserContract';
-import { startAutoRefine, getRefineState } from '../services/parserTrainAgent';
+import { startAutoRefine, getRefineState, synthesizePlacementRules } from '../services/parserTrainAgent';
 
 const SANDBOX_INST_NAME = 'Parser Train Sandbox';
 const SANDBOX_PC_EMAIL = 'parser-train-pc@sandbox.local';
@@ -82,23 +83,20 @@ export const diagnoseParserTrain = async (req: AuthenticatedRequest, res: Respon
     if (!sub?.trainingRun) { res.status(400).json({ error: 'not a Parser Train sandbox run' }); return; }
 
     const contract = await checkParserContract(importId);
-    const proposals: string[] = [];
-    for (const f of contract.findings) {
-      if (f.severity !== 'critical') continue; // only real gaps become proposed rules
-      const ruleId = `agent.${f.check}.${String(importId).slice(-6)}`;
-      const rule = {
-        ruleId, version: 1, name: `Proposed by Parser Train: fix ${f.check}`, description: f.detail,
-        scope: { level: 'institution', institutionId: sub.institutionId },
-        status: 'proposed', createdBy: 'agent', createdFromImportId: imp._id,
-        match: { format: 'any', region: 'document', signature: { from: 'parser-train', finding: f.check } },
-        extract: {}, anchor: { emit: true, wrap: 'section', idFrom: 'sectionId' },
-        examples: [{ importId: imp._id, excerpt: String(f.detail || '').slice(0, 200) }],
-        confidence: 0.6, contractChecks: {}, metrics: {}, updatedAt: new Date(),
-      };
-      await ParserRule.updateOne({ ruleId, version: 1 }, { $set: rule, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
-      proposals.push(ruleId);
-    }
-    res.json({ ok: true, contract, proposals, cleanParse: contract.ok && proposals.length === 0 });
+    // REAL rule synthesis (CR-073 #1): for the content this parse left unplaced,
+    // ask the matcher where it belongs and PROPOSE deterministic placement rules
+    // (not activated — the SU approves them). Bounded so diagnose stays responsive.
+    const sub2: any = await Submission.findById(imp.submissionId).select('programLevel').lean();
+    const syn = await synthesizePlacementRules(
+      importId, String(sub.institutionId), String(sub2?.programLevel || 'associate'),
+      { activate: false, cap: 12 }
+    );
+    res.json({
+      ok: true, contract,
+      proposals: syn.synthesized,
+      unplacedConsidered: syn.considered,
+      cleanParse: contract.ok && contract.coverage.unplacedTags === 0 && syn.synthesized.length === 0,
+    });
   } catch (err: any) {
     console.error('[parser-train diagnose] failed:', err);
     res.status(500).json({ error: 'diagnose failed', detail: err?.message || String(err) });
@@ -114,16 +112,23 @@ export const setParserTrainRule = async (req: AuthenticatedRequest, res: Respons
     if (!b.ruleId) { res.status(400).json({ error: 'ruleId required' }); return; }
     const scope: any = b.scope || { level: 'global' };
     if (scope.institutionId) scope.institutionId = new mongoose.Types.ObjectId(String(scope.institutionId));
-    // GUARDRAIL — a GLOBAL rule (one that could affect the proven baseline /
-    // every institution) may only be activated when it has passed the golden
-    // regression. Institution-scoped rules can never touch the baseline, so they
-    // activate freely. This is what makes the self-improving loop safe.
+    // GUARDRAIL (CR-073 #7) — a GLOBAL rule (one that could affect the proven
+    // baseline / every institution) may only be activated when the golden
+    // regression is CURRENTLY green (a fresh mark-goldens-green stamp set by the
+    // passing golden suite). Institution-scoped rules can never touch the
+    // baseline, so they activate freely. This is the automated safety gate.
     const wantsActive = b.activate !== false;
-    if (wantsActive && scope.level === 'global' && b.goldenChecked !== true) {
-      res.status(400).json({
-        error: 'Global rule activation is blocked until it passes the golden regression. Scope the rule to an institution, or set goldenChecked:true only after the golden suite is green.',
-      });
-      return;
+    if (wantsActive && scope.level === 'global') {
+      const guard: any = await ParserTrainGuard.findOne({ key: 'singleton' }).lean();
+      const at = guard?.goldensGreenAt ? new Date(guard.goldensGreenAt).getTime() : 0;
+      const fresh = at > 0 && (Date.now() - at) < GOLDEN_GUARD_TTL_MS;
+      if (!fresh && b.goldenChecked !== true) {
+        res.status(400).json({
+          error: 'Global rule activation is blocked: the golden regression is not currently green. Run the golden suite (which stamps mark-goldens-green) within the last 24h, or scope the rule to an institution.',
+          goldensGreenAt: guard?.goldensGreenAt || null,
+        });
+        return;
+      }
     }
     const rule = {
       ruleId: b.ruleId, version: Number(b.version || 1), name: b.name || b.ruleId, description: b.description || '',
@@ -148,14 +153,20 @@ export const approveParserTrainSpec = async (req: AuthenticatedRequest, res: Res
   if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
   try {
     const importId = req.params.importId;
-    const { std, spec } = req.body || {};
+    const { std, spec, all } = req.body || {};
     const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
     if (!imp) { res.status(404).json({ error: 'import not found' }); return; }
-    const r = await ParserRule.updateMany(
-      { createdFromImportId: imp._id, status: 'proposed' },
-      { $set: { status: 'active', updatedAt: new Date() } }
-    );
-    res.json({ ok: true, approved: { std, spec }, activatedRules: r.modifiedCount });
+    // CR-073 #6 — approving a SPECIFIC spec activates only the proposed rule(s)
+    // this run created for THAT std.spec (the rule that parsed it). `all:true`
+    // activates every proposal for the run (bulk approve).
+    const filter: any = { createdFromImportId: imp._id, status: 'proposed' };
+    if (!all && std != null && spec != null) {
+      filter['extract.params.std'] = String(std);
+      filter['extract.params.spec'] = String(spec);
+    }
+    const r = await ParserRule.updateMany(filter, { $set: { status: 'active', updatedAt: new Date() } });
+    const activatedIds = (await ParserRule.find({ createdFromImportId: imp._id, status: 'active', ...(!all && std != null && spec != null ? { 'extract.params.std': String(std), 'extract.params.spec': String(spec) } : {}) }).select('ruleId').lean()).map((x: any) => x.ruleId);
+    res.json({ ok: true, approved: { std, spec, all: !!all }, activatedRules: r.modifiedCount, activatedRuleIds: activatedIds });
   } catch (err: any) {
     console.error('[parser-train approve-spec] failed:', err);
     res.status(500).json({ error: 'approve-spec failed', detail: err?.message || String(err) });
@@ -192,6 +203,90 @@ export const refineStatusParserTrain = async (req: AuthenticatedRequest, res: Re
     res.json({ ok: true, state });
   } catch (err: any) {
     res.status(500).json({ error: 'refine-status failed', detail: err?.message || String(err) });
+  }
+};
+
+// POST /api/parser-train/:importId/note  (SU) — attach a note (+ optional
+// screenshot data URI) to a card/spec of a training run (#5). Persists against
+// the run in parserTrainState.notes[].
+export const addParserTrainNote = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
+  try {
+    const importId = req.params.importId;
+    const { std, spec, ruleId, note, screenshot } = req.body || {};
+    if (!note && !screenshot) { res.status(400).json({ error: 'note or screenshot required' }); return; }
+    const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
+    if (!imp) { res.status(404).json({ error: 'import not found' }); return; }
+    const sub: any = await Submission.findById(imp.submissionId).select('trainingRun').lean();
+    if (!sub?.trainingRun) { res.status(400).json({ error: 'not a Parser Train sandbox run' }); return; }
+    // cap screenshot size (base64 data URI) so the state doc stays bounded (~2MB)
+    const shot = typeof screenshot === 'string' && screenshot.length < 3_000_000 ? screenshot : undefined;
+    const entry = { at: new Date().toISOString(), std: std ?? null, spec: spec ?? null, ruleId: ruleId ?? null, note: String(note || ''), screenshot: shot };
+    await Submission.updateOne({ _id: imp.submissionId }, { $push: { 'parserTrainState.notes': entry } });
+    res.json({ ok: true, note: { ...entry, screenshot: shot ? '[stored]' : undefined } });
+  } catch (err: any) {
+    console.error('[parser-train note] failed:', err);
+    res.status(500).json({ error: 'note failed', detail: err?.message || String(err) });
+  }
+};
+
+// POST /api/parser-train/mark-goldens-green  (SU) — the passing golden suite
+// stamps this so global rule activation is unlocked for the TTL window (#7).
+export const markGoldensGreen = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
+  try {
+    const detail = String(req.body?.detail || 'golden regression green');
+    await ParserTrainGuard.updateOne({ key: 'singleton' }, { $set: { key: 'singleton', goldensGreenAt: new Date(), detail } }, { upsert: true });
+    res.json({ ok: true, goldensGreenAt: new Date() });
+  } catch (err: any) {
+    res.status(500).json({ error: 'mark-goldens-green failed', detail: err?.message || String(err) });
+  }
+};
+
+// GET /api/parser-train/guard  (SU) — current golden-guard freshness.
+export const getGuard = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
+  const guard: any = await ParserTrainGuard.findOne({ key: 'singleton' }).lean();
+  const at = guard?.goldensGreenAt ? new Date(guard.goldensGreenAt).getTime() : 0;
+  res.json({ ok: true, goldensGreenAt: guard?.goldensGreenAt || null, fresh: at > 0 && Date.now() - at < GOLDEN_GUARD_TTL_MS });
+};
+
+// GET /api/parser-train/:importId/review-page  (SU) — the dated per-run review
+// page (#8): findings + synthesized rules + learning trajectory, as a report.
+export const getReviewPage = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
+  try {
+    const importId = req.params.importId;
+    const imp: any = await SelfStudyImport.findById(importId).select('submissionId originalFilename').lean();
+    if (!imp) { res.status(404).json({ error: 'import not found' }); return; }
+    const sub: any = await Submission.findById(imp.submissionId).select('trainingRun institutionId programLevel parserTrainState createdAt').lean();
+    if (!sub?.trainingRun) { res.status(400).json({ error: 'not a Parser Train sandbox run' }); return; }
+    const contract = await checkParserContract(importId);
+    const rules = await ParserRule.find({ createdFromImportId: imp._id }).select('ruleId status extract match description confidence').lean();
+    const now = new Date();
+    res.json({
+      ok: true,
+      reviewPage: {
+        title: `Parser Train review — ${imp.originalFilename || 'document'}`,
+        date: now.toISOString().slice(0, 10),
+        generatedAt: now.toISOString(),
+        programLevel: sub.programLevel,
+        format: contract.format,
+        summary: {
+          specsWithContent: contract.coverage.specsWithContent,
+          catalogSpecs: contract.coverage.catalogSpecs,
+          unplacedTags: contract.coverage.unplacedTags,
+          anchorsTotal: contract.anchors.totalItems,
+          anchorsMissing: contract.anchors.missing.length,
+          fileTypes: contract.fileTypes,
+        },
+        findings: contract.findings,
+        learningTrajectory: sub.parserTrainState || null,
+        rules: rules.map((r: any) => ({ ruleId: r.ruleId, status: r.status, target: r.extract?.params, classification: r.extract?.classification, forceFormat: r.extract?.forceFormat, signature: r.match?.signature, description: r.description, confidence: r.confidence })),
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'review-page failed', detail: err?.message || String(err) });
   }
 };
 

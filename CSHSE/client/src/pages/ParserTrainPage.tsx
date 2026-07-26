@@ -51,6 +51,7 @@ export default function ParserTrainPage() {
   const [proposals, setProposals] = useState<string[]>([]);
   const [activated, setActivated] = useState<number | null>(null);
   const [refine, setRefine] = useState<any>(null);
+  const [noteText, setNoteText] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadRuns = async () => {
@@ -152,11 +153,26 @@ export default function ParserTrainPage() {
     } catch (e: any) { setErr(e?.response?.data?.error || String(e)); setBusy(''); }
   };
 
+  const addNote = async (note: string, screenshot?: string) => {
+    if (!importId || (!note && !screenshot)) return;
+    setErr('');
+    try {
+      await api.post(`/api/parser-train/${importId}/note`, { note, screenshot });
+      setNoteText('');
+    } catch (e: any) { setErr(e?.response?.data?.error || String(e)); }
+  };
+  const onShot = (f?: File) => {
+    if (!f || !importId) return;
+    const r = new FileReader();
+    r.onload = () => addNote(noteText || `screenshot: ${f.name}`, String(r.result));
+    r.readAsDataURL(f);
+  };
+
   const approve = async () => {
     if (!importId) return;
     setErr(''); setBusy('Activating rules…');
     try {
-      const { data } = await api.post(`/api/parser-train/${importId}/approve-spec`, {});
+      const { data } = await api.post(`/api/parser-train/${importId}/approve-spec`, { all: true });
       setActivated(data.activatedRules ?? 0);
     } catch (e: any) { setErr(e?.response?.data?.error || String(e)); }
     finally { setBusy(''); }
@@ -298,8 +314,29 @@ export default function ParserTrainPage() {
               )}
 
               {proposals.length > 0 && (
-                <div className="text-xs text-gray-600">Proposed rules from this run: {proposals.join(', ')}</div>
+                <div className="rounded-md border border-indigo-200 bg-indigo-50 p-3 text-xs text-indigo-800">
+                  <span className="font-medium">Agent-synthesized placement rules ({proposals.length}):</span> {proposals.join(', ')}
+                  <div className="mt-1 text-indigo-600">The matcher placed unplaced content into specs. Verify in Compare, then approve to activate.</div>
+                </div>
               )}
+
+              {/* #5 — notes + screenshots on the run */}
+              <div className="rounded-md border border-gray-200 p-3">
+                <div className="font-medium text-gray-900">Notes &amp; screenshots</div>
+                <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)}
+                  placeholder="Note anything wrong on a card…" rows={2}
+                  className="mt-2 w-full border border-gray-300 rounded-md px-2 py-1 text-sm" />
+                <div className="mt-2 flex items-center gap-3">
+                  <button onClick={() => addNote(noteText)} disabled={!noteText}
+                    className="px-3 py-1.5 bg-gray-800 text-white rounded-md text-xs disabled:opacity-50">Save note</button>
+                  <label className="text-xs text-gray-600 cursor-pointer">
+                    Attach screenshot
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => onShot(e.target.files?.[0])} />
+                  </label>
+                  <a href={`${import.meta.env.VITE_API_URL || ''}/api/parser-train/${importId}/review-page`} target="_blank" rel="noreferrer"
+                    className="text-xs text-blue-600 underline ml-auto">View dated review page →</a>
+                </div>
+              </div>
             </div>
           )}
         </section>

@@ -2,3 +2,9 @@ node_modules/
 playwright-report/
 test-results/
 .playwright/
+
+# CR-073 large source fixtures (pulled from S3, not committed)
+fixtures/files/stevenson.docx
+fixtures/files/mcc.pdf
+report/shots/
+report/report.html

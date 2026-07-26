@@ -515,10 +515,11 @@ def _run_pipeline(job: JobRecord) -> None:
                 summary = job.rule_engine.apply_post_pass(job)
                 # CR-073 — surface the post-pass outcome in warnings (JSON-only support
                 # channel) ONLY when a rule actually acted, so normal parses stay clean.
-                if summary.get("moved") or summary.get("reclassified"):
+                if summary.get("moved") or summary.get("reclassified") or summary.get("placedTags"):
                     job.warnings.append(
                         f"rule-engine post-pass: moved={summary.get('moved', 0)} "
                         f"reclassified={summary.get('reclassified', 0)} "
+                        f"placedTags={summary.get('placedTags', 0)} "
                         f"applied={summary.get('appliedRuleIds', [])}"
                     )
             except Exception as exc:  # noqa: BLE001 — never sink the import

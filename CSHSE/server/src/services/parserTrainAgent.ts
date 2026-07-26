@@ -24,8 +24,29 @@ import { SelfStudyImport } from '../models/SelfStudyImport';
 import { ParserRule } from '../models/ParserRule';
 import { checkParserContract, ContractResult } from './parserContract';
 import { startAIImportForBatch } from '../controllers/aiImportController';
+import { recommendPlacement } from './cshseAiClient';
 
 type Fmt = 'template' | 'self_study' | 'mcc_narrative' | null;
+
+// section_type (matcher) → parserRule classification
+function mapSectionType(t: string): string {
+  const s = String(t || '').toLowerCase();
+  if (s.includes('supporting_evidence') || s === 'supporting-evidence') return 'evidence-text';
+  if (s.includes('curriculum_matrix') || s.includes('matrix')) return 'matrix';
+  if (s.includes('introduction')) return 'intro';
+  return 'narrative'; // narrative_response / context / unknown default to narrative
+}
+
+// A clean, distinctive contiguous run (6 pure-ASCII words) — a robust textContains
+// needle that survives whitespace normalisation across re-parses.
+function cleanNeedle(text: string): string {
+  const words = String(text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().split(' ');
+  for (let i = 0; i + 6 <= words.length; i++) {
+    const run = words.slice(i, i + 6);
+    if (run.every((w) => /^[A-Za-z][A-Za-z-]*$/.test(w))) return run.join(' ');
+  }
+  return words.slice(0, 8).join(' ');
+}
 
 interface Candidate { forceFormat: Fmt; }
 interface Attempt {
@@ -44,6 +65,15 @@ interface RefineState {
   importId: string;
   attempts: Attempt[];
   winner?: { candidate: string; ruleId?: string; score: number };
+  synthesis?: {
+    rulesSynthesized: number;
+    ruleIds: string[];
+    unplacedBefore: number;
+    unplacedAfter: number;
+    specsBefore: number;
+    specsAfter: number;
+    anchorsOkAfter: boolean;
+  };
   message?: string;
 }
 
@@ -187,9 +217,34 @@ export function startAutoRefine(importId: string, programLevel: string, institut
         await clearReviewState(importId);
         await startAIImportForBatch(importId, programLevel, null as any);
         await pollParsed(importId);
+        const cWin = await settledContract(importId);
         state.winner = { candidate: best.attempt.candidate, ruleId: best.candidate.forceFormat ? ruleId : undefined, score: best.attempt.score };
+
+        // PHASE 2 — autonomous rule synthesis: place the content the winning parse
+        // still left unplaced by writing deterministic placement rules, then
+        // re-parse so the engine applies them and Compare stays intact.
+        const unplacedBefore = cWin.coverage.unplacedTags;
+        const specsBefore = cWin.coverage.specsWithContent;
+        state.message = `Learned format "${best.attempt.candidate}" (${specsBefore} specs). Synthesizing placement rules for ${unplacedBefore} unplaced item(s)…`;
+        await persist(importId, state);
+
+        const syn = await synthesizePlacementRules(importId, institutionId, programLevel, { activate: true });
+        if (syn.synthesized.length) {
+          await clearReviewState(importId);
+          await startAIImportForBatch(importId, programLevel, null as any);
+          await pollParsed(importId);
+        }
+        const cAfter = await settledContract(importId);
+        state.synthesis = {
+          rulesSynthesized: syn.synthesized.length, ruleIds: syn.synthesized,
+          unplacedBefore, unplacedAfter: cAfter.coverage.unplacedTags,
+          specsBefore, specsAfter: cAfter.coverage.specsWithContent,
+          anchorsOkAfter: cAfter.anchors.missing.length === 0,
+        };
         state.status = 'done';
-        state.message = `Learned: parse this document as "${best.attempt.candidate}" (${best.attempt.specsWithContent} specs, anchors ${best.attempt.anchorsOk ? 'OK' : 'MISSING'}).`;
+        state.message = `Learned: format "${best.attempt.candidate}" + ${syn.synthesized.length} placement rule(s). `
+          + `Unplaced ${unplacedBefore}→${cAfter.coverage.unplacedTags}, specs ${specsBefore}→${cAfter.coverage.specsWithContent}, `
+          + `anchors ${cAfter.anchors.missing.length === 0 ? 'OK' : 'MISSING'}.`;
       }
       state.finishedAt = new Date().toISOString();
       await persist(importId, state);
@@ -201,6 +256,68 @@ export function startAutoRefine(importId: string, programLevel: string, institut
       console.error('[parser-train agent] refine failed:', err);
     }
   })();
+}
+
+/**
+ * AUTONOMOUS RULE SYNTHESIS (CR-073 #1). For each UNPLACED tag (content the parser
+ * could not route to a spec) — and optionally low-confidence placements — ask the
+ * ai-service matcher where it SHOULD go, and if it has a confident target, write a
+ * deterministic parserRule (textContains → std.spec + classification) so the engine
+ * places it on the next parse. Institution-scoped, so it can never touch the
+ * baseline. Returns the synthesized ruleIds. `activate` gates proposed vs active.
+ */
+export async function synthesizePlacementRules(
+  importId: string, institutionId: string, programLevel: string,
+  opts: { activate: boolean; cap?: number } = { activate: false }
+): Promise<{ synthesized: string[]; considered: number }> {
+  const cap = opts.cap ?? 25;
+  const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
+  if (!imp?.submissionId) return { synthesized: [], considered: 0 };
+  const sub: any = await Submission.findById(imp.submissionId).select('aiReviewState').lean();
+  const tags: any[] = sub?.aiReviewState?.tags || [];
+  const synthesized: string[] = [];
+  let considered = 0;
+
+  for (const tag of tags.slice(0, cap)) {
+    const text = String(tag.fullText || tag.snippet || '').trim();
+    if (text.length < 40) continue; // too short to place / match reliably
+    considered++;
+    const rec = await recommendPlacement({
+      text: text.slice(0, 4000), heading: String(tag.summary || tag.sourceHeading || ''),
+      programLevel, institutionId,
+    });
+    if (!rec.std || !rec.spec || (rec.confidence ?? 0) < 0.5) continue;
+    const needle = cleanNeedle(text);
+    if (needle.length < 12) continue;
+    const classification = mapSectionType(rec.sectionType);
+    const ruleId = `agent.place.${String(tag.sectionId || tag.tagId || Math.abs(hashStr(needle))).slice(-16)}`;
+    await ParserRule.updateOne(
+      { ruleId, version: 1 },
+      {
+        $set: {
+          ruleId, version: 1, name: `Agent-placed: ${rec.std}.${rec.spec}`,
+          description: `Matcher placed unplaced content into ${rec.std}.${rec.spec} (${classification}, conf ${(rec.confidence ?? 0).toFixed(2)}).`,
+          scope: { level: 'institution', institutionId },
+          status: opts.activate ? 'active' : 'proposed', createdBy: 'agent', createdFromImportId: importId,
+          match: { format: 'any', region: 'document', signature: { textContains: needle } },
+          extract: { standardAssignment: 'explicit', specAssignment: 'explicit', classification, params: { std: rec.std, spec: rec.spec } },
+          anchor: { emit: true, wrap: 'section', idFrom: 'sectionId' },
+          examples: [{ importId, excerpt: text.slice(0, 200) }],
+          confidence: rec.confidence ?? 0.6, updatedAt: new Date(),
+        },
+        $setOnInsert: { createdAt: new Date() },
+      },
+      { upsert: true }
+    );
+    synthesized.push(ruleId);
+  }
+  return { synthesized, considered };
+}
+
+function hashStr(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) { h = (h << 5) - h + s.charCodeAt(i); h |= 0; }
+  return h;
 }
 
 export async function getRefineState(importId: string): Promise<RefineState | null> {

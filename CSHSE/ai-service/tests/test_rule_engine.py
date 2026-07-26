@@ -27,9 +27,10 @@ class _FakeJob:
     """Minimal stand-in for JobRecord — the engine only reads .buckets /
     .introductions."""
 
-    def __init__(self, buckets=None, introductions=None):
+    def __init__(self, buckets=None, introductions=None, tags=None):
         self.buckets = buckets
         self.introductions = introductions
+        self.tags = tags
 
 
 def _fixture_buckets() -> dict:
@@ -101,7 +102,7 @@ def test_empty_rules_is_strict_noop():
     engine = RuleEngine([])
     summary = engine.apply_post_pass(job)
 
-    assert summary == {"moved": 0, "reclassified": 0, "appliedRuleIds": []}
+    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
     assert job.buckets == before  # deep-equal: nothing moved or reclassified
 
 
@@ -122,7 +123,7 @@ def test_signature_matching_nothing_is_noop():
     }
     summary = RuleEngine([rule]).apply_post_pass(job)
 
-    assert summary == {"moved": 0, "reclassified": 0, "appliedRuleIds": []}
+    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
     assert job.buckets == before
 
 
@@ -149,7 +150,7 @@ def test_baseline_structural_signatures_are_noop():
     ]
     summary = RuleEngine(baseline_like).apply_post_pass(job)
 
-    assert summary == {"moved": 0, "reclassified": 0, "appliedRuleIds": []}
+    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
     assert job.buckets == before
 
 
@@ -234,3 +235,132 @@ def test_section_id_equals_signature():
     assert job.buckets["2.b"]["narratives"] == []
     # sec-foo (a different id) never moved
     assert [i["sectionId"] for i in job.buckets["1.a"]["narratives"]] == ["sec-foo"]
+
+
+# ---------------------------------------------------------------- tag routing
+
+
+def _fixture_tags() -> list:
+    """Two unplaced tags in the ``job.tags`` shape (see
+    import_jobs._recommendation_to_tag)."""
+    return [
+        {
+            "tagId": "tag-aaaa1111",
+            "sectionId": "sec-tag-orphan",
+            "summary": "Program Evaluation Plan",
+            "fullText": "This section describes our WIDGET evaluation methodology "
+            "and annual review cycle in detail.",
+            "htmlSnippet": None,
+            "suggestedStd": None,
+            "suggestedSpec": None,
+            "confidence": 0.12,
+            "sourceHeading": "Program Evaluation Plan",
+            "acceptState": "review_unknown",
+            "rationale": "Matcher returned low confidence.",
+            "byteOffsetStart": 4200,
+        },
+        {
+            "tagId": "tag-bbbb2222",
+            "sectionId": "sec-tag-keep",
+            "summary": "Miscellaneous appendix listing",
+            "fullText": "An unrelated index of gadget references nobody routes.",
+            "htmlSnippet": None,
+            "suggestedStd": None,
+            "suggestedSpec": None,
+            "confidence": 0.05,
+            "sourceHeading": "Miscellaneous appendix listing",
+            "acceptState": "review_unknown",
+            "rationale": "Matcher returned no recommendation.",
+            "byteOffsetStart": 8800,
+        },
+    ]
+
+
+def test_routing_rule_places_matching_tag_into_bucket():
+    """A textContains rule matching a tag's fullText + routing to 5.a MOVES the
+    tag out of job.tags and INTO buckets['5.a'].narratives as a bucket item."""
+    buckets = _fixture_buckets()
+    tags = _fixture_tags()
+    job = _FakeJob(buckets=buckets, tags=tags)
+
+    rule = {
+        "ruleId": "test.place-widget",
+        "match": {"signature": {"textContains": "widget"}},  # matches fullText
+        "extract": {
+            "classification": "narrative",
+            "params": {"std": "5", "spec": "a"},
+        },
+        "confidence": 1.0,
+    }
+    summary = RuleEngine([rule]).apply_post_pass(job)
+
+    assert summary["placedTags"] == 1
+    assert summary["moved"] == 0
+    assert summary["reclassified"] == 0
+    assert summary["appliedRuleIds"] == ["test.place-widget"]
+
+    # The matched tag left job.tags (removed by identity)...
+    assert [t["sectionId"] for t in job.tags] == ["sec-tag-keep"]
+    # ...and landed in a freshly created 5.a bucket, converted to a bucket item.
+    dest = job.buckets["5.a"]
+    assert [i["sectionId"] for i in dest["narratives"]] == ["sec-tag-orphan"]
+    placed = dest["narratives"][0]
+    # Converted shape: heading from summary, snippet from fullText, wordCount set.
+    assert placed["heading"] == "Program Evaluation Plan"
+    assert placed["snippet"].startswith("This section describes our WIDGET")
+    assert placed["wordCount"] == len(
+        _fixture_tags()[0]["fullText"].split()
+    )
+    assert "fullText" not in placed  # it's a bucket item now, not a tag
+
+
+def test_empty_rules_leaves_tags_untouched():
+    """apply_post_pass with no rules is a strict no-op — job.tags deep-equal."""
+    tags = _fixture_tags()
+    before = copy.deepcopy(tags)
+    job = _FakeJob(buckets=_fixture_buckets(), tags=tags)
+
+    summary = RuleEngine([]).apply_post_pass(job)
+
+    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
+    assert job.tags == before  # deep-equal: no tag moved, mutated, or removed
+
+
+def test_unmatched_tag_stays_in_tags():
+    """A tag no rule matches stays in job.tags untouched."""
+    tags = _fixture_tags()
+    before = copy.deepcopy(tags)
+    job = _FakeJob(buckets=_fixture_buckets(), tags=tags)
+
+    # This rule matches the FIRST tag only ('widget'), never the second.
+    rule = {
+        "ruleId": "test.place-widget",
+        "match": {"signature": {"textContains": "widget"}},
+        "extract": {"classification": "narrative", "params": {"std": "5", "spec": "a"}},
+        "confidence": 1.0,
+    }
+    RuleEngine([rule]).apply_post_pass(job)
+
+    # The un-matched 'gadget' tag is still present and identical to before.
+    remaining = [t for t in job.tags if t["sectionId"] == "sec-tag-keep"]
+    assert len(remaining) == 1
+    assert remaining[0] == before[1]
+
+
+def test_classification_only_rule_does_not_place_tag():
+    """A tag can only be placed by a ROUTING rule (needs a dest bucket). A
+    classification-only rule that matches a tag is a no-op — the tag stays."""
+    tags = _fixture_tags()
+    before = copy.deepcopy(tags)
+    job = _FakeJob(buckets=_fixture_buckets(), tags=tags)
+
+    rule = {
+        "ruleId": "test.reclass-only",
+        "match": {"signature": {"textContains": "widget"}},
+        "extract": {"classification": "appendix"},  # no params.std/spec → no routing
+        "confidence": 1.0,
+    }
+    summary = RuleEngine([rule]).apply_post_pass(job)
+
+    assert summary["placedTags"] == 0
+    assert job.tags == before

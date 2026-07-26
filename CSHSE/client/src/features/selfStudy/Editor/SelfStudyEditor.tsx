@@ -2525,6 +2525,18 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
   return (
     <div className="self-study-editor flex flex-1 min-h-0 flex-col overflow-hidden bg-gray-50">
+      {/* CR-073 — Parser Train mode banner. When an SU opens a sandbox training
+          run, this IS the verification surface: run Compare on every card,
+          confirm placement, then approve on the Parser Train page (approval
+          activates the parser rule that produced the spec). */}
+      {(submission as any)?.trainingRun && (
+        <div className="flex-shrink-0 border-b border-indigo-200 bg-indigo-50 px-4 py-2 text-sm text-indigo-900">
+          <div className="mx-auto flex max-w-7xl items-center gap-2">
+            <span className="font-semibold">Parser Train mode</span>
+            <span className="text-indigo-700">— verification sandbox. Run Compare on each card to confirm placement &amp; anchoring; approving a spec in Parser Train activates the rule that parsed it. This run is isolated and never affects real submissions.</span>
+          </div>
+        </div>
+      )}
       {/* CR-005 / S2A.2 — read-only lockout banner. Shown when the PC's
           submission has progressed past draft (final-submitted, under
           review, etc.) so they understand why the editor is read-only

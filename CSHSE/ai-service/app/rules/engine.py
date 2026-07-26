@@ -175,7 +175,13 @@ def _empty_bucket(std: str, spec: str) -> dict[str, Any]:
 
 
 def _item_text(item: dict) -> str:
-    """Lower-cased text used for ``textContains`` matching."""
+    """Lower-cased text used for ``textContains`` matching.
+
+    Bucket items carry text under ``heading``/``snippet``/``htmlSnippet``;
+    unplaced tags (``job.tags``) carry it under ``fullText``/``summary`` (see
+    ``import_jobs._recommendation_to_tag``). We concatenate ALL of them so the
+    same ``textContains`` needle matches whichever shape the item is.
+    """
     parts = [
         str(item.get("heading") or ""),
         str(item.get("snippet") or ""),
@@ -185,6 +191,32 @@ def _item_text(item: dict) -> str:
         str(item.get("summary") or ""),
     ]
     return "\n".join(parts).lower()
+
+
+# Sentinel bucket key for unplaced tags. It is never a real "<std>.<spec>"
+# bucket, so a ``currentBucket`` signature can never spuriously match a tag.
+_TAGS_KEY = "__tags__"
+
+
+def _tag_to_bucket_item(tag: dict) -> dict[str, Any]:
+    """Convert an unplaced ``job.tags`` entry into a bucket-item dict.
+
+    Maps the tag shape (``fullText``/``summary``/``sourceHeading`` + routing
+    hints, see ``import_jobs._recommendation_to_tag``) to the bucket-item shape
+    the wizard renders (``heading``/``snippet``/``htmlSnippet``/``wordCount`` …).
+    """
+    full = str(tag.get("fullText") or "")
+    return {
+        "sectionId": tag.get("sectionId"),
+        "heading": tag.get("summary") or tag.get("sourceHeading") or "",
+        "snippet": full,
+        "htmlSnippet": tag.get("htmlSnippet"),
+        "wordCount": len(full.split()),
+        "confidence": tag.get("confidence"),
+        "acceptState": tag.get("acceptState"),
+        "rationale": tag.get("rationale"),
+        "byteOffsetStart": tag.get("byteOffsetStart"),
+    }
 
 
 class RuleEngine:
@@ -213,10 +245,17 @@ class RuleEngine:
     def apply_post_pass(self, job) -> dict:
         """Reassign items a rule EXPLICITLY targets. Otherwise a strict no-op.
 
-        Returns ``{"moved": N, "reclassified": N, "appliedRuleIds": [...]}``.
+        Scans placed bucket / introduction items AND unplaced ``job.tags``.
+        A tag matched by a rule that carries a ROUTING directive is MOVED out of
+        ``job.tags`` and INTO ``buckets["<std>.<spec>"]`` as a proper bucket
+        item (routing unplaced content is the #1 thing a new-document rule does).
+
+        Returns ``{"moved": N, "reclassified": N, "placedTags": N,
+        "appliedRuleIds": [...]}``.
         """
-        summary = {"moved": 0, "reclassified": 0, "appliedRuleIds": []}
+        summary = {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
         if not self._rules:
+            # STRICT no-op — buckets, introductions AND tags left untouched.
             return summary
 
         buckets = getattr(job, "buckets", None)
@@ -225,11 +264,14 @@ class RuleEngine:
         introductions = getattr(job, "introductions", None)
         if not isinstance(introductions, dict):
             introductions = {}
+        tags = getattr(job, "tags", None)
+        if not isinstance(tags, list):
+            tags = None
 
         # Snapshot every scannable (item, source-location). We capture the live
         # list object so removal later is by identity against the real bucket.
-        # location = (item, key, list_obj, list_name)
-        snapshot: list[tuple[dict, str, list, str]] = []
+        # location = (item, key, list_obj, list_name, is_tag)
+        snapshot: list[tuple[dict, str, list, str, bool]] = []
         for key, bucket in buckets.items():
             if not isinstance(bucket, dict):
                 continue
@@ -238,7 +280,7 @@ class RuleEngine:
                 if isinstance(lst, list):
                     for it in lst:
                         if isinstance(it, dict):
-                            snapshot.append((it, key, lst, list_name))
+                            snapshot.append((it, key, lst, list_name, False))
         for key, intro in introductions.items():
             if not isinstance(intro, dict):
                 continue
@@ -246,7 +288,15 @@ class RuleEngine:
             if isinstance(lst, list):
                 for it in lst:
                     if isinstance(it, dict):
-                        snapshot.append((it, key, lst, "items"))
+                        snapshot.append((it, key, lst, "items", False))
+        # Unplaced tags — the live ``job.tags`` list. Matched on ``fullText`` /
+        # ``summary`` (via _item_text) and ``sectionId`` (sectionIdEquals). A
+        # ``currentBucket`` signature can't match (sentinel key never == a real
+        # bucket). Only a routing rule can place one (see below).
+        if tags is not None:
+            for it in tags:
+                if isinstance(it, dict):
+                    snapshot.append((it, _TAGS_KEY, tags, "tags", True))
 
         # Build a plan. Each item is handled by at most one rule (rules are
         # already ordered by confidence desc). We only record a plan when the
@@ -270,10 +320,16 @@ class RuleEngine:
             if not any(k in sig for k in _KNOWN_SIG_KEYS):
                 continue
 
-            for item, src_key, src_list, src_list_name in snapshot:
+            for item, src_key, src_list, src_list_name, is_tag in snapshot:
                 if id(item) in processed:
                     continue
                 if not self._signature_matches(sig, item, src_key):
+                    continue
+
+                # An unplaced tag can ONLY be placed by a routing rule — it has
+                # no home bucket to reclassify within. A classification-only
+                # rule that matches a tag is a no-op (nowhere to route it).
+                if is_tag and not has_routing:
                     continue
 
                 dest_key = f"{target_std}.{target_spec}" if has_routing else src_key
@@ -295,6 +351,7 @@ class RuleEngine:
                         "dest_list_name": dest_list_name,
                         "classification": classification,
                         "ruleId": rule.get("ruleId"),
+                        "is_tag": is_tag,
                     }
                 )
 
@@ -302,11 +359,15 @@ class RuleEngine:
         for plan in plans:
             item = plan["item"]
             src_list = plan["src_list"]
-            # Remove from source by identity.
+            is_tag = plan.get("is_tag", False)
+            # Remove from source by identity — mirrors the bucket-list removal
+            # for tags too (removed from the live ``job.tags`` list).
             for i, existing in enumerate(src_list):
                 if existing is item:
                     del src_list[i]
                     break
+            # A tag becomes a proper bucket item; a placed item moves as-is.
+            placed = _tag_to_bucket_item(item) if is_tag else item
             # Ensure destination bucket exists (create-missing mirror).
             dest_key = plan["dest_key"]
             dest_bucket = buckets.get(dest_key)
@@ -321,10 +382,12 @@ class RuleEngine:
             # Stamp a docSubKind marker for file-kind classifications.
             classification = plan["classification"]
             if classification in _CLASS_SUBKINDS:
-                item["docSubKind"] = classification
-            dest_list.append(item)
+                placed["docSubKind"] = classification
+            dest_list.append(placed)
 
-            if dest_key != plan["src_key"]:
+            if is_tag:
+                summary["placedTags"] += 1
+            elif dest_key != plan["src_key"]:
                 summary["moved"] += 1
             else:
                 summary["reclassified"] += 1
