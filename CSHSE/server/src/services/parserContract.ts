@@ -163,7 +163,7 @@ export async function checkParserContract(importId: string): Promise<ContractRes
     importId: String(importId),
     submissionId: String(imp.submissionId),
     programLevel: normalizeLevel(programLevel),
-    format: String(imp.aiFormat || ''),
+    format: String(imp.aiFormat?.format || (typeof imp.aiFormat === 'string' ? imp.aiFormat : '') || ''),
     anchors: { ok: anchorsOk, totalItems: items.length, anchored: items.length - missing.length, missing },
     coverage: { specsWithContent, byStandard, unplacedTags, catalogSpecs },
     fileTypes: { evidenceFiles: evFiles, evidenceText: evText, cvs: (rs.cvs || []).length, evidenceDocs: evidenceDocs.length, matrices: (rs.matrices || []).length, docSubKinds },
