@@ -179,6 +179,11 @@ class JobRecord:
     source_html: str | None = None
     started_at: float | None = None
     completed_at: float | None = None
+    # CR-073 — the data-driven parser rule engine loaded for this import
+    # (active, in-scope ``parserrules``). Not serialized in ``snapshot()``;
+    # applied as a default-preserving post-pass before anchoring. ``None`` when
+    # the rule store is empty/unreachable (parse proceeds unchanged).
+    rule_engine: Any = field(default=None, repr=False, compare=False)
 
     def snapshot(self) -> dict[str, Any]:
         """JSON-serializable snapshot for /ai/import/:jobId + webhooks."""
@@ -471,6 +476,26 @@ def _run_pipeline(job: JobRecord) -> None:
             )
         _stage_done(job, "format_detect", f"{job.format.format} ({job.format.confidence:.2f})")
 
+        # CR-073 — load the active, in-scope parser rules for this format/scope.
+        # STRICTLY default-preserving: an empty/unreachable rule store yields []
+        # and the post-pass (below, before anchoring) becomes a strict no-op.
+        # Never blocks or slows the parse (3s Mongo timeout, try/except → []).
+        # The server already resolves forceFormat before calling us, so the
+        # existing force logic above stays intact; we only EXPOSE
+        # rule_engine.force_format() for parity — we don't re-apply it here.
+        try:
+            from app.rules.engine import RuleEngine, fetch_active_rules
+
+            _rules = fetch_active_rules(
+                job.format.format, job.institution_id, job.program_level
+            )
+            job.rule_engine = RuleEngine(_rules)
+        except Exception as exc:  # noqa: BLE001 — the rule store must never break a parse
+            job.warnings.append(
+                f"rule-engine load: {type(exc).__name__}: {exc}"
+            )
+            job.rule_engine = None
+
         # Stages 3-N: dispatch to the right pipeline.
         if job.format.format == "mcc_narrative":
             _run_mcc_pipeline(job, docx_path)
@@ -478,6 +503,26 @@ def _run_pipeline(job: JobRecord) -> None:
             _run_template_pipeline(job, docx_path)
         else:
             _run_self_study_pipeline(job, docx_path)
+
+        # CR-073 — apply the data-driven parser rules as a default-preserving
+        # post-pass over the assembled buckets. A strict NO-OP unless an active
+        # rule's signature EXPLICITLY matches an item (the seeded baseline rules
+        # carry structural signatures the post-pass doesn't evaluate, so they
+        # move nothing → output stays byte-identical to today). Runs BEFORE
+        # anchoring so any moved item still gets its Compare data-section-id.
+        if job.status not in ("failed", "canceled") and getattr(job, "rule_engine", None):
+            try:
+                summary = job.rule_engine.apply_post_pass(job)
+                if summary.get("moved") or summary.get("reclassified"):
+                    print(
+                        f"[import_jobs] rule-engine post-pass: moved={summary['moved']} "
+                        f"reclassified={summary['reclassified']} "
+                        f"rules={summary['appliedRuleIds']}"
+                    )
+            except Exception as exc:  # noqa: BLE001 — never sink the import
+                job.warnings.append(
+                    f"rule-engine post-pass: {type(exc).__name__}: {exc}"
+                )
 
         # Compare relies on a data-section-id anchor per item. Template builds no
         # source HTML and MCC anchors only narratives — ensure EVERY item is
