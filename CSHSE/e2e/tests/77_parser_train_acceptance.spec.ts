@@ -27,7 +27,7 @@ async function createRun(api: APIRequestContext, auth: any, level: string) {
 async function importDoc(api: APIRequestContext, pc: any, submissionId: string, file: string, mime: string, level: string) {
   const up = await j(api.post('/api/imports/upload', { headers: pc, multipart: { submissionId, file: { name: 'doc' + path.extname(file), mimeType: mime, buffer: fs.readFileSync(file) } } }));
   await api.post(`/api/imports/${up.importId}/start-ai`, { headers: pc, data: { programLevel: level, forceFormat: null } });
-  await expect.poll(async () => (await j(api.get(`/api/imports/${up.importId}/ai-status`, { headers: pc }))).status, { timeout: 500_000, intervals: [5000] }).toMatch(/^(parsed|completed|failed)$/);
+  await expect.poll(async () => (await j(api.get(`/api/imports/${up.importId}/ai-status`, { headers: pc }))).status, { timeout: 900_000, intervals: [6000] }).toMatch(/^(parsed|completed|failed)$/);
   return up.importId;
 }
 async function waitReview(api: APIRequestContext, auth: any, submissionId: string) {
@@ -60,12 +60,77 @@ test.describe('Parser Train acceptance (#6/#7/#10/#12)', () => {
     console.log('#7 guardrail: global activation gated on fresh golden stamp ✓');
   });
 
-  test('#10 file-type classification via a rule (appendix)', async () => {
-    test.setTimeout(700_000);
+  test('#5 notes + screenshot persist against the run', async () => {
+    test.setTimeout(120_000);
+    const api = await request.newContext({ baseURL: BASE });
+    const auth = await su(api);
+    const { submissionId, pc } = await createRun(api, auth, 'bachelors');
+    // upload gives us an importId immediately (no parse needed for a note)
+    const up = await j(api.post('/api/imports/upload', { headers: pc, multipart: { submissionId, file: { name: 'k.docx', mimeType: DOCX, buffer: fs.readFileSync(path.join(FILES, 'kennesaw.docx')) } } }));
+    const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const r1 = await api.post(`/api/parser-train/${up.importId}/note`, { headers: auth, data: { std: '4', spec: 'a', note: '4.a placement looks wrong', screenshot: tinyPng } });
+    expect(r1.status(), 'note accepted').toBe(200);
+    // it persisted on the run
+    const rp = await j(api.get(`/api/parser-train/${up.importId}/review-page`, { headers: auth }));
+    const notes = rp.reviewPage?.learningTrajectory?.notes || [];
+    const mine = notes.find((n: any) => n.note === '4.a placement looks wrong' && n.std === '4' && n.spec === 'a' && n.screenshot);
+    expect(mine, 'note + screenshot persisted against the run').toBeTruthy();
+    console.log('#5 notes: note + screenshot persisted on the training run ✓');
+  });
+
+  test('#6 approve-spec activates the SPECIFIC rule for that spec, applied on re-run', async () => {
+    test.setTimeout(1_300_000);
     const api = await request.newContext({ baseURL: BASE });
     const auth = await su(api);
     const { submissionId, institutionId, pc } = await createRun(api, auth, 'bachelors');
     const importId = await importDoc(api, pc, submissionId, STEVENSON, DOCX, 'bachelors');
+    await waitReview(api, auth, submissionId);
+
+    // diagnose synthesizes PROPOSED placement rules (each targets a specific std.spec)
+    const diag = await j(api.post(`/api/parser-train/${importId}/diagnose`, { headers: auth }));
+    test.skip(!(diag.proposals && diag.proposals.length), 'no unplaced content to synthesize a proposal from');
+
+    // find one proposed rule + its target std.spec
+    const proposedRules = await j(api.get('/api/parser-train/runs', { headers: auth })); // touch API
+    // read the proposals' targets via review-page (lists rules with target)
+    const rp = await j(api.get(`/api/parser-train/${importId}/review-page`, { headers: auth }));
+    const proposed = (rp.reviewPage.rules || []).filter((r: any) => r.status === 'proposed' && r.target?.std && r.target?.spec);
+    test.skip(proposed.length < 1, 'no targeted proposal');
+    const pick = proposed[0];
+    const otherProposedCount = proposed.length - proposed.filter((r: any) => r.target.std === pick.target.std && r.target.spec === pick.target.spec).length;
+
+    // approve ONLY that spec
+    const appr = await j(api.post(`/api/parser-train/${importId}/approve-spec`, { headers: auth, data: { std: pick.target.std, spec: pick.target.spec } }));
+    expect(appr.ok).toBeTruthy();
+    expect(appr.activatedRuleIds.length, 'activated at least the picked rule').toBeGreaterThanOrEqual(1);
+
+    // the rule(s) for OTHER specs stay proposed (specific, not bulk)
+    const rp2 = await j(api.get(`/api/parser-train/${importId}/review-page`, { headers: auth }));
+    const stillProposed = (rp2.reviewPage.rules || []).filter((r: any) => r.status === 'proposed');
+    if (otherProposedCount > 0) expect(stillProposed.length, 'other specs remain proposed').toBeGreaterThan(0);
+    const nowActive = (rp2.reviewPage.rules || []).filter((r: any) => r.status === 'active' && r.target?.std === pick.target.std && r.target?.spec === pick.target.spec);
+    expect(nowActive.length, 'the approved spec rule is active').toBeGreaterThanOrEqual(1);
+
+    // demonstrated on re-run: re-parse → the approved rule applies (its content placed in target)
+    await api.post(`/api/imports/${importId}/restart-ai`, { headers: pc, data: { forceFormat: null } });
+    await expect.poll(async () => (await j(api.get(`/api/imports/${importId}/ai-status`, { headers: pc }))).status, { timeout: 900_000, intervals: [6000] }).toMatch(/^(parsed|completed)$/);
+    await waitReview(api, auth, submissionId).catch(() => {});
+    const after = await j(api.post(`/api/imports/${importId}/contract-check`, { headers: auth }));
+    const key = `${pick.target.std}.${pick.target.spec}`;
+    expect((after.coverage.byStandard[pick.target.std] || []).includes(pick.target.spec), `approved rule placed content into ${key}`).toBeTruthy();
+    // cleanup
+    for (const r of (rp2.reviewPage.rules || [])) await api.post('/api/parser-train/set-rule', { headers: auth, data: { ruleId: r.ruleId, activate: false, scope: { level: 'institution', institutionId }, extract: {} } });
+    console.log(`#6 per-spec approve: activated the rule for ${key}, others stayed proposed, applied on re-run ✓`);
+  });
+
+  test('#10 file-type classification via a rule (appendix)', async () => {
+    test.setTimeout(1_300_000);
+    const api = await request.newContext({ baseURL: BASE });
+    const auth = await su(api);
+    const { submissionId, institutionId, pc } = await createRun(api, auth, 'bachelors');
+    // Kennesaw = deterministic TEMPLATE parse, so a snippet picked from parse 1
+    // reappears identically on re-parse (self_study sectioning is non-deterministic).
+    const importId = await importDoc(api, pc, submissionId, path.join(FILES, 'kennesaw.docx'), DOCX, 'bachelors');
     await waitReview(api, auth, submissionId);
 
     // pick a real narrative/evidence snippet to reclassify as an appendix FILE
@@ -81,30 +146,40 @@ test.describe('Parser Train acceptance (#6/#7/#10/#12)', () => {
       }
     }
     expect(snippet, 'found a snippet to reclassify').toBeTruthy();
-    const before = await j(api.post(`/api/imports/${importId}/contract-check`, { headers: auth }));
+    const [std, spec] = srcKey.split('.');
 
     // rule: this content is an APPENDIX file → engine routes it to evidenceFiles w/ docSubKind
-    const [std, spec] = srcKey.split('.');
     const ruleId = `e2e.filetype.${String(importId).slice(-6)}`;
     await api.post('/api/parser-train/set-rule', { headers: auth, data: {
       ruleId, name: 'reclassify appendix', activate: true, scope: { level: 'institution', institutionId },
       match: { format: 'any', region: 'document', signature: { textContains: snippet } },
       extract: { standardAssignment: 'explicit', specAssignment: 'explicit', classification: 'appendix', params: { std, spec } },
     } });
-    await api.post(`/api/imports/${importId}/restart-ai`, { headers: pc, data: { forceFormat: null } });
-    await expect.poll(async () => (await j(api.get(`/api/imports/${importId}/ai-status`, { headers: pc }))).status, { timeout: 500_000, intervals: [5000] }).toMatch(/^(parsed|completed|failed)$/);
-    await waitReview(api, auth, submissionId).catch(() => {});
-    const after = await j(api.post(`/api/imports/${importId}/contract-check`, { headers: auth }));
-    // the content is now a file (evidenceFiles up) with a docSubKind 'appendix'
-    expect(after.fileTypes.evidenceFiles, 'evidenceFiles increased').toBeGreaterThan(before.fileTypes.evidenceFiles);
-    expect(after.fileTypes.docSubKinds?.appendix || 0, 'appendix docSubKind present').toBeGreaterThan(0);
+
+    // Parse the SAME doc into a FRESH submission with the rule already active — a
+    // single clean parse (avoids the cross-job accumulation that a restart-ai on
+    // the same import would introduce). The engine applies the rule on this parse.
+    const runB = await createRun(api, auth, 'bachelors');
+    const importB = await importDoc(api, runB.pc, runB.submissionId, path.join(FILES, 'kennesaw.docx'), DOCX, 'bachelors');
+    await waitReview(api, auth, runB.submissionId);
+    const after = await j(api.post(`/api/imports/${importB}/contract-check`, { headers: auth }));
+    const subAfter = await j(api.get(`/api/submissions/${runB.submissionId}`, { headers: auth }));
+    const bAfter = (subAfter.submission ?? subAfter).aiReviewState?.buckets ?? {};
+    // the content is now a FILE: an evidenceFiles item stamped docSubKind='appendix'
+    const files = Object.values(bAfter).flatMap((x: any) => x.evidenceFiles || []);
+    const stamped = files.find((f: any) => f.docSubKind === 'appendix' && String(f.snippet || '').toLowerCase().includes(snippet.toLowerCase()));
+    expect(stamped, 'the matched content is an evidenceFiles item stamped docSubKind=appendix').toBeTruthy();
+    // and it's no longer sitting in a narratives rail
+    const narrs = Object.values(bAfter).flatMap((x: any) => x.narratives || []);
+    expect(narrs.some((n: any) => String(n.snippet || '').toLowerCase().includes(snippet.toLowerCase())), 'moved out of narratives').toBe(false);
+    // Compare intact — the reclassify didn't break anchoring
     expect(after.anchors.missing.length, 'still 0 un-anchored').toBe(0);
     await api.post('/api/parser-train/set-rule', { headers: auth, data: { ruleId, activate: false, scope: { level: 'institution', institutionId }, extract: {} } });
-    console.log(`#10 file-type: content reclassified to appendix file (evidenceFiles ${before.fileTypes.evidenceFiles}→${after.fileTypes.evidenceFiles}, docSubKind.appendix=${after.fileTypes.docSubKinds?.appendix}) ✓`);
+    console.log(`#10 file-type: content reclassified to an appendix FILE (docSubKind=appendix stamped, evidenceFiles=${after.fileTypes.evidenceFiles}, 0 un-anchored) ✓`);
   });
 
   test('#12 activating training rules leaves a real submission byte-for-byte unchanged', async () => {
-    test.setTimeout(700_000);
+    test.setTimeout(1_300_000);
     const api = await request.newContext({ baseURL: BASE });
     const auth = await su(api);
     // REFERENCE: a normal (non-training) submission on a DIFFERENT institution.

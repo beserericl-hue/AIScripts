@@ -8,10 +8,19 @@ priority: P1
 source: "Eric 2026-07-24 'an agent that will take any self study document and produce input into the review panel and have it correctly display and compare with the original … the AI Parser will get smarter with more documents' · the AACC manual-diagnosis loop across [[log]] 2026-07-17→23 · [[ai-parser-architecture]] §7 (contract) §8 (failure modes)"
 sprint_target: TBD
 tags: [parser, ai-import, agent, self-improving, compare, qa, P1]
-last_reviewed: 2026-07-24
+last_reviewed: 2026-07-26
 ---
 
 # CR-073 — Self-improving parser QA/training agent
+
+> **Phase 4 (items 1–13 COMPLETE) SHIPPED TO DEV 2026-07-26, tested on Stevenson + Kennesaw + MCC.** The full acceptance gap-list is done and green on dev (NOT prod). Verified by running the ORIGINAL Stevenson self-study (pulled read-only from dev S3) as a brand-new document through the analyzer, plus Kennesaw and MCC (from prod S3).
+> - **#1 Autonomous rule synthesis** — `parserTrainAgent.synthesizePlacementRules`: for each UNPLACED tag it asks the matcher (new `POST /ai/placement/recommend`, wrapping `SpecMatcher.recommend`) where the content belongs and writes a deterministic placement `parserRule` (textContains → std.spec + classification). `diagnose` PROPOSES; the learning-loop Phase 2 ACTIVATES + re-parses and records unplaced/specs before→after. **Stevenson: 7 rules, unplaced 17→13. Kennesaw: 9 rules, 10→2.**
+> - **#2 Engine coverage** — `apply_post_pass` now routes unplaced `job.tags` a rule targets AND reclassifies file-types (appendix/syllabus/cv/matrix → evidenceFiles + docSubKind). Strict no-op with empty/baseline rules (12 rule-engine + 56 golden-path unit tests pass).
+> - **#3 Hybrid / per-region** — the primary format + per-region placement/classification rules reconcile into ONE fully-anchored review state on all three docs (Compare intact).
+> - **#4** train-mode Review banner (SU) · **#5** notes+screenshots persisted on the run · **#6** approve-spec activates the SPECIFIC rule for that std.spec (others stay proposed), applied on re-run · **#7** automated golden guardrail (`ParserTrainGuard` marker gates global activation, stamped by the passing golden suite) · **#8** dated per-run review page.
+> - **E2E all green (dev):** #9 MCC golden default-preserving (77 specs / 73 appendix / 169 anchored) + AACC + Kennesaw goldens exact; #10 file-type appendix stamp; #11 all three docs through the loop; #12 byte-for-byte isolation; #13 train banner + anchor-gate Compare. **Report: `e2e/report/parser-train-e2e-report.pdf`** (14 suites, 9 screenshots). Tests: `e2e/tests/77` (#5/#6/#7/#10/#12), `78` (#1/#3/#11 Stevenson+Kennesaw+MCC), `79` (#4/#13).
+> Still open (honestly): masters-level catalog (`load_specifications('masters')` returns []); the LLM diagnose could be extended beyond matcher-backed placement to structural rule synthesis; prod rollout.
+
 
 > **Phase 1 (safety-net foundation) SHIPPED TO DEV + E2E-TESTED 2026-07-25.** The verifier + the immovable baseline are in place (proven parser code untouched, no rule engine yet):
 > - `server/src/models/ParserRule.ts` + `parserrules` collection — the realtime rule store; **17 baseline rules seeded on dev** (`server/scripts/seed_baseline_parser_rules.mjs`).

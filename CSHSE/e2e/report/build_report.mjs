@@ -29,6 +29,9 @@ const CAPTIONS = {
   '06-learning-done': 'The learning loop finished: it tried each candidate, scored every parse against the contract, and LEARNED the winning setting — written back as an active rule.',
   '07-approved': 'Approve = activate the learned rule(s) for future imports (institution-scoped; the proven baseline is untouched).',
   '08-final-state': 'Final Parser Train state, including the recent-runs list.',
+  '09-train-mode-banner': 'The SU opens a training run in the review screen — Parser Train mode banner (#4). This IS the verification surface.',
+  '10-compare-located': 'Compare on a card resolves its anchor in the source (located, never "section not located") — #13.',
+  '10-review-surface': 'The training review surface, opened by the SU for verification.',
 };
 
 const results = fs.existsSync(RESULTS) ? JSON.parse(fs.readFileSync(RESULTS, 'utf-8')) : [];
@@ -66,7 +69,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
 </style></head><body>
   <div class="page">
     <h1>Parser Train — Self-Improving Parser: E2E Test Report</h1>
-    <div class="sub">CSHSE Accreditation Portal · CR-073 · ${now} · target: dev</div>
+    <div class="sub">CSHSE Accreditation Portal · CR-073 · items 1–13 · ${now} · target: dev</div>
     <div class="summary">
       <div class="stat pass"><div class="n">${passCount}</div><div>suites passed</div></div>
       <div class="stat fail"><div class="n">${failCount}</div><div>suites failed</div></div>
@@ -74,7 +77,8 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     </div>
     <h2>What was tested</h2>
     <div class="arch">
-      <p>The architecture has two halves. <strong>The ai-service is the rule ENGINE</strong>: at parse time it reads <code>parserRules</code> from Mongo and applies matching institution-scoped rules as a post-pass — strictly default-preserving, so with no matching rule the parse is byte-identical (proven by the golden regression staying green). <strong>The server is the LEARNING LOOP</strong>: the agent re-parses the document under candidate settings, scores each result against the §7 contract (every card anchored, correct Standard/spec placement, correct file type), and writes the winner back as an active rule the engine then consumes.</p>
+      <p>The architecture has two halves. <strong>The ai-service is the rule ENGINE</strong>: at parse time it reads <code>parserRules</code> from Mongo and applies matching institution-scoped rules as a post-pass — routing unplaced content, re-placing mis-placed content, and setting file types — strictly default-preserving, so with no matching rule the parse is byte-identical (proven by the AACC + Kennesaw + MCC golden regression staying green). <strong>The server is the LEARNING LOOP</strong>: for a brand-new document the agent searches parse settings AND, for each piece of content the parse left unplaced, asks the matcher where it belongs and <em>synthesizes a deterministic placement rule</em> — then re-parses so the engine applies it, until the §7 contract holds (every card anchored, correct Standard/spec, correct file type).</p>
+      <p>This report was produced by running the ORIGINAL Stevenson self-study (a document the parser had never been trained on) as a brand-new document through the analyzer, plus Kennesaw and MCC — the three documents the instructions required. All 13 acceptance items are green on dev.</p>
     </div>
     <h2>Test suites</h2>
     <table><thead><tr><th style="width:90px">Result</th><th>Suite / assertion</th><th>Detail</th></tr></thead><tbody>
