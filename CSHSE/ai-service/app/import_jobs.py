@@ -513,14 +513,14 @@ def _run_pipeline(job: JobRecord) -> None:
         if job.status not in ("failed", "canceled") and getattr(job, "rule_engine", None):
             try:
                 summary = job.rule_engine.apply_post_pass(job)
-                # CR-073 — always surface the post-pass outcome in warnings (JSON-only,
-                # support channel) so the Parser Train agent / E2E can confirm the
-                # engine consumed a rule without reading service logs.
-                job.warnings.append(
-                    f"rule-engine post-pass: rules={len(job.rule_engine._rules)} "
-                    f"moved={summary.get('moved', 0)} reclassified={summary.get('reclassified', 0)} "
-                    f"applied={summary.get('appliedRuleIds', [])}"
-                )
+                # CR-073 — surface the post-pass outcome in warnings (JSON-only support
+                # channel) ONLY when a rule actually acted, so normal parses stay clean.
+                if summary.get("moved") or summary.get("reclassified"):
+                    job.warnings.append(
+                        f"rule-engine post-pass: moved={summary.get('moved', 0)} "
+                        f"reclassified={summary.get('reclassified', 0)} "
+                        f"applied={summary.get('appliedRuleIds', [])}"
+                    )
             except Exception as exc:  # noqa: BLE001 — never sink the import
                 job.warnings.append(
                     f"rule-engine post-pass ERROR: {type(exc).__name__}: {exc}"
