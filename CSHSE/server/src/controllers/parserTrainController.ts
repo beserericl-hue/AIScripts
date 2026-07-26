@@ -22,6 +22,7 @@ import { User } from '../models/User';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { ParserRule } from '../models/ParserRule';
 import { checkParserContract } from '../services/parserContract';
+import { startAutoRefine, getRefineState } from '../services/parserTrainAgent';
 
 const SANDBOX_INST_NAME = 'Parser Train Sandbox';
 const SANDBOX_PC_EMAIL = 'parser-train-pc@sandbox.local';
@@ -113,6 +114,17 @@ export const setParserTrainRule = async (req: AuthenticatedRequest, res: Respons
     if (!b.ruleId) { res.status(400).json({ error: 'ruleId required' }); return; }
     const scope: any = b.scope || { level: 'global' };
     if (scope.institutionId) scope.institutionId = new mongoose.Types.ObjectId(String(scope.institutionId));
+    // GUARDRAIL — a GLOBAL rule (one that could affect the proven baseline /
+    // every institution) may only be activated when it has passed the golden
+    // regression. Institution-scoped rules can never touch the baseline, so they
+    // activate freely. This is what makes the self-improving loop safe.
+    const wantsActive = b.activate !== false;
+    if (wantsActive && scope.level === 'global' && b.goldenChecked !== true) {
+      res.status(400).json({
+        error: 'Global rule activation is blocked until it passes the golden regression. Scope the rule to an institution, or set goldenChecked:true only after the golden suite is green.',
+      });
+      return;
+    }
     const rule = {
       ruleId: b.ruleId, version: Number(b.version || 1), name: b.name || b.ruleId, description: b.description || '',
       scope, status: b.activate === false ? 'proposed' : 'active', createdBy: 'human',
@@ -147,6 +159,39 @@ export const approveParserTrainSpec = async (req: AuthenticatedRequest, res: Res
   } catch (err: any) {
     console.error('[parser-train approve-spec] failed:', err);
     res.status(500).json({ error: 'approve-spec failed', detail: err?.message || String(err) });
+  }
+};
+
+// POST /api/parser-train/:importId/auto-refine  (SU) — run the learning loop.
+// The agent tries candidate parse settings, re-parses under each, scores every
+// result against the §7 contract, and writes the winner back as an ACTIVE
+// institution-scoped rule the engine consumes on future imports. Runs in the
+// background; poll GET /:importId/refine-status.
+export const autoRefineParserTrain = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
+  try {
+    const importId = req.params.importId;
+    const imp: any = await SelfStudyImport.findById(importId).select('submissionId aiS3Key').lean();
+    if (!imp) { res.status(404).json({ error: 'import not found' }); return; }
+    const sub: any = await Submission.findById(imp.submissionId).select('trainingRun institutionId programLevel').lean();
+    if (!sub?.trainingRun) { res.status(400).json({ error: 'not a Parser Train sandbox run' }); return; }
+    const isPdf = /\.pdf(\?|$)/i.test(String(imp.aiS3Key || ''));
+    startAutoRefine(importId, String(sub.programLevel || 'associate'), String(sub.institutionId), isPdf);
+    res.json({ ok: true, started: true, note: 'Agent is searching parse settings; poll GET /api/parser-train/:importId/refine-status.' });
+  } catch (err: any) {
+    console.error('[parser-train auto-refine] failed:', err);
+    res.status(500).json({ error: 'auto-refine failed', detail: err?.message || String(err) });
+  }
+};
+
+// GET /api/parser-train/:importId/refine-status  (SU) — the agent's trajectory.
+export const refineStatusParserTrain = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
+  try {
+    const state = await getRefineState(req.params.importId);
+    res.json({ ok: true, state });
+  } catch (err: any) {
+    res.status(500).json({ error: 'refine-status failed', detail: err?.message || String(err) });
   }
 };
 

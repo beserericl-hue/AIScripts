@@ -6,6 +6,8 @@ import {
   setParserTrainRule,
   approveParserTrainSpec,
   listParserTrainRuns,
+  autoRefineParserTrain,
+  refineStatusParserTrain,
 } from '../controllers/parserTrainController';
 
 // Parser Train (CR-073) — superuser-only. Every handler self-guards via isSU(),
@@ -18,5 +20,7 @@ router.post('/', createParserTrainRun);
 router.post('/set-rule', setParserTrainRule);
 router.post('/:importId/diagnose', diagnoseParserTrain);
 router.post('/:importId/approve-spec', approveParserTrainSpec);
+router.post('/:importId/auto-refine', autoRefineParserTrain);
+router.get('/:importId/refine-status', refineStatusParserTrain);
 
 export default router;

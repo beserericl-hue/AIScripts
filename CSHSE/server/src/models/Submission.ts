@@ -171,6 +171,7 @@ export interface ISubmission extends Document {
   // CR-073 Parser Train — a sandbox training run (never a real institution's
   // self-study). Excluded from every submission list; owned by the SU who ran it.
   trainingRun?: boolean;
+  parserTrainState?: any;
   status: SubmissionStatus;
   narratives: Map<string, Map<string, INarrativeContent>>;
   documents: IDocumentRef[];
@@ -336,6 +337,8 @@ const SubmissionSchema = new Schema<ISubmission>({
   },
   // CR-073 Parser Train sandbox run (excluded from every list).
   trainingRun: { type: Boolean, default: undefined, index: true },
+  // CR-073 Parser Train — the auto-refine agent's trajectory + winner (pollable).
+  parserTrainState: { type: Schema.Types.Mixed, default: undefined },
   status: {
     type: String,
     enum: [

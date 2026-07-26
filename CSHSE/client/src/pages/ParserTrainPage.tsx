@@ -50,6 +50,7 @@ export default function ParserTrainPage() {
   const [contract, setContract] = useState<Contract | null>(null);
   const [proposals, setProposals] = useState<string[]>([]);
   const [activated, setActivated] = useState<number | null>(null);
+  const [refine, setRefine] = useState<any>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const loadRuns = async () => {
@@ -129,6 +130,25 @@ export default function ParserTrainPage() {
     finally { setBusy(''); }
   };
 
+  const autoRefine = async () => {
+    if (!importId) return;
+    setErr(''); setBusy('Agent learning (searching parse settings)…'); setRefine({ status: 'running', attempts: [] });
+    try {
+      await api.post(`/api/parser-train/${importId}/auto-refine`, {});
+      const started = Date.now();
+      const tick = async () => {
+        try {
+          const { data } = await api.get(`/api/parser-train/${importId}/refine-status`);
+          setRefine(data.state);
+          if (data.state && ['done', 'failed'].includes(data.state.status)) { setBusy(''); diagnose(); return; }
+        } catch { /* transient */ }
+        if (Date.now() - started < 900_000) setTimeout(tick, 5000);
+        else setBusy('');
+      };
+      setTimeout(tick, 5000);
+    } catch (e: any) { setErr(e?.response?.data?.error || String(e)); setBusy(''); }
+  };
+
   const approve = async () => {
     if (!importId) return;
     setErr(''); setBusy('Activating rules…');
@@ -202,7 +222,36 @@ export default function ParserTrainPage() {
               className="px-4 py-2 bg-gray-800 text-white rounded-md text-sm disabled:opacity-50">
               Run contract diagnose
             </button>
+            <button onClick={autoRefine} disabled={!!busy}
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md text-sm disabled:opacity-50"
+              title="Agent tries candidate parse settings, scores each against the contract, and learns the best one">
+              Auto-refine (agent learns)
+            </button>
           </div>
+
+          {refine && (
+            <div className="text-sm rounded-md border border-indigo-200 bg-indigo-50 p-3">
+              <div className="font-medium text-indigo-900">
+                Learning loop: {refine.status}
+                {refine.winner && <span> — learned <strong>{refine.winner.candidate}</strong></span>}
+              </div>
+              {refine.message && <div className="text-xs text-indigo-800 mt-1">{refine.message}</div>}
+              {(refine.attempts || []).length > 0 && (
+                <table className="mt-2 w-full text-xs">
+                  <thead><tr className="text-left text-indigo-500"><th>Candidate</th><th>Parsed as</th><th>Specs</th><th>Anchors</th><th>Unplaced</th><th>Score</th></tr></thead>
+                  <tbody>
+                    {refine.attempts.map((a: any, i: number) => (
+                      <tr key={i} className={`border-t border-indigo-100 ${refine.winner?.candidate === a.candidate ? 'font-semibold' : ''}`}>
+                        <td>{a.candidate}</td><td>{a.format}</td><td>{a.specsWithContent}</td>
+                        <td className={a.anchorsOk ? 'text-green-700' : 'text-red-600'}>{a.anchorsOk ? 'OK' : 'MISSING'}</td>
+                        <td>{a.unplacedTags}</td><td>{a.score}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
 
           {contract && (
             <div className="text-sm space-y-3">
