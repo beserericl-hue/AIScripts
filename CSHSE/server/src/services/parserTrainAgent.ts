@@ -66,6 +66,23 @@ async function pollParsed(importId: string, timeoutMs = 500_000): Promise<string
   return 'timeout';
 }
 
+// The terminal callback flips aiStatus to 'parsed' and materializes the review
+// state + Compare source HTML in separate writes; scoring the contract before
+// both have landed reads 0 anchors spuriously. Wait for the review state to
+// appear on the submission (then a short beat for source HTML) before scoring.
+async function waitReviewMaterialized(importId: string, timeoutMs = 60_000): Promise<void> {
+  const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
+  if (!imp?.submissionId) return;
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const sub: any = await Submission.findById(imp.submissionId).select('aiReviewState').lean();
+    const buckets = sub?.aiReviewState?.buckets || {};
+    const hasContent = Object.values(buckets).some((b: any) => (b?.narratives || []).length || (b?.evidenceText || []).length);
+    if (hasContent) { await new Promise((r) => setTimeout(r, 3000)); return; }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+}
+
 async function persist(importId: string, state: RefineState) {
   const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
   if (imp?.submissionId) {
@@ -129,6 +146,7 @@ export function startAutoRefine(importId: string, programLevel: string, institut
           await persist(importId, state);
           continue;
         }
+        await waitReviewMaterialized(importId);
         const c = await checkParserContract(importId);
         const attempt: Attempt = {
           candidate: cand.forceFormat || 'auto',

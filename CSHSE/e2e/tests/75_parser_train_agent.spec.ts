@@ -56,14 +56,31 @@ test.describe('Parser Train — engine + learning loop', () => {
     await expect.poll(async () => (await j(api.get(`/api/imports/${importId}/ai-status`, { headers: asPc }))).status,
       { timeout: 500_000, intervals: [5000] }).toMatch(/^(parsed|completed|failed)$/);
 
-    // baseline review state — pick a bucket that currently has a narrative
-    const baseSub = await j(api.get(`/api/submissions/${submissionId}`, { headers: su }));
-    const baseBuckets = (baseSub.submission ?? baseSub).aiReviewState?.buckets ?? {};
-    const srcKey = Object.keys(baseBuckets).find((k) => (baseBuckets[k].narratives || []).length > 0);
+    // baseline review state — wait for it to materialize onto the submission
+    // (the terminal callback lands slightly after ai-status flips to parsed),
+    // then pick a bucket that has a narrative.
+    let baseBuckets: any = {};
+    let srcKey: string | undefined;
+    await expect.poll(async () => {
+      const baseSub = await j(api.get(`/api/submissions/${submissionId}`, { headers: su }));
+      baseBuckets = (baseSub.submission ?? baseSub).aiReviewState?.buckets ?? {};
+      srcKey = Object.keys(baseBuckets).find((k) => (baseBuckets[k].narratives || []).length > 0);
+      return srcKey ? 1 : 0;
+    }, { timeout: 60_000, intervals: [3000] }).toBe(1);
     expect(srcKey, 'a populated bucket exists').toBeTruthy();
     const sample = baseBuckets[srcKey!].narratives[0];
-    const snippet = String(sample.markdown || sample.text || sample.content || '').replace(/<[^>]+>/g, ' ').trim().split(/\s+/).slice(3, 9).join(' ');
-    expect(snippet.length, 'have a text snippet to match on').toBeGreaterThan(0);
+    // Pick a CLEAN, distinctive contiguous run — 6 consecutive pure-ASCII-letter
+    // words — so the textContains needle is an exact substring of the parsed text
+    // (no punctuation / smart-quotes / entities that whitespace-normalisation could
+    // desync). This is what makes the engine's substring match deterministic.
+    const words = String(sample.snippet || sample.heading || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().split(' ');
+    let snippet = '';
+    for (let i = 0; i + 6 <= words.length; i++) {
+      const run = words.slice(i, i + 6);
+      if (run.every((w) => /^[A-Za-z]+$/.test(w))) { snippet = run.join(' '); break; }
+    }
+    if (!snippet) snippet = words.slice(2, 8).join(' '); // fallback
+    expect(snippet.length, 'have a clean text snippet to match on').toBeGreaterThan(0);
 
     // --- B. ENGINE CONSUMES A RULE: route that snippet to an unusual bucket (9.j) ---
     const targetStd = '9', targetSpec = 'j';
@@ -83,13 +100,19 @@ test.describe('Parser Train — engine + learning loop', () => {
     await api.post(`/api/imports/${importId}/restart-ai`, { headers: asPc, data: { forceFormat: null } });
     await expect.poll(async () => (await j(api.get(`/api/imports/${importId}/ai-status`, { headers: asPc }))).status,
       { timeout: 500_000, intervals: [5000] }).toMatch(/^(parsed|completed|failed)$/);
-    const movedSub = await j(api.get(`/api/submissions/${submissionId}`, { headers: su }));
-    const movedBuckets = (movedSub.submission ?? movedSub).aiReviewState?.buckets ?? {};
     const targetKey = `${targetStd}.${targetSpec}`;
-    const targetText = JSON.stringify(movedBuckets[targetKey] || {});
-    expect(targetText.includes(snippet.split(' ')[0]) || (movedBuckets[targetKey]?.narratives || []).length > 0,
-      `engine moved the item into ${targetKey}`).toBeTruthy();
-    console.log(`engine: institution rule consumed at parse time — snippet routed to ${targetKey} ✓`);
+    let movedBuckets: any = {};
+    await expect.poll(async () => {
+      const movedSub = await j(api.get(`/api/submissions/${submissionId}`, { headers: su }));
+      movedBuckets = (movedSub.submission ?? movedSub).aiReviewState?.buckets ?? {};
+      // settle once the target bucket appears with the moved snippet (or timeout)
+      return JSON.stringify(movedBuckets[targetKey] || {}).includes(snippet) ? 1 : 0;
+    }, { timeout: 90_000, intervals: [4000] }).toBe(1);
+    const inTarget = JSON.stringify(movedBuckets[targetKey] || {}).includes(snippet);
+    const stillInSource = JSON.stringify(movedBuckets[srcKey!] || {}).includes(snippet);
+    expect(inTarget, `engine moved the snippet into ${targetKey}`).toBe(true);
+    expect(stillInSource, `snippet removed from its original bucket ${srcKey}`).toBe(false);
+    console.log(`engine: institution rule consumed at parse time — snippet routed ${srcKey} → ${targetKey} ✓`);
 
     // retire the routing rule so it can't affect the refine search
     await api.post('/api/parser-train/set-rule', { headers: su, data: { ruleId, activate: false, scope: { level: 'institution', institutionId }, extract: {} } });
