@@ -58,6 +58,14 @@ test.describe('Parser Train — SU human-in-the-loop', () => {
       return s.status;
     }, { timeout: 500_000, intervals: [5000] }).toMatch(/^(parsed|completed|failed)$/);
 
+    // wait for the review state to materialize on the submission (the terminal
+    // callback lands the buckets shortly after ai-status flips to parsed).
+    await expect.poll(async () => {
+      const b = await j(api.get(`/api/submissions/${submissionId}`, { headers: su }));
+      const bk = (b.submission ?? b).aiReviewState?.buckets ?? {};
+      return Object.values(bk).filter((x: any) => (x.narratives || []).length || (x.evidenceText || []).length).length;
+    }, { timeout: 60_000, intervals: [3000] }).toBeGreaterThan(0);
+
     // --- 3. diagnose (contract-check) — the §7 verifier ---
     const diag = await j(api.post(`/api/parser-train/${importId}/diagnose`, { headers: su }));
     expect(diag.ok, 'diagnose ok').toBeTruthy();
