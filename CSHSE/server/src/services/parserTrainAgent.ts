@@ -93,6 +93,18 @@ async function persist(importId: string, state: RefineState) {
   }
 }
 
+// Re-parsing the SAME import accumulates review items across parse jobs (each
+// parse mints new sectionIds, so the re-import "replace" can't purge the old
+// ones, and the fresh source HTML only anchors the latest job → stale items read
+// as un-anchored). Before each candidate re-parse, clear the sandbox submission's
+// review state so every candidate is measured on a CLEAN parse. Sandbox-only.
+async function clearReviewState(importId: string): Promise<void> {
+  const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
+  if (imp?.submissionId) {
+    await Submission.updateOne({ _id: imp.submissionId }, { $unset: { aiReviewState: 1 } });
+  }
+}
+
 // The single agent-managed format rule for this training import.
 function formatRuleId(importId: string) { return `agent.format.${String(importId).slice(-8)}`; }
 
@@ -142,6 +154,7 @@ export function startAutoRefine(importId: string, programLevel: string, institut
         // set the active format rule for this candidate, then RE-PARSE (the batch
         // helper resolves forceFormat via the rule engine → consumes our rule).
         await setFormatRule(importId, institutionId, cand.forceFormat, cand.forceFormat !== null);
+        await clearReviewState(importId);
         await startAIImportForBatch(importId, programLevel, null as any);
         const st = await pollParsed(importId);
         if (st === 'failed' || st === 'timeout') {
@@ -171,6 +184,7 @@ export function startAutoRefine(importId: string, programLevel: string, institut
         // Write the winner as the ACTIVE learned rule and re-parse once more so the
         // final review state on disk reflects the winning setting.
         const ruleId = await setFormatRule(importId, institutionId, best.candidate.forceFormat, best.candidate.forceFormat !== null);
+        await clearReviewState(importId);
         await startAIImportForBatch(importId, programLevel, null as any);
         await pollParsed(importId);
         state.winner = { candidate: best.attempt.candidate, ruleId: best.candidate.forceFormat ? ruleId : undefined, score: best.attempt.score };
