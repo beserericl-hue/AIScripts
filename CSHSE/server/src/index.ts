@@ -131,6 +131,7 @@ let dbError: string | null = null;
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'ok',
+    git: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 8) || 'unknown',
     timestamp: new Date().toISOString()
   });
 });

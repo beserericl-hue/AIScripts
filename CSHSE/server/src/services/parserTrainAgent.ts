@@ -67,20 +67,23 @@ async function pollParsed(importId: string, timeoutMs = 500_000): Promise<string
 }
 
 // The terminal callback flips aiStatus to 'parsed' and materializes the review
-// state + Compare source HTML in separate writes; scoring the contract before
-// both have landed reads 0 anchors spuriously. Wait for the review state to
-// appear on the submission (then a short beat for source HTML) before scoring.
-async function waitReviewMaterialized(importId: string, timeoutMs = 60_000): Promise<void> {
-  const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
-  if (!imp?.submissionId) return;
+// state + Compare source HTML in SEPARATE writes; scoring the contract before the
+// source HTML lands reads 0 anchors spuriously. Return a SETTLED contract: for
+// template/mcc (which anchor every item) wait until anchored === totalItems;
+// self_study anchors nothing, so accept its first non-empty read. This makes the
+// anchors gate in the score reflect the real parse, not a write race.
+async function settledContract(importId: string, timeoutMs = 90_000): Promise<ContractResult> {
   const started = Date.now();
+  let last = await checkParserContract(importId);
   while (Date.now() - started < timeoutMs) {
-    const sub: any = await Submission.findById(imp.submissionId).select('aiReviewState').lean();
-    const buckets = sub?.aiReviewState?.buckets || {};
-    const hasContent = Object.values(buckets).some((b: any) => (b?.narratives || []).length || (b?.evidenceText || []).length);
-    if (hasContent) { await new Promise((r) => setTimeout(r, 3000)); return; }
-    await new Promise((r) => setTimeout(r, 3000));
+    const a = last.anchors;
+    const anchoringFormat = last.format === 'template' || last.format === 'mcc_narrative';
+    // materialized when there ARE items and (self_study, or every item anchored)
+    if (a.totalItems > 0 && (!anchoringFormat || a.anchored === a.totalItems)) return last;
+    await new Promise((r) => setTimeout(r, 4000));
+    last = await checkParserContract(importId);
   }
+  return last;
 }
 
 async function persist(importId: string, state: RefineState) {
@@ -146,8 +149,7 @@ export function startAutoRefine(importId: string, programLevel: string, institut
           await persist(importId, state);
           continue;
         }
-        await waitReviewMaterialized(importId);
-        const c = await checkParserContract(importId);
+        const c = await settledContract(importId);
         const attempt: Attempt = {
           candidate: cand.forceFormat || 'auto',
           format: c.format,
