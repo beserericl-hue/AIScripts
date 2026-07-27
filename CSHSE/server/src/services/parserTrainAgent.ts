@@ -331,8 +331,15 @@ export async function synthesizeSplitRules(
   importId: string, institutionId: string, programLevel: string,
   opts: { activate: boolean } = { activate: false }
 ): Promise<{ synthesized: string[]; splits: Array<{ std: string; spec: string; host: string }> }> {
-  const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
+  const imp: any = await SelfStudyImport.findById(importId).select('submissionId aiFormat').lean();
   if (!imp?.submissionId) return { synthesized: [], splits: [] };
+  // GUARD (CR-073) — spec-row bunching is a TEMPLATE-walker failure (a table row
+  // merged into its neighbour, e.g. AACC 15.b). In prose formats (mcc_narrative /
+  // self_study) a catalog prompt naturally appears as a *mention* inside a
+  // narrative, so splitting on it invents specs the document doesn't have (MCC
+  // 21.e/h/i). Only synthesize splits for the template format.
+  const fmt = String(imp.aiFormat?.format || (typeof imp.aiFormat === 'string' ? imp.aiFormat : ''));
+  if (fmt !== 'template') return { synthesized: [], splits: [] };
   const sub: any = await Submission.findById(imp.submissionId).select('aiReviewState').lean();
   const buckets: any = sub?.aiReviewState?.buckets || {};
   const catalog = getLevelStandards(programLevel) || [];

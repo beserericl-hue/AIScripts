@@ -39,8 +39,10 @@ function summarize(rs: any) {
   }
   const intro = rs?.introductions || {};
   const introChars = Object.values(intro).reduce((a: number, it: any) => a + (it?.items || []).reduce((x: number, i: any) => x + String(i.snippet || '').length, 0), 0);
+  for (const s of Object.keys(byStd)) byStd[s] = byStd[s].sort();
   return {
     standards: Object.keys(byStd).sort((a, b) => +a - +b),
+    byStandard: byStd,
     specsWithContent: specs, narratives: narr, evidenceText: ev, evidenceFiles: files,
     cvs: (rs?.cvs || []).length, evidenceDocs: (rs?.evidenceDocs || []).length, matrices: (rs?.matrices || []).length,
     introChars, hasIntro: introChars > 0,
@@ -100,8 +102,10 @@ async function loginSU(api: APIRequestContext, base: string) {
   return (await j(api.post(`${base}/api/auth/login`, { data: { email: SU_EMAIL, password: SU_PASSWORD } }))).token;
 }
 
-// dev: parse a doc through Parser Train, return submissionId + importId
-async function devParse(api: APIRequestContext, token: string, file: string, mime: 'docx' | 'pdf', level: string) {
+// dev: parse a doc through Parser Train AND run the learning loop (format search
+// + placement/split synthesis), so the learned rules are applied before we
+// validate. Returns submissionId + importId.
+async function devParse(api: APIRequestContext, token: string, file: string, mime: 'docx' | 'pdf', level: string, learn: boolean) {
   const auth = { Authorization: `Bearer ${token}` };
   const run = await j(api.post(`${DEV}/api/parser-train`, { headers: auth, data: { programLevel: level } }));
   const pc = { ...auth, 'X-Impersonated-User-Id': run.pcUserId, 'X-Impersonated-Role': 'program_coordinator' };
@@ -109,6 +113,14 @@ async function devParse(api: APIRequestContext, token: string, file: string, mim
   await api.post(`${DEV}/api/imports/${up.importId}/start-ai`, { headers: pc, data: { programLevel: level, forceFormat: null } });
   await expect.poll(async () => (await j(api.get(`${DEV}/api/imports/${up.importId}/ai-status`, { headers: pc }))).status, { timeout: 1_200_000, intervals: [8000] }).toMatch(/^(parsed|completed)$/);
   await expect.poll(async () => Object.keys((await reviewState(api, auth, run.submissionId, DEV)).buckets ?? {}).length, { timeout: 90_000, intervals: [4000] }).toBeGreaterThan(0);
+  if (learn) {
+    // the self-improving loop learns format + synthesizes placement/split rules
+    // (e.g. un-bunch AACC 15.b) so dev reproduces the human-validated prod panel.
+    await api.post(`${DEV}/api/parser-train/${up.importId}/auto-refine`, { headers: auth });
+    await expect.poll(async () => (await j(api.get(`${DEV}/api/parser-train/${up.importId}/refine-status`, { headers: auth }))).state?.status,
+      { timeout: 3_000_000, intervals: [10000] }).toBe('done');
+    await expect.poll(async () => Object.keys((await reviewState(api, auth, run.submissionId, DEV)).buckets ?? {}).length, { timeout: 90_000, intervals: [4000] }).toBeGreaterThan(0);
+  }
   return { submissionId: run.submissionId, importId: up.importId };
 }
 
@@ -132,7 +144,7 @@ async function browserProdPC(page: Page, suToken: string, pc: any) {
 const DOCS = [
   { name: 'aacc', file: path.join(FILES, 'aacc.docx'), mime: 'docx' as const, level: 'associate', prodSub: '6a590c0fc01945aaab81f289', pc: { id: '6a4d718362b2b773fb5e0302', email: 'nrwilliams1@aacc.edu', firstName: 'Nicole', lastName: 'Williams', role: 'program_coordinator' } },
   { name: 'kennesaw', file: path.join(FILES, 'kennesaw.docx'), mime: 'docx' as const, level: 'bachelors', prodSub: '6a31f92483a01b1a6d930a4e', pc: { id: '6a31f8a383a01b1a6d93095b', email: 'mnandan@kennesaw.edu', firstName: 'Monica', lastName: 'Nandan', role: 'program_coordinator' } },
-  { name: 'mcc', file: path.join(FILES, 'mcc.pdf'), mime: 'pdf' as const, level: 'associate', prodSub: '6a550c306ded4223c782ffe2', pc: { id: '6a5119d976f91443017832bd', email: 'mlmiller26@mccneb.edu', firstName: 'Michelle', lastName: 'Miller', role: 'program_coordinator' }, slow: true },
+  { name: 'mcc', file: path.join(FILES, 'mcc.pdf'), mime: 'pdf' as const, level: 'bachelors', prodSub: '6a550c306ded4223c782ffe2', pc: { id: '6a5119d976f91443017832bd', email: 'mlmiller26@mccneb.edu', firstName: 'Michelle', lastName: 'Miller', role: 'program_coordinator' }, slow: true }, // prod submission is programLevel=bachelors
   { name: 'stevenson', file: path.join(FILES, 'stevenson.docx'), mime: 'docx' as const, level: 'bachelors', prodSub: '', pc: null, slow: true }, // dev-only, 14MB self_study (slow parse)
 ];
 
@@ -146,8 +158,8 @@ test.describe('Review panel — parsed output shown + validated vs production', 
       const token = await loginSU(api, DEV);
       const auth = { Authorization: `Bearer ${token}` };
 
-      // --- DEV: parse + show on the review panel (as SU) ---
-      const { submissionId } = await devParse(api, token, d.file, d.mime, d.level);
+      // --- DEV: parse + LEARN (self-improving loop) + show on the review panel (as SU) ---
+      const { submissionId } = await devParse(api, token, d.file, d.mime, d.level, !!d.prodSub);
       const devRs = summarize(await reviewState(api, auth, submissionId, DEV));
       await browserSU(page, token);
       const devCap = await captureReviewPanel(page, DEV, submissionId, `${d.name}-dev`);
@@ -164,14 +176,19 @@ test.describe('Review panel — parsed output shown + validated vs production', 
         await browserProdPC(page, prodTok, d.pc);
         await captureReviewPanel(page, PROD, d.prodSub, `${d.name}-prod`);
 
-        // VALIDATION — the dev parse (with rules) reproduces the prod validated outcome:
-        // every standard the production review panel shows is also present on dev,
-        // dev places at least as many specs, and the introduction presence matches.
-        const missingOnDev = prodRs.standards.filter((s) => !devRs.standards.includes(s));
-        expect(missingOnDev, `${d.name}: standards on prod also present on dev`).toEqual([]);
-        expect(devRs.specsWithContent, `${d.name}: dev places >= prod specs`).toBeGreaterThanOrEqual(prodRs.specsWithContent - 2);
-        expect(devRs.hasIntro, `${d.name}: introduction presence matches prod`).toBe(prodRs.hasIntro);
-        console.log(`${d.name} VALIDATION vs prod: dev stds ${devRs.standards.length} ⊇ prod ${prodRs.standards.length}; specs dev ${devRs.specsWithContent} vs prod ${prodRs.specsWithContent}; intro dev=${devRs.hasIntro}/prod=${prodRs.hasIntro} ✓`);
+        // VALIDATION — EXACT (no tolerance). After learning, the dev review panel
+        // must reproduce the production review panel spec-for-spec: identical
+        // byStandard map (every Standard has exactly the same set of specs with
+        // content) and the introduction present on both. ANY difference is a failure.
+        const diffs: string[] = [];
+        for (const s of new Set([...Object.keys(devRs.byStandard), ...Object.keys(prodRs.byStandard)])) {
+          const dv = (devRs.byStandard as any)[s] || [], pv = (prodRs.byStandard as any)[s] || [];
+          if (JSON.stringify(dv) !== JSON.stringify(pv)) diffs.push(`Std ${s}: dev=[${dv}] prod=[${pv}]`);
+        }
+        expect(diffs, `${d.name}: dev byStandard must EQUAL prod exactly`).toEqual([]);
+        expect(devRs.specsWithContent, `${d.name}: exact spec count`).toBe(prodRs.specsWithContent);
+        expect(devRs.hasIntro, `${d.name}: introduction present on both`).toBe(prodRs.hasIntro);
+        console.log(`${d.name} VALIDATION vs prod: EXACT byStandard match — ${devRs.specsWithContent} specs = prod ${prodRs.specsWithContent}, intro both=${devRs.hasIntro} ✓`);
       }
     });
   }
