@@ -102,7 +102,7 @@ def test_empty_rules_is_strict_noop():
     engine = RuleEngine([])
     summary = engine.apply_post_pass(job)
 
-    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
+    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "splitSpecs": 0, "appliedRuleIds": []}
     assert job.buckets == before  # deep-equal: nothing moved or reclassified
 
 
@@ -123,7 +123,7 @@ def test_signature_matching_nothing_is_noop():
     }
     summary = RuleEngine([rule]).apply_post_pass(job)
 
-    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
+    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "splitSpecs": 0, "appliedRuleIds": []}
     assert job.buckets == before
 
 
@@ -150,7 +150,7 @@ def test_baseline_structural_signatures_are_noop():
     ]
     summary = RuleEngine(baseline_like).apply_post_pass(job)
 
-    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
+    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "splitSpecs": 0, "appliedRuleIds": []}
     assert job.buckets == before
 
 
@@ -322,7 +322,7 @@ def test_empty_rules_leaves_tags_untouched():
 
     summary = RuleEngine([]).apply_post_pass(job)
 
-    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
+    assert summary == {"moved": 0, "reclassified": 0, "placedTags": 0, "splitSpecs": 0, "appliedRuleIds": []}
     assert job.tags == before  # deep-equal: no tag moved, mutated, or removed
 
 
@@ -364,3 +364,51 @@ def test_classification_only_rule_does_not_place_tag():
 
     assert summary["placedTags"] == 0
     assert job.tags == before
+
+
+def test_split_rule_unbunches_a_spec():
+    """A split rule un-bunches 15.b out of 15.a at the prompt boundary."""
+    from app.rules.engine import RuleEngine
+    class Job:
+        buckets = {
+            "15.a": {"standardCode": "15", "specCode": "a", "narratives": [
+                {"sectionId": "sid1", "heading": "15.a. Needs", "snippet":
+                 "The following courses emphasize analysis of client needs. HUS 101 HUS 114. "
+                 "Skills to develop goals, design and implement a plan of action. The following "
+                 "courses emphasize skills to develop goals. HUS 130 HUS 141.",
+                 "htmlSnippet": None, "wordCount": 30, "confidence": 0.9}],
+                "evidenceText": [], "evidenceFiles": []},
+        }
+        introductions = {}
+        tags = []
+    job = Job()
+    rules = [{"ruleId": "agent.split.15b", "status": "active",
+              "match": {"signature": {"currentBucket": "15.a"}},
+              "extract": {"split": {"boundary": "Skills to develop goals, design and implement a plan of action", "std": "15", "spec": "b"}}}]
+    summary = RuleEngine(rules).apply_post_pass(job)
+    assert summary["splitSpecs"] == 1
+    assert "15.b" in job.buckets and len(job.buckets["15.b"]["narratives"]) == 1
+    tail = job.buckets["15.b"]["narratives"][0]["snippet"]
+    assert tail.startswith("Skills to develop goals")
+    head = job.buckets["15.a"]["narratives"][0]["snippet"]
+    assert "Skills to develop goals" not in head
+    assert "analysis of client needs" in head
+    # both halves got fresh sectionIds so anchoring re-anchors each
+    assert job.buckets["15.a"]["narratives"][0]["sectionId"].endswith(":splithead")
+
+
+def test_split_no_boundary_is_noop():
+    from app.rules.engine import RuleEngine
+    import copy
+    class Job:
+        buckets = {"15.a": {"standardCode": "15", "specCode": "a",
+                            "narratives": [{"sectionId": "s", "snippet": "no boundary here", "htmlSnippet": None}],
+                            "evidenceText": [], "evidenceFiles": []}}
+        introductions = {}; tags = []
+    job = Job(); before = copy.deepcopy(job.buckets)
+    rules = [{"ruleId": "agent.split.x", "status": "active",
+              "match": {"signature": {"currentBucket": "15.a"}},
+              "extract": {"split": {"boundary": "this text is absent", "std": "15", "spec": "b"}}}]
+    summary = RuleEngine(rules).apply_post_pass(job)
+    assert summary["splitSpecs"] == 0
+    assert job.buckets == before

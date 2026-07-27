@@ -25,6 +25,7 @@ import { ParserRule } from '../models/ParserRule';
 import { checkParserContract, ContractResult } from './parserContract';
 import { startAIImportForBatch } from '../controllers/aiImportController';
 import { recommendPlacement } from './cshseAiClient';
+import { getLevelStandards } from '../data/levelStandards';
 
 type Fmt = 'template' | 'self_study' | 'mcc_narrative' | null;
 
@@ -229,22 +230,26 @@ export function startAutoRefine(importId: string, programLevel: string, institut
         await persist(importId, state);
 
         const syn = await synthesizePlacementRules(importId, institutionId, programLevel, { activate: true });
-        if (syn.synthesized.length) {
+        // un-bunch any spec the walker merged into a neighbour (e.g. 15.b into 15.a)
+        const split = await synthesizeSplitRules(importId, institutionId, programLevel, { activate: true });
+        if (syn.synthesized.length || split.synthesized.length) {
           await clearReviewState(importId);
           await startAIImportForBatch(importId, programLevel, null as any);
           await pollParsed(importId);
         }
         const cAfter = await settledContract(importId);
         state.synthesis = {
-          rulesSynthesized: syn.synthesized.length, ruleIds: syn.synthesized,
+          rulesSynthesized: syn.synthesized.length + split.synthesized.length,
+          ruleIds: [...syn.synthesized, ...split.synthesized],
           unplacedBefore, unplacedAfter: cAfter.coverage.unplacedTags,
           specsBefore, specsAfter: cAfter.coverage.specsWithContent,
           anchorsOkAfter: cAfter.anchors.missing.length === 0,
         };
         state.status = 'done';
-        state.message = `Learned: format "${best.attempt.candidate}" + ${syn.synthesized.length} placement rule(s). `
-          + `Unplaced ${unplacedBefore}→${cAfter.coverage.unplacedTags}, specs ${specsBefore}→${cAfter.coverage.specsWithContent}, `
-          + `anchors ${cAfter.anchors.missing.length === 0 ? 'OK' : 'MISSING'}.`;
+        state.message = `Learned: format "${best.attempt.candidate}" + ${syn.synthesized.length} placement + ${split.synthesized.length} split rule(s). `
+          + `Unplaced ${unplacedBefore}→${cAfter.coverage.unplacedTags}, specs ${specsBefore}→${cAfter.coverage.specsWithContent}`
+          + (split.splits.length ? ` (un-bunched ${split.splits.map((s) => `${s.std}.${s.spec}`).join(',')})` : '')
+          + `, anchors ${cAfter.anchors.missing.length === 0 ? 'OK' : 'MISSING'}.`;
       }
       state.finishedAt = new Date().toISOString();
       await persist(importId, state);
@@ -312,6 +317,78 @@ export async function synthesizePlacementRules(
     synthesized.push(ruleId);
   }
   return { synthesized, considered };
+}
+
+/**
+ * SPLIT-RULE SYNTHESIS (CR-073). Detect a catalog spec the walker BUNCHED into an
+ * adjacent spec — the spec has NO content, yet its prompt text appears mid-way
+ * through another spec's narrative (e.g. AACC 15.b merged into 15.a). Synthesize a
+ * split rule (boundary = the missing spec's prompt prefix as it appears in the
+ * host) so the engine un-bunches it → the review panel gains the missing spec,
+ * matching the human-validated production panel spec-for-spec.
+ */
+export async function synthesizeSplitRules(
+  importId: string, institutionId: string, programLevel: string,
+  opts: { activate: boolean } = { activate: false }
+): Promise<{ synthesized: string[]; splits: Array<{ std: string; spec: string; host: string }> }> {
+  const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
+  if (!imp?.submissionId) return { synthesized: [], splits: [] };
+  const sub: any = await Submission.findById(imp.submissionId).select('aiReviewState').lean();
+  const buckets: any = sub?.aiReviewState?.buckets || {};
+  const catalog = getLevelStandards(programLevel) || [];
+  const hasContent = (k: string) => {
+    const b = buckets[k];
+    return b && ((b.narratives || []).length || (b.evidenceText || []).length || (b.evidenceFiles || []).length);
+  };
+  const norm = (s: string) => String(s || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const synthesized: string[] = [];
+  const splits: Array<{ std: string; spec: string; host: string }> = [];
+
+  for (const std of catalog as any[]) {
+    for (const spec of std.specifications || []) {
+      const key = `${std.code}.${spec.code}`;
+      if (hasContent(key)) continue; // spec already present — nothing to un-bunch
+      const critWords = norm(spec.text).split(' ').filter(Boolean);
+      if (critWords.length < 3) continue;
+      // search every OTHER bucket's narratives for the longest verbatim prefix of
+      // this spec's prompt that appears at a NON-start position (i.e. bunched).
+      let found: { host: string; boundary: string } | null = null;
+      for (const hk of Object.keys(buckets)) {
+        if (hk === key || !hasContent(hk)) continue;
+        for (const it of (buckets[hk].narratives || [])) {
+          const snip = norm(it.snippet || '');
+          for (let len = Math.min(10, critWords.length); len >= 3 && !found; len--) {
+            const phrase = critWords.slice(0, len).join(' ');
+            const idx = snip.indexOf(phrase);
+            if (idx > 40) { found = { host: hk, boundary: phrase }; break; }
+          }
+          if (found) break;
+        }
+        if (found) break;
+      }
+      if (!found) continue;
+      const ruleId = `agent.split.${std.code}.${spec.code}.${String(importId).slice(-6)}`;
+      await ParserRule.updateOne(
+        { ruleId, version: 1 },
+        {
+          $set: {
+            ruleId, version: 1, name: `Agent split: un-bunch ${key} from ${found.host}`,
+            description: `${key} was bunched into ${found.host}; split at its prompt boundary "${found.boundary.slice(0, 60)}…".`,
+            scope: { level: 'institution', institutionId }, status: opts.activate ? 'active' : 'proposed',
+            createdBy: 'agent', createdFromImportId: importId,
+            match: { format: 'any', region: 'document', signature: { currentBucket: found.host } },
+            extract: { split: { boundary: found.boundary, std: std.code, spec: spec.code } },
+            anchor: { emit: true, wrap: 'section', idFrom: 'sectionId' }, confidence: 0.8, updatedAt: new Date(),
+          },
+          $setOnInsert: { createdAt: new Date() },
+        },
+        { upsert: true }
+      );
+      synthesized.push(ruleId);
+      splits.push({ std: std.code, spec: spec.code, host: found.host });
+    }
+  }
+  return { synthesized, splits };
 }
 
 function hashStr(s: string): number {

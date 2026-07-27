@@ -253,10 +253,18 @@ class RuleEngine:
         Returns ``{"moved": N, "reclassified": N, "placedTags": N,
         "appliedRuleIds": [...]}``.
         """
-        summary = {"moved": 0, "reclassified": 0, "placedTags": 0, "appliedRuleIds": []}
+        summary = {"moved": 0, "reclassified": 0, "placedTags": 0, "splitSpecs": 0, "appliedRuleIds": []}
         if not self._rules:
             # STRICT no-op — buckets, introductions AND tags left untouched.
             return summary
+
+        buckets0 = getattr(job, "buckets", None)
+        if isinstance(buckets0, dict):
+            # SPLIT pass (CR-073) — un-bunch a spec whose content the walker merged
+            # into an adjacent spec (e.g. AACC 15.b bunched into 15.a). Runs first so
+            # the split-out narrative then participates in anchoring. Default-
+            # preserving: only rules carrying an ``extract.split`` act.
+            self._apply_splits(buckets0, summary)
 
         buckets = getattr(job, "buckets", None)
         if not isinstance(buckets, dict):
@@ -397,6 +405,81 @@ class RuleEngine:
 
         summary["appliedRuleIds"] = applied
         return summary
+
+    # ------------------------------------------------------------ split pass
+    def _apply_splits(self, buckets: dict, summary: dict) -> None:
+        """Split a bunched spec out of its host bucket into its own spec.
+
+        A split rule: ``extract.split = {boundary, std, spec}`` (+ optional
+        ``match.signature.currentBucket`` naming the host). We locate the host
+        bucket's narrative whose text contains ``boundary`` at a non-start
+        position, cut it there, leave the head in the host, and emit the tail as
+        a NEW narrative in ``buckets["{std}.{spec}"]``. Both halves get fresh
+        sectionIds so the later anchoring pass re-anchors each (Compare locates
+        both). No boundary match → no change (default-preserving)."""
+        for rule in self._rules:
+            split = (rule.get("extract") or {}).get("split") or {}
+            boundary = str(split.get("boundary") or "").strip()
+            tstd, tspec = split.get("std"), split.get("spec")
+            if not (boundary and tstd and tspec) or len(boundary) < 12:
+                continue
+            sig = (rule.get("match") or {}).get("signature") or {}
+            host_key = sig.get("currentBucket")
+            candidates = [host_key] if host_key else list(buckets.keys())
+            done = False
+            for hk in candidates:
+                bucket = buckets.get(hk)
+                if not isinstance(bucket, dict):
+                    continue
+                narrs = bucket.get("narratives")
+                if not isinstance(narrs, list):
+                    continue
+                for item in list(narrs):
+                    if not isinstance(item, dict):
+                        continue
+                    snip = str(item.get("snippet") or "")
+                    idx = snip.find(boundary)
+                    if idx <= 0:
+                        continue  # not bunched here (must be a non-start boundary)
+                    head = snip[:idx].rstrip()
+                    tail = snip[idx:].strip()
+                    if len(head) < 20 or len(tail) < 20:
+                        continue
+                    html = item.get("htmlSnippet") or ""
+                    hidx = html.find(boundary) if html else -1
+                    head_html = html[:hidx] if hidx > 0 else None
+                    tail_html = html[hidx:] if hidx > 0 else None
+                    base_sid = str(item.get("sectionId") or "split")
+                    # head stays in the host (fresh sectionId → re-anchored to the head only)
+                    item["snippet"] = head
+                    item["htmlSnippet"] = head_html
+                    item["wordCount"] = len(head.split())
+                    item["sectionId"] = f"{base_sid}:splithead"
+                    # tail becomes the new spec's narrative
+                    dest_key = f"{tstd}.{tspec}"
+                    dest = buckets.get(dest_key)
+                    if not isinstance(dest, dict):
+                        dest = _empty_bucket(str(tstd), str(tspec))
+                        buckets[dest_key] = dest
+                    dest.setdefault("narratives", []).append({
+                        "sectionId": f"{base_sid}:split:{tstd}.{tspec}",
+                        "heading": f"{tstd}.{tspec}. {tail[:120]}",
+                        "snippet": tail,
+                        "htmlSnippet": tail_html,
+                        "wordCount": len(tail.split()),
+                        "confidence": item.get("confidence", 0.9),
+                        "acceptState": item.get("acceptState", "review_low_confidence"),
+                        "rationale": f"Split out of {hk} at the {dest_key} prompt boundary.",
+                        "byteOffsetStart": item.get("byteOffsetStart", 0),
+                    })
+                    summary["splitSpecs"] += 1
+                    rid = rule.get("ruleId")
+                    if rid and rid not in summary["appliedRuleIds"]:
+                        summary["appliedRuleIds"].append(rid)
+                    done = True
+                    break
+                if done:
+                    break
 
     # ------------------------------------------------------------ helpers
     @staticmethod
