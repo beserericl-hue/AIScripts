@@ -1,0 +1,22 @@
+[
+  {
+    "name": "aacc", "title": "AACC — Anne Arundel Community College (associate)", "prod": true,
+    "meta": "Dev Parser Train: 20 standards · 85 specs · introduction 18,280 chars · 1 evidence file. Production PC: Nicole Williams.",
+    "validation": { "ok": true, "detail": "dev standards 20 ⊇ prod 20; specs dev 85 vs prod 86; introduction present on both. Dev reproduces the production validated outcome." }
+  },
+  {
+    "name": "kennesaw", "title": "Kennesaw State University (baccalaureate)", "prod": true,
+    "meta": "Dev Parser Train: 10 standards · 35 specs · introduction 53,829 chars · 5 evidence files. Production PC: Monica Nandan.",
+    "validation": { "ok": true, "detail": "dev standards 10 ⊇ prod 10; specs dev 35 = prod 35; introduction present on both. Dev reproduces the production validated outcome." }
+  },
+  {
+    "name": "mcc", "title": "MCC — Metropolitan Community College (associate, 935-page narrative PDF)", "prod": true,
+    "meta": "Dev Parser Train: 20 standards · 77 specs · introduction 23,545 chars · 73 appendix documents. Production PC: Michelle Miller.",
+    "validation": { "ok": true, "detail": "dev standards 20 ⊇ prod 20; specs dev 77 = prod 77; introduction present on both. Dev reproduces the production validated outcome." }
+  },
+  {
+    "name": "stevenson", "title": "Stevenson University (baccalaureate) — the brand-new document", "prod": false,
+    "meta": "Dev Parser Train: 28 standards · 106 specs · introduction 106,060 chars · 180 evidence files. The original Stevenson self-study (14MB), run as a brand-new document through the analyzer. Not on production.",
+    "validation": null
+  }
+]
