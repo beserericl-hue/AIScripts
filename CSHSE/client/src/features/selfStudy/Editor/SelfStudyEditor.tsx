@@ -507,6 +507,12 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const isReadOnly = !isProgramCoordinator;
   // A non-impersonating superuser cannot import (server enforces requireCanImport).
   const _authUser = useAuthStore((s) => s.user);
+  // CR-073 Parser Train — the review panel is a SUPERUSER verification surface for
+  // training runs. A superuser opens the SAME ReviewSurface/ReviewStep the PC uses
+  // (parsed cards per section + Compare) WITHOUT assuming the PC role. Everything
+  // that gates the review/import surfaces on the PC role also allows the SU here.
+  const _isSuperuser = _authUser?.isSuperuser === true;
+  const canReviewSurface = isProgramCoordinator || _isSuperuser;
   const _isImpersonating = useAuthStore((s) => s.impersonation.isImpersonating);
   const canImport = !(_authUser?.isSuperuser === true && !_isImpersonating);
   // Lead Reader Report — a board-facing document distinct from the reader
@@ -567,7 +573,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       if (viewParam === 'files') return 'files';
       if (viewParam === 'introduction') return 'introduction';
       if (canViewLeadReaderReport && viewParam === 'lead-reader-report') return 'lead-reader-report';
-      if (isProgramCoordinator && viewParam === 'review') return 'review-surface';
+      if (canReviewSurface && viewParam === 'review') return 'review-surface';
       if (isProgramCoordinator && viewParam === 'import') return 'ai-import';
       if (isProgramCoordinator && submissionId && !hasViewParam) {
         const s = useAIImportStore.getState();
@@ -601,7 +607,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // a fresh load/reload (localStorage no longer carries buckets/tags/etc.).
   // Idempotent with ReviewSurface's own load; both read the same server state.
   useEffect(() => {
-    if (!isProgramCoordinator || !submissionId) return;
+    if (!canReviewSurface || !submissionId) return;
     const store = useAIImportStore.getState();
     store.setSubmissionId(submissionId);
     void store.loadPersistedReviewState();
@@ -667,7 +673,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       if (dlStd && dlSpec) setFileScrollTarget({ std: dlStd, spec: dlSpec });
     } else if (canViewLeadReaderReport && view === 'lead-reader-report') {
       setActiveView('lead-reader-report');
-    } else if (isProgramCoordinator && view === 'review') {
+    } else if (canReviewSurface && view === 'review') {
       setActiveView('review-surface');
       const specKey = deepLinkParams.get('specKey');
       if (specKey) {
@@ -3261,7 +3267,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
           {/* CR-043 — Review surface, decoupled from the wizard.
               State comes from Submission.aiReviewState. */}
-          {activeView === 'review-surface' && isProgramCoordinator && submissionId && (
+          {activeView === 'review-surface' && canReviewSurface && submissionId && (
             <main className="flex flex-1 flex-col min-h-0 overflow-hidden">
               <SurfaceErrorBoundary label="Review" onReset={() => window.location.reload()}>
                 <ReviewSurface
