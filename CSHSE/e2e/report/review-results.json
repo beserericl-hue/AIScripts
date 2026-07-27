@@ -1,22 +1,22 @@
 [
   {
     "name": "aacc", "title": "AACC — Anne Arundel Community College (associate)", "prod": true,
-    "meta": "Dev Parser Train: 20 standards · 85 specs · introduction 18,280 chars · 1 evidence file. Production PC: Nicole Williams.",
-    "validation": { "ok": true, "detail": "dev standards 20 ⊇ prod 20; specs dev 85 vs prod 86; introduction present on both. Dev reproduces the production validated outcome." }
+    "meta": "Dev Parser Train: 20 standards · 86 specs · introduction present · 1 evidence file. Production PC: Nicole Williams.",
+    "validation": { "ok": true, "detail": "EXACT byStandard match — 86 specs = prod 86, every Standard identical, introduction on both. The raw parser produced 85 (it bunched Std 15.b into 15.a); the learning loop AUTONOMOUSLY synthesized a split rule that un-bunched 15.b, so dev now reproduces the production panel spec-for-spec." }
   },
   {
     "name": "kennesaw", "title": "Kennesaw State University (baccalaureate)", "prod": true,
-    "meta": "Dev Parser Train: 10 standards · 35 specs · introduction 53,829 chars · 5 evidence files. Production PC: Monica Nandan.",
-    "validation": { "ok": true, "detail": "dev standards 10 ⊇ prod 10; specs dev 35 = prod 35; introduction present on both. Dev reproduces the production validated outcome." }
+    "meta": "Dev Parser Train: 10 standards · 35 specs · introduction present · 5 evidence files. Production PC: Monica Nandan.",
+    "validation": { "ok": true, "detail": "EXACT byStandard match — 35 specs = prod 35, every Standard identical, introduction on both." }
   },
   {
-    "name": "mcc", "title": "MCC — Metropolitan Community College (associate, 935-page narrative PDF)", "prod": true,
-    "meta": "Dev Parser Train: 20 standards · 77 specs · introduction 23,545 chars · 73 appendix documents. Production PC: Michelle Miller.",
-    "validation": { "ok": true, "detail": "dev standards 20 ⊇ prod 20; specs dev 77 = prod 77; introduction present on both. Dev reproduces the production validated outcome." }
+    "name": "mcc", "title": "MCC — Metropolitan Community College (baccalaureate, 935-page narrative PDF)", "prod": true,
+    "meta": "Dev Parser Train: 20 standards · 77 specs · introduction present · 73 appendix documents. Production PC: Michelle Miller.",
+    "validation": { "ok": true, "detail": "EXACT byStandard match — 77 specs = prod 77, every Standard identical, introduction on both. (Parsed at the production submission's level, baccalaureate.)" }
   },
   {
     "name": "stevenson", "title": "Stevenson University (baccalaureate) — the brand-new document", "prod": false,
-    "meta": "Dev Parser Train: 28 standards · 106 specs · introduction 106,060 chars · 180 evidence files. The original Stevenson self-study (14MB), run as a brand-new document through the analyzer. Not on production.",
+    "meta": "Dev Parser Train: 28 standards · 106 specs · introduction present · 180 evidence files. The original Stevenson self-study (14MB), run as a brand-new document through the analyzer. Not on production.",
     "validation": null
   }
 ]
