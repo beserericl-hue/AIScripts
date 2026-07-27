@@ -62,6 +62,30 @@ export default function ParserTrainPage() {
   };
   useEffect(() => { if (isSU) loadRuns(); }, [isSU]);
 
+  // Open a PAST run from the list: load its import, show its diagnose results, and
+  // enable the Review screen + approve. Lets the SU review + approve any run, not
+  // only the one created this session.
+  const openRun = async (r: RunRow) => {
+    setErr(''); setBusy('Loading run…');
+    setContract(null); setActivated(null); setProposals([]); setRefine(null); setNoteText('');
+    try {
+      const chk = await api.get(`/api/imports/check/${r._id}`);
+      const impId = chk.data?.import?.id;
+      if (!impId) { setErr('This run has no import yet — create/import a document for it first.'); setBusy(''); return; }
+      setRun({ submissionId: r._id, pcUserId: '', programLevel: r.programLevel });
+      setImportId(impId);
+      setParseStatus('parsed');
+      setDetectedFormat('');
+      // load the contract + synthesized proposals so the results show immediately
+      const { data } = await api.post(`/api/parser-train/${impId}/diagnose`);
+      setContract(data.contract);
+      setProposals(data.proposals || []);
+      // bring the verify/approve section into view
+      requestAnimationFrame(() => document.getElementById('pt-verify')?.scrollIntoView({ behavior: 'smooth' }));
+    } catch (e: any) { setErr(e?.response?.data?.error || String(e)); }
+    finally { setBusy(''); }
+  };
+
   if (!isSU) {
     return (
       <div className="p-8 max-w-2xl">
@@ -230,8 +254,8 @@ export default function ParserTrainPage() {
 
       {/* 3 — verify + diagnose */}
       {importId && parsedOk && (
-        <section className="rounded-lg border border-gray-200 p-4 space-y-4">
-          <h2 className="font-medium text-gray-900">3. Verify &amp; diagnose</h2>
+        <section id="pt-verify" className="rounded-lg border border-gray-200 p-4 space-y-4">
+          <h2 className="font-medium text-gray-900">3. Verify &amp; diagnose {run?.submissionId && <span className="font-normal text-xs text-gray-400">· run {run.submissionId}</span>}</h2>
           <div className="flex items-center gap-3">
             <Link to={`/self-study/${run?.submissionId}`}
               className="px-4 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">
@@ -361,21 +385,28 @@ export default function ParserTrainPage() {
         </section>
       )}
 
-      {/* recent runs */}
+      {/* recent runs — click a run to load its results (diagnose + Review + approve) */}
       <section className="rounded-lg border border-gray-200 p-4">
         <h2 className="font-medium text-gray-900">Recent training runs</h2>
+        <p className="mt-1 text-xs text-gray-500">Open a run to see its parsed results in the Review screen, review the contract diagnosis, and approve/activate its rules.</p>
         <table className="mt-3 w-full text-sm">
-          <thead><tr className="text-left text-gray-500"><th className="py-1">Run</th><th>Level</th><th>Status</th><th>Created</th></tr></thead>
+          <thead><tr className="text-left text-gray-500"><th className="py-1">Run</th><th>Level</th><th>Status</th><th>Created</th><th></th></tr></thead>
           <tbody>
             {runs.map((r) => (
-              <tr key={r._id} className="border-t border-gray-100">
+              <tr key={r._id} className={`border-t border-gray-100 hover:bg-gray-50 ${run?.submissionId === r._id ? 'bg-indigo-50' : ''}`}>
                 <td className="py-1 font-mono text-xs">{r.submissionId}</td>
                 <td>{r.programLevel}</td>
                 <td>{r.status}</td>
                 <td className="text-gray-500">{new Date(r.createdAt).toLocaleString()}</td>
+                <td className="text-right">
+                  <button onClick={() => openRun(r)} disabled={!!busy}
+                    className="px-2.5 py-1 text-xs rounded-md border border-indigo-300 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50">
+                    Open results →
+                  </button>
+                </td>
               </tr>
             ))}
-            {runs.length === 0 && <tr><td colSpan={4} className="py-2 text-gray-400">No runs yet.</td></tr>}
+            {runs.length === 0 && <tr><td colSpan={5} className="py-2 text-gray-400">No runs yet.</td></tr>}
           </tbody>
         </table>
       </section>
