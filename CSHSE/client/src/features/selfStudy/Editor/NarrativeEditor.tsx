@@ -48,6 +48,7 @@ import {
   X,
   Maximize2,
   Minimize2,
+  Sparkles,
 } from 'lucide-react';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useValidationStatus } from '../../../hooks/useValidationStatus';
@@ -663,7 +664,7 @@ export function NarrativeEditor({
 
       {/* AI Review opens in a POPUP so it never crowds the editor — the verdict
           pill toggles it. Fully scrollable; click the backdrop or ✕ to close. */}
-      {hasAiReport && aiReportOpen && (
+      {verdictUI && aiReportOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           onClick={() => setAiReportOpen(false)}
@@ -688,6 +689,7 @@ export function NarrativeEditor({
               </button>
             </div>
             <div className="p-5 overflow-y-auto">
+              {!hasAiReport && <p className="text-sm text-gray-500">Verdict: <span className="font-medium">{verdictUI?.label}</span>. No further detail was provided for this specification.</p>}
               {feedback && <p className="text-sm text-gray-700 whitespace-pre-wrap">{feedback}</p>}
               {suggestions.length > 0 && (
                 <div className="mt-3">
@@ -952,6 +954,29 @@ export function NarrativeEditor({
 
           {/* Save Button & Status */}
           <div className="ml-auto flex items-center gap-2">
+          {/* AI evaluation — always-visible button so the coordinator can open the
+              AI review from the spec editor (the verdict pill up top can scroll out
+              of view on smaller screens). Shows the verdict colour when evaluated. */}
+          {verdictUI ? (
+            <button
+              onClick={() => setAiReportOpen(true)}
+              data-testid="ai-eval-button"
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border ${verdictUI.pill}`}
+              title="View the AI evaluation for this specification"
+            >
+              <verdictUI.Icon className="w-4 h-4" />
+              AI evaluation
+            </button>
+          ) : (
+            <span
+              data-testid="ai-eval-none"
+              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-200 bg-gray-50 text-gray-400"
+              title="Run Validate to generate an AI evaluation"
+            >
+              <Sparkles className="w-4 h-4" />
+              AI: not evaluated
+            </span>
+          )}
           {/* Save Status Indicator */}
           <SaveStatusIndicator
             isSaving={isSaving}

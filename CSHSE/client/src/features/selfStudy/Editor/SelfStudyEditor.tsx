@@ -20,6 +20,8 @@ import {
   BookOpen,
   FolderOpen,
   Maximize2,
+  Minimize2,
+  Menu,
   ArrowRight,
   PlayCircle,
   MessageSquarePlus,
@@ -600,6 +602,20 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     window.addEventListener('cr-043-open-review-surface', handler);
     return () => window.removeEventListener('cr-043-open-review-surface', handler);
   }, []);
+
+  // Focus mode — the work area (spec rail + editor/review) takes over the whole
+  // viewport, hiding the editor chrome (wizard + toolbar) AND the app nav, to
+  // recover vertical space on small / low-resolution laptop screens. Esc exits.
+  const [focusMode, setFocusMode] = useState(false);
+  useEffect(() => {
+    if (!focusMode) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFocusMode(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [focusMode]);
+  // A compact toolbar menu (hamburger) at narrow widths so the button rows stop
+  // stacking into tall chrome. Open/close state for the dropdown.
+  const [toolbarMenuOpen, setToolbarMenuOpen] = useState(false);
 
   // 2026-06-06 — review state lives on the server now (not localStorage), so
   // hydrate the store from Submission.aiReviewState on editor mount. Without
@@ -2530,7 +2546,18 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   }
 
   return (
-    <div className="self-study-editor flex flex-1 min-h-0 flex-col overflow-hidden bg-gray-50">
+    <div className={`self-study-editor flex flex-1 min-h-0 flex-col overflow-hidden bg-gray-50${focusMode ? ' fixed inset-0 z-40' : ''}`}>
+      {/* Focus mode — a floating exit control (the chrome is hidden below). */}
+      {focusMode && (
+        <button
+          onClick={() => setFocusMode(false)}
+          data-testid="focus-exit"
+          className="fixed top-2 right-3 z-50 inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 shadow hover:bg-gray-50"
+          title="Exit full screen (Esc)"
+        >
+          <Minimize2 className="w-3.5 h-3.5" /> Exit full screen
+        </button>
+      )}
       {/* CR-073 — Parser Train mode banner. When an SU opens a sandbox training
           run, this IS the verification surface: run Compare on every card,
           confirm placement, then approve on the Parser Train page (approval
@@ -2565,7 +2592,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           tab row, progress, and Submit button never overlap. At ≥1400px
           they sit on one line; below that the right cluster (progress +
           Submit) wraps below the tabs without losing any controls. */}
-      <header className="flex-shrink-0 bg-white border-b border-gray-200 px-4 py-2">
+      <header className={`flex-shrink-0 bg-white border-b border-gray-200 px-4 py-2${focusMode ? ' hidden' : ''}`}>
         {/* CR-045 — wizard phase indicator strip. Shows the PC where they
             are in the 4-step guided workflow. PC-only (the wizard
             workflow doesn't apply to readers). Hidden on the full-screen
@@ -2608,13 +2635,66 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             </div>
           </div>
 
+          {/* Compact controls: a full-screen toggle (give the work area the whole
+              viewport) + a hamburger that collapses the toolbar on narrow screens
+              so the button rows stop stacking into tall chrome. */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => setFocusMode(true)}
+              data-testid="focus-enter"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              title="Full screen — give the work area the whole screen"
+            >
+              <Maximize2 className="w-3.5 h-3.5" /> Full screen
+            </button>
+            <div className="relative 2xl:hidden">
+              <button
+                onClick={() => setToolbarMenuOpen((o) => !o)}
+                data-testid="toolbar-menu"
+                aria-label="Menu"
+                className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                title="Menu"
+              >
+                <Menu className="w-4 h-4" /> Menu
+              </button>
+              {toolbarMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setToolbarMenuOpen(false)} />
+                  <div className="absolute left-0 mt-1 z-40 w-56 rounded-md border border-gray-200 bg-white py-1 shadow-lg text-sm" role="menu">
+                    {([
+                      isProgramCoordinator && canImport && { label: 'Import file', fn: () => setShowImportFile(true) },
+                      isProgramCoordinator && { label: 'Review drafts', fn: () => setActiveView('review-surface') },
+                      isProgramCoordinator && { label: 'Curriculum Matrix drafts', fn: () => setActiveView('matrix-surface') },
+                      { label: 'Introduction', fn: () => setActiveView('introduction') },
+                      { label: 'Standards', fn: () => setActiveView('standards') },
+                      { label: 'Curriculum Matrix', fn: () => setActiveView('curriculum') },
+                      { label: 'Supporting File Library', fn: () => setActiveView('files') },
+                    ].filter(Boolean) as { label: string; fn: () => void }[]).map((it) => (
+                      <button
+                        key={it.label}
+                        role="menuitem"
+                        onClick={() => { it.fn(); setToolbarMenuOpen(false); }}
+                        className="block w-full text-left px-3 py-2 hover:bg-gray-100 text-gray-700"
+                      >
+                        {it.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center gap-3 min-w-0">
             {/* CR-045 — toolbar grouped by workflow phase. Left-to-right
                 matches the data flow: IMPORT → DRAFTS → SELF-STUDY. Each
                 group carries a plain-English label so a teacher reads the
                 row as a pipeline, not seven equal options. The phase
                 indicator strip above (PhaseIndicator) is the wizard. */}
-            <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-l pl-3 border-gray-200">
+            {/* The grouped nav buttons show at wide widths; below 2xl (~1536px,
+                i.e. a maximized laptop) they collapse into the "Menu" hamburger
+                above so the header stays a single compact row. */}
+            <div className="hidden 2xl:flex flex-wrap items-end gap-x-4 gap-y-2 border-l pl-3 border-gray-200">
               {/* GROUP: IMPORT (PC only) — bring content in. */}
               {isProgramCoordinator && (
                 <div className="flex flex-col gap-0.5">
