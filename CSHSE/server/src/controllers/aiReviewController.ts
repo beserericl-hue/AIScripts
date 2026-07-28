@@ -1748,6 +1748,25 @@ export async function setMatrixRowEdit(
 // Bulk supporting-evidence import (drag-and-drop many files into the Review)
 // ============================================================================
 
+/** Infer a proper MIME from the filename when the client sent a generic one. */
+function normalizeMime(mime: string, filename: string): string {
+  const m = (mime || '').toLowerCase();
+  if (m && m !== 'application/octet-stream' && m !== 'binary/octet-stream') return mime;
+  const ext = (filename.match(/\.([a-z0-9]+)$/i)?.[1] || '').toLowerCase();
+  const byExt: Record<string, string> = {
+    pdf: 'application/pdf',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', tif: 'image/tiff', tiff: 'image/tiff',
+  };
+  return byExt[ext] || mime || 'application/octet-stream';
+}
+
 /** Strip HTML → plain text for reference matching. */
 function htmlToPlain(html?: string | null): string {
   return String(html || '')
@@ -1856,12 +1875,13 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
     try {
       const sectionId = `bulk-${uuidv4()}`;
       const title = titleFromFilename(f.originalname);
+      const mime = normalizeMime(f.mimetype, f.originalname);
       const versionId = uuidv4();
       const s3Key = generateS3Key(String(institutionId), versionId, f.originalname);
-      const { bucket } = await uploadFile(s3Key, f.buffer, f.mimetype);
+      const { bucket } = await uploadFile(s3Key, f.buffer, mime);
 
       // Extract text (best-effort) for suggestion + hidden AI-eval body.
-      const extracted = await extractFileText({ s3Key, s3Bucket: bucket, mimeType: f.mimetype, filename: f.originalname });
+      const extracted = await extractFileText({ s3Key, s3Bucket: bucket, mimeType: mime, filename: f.originalname });
       const text = extracted.text || '';
 
       // Suggest a placement (reference-match + semantic).
@@ -1882,11 +1902,11 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         submissionId: submission._id,
         uploadedBy: userId || submission.submitterId,
         // no standardCode/specCode yet — Approve stamps it.
-        evidenceType: (f.mimetype || '').startsWith('image/') ? 'image' : 'document',
+        evidenceType: (mime || '').startsWith('image/') ? 'image' : 'document',
         file: {
           filename: f.originalname,
           originalName: f.originalname,
-          mimeType: f.mimetype,
+          mimeType: mime,
           size: f.size,
           s3Key,
           s3Bucket: bucket,
@@ -1914,7 +1934,7 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         fileName: f.originalname,
         s3Key,
         s3Bucket: bucket,
-        mimeType: f.mimetype,
+        mimeType: mime,
         fileSize: f.size,
         fileId: String(ev._id),
         pageCountEstimate: 0,
