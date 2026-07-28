@@ -2392,6 +2392,144 @@ function CVsView({ cvs, onShowInSource, approvedIds, onToggleApproval, onApprove
   );
 }
 
+// ------------------------------------------------- BulkEvidenceDropZone
+//
+// Drag-and-drop (or click) MANY supporting files into the review at once. Each
+// file is stored immediately (so it appears in the File Library), then the
+// server suggests a Standard / Sub-specification by reference-matching the
+// imported narratives + the AI placement matcher. The suggestion pre-fills the
+// card's routing dropdowns; Approve stamps the (std, spec) onto the file.
+const BULK_ACCEPT =
+  '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff';
+
+function BulkEvidenceDropZone({
+  submissionId,
+  onUploaded,
+}: {
+  submissionId: string | null;
+  onUploaded: () => void | Promise<void>;
+}): JSX.Element {
+  const [dragOver, setDragOver] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string>('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const upload = useCallback(
+    async (files: File[]) => {
+      if (!submissionId || files.length === 0) return;
+      setBusy(true);
+      setStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'} + matching to standards…`);
+      try {
+        const form = new FormData();
+        files.forEach((f) => form.append('files', f));
+        const resp = await api.post(
+          `/api/submissions/${submissionId}/review/bulk-evidence`,
+          form,
+          { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300_000 }
+        );
+        const count = resp.data?.count ?? files.length;
+        setStatus(`Added ${count} file${count === 1 ? '' : 's'} — review the suggested standards below.`);
+        await onUploaded();
+      } catch (err: any) {
+        setStatus(`Upload failed: ${err?.response?.data?.error || err?.message || 'unknown error'}`);
+      } finally {
+        setBusy(false);
+        window.setTimeout(() => setStatus(''), 6000);
+      }
+    },
+    [submissionId, onUploaded]
+  );
+
+  return (
+    <div className="border-b border-gray-200 bg-white px-4 py-3">
+      <div
+        data-testid="bulk-evidence-dropzone"
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const files = Array.from(e.dataTransfer.files || []);
+          if (files.length) void upload(files);
+        }}
+        onClick={() => inputRef.current?.click()}
+        className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-4 text-center transition-colors ${
+          dragOver ? 'border-cshse-500 bg-cshse-50' : 'border-gray-300 bg-gray-50 hover:border-cshse-400 hover:bg-cshse-50/40'
+        }`}
+      >
+        {busy ? (
+          <Loader2 className="h-5 w-5 animate-spin text-cshse-600" aria-hidden />
+        ) : (
+          <Upload className="h-5 w-5 text-cshse-600" aria-hidden />
+        )}
+        <span className="text-sm font-medium text-gray-800">
+          Drop supporting files here to add them
+        </span>
+        <span className="text-[11px] text-gray-500">
+          PDF, Word, Excel, PowerPoint or images · we’ll suggest a Standard &amp; Sub-specification for each
+        </span>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          accept={BULK_ACCEPT}
+          data-testid="bulk-evidence-input"
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files || []);
+            if (files.length) void upload(files);
+            e.target.value = '';
+          }}
+        />
+      </div>
+      {status && (
+        <p className="mt-2 text-xs text-gray-600" data-testid="bulk-evidence-status">
+          {status}
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Open a stored evidence file for viewing. xlsx/pptx go through the Microsoft
+// Office web viewer (needs a public URL); everything else opens natively.
+async function openEvidenceDocFile(
+  submissionId: string,
+  d: EvidenceDocItem,
+  onFallback?: (sectionId: string) => void
+): Promise<void> {
+  const mime = String(d.mimeType || '');
+  const isOffice = mime.includes('spreadsheetml') || mime.includes('presentationml');
+  try {
+    if (isOffice) {
+      const resp = await api.get(
+        `/api/submissions/${submissionId}/review/evidence-doc/${d.sectionId}/public-url`
+      );
+      const publicUrl = resp.data?.url as string;
+      if (publicUrl) {
+        const viewer = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(publicUrl)}`;
+        window.open(viewer, '_blank', 'noopener,noreferrer');
+        return;
+      }
+    } else if (d.s3Key) {
+      const resp = await api.get(
+        `/api/submissions/${submissionId}/review/evidence-doc/${d.sectionId}/file`,
+        { responseType: 'blob' }
+      );
+      const url = URL.createObjectURL(resp.data as Blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      return;
+    }
+  } catch {
+    /* fall through */
+  }
+  onFallback?.(d.sectionId);
+}
+
 // ------------------------------------------------------- EvidenceDocsView
 //
 // CR-040 Phase 2c — same shape as CVsView for appendix papers + syllabi.
@@ -2440,6 +2578,7 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
   const selectedSectionId = useAIImportStore((s) => s.selectedSectionId);
   const updateEvidenceDocRouting = useAIImportStore((s) => s.updateEvidenceDocRouting);
   const setEvidenceDocReferences = useAIImportStore((s) => s.setEvidenceDocReferences);
+  const loadPersistedReviewState = useAIImportStore((s) => s.loadPersistedReviewState);
 
   // Document search — filter the list to the docs indexed for a given Standard /
   // Subspecification, and/or a free-text match on title/summary/filename. Lets
@@ -2495,8 +2634,11 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
 
   if (docs.length === 0) {
     return (
-      <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
-        No appendix papers or syllabi were detected in this import.
+      <div className="flex h-full flex-1 flex-col bg-gray-50">
+        <BulkEvidenceDropZone submissionId={submissionId} onUploaded={loadPersistedReviewState} />
+        <div className="flex flex-1 items-center justify-center text-sm text-gray-500">
+          No appendix papers or syllabi yet — drop supporting files above to add them.
+        </div>
       </div>
     );
   }
@@ -2516,6 +2658,7 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
   };
   return (
     <div className="flex h-full flex-1 flex-col bg-gray-50">
+      <BulkEvidenceDropZone submissionId={submissionId} onUploaded={loadPersistedReviewState} />
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-white px-4 py-2 text-sm">
         <div>
           <span className="font-medium text-gray-800">
@@ -2687,6 +2830,30 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
             {d.summary && (
               <p className="mt-2 text-xs text-gray-700 line-clamp-3">{d.summary}</p>
             )}
+            {/* Bulk-import AI suggestion — why this standard was suggested. The
+                routing dropdowns below are pre-filled with it; the coordinator
+                accepts or overrides, then Approve stamps it onto the file. */}
+            {d.bulkImported && d.aiSuggestionRationale && (
+              <div
+                data-testid={`evdoc-suggestion-${d.sectionId}`}
+                className="mt-2 rounded border border-cshse-200 bg-cshse-50 px-2 py-1 text-[11px] text-cshse-800"
+              >
+                <span className="font-semibold">AI suggests</span>
+                {d.resolvedStd && (
+                  <span className="ml-1 font-mono">
+                    {d.resolvedStd === 'introduction'
+                      ? 'Introduction'
+                      : `Std ${d.resolvedStd}${d.resolvedSpec ? '.' + d.resolvedSpec : ''}`}
+                  </span>
+                )}
+                {typeof d.aiSuggestionConfidence === 'number' && (
+                  <span className="ml-1 text-cshse-600">
+                    ({Math.round(d.aiSuggestionConfidence * 100)}% match)
+                  </span>
+                )}
+                <span className="ml-1 text-gray-600">— {d.aiSuggestionRationale}</span>
+              </div>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
               {d.resolvedStd === 'introduction' ? (
                 <span className="font-mono text-cshse-700">→ Introduction</span>
@@ -2720,22 +2887,16 @@ function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval,
                 onClick={async (e) => {
                   e.stopPropagation();
                   if (submissionId && d.s3Key) {
-                    try {
-                      const resp = await api.get(
-                        `/api/submissions/${submissionId}/review/evidence-doc/${d.sectionId}/file`,
-                        { responseType: 'blob' }
-                      );
-                      const url = URL.createObjectURL(resp.data as Blob);
-                      window.open(url, '_blank', 'noopener,noreferrer');
-                      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-                      return;
-                    } catch {
-                      /* fall through to the source-document fragment */
-                    }
+                    await openEvidenceDocFile(submissionId, d, onShowInSource);
+                    return;
                   }
                   onShowInSource?.(d.sectionId);
                 }}
-                title="Open this appendix's stored file (PDF) as it is saved in the library."
+                title={
+                  (d.mimeType || '').includes('spreadsheetml') || (d.mimeType || '').includes('presentationml')
+                    ? 'Open this file in the Office web viewer (native spreadsheet / slides).'
+                    : "Open this file as it is saved in the library."
+                }
                 className="ml-auto inline-flex items-center gap-1 rounded border border-indigo-300 bg-white px-2 py-0.5 text-[10px] font-medium text-indigo-700 hover:bg-indigo-50"
               >
                 <Eye className="h-3 w-3" aria-hidden /> View file

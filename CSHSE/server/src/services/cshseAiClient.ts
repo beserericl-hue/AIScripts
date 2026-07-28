@@ -267,3 +267,75 @@ export async function isEvidencePhase2Ready(): Promise<boolean> {
     return false;
   }
 }
+
+// ============================================================================
+// CR-073 — Parser Train: text → ground-truth spec placement
+// ============================================================================
+
+export interface PlacementRequest {
+  text: string;
+  heading?: string;
+  programLevel: string;
+  institutionId?: string;
+}
+export interface PlacementResult {
+  std: string | null;
+  spec: string | null;
+  sectionType: string;
+  confidence: number;
+  acceptState?: string;
+  rationale?: string;
+  error?: string;
+}
+
+/**
+ * Ask the ai-service where a piece of text SHOULD be placed (the matcher's
+ * ground-truth recommendation). Used by the Parser Train synthesis loop to turn
+ * an unplaced/mis-placed item into a deterministic parserRule. Advisory: never
+ * throws on a bad recommendation — returns a null placement instead.
+ */
+export async function recommendPlacement(req: PlacementRequest): Promise<PlacementResult> {
+  try {
+    const res = await postSigned<PlacementResult>('/ai/placement/recommend', req, 30_000);
+    if (res.status >= 400) return { std: null, spec: null, sectionType: 'unknown', confidence: 0, error: `HTTP ${res.status}` };
+    return res.body;
+  } catch (err: any) {
+    return { std: null, spec: null, sectionType: 'unknown', confidence: 0, error: err?.message || String(err) };
+  }
+}
+
+// ============================================================================
+// Bulk supporting-evidence — file → plain text (pdf/docx/xlsx/pptx)
+// ============================================================================
+
+export interface FileExtractRequest {
+  s3Key?: string;
+  base64?: string;
+  mimeType?: string;
+  filename?: string;
+  s3Bucket?: string;
+}
+export interface FileExtractResult {
+  text: string;
+  title: string;
+  chars: number;
+  error?: string;
+}
+
+/**
+ * Extract plain text from a pdf/docx/xlsx/pptx (by S3 key or inline base64) so
+ * the caller can reference-match it against imported narratives and call the
+ * placement matcher. Advisory: returns empty text + `error` on any failure so
+ * the bulk-upload flow never aborts on one unreadable file.
+ */
+export async function extractFileText(req: FileExtractRequest): Promise<FileExtractResult> {
+  try {
+    const res = await postSigned<FileExtractResult>('/ai/files/extract', req, 45_000);
+    if (res.status >= 400) {
+      return { text: '', title: req.filename || '', chars: 0, error: `HTTP ${res.status}: ${(res.body as any)?.detail || ''}` };
+    }
+    return res.body;
+  } catch (err: any) {
+    return { text: '', title: req.filename || '', chars: 0, error: err?.message || String(err) };
+  }
+}
