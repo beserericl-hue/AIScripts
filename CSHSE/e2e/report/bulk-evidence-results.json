@@ -1,0 +1,223 @@
+{
+  "submissionId": "6a628cfc18c16eda99b34a95",
+  "total": 24,
+  "suggested": 24,
+  "rows": [
+    {
+      "file": "Assessmemt tool chart  human services assignments cycle Spring 2025.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.a",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.a (matched: tool, assignments)",
+      "chars": 2618,
+      "alternates": "12.f (reference), 19.a (reference)"
+    },
+    {
+      "file": "Career Conversation Worksheet.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.b (matched: career, conversation, worksheet)",
+      "chars": 3502,
+      "alternates": "7.c (reference), 8.a (reference)"
+    },
+    {
+      "file": "Comprehensive Evaluation Form.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 4.b",
+      "chars": 11147,
+      "alternates": "8.a (reference), 7.c (reference)"
+    },
+    {
+      "file": "Curriculum Mapping Human Services  cycle 3.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.a",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.a (matched: curriculum, mapping)",
+      "chars": 2210,
+      "alternates": "8.b (reference), 8.a (reference)"
+    },
+    {
+      "file": "Equity Gaps Worksheet  HUS 101 .pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.b (matched: equity, gaps, worksheet, hus)",
+      "chars": 43120,
+      "alternates": "8.a (reference), 4.c (reference)"
+    },
+    {
+      "file": "Equity Gaps Worksheet HUS 100.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.b (matched: equity, gaps, worksheet, hus)",
+      "chars": 15182,
+      "alternates": "8.a (reference), 4.c (reference)"
+    },
+    {
+      "file": "Human Services  AAS Program Review.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 4.b",
+      "chars": 20773,
+      "alternates": "8.a (reference), 20.a (reference)"
+    },
+    {
+      "file": "Human Services Fieldwork Agency Agreement.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 4.b",
+      "chars": 4836,
+      "alternates": "8.a (reference), 20.a (reference)"
+    },
+    {
+      "file": "Human Services Frequently Asked Questions Brochure.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.b (matched: frequently, asked, questions, brochure)",
+      "chars": 5847,
+      "alternates": "8.a (reference), 20.a (reference)"
+    },
+    {
+      "file": "Human Services Graduate Survey.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 4.b",
+      "chars": 19789,
+      "alternates": "8.a (reference), 20.a (reference)"
+    },
+    {
+      "file": "Human Services Learning Outcome Assessment.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.b (matched: learning, outcome, assessment)",
+      "chars": 5559,
+      "alternates": "8.a (reference), 4.a (reference)"
+    },
+    {
+      "file": "Human Services Stats.pptx",
+      "mime": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "suggestion": "Std 8.a",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 8.a",
+      "chars": 509,
+      "alternates": "4.b (reference), 4.c (reference)"
+    },
+    {
+      "file": "HumanServicesCounselingBrochure_F23_Aug_17.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 8.a",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 8.a (matched: )",
+      "chars": 5847,
+      "alternates": "20.a (reference), 4.b (reference)"
+    },
+    {
+      "file": "Overall Learning Outcome Assessment Report.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.a",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 4.a",
+      "chars": 5559,
+      "alternates": "4.b (reference), 8.a (reference)"
+    },
+    {
+      "file": "Part Time Faculty Promotion Presentation.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.b (matched: part, time, faculty, promotion)",
+      "chars": 13179,
+      "alternates": "6.a (reference), 7.c (reference)"
+    },
+    {
+      "file": "Performance Evaluation of Students.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 4.b",
+      "chars": 5677,
+      "alternates": "20.a (reference), 4.a (reference)"
+    },
+    {
+      "file": "Professional Expectations Concern.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 20.a",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 20.a",
+      "chars": 2397,
+      "alternates": "8.a (reference), 19.a (reference)"
+    },
+    {
+      "file": "Program Learning Outcome Data Collection Template for  Human Services.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.a",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.a (matched: learning, outcome, collection)",
+      "chars": 9953,
+      "alternates": "4.b (reference), 8.a (reference)"
+    },
+    {
+      "file": "Standard 4 Documentation Program Evaluation.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.a",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.a (matched: evaluation)",
+      "chars": 60446,
+      "alternates": "4 (filename), 4.b (reference)"
+    },
+    {
+      "file": "Student Opinion Form.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 4.b",
+      "chars": 3320,
+      "alternates": "8.a (reference), 20.a (reference)"
+    },
+    {
+      "file": "Student_s Evaluation of the Field Placement Experience.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 20.a",
+      "confidence": "100%",
+      "rationale": "Named verbatim in Standard 20.a",
+      "chars": 3295,
+      "alternates": "4.b (reference), 20.h (reference)"
+    },
+    {
+      "file": "Transfer Rates MDCC to USM.xlsx",
+      "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "suggestion": "Std 8.a",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 8.a (matched: transfer, rates)",
+      "chars": 200000,
+      "alternates": "10.a (reference), 10.b (reference)"
+    },
+    {
+      "file": "advisory board meeting agenda  june 2024 minutes.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.b (matched: advisory, board, meeting)",
+      "chars": 8069,
+      "alternates": "8.a (reference), 3.b (reference)"
+    },
+    {
+      "file": "advisory board meeting minutes  june 2025.pdf",
+      "mime": "application/pdf",
+      "suggestion": "Std 4.b",
+      "confidence": "100%",
+      "rationale": "Referenced in Standard 4.b (matched: advisory, board, meeting)",
+      "chars": 9232,
+      "alternates": "8.a (reference), 3.b (reference)"
+    }
+  ]
+}
