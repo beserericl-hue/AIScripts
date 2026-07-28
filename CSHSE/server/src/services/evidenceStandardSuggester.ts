@@ -207,9 +207,17 @@ export async function suggestStandardForFile(opts: {
     });
   }
 
-  // Semantic placement — best-effort; never blocks on AI-service trouble.
+  // Semantic placement — best-effort; never blocks on AI-service trouble. Skip
+  // it when the reference match is already strong (most bulk files are named
+  // after the standard/topic they support), so a 24-file drop doesn't fan out
+  // into 24 sequential AI calls.
   const semanticSuggestions: Suggestion[] = [];
+  const strongReference = (ref[0] && ref[0].confidence >= 0.6) || filenameSuggestions.length > 0;
   const probeText = (opts.text && opts.text.trim().length > 20 ? opts.text : opts.title).slice(0, 8000);
+  if (strongReference) {
+    const suggestions = mergeSuggestions(ref, filenameSuggestions);
+    return { suggestions, best: suggestions[0] };
+  }
   try {
     const rec = await recommendPlacement({
       text: probeText,
