@@ -5,6 +5,7 @@ import {
   Loader2,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   ChevronDown,
   FileUp,
   Home,
@@ -2441,41 +2442,25 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const isEditingDisabled = isReadOnly || (isProgramCoordinator && isSubmissionLocked);
 
   // Navigate to next/prev spec
+  // One linear sequence through the self-study: for each Standard (in order) its
+  // Introduction panel (spec = null → shows the document + standard introduction)
+  // then each specification. Down = next panel, Up = previous — wraps standard→
+  // standard and, at the top of Standard 1, into its introduction.
   const navigateSpec = useCallback(
     (direction: 'next' | 'prev') => {
       if (!standards) return;
-      const currentStandard = standards.find((s) => s.code === selectedStandard);
-      if (!currentStandard) return;
-
-      const specs = currentStandard.specifications || [];
-      const currentIndex = specs.findIndex((s) => s.code === selectedSpec);
-
-      if (direction === 'next') {
-        if (currentIndex < specs.length - 1) {
-          setSelectedSpec(specs[currentIndex + 1].code);
-        } else {
-          // Move to next standard
-          const standardIndex = standards.findIndex((s) => s.code === selectedStandard);
-          if (standardIndex < standards.length - 1) {
-            const nextStandard = standards[standardIndex + 1];
-            setSelectedStandard(nextStandard.code);
-            setSelectedSpec((nextStandard.specifications || [])[0]?.code || null);
-          }
-        }
-      } else {
-        if (currentIndex > 0) {
-          setSelectedSpec(specs[currentIndex - 1].code);
-        } else {
-          // Move to prev standard
-          const standardIndex = standards.findIndex((s) => s.code === selectedStandard);
-          if (standardIndex > 0) {
-            const prevStandard = standards[standardIndex - 1];
-            setSelectedStandard(prevStandard.code);
-            const prevSpecs = prevStandard.specifications || [];
-            const lastSpec = prevSpecs[prevSpecs.length - 1];
-            setSelectedSpec(lastSpec?.code || null);
-          }
-        }
+      const panels: Array<{ std: string; spec: string | null }> = [];
+      for (const s of standards) {
+        panels.push({ std: s.code, spec: null }); // the Standard's Introduction panel
+        for (const sp of s.specifications || []) panels.push({ std: s.code, spec: sp.code });
+      }
+      if (panels.length === 0) return;
+      const cur = panels.findIndex((p) => p.std === selectedStandard && p.spec === (selectedSpec ?? null));
+      const base = cur < 0 ? (direction === 'next' ? -1 : panels.length) : cur;
+      const next = base + (direction === 'next' ? 1 : -1);
+      if (next >= 0 && next < panels.length) {
+        setSelectedStandard(panels[next].std);
+        setSelectedSpec(panels[next].spec);
       }
     },
     [standards, selectedStandard, selectedSpec]
@@ -3125,7 +3110,30 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                         : `Matrix · Standard ${selectedStandard}`}
                     </button>
                   )}
-                  {/* Spec Navigation */}
+                  {/* Panel Navigation — previous / next panel in document order
+                      (each Standard's Introduction then its specs, wrapping
+                      between standards). Up/down and the ‹ › pair do the same. */}
+                  <div className="flex items-center rounded border border-gray-300 divide-x divide-gray-300">
+                    <button
+                      data-testid="standards-nav-up"
+                      onClick={() => navigateSpec('prev')}
+                      className="p-1.5 hover:bg-gray-200 text-gray-600 rounded-l transition-colors"
+                      title="Previous panel"
+                      aria-label="Previous panel"
+                    >
+                      <ChevronUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      data-testid="standards-nav-down"
+                      onClick={() => navigateSpec('next')}
+                      className="p-1.5 hover:bg-gray-200 text-gray-600 rounded-r transition-colors"
+                      title="Next panel"
+                      aria-label="Next panel"
+                    >
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {/* Spec Navigation (‹ ›) — kept for horizontal parity. */}
                   <button
                     onClick={() => navigateSpec('prev')}
                     className="p-2 hover:bg-gray-200 rounded transition-colors"
