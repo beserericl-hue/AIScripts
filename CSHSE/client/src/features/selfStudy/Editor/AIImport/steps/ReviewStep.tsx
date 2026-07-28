@@ -11,9 +11,9 @@
  */
 import React, { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Rocket, Loader2, X, Upload, Sparkles } from 'lucide-react';
+import { Rocket, Loader2, X, Upload, Sparkles, ChevronUp, ChevronDown } from 'lucide-react';
 import { useAIImportStore, type Tag, type BucketItem, type SpecBucket } from '../../../../../store/aiImportStore';
-import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY } from '../review/SpecRail';
+import { SpecRail, UNPLACED_KEY, UNWRITTEN_KEY, INTRO_DOC_KEY, introStandardKey } from '../review/SpecRail';
 // Any selectedSpecKey starting with '_' is a synthetic rail key (matrices,
 // cvs, evidence-docs, papers, syllabi, etc.) — none of them map to a real
 // bucket lookup, so activeBucket must return null for them.
@@ -179,6 +179,35 @@ function FullReviewStep(): JSX.Element {
   const setStep = useAIImportStore((s) => s.setStep);
   const selectSpec = useAIImportStore((s) => s.selectSpec);
   const selectSection = useAIImportStore((s) => s.selectSection);
+
+  // Up/down panel navigation — one linear sequence through the review surface:
+  // [Document Introduction] → for each Standard (numeric order): [that Standard's
+  // Introduction, then its specs a,b,c…]. Down = next panel, Up = previous. This
+  // naturally wraps standard→standard and, at the top of Standard 1, into the
+  // introduction. File/evidence + synthetic rails are excluded from the sequence.
+  const navKeys = React.useMemo(() => {
+    const keys: string[] = [];
+    if (introductions?.document) keys.push(INTRO_DOC_KEY);
+    const byStd = new Map<string, string[]>();
+    for (const b of Object.values(buckets)) {
+      const std = (b as any).standardCode, spec = (b as any).specCode;
+      if (std == null || spec == null) continue;
+      (byStd.get(std) ?? byStd.set(std, []).get(std)!).push(String(spec));
+    }
+    const stds = [...byStd.keys()].sort((a, b) => (parseInt(a, 10) || 99) - (parseInt(b, 10) || 99));
+    for (const std of stds) {
+      if ((introductions as any)?.[`standard-${std}`]) keys.push(introStandardKey(std));
+      for (const spec of byStd.get(std)!.sort((a, b) => a.localeCompare(b))) keys.push(`${std}.${spec}`);
+    }
+    return keys;
+  }, [buckets, introductions]);
+  const navIndex = selectedSpecKey ? navKeys.indexOf(selectedSpecKey) : -1;
+  const goPanel = React.useCallback((dir: -1 | 1) => {
+    const i = navIndex < 0 ? (dir === 1 ? -1 : navKeys.length) : navIndex;
+    const next = i + dir;
+    if (next >= 0 && next < navKeys.length) selectSpec(navKeys[next]);
+  }, [navIndex, navKeys, selectSpec]);
+
   const setMatrixRowAnchor = useAIImportStore((s) => s.setMatrixRowAnchor);
   const selectMatrixRow = useAIImportStore((s) => s.selectMatrixRow);
 
@@ -1108,6 +1137,32 @@ function FullReviewStep(): JSX.Element {
           {approvedIds.size > 0 && <> · <span className="text-emerald-700">{approvedIds.size} reviewed</span></>}
         </div>
         <div className="flex items-center gap-2">
+          {/* Up/down panel navigation — previous / next panel in document order
+              (introduction → standards, wrapping between standards). */}
+          <div className="flex items-center rounded-md border border-gray-300 divide-x divide-gray-300">
+            <button
+              type="button"
+              data-testid="review-nav-up"
+              onClick={() => goPanel(-1)}
+              disabled={navIndex <= 0}
+              title="Previous panel"
+              aria-label="Previous panel"
+              className="p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-l-md"
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              data-testid="review-nav-down"
+              onClick={() => goPanel(1)}
+              disabled={navIndex >= 0 && navIndex >= navKeys.length - 1}
+              title="Next panel"
+              aria-label="Next panel"
+              className="p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-r-md"
+            >
+              <ChevronDown className="w-4 h-4" />
+            </button>
+          </div>
           {/* CR-041 US-6 — source-file filter. Visible only when in
               batch mode (sourceOptions populated). Lets the PC scope
               SpecRail counts + visible cards to one source file. */}
