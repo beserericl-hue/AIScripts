@@ -23,8 +23,30 @@ import {
 } from '../controllers/submissionController';
 import { authenticate } from '../middleware/auth';
 import { submissionLockout } from '../middleware/submissionLockout';
+import multer from 'multer';
 
 const router = Router();
+
+// Bulk supporting-evidence upload — memory storage, 50MB/file, up to 30 files.
+// Accepts pdf/docx/xlsx/pptx (the formats the review + Office viewer support).
+const bulkEvidenceUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024, files: 30 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff',
+    ];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error(`File type not allowed: ${file.mimetype}`));
+  },
+});
 
 // All routes require authentication
 router.use(authenticate);
@@ -115,10 +137,22 @@ import {
   evaluateAllSpecs,
   getEvalProgress,
   getReviewEvidenceDocFile,
+  bulkAddEvidence,
+  getReviewEvidenceDocPublicUrl,
 } from '../controllers/aiReviewController';
 
 router.get('/:submissionId/review', getReviewState);
 router.get('/:submissionId/review/evidence-doc/:sectionId/file', getReviewEvidenceDocFile);
+// Short-lived public URL for the Office web viewer (xlsx/pptx native render).
+router.get('/:submissionId/review/evidence-doc/:sectionId/public-url', getReviewEvidenceDocPublicUrl);
+// Bulk drag-and-drop supporting-evidence import (creates File-Library rows +
+// review-rail cards with AI-suggested standard/sub-spec).
+router.post(
+  '/:submissionId/review/bulk-evidence',
+  submissionLockout,
+  bulkEvidenceUpload.array('files', 30),
+  bulkAddEvidence
+);
 router.post('/:submissionId/review/approve', submissionLockout, approveItem);
 router.post('/:submissionId/review/discard', submissionLockout, discardItem);
 router.post('/:submissionId/review/clear-item', submissionLockout, clearItem);

@@ -905,6 +905,20 @@ class EvidenceExtractRequest(BaseModel):
     sourceFilename: str | None = None
 
 
+class FileExtractRequest(BaseModel):
+    """Generic file → plain-text extraction for the bulk supporting-evidence
+    placement flow. Supports pdf / docx / xlsx / pptx via inline base64 OR an
+    S3/Tigris object key. Unlike ``/ai/evidence/extract`` this does NOT embed
+    into Qdrant — it just returns the text so the Node side can reference-match
+    it against the imported narratives and call ``/ai/placement/recommend``.
+    """
+    s3Key: str | None = Field(default=None, description="S3/Tigris object key; fetched server-side.")
+    base64: str | None = Field(default=None, description="Inline file bytes (base64). Takes priority over s3Key.")
+    mimeType: str = Field(default="", description="MIME type; dispatches the extractor (falls back to filename extension).")
+    filename: str = Field(default="", description="Original filename; used for extractor dispatch + returned title.")
+    s3Bucket: str | None = None
+
+
 class EvidenceRecommendRequest(BaseModel):
     institutionId: str
     submissionId: str
@@ -936,6 +950,53 @@ class SectionEvaluateRequest(BaseModel):
     supportingEvidenceText: list[str] = Field(default_factory=list)
     files: list[dict] = Field(default_factory=list)
     webLinks: list[str] = Field(default_factory=list)
+
+
+@app.post("/ai/files/extract", status_code=status.HTTP_200_OK)
+async def files_extract(req: FileExtractRequest, request: Request) -> dict:
+    """Extract plain text from a pdf/docx/xlsx/pptx (base64 or S3 key).
+
+    Used by the bulk supporting-evidence uploader to get a file's text so the
+    server can (a) reference-match it against the imported narratives and (b)
+    call the placement SpecMatcher. HMAC-gated. Returns
+    ``{ text, title, chars }``; a 400 on unsupported/malformed input.
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+
+    from app.evidence.office_extract import extract_text
+
+    data: bytes | None = None
+    if req.base64:
+        import base64 as _b64
+        try:
+            data = _b64.b64decode(req.base64, validate=True)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=400, detail=f"base64 decode failed: {exc}")
+    elif req.s3Key:
+        import os as _os
+        import boto3
+        from botocore.config import Config as BotoConfig
+
+        bucket = req.s3Bucket or _os.environ.get("CSHSE_S3_BUCKET", "cshse-filestorage-qlyj5pn")
+        endpoint = _os.environ.get("AWS_ENDPOINT_URL_S3") or _os.environ.get("AWS_ENDPOINT_URL")
+        try:
+            s3 = boto3.client("s3", endpoint_url=endpoint, config=BotoConfig(s3={"addressing_style": "path"}))
+            obj = s3.get_object(Bucket=bucket, Key=req.s3Key)
+            data = obj["Body"].read()
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=502, detail=f"s3 fetch failed: {type(exc).__name__}: {exc}")
+    else:
+        raise HTTPException(status_code=400, detail="provide base64 or s3Key")
+
+    try:
+        text = extract_text(data, mime_type=req.mimeType, filename=req.filename)
+    except ValueError as exc:
+        # Unsupported type or malformed file — a 400, not a 502.
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    title = req.filename.rsplit("/", 1)[-1] if req.filename else ""
+    return {"text": text, "title": title, "chars": len(text)}
 
 
 @app.post("/ai/evidence/extract")

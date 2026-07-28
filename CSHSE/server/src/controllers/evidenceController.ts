@@ -14,6 +14,7 @@ import {
   logError
 } from '../services/errorLogger';
 import * as s3Service from '../services/s3Service';
+import { signFileAccessToken } from '../services/fileAccessToken';
 import { documentParserService } from '../services/documentParser';
 
 interface AuthenticatedRequest extends Request {
@@ -780,6 +781,42 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
       filename: evidence.file.originalName
     });
   }
+});
+
+/**
+ * Mint a short-lived PUBLIC url for a stored evidence file so the Microsoft
+ * Office web viewer can render xlsx/pptx (it fetches the file cross-origin, so
+ * it can't use our auth header). Access is enforced here (same checks as
+ * download); the returned URL carries a signed, ~30-min token. Only S3-backed
+ * files can be minted (the viewer needs a fetchable object).
+ * GET /api/submissions/:submissionId/evidence/:evidenceId/public-url
+ */
+export const getEvidencePublicUrl = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { submissionId, evidenceId } = req.params;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
+  if (!userId || !userRole) throw new AuthorizationError('Authentication required');
+
+  const { hasAccess, institution } = await verifyEvidenceAccess(userId, userRole, submissionId, undefined, isSuperuser);
+  if (!hasAccess) throw new AuthorizationError('You do not have access to this file');
+
+  const filter: any = { _id: evidenceId, submissionId, isDeleted: false };
+  if (userRole !== 'admin' && institution) filter.institutionId = institution._id;
+  const evidence = await SupportingEvidence.findOne(filter);
+  if (!evidence || !evidence.file) throw new NotFoundError('Evidence');
+
+  if ((evidence.file.storageType || 'base64') !== 's3' || !evidence.file.s3Key) {
+    throw new ValidationError('This file is not stored in a way the web viewer can display.');
+  }
+  const token = signFileAccessToken({
+    s3Key: String(evidence.file.s3Key),
+    mimeType: String(evidence.file.mimeType || 'application/octet-stream'),
+    fileName: String(evidence.file.originalName || 'file'),
+    sub: String(submissionId),
+  });
+  const base = `${req.protocol}://${req.get('host')}`;
+  res.json({ url: `${base}/public-file/${token}` });
 });
 
 /**

@@ -303,3 +303,39 @@ export async function recommendPlacement(req: PlacementRequest): Promise<Placeme
     return { std: null, spec: null, sectionType: 'unknown', confidence: 0, error: err?.message || String(err) };
   }
 }
+
+// ============================================================================
+// Bulk supporting-evidence — file → plain text (pdf/docx/xlsx/pptx)
+// ============================================================================
+
+export interface FileExtractRequest {
+  s3Key?: string;
+  base64?: string;
+  mimeType?: string;
+  filename?: string;
+  s3Bucket?: string;
+}
+export interface FileExtractResult {
+  text: string;
+  title: string;
+  chars: number;
+  error?: string;
+}
+
+/**
+ * Extract plain text from a pdf/docx/xlsx/pptx (by S3 key or inline base64) so
+ * the caller can reference-match it against imported narratives and call the
+ * placement matcher. Advisory: returns empty text + `error` on any failure so
+ * the bulk-upload flow never aborts on one unreadable file.
+ */
+export async function extractFileText(req: FileExtractRequest): Promise<FileExtractResult> {
+  try {
+    const res = await postSigned<FileExtractResult>('/ai/files/extract', req, 45_000);
+    if (res.status >= 400) {
+      return { text: '', title: req.filename || '', chars: 0, error: `HTTP ${res.status}: ${(res.body as any)?.detail || ''}` };
+    }
+    return res.body;
+  } catch (err: any) {
+    return { text: '', title: req.filename || '', chars: 0, error: err?.message || String(err) };
+  }
+}

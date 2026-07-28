@@ -28,7 +28,11 @@ import { Assignment } from '../models/Assignment';
 import { buildEmptyReviewState } from '../services/aiReviewMerge';
 import { ValidationService } from '../services/validationService';
 import { applyAIImportCore } from './aiImportController';
-import { downloadFileAsBuffer } from '../services/s3Service';
+import { downloadFileAsBuffer, generateS3Key, uploadFile, isS3Configured } from '../services/s3Service';
+import { v4 as uuidv4 } from 'uuid';
+import { extractFileText } from '../services/cshseAiClient';
+import { suggestStandardForFile, NarrativeTuple, titleFromFilename } from '../services/evidenceStandardSuggester';
+import { signFileAccessToken } from '../services/fileAccessToken';
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -875,19 +879,23 @@ async function materializeApprovedToEditor(
       // evidence text — store the real body there so the file is visible to it.
       const bodyText = (fi.body || '').trim();
 
-      // ── MCC appendix: a native PDF already sliced + uploaded to S3. Store it
-      // as an S3-backed SupportingEvidence (viewed natively — NOT flattened to
-      // a synthesized .docx). The HIDDEN extracted text goes to
-      // metadata.description so the AI evaluator can read the file; the reader
-      // only ever opens the actual PDF.
-      if (fi.s3Key && (fi.mimeType || '').includes('pdf')) {
-        const pdfName = (fi.fileName || `${String(fi.title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'appendix'}.pdf`);
+      // ── Native S3-backed file (MCC appendix PDF, OR a bulk-imported
+      // pdf/docx/xlsx/pptx): keep the ORIGINAL file as-is — NOT flattened to a
+      // synthesized .docx. The reader opens the real file (natively / via the
+      // Office web viewer); the HIDDEN extracted text goes to
+      // metadata.description so the AI evaluator can read the content.
+      if (fi.s3Key && fi.mimeType) {
+        const extByMime = (fi.mimeType || '').includes('spreadsheetml') ? '.xlsx'
+          : (fi.mimeType || '').includes('presentationml') ? '.pptx'
+          : (fi.mimeType || '').includes('wordprocessingml') ? '.docx'
+          : (fi.mimeType || '').includes('pdf') ? '.pdf' : '';
+        const nativeName = (fi.fileName || `${String(fi.title).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(0, 80) || 'evidence'}${extByMime}`);
         const aiText = (fi.aiText || bodyText || '').trim();
         const existingPdf: any = await SupportingEvidence.findOne({ submissionId: submission._id, tags: tag, isDeleted: false });
         const fileData = {
-          filename: pdfName,
-          originalName: pdfName,
-          mimeType: 'application/pdf',
+          filename: nativeName,
+          originalName: nativeName,
+          mimeType: fi.mimeType,
           size: fi.fileSize || 0,
           s3Key: fi.s3Key,
           s3Bucket: fi.s3Bucket,
@@ -915,11 +923,11 @@ async function materializeApprovedToEditor(
             evidenceType: 'document',
             file: fileData as any,
             description: fi.title,
-            // HIDDEN AI-readable text (extracted/OCR); reader sees the PDF only.
+            // HIDDEN AI-readable text (extracted/OCR); reader sees the file only.
             metadata: { description: aiText },
             versionNumber: 1, isCurrentVersion: true, isDeleted: false,
             linkedNarratives: [],
-            tags: ['ai-import', 'mcc-appendix', `kind:${fi.kind}`, tag],
+            tags: ['ai-import', 'native-file', `kind:${fi.kind}`, tag],
           });
           _evCreated += 1;
         }
@@ -1734,4 +1742,231 @@ export async function setMatrixRowEdit(
   (submission as any).markModified('aiMatrixState');
   await submission.save();
   res.json({ ok: true });
+}
+
+// ============================================================================
+// Bulk supporting-evidence import (drag-and-drop many files into the Review)
+// ============================================================================
+
+/** Strip HTML → plain text for reference matching. */
+function htmlToPlain(html?: string | null): string {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Collect every (standardCode, specCode, plain-text) tuple the coordinator has
+ * imported — from the in-review buckets/introductions AND the applied
+ * narratives/standardIntroductions — so we can reference-match a dropped file
+ * against whatever the self-study actually says.
+ */
+export function gatherNarrativeTuples(submission: any): NarrativeTuple[] {
+  const tuples: NarrativeTuple[] = [];
+  const push = (std?: string, spec?: string, text?: string) => {
+    const t = (text || '').trim();
+    if (std && t) tuples.push({ standardCode: String(std), specCode: spec ? String(spec) : undefined, content: t });
+  };
+
+  const state = submission.aiReviewState || {};
+  // In-review buckets (pre-Apply).
+  for (const bucket of Object.values(state.buckets || {}) as any[]) {
+    const parts: string[] = [];
+    for (const it of [...(bucket?.narratives || []), ...(bucket?.evidenceText || [])]) {
+      parts.push(it.htmlSnippet ? htmlToPlain(it.htmlSnippet) : it.snippet || '');
+    }
+    push(bucket?.standardCode, bucket?.specCode, parts.join(' \n '));
+  }
+  // In-review introductions (keyed e.g. `_intro:standard-2`).
+  for (const [key, ib] of Object.entries(state.introductions || {}) as any[]) {
+    const items = (ib?.items || []) as any[];
+    const text = items.map((it) => (it.htmlSnippet ? htmlToPlain(it.htmlSnippet) : it.snippet || '')).join(' \n ');
+    const m = String(key).match(/standard-(\d+)/);
+    if (m) push(m[1], undefined, text);
+  }
+
+  // Applied narratives (post-Apply) — Mongoose nested Maps.
+  const narr = submission.narratives;
+  if (narr && typeof narr.forEach === 'function') {
+    narr.forEach((specMap: any, std: string) => {
+      if (specMap && typeof specMap.forEach === 'function') {
+        specMap.forEach((val: any, spec: string) => push(std, spec, htmlToPlain(val?.content)));
+      }
+    });
+  }
+  const intros = submission.standardIntroductions;
+  if (intros && typeof intros.forEach === 'function') {
+    intros.forEach((val: any, std: string) => push(std, undefined, htmlToPlain(val)));
+  }
+
+  return tuples;
+}
+
+/**
+ * POST /api/submissions/:submissionId/review/bulk-evidence
+ * multipart: files[] (up to 30). For each file:
+ *   1. store the ORIGINAL file to S3 (native format preserved),
+ *   2. create a SupportingEvidence row immediately (unassigned) so it appears
+ *      in the File Library right away — the Approve button only stamps the
+ *      (standard, spec) later,
+ *   3. extract its text + suggest a (standard, sub-spec) by reference-matching
+ *      the imported narratives and the AI placement matcher,
+ *   4. add it to aiReviewState.evidenceDocs so it shows in the Review Evidence
+ *      rail with its suggestion pre-filled.
+ * Returns the added docs (with suggestions) so the client can refresh the rail.
+ */
+export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const files = (req as any).files as Express.Multer.File[] | undefined;
+  if (!files || files.length === 0) {
+    res.status(400).json({ error: 'No files uploaded (field name must be "files").' });
+    return;
+  }
+  if (!isS3Configured()) {
+    res.status(503).json({ error: 'File storage (S3) is not configured on this server.' });
+    return;
+  }
+
+  const userId = req.user?.id || req.user?._id;
+  const institutionId = submission.institutionId;
+  const programLevel = String(submission.programLevel || 'bachelors');
+  const bucketName = process.env.AWS_S3_BUCKET_NAME || '';
+
+  // One narrative snapshot for the whole batch (cheap, avoids re-gathering).
+  const narratives = gatherNarrativeTuples(submission);
+
+  // Ensure a review-state object exists (a submission may have only evidence).
+  let state = (submission as any).aiReviewState;
+  if (!state || typeof state !== 'object') {
+    state = buildEmptyReviewState();
+    (submission as any).aiReviewState = state;
+  }
+  if (!Array.isArray(state.evidenceDocs)) state.evidenceDocs = [];
+
+  const added: any[] = [];
+  for (const f of files) {
+    try {
+      const sectionId = `bulk-${uuidv4()}`;
+      const title = titleFromFilename(f.originalname);
+      const versionId = uuidv4();
+      const s3Key = generateS3Key(String(institutionId), versionId, f.originalname);
+      const { bucket } = await uploadFile(s3Key, f.buffer, f.mimetype);
+
+      // Extract text (best-effort) for suggestion + hidden AI-eval body.
+      const extracted = await extractFileText({ s3Key, s3Bucket: bucket, mimeType: f.mimetype, filename: f.originalname });
+      const text = extracted.text || '';
+
+      // Suggest a placement (reference-match + semantic).
+      const { suggestions, best } = await suggestStandardForFile({
+        title,
+        filename: f.originalname,
+        text,
+        narratives,
+        programLevel,
+        institutionId: String(institutionId),
+      });
+
+      // Create the SupportingEvidence row NOW (unassigned) so it's already in
+      // the File Library; the rev tag is the upsert key set-approved uses later.
+      const evTag = `rev:${sectionId}`;
+      const ev = await SupportingEvidence.create({
+        institutionId,
+        submissionId: submission._id,
+        uploadedBy: userId || submission.submitterId,
+        // no standardCode/specCode yet — Approve stamps it.
+        evidenceType: (f.mimetype || '').startsWith('image/') ? 'image' : 'document',
+        file: {
+          filename: f.originalname,
+          originalName: f.originalname,
+          mimeType: f.mimetype,
+          size: f.size,
+          s3Key,
+          s3Bucket: bucket,
+          storageType: 's3',
+          uploadedAt: new Date(),
+          uploadedBy: userId || submission.submitterId,
+        },
+        description: title,
+        // hidden extracted text — the AI evaluator reads metadata.description.
+        metadata: { description: text.slice(0, 20000) },
+        versionNumber: 1,
+        isCurrentVersion: true,
+        isDeleted: false,
+        linkedNarratives: [],
+        tags: ['ai-import', 'bulk-import', evTag],
+      });
+
+      // Detect a syllabus by name so the rail groups it correctly.
+      const isSyllabus = /syllab|course outline/i.test(f.originalname);
+      const doc: any = {
+        sectionId,
+        docSubKind: isSyllabus ? 'syllabus' : 'paper',
+        title,
+        sourceFilename: f.originalname,
+        fileName: f.originalname,
+        s3Key,
+        s3Bucket: bucket,
+        mimeType: f.mimetype,
+        fileSize: f.size,
+        fileId: String(ev._id),
+        pageCountEstimate: 0,
+        imageCount: 0,
+        summary: text ? text.slice(0, 400) : title,
+        extractedText: text.slice(0, 20000),
+        // Pre-fill the routing dropdowns with the best suggestion (accept-as-is
+        // or override). resolvedStd/resolvedSpec drive the SpecAssignControls.
+        resolvedStd: best?.standardCode,
+        resolvedSpec: best?.specCode,
+        routing: best ? { std: best.standardCode, spec: best.specCode, source: 'suggestion' } : undefined,
+        // Suggestion metadata for the rationale line + alternates.
+        aiSuggestions: suggestions.slice(0, 3),
+        aiSuggestionRationale: best?.rationale,
+        aiSuggestionConfidence: best?.confidence,
+        bulkImported: true,
+      };
+      state.evidenceDocs.push(doc);
+      added.push({ ...doc, extractedTextChars: text.length, extractError: extracted.error });
+    } catch (err: any) {
+      console.error('[bulkAddEvidence] failed for', f.originalname, err?.message || err);
+      added.push({ sectionId: null, fileName: f.originalname, error: err?.message || String(err) });
+    }
+  }
+
+  (submission as any).markModified('aiReviewState');
+  await persistAiReviewState(submission, state);
+
+  res.json({ ok: true, count: added.filter((a) => a.sectionId).length, added });
+}
+
+/**
+ * GET /api/submissions/:submissionId/review/evidence-doc/:sectionId/public-url
+ * Mint a short-lived public URL for the Office web viewer (xlsx/pptx). Access is
+ * checked here (owned submission); the returned URL carries a signed token.
+ */
+export async function getReviewEvidenceDocPublicUrl(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const { sectionId } = req.params;
+  const state = (submission as any).aiReviewState;
+  const doc = ((state?.evidenceDocs as any[]) || []).find((e) => e?.sectionId === sectionId);
+  if (!doc || !doc.s3Key) {
+    res.status(404).json({ error: 'No stored file for this evidence item.' });
+    return;
+  }
+  const token = signFileAccessToken({
+    s3Key: String(doc.s3Key),
+    mimeType: String(doc.mimeType || 'application/octet-stream'),
+    fileName: String(doc.fileName || 'file'),
+    sub: String(submission._id),
+  });
+  const base = `${req.protocol}://${req.get('host')}`;
+  res.json({ url: `${base}/public-file/${token}` });
 }

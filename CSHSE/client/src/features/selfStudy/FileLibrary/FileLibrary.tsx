@@ -390,6 +390,9 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
     return (
       mime.includes('pdf') ||
       mime.includes('wordprocessingml') ||
+      // xlsx / pptx render natively via the Office web viewer.
+      mime.includes('spreadsheetml') ||
+      mime.includes('presentationml') ||
       mime.startsWith('image/')
     );
   };
@@ -604,6 +607,42 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
         {isExpanded && (
           <div className="px-4 pb-4 pt-3 border-t border-gray-100">
             {introFiles.map(renderEvidenceItem)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Bulk-imported files that haven't been assigned a standard yet (standardCode
+  // unset). They ARE in the library (stored) but need routing — show them in
+  // their own section so a dropped file is visible immediately; approving it in
+  // the Review rail moves it under its standard.
+  const renderUnassignedAccordion = () => {
+    const unassignedFiles = Object.values(evidenceByStandard['unassigned'] || {}).flat();
+    if (unassignedFiles.length === 0) return null;
+    const isExpanded = expandedStandards.has('unassigned');
+    return (
+      <div key="unassigned" className="border border-amber-200 rounded-lg overflow-hidden" data-testid="file-library-unassigned">
+        <button
+          onClick={() => toggleStandard('unassigned')}
+          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-amber-50 transition-colors whitespace-nowrap bg-amber-50/40"
+        >
+          {isExpanded ? (
+            <ChevronDown className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-amber-600 flex-shrink-0" />
+          )}
+          <span className="text-sm font-semibold text-amber-800 flex-shrink-0">Unassigned</span>
+          <span className="text-sm text-amber-700/80 truncate flex-1">
+            Imported files awaiting a Standard — assign in the Review panel
+          </span>
+          <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full whitespace-nowrap">
+            {unassignedFiles.length} file{unassignedFiles.length !== 1 ? 's' : ''}
+          </span>
+        </button>
+        {isExpanded && (
+          <div className="px-4 pb-4 pt-3 border-t border-amber-100">
+            {unassignedFiles.map(renderEvidenceItem)}
           </div>
         )}
       </div>
@@ -992,6 +1031,8 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
           </div>
         ) : (
           <div className="space-y-2">
+            {/* Unassigned — bulk-imported files awaiting a standard */}
+            {renderUnassignedAccordion()}
             {/* Introduction — files referenced in the program introduction */}
             {renderIntroductionAccordion()}
             {/* Part I */}

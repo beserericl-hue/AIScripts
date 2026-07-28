@@ -224,6 +224,16 @@ export type EvidenceDocItem = {
   // GET /api/submissions/:submissionId/evidence/:fileId/download.
   fileId?: string;
   fileName?: string;
+  // Native file mime (bulk import / MCC appendix) — drives the Office web
+  // viewer branch for xlsx/pptx.
+  mimeType?: string;
+  // Bulk drag-and-drop import: the file was uploaded directly (already in the
+  // File Library); Approve only stamps the (std, spec). The suggestion fields
+  // pre-fill + explain the routing dropdowns.
+  bulkImported?: boolean;
+  aiSuggestions?: Array<{ standardCode: string; specCode?: string; confidence: number; source: string; rationale: string }>;
+  aiSuggestionRationale?: string;
+  aiSuggestionConfidence?: number;
 };
 
 export type Tag = {

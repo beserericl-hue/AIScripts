@@ -9,6 +9,7 @@ import {
   deleteEvidence,
   downloadEvidence,
   previewEvidence,
+  getEvidencePublicUrl,
   linkEvidence,
   unlinkEvidence,
   getEvidenceStats
@@ -152,6 +153,9 @@ router.get('/submissions/:submissionId/evidence/:evidenceId/preview', previewEvi
  * @note    Binary files (Word, PPT, PDF) are decoded from base64 for proper download
  */
 router.get('/submissions/:submissionId/evidence/:evidenceId/download', downloadEvidence);
+
+// Short-lived PUBLIC url for the Office web viewer (xlsx/pptx native render).
+router.get('/submissions/:submissionId/evidence/:evidenceId/public-url', getEvidencePublicUrl);
 
 /**
  * @route   POST /api/submissions/:submissionId/evidence/:evidenceId/link

@@ -155,6 +155,13 @@ app.get('/ready', (_req, res) => {
   }
 });
 
+// Public file streaming for the Office web viewer (xlsx/pptx). The :token is a
+// short-lived JWT minted by an authenticated, ownership-checked endpoint; this
+// route just verifies + streams so Microsoft's viewer can fetch the file.
+// Mounted BEFORE the authenticated /api routers (it must NOT require a session).
+import { servePublicFile } from './controllers/publicFileController';
+app.get('/public-file/:token', servePublicFile);
+
 // API Routes
 // Auth routes MUST be first - they're public and other /api routers have authenticate middleware
 app.use('/api/auth', authRouter);

@@ -42,6 +42,13 @@ export function FilePreviewModal({
   // of a messy extracted-text dump, which confused users.
   const isPdf =
     (mimeType || '').toLowerCase().includes('pdf') || /\.pdf$/i.test(fileName || '');
+  // xlsx / pptx render natively via the Microsoft Office web viewer (it needs a
+  // public URL, which we mint on demand).
+  const isOffice =
+    (mimeType || '').toLowerCase().includes('spreadsheetml') ||
+    (mimeType || '').toLowerCase().includes('presentationml') ||
+    /\.(xlsx|pptx)$/i.test(fileName || '');
+  const [officeUrl, setOfficeUrl] = useState<string | null>(null);
   const [savingSummary, setSavingSummary] = useState(false);
   const [summarySaved, setSummarySaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -50,6 +57,29 @@ export function FilePreviewModal({
     let cancelled = false;
 
     async function fetchPreview() {
+      // xlsx/pptx: mint a public URL and hand it to the Office web viewer. No
+      // text-extraction preview needed — the viewer renders the real file.
+      if (isOffice) {
+        try {
+          const resp = await api.get(
+            `${API_BASE}/submissions/${submissionId}/evidence/${evidenceId}/public-url`
+          );
+          if (cancelled) return;
+          const publicUrl = resp.data?.url as string;
+          if (publicUrl) {
+            setOfficeUrl(`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(publicUrl)}`);
+          } else {
+            setError('Could not build a viewer link for this file.');
+          }
+        } catch (err: any) {
+          if (cancelled) return;
+          setError(err.response?.data?.error?.message || err.response?.data?.error || 'Could not load the Office viewer.');
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+        return;
+      }
+
       // 1) Text-extraction preview (summary + html) — best effort. For PDFs and
       //    images we can still render the native file even if this fails, so a
       //    preview error here is not fatal.
@@ -242,7 +272,17 @@ export function FilePreviewModal({
             </>
           )}
 
-          {!loading && !error && !isPdf && preview && !preview.previewable && (
+          {/* Native xlsx/pptx — Microsoft Office web viewer. */}
+          {!loading && !error && isOffice && officeUrl && (
+            <iframe
+              src={officeUrl}
+              title={fileName}
+              data-testid="office-web-viewer"
+              className="w-full h-[72vh] rounded-lg border border-gray-200 bg-gray-50"
+            />
+          )}
+
+          {!loading && !error && !isPdf && !isOffice && preview && !preview.previewable && (
             <div className="flex flex-col items-center justify-center py-16">
               <AlertTriangle className="w-10 h-10 text-amber-500 mb-3" />
               <p className="text-sm font-medium text-gray-700 mb-1">
@@ -261,7 +301,7 @@ export function FilePreviewModal({
             </div>
           )}
 
-          {!loading && !error && !isPdf && preview?.previewable && (
+          {!loading && !error && !isPdf && !isOffice && preview?.previewable && (
             <>
               {/* Summary box */}
               {preview.summary && (
