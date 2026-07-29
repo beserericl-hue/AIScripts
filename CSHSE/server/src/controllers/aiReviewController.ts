@@ -1942,13 +1942,22 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         summary: text ? text.slice(0, 400) : title,
         extractedText: text.slice(0, 20000),
         // Pre-fill the routing dropdowns with the best suggestion (accept-as-is
-        // or override). resolvedStd/resolvedSpec drive the SpecAssignControls.
+        // or override) ONLY when the matcher was confident. A weak/ambiguous
+        // match leaves the file UNASSIGNED (it's already in the library) with
+        // its closest guesses shown — better than a confident wrong route.
         resolvedStd: best?.standardCode,
         resolvedSpec: best?.specCode,
         routing: best ? { std: best.standardCode, spec: best.specCode, source: 'suggestion' } : undefined,
         // Suggestion metadata for the rationale line + alternates.
         aiSuggestions: suggestions.slice(0, 3),
-        aiSuggestionRationale: best?.rationale,
+        aiSuggestionRationale: best
+          ? best.rationale
+          : suggestions.length
+          ? `Not confident enough to auto-assign — please choose. Closest guesses: ${suggestions
+              .slice(0, 2)
+              .map((s) => `Std ${s.standardCode}${s.specCode ? '.' + s.specCode : ''} (${Math.round(s.confidence * 100)}%)`)
+              .join(', ')}`
+          : 'Could not determine a standard from the file — please assign it.',
         aiSuggestionConfidence: best?.confidence,
         bulkImported: true,
       };
