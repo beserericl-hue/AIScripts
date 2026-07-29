@@ -1870,9 +1870,14 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
   }
   if (!Array.isArray(state.evidenceDocs)) state.evidenceDocs = [];
 
-  const added: any[] = [];
-  for (const f of files) {
-    try {
+  // Bounded-concurrency processing — a folder drop can be 20+ files and each may
+  // call the AI classifier + extractor, so serial awaits would time out. Order is
+  // preserved in the response.
+  const CONCURRENCY = 5;
+  const results: Array<{ doc: any; summary: any } | null> = new Array(files.length).fill(null);
+  const errors: Array<any | null> = new Array(files.length).fill(null);
+
+  const processOne = async (f: Express.Multer.File): Promise<{ doc: any; summary: any }> => {
       const sectionId = `bulk-${uuidv4()}`;
       const title = titleFromFilename(f.originalname);
       const mime = normalizeMime(f.mimetype, f.originalname);
@@ -1961,11 +1966,34 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         aiSuggestionConfidence: best?.confidence,
         bulkImported: true,
       };
-      state.evidenceDocs.push(doc);
-      added.push({ ...doc, extractedTextChars: text.length, extractError: extracted.error });
-    } catch (err: any) {
-      console.error('[bulkAddEvidence] failed for', f.originalname, err?.message || err);
-      added.push({ sectionId: null, fileName: f.originalname, error: err?.message || String(err) });
+      return {
+        doc,
+        summary: { ...doc, extractedTextChars: text.length, extractError: extracted.error },
+      };
+  };
+
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= files.length) return;
+      try {
+        results[i] = await processOne(files[i]);
+      } catch (err: any) {
+        console.error('[bulkAddEvidence] failed for', files[i].originalname, err?.message || err);
+        errors[i] = { sectionId: null, fileName: files[i].originalname, error: err?.message || String(err) };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, () => worker()));
+
+  const added: any[] = [];
+  for (let i = 0; i < files.length; i++) {
+    if (results[i]) {
+      state.evidenceDocs.push(results[i]!.doc);
+      added.push(results[i]!.summary);
+    } else if (errors[i]) {
+      added.push(errors[i]);
     }
   }
 
