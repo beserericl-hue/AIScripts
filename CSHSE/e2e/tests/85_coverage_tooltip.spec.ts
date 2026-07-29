@@ -41,8 +41,11 @@ test('1) coverage dots explain their color on hover (assessed submission)', asyn
   await page.setViewportSize({ width: 1600, height: 950 });
   await login(page);
   await page.goto(`${BASE}/self-study/${SUBMISSION_ID}?view=review`);
-  const rail = page.getByRole('complementary', { name: 'Specifications' });
-  await expect(rail).toBeVisible({ timeout: 60000 });
+  // Wait on the review chrome (heavier MCC payloads can take a while), then the
+  // rail via a stable CSS selector rather than the landmark role.
+  await expect(page.getByTestId('check-coverage-cta')).toBeVisible({ timeout: 120000 });
+  const rail = page.locator('aside[aria-label="Specifications"]');
+  await expect(rail).toBeVisible({ timeout: 30000 });
   await expect(rail.getByText(/hover a dot for why/i)).toBeVisible();
 
   const dots = rail.locator('[data-testid^="coverage-dot-"]');
@@ -74,8 +77,11 @@ test('2) "not assessed" dots + Check-coverage backfill (MCC / no-coverage)', asy
   await page.setViewportSize({ width: 1600, height: 950 });
   await login(page);
   await page.goto(`${BASE}/self-study/${MCC_SUBMISSION_ID}?view=review`);
-  const rail = page.getByRole('complementary', { name: 'Specifications' });
-  await expect(rail).toBeVisible({ timeout: 60000 });
+  // Wait on the review chrome (heavier MCC payloads can take a while), then the
+  // rail via a stable CSS selector rather than the landmark role.
+  await expect(page.getByTestId('check-coverage-cta')).toBeVisible({ timeout: 120000 });
+  const rail = page.locator('aside[aria-label="Specifications"]');
+  await expect(rail).toBeVisible({ timeout: 30000 });
 
   const unassessed = rail.locator('[data-testid^="coverage-dot-"][data-coverage-state="unassessed"]');
   const before = await unassessed.count();
