@@ -72,6 +72,63 @@ function coverageIcon(b: SpecBucket): string {
   return '';
 }
 
+/** Trim one gap/strength sentence so a hover tooltip stays a sane height. */
+function clip(s: string, n = 180): string {
+  const t = (s || '').replace(/\s+/g, ' ').trim();
+  return t.length > n ? `${t.slice(0, n - 1)}…` : t;
+}
+
+/**
+ * Human explanation of WHY a spec shows its green/yellow/red coverage dot —
+ * the color's meaning + the AI coverage_verifier's actual gaps (what still
+ * needs work) and strengths (what's working). Surfaced as the dot's hover
+ * tooltip so a coordinator sees the reason instead of guessing.
+ */
+export function coverageReason(b: SpecBucket): string {
+  const covered = b.coverageCovered === true;
+  const score = b.coverageScore;
+  const partial = !covered && score !== null && score >= 0.5;
+  const hasContent = b.narratives.length || b.evidenceText.length || b.evidenceFiles.length;
+  const pct = score !== null ? `${Math.round(score * 100)}%` : null;
+
+  const gaps = (b.coverageGaps || []).filter(Boolean);
+  const strengths = (b.coverageStrengths || []).filter(Boolean);
+  // Never surface a raw model error (e.g. "LLM returned non-JSON response").
+  const looksLikeError =
+    gaps.length > 0 && gaps.every((g) => /non-json|llm returned|failed|error|timed out|no response|parse/i.test(g));
+
+  if (!covered && !partial && !hasContent) {
+    return 'No content placed here yet — nothing has been routed to this specification. Add or move a narrative/evidence item to it.';
+  }
+
+  const lines: string[] = [];
+  if (covered) {
+    lines.push(`🟢 Covered${pct ? ` — the AI review found ${pct} of the specification's criteria addressed` : ''}.`);
+  } else if (partial) {
+    lines.push(`🟡 Partial — ${pct ?? 'some'} of the criteria are addressed, but gaps remain.`);
+  } else {
+    lines.push(`🔴 Gap — content is placed here but ${pct ? `only ${pct} of` : ''} the criteria are met; it does not yet satisfy this specification.`);
+  }
+
+  if (looksLikeError || (!gaps.length && !strengths.length)) {
+    lines.push('');
+    lines.push('A detailed AI coverage assessment isn’t available for this spec yet — click “Re-run detectors” (or Validate) to generate one.');
+    return lines.join('\n');
+  }
+
+  if (gaps.length) {
+    lines.push('');
+    lines.push(covered ? 'To strengthen it further:' : 'What still needs work:');
+    for (const g of gaps.slice(0, covered ? 3 : 5)) lines.push(`•  ${clip(g)}`);
+  }
+  if (strengths.length) {
+    lines.push('');
+    lines.push('What’s working:');
+    for (const s of strengths.slice(0, 3)) lines.push(`•  ${clip(s)}`);
+  }
+  return lines.join('\n');
+}
+
 function bucketCount(b: SpecBucket): number {
   const mc = (b as any).matrixCells?.length || 0;
   return b.narratives.length + b.evidenceText.length + b.evidenceFiles.length + mc;
@@ -159,6 +216,7 @@ export function SpecRail({
           <span>🟢 covered</span>
           <span>🟡 partial</span>
           <span>🔴 gap</span>
+          <span className="italic text-gray-400">— hover a dot for why</span>
         </div>
       </div>
 
@@ -450,16 +508,27 @@ export function SpecRail({
                           {count > 0 && (
                             <span className="rounded bg-cshse-200 px-1.5 text-cshse-800">{count}</span>
                           )}
-                          {icon && <span aria-hidden>{icon}</span>}
-                          <span className="sr-only">
-                            {b.coverageCovered === true
-                              ? 'covered'
-                              : b.coverageScore !== null && b.coverageScore >= 0.5
-                              ? 'partial coverage'
-                              : count > 0
-                              ? 'gaps remain'
-                              : ''}
-                          </span>
+                          {icon && (
+                            // Hovering the dot explains WHY this color — the
+                            // coverage status + the AI's specific gaps/strengths.
+                            // Its own `title` overrides the row's spec-title tip.
+                            <span
+                              className="cursor-help"
+                              data-testid={`coverage-dot-${key}`}
+                              title={coverageReason(b)}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span aria-hidden>{icon}</span>
+                              <span className="sr-only">
+                                {b.coverageCovered === true
+                                  ? 'covered'
+                                  : b.coverageScore !== null && b.coverageScore >= 0.5
+                                  ? 'partial coverage'
+                                  : 'gaps remain'}
+                                . {coverageReason(b)}
+                              </span>
+                            </span>
+                          )}
                         </span>
                       </button>
                     </li>
