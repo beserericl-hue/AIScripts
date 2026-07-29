@@ -108,6 +108,21 @@ class CorrectionIngestRequest(BaseModel):
     correctionType: str = "missed-by-matcher"
 
 
+class PlacementRecommendRequest(BaseModel):
+    """text → (standard, spec) topic classification.
+
+    Used by the bulk supporting-evidence importer: given a dropped appendix's
+    text (and optionally its title), return the matcher's best (standard, spec)
+    recommendation — exactly as the import pipeline would place it — so a file
+    is routed by what it is ABOUT, not by incidental keyword overlap. Advisory
+    only: never 500s the caller.
+    """
+    text: str
+    heading: str = ""
+    programLevel: str
+    institutionId: str | None = None
+
+
 class MatrixInferColumnsRequest(BaseModel):
     """CR-025 — coordinator-facing column inference for the wizard's matrix step."""
     matrixSlug: str
@@ -631,6 +646,78 @@ async def ingest_correction_endpoint(req: CorrectionIngestRequest, request: Requ
             status_code=502,
             detail=f"correction ingest failed: {type(exc).__name__}: {exc}",
         )
+
+
+@app.post("/ai/placement/recommend", status_code=status.HTTP_200_OK)
+async def placement_recommend_endpoint(req: PlacementRecommendRequest, request: Request) -> dict:
+    """Recommend a (std, spec) placement for a piece of text.
+
+    Builds a minimal synthetic ``Section`` from ``text``/``heading`` and runs
+    the SAME ``SpecMatcher`` the import pipeline uses (embeddings + Handbook
+    specs + the Haiku classifier). Used by the bulk supporting-evidence importer
+    to route a dropped appendix by topic. HMAC-gated.
+
+    ADVISORY: any failure (Qdrant/Anthropic/OpenAI down, spec cache empty)
+    returns ``{std:null, spec:null, sectionType:"unknown", confidence:0,
+    error:"..."}`` with HTTP 200 — it must never 500 the caller.
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+
+    try:
+        from app.splitter.sections import Section
+        from app.embeddings.openai_client import EmbeddingClient
+        from app.embeddings.spec_cache import bootstrap_spec_cache
+        from app.matcher.spec_matcher import SpecMatcher
+        from app.vector.qdrant_ops import VectorStore
+
+        settings = get_settings()
+
+        text = req.text or ""
+        section = Section(
+            id="placement-probe",
+            heading=req.heading or "",
+            heading_level=1,
+            markdown=text,
+            byte_offset_start=0,
+            byte_offset_end=len(text),
+            word_count=len(text.split()),
+            contains_table=False,
+            contains_image=False,
+            has_resume_signals=False,
+            has_syllabus_signals=False,
+            splitter_tier="probe",
+            flags={},
+            html_snippet=None,
+            images=[],
+        )
+
+        # Same construction as the template import pipeline, scoped to the one
+        # program level so we don't warm caches we won't use.
+        store = VectorStore(settings.qdrant_url, settings.qdrant_api_key or None)
+        embedder = EmbeddingClient(settings.openai_api_key)
+        bootstrap_spec_cache(store, embedder, program_levels=(req.programLevel,))
+        matcher = SpecMatcher(
+            store=store, embedder=embedder, anthropic_key=settings.anthropic_api_key
+        )
+
+        rec = matcher.recommend(section, req.programLevel, institution_id=req.institutionId)
+        return {
+            "std": rec.primary_standard,
+            "spec": rec.primary_spec,
+            "sectionType": str(rec.section_type),
+            "confidence": rec.primary_confidence,
+            "acceptState": str(rec.accept_state),
+            "rationale": rec.rationale,
+        }
+    except Exception as exc:  # noqa: BLE001 — advisory endpoint, never 500
+        return {
+            "std": None,
+            "spec": None,
+            "sectionType": "unknown",
+            "confidence": 0,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
 
 
 @app.post("/ai/matrix/infer-columns", status_code=status.HTTP_200_OK)
