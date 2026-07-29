@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { coverageReason } from './SpecRail';
+import { coverageReason, coverageState } from './SpecRail';
 import type { SpecBucket } from '../../../../../store/aiImportStore';
 
 function bucket(over: Partial<SpecBucket>): SpecBucket {
@@ -57,11 +57,27 @@ describe('coverageReason', () => {
       coverageGaps: ['LLM returned non-JSON response'],
     }));
     expect(r).not.toContain('non-JSON');
-    expect(r).toMatch(/Re-run detectors|Validate/);
+    expect(r).toMatch(/Check coverage/);
   });
+});
 
-  it('has content but no assessment yet: suggests generating one', () => {
-    const r = coverageReason(bucket({ coverageCovered: null, coverageScore: null, narratives: [item(1)] }));
-    expect(r).toMatch(/isn’t available|Re-run detectors|Validate/);
+describe('coverageState + the "not assessed" (MCC) case', () => {
+  it('content but NO assessment → unassessed (gray), NOT gap (red)', () => {
+    const b = bucket({ coverageCovered: null, coverageScore: null, narratives: [item(1)] });
+    expect(coverageState(b)).toBe('unassessed');
+    const r = coverageReason(b);
+    expect(r).toMatch(/Not yet assessed/);
+    expect(r).toMatch(/Check coverage/);
+    expect(r).not.toMatch(/🔴 Gap/);
+  });
+  it('assessed low score → gap (red)', () => {
+    const b = bucket({ coverageCovered: false, coverageScore: 0.2, narratives: [item(1)], coverageGaps: ['x missing'] });
+    expect(coverageState(b)).toBe('gap');
+    expect(coverageReason(b)).toMatch(/🔴 Gap/);
+  });
+  it('covered → green; partial → yellow; empty → none', () => {
+    expect(coverageState(bucket({ coverageCovered: true, coverageScore: 0.9, narratives: [item(1)] }))).toBe('covered');
+    expect(coverageState(bucket({ coverageCovered: false, coverageScore: 0.6, narratives: [item(1)] }))).toBe('partial');
+    expect(coverageState(bucket({ coverageCovered: null, coverageScore: null }))).toBe('none');
   });
 });

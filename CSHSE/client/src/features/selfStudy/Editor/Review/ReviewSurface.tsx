@@ -107,6 +107,44 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
     | { kind: 'error'; message: string }
   >({ kind: 'idle' });
 
+  const [coverageState, setCoverageState] = useState<
+    | { kind: 'idle' }
+    | { kind: 'running' }
+    | { kind: 'done'; assessed: number }
+    | { kind: 'error'; message: string }
+  >({ kind: 'idle' });
+
+  // How many filled specs still have NO coverage assessment (gray dots). Drives
+  // the "Check coverage (N)" label so the coordinator knows there's work to do.
+  const coverageMissing = React.useMemo(() => {
+    let n = 0;
+    for (const b of Object.values(buckets || {})) {
+      const hasContent = b.narratives.length || b.evidenceText.length || b.evidenceFiles.length;
+      const assessed = b.coverageCovered !== null || b.coverageScore !== null;
+      if (hasContent && !assessed) n += 1;
+    }
+    return n;
+  }, [buckets]);
+
+  const handleCheckCoverage = async () => {
+    setCoverageState({ kind: 'running' });
+    try {
+      const res = await api.post<{ ok: boolean; assessed?: number; error?: string }>(
+        `/api/submissions/${submissionId}/review/recompute-coverage`,
+        { onlyMissing: true }
+      );
+      if (res.data?.ok) {
+        setCoverageState({ kind: 'done', assessed: res.data.assessed ?? 0 });
+        await loadPersistedReviewState();
+      } else {
+        setCoverageState({ kind: 'error', message: res.data?.error || 'Coverage review failed.' });
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.error || err?.message;
+      setCoverageState({ kind: 'error', message: detail || 'Coverage review failed.' });
+    }
+  };
+
   useEffect(() => {
     setSubmissionId(submissionId);
     loadPersistedReviewState();
@@ -191,6 +229,34 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
           >
             {saveState === 'saving' ? 'Saving…' : saveState === 'saved' ? '✓ All changes saved' : 'saved'}
           </span>
+          {/* Check coverage — (re)run the AI coverage reviewer over the filled
+              specs so every red/yellow/green dot has a real assessment behind
+              it. Backfills imports that never ran it (older MCC imports). */}
+          <button
+            onClick={handleCheckCoverage}
+            data-testid="check-coverage-cta"
+            disabled={coverageState.kind === 'running'}
+            title={
+              coverageMissing > 0
+                ? `Run the AI coverage review for the ${coverageMissing} spec(s) that haven't been assessed yet — populates the score, gaps and strengths behind each dot. No re-reading of the document.`
+                : 'Re-run the AI coverage review for any spec that still has no assessment.'
+            }
+            className="rounded border border-cshse-300 bg-white px-3 py-1 text-sm font-medium text-cshse-700 hover:bg-cshse-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {coverageState.kind === 'running'
+              ? '⏳ Checking coverage…'
+              : coverageMissing > 0
+              ? `✅ Check coverage (${coverageMissing})`
+              : '✅ Check coverage'}
+          </button>
+          {coverageState.kind === 'done' && (
+            <span className="text-xs text-emerald-600" data-testid="coverage-done">
+              ✓ {coverageState.assessed} assessed
+            </span>
+          )}
+          {coverageState.kind === 'error' && (
+            <span className="text-xs text-red-600">✗ {coverageState.message}</span>
+          )}
           {/* CR-040 follow-on — Re-run detectors button. Pulls the
               persisted DOCX from S3 and re-runs cv_detector +
               appendix_paper_detector + introduction_detector only.

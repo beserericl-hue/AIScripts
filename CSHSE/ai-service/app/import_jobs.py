@@ -421,6 +421,70 @@ def _ensure_all_items_anchored(job: "JobRecord") -> None:
         )
 
 
+def _ensure_coverage(job: "JobRecord") -> None:
+    """Guarantee a coverage assessment exists for EVERY filled spec, regardless
+    of which pipeline ran. Template + self-study run the reviewer inline; MCC
+    (and any future format) don't — so backfill any filled bucket that still has
+    no assessment. Requirement: no document is parsed without a coverage review,
+    so the red/yellow/green dot and its "why" tooltip always have data behind it.
+    Already-assessed buckets are skipped (idempotent — no double cost)."""
+    from app.coverage.spec_coverage import review_specs
+
+    buckets = job.buckets or {}
+    items: list[dict] = []
+    for key, b in buckets.items():
+        if not b:
+            continue
+        # Skip specs the reviewer already scored (template/self-study inline pass).
+        if b.get("coverageScore") is not None or b.get("coverageCovered") is not None:
+            continue
+        narr = b.get("narratives") or []
+        evt = b.get("evidenceText") or []
+        evf = b.get("evidenceFiles") or []
+        if not (narr or evt or evf):
+            continue  # empty spec → no dot shown → nothing to assess
+        std, spec = b.get("standardCode"), b.get("specCode")
+        if not std or not spec:
+            continue
+        narrative_text = "\n\n".join((n.get("snippet") or "")[:3000] for n in narr).strip()
+        evidence_items = [
+            ((e.get("heading") or "")[:80], (e.get("snippet") or "")[:1500]) for e in [*evt, *evf]
+        ]
+        items.append({
+            "key": key, "standard_code": str(std), "spec_code": str(spec),
+            "narrative_text": narrative_text, "evidence_items": evidence_items,
+        })
+
+    if not items:
+        return
+
+    _stage_started(job, "coverage_review", f"0 / {len(items)}")
+
+    def _progress(done: int, total: int) -> None:
+        for s in reversed(job.stages):
+            if s.name == "coverage_review":
+                s.detail, s.state = f"{done} / {total}", "running"
+                break
+        if done % 5 == 0:
+            _publish_status(job)
+
+    settings = get_settings()
+    reviews = review_specs(job.program_level, settings.anthropic_api_key, items, on_progress=_progress)
+    by_key = {(r.standard_code, r.spec_code): r for r in reviews}
+    applied = 0
+    for it in items:
+        r = by_key.get((it["standard_code"], it["spec_code"]))
+        if not r:
+            continue
+        b = buckets[it["key"]]
+        b["coverageScore"] = r.coverage_score
+        b["coverageCovered"] = r.is_covered
+        b["coverageGaps"] = r.gaps
+        b["coverageStrengths"] = r.strengths
+        applied += 1
+    _stage_done(job, "coverage_review", f"{applied} reviewed")
+
+
 def _run_pipeline(job: JobRecord) -> None:
     """The actual pipeline body. Runs in a worker thread.
 
@@ -489,6 +553,14 @@ def _run_pipeline(job: JobRecord) -> None:
                 _ensure_all_items_anchored(job)
             except Exception as exc:  # noqa: BLE001 — never sink the import
                 job.warnings.append(f"anchor-source: {type(exc).__name__}: {exc}")
+
+        # Guarantee a coverage assessment for every format (backfills MCC, which
+        # doesn't run the reviewer inline). Requirement: no import without coverage.
+        if job.status not in ("failed", "canceled"):
+            try:
+                _ensure_coverage(job)
+            except Exception as exc:  # noqa: BLE001 — never sink the import over coverage
+                job.warnings.append(f"coverage backfill: {type(exc).__name__}: {exc}")
 
         if job.status not in ("failed", "canceled"):
             # CR-037 Defense 1 — ai-service self-validates before the

@@ -65,11 +65,32 @@ interface SpecRailProps {
   onAddFromSourceForIntro?: (introBucketKey: string) => void;
 }
 
+type CoverageState = 'covered' | 'partial' | 'gap' | 'unassessed' | 'none';
+
+/**
+ * The dot's meaning. A spec is only RED ("gap") when the AI actually ASSESSED
+ * it and found it lacking. A spec with content but NO assessment yet is
+ * 'unassessed' (gray) — NOT red — so the red dot never lies about a gap the AI
+ * never evaluated (the MCC bug: every spec showed red because coverage never
+ * ran). Empty specs show no dot.
+ */
+export function coverageState(b: SpecBucket): CoverageState {
+  const hasContent = !!(b.narratives.length || b.evidenceText.length || b.evidenceFiles.length);
+  const assessed = b.coverageCovered !== null || b.coverageScore !== null;
+  if (!assessed) return hasContent ? 'unassessed' : 'none';
+  if (b.coverageCovered === true) return 'covered';
+  if (b.coverageScore !== null && b.coverageScore >= 0.5) return 'partial';
+  return 'gap';
+}
+
 function coverageIcon(b: SpecBucket): string {
-  if (b.coverageCovered === true) return '🟢';
-  if (b.coverageScore !== null && b.coverageScore >= 0.5) return '🟡';
-  if (b.narratives.length || b.evidenceText.length || b.evidenceFiles.length) return '🔴';
-  return '';
+  switch (coverageState(b)) {
+    case 'covered': return '🟢';
+    case 'partial': return '🟡';
+    case 'gap': return '🔴';
+    case 'unassessed': return '⚪';
+    default: return '';
+  }
 }
 
 /** Trim one gap/strength sentence so a hover tooltip stays a sane height. */
@@ -85,11 +106,18 @@ function clip(s: string, n = 180): string {
  * tooltip so a coordinator sees the reason instead of guessing.
  */
 export function coverageReason(b: SpecBucket): string {
-  const covered = b.coverageCovered === true;
+  const state = coverageState(b);
   const score = b.coverageScore;
-  const partial = !covered && score !== null && score >= 0.5;
-  const hasContent = b.narratives.length || b.evidenceText.length || b.evidenceFiles.length;
   const pct = score !== null ? `${Math.round(score * 100)}%` : null;
+
+  if (state === 'none') {
+    return 'No content placed here yet — nothing has been routed to this specification. Add or move a narrative/evidence item to it.';
+  }
+  // Content exists but the AI coverage review never ran (e.g. an MCC import that
+  // predates coverage). The dot is gray, NOT red — the AI hasn't judged a gap.
+  if (state === 'unassessed') {
+    return 'Not yet assessed — the AI coverage review hasn’t run for this spec, so there’s no verdict yet. Click “Check coverage” above to review every filled spec (score, gaps, and strengths). No re-reading of the document is needed.';
+  }
 
   const gaps = (b.coverageGaps || []).filter(Boolean);
   const strengths = (b.coverageStrengths || []).filter(Boolean);
@@ -97,29 +125,31 @@ export function coverageReason(b: SpecBucket): string {
   const looksLikeError =
     gaps.length > 0 && gaps.every((g) => /non-json|llm returned|failed|error|timed out|no response|parse/i.test(g));
 
-  if (!covered && !partial && !hasContent) {
-    return 'No content placed here yet — nothing has been routed to this specification. Add or move a narrative/evidence item to it.';
-  }
-
   const lines: string[] = [];
-  if (covered) {
+  if (state === 'covered') {
     lines.push(`🟢 Covered${pct ? ` — the AI review found ${pct} of the specification's criteria addressed` : ''}.`);
-  } else if (partial) {
+  } else if (state === 'partial') {
     lines.push(`🟡 Partial — ${pct ?? 'some'} of the criteria are addressed, but gaps remain.`);
   } else {
-    lines.push(`🔴 Gap — content is placed here but ${pct ? `only ${pct} of` : ''} the criteria are met; it does not yet satisfy this specification.`);
+    lines.push(`🔴 Gap — the AI review found this spec is not adequately addressed${pct ? ` (only ${pct} of the criteria met)` : ''}.`);
   }
 
-  if (looksLikeError || (!gaps.length && !strengths.length)) {
+  if (looksLikeError) {
     lines.push('');
-    lines.push('A detailed AI coverage assessment isn’t available for this spec yet — click “Re-run detectors” (or Validate) to generate one.');
+    lines.push('The AI coverage review errored on this spec — click “Check coverage” above to re-run it.');
+    return lines.join('\n');
+  }
+  if (!gaps.length && !strengths.length) {
+    // Assessed but no detail returned — rare; still honest.
+    lines.push('');
+    lines.push('The review returned a verdict but no detail. Click “Check coverage” to re-run it for specifics.');
     return lines.join('\n');
   }
 
   if (gaps.length) {
     lines.push('');
-    lines.push(covered ? 'To strengthen it further:' : 'What still needs work:');
-    for (const g of gaps.slice(0, covered ? 3 : 5)) lines.push(`•  ${clip(g)}`);
+    lines.push(state === 'covered' ? 'To strengthen it further:' : 'What still needs work:');
+    for (const g of gaps.slice(0, state === 'covered' ? 3 : 5)) lines.push(`•  ${clip(g)}`);
   }
   if (strengths.length) {
     lines.push('');
@@ -216,6 +246,9 @@ export function SpecRail({
           <span>🟢 covered</span>
           <span>🟡 partial</span>
           <span>🔴 gap</span>
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block h-2.5 w-2.5 rounded-full border border-gray-400 bg-gray-200" /> not assessed
+          </span>
           <span className="italic text-gray-400">— hover a dot for why</span>
         </div>
       </div>
@@ -481,6 +514,7 @@ export function SpecRail({
                   const key = `${b.standardCode}.${b.specCode}`;
                   const count = bucketCount(b);
                   const icon = coverageIcon(b);
+                  const covState = coverageState(b);
                   const isActive = selectedKey === key;
                   // Truncated titles in the rail; native title attribute provides
                   // a hover tooltip showing the full standard title + spec prompt.
@@ -508,23 +542,36 @@ export function SpecRail({
                           {count > 0 && (
                             <span className="rounded bg-cshse-200 px-1.5 text-cshse-800">{count}</span>
                           )}
-                          {icon && (
+                          {covState !== 'none' && (
                             // Hovering the dot explains WHY this color — the
                             // coverage status + the AI's specific gaps/strengths.
                             // Its own `title` overrides the row's spec-title tip.
                             <span
                               className="cursor-help"
                               data-testid={`coverage-dot-${key}`}
+                              data-coverage-state={covState}
                               title={coverageReason(b)}
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <span aria-hidden>{icon}</span>
+                              {covState === 'unassessed' ? (
+                                // Gray hollow dot — visibly distinct from the
+                                // status emoji so "not assessed" never reads as
+                                // a red gap.
+                                <span
+                                  aria-hidden
+                                  className="inline-block h-2.5 w-2.5 rounded-full border border-gray-400 bg-gray-200 align-middle"
+                                />
+                              ) : (
+                                <span aria-hidden>{icon}</span>
+                              )}
                               <span className="sr-only">
-                                {b.coverageCovered === true
+                                {covState === 'covered'
                                   ? 'covered'
-                                  : b.coverageScore !== null && b.coverageScore >= 0.5
+                                  : covState === 'partial'
                                   ? 'partial coverage'
-                                  : 'gaps remain'}
+                                  : covState === 'gap'
+                                  ? 'gap'
+                                  : 'not yet assessed'}
                                 . {coverageReason(b)}
                               </span>
                             </span>

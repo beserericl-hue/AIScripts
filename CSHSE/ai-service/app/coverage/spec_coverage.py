@@ -182,3 +182,52 @@ class CoverageReviewer:
             suggestion=str(parsed.get("suggestion", "")),
             raw_response=raw,
         )
+
+
+def review_specs(
+    program_level: str,
+    anthropic_key: str,
+    items: list[dict],
+    max_workers: int = 6,
+    on_progress=None,
+) -> list[CoverageReview]:
+    """Run the coverage reviewer over a batch of specs — the reusable primitive
+    shared by every import pipeline (so no document is parsed without a coverage
+    assessment) AND by the on-demand "Check coverage" endpoint (to backfill an
+    already-parsed submission without re-reading the document).
+
+    ``items``: ``[{standard_code, spec_code, narrative_text, evidence_items:[(title,body)]}]``
+    Returns a ``CoverageReview`` per item whose (std, spec) resolves to a known
+    Handbook Specification for ``program_level``.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from app.standards.loader import load_specifications
+
+    specs = load_specifications(program_level)
+    by_key = {(str(s.standard_code), str(s.spec_code)): s for s in specs}
+    reviewer = CoverageReviewer(anthropic_key)
+
+    tasks = []
+    for it in items:
+        spec = by_key.get((str(it.get("standard_code")), str(it.get("spec_code"))))
+        if spec is not None:
+            tasks.append((spec, it))
+    if not tasks:
+        return []
+
+    results: list[CoverageReview] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futures = {
+            ex.submit(reviewer.review, spec, it.get("narrative_text") or "", it.get("evidence_items") or []): spec
+            for (spec, it) in tasks
+        }
+        done = 0
+        for fut in as_completed(futures):
+            results.append(fut.result())
+            done += 1
+            if on_progress:
+                try:
+                    on_progress(done, len(futures))
+                except Exception:  # noqa: BLE001 — progress is best-effort
+                    pass
+    return results
