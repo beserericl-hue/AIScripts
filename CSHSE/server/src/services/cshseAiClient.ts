@@ -339,3 +339,41 @@ export async function extractFileText(req: FileExtractRequest): Promise<FileExtr
     return { text: '', title: req.filename || '', chars: 0, error: err?.message || String(err) };
   }
 }
+
+// ============================================================================
+// Coverage review — per-spec score/gaps/strengths (backfill "Check coverage")
+// ============================================================================
+
+export interface CoverageReviewRequest {
+  programLevel: string;
+  specs: Array<{
+    standardCode: string;
+    specCode: string;
+    narrativeText?: string;
+    evidence?: Array<{ heading?: string; snippet?: string }>;
+  }>;
+}
+export interface CoverageResult {
+  standardCode: string;
+  specCode: string;
+  coverageScore: number;
+  coverageCovered: boolean;
+  coverageGaps: string[];
+  coverageStrengths: string[];
+}
+
+/**
+ * Run the AI coverage reviewer over a batch of already-parsed specs and get
+ * back score/covered/gaps/strengths per spec. Used to backfill a submission
+ * whose import didn't produce coverage (older MCC imports). Generous timeout —
+ * it fans out one Haiku call per spec (parallelized ai-service side).
+ */
+export async function reviewCoverage(req: CoverageReviewRequest): Promise<{ results: CoverageResult[]; error?: string }> {
+  try {
+    const res = await postSigned<{ results: CoverageResult[]; error?: string }>('/ai/coverage/review', req, 180_000);
+    if (res.status >= 400) return { results: [], error: `HTTP ${res.status}` };
+    return res.body;
+  } catch (err: any) {
+    return { results: [], error: err?.message || String(err) };
+  }
+}

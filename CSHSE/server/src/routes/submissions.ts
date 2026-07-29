@@ -143,6 +143,7 @@ import {
   getReviewEvidenceDocFile,
   bulkAddEvidence,
   getReviewEvidenceDocPublicUrl,
+  recomputeCoverage,
 } from '../controllers/aiReviewController';
 
 router.get('/:submissionId/review', getReviewState);
@@ -172,6 +173,10 @@ router.post('/:submissionId/review/split-item', submissionLockout, splitReviewIt
 router.post('/:submissionId/review/set-approved', submissionLockout, setApprovedIds);
 // Background AI-evaluation queue: "Validate all" enqueues every spec; poll progress.
 router.post('/:submissionId/review/evaluate-all', submissionLockout, evaluateAllSpecs);
+// "Check coverage" — (re)run the AI coverage reviewer over the filled specs so
+// the green/yellow/red dots + "why" tooltips have real data (backfills imports
+// that never ran it, e.g. older MCC imports).
+router.post('/:submissionId/review/recompute-coverage', submissionLockout, recomputeCoverage);
 router.get('/:submissionId/review/eval-progress', getEvalProgress);
 // Autosave review-rail content (change-kind, reassign, edit, move, etc.).
 router.post('/:submissionId/review/save-state', submissionLockout, saveReviewState);

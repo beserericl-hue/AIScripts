@@ -30,7 +30,7 @@ import { ValidationService } from '../services/validationService';
 import { applyAIImportCore } from './aiImportController';
 import { downloadFileAsBuffer, generateS3Key, uploadFile, isS3Configured } from '../services/s3Service';
 import { v4 as uuidv4 } from 'uuid';
-import { extractFileText } from '../services/cshseAiClient';
+import { extractFileText, reviewCoverage } from '../services/cshseAiClient';
 import { suggestStandardForFile, NarrativeTuple, titleFromFilename } from '../services/evidenceStandardSuggester';
 import { signFileAccessToken } from '../services/fileAccessToken';
 
@@ -2001,6 +2001,73 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
   await persistAiReviewState(submission, state);
 
   res.json({ ok: true, count: added.filter((a) => a.sectionId).length, added });
+}
+
+/**
+ * POST /api/submissions/:submissionId/review/recompute-coverage
+ * Run the AI coverage reviewer over the submission's filled spec buckets and
+ * write score/covered/gaps/strengths back onto each — so the green/yellow/red
+ * dot + its "why" tooltip have real data. Backfills imports that never ran the
+ * reviewer (older MCC imports). Body { onlyMissing?: boolean } (default true).
+ */
+export async function recomputeCoverage(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const state = (submission as any).aiReviewState;
+  if (!state || !state.buckets) {
+    res.status(409).json({ error: 'No review state / buckets to assess.' });
+    return;
+  }
+  const onlyMissing = req.body?.onlyMissing !== false; // default: fill the gaps
+  const programLevel = String(submission.programLevel || 'bachelors');
+
+  const specs: Array<{ standardCode: string; specCode: string; narrativeText: string; evidence: any[]; _key: string }> = [];
+  for (const [key, bAny] of Object.entries(state.buckets)) {
+    const b = bAny as any;
+    const std = b?.standardCode, spec = b?.specCode;
+    if (!std || !spec) continue;
+    const narr = b.narratives || [], evt = b.evidenceText || [], evf = b.evidenceFiles || [];
+    if (!(narr.length || evt.length || evf.length)) continue; // empty spec — no dot
+    if (onlyMissing && (b.coverageScore != null || b.coverageCovered != null)) continue;
+    const narrativeText = narr
+      .map((n: any) => (n.htmlSnippet ? htmlToPlain(n.htmlSnippet) : n.snippet || ''))
+      .join('\n\n')
+      .slice(0, 12000);
+    const evidence = [...evt, ...evf].map((e: any) => ({
+      heading: e.heading || '',
+      snippet: (e.htmlSnippet ? htmlToPlain(e.htmlSnippet) : e.snippet || '').slice(0, 1500),
+    }));
+    specs.push({ standardCode: String(std), specCode: String(spec), narrativeText, evidence, _key: key });
+  }
+
+  if (specs.length === 0) {
+    res.json({ ok: true, assessed: 0, message: onlyMissing ? 'All filled specs already have a coverage assessment.' : 'No filled specs to assess.' });
+    return;
+  }
+
+  const { results, error } = await reviewCoverage({
+    programLevel,
+    specs: specs.map((s) => ({ standardCode: s.standardCode, specCode: s.specCode, narrativeText: s.narrativeText, evidence: s.evidence })),
+  });
+  if (error && results.length === 0) {
+    res.status(502).json({ error: `Coverage review failed: ${error}` });
+    return;
+  }
+  const byKey = new Map(results.map((r) => [`${r.standardCode}.${r.specCode}`, r]));
+  let assessed = 0;
+  for (const s of specs) {
+    const r = byKey.get(`${s.standardCode}.${s.specCode}`);
+    if (!r) continue;
+    const b = state.buckets[s._key] as any;
+    b.coverageScore = r.coverageScore;
+    b.coverageCovered = r.coverageCovered;
+    b.coverageGaps = r.coverageGaps || [];
+    b.coverageStrengths = r.coverageStrengths || [];
+    assessed += 1;
+  }
+  (submission as any).markModified('aiReviewState');
+  await persistAiReviewState(submission, state);
+  res.json({ ok: true, assessed, total: specs.length });
 }
 
 /**

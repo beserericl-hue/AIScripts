@@ -141,6 +141,21 @@ class PlacementRecommendRequest(BaseModel):
     institutionId: str | None = None
 
 
+class CoverageSpecItem(BaseModel):
+    standardCode: str
+    specCode: str
+    narrativeText: str = ""
+    evidence: list[dict] = Field(default_factory=list, description="[{heading, snippet}] supporting-evidence items")
+
+
+class CoverageReviewRequest(BaseModel):
+    """On-demand coverage review over already-parsed specs — the "Check coverage"
+    backfill so a submission whose import didn't run the reviewer (e.g. an older
+    MCC import) gets per-spec score/gaps/strengths WITHOUT re-reading the doc."""
+    programLevel: str
+    specs: list[CoverageSpecItem]
+
+
 class MatrixInferColumnsRequest(BaseModel):
     """CR-025 — coordinator-facing column inference for the wizard's matrix step."""
     matrixSlug: str
@@ -736,6 +751,50 @@ async def placement_recommend_endpoint(req: PlacementRecommendRequest, request: 
             "confidence": 0,
             "error": f"{type(exc).__name__}: {exc}",
         }
+
+
+@app.post("/ai/coverage/review", status_code=status.HTTP_200_OK)
+async def coverage_review_endpoint(req: CoverageReviewRequest, request: Request) -> dict:
+    """Run the per-spec coverage reviewer over a batch of already-parsed specs.
+
+    Returns ``{results:[{standardCode, specCode, coverageScore, coverageCovered,
+    coverageGaps, coverageStrengths}]}``. Used by the server's "Check coverage"
+    action to backfill a submission that has no coverage assessment. HMAC-gated.
+    Advisory-ish: on a hard failure returns ``{results:[], error:"..."}`` (200).
+    """
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    try:
+        from app.coverage.spec_coverage import review_specs
+
+        settings = get_settings()
+        items = [
+            {
+                "standard_code": s.standardCode,
+                "spec_code": s.specCode,
+                "narrative_text": s.narrativeText or "",
+                "evidence_items": [
+                    ((e.get("heading") or "")[:80], (e.get("snippet") or "")[:1500]) for e in (s.evidence or [])
+                ],
+            }
+            for s in req.specs
+        ]
+        reviews = review_specs(req.programLevel, settings.anthropic_api_key, items)
+        return {
+            "results": [
+                {
+                    "standardCode": r.standard_code,
+                    "specCode": r.spec_code,
+                    "coverageScore": r.coverage_score,
+                    "coverageCovered": r.is_covered,
+                    "coverageGaps": r.gaps,
+                    "coverageStrengths": r.strengths,
+                }
+                for r in reviews
+            ]
+        }
+    except Exception as exc:  # noqa: BLE001 — never 500 the caller
+        return {"results": [], "error": f"{type(exc).__name__}: {exc}"}
 
 
 @app.post("/ai/matrix/infer-columns", status_code=status.HTTP_200_OK)
