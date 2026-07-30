@@ -257,7 +257,8 @@ export default function ParserTrainPage() {
         <section id="pt-verify" className="rounded-lg border border-gray-200 p-4 space-y-4">
           <h2 className="font-medium text-gray-900">3. Verify &amp; diagnose {run?.submissionId && <span className="font-normal text-xs text-gray-400">· run {run.submissionId}</span>}</h2>
           <div className="flex items-center gap-3">
-            <Link to={`/self-study/${run?.submissionId}`}
+            <Link to={`/self-study/${run?.submissionId}?view=review`}
+              data-testid="pt-open-review"
               className="px-4 py-2 border border-gray-300 rounded-md text-sm hover:bg-gray-50">
               Open Review screen (Compare + notes/screenshots) →
             </Link>
