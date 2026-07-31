@@ -8,7 +8,22 @@
  * phantom "12.g"/"12.h" rows. The name plainly says "ASSOCIATE".
  */
 import { describe, expect, it } from 'vitest';
-import { inferProgramLevel } from '../../src/data/levelStandards';
+import { inferProgramLevel, levelFromInstitution } from '../../src/data/levelStandards';
+
+describe('levelFromInstitution (the AUTHORITATIVE source — the institution\'s assigned spec)', () => {
+  it('reads the level from the institution\'s assigned CSHSE spec', () => {
+    expect(levelFromInstitution({ specName: 'ASSOCIATE DEGREE IN HUMAN SERVICES v2025' })).toBe('associate');
+    expect(levelFromInstitution({ specName: 'BACCALAUREATE DEGREE IN HUMAN SERVICES v2025' })).toBe('bachelors');
+    expect(levelFromInstitution({ specName: 'MASTER’S DEGREE IN HUMAN SERVICES v2025' })).toBe('masters');
+  });
+
+  it('returns null when the institution has NO spec assigned (the AACC gap)', () => {
+    expect(levelFromInstitution({ specName: null })).toBeNull();
+    expect(levelFromInstitution({ specName: '' })).toBeNull();
+    expect(levelFromInstitution(null)).toBeNull();
+    expect(levelFromInstitution(undefined)).toBeNull();
+  });
+});
 
 describe('inferProgramLevel', () => {
   it('reads ASSOCIATE from the reported MCC program name', () => {

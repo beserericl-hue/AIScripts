@@ -15,7 +15,7 @@ import { SupportingEvidence } from '../models/SupportingEvidence';
 import { Assignment } from '../models/Assignment';
 import { JointVenture } from '../models/JointVenture';
 import { getAllStandards } from '../data/standards';
-import { inferProgramLevel } from '../data/levelStandards';
+import { inferProgramLevel, levelFromInstitution } from '../data/levelStandards';
 import { ingestCorrection } from '../services/cshseAiClient';
 import mongoose from 'mongoose';
 
@@ -1703,6 +1703,18 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
       });
     }
 
+    // THE degree level comes from the INSTITUTION, not the uploaded document.
+    // Specs load by institution: an associate college is scored against
+    // associate standards. Derive from the institution's assigned CSHSE spec
+    // (authoritative); the request body / document name are only fallbacks when
+    // the institution has no spec assigned yet. A wrong level here sprouts
+    // phantom spec rows and grades against the wrong rubric (the AACC bug).
+    const institutionForLevel = await Institution.findById(effectiveInstitutionId).select('specName');
+    const resolvedLevel =
+      levelFromInstitution(institutionForLevel) ||
+      (['associate', 'bachelors', 'masters'].includes(programLevel) ? programLevel : null) ||
+      inferProgramLevel(programName);
+
     // Initialize standards status for 21 standards
     const standardsStatus: Record<string, any> = {};
     for (let i = 1; i <= 21; i++) {
@@ -1725,11 +1737,9 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
       institutionId: effectiveInstitutionId,
       institutionName,
       programName,
-      // Don't blind-default to baccalaureate: infer from the program name when
-      // the caller didn't pass an explicit level (an associate program stored as
-      // bachelors sprouts phantom spec rows and is graded against the wrong
-      // rubric). Explicit value always wins.
-      programLevel: programLevel || inferProgramLevel(programName),
+      // Level is institution-derived (see resolvedLevel above) — never a blind
+      // 'bachelors' default.
+      programLevel: resolvedLevel,
       submitterId: req.user!.id,
       type,
       status: 'draft',

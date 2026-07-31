@@ -55,6 +55,28 @@ export function normalizeLevel(programLevel?: string | null): ProgramLevel {
  * back to 'bachelors' only when the name is genuinely indeterminate (unchanged
  * behavior for that case).
  */
+/**
+ * THE degree level is a property of the INSTITUTION, not of any uploaded
+ * document. CSHSE specs load by institution: an associate program is scored
+ * against associate standards, a baccalaureate program against baccalaureate,
+ * etc. The institution carries its assigned CSHSE spec in `specName` (e.g.
+ * "ASSOCIATE DEGREE IN HUMAN SERVICES v2025"), which is the source of truth for
+ * the level. Returns null when the institution has no spec assigned yet (so the
+ * caller can surface/repair that gap instead of silently mislabeling — this is
+ * exactly what happened to AACC, whose specName was unset → it defaulted to
+ * baccalaureate and grew phantom baccalaureate-only spec rows).
+ */
+export function levelFromInstitution(
+  institution: { specName?: string | null } | null | undefined
+): 'associate' | 'bachelors' | 'masters' | null {
+  const n = String(institution?.specName || '').toLowerCase();
+  if (!n.trim()) return null;
+  if (/\bassociate/.test(n)) return 'associate';
+  if (/\bmaster/.test(n)) return 'masters';
+  if (/baccalaureate|\bbachelor/.test(n)) return 'bachelors';
+  return null;
+}
+
 export function inferProgramLevel(programName?: string | null): 'associate' | 'bachelors' | 'masters' {
   const n = String(programName || '').toLowerCase();
   // Full words first; dotted abbreviations only (require the dots so bare words
