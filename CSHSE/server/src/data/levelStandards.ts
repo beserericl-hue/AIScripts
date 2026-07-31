@@ -43,6 +43,28 @@ export function normalizeLevel(programLevel?: string | null): ProgramLevel {
   return 'baccalaureate';
 }
 
+/**
+ * Infer the submission's degree level from its program NAME when the caller
+ * didn't pass an explicit level. This exists because the create/import default
+ * was a blind `'bachelors'`, which silently mislabeled associate + masters
+ * programs — the level drives the spec catalog (baccalaureate Std 12 has a–h,
+ * associate only a–f, so an associate program stored as bachelors sprouts
+ * phantom subsections like "12.g"/"12.h"), the AI rubric, and the reader-report
+ * template. The program name almost always states the level ("ASSOCIATE DEGREE
+ * IN HUMAN SERVICES"), so we read it. Returns the Submission enum value; falls
+ * back to 'bachelors' only when the name is genuinely indeterminate (unchanged
+ * behavior for that case).
+ */
+export function inferProgramLevel(programName?: string | null): 'associate' | 'bachelors' | 'masters' {
+  const n = String(programName || '').toLowerCase();
+  // Full words first; dotted abbreviations only (require the dots so bare words
+  // like "as"/"ba"/"ma" in a program title don't false-match a degree level).
+  if (/\bassociate\b|associate'?s|\ba\.a\.|\ba\.s\.|\baas\b/.test(n)) return 'associate';
+  if (/\bmaster'?s?\b|baccalaureate\s+and\s+master|\bm\.a\.|\bm\.s\.|\bm\.s\.w\.|graduate\s+program/.test(n)) return 'masters';
+  if (/\bbachelor'?s?\b|baccalaureate|\bb\.a\.|\bb\.s\.|\bb\.s\.w\./.test(n)) return 'bachelors';
+  return 'bachelors';
+}
+
 export interface SpecCriteria {
   standardCode: string;
   specCode: string;
