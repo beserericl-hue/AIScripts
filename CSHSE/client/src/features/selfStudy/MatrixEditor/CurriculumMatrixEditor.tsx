@@ -82,6 +82,33 @@ export function CurriculumMatrixEditor({
     },
   });
 
+  // Curriculum-matrix SOURCE documents (e.g. MCC's "Appendix A6 - Curriculum
+  // Matrix.pdf"). The grid is imported as its own native file — NOT parsed into
+  // narrative text — so we surface it here to view natively (option A).
+  const { data: matrixDocs } = useQuery<any[]>({
+    queryKey: ['matrix-source-docs', submissionId],
+    queryFn: async () => {
+      const r = await api.get(`${API_BASE}/submissions/${submissionId}/evidence`);
+      const list = r.data?.evidence || [];
+      return list.filter((e: any) =>
+        /curriculum\s*matrix/i.test(`${e.description || ''} ${e.file?.originalName || ''}`)
+      );
+    },
+  });
+  const openMatrixDoc = async (ev: any) => {
+    try {
+      const resp = await api.get(
+        `${API_BASE}/submissions/${submissionId}/evidence/${ev._id}/download`,
+        { responseType: 'blob' }
+      );
+      const url = URL.createObjectURL(resp.data as Blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      /* ignore */
+    }
+  };
+
   const curriculumStandards = useMemo(() => {
     if (!standards) return [];
     return standards.filter((s) => parseInt(s.code) >= 11);
@@ -248,6 +275,30 @@ export function CurriculumMatrixEditor({
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-4 space-y-2">
+        {/* Curriculum-matrix source documents (native files, not narrative). */}
+        {matrixDocs && matrixDocs.length > 0 && (
+          <div data-testid="matrix-source-docs" className="rounded-lg border border-purple-200 bg-purple-50 p-3">
+            <div className="text-sm font-semibold text-purple-900">
+              Curriculum matrix document{matrixDocs.length > 1 ? 's' : ''}
+            </div>
+            <p className="mt-0.5 mb-2 text-xs text-purple-700">
+              The curriculum matrix was imported as its own file (it is not parsed into narrative text). View it in native format here.
+            </p>
+            <ul className="space-y-1">
+              {matrixDocs.map((ev: any) => (
+                <li key={ev._id} className="flex items-center justify-between text-sm">
+                  <span className="truncate text-gray-800">📊 {ev.description || ev.file?.originalName}</span>
+                  <button
+                    onClick={() => openMatrixDoc(ev)}
+                    className="ml-3 shrink-0 rounded border border-purple-300 bg-white px-2 py-0.5 text-xs font-medium text-purple-700 hover:bg-purple-100"
+                  >
+                    View
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {/* Standards as accordion sections */}
         {curriculumStandards.map((standard) => {
           const sections = sectionsByStandard.groups.get(standard.code) || [];

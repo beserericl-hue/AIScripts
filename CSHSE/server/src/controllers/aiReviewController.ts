@@ -2070,6 +2070,77 @@ export async function recomputeCoverage(req: AuthenticatedRequest, res: Response
   res.json({ ok: true, assessed, total: specs.length });
 }
 
+// ---------------------------------------------------------------- matrix denoise
+// A curriculum matrix (spec rows × course columns, cells X/H/M/L) flattened by
+// the PDF text extractor leaks its cells into narrative text. Mirror of the
+// ai-service `denoise_matrix_cells` / `is_matrix_row` so we can clean an
+// already-parsed submission's buckets in place (no re-import → approvals kept).
+const _CELL_RUN = /(?:\b[XHMLIKTS]{1,8}\b[ \t.,]*){4,}/; // test (non-global)
+const _CELL_RUN_G = /(?:\b[XHMLIKTS]{1,8}\b[ \t.,]*){4,}/g; // replace (global)
+function denoiseMatrixCells(text: string): string {
+  if (!text || !_CELL_RUN.test(text)) return text;
+  return text.replace(_CELL_RUN_G, ' ').replace(/[ \t]{2,}/g, ' ').trim();
+}
+function isMatrixRow(text: string): boolean {
+  if (!text || !_CELL_RUN.test(text)) return false;
+  const stripped = denoiseMatrixCells(text);
+  return (stripped.match(/[A-Za-z]{3,}/g) || []).length < 5;
+}
+
+/**
+ * POST /api/submissions/:submissionId/review/denoise-narratives
+ * Clean curriculum-matrix garbage out of an ALREADY-parsed submission's
+ * narratives (no re-import needed, so approvals survive): drop chunks that are
+ * pure matrix rows, strip stray cell runs from the rest. Idempotent.
+ */
+export async function denoiseNarratives(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const state = (submission as any).aiReviewState;
+  if (!state || !state.buckets) {
+    res.status(409).json({ error: 'No review state / buckets to clean.' });
+    return;
+  }
+  const approved = new Set<string>(state.approvedIds || []);
+  const discarded = new Set<string>(state.discardedIds || []);
+  let dropped = 0, cleaned = 0;
+  const removedIds: string[] = [];
+
+  for (const bAny of Object.values(state.buckets)) {
+    const b = bAny as any;
+    const kept: any[] = [];
+    for (const it of (b.narratives || [])) {
+      const snip = String(it.snippet || '');
+      const head = String(it.heading || '');
+      if (isMatrixRow(snip) || isMatrixRow(head)) {
+        dropped += 1;
+        if (it.sectionId) removedIds.push(it.sectionId);
+        continue; // a pure matrix row — the grid lives in Appendix A6
+      }
+      const nSnip = denoiseMatrixCells(snip);
+      const nHead = denoiseMatrixCells(head);
+      const nHtml = it.htmlSnippet ? denoiseMatrixCells(String(it.htmlSnippet)) : it.htmlSnippet;
+      if (nSnip !== snip || nHead !== head || nHtml !== it.htmlSnippet) {
+        it.snippet = nSnip;
+        it.heading = nHead;
+        if (it.htmlSnippet) it.htmlSnippet = nHtml;
+        it.wordCount = nSnip.split(/\s+/).filter(Boolean).length;
+        cleaned += 1;
+      }
+      kept.push(it);
+    }
+    b.narratives = kept;
+  }
+  // Prune removed ids from approved/discarded sets.
+  for (const id of removedIds) { approved.delete(id); discarded.delete(id); }
+  state.approvedIds = [...approved];
+  state.discardedIds = [...discarded];
+  state.lastUpdatedAt = new Date();
+  (submission as any).markModified('aiReviewState');
+  await persistAiReviewState(submission, state);
+  res.json({ ok: true, dropped, cleaned });
+}
+
 /**
  * GET /api/submissions/:submissionId/review/evidence-doc/:sectionId/public-url
  * Mint a short-lived public URL for the Office web viewer (xlsx/pptx). Access is

@@ -144,6 +144,7 @@ import {
   bulkAddEvidence,
   getReviewEvidenceDocPublicUrl,
   recomputeCoverage,
+  denoiseNarratives,
 } from '../controllers/aiReviewController';
 
 router.get('/:submissionId/review', getReviewState);
@@ -177,6 +178,8 @@ router.post('/:submissionId/review/evaluate-all', submissionLockout, evaluateAll
 // the green/yellow/red dots + "why" tooltips have real data (backfills imports
 // that never ran it, e.g. older MCC imports).
 router.post('/:submissionId/review/recompute-coverage', submissionLockout, recomputeCoverage);
+// Clean curriculum-matrix garbage out of an already-parsed submission's narratives.
+router.post('/:submissionId/review/denoise-narratives', submissionLockout, denoiseNarratives);
 router.get('/:submissionId/review/eval-progress', getEvalProgress);
 // Autosave review-rail content (change-kind, reassign, edit, move, etc.).
 router.post('/:submissionId/review/save-state', submissionLockout, saveReviewState);
