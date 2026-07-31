@@ -1039,13 +1039,14 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
                 ocr_text = _ocr_pdf_bytes(pdf_bytes)
                 if len(ocr_text) > len(extracted):
                     extracted, ocr_used = ocr_text, True
-            ref_stds = code_to_stds.get(entry.code, [])
+            ref_stds = list(code_to_stds.get(entry.code, []))
             # Standard + sub-standard from the sub-point that CITES this appendix
             # in the narrative — this is the "third pass" the file cards need so
             # they pre-fill and a reader sees the file under the right spec.
             route_std, route_spec = code_to_spec.get(entry.code, (None, None))
-            # EVERY spec that lists this appendix (third-pass multi-link).
-            ref_specs = code_to_specs.get(entry.code, [])
+            # EVERY spec that lists this appendix (third-pass multi-link). Copy so
+            # augmenting below doesn't mutate the shared code_to_specs list.
+            ref_specs = list(code_to_specs.get(entry.code, []))
             ref_specs_labels = [f"{s}.{p}" for (s, p) in ref_specs]
             ref_summary = (
                 f"Referenced by {', '.join(ref_specs_labels)}."
@@ -1060,6 +1061,34 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             #    Curriculum Matrices section.
             intro_ref = route_std is None and entry.code in code_to_spec
             is_matrix = "curriculum matrix" in (entry.title or "").lower() or entry.kind == "matrix"
+
+            # RULE: a document links BOTH to where it is CITED in the narrative
+            # (ref_specs above) AND to every specification IT cites in its OWN
+            # content — so the AI evaluator reads the file when it grades each of
+            # those specs. There can be many links. The curriculum matrix is the
+            # prime case: its grid rows ARE the curriculum content standards
+            # (11..N), so it backs all of them.
+            _content_stds = {
+                str(n)
+                for n in (int(m.group(1)) for m in re.finditer(r"Standard\s*#?\s*(\d{1,2})\b", extracted))
+                if 1 <= n <= len(result.standards)
+            }
+            if is_matrix:
+                # A CSHSE curriculum matrix maps courses to the Knowledge/Theory/
+                # Skills/Values standards (11 through the last) — link the whole
+                # contiguous range even if OCR dropped a row header.
+                _content_stds |= {str(n) for n in range(11, len(result.standards) + 1)}
+            _seen_stds = {str(s) for s in ref_stds}
+            for _n in sorted(_content_stds, key=int):
+                if _n not in _seen_stds:
+                    ref_stds.append(_n)
+                    ref_specs.append((_n, None))  # standard-level (whole standard)
+                    _seen_stds.add(_n)
+            # Refresh the human summary to reflect ALL links (cited-by + backs).
+            _cited = [f"{s}.{p}" if p else f"Std {s}" for (s, p) in ref_specs]
+            if _cited:
+                ref_summary = f"Referenced by / backs {', '.join(_cited)}."
+
             evidence_docs.append({
                 # STABLE per (submission, appendix code) — NOT job-specific — so a
                 # re-import yields the same sectionId → the review-state merge
