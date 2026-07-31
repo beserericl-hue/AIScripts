@@ -1280,10 +1280,34 @@ function specsWithContent(submission: any): string[] {
   return out;
 }
 
-/** Merge spec keys into the submission's background eval queue (atomic). */
-async function enqueueSpecsForEval(submissionId: any, keys: string[]): Promise<number> {
+/** Merge spec keys into the submission's background eval queue (atomic). Exported for tests. */
+export async function enqueueSpecsForEval(submissionId: any, keys: string[]): Promise<number> {
   const unique = [...new Set(keys.filter(Boolean))];
   if (unique.length === 0) return 0;
+
+  // Read the pre-enqueue state FIRST so we grow the CUMULATIVE total by the number
+  // of genuinely-new specs — never reset it from the current queue length.
+  //
+  // The old high-water-mark (`total = max(total, queue.length)`) silently forgot
+  // specs the worker had already drained: approving a 2nd standard while the queue
+  // still held un-drained items pushed `remaining` up WITHOUT crediting the
+  // already-evaluated specs, so `done = total - remaining` went BACKWARDS
+  // (user-reported: badge "6/71 reviewed" → "3/72" after approving another
+  // standard). We instead track `total` as "cumulative specs ever queued in this
+  // run" and only ever add the count of specs not already in the queue.
+  const before: any = await Submission.findById(submissionId)
+    .select('aiEvalQueue aiEvalQueueTotal');
+  const beforeQueue: string[] = Array.isArray(before?.aiEvalQueue) ? before.aiEvalQueue : [];
+  const beforeSet = new Set(beforeQueue);
+  // Count only specs NOT already queued. Computed from the snapshot taken before
+  // our write, so it's race-safe against the worker's concurrent $pull (which only
+  // REMOVES items — correctly shrinking `remaining` and growing `done`).
+  const added = unique.filter((k) => !beforeSet.has(k)).length;
+  // An empty queue means either a brand-new run or one that fully drained
+  // (doneAt stamped). Either way this is a FRESH run: the cumulative total
+  // restarts at the number of specs we're adding (so done starts at 0/N).
+  const freshRun = beforeQueue.length === 0;
+
   await Submission.updateOne(
     { _id: submissionId },
     {
@@ -1292,10 +1316,9 @@ async function enqueueSpecsForEval(submissionId: any, keys: string[]): Promise<n
       $unset: { aiEvalQueueDoneAt: '' },
     }
   );
-  // Bump the high-water-mark total so progress (done = total - remaining) is sane.
-  const fresh: any = await Submission.findById(submissionId).select('aiEvalQueue aiEvalQueueTotal');
-  const len = (fresh?.aiEvalQueue || []).length;
-  const total = Math.max(fresh?.aiEvalQueueTotal || 0, len);
+
+  const priorTotal = freshRun ? 0 : (before?.aiEvalQueueTotal || 0);
+  const total = priorTotal + added;
   await Submission.updateOne({ _id: submissionId }, { $set: { aiEvalQueueTotal: total } });
   return unique.length;
 }
