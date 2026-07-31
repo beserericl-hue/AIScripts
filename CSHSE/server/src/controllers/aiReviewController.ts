@@ -33,6 +33,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { extractFileText, reviewCoverage } from '../services/cshseAiClient';
 import { suggestStandardForFile, NarrativeTuple, titleFromFilename } from '../services/evidenceStandardSuggester';
 import { signFileAccessToken } from '../services/fileAccessToken';
+import { getLevelStandards, normalizeLevel } from '../data/levelStandards';
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -2107,6 +2108,80 @@ export async function recomputeCoverage(req: AuthenticatedRequest, res: Response
   (submission as any).markModified('aiReviewState');
   await persistAiReviewState(submission, state);
   res.json({ ok: true, assessed, total: specs.length });
+}
+
+/**
+ * POST /api/submissions/:submissionId/review/reconcile-spec-level
+ *
+ * Remove EMPTY review buckets whose spec doesn't exist at the submission's degree
+ * level. The parse seeds one bucket per spec in the LEVEL catalog; when a
+ * submission was parsed at the wrong level (the old blind 'bachelors' import
+ * default) an ASSOCIATE program got baccalaureate-only spec rows as phantom
+ * EMPTY entries in the rail — e.g. AACC (associate) showed 12.g/12.h, 13.d–f,
+ * 16.d–f, 19.f–h, which don't exist for associate and hold nothing from the
+ * document (user-reported: "there is no 12g or 12h").
+ *
+ * Prunes ONLY out-of-level buckets that are completely empty (no narratives,
+ * evidence text, or evidence files). A bucket that actually holds content is
+ * NEVER dropped — it's reported back as `keptWithContent` so the coordinator can
+ * re-route it, so no work is ever lost. Idempotent; no re-import → approvals
+ * survive.
+ */
+export async function reconcileSpecLevel(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const state = (submission as any).aiReviewState;
+  if (!state || !state.buckets) {
+    res.status(409).json({ error: 'No review state / buckets to reconcile.' });
+    return;
+  }
+  const level = (submission as any).programLevel;
+  const catalog = getLevelStandards(level);
+  if (!catalog) {
+    res.status(409).json({ error: `No standards catalog for level "${level}".` });
+    return;
+  }
+  // allowed spec codes per standard code, at this submission's level
+  const allowed = new Map<string, Set<string>>();
+  for (const std of catalog) {
+    allowed.set(String(std.code), new Set(std.specifications.map((s) => s.code)));
+  }
+
+  const removed: string[] = [];
+  const keptWithContent: string[] = [];
+  for (const key of Object.keys(state.buckets)) {
+    const b = state.buckets[key] as any;
+    // Only reconcile real per-spec buckets ("<std>.<spec>"); leave synthetic /
+    // intro / appendix buckets alone.
+    const std = b?.standardCode != null ? String(b.standardCode) : '';
+    const spec = b?.specCode != null ? String(b.specCode) : '';
+    if (!std || !spec) continue;
+    const allowedSpecs = allowed.get(std);
+    if (!allowedSpecs) continue;          // standard not in this level's catalog — leave it
+    if (allowedSpecs.has(spec)) continue; // valid spec at this level — keep
+
+    // Out-of-level. Prune ONLY if it holds nothing from the document.
+    const narr = b.narratives || [], evt = b.evidenceText || [], evf = b.evidenceFiles || [];
+    if (narr.length || evt.length || evf.length) {
+      keptWithContent.push(key);
+      continue;
+    }
+    delete state.buckets[key];
+    removed.push(key);
+  }
+
+  if (removed.length) {
+    state.lastUpdatedAt = new Date();
+    (submission as any).markModified('aiReviewState');
+    await persistAiReviewState(submission, state);
+  }
+  res.json({
+    ok: true,
+    level: normalizeLevel(level),
+    removed,
+    removedCount: removed.length,
+    keptWithContent,
+  });
 }
 
 // ---------------------------------------------------------------- matrix denoise

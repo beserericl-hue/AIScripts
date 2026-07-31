@@ -153,6 +153,7 @@ import {
   getReviewEvidenceDocPublicUrl,
   recomputeCoverage,
   denoiseNarratives,
+  reconcileSpecLevel,
 } from '../controllers/aiReviewController';
 
 router.get('/:submissionId/review', getReviewState);
@@ -188,6 +189,9 @@ router.post('/:submissionId/review/evaluate-all', submissionLockout, evaluateAll
 router.post('/:submissionId/review/recompute-coverage', submissionLockout, recomputeCoverage);
 // Clean curriculum-matrix garbage out of an already-parsed submission's narratives.
 router.post('/:submissionId/review/denoise-narratives', submissionLockout, denoiseNarratives);
+// Remove EMPTY spec rows not in the submission's degree level (an associate study
+// seeded with baccalaureate-only specs like 12.g/12.h). Prunes empties only.
+router.post('/:submissionId/review/reconcile-spec-level', submissionLockout, reconcileSpecLevel);
 router.get('/:submissionId/review/eval-progress', getEvalProgress);
 // Autosave review-rail content (change-kind, reassign, edit, move, etc.).
 router.post('/:submissionId/review/save-state', submissionLockout, saveReviewState);
