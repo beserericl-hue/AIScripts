@@ -15,6 +15,7 @@ import { SupportingEvidence } from '../models/SupportingEvidence';
 import { Assignment } from '../models/Assignment';
 import { JointVenture } from '../models/JointVenture';
 import { getAllStandards } from '../data/standards';
+import { inferProgramLevel } from '../data/levelStandards';
 import { ingestCorrection } from '../services/cshseAiClient';
 import mongoose from 'mongoose';
 
@@ -1599,6 +1600,44 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
 /**
  * Create a new submission
  */
+/**
+ * PATCH /api/submissions/:submissionId/program-level
+ * Correct a submission's degree level (associate | bachelors | masters).
+ *
+ * The level drives the spec catalog, the AI rubric, and the reader-report
+ * template, so a wrong level (e.g. an associate program imported with the old
+ * blind `'bachelors'` default) shows phantom subsection rows and grades against
+ * the wrong standards. This lets the submission owner (or a superuser) fix it
+ * without a re-import. Idempotent.
+ */
+export const updateProgramLevel = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { submissionId } = req.params;
+    const { programLevel } = req.body || {};
+    if (!['associate', 'bachelors', 'masters'].includes(programLevel)) {
+      return res.status(400).json({ error: `Invalid programLevel: ${programLevel}` });
+    }
+    // Owner / coordinator / superuser access (same guard the rest of the
+    // submission-mutating endpoints use).
+    const access = await requireSubmissionAccess(req as any, res, submissionId);
+    if (!access) return;
+    const submission = await Submission.findById(submissionId);
+    if (!submission) return res.status(404).json({ error: 'Submission not found' });
+
+    const previous = (submission as any).programLevel;
+    (submission as any).programLevel = programLevel;
+    await submission.save();
+    console.log(
+      `[updateProgramLevel] ${submissionId} programLevel ${previous} -> ${programLevel} by ${req.user?.id}`
+    );
+
+    return res.json({ ok: true, programLevel, previous });
+  } catch (err: any) {
+    console.error('[updateProgramLevel] failed:', err);
+    return res.status(500).json({ error: err?.message || 'Failed to update program level' });
+  }
+};
+
 export const createSubmission = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const {
@@ -1682,7 +1721,11 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
       institutionId: effectiveInstitutionId,
       institutionName,
       programName,
-      programLevel: programLevel || 'bachelors',
+      // Don't blind-default to baccalaureate: infer from the program name when
+      // the caller didn't pass an explicit level (an associate program stored as
+      // bachelors sprouts phantom spec rows and is graded against the wrong
+      // rubric). Explicit value always wins.
+      programLevel: programLevel || inferProgramLevel(programName),
       submitterId: req.user!.id,
       type,
       status: 'draft',

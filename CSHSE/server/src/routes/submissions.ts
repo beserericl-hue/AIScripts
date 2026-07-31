@@ -19,7 +19,8 @@ import {
   adminUnlockSubmission,
   getSubmissionPreflight,
   listSubmissions,
-  createSubmission
+  createSubmission,
+  updateProgramLevel
 } from '../controllers/submissionController';
 import { authenticate } from '../middleware/auth';
 import { submissionLockout } from '../middleware/submissionLockout';
@@ -76,6 +77,13 @@ router.get('/', listSubmissions);
  * @access  Private (Program Coordinator)
  */
 router.post('/', createSubmission);
+
+/**
+ * @route   PATCH /api/submissions/:submissionId/program-level
+ * @desc    Correct a submission's degree level (fixes phantom spec rows + wrong rubric)
+ * @access  Private (owner / coordinator / superuser)
+ */
+router.patch('/:submissionId/program-level', updateProgramLevel);
 
 /**
  * @route   GET /api/submissions/:submissionId
