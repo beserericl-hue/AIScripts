@@ -1964,6 +1964,22 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
               .join(', ')}`
           : 'Could not determine a standard from the file — please assign it.',
         aiSuggestionConfidence: best?.confidence,
+        // RULE: also link the file to every specification IT cites in its own
+        // content (Standard N mentions), in addition to the suggested placement,
+        // so the AI evaluator reads it for each of those specs. Several links.
+        referencedBySpecs: (() => {
+          const cited = new Set<string>();
+          for (const m of text.matchAll(/\bStandard\s*#?\s*(\d{1,2})\b/g)) {
+            const n = parseInt(m[1], 10);
+            if (n >= 1 && n <= 30) cited.add(String(n));
+          }
+          const refs: Array<{ std: string; spec?: string }> = [];
+          if (best?.standardCode) refs.push({ std: best.standardCode, spec: best.specCode });
+          for (const std of [...cited].sort((a, b) => Number(a) - Number(b))) {
+            if (std !== best?.standardCode) refs.push({ std, spec: undefined });
+          }
+          return refs;
+        })(),
         bulkImported: true,
       };
       return {
