@@ -797,7 +797,7 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
     """
     import uuid as _uuid
 
-    from app.splitter.mcc_narrative_walker import walk_mcc_pdf, slice_pdf_pages, extract_uri_links
+    from app.splitter.mcc_narrative_walker import walk_mcc_pdf, slice_pdf_pages, extract_uri_links, denoise_matrix_cells, is_matrix_row
     from app.standards.loader import load_specifications
 
     settings = get_settings()
@@ -959,6 +959,16 @@ def _run_mcc_pipeline(job: JobRecord, src_path: Path) -> None:
             f'{": " + _esc(_std_title) if _std_title else ""}</h1>'
         )
         for (letter, heading, body) in _split_standard_by_letter(std.text):
+            # Matrix denoise (belt-and-suspenders alongside the walker clamp):
+            # a curriculum-matrix row that leaked into the narrative is dropped
+            # (the grid lives in Appendix A6, sliced to its own native file);
+            # otherwise strip any stray cell runs from the prose + heading.
+            if is_matrix_row(body) or is_matrix_row(heading):
+                continue
+            body = denoise_matrix_cells(body)
+            heading = denoise_matrix_cells(heading)
+            if not body.strip():
+                continue
             refs = _parse_refs(body)
             spec = spec_letters.get(letter) if letter else None
             chunk_html = _text_to_html(body, std.link_map)

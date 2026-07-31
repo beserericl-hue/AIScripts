@@ -77,6 +77,37 @@ SUPPORTING_LINK_RE = re.compile(
 APPENDIX_CODE_RE = re.compile(r"appendix\s*([A-Z]\d{1,2})\b", re.I)
 URL_RE = re.compile(r"https?://\S+")
 
+# ------------------------------------------------------------ matrix denoise
+# A curriculum matrix (Appendix A6) is a grid: spec rows × course columns, cells
+# rated X / H / M / L (with I/K/T/S sub-column headers). A linear PDF text
+# extractor flattens each row into "<spec label> <cell> <cell> …", so the cells
+# leak into the narrative ("Intake interviewing HHH HHMXHHH M M M …"). This run
+# is UNMISTAKABLE — 4+ consecutive UPPERCASE tokens drawn only from the coverage
+# alphabet {X,H,M,L,I,K,T,S}. Real prose never produces that (it would need 4+
+# consecutive all-caps words made only of those letters). Case-sensitive so
+# lowercase words like "it is this list" can never match.
+_MATRIX_CELL_RUN = re.compile(r"(?:\b[XHMLIKTS]{1,8}\b[ \t.,]*){4,}")
+
+
+def denoise_matrix_cells(text: str) -> str:
+    """Strip flattened curriculum-matrix cell runs out of narrative text. Text
+    with no cell run is returned UNCHANGED (we never touch clean prose)."""
+    if not text or not _MATRIX_CELL_RUN.search(text):
+        return text
+    cleaned = _MATRIX_CELL_RUN.sub(" ", text)
+    return re.sub(r"[ \t]{2,}", " ", cleaned).strip()
+
+
+def is_matrix_row(text: str) -> bool:
+    """True when a chunk is essentially a matrix ROW — i.e. once the cell runs
+    are stripped, little real prose remains (a 1–4 word topic label like
+    "Intake interviewing"). Real narratives survive denoising with many words."""
+    if not text or not _MATRIX_CELL_RUN.search(text):
+        return False
+    stripped = denoise_matrix_cells(text)
+    words = re.findall(r"[A-Za-z]{3,}", stripped)
+    return len(words) < 5
+
 # Numbered intro sub-section header ("1. MCC Associate of Applied Science").
 # Anchored + Title-Case to avoid matching prose like "2024. Average GPA…".
 INTRO_HEADER_RE = re.compile(r"^\s*([1-9]|1[0-9])\.\s+([A-Z][A-Za-z].{2,60})$")
@@ -523,6 +554,30 @@ def walk_mcc_pdf(pdf_path: str, expected_standards: int = 20) -> MccParseResult:
                     "is ambiguous (adjacent scanned appendices) — needs manual page confirmation."
                 )
         i = j
+
+    # ---- Clamp the LAST standard so it doesn't swallow the appendix section ----
+    # build_skeleton runs the final "Standard #N" block to EOF (no next marker),
+    # which pulls in the appendix index + the Appendix A6 curriculum matrix pages.
+    # Those matrix rows ("a. Intake interviewing HHH HHMX…") then get letter-split
+    # into that standard's specs — the garbage cards. Re-bound the last standard to
+    # end at the first appendix content page so the matrix never enters a narrative.
+    app_starts = [e.page_start for e in result.appendix_catalog if e.page_start is not None]
+    if app_starts and result.standards:
+        body_end = min(app_starts)  # 0-based; body is [.. body_end)
+        last = result.standards[-1]
+        if last.page_start is not None and body_end > last.page_start and (
+            last.page_end is None or last.page_end >= body_end
+        ):
+            per_page = [strip_footers(t) for t in pages_text]
+            body_text = "\n".join(per_page[last.page_start:body_end])
+            m = STANDARD_RE.search(per_page[last.page_start])
+            last.text = (body_text[m.start():] if m else body_text).strip()
+            last.page_end = body_end - 1
+            last.references = parse_references(last.text)
+            result.warnings.append(
+                f"Clamped Standard #{last.n} to end before the appendix section "
+                f"(page {body_end}) so the curriculum matrix isn't read as narrative."
+            )
     return result
 
 
