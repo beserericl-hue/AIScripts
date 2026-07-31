@@ -19,6 +19,8 @@ import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission, INarrativeContent } from '../models/Submission';
+import { Institution } from '../models/Institution';
+import { levelFromInstitution } from '../data/levelStandards';
 // Static import (was runtime require() / await import()) — both dynamic forms
 // fail to resolve the relative TS/JS path in one of the two runtimes (vitest vs
 // the compiled dist build), silently no-op'ing the evidence packaging in a
@@ -374,15 +376,25 @@ export async function startAIImportForBatch(
   if (!initial) throw new Error(`Import not found: ${importId}`);
   const s3Key = initial.aiS3Key || `imports/${importId}/source.docx`;
   const submissionDoc = await Submission.findById(initial.submissionId)
-    .select('institutionId')
+    .select('institutionId programLevel')
     .lean();
   const institutionIdStr = submissionDoc?.institutionId
     ? String(submissionDoc.institutionId)
     : null;
+  // Parse level is INSTITUTION-derived (see startAIImport) — never the blind
+  // 'bachelors' default, which seeds baccalaureate spec rows on associate
+  // programs (the AACC bug).
+  const instForLevel = institutionIdStr
+    ? await Institution.findById(institutionIdStr).select('specName').lean()
+    : null;
+  const effectiveLevel =
+    levelFromInstitution(instForLevel) ||
+    (submissionDoc?.programLevel as string) ||
+    programLevel;
   await SelfStudyImport.findByIdAndUpdate(importId, {
     $set: {
       aiStatus: 'queued',
-      aiProgramLevel: programLevel,
+      aiProgramLevel: effectiveLevel,
       aiForceFormat: forceFormat,
       aiS3Key: s3Key,
       aiStartedAt: new Date(),
@@ -396,7 +408,7 @@ export async function startAIImportForBatch(
     s3Key,
     submissionId: String(initial.submissionId),
     importId,
-    programLevel,
+    programLevel: effectiveLevel,
     forceFormat,
     callbackUrl,
     eventCallbackUrl,
@@ -444,15 +456,28 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
   // Look up the owning institution so cshse-ai can scope the corrections
   // RAG to this school's history only (per-institution policy).
   const submissionDoc = await Submission.findById(initial.submissionId)
-    .select('institutionId')
+    .select('institutionId programLevel')
     .lean();
   const institutionIdStr = submissionDoc?.institutionId ? String(submissionDoc.institutionId) : null;
+
+  // THE parse level comes from the INSTITUTION, not the document or a default.
+  // The ai-service seeds one review bucket per spec in this level's catalog, so
+  // parsing at the wrong level sprouts phantom spec rows (the AACC bug). Resolve
+  // authoritatively from the institution's assigned CSHSE spec; fall back to the
+  // submission's stored (institution-derived) level, then the request body.
+  const instForLevel = institutionIdStr
+    ? await Institution.findById(institutionIdStr).select('specName').lean()
+    : null;
+  const effectiveLevel =
+    levelFromInstitution(instForLevel) ||
+    (submissionDoc?.programLevel as string) ||
+    programLevel;
 
   // Mark queued atomically before dispatching to the AI service.
   await SelfStudyImport.findByIdAndUpdate(importId, {
     $set: {
       aiStatus: 'queued',
-      aiProgramLevel: programLevel,
+      aiProgramLevel: effectiveLevel,
       aiForceFormat: forceFormat,
       aiIsReimport: !!isReimport,
       aiS3Key: s3Key,
@@ -470,12 +495,20 @@ export async function startAIImport(req: AuthenticatedRequest, res: Response): P
       s3Key,
       submissionId: submissionIdStr,
       importId: String(importId),
-      programLevel,
+      programLevel: effectiveLevel,
       forceFormat,
       callbackUrl,
       eventCallbackUrl,
       institutionId: institutionIdStr
     });
+    // Keep the submission's stored level in lock-step with the institution so
+    // the spec catalog, AI rubric, and reader-report template all agree.
+    if (submissionDoc && submissionDoc.programLevel !== effectiveLevel) {
+      await Submission.updateOne(
+        { _id: initial.submissionId },
+        { $set: { programLevel: effectiveLevel } }
+      );
+    }
     // Atomic save of the cshse-ai snapshot — again no .save() to avoid version
     // races with the legacy pipeline.
     await SelfStudyImport.findByIdAndUpdate(importId, {
