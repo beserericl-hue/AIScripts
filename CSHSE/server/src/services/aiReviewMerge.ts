@@ -46,6 +46,13 @@ interface ImportInputs {
   introductions: Record<string, any>;
   placeholderSections: any[];
   coverageReport?: any;
+  /**
+   * Import ids to PRESERVE when a document parse replaces prior parse content —
+   * i.e. the current import's same-batch siblings, so a multi-file batch does
+   * not wipe itself. Omit/empty for the normal single-document case, where any
+   * prior document parse is fully replaced.
+   */
+  keepImportIds?: string[];
 }
 
 /** SHA-256 hex of an arbitrary string — used for client-provided
@@ -155,6 +162,58 @@ export function mergeImportIntoReviewState(
     placeholders: { kept: 0, replaced: 0, added: 0 },
     matrices: { kept: 0, replaced: 0, added: 0 }
   };
+
+  // REQUIREMENT (user): reading in a document REPLACES the previously-read
+  // document's items — filename/content-hash is IRRELEVANT. Before merging a
+  // real document parse (non-empty buckets), purge every item that came from a
+  // PRIOR document parse (a different importId that is NOT a same-batch sibling),
+  // EXCEPT separately-added supporting evidence (item.bulkImported). This is what
+  // stops a re-parse of an edited/renamed self-study from duplicating every
+  // narrative + table (the Kennesaw bug: "DRAFT TO ERIC" then "2026 New
+  // Accreditation Draft" both accumulated). Same-batch files are kept so a
+  // multi-file batch import does not wipe itself.
+  const isDocumentParse = !!inputs.buckets && Object.keys(inputs.buckets).length > 0;
+  if (isDocumentParse) {
+    const keepIds = new Set<string>([inputs.importId, ...((inputs.keepImportIds || []))]);
+    // returns TRUE to KEEP the item, FALSE to drop it (prior parse content)
+    const keepItem = (it: any): boolean => {
+      if (it && it.bulkImported === true) return true; // separately-added evidence survives
+      const src = it && it.sectionId ? state.itemSources[it.sectionId] : undefined;
+      const imp = (src && (src as any).importId) || (it && it.sourceImportId);
+      if (!imp) return true;             // untracked provenance → can't safely drop
+      if (keepIds.has(imp)) return true; // current import or a same-batch sibling
+      if (it.sectionId) {                // prior document parse → drop it
+        dropApprovalsForSection(state, it.sectionId);
+        delete state.itemSources[it.sectionId];
+      }
+      return false;
+    };
+    for (const bk of Object.values(state.buckets)) {
+      for (const kind of ['narratives', 'evidenceText', 'evidenceFiles'] as const) {
+        if (Array.isArray((bk as any)[kind])) {
+          const before = (bk as any)[kind].length;
+          (bk as any)[kind] = (bk as any)[kind].filter(keepItem);
+          counts[kind].replaced += before - (bk as any)[kind].length;
+        }
+      }
+    }
+    if (Array.isArray(state.tags)) {
+      const before = state.tags.length; state.tags = state.tags.filter(keepItem);
+      counts.tags.replaced += before - state.tags.length;
+    }
+    if (Array.isArray(state.cvs)) {
+      const before = state.cvs.length; state.cvs = state.cvs.filter(keepItem);
+      counts.cvs.replaced += before - state.cvs.length;
+    }
+    if (Array.isArray(state.evidenceDocs)) {
+      const before = state.evidenceDocs.length; state.evidenceDocs = state.evidenceDocs.filter(keepItem);
+      counts.evidenceDocs.replaced += before - state.evidenceDocs.length;
+    }
+    for (const key of Object.keys(state.introductions || {})) {
+      const intro = (state.introductions as any)[key];
+      if (intro && Array.isArray(intro.items)) intro.items = intro.items.filter(keepItem);
+    }
+  }
 
   // --- buckets (narratives + evidenceText + evidenceFiles per spec) ---
   for (const [specKey, incomingBucket] of Object.entries(inputs.buckets || {})) {
