@@ -155,6 +155,7 @@ import {
   denoiseNarratives,
   reconcileSpecLevel,
   dedupeImports,
+  stripContextBleed,
 } from '../controllers/aiReviewController';
 
 router.get('/:submissionId/review', getReviewState);
@@ -191,6 +192,9 @@ router.post('/:submissionId/review/recompute-coverage', submissionLockout, recom
 // Clean an already-duplicated review state (re-read under a different filename
 // before the merge fix): keep the newest document parse, drop older duplicates.
 router.post('/:submissionId/review/dedupe-imports', submissionLockout, dedupeImports);
+// Strip the "<Standard Title> Context: <rubric>" descriptor bleed from stored
+// narratives (mirrors the template-walker fix for already-parsed submissions).
+router.post('/:submissionId/review/strip-context-bleed', submissionLockout, stripContextBleed);
 // Clean curriculum-matrix garbage out of an already-parsed submission's narratives.
 router.post('/:submissionId/review/denoise-narratives', submissionLockout, denoiseNarratives);
 // Remove EMPTY spec rows not in the submission's degree level (an associate study
