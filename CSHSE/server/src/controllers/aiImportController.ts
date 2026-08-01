@@ -894,12 +894,23 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
         const _priorSameSource = Object.values((state as any).itemSources || {}).some(
           (s: any) => s && (s.sourceFilename === _srcFilename || s.sourceContentHash === contentHash)
         );
+        // Same-batch siblings must be PRESERVED when this parse replaces prior
+        // document content (a multi-file batch import must not wipe itself). For
+        // the normal single-document case there is no batch → any prior parse is
+        // fully replaced (filename-independent), which is the required behavior.
+        let _keepImportIds: string[] = [];
+        const _batchId = (importRecord as any).batchId;
+        if (_batchId) {
+          const sibs = await SelfStudyImport.find({ batchId: _batchId }).select('_id').lean();
+          _keepImportIds = sibs.map((s: any) => String(s._id));
+        }
         const report = merge.mergeImportIntoReviewState(state, {
           importId: String(importRecord._id),
           sourceFilename: _srcFilename,
           sourceContentHash: contentHash,
           importedAt: new Date(),
           reimport: !!(importRecord as any).aiIsReimport || _priorSameSource,
+          keepImportIds: _keepImportIds,
           buckets: importRecord.aiBuckets || {},
           tags: importRecord.aiTags || [],
           cvs: (importRecord as any).aiCVs || [],

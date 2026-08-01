@@ -154,6 +154,7 @@ import {
   recomputeCoverage,
   denoiseNarratives,
   reconcileSpecLevel,
+  dedupeImports,
 } from '../controllers/aiReviewController';
 
 router.get('/:submissionId/review', getReviewState);
@@ -187,6 +188,9 @@ router.post('/:submissionId/review/evaluate-all', submissionLockout, evaluateAll
 // the green/yellow/red dots + "why" tooltips have real data (backfills imports
 // that never ran it, e.g. older MCC imports).
 router.post('/:submissionId/review/recompute-coverage', submissionLockout, recomputeCoverage);
+// Clean an already-duplicated review state (re-read under a different filename
+// before the merge fix): keep the newest document parse, drop older duplicates.
+router.post('/:submissionId/review/dedupe-imports', submissionLockout, dedupeImports);
 // Clean curriculum-matrix garbage out of an already-parsed submission's narratives.
 router.post('/:submissionId/review/denoise-narratives', submissionLockout, denoiseNarratives);
 // Remove EMPTY spec rows not in the submission's degree level (an associate study

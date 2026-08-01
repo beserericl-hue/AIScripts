@@ -148,7 +148,10 @@ describe('mergeImportIntoReviewState — fresh import', () => {
     expect(report.counts.narratives).toEqual({ kept: 0, replaced: 0, added: 1 });
   });
 
-  it('AC#3: second file ADDS items without touching prior items (same spec)', () => {
+  // UPDATED CONTRACT (user requirement): reading in a document REPLACES the
+  // previously-read document — filename/hash irrelevant. A second document parse
+  // that is NOT a same-batch sibling (no keepImportIds) fully replaces the first.
+  it('AC#3: a second document parse REPLACES the prior parse (same spec, no dupes)', () => {
     const state = buildEmptyReviewState();
     mergeImportIntoReviewState(
       state,
@@ -168,13 +171,13 @@ describe('mergeImportIntoReviewState — fresh import', () => {
         buckets: makeBucket('1.a', [{ sectionId: 'sec-B1', snippet: 'B' }]),
       })
     );
-    expect(state.buckets['1.a'].narratives.length).toBe(2);
+    expect(state.buckets['1.a'].narratives.length).toBe(1);
     const ids = state.buckets['1.a'].narratives.map((n: any) => n.sectionId);
-    expect(ids).toContain('sec-A1');
+    expect(ids).not.toContain('sec-A1'); // prior parse replaced
     expect(ids).toContain('sec-B1');
   });
 
-  it('AC#3: second file across a DIFFERENT spec adds new bucket without touching prior bucket', () => {
+  it('AC#3: a second document parse replaces the prior parse ENTIRELY (prior specs cleared)', () => {
     const state = buildEmptyReviewState();
     mergeImportIntoReviewState(
       state,
@@ -192,8 +195,8 @@ describe('mergeImportIntoReviewState — fresh import', () => {
         buckets: makeBucket('7.b', [{ sectionId: 'sec-B1' }]),
       })
     );
-    expect(Object.keys(state.buckets).sort()).toEqual(['1.a', '7.b']);
-    expect(state.buckets['1.a'].narratives[0].sectionId).toBe('sec-A1');
+    // The prior document's 1.a content is gone; only the new document's 7.b remains.
+    expect(state.buckets['1.a'].narratives.length).toBe(0);
     expect(state.buckets['7.b'].narratives[0].sectionId).toBe('sec-B1');
   });
 
@@ -344,7 +347,8 @@ describe('mergeImportIntoReviewState — reimport strict-match', () => {
     expect(state.discardedIds).not.toContain('old-sec');
   });
 
-  it('AC#5: reimport with DIFFERENT filename adds, does not replace', () => {
+  // UPDATED CONTRACT: filename/hash are IRRELEVANT — a re-read always replaces.
+  it('AC#5: re-read with a DIFFERENT filename REPLACES (no dupes)', () => {
     const state = buildEmptyReviewState();
     mergeImportIntoReviewState(
       state,
@@ -358,19 +362,18 @@ describe('mergeImportIntoReviewState — reimport strict-match', () => {
       state,
       makeInputs({
         importId: 'import-2',
-        reimport: true,
         sourceFilename: 'file-A-v2.docx',
         sourceContentHash: 'hash-V2',
         buckets: makeBucket('1.a', [{ sectionId: 'sec-V2' }]),
       })
     );
-    expect(state.buckets['1.a'].narratives.length).toBe(2);
+    expect(state.buckets['1.a'].narratives.length).toBe(1);
     const ids = state.buckets['1.a'].narratives.map((n: any) => n.sectionId);
-    expect(ids).toContain('sec-A');
+    expect(ids).not.toContain('sec-A');
     expect(ids).toContain('sec-V2');
   });
 
-  it('AC#5: reimport with SAME filename but DIFFERENT hash adds, does not replace', () => {
+  it('AC#5: re-read with SAME filename but DIFFERENT hash REPLACES (no dupes)', () => {
     const state = buildEmptyReviewState();
     mergeImportIntoReviewState(
       state,
@@ -384,13 +387,13 @@ describe('mergeImportIntoReviewState — reimport strict-match', () => {
       state,
       makeInputs({
         importId: 'import-2',
-        reimport: true,
         sourceFilename: 'file-A.docx',
         sourceContentHash: 'hash-A-EDITED',
         buckets: makeBucket('1.a', [{ sectionId: 'sec-A2' }]),
       })
     );
-    expect(state.buckets['1.a'].narratives.length).toBe(2);
+    expect(state.buckets['1.a'].narratives.length).toBe(1);
+    expect(state.buckets['1.a'].narratives[0].sectionId).toBe('sec-A2');
   });
 
   it('merges into a PARTIAL state (buckets/itemSources undefined) without throwing', () => {
@@ -413,42 +416,30 @@ describe('mergeImportIntoReviewState — reimport strict-match', () => {
     expect(Array.isArray(partial.mergeLog)).toBe(true);
   });
 
-  it('AC#5: items from a DIFFERENT source survive reimport-replace', () => {
+  // UPDATED CONTRACT: each successive document parse replaces the prior one, so
+  // three sequential reads never accumulate — only the newest survives.
+  it('AC#5: sequential document parses each replace the prior (only newest survives)', () => {
     const state = buildEmptyReviewState();
     mergeImportIntoReviewState(
       state,
-      makeInputs({
-        importId: 'import-A',
-        sourceFilename: 'file-A.docx',
-        sourceContentHash: 'hash-A',
-        buckets: makeBucket('1.a', [{ sectionId: 'sec-A' }]),
-      })
+      makeInputs({ importId: 'import-A', sourceFilename: 'file-A.docx', sourceContentHash: 'hash-A',
+        buckets: makeBucket('1.a', [{ sectionId: 'sec-A' }]) }),
     );
     mergeImportIntoReviewState(
       state,
-      makeInputs({
-        importId: 'import-B',
-        sourceFilename: 'file-B.docx',
-        sourceContentHash: 'hash-B',
-        buckets: makeBucket('1.a', [{ sectionId: 'sec-B' }]),
-      })
+      makeInputs({ importId: 'import-B', sourceFilename: 'file-B.docx', sourceContentHash: 'hash-B',
+        buckets: makeBucket('1.a', [{ sectionId: 'sec-B' }]) }),
     );
-    expect(state.buckets['1.a'].narratives.length).toBe(2);
-
+    expect(state.buckets['1.a'].narratives.map((n: any) => n.sectionId)).toEqual(['sec-B']); // A replaced
     mergeImportIntoReviewState(
       state,
-      makeInputs({
-        importId: 'import-A2',
-        reimport: true,
-        sourceFilename: 'file-A.docx',
-        sourceContentHash: 'hash-A',
-        buckets: makeBucket('1.a', [{ sectionId: 'sec-A-new' }]),
-      })
+      makeInputs({ importId: 'import-A2', sourceFilename: 'file-A.docx', sourceContentHash: 'hash-A',
+        buckets: makeBucket('1.a', [{ sectionId: 'sec-A-new' }]) }),
     );
     const ids = state.buckets['1.a'].narratives.map((n: any) => n.sectionId);
-    expect(ids).toContain('sec-B');
-    expect(ids).toContain('sec-A-new');
+    expect(ids).toEqual(['sec-A-new']); // B replaced too — only the newest read remains
     expect(ids).not.toContain('sec-A');
+    expect(ids).not.toContain('sec-B');
   });
 
   it('AC#4: itemSources entries for replaced items are dropped', () => {
@@ -872,5 +863,68 @@ describe('clearPreCR043State', () => {
     });
     const cleared = await clearPreCR043State(SelfStudyImport, submission._id);
     expect(cleared).toBe(0);
+  });
+});
+
+// --- Group E — a NEW document parse REPLACES the previously-read document ----
+// User requirement: filename is irrelevant; reading in a document replaces the
+// prior document's items (no duplicates). Same-batch siblings + separately-added
+// bulk evidence survive.
+describe('mergeImportIntoReviewState — document re-read replaces prior parse', () => {
+  const narr = (id: string, text: string) => ({ sectionId: id, heading: text, snippet: text });
+
+  it('a second parse under a DIFFERENT filename replaces the first (no dupes)', () => {
+    const state = buildEmptyReviewState();
+    // first document
+    mergeImportIntoReviewState(state, makeInputs({
+      importId: 'imp-A', sourceFilename: 'DRAFT TO ERIC.docx', sourceContentHash: 'hash-A',
+      importedAt: new Date('2026-07-01T00:00:00Z'),
+      buckets: makeBucket('1.a', [narr('A:1.a:1', '1a text'), narr('A:1.a:2', '1a text two')]),
+    }));
+    expect(state.buckets['1.a'].narratives).toHaveLength(2);
+    // re-read a REVISED document, different filename + hash, NOT flagged reimport
+    mergeImportIntoReviewState(state, makeInputs({
+      importId: 'imp-B', sourceFilename: '2026 New Draft (1).docx', sourceContentHash: 'hash-B',
+      importedAt: new Date('2026-07-28T00:00:00Z'), reimport: false,
+      buckets: makeBucket('1.a', [narr('B:1.a:1', '1a text'), narr('B:1.a:2', '1a text two')]),
+    }));
+    // prior parse REPLACED — exactly the new import's 2 items, not 4
+    const ids = state.buckets['1.a'].narratives.map((n: any) => n.sectionId).sort();
+    expect(ids).toEqual(['B:1.a:1', 'B:1.a:2']);
+  });
+
+  it('preserves separately-added bulk evidence across a re-read', () => {
+    const state = buildEmptyReviewState();
+    mergeImportIntoReviewState(state, makeInputs({
+      importId: 'imp-A', sourceFilename: 'a.docx', sourceContentHash: 'ha',
+      buckets: makeBucket('2.a', [], [], [{ sectionId: 'A:2.a:f', heading: 'table' }]),
+    }));
+    // simulate a separately-added supporting file in the same bucket
+    state.buckets['2.a'].evidenceFiles.push({ sectionId: 'bulk:2.a:f', heading: 'uploaded CV', bulkImported: true });
+    mergeImportIntoReviewState(state, makeInputs({
+      importId: 'imp-B', sourceFilename: 'b.docx', sourceContentHash: 'hb',
+      importedAt: new Date('2026-07-28T00:00:00Z'),
+      buckets: makeBucket('2.a', [], [], [{ sectionId: 'B:2.a:f', heading: 'table' }]),
+    }));
+    const ids = state.buckets['2.a'].evidenceFiles.map((f: any) => f.sectionId).sort();
+    expect(ids).toEqual(['B:2.a:f', 'bulk:2.a:f']); // A dropped, bulk survives, B added
+  });
+
+  it('keeps same-batch siblings (a multi-file batch does not wipe itself)', () => {
+    const state = buildEmptyReviewState();
+    mergeImportIntoReviewState(state, makeInputs({
+      importId: 'batch-file-1', sourceFilename: 'part1.docx', sourceContentHash: 'h1',
+      buckets: makeBucket('3.a', [narr('F1:3.a', 'part 1')]),
+    }));
+    // file 2 of the SAME batch declares file 1 as a sibling to keep
+    mergeImportIntoReviewState(state, {
+      ...makeInputs({
+        importId: 'batch-file-2', sourceFilename: 'part2.docx', sourceContentHash: 'h2',
+        buckets: makeBucket('4.a', [narr('F2:4.a', 'part 2')]),
+      }),
+      keepImportIds: ['batch-file-1', 'batch-file-2'],
+    } as any);
+    expect(state.buckets['3.a'].narratives).toHaveLength(1); // sibling preserved
+    expect(state.buckets['4.a'].narratives).toHaveLength(1);
   });
 });

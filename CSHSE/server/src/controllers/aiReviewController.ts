@@ -2111,6 +2111,72 @@ export async function recomputeCoverage(req: AuthenticatedRequest, res: Response
 }
 
 /**
+ * POST /api/submissions/:submissionId/review/dedupe-imports
+ *
+ * Clean an ALREADY-duplicated review state (no re-parse, so approvals survive):
+ * when a document was re-read under a DIFFERENT filename before the merge fix,
+ * both parses' items accumulated (every narrative + table duplicated — the
+ * Kennesaw bug). This keeps only the NEWEST document parse's items and drops all
+ * OLDER document-parse items, preserving separately-added supporting evidence
+ * (item.bulkImported). Idempotent.
+ */
+export async function dedupeImports(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const state = (submission as any).aiReviewState;
+  if (!state || !state.buckets) {
+    res.status(409).json({ error: 'No review state to dedupe.' });
+    return;
+  }
+  const srcs = state.itemSources || {};
+  // Rank document-parse imports by importedAt; the newest is the survivor.
+  const byImport: Record<string, number> = {};
+  for (const sid of Object.keys(srcs)) {
+    const s = srcs[sid];
+    if (!s || !s.importId) continue;
+    const t = s.importedAt ? new Date(s.importedAt).getTime() : 0;
+    byImport[s.importId] = Math.max(byImport[s.importId] || 0, t);
+  }
+  const imports = Object.keys(byImport);
+  if (imports.length <= 1) {
+    res.json({ ok: true, removed: 0, message: 'Single (or zero) document parse — nothing to dedupe.', imports });
+    return;
+  }
+  const newest = imports.sort((a, b) => byImport[b] - byImport[a])[0];
+  let removed = 0;
+  const keep = (it: any): boolean => {
+    if (it && it.bulkImported === true) return true;
+    const sid = it && it.sectionId;
+    const imp = (sid && srcs[sid] && srcs[sid].importId) || (it && it.sourceImportId);
+    if (!imp || imp === newest) return true;
+    if (sid) {
+      state.approvedIds = (state.approvedIds || []).filter((id: string) => id !== sid);
+      state.discardedIds = (state.discardedIds || []).filter((id: string) => id !== sid);
+      delete srcs[sid];
+    }
+    removed += 1;
+    return false;
+  };
+  for (const bAny of Object.values(state.buckets)) {
+    const b = bAny as any;
+    for (const kind of ['narratives', 'evidenceText', 'evidenceFiles']) {
+      if (Array.isArray(b[kind])) b[kind] = b[kind].filter(keep);
+    }
+  }
+  if (Array.isArray(state.tags)) state.tags = state.tags.filter(keep);
+  if (Array.isArray(state.cvs)) state.cvs = state.cvs.filter(keep);
+  if (Array.isArray(state.evidenceDocs)) state.evidenceDocs = state.evidenceDocs.filter(keep);
+  for (const key of Object.keys(state.introductions || {})) {
+    const intro = state.introductions[key];
+    if (intro && Array.isArray(intro.items)) intro.items = intro.items.filter(keep);
+  }
+  state.lastUpdatedAt = new Date();
+  (submission as any).markModified('aiReviewState');
+  await persistAiReviewState(submission, state);
+  res.json({ ok: true, removed, keptImport: newest, droppedImports: imports.filter((i) => i !== newest) });
+}
+
+/**
  * POST /api/submissions/:submissionId/review/reconcile-spec-level
  *
  * Remove EMPTY review buckets whose spec doesn't exist at the submission's degree
