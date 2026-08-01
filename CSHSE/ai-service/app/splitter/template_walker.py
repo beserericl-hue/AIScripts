@@ -128,6 +128,14 @@ _STANDARDS_REGION_RE = re.compile(
 # Markers that are not section breaks — they appear inside a section body.
 _RESPONSE_MARKER_RE = re.compile(r"^\s*Response\s*:\s*", re.IGNORECASE)
 
+# CSHSE standard-DESCRIPTOR block. Each standard is introduced in the template by
+# a short TITLE line ("Program Evaluation", "Human Systems", "4. Discipline
+# Inquiry…") followed by a "Context:" rubric paragraph, BEFORE the "Standard N:"
+# shall-statement. This is descriptor/rubric text, never a program response — it
+# must not accumulate onto the previous spec's answer (the boundary-bleed bug:
+# the last spec of each standard swallowed the next standard's title + Context).
+_CONTEXT_MARKER_RE = re.compile(r"^\s*Context\s*:", re.IGNORECASE)
+
 # Placeholder responses the institution hasn't filled in.
 _PLACEHOLDER_RE = re.compile(
     r"^\s*(not\s+applicable|n/?a|tbd|to\s+be\s+determined|\[response\]|insert\s+response)\s*\.?\s*$",
@@ -739,6 +747,10 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
         _STANDARDS_REGION_RE.match((t or "").strip()) for t in text_blocks
     )
     in_introduction = has_standards_region
+    # True while inside a standard-DESCRIPTOR block (a "Context:" rubric and the
+    # text up to the next heading). These paragraphs are skipped so they never
+    # bleed into a spec's response — see _CONTEXT_MARKER_RE.
+    in_standard_descriptor = False
 
     for idx, block in enumerate(blocks):
         if block and block[0] == "table":
@@ -775,6 +787,39 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
         # itself is NOT tagged as introduction.
         if in_introduction and _STANDARDS_REGION_RE.match(text):
             in_introduction = False
+
+        # CSHSE standard-DESCRIPTOR block. A "Context:" rubric paragraph starts
+        # the next standard's descriptor (title already accumulated + this
+        # Context + following lines, up to the next heading). It is NOT a program
+        # response — drop it so it never bleeds onto the previous spec's answer.
+        # Prod excludes these entirely; matching that is the boundary-bleed fix.
+        if not in_introduction and has_standards_region and _CONTEXT_MARKER_RE.match(text):
+            # Remove the trailing standard-TITLE line the walker just accumulated
+            # onto the current spec (short, no Response marker, not a full
+            # sentence). Only one such line precedes a Context paragraph.
+            if current is not None and current.body_paragraphs:
+                last = current.body_paragraphs[-1].strip()
+                title_like = (
+                    len(last.split()) <= 15
+                    and not _RESPONSE_MARKER_RE.match(last)
+                    and not last.endswith((".", "!", "?", ":"))
+                )
+                if title_like:
+                    current.body_paragraphs.pop()
+                    if current.body_html_parts:
+                        current.body_html_parts.pop()
+            in_standard_descriptor = True
+            continue
+
+        if in_standard_descriptor:
+            # Skip descriptor lines until the next real spec/standard heading.
+            _hit = _match_heading(text)
+            if _hit is not None and _is_real_break(
+                _hit, text, current_spec_section, in_introduction, has_standards_region
+            ):
+                in_standard_descriptor = False  # fall through to handle the heading
+            else:
+                continue
 
         hit = _match_heading(text)
         if hit is not None and _is_real_break(

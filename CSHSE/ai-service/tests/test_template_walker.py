@@ -545,3 +545,34 @@ def test_cr063_image_cap_raised_to_2mb():
     """CR-063 — inline-image cap raised so realistic images aren't dropped."""
     from app.splitter import template_walker
     assert template_walker._MAX_INLINE_IMAGE_BYTES >= 2_000_000
+
+
+def test_standard_context_descriptor_does_not_bleed_into_prior_spec():
+    """A standard's TITLE + 'Context:' rubric block must NOT accumulate onto the
+    previous spec's response (the AACC boundary-bleed bug). Prod excludes them."""
+    from app.splitter.template_walker import walk_template_paragraphs
+    paras = [
+        "Standard 4: The program shall document achievement.",
+        "4.c. Provide data.",
+        "Response:",
+        "The program publishes achievement data on its website.",
+        # --- next standard's descriptor block (title + Context:) ---
+        "Policies and Procedures for Admitting, Retaining, and Dismissing Students",
+        "Context: Students have a right to know, prior to enrollment, the standards "
+        "of the program and the procedures for admitting, retaining, and dismissing students.",
+        "Standard 5: The program shall have written standards and procedures.",
+        "5.a. Provide documentation of admission policies.",
+        "Response:",
+        "The program admits students per the catalog.",
+    ]
+    secs = walk_template_paragraphs(paras)
+    joined = " ".join(s.body_text for s in secs)
+    # the 4.c response is kept, the descriptor block is dropped
+    assert "publishes achievement data" in joined
+    assert "admits students per the catalog" in joined
+    assert "Context:" not in joined
+    assert "admitting, retaining, and dismissing students" not in joined
+    # the standard-5 title line did not bleed into 4.c
+    four_c = next((s for s in secs if s.spec_hint == "c" and s.standard_hint == "4"), None)
+    assert four_c is not None
+    assert "Policies and Procedures" not in four_c.body_text
