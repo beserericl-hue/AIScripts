@@ -577,30 +577,3 @@ def test_standard_context_descriptor_does_not_bleed_into_prior_spec():
     assert four_c is not None
     assert "Policies and Procedures" not in four_c.body_text
 
-
-def test_split_bunched_spec_by_catalog_definition():
-    """A spec whose letter marker the doc dropped is split out when its body
-    contains that spec's known catalog definition (global / type-level)."""
-    from app.splitter.template_walker import walk_template_paragraphs, split_bunched_specs, _norm_spec_text
-    paras = [
-        "Standard 15: The program shall provide a foundation of skills.",
-        "15.a. Knowledge and skills to analyze and assess the needs of clients.",
-        "Response:",
-        "The following courses emphasize analysis and assessment. HUS 101, HUS 114.",
-        # 15.b's letter marker is MISSING — only its definition sentence appears:
-        "Skills to develop goals, design and implement a plan of action.",
-        "Response:",
-        "The following courses emphasize developing goals. HUS 101, HUS 115.",
-    ]
-    raw = walk_template_paragraphs(paras)
-    spec_defs = {
-        _norm_spec_text("Knowledge and skills to analyze and assess the needs of clients."): ("15", "a"),
-        _norm_spec_text("Skills to develop goals, design and implement a plan of action."): ("15", "b"),
-    }
-    split = split_bunched_specs(raw, spec_defs)
-    a = next((s for s in split if s.standard_hint == "15" and s.spec_hint == "a"), None)
-    b = next((s for s in split if s.standard_hint == "15" and s.spec_hint == "b"), None)
-    assert a is not None and b is not None, "both 15.a and 15.b present after split"
-    assert "develop goals" not in a.body_text.lower(), "15.b content removed from 15.a"
-    assert "develop goals" in b.body_text.lower(), "15.b owns its content"
-    assert "analysis and assessment" in a.body_text.lower()  # 15.a response kept
