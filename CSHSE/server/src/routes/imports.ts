@@ -3,6 +3,7 @@ import multer from 'multer';
 import {
   uploadDocument,
   getImport,
+  getImportSourceFile,
   getExtractedSections,
   getSectionContent,
   mapSection,
@@ -152,6 +153,9 @@ router.delete('/:importId/discard', discardImport);
  * @access  Private
  */
 router.get('/:importId', getImport);
+// Stream the ORIGINAL uploaded document (raw bytes from S3) — used to pull the
+// current prod source doc and re-run it through the dev parser.
+router.get('/:importId/source-file', getImportSourceFile);
 
 /**
  * @route   GET /api/imports/:importId/sections

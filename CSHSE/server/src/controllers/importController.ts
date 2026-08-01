@@ -13,6 +13,8 @@ import { sectionMapperService } from '../services/sectionMapper';
 import { saveWithRetry, withRetry } from '../utils/dbRetry';
 import * as tempFileService from '../services/tempFileService';
 import * as gridFsService from '../services/gridFsService';
+import * as s3Service from '../services/s3Service';
+import { DocumentVersion } from '../models/DocumentVersion';
 import { recordVersion } from '../services/documentVersionService';
 import { requireImportAccess, requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
 import { AuthenticatedRequest } from '../middleware/auth';
@@ -1290,6 +1292,56 @@ export const discardImport = async (req: AuthenticatedRequest, res: Response) =>
   } catch (error: any) {
     console.error('Discard import error:', error);
     return res.status(500).json({ error: 'Failed to discard import' });
+  }
+};
+
+/**
+ * GET /api/imports/:importId/source-file
+ *
+ * Stream the ORIGINAL uploaded document (the exact bytes the coordinator
+ * uploaded, preserved in S3) so it can be re-parsed elsewhere — e.g. pulling the
+ * current production Kennesaw document to re-run it through the dev Parser Train
+ * (the repo fixture had drifted to an older version). Access-gated by
+ * requireImportAccess; the S3 key comes from the import record, never the client.
+ */
+export const getImportSourceFile = async (req: Request, res: Response) => {
+  try {
+    const { importId } = req.params;
+    const _imp = await requireImportAccess(req, res, importId);
+    if (!_imp) return;
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) return res.status(404).json({ error: 'Import not found' });
+
+    // Prefer the import's own aiS3Key; fall back to its DocumentVersion's s3Key.
+    let s3Key = (importRecord as any).aiS3Key as string | undefined;
+    let mime: string | undefined;
+    if (!s3Key) {
+      const dv = (importRecord as any).aiDocumentVersionId
+        ? await DocumentVersion.findById((importRecord as any).aiDocumentVersionId).lean()
+        : await DocumentVersion.findOne({ importId: importRecord._id }).sort({ version: -1 }).lean();
+      if (dv) { s3Key = (dv as any).s3Key; mime = (dv as any).mimeType; }
+    }
+    if (!s3Key) {
+      return res.status(404).json({ error: 'No stored source file for this import (aiS3Key/DocumentVersion missing).' });
+    }
+    if (!s3Service.isS3Configured()) {
+      return res.status(503).json({ error: 'S3 storage is not configured on this server.' });
+    }
+    const buf = await s3Service.downloadFileAsBuffer(s3Key);
+    const typeByFile: Record<string, string> = {
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      pdf: 'application/pdf',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    };
+    const contentType = mime || typeByFile[(importRecord as any).fileType] || 'application/octet-stream';
+    const name = (importRecord as any).originalFilename || `source.${(importRecord as any).fileType || 'bin'}`;
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${String(name).replace(/"/g, '')}"`);
+    res.setHeader('Content-Length', String(buf.length));
+    return res.end(buf);
+  } catch (err: any) {
+    console.error('[getImportSourceFile] failed:', err);
+    return res.status(500).json({ error: 'Failed to retrieve source file', detail: err?.message || String(err) });
   }
 };
 
