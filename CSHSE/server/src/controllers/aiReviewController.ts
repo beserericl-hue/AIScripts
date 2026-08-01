@@ -2111,6 +2111,57 @@ export async function recomputeCoverage(req: AuthenticatedRequest, res: Response
 }
 
 /**
+ * POST /api/submissions/:submissionId/review/strip-context-bleed
+ *
+ * Clean an ALREADY-parsed review state (no re-parse → approvals survive) of the
+ * CSHSE standard-DESCRIPTOR bleed: a "<Standard Title> Context: <rubric>" block
+ * that the old parser accumulated onto the END of the last spec of a standard.
+ * Mirrors the template-walker fix for stored data. Idempotent; only touches
+ * narratives that actually carry the trailing bleed.
+ */
+// Trailing "<Title> Context: <descriptor>" appended to a spec's response. The
+// title is a capitalized phrase (no periods) directly before "Context:".
+const _CONTEXT_BLEED_RE = /\s+[A-Z][A-Za-z0-9 ,&/()'"\-]{1,90}?\s+Context\s*:[\s\S]*$/;
+export async function stripContextBleed(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const state = (submission as any).aiReviewState;
+  if (!state || !state.buckets) {
+    res.status(409).json({ error: 'No review state to clean.' });
+    return;
+  }
+  let cleaned = 0;
+  const cleanedSpecs: string[] = [];
+  for (const [key, bAny] of Object.entries(state.buckets)) {
+    if (!key.includes('.')) continue;
+    const b = bAny as any;
+    for (const n of (b.narratives || [])) {
+      const before = String(n.snippet || '');
+      if (!/\bContext\s*:/.test(before)) continue;
+      const after = before.replace(_CONTEXT_BLEED_RE, '').replace(/\s+$/, '');
+      if (after !== before && after.length > 0) {
+        n.snippet = after;
+        if (n.htmlSnippet) {
+          // Best-effort: drop trailing paragraphs from the Context onward in HTML.
+          n.htmlSnippet = String(n.htmlSnippet).replace(
+            /(<p>[^<]*Context\s*:[\s\S]*$)/i, ''
+          );
+        }
+        n.wordCount = after.split(/\s+/).filter(Boolean).length;
+        cleaned += 1;
+        if (!cleanedSpecs.includes(key)) cleanedSpecs.push(key);
+      }
+    }
+  }
+  if (cleaned) {
+    state.lastUpdatedAt = new Date();
+    (submission as any).markModified('aiReviewState');
+    await persistAiReviewState(submission, state);
+  }
+  res.json({ ok: true, cleaned, cleanedSpecs });
+}
+
+/**
  * POST /api/submissions/:submissionId/review/dedupe-imports
  *
  * Clean an ALREADY-duplicated review state (no re-parse, so approvals survive):
