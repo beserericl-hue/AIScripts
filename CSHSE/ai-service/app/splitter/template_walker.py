@@ -40,7 +40,7 @@ from __future__ import annotations
 import base64
 import re
 import uuid
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 from docx import Document
 
@@ -893,70 +893,10 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
     return sections
 
 
-def _norm_spec_text(t: str) -> str:
-    """Normalize a spec-definition sentence for exact-ish matching."""
-    return re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
-
-
-def split_bunched_specs(
-    raw_sections: list["TemplateSection"],
-    spec_defs: dict[str, tuple[str, str]] | None,
-) -> list["TemplateSection"]:
-    """Split a spec section whose body contains ANOTHER spec's known definition.
-
-    Some documents drop a spec's letter marker (e.g. AACC's "b." line is missing
-    before "Skills to develop goals, design and implement a plan of action."), so
-    the walker — which cuts on letter/number headings — folds that spec's content
-    into the previous one. This is GLOBAL and type-level: when a section's body
-    paragraph matches a known spec definition from the level catalog (a DIFFERENT
-    spec than the section owns), split there into two sections. Works for any
-    document of that level at any institution — never institution-specific.
-    """
-    if not spec_defs:
-        return raw_sections
-    out: list[TemplateSection] = []
-    for sec in raw_sections:
-        if sec.is_introduction or not sec.spec_hint or not sec.body_paragraphs:
-            out.append(sec)
-            continue
-        split_at: int | None = None
-        matched: tuple[str, str] | None = None
-        for i, para in enumerate(sec.body_paragraphs):
-            hit = spec_defs.get(_norm_spec_text(para))
-            if hit and hit != (str(sec.standard_hint), str(sec.spec_hint)):
-                split_at = i
-                matched = hit
-                break
-        if split_at is None or matched is None:
-            out.append(sec)
-            continue
-        # First part keeps the original spec with content BEFORE the found def.
-        first = replace(
-            sec,
-            body_paragraphs=sec.body_paragraphs[:split_at],
-            body_html_parts=sec.body_html_parts[:split_at],
-        )
-        # Second part is the newly-recognized spec: its definition + what follows.
-        second = TemplateSection(
-            paragraph_index=sec.paragraph_index + split_at,
-            heading=f"{matched[0]}.{matched[1]}. {sec.body_paragraphs[split_at]}",
-            body_paragraphs=sec.body_paragraphs[split_at:],
-            body_html_parts=sec.body_html_parts[split_at:] if len(sec.body_html_parts) > split_at else [],
-            standard_hint=matched[0],
-            spec_hint=matched[1],
-            placeholder=False,
-            is_introduction=False,
-        )
-        out.append(first)
-        # The second half may itself contain a further bunched spec — recurse.
-        out.extend(split_bunched_specs([second], spec_defs))
-    return out
-
 
 def walk_template_docx(
     docx_path: str,
     base_id: str = "template",
-    spec_defs: dict[str, tuple[str, str]] | None = None,
 ) -> tuple[list[Section], list[TemplateSection]]:
     """Open a DOCX and walk it. Returns ``(sections, raw_template_sections)``.
 
@@ -964,15 +904,10 @@ def walk_template_docx(
     ``raw_template_sections`` is the intermediate form, kept so the
     preview renderer can show placeholder/empty sections that the
     matcher never sees.
-
-    ``spec_defs`` maps a normalized spec-definition sentence → (std, spec); when
-    provided, a section that bunched a marker-less spec is split (see
-    :func:`split_bunched_specs`). GLOBAL/type-level — never institution-specific.
     """
     doc = Document(docx_path)
     blocks = list(_iter_block_items(doc))
     raw_sections = walk_template_blocks(blocks)
-    raw_sections = split_bunched_specs(raw_sections, spec_defs)
 
     sections: list[Section] = []
     for raw in raw_sections:
