@@ -6,6 +6,7 @@ import {
   setParserTrainRule,
   approveParserTrainSpec,
   listParserTrainRuns,
+  clearParserTrainRuns,
   autoRefineParserTrain,
   refineStatusParserTrain,
   markGoldensGreen,
@@ -20,6 +21,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/runs', listParserTrainRuns);
+router.delete('/runs', clearParserTrainRuns);
 router.get('/guard', getGuard);
 router.post('/mark-goldens-green', markGoldensGreen);
 router.post('/', createParserTrainRun);

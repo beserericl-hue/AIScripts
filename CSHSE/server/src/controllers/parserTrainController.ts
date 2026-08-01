@@ -302,3 +302,32 @@ export const listParserTrainRuns = async (req: AuthenticatedRequest, res: Respon
     res.status(500).json({ error: 'list failed', detail: err?.message || String(err) });
   }
 };
+
+// DELETE /api/parser-train/runs  (SU) — "start fresh": remove every training run
+// (trainingRun submissions + their imports) and, unless ?keepRules=1, every
+// learned parser rule, so a training session begins from the proven default
+// parser with no prior state. Never touches real institution submissions
+// (trainingRun:true is the hard filter). Dev-only feature.
+export const clearParserTrainRuns = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
+  try {
+    const runs = await Submission.find({ trainingRun: true }).select('_id').lean();
+    const runIds = runs.map((r: any) => r._id);
+    const imports = await SelfStudyImport.deleteMany({ submissionId: { $in: runIds } });
+    const subs = await Submission.deleteMany({ trainingRun: true });
+    const keepRules = String(req.query.keepRules || '') === '1';
+    const rules = keepRules
+      ? { deletedCount: 0 }
+      : await ParserRule.deleteMany({});
+    res.json({
+      ok: true,
+      deletedRuns: subs.deletedCount || 0,
+      deletedImports: imports.deletedCount || 0,
+      deletedRules: rules.deletedCount || 0,
+      keptRules: keepRules,
+    });
+  } catch (err: any) {
+    console.error('[parser-train clear] failed:', err);
+    res.status(500).json({ error: 'clear failed', detail: err?.message || String(err) });
+  }
+};
