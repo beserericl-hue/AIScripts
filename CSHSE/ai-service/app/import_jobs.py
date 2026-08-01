@@ -1248,18 +1248,13 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     settings = get_settings()
 
     _stage_started(job, "template_walker", "walking paragraphs")
-    # Spec-definition catalog (normalized def sentence -> (std, spec)) so the
-    # walker can split a spec whose letter marker the document dropped (global /
-    # type-level; see template_walker.split_bunched_specs).
-    from app.splitter.template_walker import _norm_spec_text as _norm_def
-    _spec_defs = {
-        _norm_def(sp.spec_text): (str(sp.standard_code), str(sp.spec_code))
-        for sp in load_specifications(job.program_level)
-        if (sp.spec_text or "").strip()
-    }
-    sections, raw_sections = walk_template_docx(
-        str(docx_path), base_id=job.job_id, spec_defs=_spec_defs
-    )
+    # NOTE: a marker-less-spec split (e.g. AACC's dropped "b." before 15.b) is an
+    # INSTITUTION-SPECIFIC document quirk, NOT a global template property — a
+    # catalog-only split over-fires on other institutions (Kennesaw's short spec
+    # defs like "Intake interviewing" match ordinary list items). So the walker
+    # runs the PROVEN global default here; per-institution marker-less-spec
+    # recovery is handled as an institution-scoped Parser Train rule, not here.
+    sections, raw_sections = walk_template_docx(str(docx_path), base_id=job.job_id)
     placeholders = [r for r in raw_sections if r.placeholder]
     job.placeholder_sections = [
         {
