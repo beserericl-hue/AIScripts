@@ -53,6 +53,13 @@ export const createParserTrainRun = async (req: AuthenticatedRequest, res: Respo
   if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
   try {
     const programLevel = ['associate', 'bachelors', 'masters'].includes(String(req.body?.programLevel)) ? req.body.programLevel : 'associate';
+    // TARGET INSTITUTION — the REAL institution this training is for. Anything
+    // ACCEPTED in this run scopes its rule to THIS institution (not the sandbox),
+    // so the learned fix takes effect when THAT institution re-parses and never
+    // changes any other institution's documents. The document still parses in the
+    // isolated sandbox for testing; only accept binds it to the target.
+    const targetInstitutionId = req.body?.targetInstitutionId
+      ? String(req.body.targetInstitutionId) : null;
     const { inst, pc } = await ensureSandbox();
     const sub: any = await Submission.create({
       submissionId: `PTRAIN-${Date.now().toString(36)}`,
@@ -60,9 +67,10 @@ export const createParserTrainRun = async (req: AuthenticatedRequest, res: Respo
       programName: 'Parser Train', programLevel,
       submitterId: pc._id, type: 'initial', status: 'in_progress',
       trainingRun: true,
+      parserTrainState: { targetInstitutionId },
     });
     res.json({
-      ok: true, submissionId: String(sub._id), programLevel,
+      ok: true, submissionId: String(sub._id), programLevel, targetInstitutionId,
       pcEmail: SANDBOX_PC_EMAIL, pcUserId: String(pc._id), institutionId: String(inst._id),
       next: 'Upload + start-ai on submissionId as the sandbox PC (impersonate pcUserId or sso-login as pcEmail), then POST /api/parser-train/:importId/diagnose as SU.',
     });
@@ -170,6 +178,52 @@ export const approveParserTrainSpec = async (req: AuthenticatedRequest, res: Res
   } catch (err: any) {
     console.error('[parser-train approve-spec] failed:', err);
     res.status(500).json({ error: 'approve-spec failed', detail: err?.message || String(err) });
+  }
+};
+
+// POST /api/parser-train/:importId/accept-markerless-split  (SU)
+// ACCEPT marker-less-spec recovery for the run's TARGET INSTITUTION: activate an
+// institution-scoped rule (extract.enableMarkerlessSplit) so a spec whose letter
+// marker the document dropped (e.g. AACC's 15.b) is recovered when THAT
+// institution re-parses — and never for any other institution. This is the
+// "accept" that binds the learning to the target the run was started with.
+export const acceptMarkerlessSplit = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
+  try {
+    const importId = req.params.importId;
+    const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
+    if (!imp) { res.status(404).json({ error: 'import not found' }); return; }
+    const sub: any = await Submission.findById(imp.submissionId)
+      .select('trainingRun programLevel parserTrainState').lean();
+    if (!sub?.trainingRun) { res.status(400).json({ error: 'not a Parser Train sandbox run' }); return; }
+    const targetInstitutionId = req.body?.targetInstitutionId
+      || (sub.parserTrainState && sub.parserTrainState.targetInstitutionId);
+    if (!targetInstitutionId) {
+      res.status(400).json({ error: 'no target institution — start the run with targetInstitutionId (or pass it here) so the rule can be scoped to a real institution, not the sandbox.' });
+      return;
+    }
+    const rule = {
+      ruleId: `markerless.${String(targetInstitutionId)}`,
+      version: 1,
+      name: 'Marker-less spec recovery',
+      description: 'Recover a spec whose letter marker the document dropped (distinctive definition, catalog-matched). Institution-scoped.',
+      scope: { level: 'institution', institutionId: new mongoose.Types.ObjectId(String(targetInstitutionId)), programLevel: sub.programLevel },
+      status: 'active', createdBy: 'human',
+      createdFromImportId: imp._id,
+      match: { format: 'template', region: 'document', signature: {} },
+      extract: { enableMarkerlessSplit: true },
+      anchor: { emit: true, wrap: 'section', idFrom: 'sectionId' },
+      examples: [], confidence: 1.0, contractChecks: {}, metrics: {}, updatedAt: new Date(),
+    };
+    await ParserRule.updateOne(
+      { ruleId: rule.ruleId, version: rule.version },
+      { $set: rule, $setOnInsert: { createdAt: new Date() } },
+      { upsert: true }
+    );
+    res.json({ ok: true, ruleId: rule.ruleId, institutionId: String(targetInstitutionId), enabled: 'markerlessSplit' });
+  } catch (err: any) {
+    console.error('[parser-train accept-markerless] failed:', err);
+    res.status(500).json({ error: 'accept-markerless failed', detail: err?.message || String(err) });
   }
 };
 

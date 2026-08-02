@@ -5,6 +5,7 @@ import {
   diagnoseParserTrain,
   setParserTrainRule,
   approveParserTrainSpec,
+  acceptMarkerlessSplit,
   listParserTrainRuns,
   clearParserTrainRuns,
   autoRefineParserTrain,
@@ -30,6 +31,7 @@ router.get('/:importId/review-page', getReviewPage);
 router.post('/:importId/note', addParserTrainNote);
 router.post('/:importId/diagnose', diagnoseParserTrain);
 router.post('/:importId/approve-spec', approveParserTrainSpec);
+router.post('/:importId/accept-markerless-split', acceptMarkerlessSplit);
 router.post('/:importId/auto-refine', autoRefineParserTrain);
 router.get('/:importId/refine-status', refineStatusParserTrain);
 
