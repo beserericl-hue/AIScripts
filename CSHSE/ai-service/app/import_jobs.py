@@ -1296,13 +1296,24 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     settings = get_settings()
 
     _stage_started(job, "template_walker", "walking paragraphs")
-    # NOTE: a marker-less-spec split (e.g. AACC's dropped "b." before 15.b) is an
-    # INSTITUTION-SPECIFIC document quirk, NOT a global template property — a
-    # catalog-only split over-fires on other institutions (Kennesaw's short spec
-    # defs like "Intake interviewing" match ordinary list items). So the walker
-    # runs the PROVEN global default here; per-institution marker-less-spec
-    # recovery is handled as an institution-scoped Parser Train rule, not here.
-    sections, raw_sections = walk_template_docx(str(docx_path), base_id=job.job_id)
+    # A marker-less-spec split (e.g. AACC's dropped "b." before 15.b) is an
+    # INSTITUTION-SPECIFIC document quirk, never global. It runs ONLY when this
+    # institution has an active Parser Train rule enabling it (extract.enable
+    # MarkerlessSplit); then the level catalog is passed so the walker can
+    # recognize a dropped-marker spec by its distinctive definition. Off by
+    # default, so every other institution parses exactly as before.
+    _markerless_defs = None
+    if getattr(job, "rule_engine", None) and job.rule_engine.wants_markerless_split():
+        from app.splitter.template_walker import _norm_def_text as _norm_def
+        _markerless_defs = {
+            _norm_def(sp.spec_text): (str(sp.standard_code), str(sp.spec_code))
+            for sp in load_specifications(job.program_level)
+            if (sp.spec_text or "").strip()
+        }
+        job.warnings.append("rule-engine: marker-less-spec recovery enabled for this institution")
+    sections, raw_sections = walk_template_docx(
+        str(docx_path), base_id=job.job_id, markerless_spec_defs=_markerless_defs
+    )
     placeholders = [r for r in raw_sections if r.placeholder]
     job.placeholder_sections = [
         {

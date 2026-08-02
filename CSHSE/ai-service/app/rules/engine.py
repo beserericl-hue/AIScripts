@@ -228,6 +228,17 @@ class RuleEngine:
     def __init__(self, rules: list[dict] | None):
         self._rules: list[dict] = list(rules or [])
 
+    # ------------------------------------------- marker-less-spec recovery
+    def wants_markerless_split(self) -> bool:
+        """True when an active rule enables institution-scoped recovery of a
+        spec whose letter marker the document dropped (``extract.enable
+        MarkerlessSplit``). Off unless a rule for THIS institution turns it on —
+        never global. Consumed by the template walker."""
+        for rule in self._rules:
+            if (rule.get("extract") or {}).get("enableMarkerlessSplit") is True:
+                return True
+        return False
+
     # ------------------------------------------------------------ forceFormat
     def force_format(self) -> str | None:
         """First active rule's ``extract.forceFormat``, if any.

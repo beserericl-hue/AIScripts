@@ -722,7 +722,15 @@ def _is_real_break(
     return True
 
 
-def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
+def _norm_def_text(t: str) -> str:
+    """Normalize a spec-definition sentence for exact-ish matching."""
+    return re.sub(r"[^a-z0-9]+", " ", (t or "").lower()).strip()
+
+
+def walk_template_blocks(
+    blocks: list[tuple],
+    markerless_spec_defs: dict[str, tuple[str, str]] | None = None,
+) -> list[TemplateSection]:
     """Walk an in-document-order block stream into sections.
 
     Each block is ``("p", text)`` or ``("table", html, text)``. Paragraphs cut
@@ -730,6 +738,15 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
     section's ``evidence_tables`` (so embedded rosters/grids stay with their
     spec instead of being dropped). ``See Appendix …`` lines are also recorded
     on the section as import reminders.
+
+    ``markerless_spec_defs`` (normalized spec-definition sentence → (std, spec))
+    is passed ONLY when the parsing institution has an active Parser Train rule
+    enabling marker-less-spec recovery. When set, a paragraph that matches a known
+    spec definition AND is immediately followed by a standalone ``Response:``
+    marker is treated as a spec heading whose letter marker the document dropped
+    (e.g. AACC 15.b). The ``Response:`` guard means a list item that merely quotes
+    a short spec definition (Kennesaw's "Intake interviewing") is NEVER split.
+    This is INSTITUTION-SCOPED — off by default, never global.
     """
     sections: list[TemplateSection] = []
     current: TemplateSection | None = None
@@ -821,10 +838,29 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
             else:
                 continue
 
-        hit = _match_heading(text)
-        if hit is not None and _is_real_break(
+        # INSTITUTION-SCOPED marker-less spec recovery (only when enabled for
+        # this institution). A paragraph matching a known spec DEFINITION and
+        # immediately followed by a standalone "Response:" marker is a spec whose
+        # letter marker the document dropped. The Response guard is what keeps
+        # this from over-firing on list items that quote a short spec definition.
+        markerless_hit = None
+        if markerless_spec_defs and not in_introduction and has_standards_region:
+            cand = markerless_spec_defs.get(_norm_def_text(text))
+            cur_key = (
+                str(current.standard_hint) if current is not None else "",
+                str(current.spec_hint) if current is not None else "",
+            )
+            # Guard: only a DISTINCTIVE definition (a full sentence, >= 5 words)
+            # is safe to treat as a dropped-marker spec heading. Short spec defs
+            # ("Intake interviewing", "Helping skills:") also appear as ordinary
+            # list items inside another spec, so matching those would over-split.
+            if cand and cand != cur_key and len(text.split()) >= 5:
+                markerless_hit = cand
+
+        hit = markerless_hit or _match_heading(text)
+        if hit is not None and (markerless_hit is not None or _is_real_break(
             hit, text, current_spec_section, in_introduction, has_standards_region
-        ):
+        )):
             # Close the previous section.
             if current is not None:
                 current.placeholder = _is_placeholder(current.body_paragraphs)
@@ -897,6 +933,7 @@ def walk_template_blocks(blocks: list[tuple]) -> list[TemplateSection]:
 def walk_template_docx(
     docx_path: str,
     base_id: str = "template",
+    markerless_spec_defs: dict[str, tuple[str, str]] | None = None,
 ) -> tuple[list[Section], list[TemplateSection]]:
     """Open a DOCX and walk it. Returns ``(sections, raw_template_sections)``.
 
@@ -904,10 +941,14 @@ def walk_template_docx(
     ``raw_template_sections`` is the intermediate form, kept so the
     preview renderer can show placeholder/empty sections that the
     matcher never sees.
+
+    ``markerless_spec_defs`` is forwarded to :func:`walk_template_blocks`; it is
+    populated ONLY when the parsing institution has an active Parser Train rule
+    enabling marker-less-spec recovery (institution-scoped, never global).
     """
     doc = Document(docx_path)
     blocks = list(_iter_block_items(doc))
-    raw_sections = walk_template_blocks(blocks)
+    raw_sections = walk_template_blocks(blocks, markerless_spec_defs=markerless_spec_defs)
 
     sections: list[Section] = []
     for raw in raw_sections:

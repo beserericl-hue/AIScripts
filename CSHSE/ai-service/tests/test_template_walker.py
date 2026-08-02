@@ -577,3 +577,34 @@ def test_standard_context_descriptor_does_not_bleed_into_prior_spec():
     assert four_c is not None
     assert "Policies and Procedures" not in four_c.body_text
 
+
+
+def test_markerless_spec_split_is_institution_scoped_and_guarded():
+    """Marker-less-spec recovery: OFF by default; when enabled it splits a
+    dropped-marker spec (distinctive definition) but NEVER a short list item."""
+    from app.splitter.template_walker import walk_template_paragraphs, walk_template_blocks, _norm_def_text
+    paras = [
+        "Standard 15: The program shall provide a foundation of skills.",
+        "15.a. Knowledge and skills to analyze and assess the needs of clients.",
+        "Response:",
+        "The following courses emphasize analysis. HUS 101.",
+        # 15.b marker dropped — only the (distinctive) definition sentence:
+        "Skills to develop goals, design and implement a plan of action.",
+        "The following courses emphasize developing goals. HUS 115.",
+        # a SHORT spec-def phrase appearing as a list item (must NOT split):
+        "Intake interviewing",
+        "Helping skills",
+    ]
+    defs = {
+        _norm_def_text("Skills to develop goals, design and implement a plan of action."): ("15", "b"),
+        _norm_def_text("Intake interviewing"): ("16", "d"),
+        _norm_def_text("Helping skills"): ("16", "e"),
+    }
+    # default: no split
+    off = walk_template_blocks([("p", p) for p in paras])
+    assert not any(s.spec_hint == "b" and s.standard_hint == "15" for s in off)
+    # enabled: 15.b split, 16.d/16.e (short list items) NOT split
+    on = walk_template_blocks([("p", p) for p in paras], markerless_spec_defs=defs)
+    specs = {(s.standard_hint, s.spec_hint) for s in on if s.spec_hint}
+    assert ("15", "b") in specs, "distinctive dropped-marker spec is recovered"
+    assert ("16", "d") not in specs and ("16", "e") not in specs, "short list items never split"
