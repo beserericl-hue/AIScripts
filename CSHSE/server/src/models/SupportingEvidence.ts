@@ -91,6 +91,10 @@ export interface ISupportingEvidence extends Document {
   // Top-level description for easy querying
   description?: string;
 
+  // Cached plain-text extraction of the file — so the coverage reviewer can read
+  // an assigned File-Library file's content without re-extracting it every run.
+  extractedText?: string;
+
   // Soft delete support
   isDeleted: boolean;
   deletedAt?: Date;
@@ -209,6 +213,9 @@ const SupportingEvidenceSchema = new Schema<ISupportingEvidence>({
 
   // Top-level description
   description: { type: String },
+
+  // Cached file text extraction (for the AI coverage reviewer).
+  extractedText: { type: String },
 
   // Soft delete
   isDeleted: { type: Boolean, default: false, index: true },
