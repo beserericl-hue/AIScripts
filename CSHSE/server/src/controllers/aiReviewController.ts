@@ -2320,8 +2320,22 @@ export async function reconcileSpecLevel(req: AuthenticatedRequest, res: Respons
     allowed.set(String(std.code), new Set(std.specifications.map((s) => s.code)));
   }
 
+  // Correct spec text per (std, spec) at this level, so a submission parsed at
+  // the WRONG level shows the right rail labels — e.g. AACC (associate) Standard
+  // 20 is "Field Experience", not the baccalaureate "Knowledge, Theory, Skills…",
+  // and 18.f–h / 20.f–j (which don't exist at baccalaureate) get their titles.
+  const stdTitle = new Map<string, string>();
+  const specCriteria = new Map<string, string>();
+  for (const std of catalog) {
+    stdTitle.set(String(std.code), std.title);
+    for (const sp of std.specifications) {
+      specCriteria.set(`${std.code}.${sp.code}`, String((sp as any).text || ''));
+    }
+  }
+
   const removed: string[] = [];
   const keptWithContent: string[] = [];
+  let relabeled = 0;
   for (const key of Object.keys(state.buckets)) {
     const b = state.buckets[key] as any;
     // Only reconcile real per-spec buckets ("<std>.<spec>"); leave synthetic /
@@ -2331,7 +2345,16 @@ export async function reconcileSpecLevel(req: AuthenticatedRequest, res: Respons
     if (!std || !spec) continue;
     const allowedSpecs = allowed.get(std);
     if (!allowedSpecs) continue;          // standard not in this level's catalog — leave it
-    if (allowedSpecs.has(spec)) continue; // valid spec at this level — keep
+    if (allowedSpecs.has(spec)) {
+      // Valid spec at this level — RELABEL from the level catalog (title always;
+      // spec prompt only when the catalog has criteria for it) so a wrong-level
+      // import's baccalaureate labels are corrected in place. Content untouched.
+      const t = stdTitle.get(std);
+      if (t != null && b.standardTitle !== t) { b.standardTitle = t; relabeled++; }
+      const crit = specCriteria.get(`${std}.${spec}`);
+      if (crit && b.specPrompt !== crit) { b.specPrompt = crit; relabeled++; }
+      continue;
+    }
 
     // Out-of-level. Prune ONLY if it holds nothing from the document.
     const narr = b.narratives || [], evt = b.evidenceText || [], evf = b.evidenceFiles || [];
@@ -2343,10 +2366,32 @@ export async function reconcileSpecLevel(req: AuthenticatedRequest, res: Respons
     removed.push(key);
   }
 
-  if (removed.length) {
+  // Prune phantom standard-level status/intro keys that don't exist at this level
+  // (e.g. a stray "21"/"21_a" on an associate program → the header read "X/21").
+  // These are top-level Mongoose Map fields, so $unset them directly.
+  const unset: Record<string, ''> = {};
+  const prunedKeys: string[] = [];
+  const collectPhantom = (fieldName: string, m: any) => {
+    if (!m) return;
+    const keys = typeof m.keys === 'function' ? Array.from(m.keys()) : Object.keys(m);
+    for (const k of keys as string[]) {
+      const stdNum = String(k).split('_')[0];
+      if (/^\d+$/.test(stdNum) && !allowed.has(stdNum)) {
+        unset[`${fieldName}.${k}`] = '';
+        prunedKeys.push(`${fieldName}.${k}`);
+      }
+    }
+  };
+  collectPhantom('standardsStatus', (submission as any).standardsStatus);
+  collectPhantom('standardIntroductions', (submission as any).standardIntroductions);
+
+  if (removed.length || relabeled) {
     state.lastUpdatedAt = new Date();
     (submission as any).markModified('aiReviewState');
     await persistAiReviewState(submission, state);
+  }
+  if (Object.keys(unset).length) {
+    await Submission.updateOne({ _id: submission._id }, { $unset: unset });
   }
   res.json({
     ok: true,
@@ -2354,6 +2399,8 @@ export async function reconcileSpecLevel(req: AuthenticatedRequest, res: Respons
     removed,
     removedCount: removed.length,
     keptWithContent,
+    relabeled,
+    prunedStatusKeys: prunedKeys,
   });
 }
 
