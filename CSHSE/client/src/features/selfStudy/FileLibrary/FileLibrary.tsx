@@ -306,20 +306,25 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
       );
       return res.data as {
         best?: { standardCode: string; specCode?: string; confidence?: number } | null;
+        suggestions?: { standardCode: string; specCode?: string; confidence?: number }[];
       };
     },
     onSuccess: (data) => {
-      const best = data?.best;
+      // Prefer the confident auto-route pick; otherwise fall back to the top-ranked
+      // suggestion so the user still gets a "where does this fit" starting point
+      // (clearly flagged low-confidence — they review + confirm before Save).
+      const best = data?.best || data?.suggestions?.[0];
+      const lowConf = !data?.best;
       if (best?.standardCode) {
         setAssignStd(best.standardCode);
         setAssignSpec(best.specCode || '');
         const std = (standards || []).find((s) => s.code === best.standardCode);
         setAssignHint({
-          label: `${best.standardCode}${best.specCode ? `.${best.specCode}` : ''}${std ? ` — ${std.title}` : ''}`,
+          label: `${lowConf ? '(low confidence) ' : ''}${best.standardCode}${best.specCode ? `.${best.specCode}` : ''}${std ? ` — ${std.title}` : ''}`,
           confidence: best.confidence,
         });
       } else {
-        setAssignHint({ label: 'No confident match — choose a Standard manually.' });
+        setAssignHint({ label: 'No match found — choose a Standard manually.' });
       }
     },
     onError: (error: any) => {
