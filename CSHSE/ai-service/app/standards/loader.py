@@ -171,21 +171,18 @@ def load_specifications(program_level: ProgramLevel) -> list[Specification]:
 
         return BACCALAUREATE_2025
     if program_level == "associate":
-        # The CSHSE Associate degree uses Standards 1–20 with the same
-        # Specification language as the Baccalaureate (the Baccalaureate adds
-        # Standard 21+ for bachelor's-specific content). Derive the Associate
-        # set from the Baccalaureate dataset (Standards 1–20) so the matcher /
-        # coverage reviewer have canonical spec definitions to place content
-        # against — required by the MCC narrative import (associate self-study).
-        # TODO: replace with a dedicated parse of the Associate Handbook if its
-        # Specification text ever diverges from the Baccalaureate 1–20 set.
-        from dataclasses import replace as _dc_replace
+        # The Associate degree is NOT Baccalaureate 1-20: it has 20 standards but
+        # the tail curriculum standards differ (Std 18 = KTSV a-h, Std 19 = KTSV
+        # a-e, Std 20 = Field Experience a-j), because the Baccalaureate inserts an
+        # extra curriculum standard that shifts the numbering. Deriving from a bacc
+        # slice dropped the real associate specs (18.f-h, 20.f-j) so the coverage
+        # reviewer silently skipped them ("Check coverage" assessed 0). Use the
+        # authoritative per-level catalog generated from standardsByLevel.json.
+        from app.standards.associate_2025 import ASSOCIATE_2025
 
-        from app.standards.baccalaureate_2025 import BACCALAUREATE_2025
+        return ASSOCIATE_2025
+    if program_level == "masters":
+        from app.standards.masters_2025 import MASTERS_2025
 
-        return [
-            _dc_replace(s, program_level="associate")
-            for s in BACCALAUREATE_2025
-            if 1 <= int(s.standard_code) <= 20
-        ]
+        return MASTERS_2025
     return []
