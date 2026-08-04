@@ -114,11 +114,17 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
   // Preview modal state
   const [previewEvidence, setPreviewEvidence] = useState<Evidence | null>(null);
 
-  // Fetch standards definitions
+  // Inline "assign to Standard" state for classifying a library file directly.
+  const [assignFor, setAssignFor] = useState<string | null>(null);
+  const [assignStd, setAssignStd] = useState('');
+  const [assignSpec, setAssignSpec] = useState('');
+
+  // Fetch standards definitions — LEVEL-AWARE (the submission's degree level) so
+  // the Standard/Spec choices match this program, not the flat default.
   const { data: standards } = useQuery<StandardDefinition[]>({
-    queryKey: ['standards'],
+    queryKey: ['standards', submissionId],
     queryFn: async () => {
-      const response = await api.get(`/api/standards`);
+      const response = await api.get(`/api/standards?submissionId=${submissionId}`);
       return response.data;
     },
   });
@@ -263,6 +269,26 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
     },
     onError: (error: any) => {
       setUploadError(error.response?.data?.error || 'Failed to delete evidence');
+    },
+  });
+
+  // Classify (or re-classify) an existing library file directly — assign it a
+  // Standard/Spec without going through the Review panel. This is what lets a
+  // coordinator route files that never surfaced in Review (bulk/direct uploads
+  // the matcher couldn't place) so they become part of the standard.
+  const classifyMutation = useMutation({
+    mutationFn: async (v: { evidenceId: string; standardCode: string; specCode?: string }) => {
+      await api.patch(
+        `${API_BASE}/submissions/${submissionId}/evidence/${v.evidenceId}`,
+        { standardCode: v.standardCode, specCode: v.specCode || undefined }
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['evidence', submissionId] });
+      setAssignFor(null); setAssignStd(''); setAssignSpec('');
+    },
+    onError: (error: any) => {
+      setUploadError(error.response?.data?.error || 'Failed to assign standard');
     },
   });
 
@@ -486,6 +512,61 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
               Open
             </a>
           )}
+          {/* Assign / change the Standard for this file directly in the library.
+              Essential for files that never appeared in the Review panel (bulk
+              or direct uploads the matcher couldn't place). */}
+          {!readOnly && (
+            assignFor === item._id ? (
+              <div className="flex items-center gap-1">
+                <select
+                  value={assignStd}
+                  onChange={(e) => { setAssignStd(e.target.value); setAssignSpec(''); }}
+                  className="text-xs border border-gray-300 rounded px-1.5 py-1 max-w-[10rem]"
+                >
+                  <option value="">Standard…</option>
+                  {(standards || []).map((s) => (
+                    <option key={s.code} value={s.code}>{s.code} — {s.title}</option>
+                  ))}
+                </select>
+                <select
+                  value={assignSpec}
+                  onChange={(e) => setAssignSpec(e.target.value)}
+                  disabled={!assignStd}
+                  className="text-xs border border-gray-300 rounded px-1.5 py-1 disabled:opacity-50"
+                >
+                  <option value="">Spec…</option>
+                  {(standards || []).find((s) => s.code === assignStd)?.specifications.map((sp) => (
+                    <option key={sp.code} value={sp.code}>{sp.code}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => classifyMutation.mutate({ evidenceId: item._id, standardCode: assignStd, specCode: assignSpec })}
+                  disabled={!assignStd || classifyMutation.isPending}
+                  className="px-2 py-1 text-xs text-white bg-teal-600 rounded hover:bg-teal-700 disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => { setAssignFor(null); setAssignStd(''); setAssignSpec(''); }}
+                  className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { setAssignFor(item._id); setAssignStd(item.standardCode || ''); setAssignSpec(item.specCode || ''); }}
+                className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors whitespace-nowrap ${
+                  item.standardCode
+                    ? 'text-gray-600 bg-gray-50 border-gray-200 hover:bg-gray-100'
+                    : 'text-amber-800 bg-amber-100 border-amber-300 hover:bg-amber-200'
+                }`}
+                title={item.standardCode ? 'Change the Standard for this file' : 'Assign this file to a Standard'}
+              >
+                {item.standardCode ? 'Change Standard' : 'Assign to Standard'}
+              </button>
+            )
+          )}
           {!readOnly && (
             <button
               onClick={() => handleDelete(item._id, title)}
@@ -634,7 +715,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
           )}
           <span className="text-sm font-semibold text-amber-800 flex-shrink-0">Unassigned</span>
           <span className="text-sm text-amber-700/80 truncate flex-1">
-            Imported files awaiting a Standard — assign in the Review panel
+            Imported files awaiting a Standard — use “Assign to Standard” on each
           </span>
           <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full whitespace-nowrap">
             {unassignedFiles.length} file{unassignedFiles.length !== 1 ? 's' : ''}
