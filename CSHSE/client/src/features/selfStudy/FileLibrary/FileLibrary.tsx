@@ -20,6 +20,7 @@ import {
   Replace,
   History,
   Eye,
+  Sparkles,
 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
@@ -118,6 +119,9 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
   const [assignFor, setAssignFor] = useState<string | null>(null);
   const [assignStd, setAssignStd] = useState('');
   const [assignSpec, setAssignSpec] = useState('');
+  // AI classify: the last suggestion returned for the file being assigned, shown
+  // as a hint below the dropdowns (label + confidence). Cleared when the panel closes.
+  const [assignHint, setAssignHint] = useState<{ label: string; confidence?: number } | null>(null);
 
   // Fetch standards definitions — LEVEL-AWARE (the submission's degree level) so
   // the Standard/Spec choices match this program, not the flat default.
@@ -285,10 +289,41 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['evidence', submissionId] });
-      setAssignFor(null); setAssignStd(''); setAssignSpec('');
+      setAssignFor(null); setAssignStd(''); setAssignSpec(''); setAssignHint(null);
     },
     onError: (error: any) => {
       setUploadError(error.response?.data?.error || 'Failed to assign standard');
+    },
+  });
+
+  // AI-classify a single library file — reads the file, reference-matches the
+  // narratives + runs the placement matcher, and pre-fills the dropdowns with the
+  // best guess. Suggest-only: the coordinator still confirms and clicks Save.
+  const suggestMutation = useMutation({
+    mutationFn: async (v: { evidenceId: string }) => {
+      const res = await api.post(
+        `${API_BASE}/submissions/${submissionId}/evidence/${v.evidenceId}/suggest-standard`
+      );
+      return res.data as {
+        best?: { standardCode: string; specCode?: string; confidence?: number } | null;
+      };
+    },
+    onSuccess: (data) => {
+      const best = data?.best;
+      if (best?.standardCode) {
+        setAssignStd(best.standardCode);
+        setAssignSpec(best.specCode || '');
+        const std = (standards || []).find((s) => s.code === best.standardCode);
+        setAssignHint({
+          label: `${best.standardCode}${best.specCode ? `.${best.specCode}` : ''}${std ? ` — ${std.title}` : ''}`,
+          confidence: best.confidence,
+        });
+      } else {
+        setAssignHint({ label: 'No confident match — choose a Standard manually.' });
+      }
+    },
+    onError: (error: any) => {
+      setUploadError(error.response?.data?.error || 'AI classify failed');
     },
   });
 
@@ -517,45 +552,67 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
               or direct uploads the matcher couldn't place). */}
           {!readOnly && (
             assignFor === item._id ? (
-              <div className="flex items-center gap-1">
-                <select
-                  value={assignStd}
-                  onChange={(e) => { setAssignStd(e.target.value); setAssignSpec(''); }}
-                  className="text-xs border border-gray-300 rounded px-1.5 py-1 max-w-[10rem]"
-                >
-                  <option value="">Standard…</option>
-                  {(standards || []).map((s) => (
-                    <option key={s.code} value={s.code}>{s.code} — {s.title}</option>
-                  ))}
-                </select>
-                <select
-                  value={assignSpec}
-                  onChange={(e) => setAssignSpec(e.target.value)}
-                  disabled={!assignStd}
-                  className="text-xs border border-gray-300 rounded px-1.5 py-1 disabled:opacity-50"
-                >
-                  <option value="">Spec…</option>
-                  {(standards || []).find((s) => s.code === assignStd)?.specifications.map((sp) => (
-                    <option key={sp.code} value={sp.code}>{sp.code}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => classifyMutation.mutate({ evidenceId: item._id, standardCode: assignStd, specCode: assignSpec })}
-                  disabled={!assignStd || classifyMutation.isPending}
-                  className="px-2 py-1 text-xs text-white bg-teal-600 rounded hover:bg-teal-700 disabled:opacity-50"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => { setAssignFor(null); setAssignStd(''); setAssignSpec(''); }}
-                  className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => suggestMutation.mutate({ evidenceId: item._id })}
+                    disabled={suggestMutation.isPending}
+                    className="flex items-center gap-1 px-2 py-1 text-xs text-purple-700 bg-purple-50 border border-purple-200 rounded hover:bg-purple-100 disabled:opacity-50 whitespace-nowrap"
+                    title="Let the AI read this file and suggest which Standard it supports"
+                  >
+                    {suggestMutation.isPending
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Sparkles className="w-3.5 h-3.5" />}
+                    Suggest
+                  </button>
+                  <select
+                    value={assignStd}
+                    onChange={(e) => { setAssignStd(e.target.value); setAssignSpec(''); setAssignHint(null); }}
+                    className="text-xs border border-gray-300 rounded px-1.5 py-1 max-w-[10rem]"
+                  >
+                    <option value="">Standard…</option>
+                    {(standards || []).map((s) => (
+                      <option key={s.code} value={s.code}>{s.code} — {s.title}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={assignSpec}
+                    onChange={(e) => setAssignSpec(e.target.value)}
+                    disabled={!assignStd}
+                    className="text-xs border border-gray-300 rounded px-1.5 py-1 disabled:opacity-50"
+                  >
+                    <option value="">Spec…</option>
+                    {(standards || []).find((s) => s.code === assignStd)?.specifications.map((sp) => (
+                      <option key={sp.code} value={sp.code}>{sp.code}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => classifyMutation.mutate({ evidenceId: item._id, standardCode: assignStd, specCode: assignSpec })}
+                    disabled={!assignStd || classifyMutation.isPending}
+                    className="px-2 py-1 text-xs text-white bg-teal-600 rounded hover:bg-teal-700 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { setAssignFor(null); setAssignStd(''); setAssignSpec(''); setAssignHint(null); }}
+                    className="px-2 py-1 text-xs text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {assignHint && (
+                  <div className="text-[11px] text-purple-700 pl-1">
+                    <Sparkles className="w-3 h-3 inline-block mr-1 -mt-0.5" />
+                    AI suggests: <span className="font-medium">{assignHint.label}</span>
+                    {typeof assignHint.confidence === 'number' && (
+                      <span className="text-gray-500"> ({Math.round(assignHint.confidence * 100)}%)</span>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <button
-                onClick={() => { setAssignFor(item._id); setAssignStd(item.standardCode || ''); setAssignSpec(item.specCode || ''); }}
+                onClick={() => { setAssignFor(item._id); setAssignStd(item.standardCode || ''); setAssignSpec(item.specCode || ''); setAssignHint(null); }}
                 className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-colors whitespace-nowrap ${
                   item.standardCode
                     ? 'text-gray-600 bg-gray-50 border-gray-200 hover:bg-gray-100'

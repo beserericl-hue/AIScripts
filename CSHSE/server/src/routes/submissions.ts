@@ -154,6 +154,7 @@ import {
   recomputeCoverage,
   denoiseNarratives,
   reconcileSpecLevel,
+  suggestStandardForEvidence,
   dedupeImports,
   stripContextBleed,
 } from '../controllers/aiReviewController';
@@ -200,6 +201,10 @@ router.post('/:submissionId/review/denoise-narratives', submissionLockout, denoi
 // Remove EMPTY spec rows not in the submission's degree level (an associate study
 // seeded with baccalaureate-only specs like 12.g/12.h). Prunes empties only.
 router.post('/:submissionId/review/reconcile-spec-level', submissionLockout, reconcileSpecLevel);
+// AI-classify a SINGLE existing library file: suggest which Standard/sub-spec it
+// supports (reference-match + AI placement) so files that never hit the Review
+// panel can be routed. Suggest-only; the client confirms + saves via evidence PATCH.
+router.post('/:submissionId/evidence/:evidenceId/suggest-standard', suggestStandardForEvidence);
 router.get('/:submissionId/review/eval-progress', getEvalProgress);
 // Autosave review-rail content (change-kind, reassign, edit, move, etc.).
 router.post('/:submissionId/review/save-state', submissionLockout, saveReviewState);

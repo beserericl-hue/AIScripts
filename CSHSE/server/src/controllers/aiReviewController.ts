@@ -2044,6 +2044,62 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
 }
 
 /**
+ * POST /api/submissions/:submissionId/evidence/:evidenceId/suggest-standard
+ * AI-classify a SINGLE existing library file: download it, extract its text,
+ * reference-match it against the submission's narratives + run the AI placement
+ * matcher, and return the best (standard, sub-spec) guess with alternates. Used
+ * by the File Library's "Suggest" button so a coordinator can place files that
+ * never surfaced in the Review panel (bulk/direct uploads the matcher couldn't
+ * originally route). This only SUGGESTS — the client still confirms & saves via
+ * the evidence PATCH, so nothing is stamped without a human click.
+ */
+export async function suggestStandardForEvidence(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+
+  const ev: any = await SupportingEvidence.findById(req.params.evidenceId);
+  if (!ev || ev.isDeleted || String(ev.submissionId) !== String(submission._id)) {
+    res.status(404).json({ error: 'Evidence not found for this submission.' });
+    return;
+  }
+
+  const programLevel = String(submission.programLevel || 'bachelors');
+  const bucketName = process.env.AWS_S3_BUCKET_NAME || '';
+  const filename = ev.file?.originalName || ev.file?.filename || ev.title || 'file';
+  const title = ev.title || titleFromFilename(filename);
+
+  // Best-effort text extraction so the semantic matcher has a body to work with.
+  // Reference-matching still works from title/filename alone if extraction fails.
+  let text = '';
+  try {
+    const s3Key = ev.file?.s3Key;
+    if (s3Key && isS3Configured()) {
+      const extracted = await extractFileText({
+        s3Key,
+        s3Bucket: bucketName,
+        mimeType: ev.file?.mimeType,
+        filename,
+      });
+      text = extracted?.text || '';
+    }
+  } catch (e) {
+    console.warn('[suggest-standard] text extraction failed, matching on title/filename only:', (e as any)?.message);
+  }
+
+  const narratives = gatherNarrativeTuples(submission);
+  const { suggestions, best } = await suggestStandardForFile({
+    title,
+    filename,
+    text,
+    narratives,
+    programLevel,
+    institutionId: String(submission.institutionId),
+  });
+
+  res.json({ ok: true, best: best || null, suggestions: (suggestions || []).slice(0, 5) });
+}
+
+/**
  * POST /api/submissions/:submissionId/review/recompute-coverage
  * Run the AI coverage reviewer over the submission's filled spec buckets and
  * write score/covered/gaps/strengths back onto each — so the green/yellow/red
