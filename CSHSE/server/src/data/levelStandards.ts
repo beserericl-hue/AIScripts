@@ -151,6 +151,10 @@ export function getLevelStandards(programLevel: string | null | undefined) {
       const specs = Object.keys(std.specs).sort();
       return {
         code,
+        // Part I = general standards 1-10, Part II = curriculum standards 11+.
+        // FileLibrary groups its accordions by this; without it partI/partII are
+        // empty and "Expand All" does nothing (the legacy flat catalog had it).
+        part: Number(code) <= 10 ? 'I' : 'II',
         title: std.title,
         specifications: specs.map((sc) => ({
           code: sc,
