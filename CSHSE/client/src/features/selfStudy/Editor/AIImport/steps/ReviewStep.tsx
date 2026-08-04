@@ -914,8 +914,35 @@ function FullReviewStep(): JSX.Element {
         isEdited: (tag as any).editedAt !== undefined && (tag as any).originalSnippet !== undefined
       };
     }
+    if (editingSectionId.startsWith('placeholder-')) {
+      // UNWRITTEN placeholder headings carry no provenance, so the loops above
+      // miss them and the Compare overlay never opened ("Compare does not work").
+      // Resolve the source doc from any real item (one parse -> one source doc)
+      // and use the heading as the match text (a literal string in the source)
+      // so the right pane scrolls to it. Seed the editor EMPTY — these are
+      // unwritten, and a save is a safe no-op (no bucket matches the id).
+      const ph = placeholderSections.find(
+        (p) => `placeholder-${p.paragraphIndex}` === editingSectionId
+      );
+      if (ph) {
+        let src: string | null = null;
+        for (const b of Object.values(buckets)) {
+          const it = [...b.narratives, ...b.evidenceText, ...b.evidenceFiles].find(
+            (i) => (i as any).sourceImportId
+          );
+          if (it) { src = (it as any).sourceImportId || null; break; }
+        }
+        return {
+          heading: ph.heading || '',
+          snippet: ph.heading || '',
+          htmlSnippet: '<p></p>',
+          sourceImportId: src,
+          isEdited: false
+        };
+      }
+    }
     return null;
-  }, [editingSectionId, buckets, introductions, tags]);
+  }, [editingSectionId, buckets, introductions, tags, placeholderSections]);
 
   const handleShowInSource = useCallback(
     (sectionId: string) => {
