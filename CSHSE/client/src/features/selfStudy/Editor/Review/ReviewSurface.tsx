@@ -126,12 +126,12 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
     return n;
   }, [buckets]);
 
-  const handleCheckCoverage = async () => {
+  const handleCheckCoverage = async (onlyMissing: boolean = true) => {
     setCoverageState({ kind: 'running' });
     try {
       const res = await api.post<{ ok: boolean; assessed?: number; error?: string }>(
         `/api/submissions/${submissionId}/review/recompute-coverage`,
-        { onlyMissing: true }
+        { onlyMissing }
       );
       if (res.data?.ok) {
         setCoverageState({ kind: 'done', assessed: res.data.assessed ?? 0 });
@@ -233,13 +233,13 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
               specs so every red/yellow/green dot has a real assessment behind
               it. Backfills imports that never ran it (older MCC imports). */}
           <button
-            onClick={handleCheckCoverage}
+            onClick={() => handleCheckCoverage(coverageMissing > 0)}
             data-testid="check-coverage-cta"
             disabled={coverageState.kind === 'running'}
             title={
               coverageMissing > 0
                 ? `Run the AI coverage review for the ${coverageMissing} spec(s) that haven't been assessed yet — populates the score, gaps and strengths behind each dot. No re-reading of the document.`
-                : 'Re-run the AI coverage review for any spec that still has no assessment.'
+                : 'Recheck coverage: re-run the AI review for EVERY filled spec, re-reading the File-Library evidence assigned to each. Use this to refresh assessments after assigning files or editing narratives.'
             }
             className="rounded border border-cshse-300 bg-white px-3 py-1 text-sm font-medium text-cshse-700 hover:bg-cshse-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -247,7 +247,7 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
               ? '⏳ Checking coverage…'
               : coverageMissing > 0
               ? `✅ Check coverage (${coverageMissing})`
-              : '✅ Check coverage'}
+              : '🔄 Recheck coverage'}
           </button>
           {coverageState.kind === 'done' && (
             <span className="text-xs text-emerald-600" data-testid="coverage-done">
