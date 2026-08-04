@@ -997,7 +997,22 @@ function FullReviewStep(): JSX.Element {
           const ph = placeholderSections.find(
             (p) => `placeholder-${p.paragraphIndex}` === sectionId
           );
-          if (ph) matchText = ph.heading || '';
+          if (ph) {
+            matchText = ph.heading || '';
+            // Placeholders carry NO provenance, so resolve the source document
+            // from any real item (a submission's parse shares one source doc);
+            // without a srcImportId the modal loads nothing and the heading is
+            // never located.
+            if (!srcImportId) {
+              for (const b of Object.values(buckets)) {
+                const it =
+                  b.narratives.find((i) => (i as any).sourceImportId) ||
+                  b.evidenceText.find((i) => (i as any).sourceImportId) ||
+                  b.evidenceFiles.find((i) => (i as any).sourceImportId);
+                if (it) { srcImportId = (it as any).sourceImportId || null; break; }
+              }
+            }
+          }
         }
       }
       setSourceSectionId(sectionId);
@@ -1005,7 +1020,7 @@ function FullReviewStep(): JSX.Element {
       setSourceImportId(srcImportId);
       setSourceOpen(true);
     },
-    [activeBucket, introductions, tags, cvs, evidenceDocs, placeholderSections]
+    [activeBucket, introductions, tags, cvs, evidenceDocs, placeholderSections, buckets]
   );
 
   // Coordinator clicked "+ Add from source" on an empty spec card. Open the
