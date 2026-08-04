@@ -4,7 +4,8 @@ import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getStandardByCode } from '../data/standards';
 import { getSpecCriteria } from '../data/levelStandards';
-import { evaluateSection } from './cshseAiClient';
+import { evaluateSection, extractFileText } from './cshseAiClient';
+import { isS3Configured } from './s3Service';
 
 // CR-054 — the legacy n8n `triggerValidation` path (and its
 // ValidationRequest/ValidationResponse/WebhookCallResult shapes + the
@@ -152,7 +153,7 @@ export class ValidationService {
           { standardCode: { $exists: false } },
         ],
       })
-        .select('description metadata.description standardCode specCode')
+        .select('description metadata.description extractedText standardCode specCode file.originalName file.s3Key file.mimeType')
         .lean();
       // Routed-to-this-spec items first; un-routed only fills leftover budget.
       const isRouted = (e: any) => e?.standardCode === standardCode && e?.specCode === specCode;
@@ -160,14 +161,43 @@ export class ValidationService {
       const MAX_ITEMS = 12;     // hard cap on number of evidence snippets
       const MAX_LEN = 1200;     // per-item char cap
       const TOTAL_BUDGET = 12_000; // hard cap on total evidence chars in the prompt
+
+      // Read a file's actual TEXT for the evaluator: prefer the body set at
+      // approve-time (metadata.description), then the cached full-text extraction
+      // (extractedText, shared with the coverage reviewer), and finally extract it
+      // on-demand from S3 (caching it back). Without this, a spec whose only
+      // support is a File-Library PDF had an EMPTY description and was skipped —
+      // so validation falsely reported "no supporting evidence" (AACC 18.g: 3
+      // assigned PDFs, empty descriptions → skipped). Now their content is read.
+      const s3BucketName = process.env.AWS_S3_BUCKET_NAME || '';
+      const evidenceBody = async (e: any): Promise<string> => {
+        const meta = (e?.metadata?.description || '').trim();
+        if (meta) return meta;
+        if (typeof e?.extractedText === 'string' && e.extractedText.trim()) return e.extractedText.trim();
+        const s3Key = e?.file?.s3Key;
+        if (s3Key && isS3Configured()) {
+          try {
+            const ex = await extractFileText({ s3Key, s3Bucket: s3BucketName, mimeType: e?.file?.mimeType, filename: e?.file?.originalName });
+            const t = (ex?.text || '').trim().slice(0, 6000);
+            if (t) {
+              await SupportingEvidence.updateOne({ _id: e._id }, { $set: { extractedText: t } }).catch(() => undefined);
+              return t;
+            }
+          } catch {
+            /* extraction is best-effort */
+          }
+        }
+        return '';
+      };
+
       let used = 0;
       evidenceTexts = [];
       for (const e of ranked) {
         if (evidenceTexts.length >= MAX_ITEMS || used >= TOTAL_BUDGET) break;
         // Once routed items are exhausted, only keep adding un-routed while budget
         // remains — this keeps the per-spec prompt small and on-topic.
-        const title = (e?.description || '').trim();
-        const body = (e?.metadata?.description || '').trim();
+        const title = (e?.description || e?.file?.originalName || '').trim();
+        const body = await evidenceBody(e);
         const text = body || title;
         if (!text) continue;
         const labeled = title && body && !body.startsWith(title) ? `${title}: ${body}` : text;
