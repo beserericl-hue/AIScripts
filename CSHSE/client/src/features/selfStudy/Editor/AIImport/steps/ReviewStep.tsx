@@ -986,12 +986,26 @@ function FullReviewStep(): JSX.Element {
           srcImportId = srcImportId || (ed as any).sourceImportId || null;
         }
       }
+      if (!matchText) {
+        // Placeholder rows = UNWRITTEN standard/heading sections. They carry a
+        // synthetic "placeholder-<paragraphIndex>" id and no provenance, so every
+        // branch above misses them and Compare opened at the top of the document
+        // ("not showing where this came from"). Their heading text IS a literal
+        // string in the source, so match on that; the importId falls back to the
+        // submission's import so the right document still loads.
+        if (sectionId.startsWith('placeholder-')) {
+          const ph = placeholderSections.find(
+            (p) => `placeholder-${p.paragraphIndex}` === sectionId
+          );
+          if (ph) matchText = ph.heading || '';
+        }
+      }
       setSourceSectionId(sectionId);
       setSourceMatchText(matchText);
       setSourceImportId(srcImportId);
       setSourceOpen(true);
     },
-    [activeBucket, introductions, tags, cvs, evidenceDocs]
+    [activeBucket, introductions, tags, cvs, evidenceDocs, placeholderSections]
   );
 
   // Coordinator clicked "+ Add from source" on an empty spec card. Open the
