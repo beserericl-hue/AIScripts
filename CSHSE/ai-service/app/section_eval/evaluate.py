@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any, Callable, Optional
 
 from anthropic import Anthropic
@@ -30,7 +31,7 @@ _HAIKU_MODEL = "claude-haiku-4-5"
 # made the model emit non-JSON ("could not parse model response"). claude-haiku
 # has a 200k context, so 40k chars (~10k tokens) is comfortable. 2026-06-08.
 _MAX_INPUT_CHARS = 40000
-_MAX_TOKENS_OUT = 900
+_MAX_TOKENS_OUT = 1500  # headroom so an evidence-rich reply isn't truncated mid-JSON
 
 _VALID_VERDICTS = {"pass", "needs_improvement", "fail"}
 
@@ -180,22 +181,38 @@ def _evaluate_one_spec(
     )
     if len(prompt) > _MAX_INPUT_CHARS:
         prompt = prompt[:_MAX_INPUT_CHARS]
-    try:
-        msg = client.messages.create(
-            model=_HAIKU_MODEL,
-            max_tokens=_MAX_TOKENS_OUT,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = "".join(b.text for b in msg.content if getattr(b, "text", None))
-    except Exception as exc:  # noqa: BLE001 — never crash the caller
-        return {
-            **base,
-            "verdict": "needs_improvement",
-            "rationale": f"evaluation error ({type(exc).__name__})",
-            "criteriaCoverage": [],
-            "improvementSuggestions": [],
-        }
-    return {**base, **_parse_response(raw)}
+    # Retry the model call + parse a few times: haiku occasionally emits non-JSON
+    # (and a verbose evidence-rich reply can cut the closing brace), which used to
+    # surface as a hard "could not parse model response" fail — a false negative.
+    # A fresh sample almost always parses. Transient API errors are retried too.
+    raw = ""
+    parsed: dict | None = None
+    for _attempt in range(3):
+        try:
+            msg = client.messages.create(
+                model=_HAIKU_MODEL,
+                max_tokens=_MAX_TOKENS_OUT,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = "".join(b.text for b in msg.content if getattr(b, "text", None))
+        except Exception as exc:  # noqa: BLE001 — never crash the caller
+            if _attempt < 2:
+                time.sleep(1.0 * (_attempt + 1))
+                continue
+            return {
+                **base,
+                "verdict": "needs_improvement",
+                "rationale": f"evaluation error ({type(exc).__name__})",
+                "criteriaCoverage": [],
+                "improvementSuggestions": [],
+            }
+        cand = _parse_response(raw)
+        if cand.get("rationale") != "could not parse model response":
+            return {**base, **cand}
+        parsed = cand
+        if _attempt < 2:
+            time.sleep(0.5 * (_attempt + 1))
+    return {**base, **(parsed or _parse_response(raw))}
 
 
 def evaluate_section(
