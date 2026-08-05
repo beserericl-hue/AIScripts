@@ -2205,9 +2205,15 @@ export async function assessCoverageForKeys(submissionId: string, keys: string[]
   }
   if (specs.length === 0) return 0;
 
+  const libraryFileNames = [...new Set(
+    ([] as any[]).concat(...Array.from(filesByKey.values()))
+      .map((f: any) => f.file?.originalName || f.title)
+      .filter(Boolean)
+  )].slice(0, 200);
   const { results, error } = await reviewCoverage({
     programLevel,
     specs: specs.map((s) => ({ standardCode: s.standardCode, specCode: s.specCode, narrativeText: s.narrativeText, evidence: s.evidence })),
+    libraryFileNames,
   });
   if (error && results.length === 0) return 0;
   const byKey = new Map(results.map((r) => [`${r.standardCode}.${r.specCode}`, r]));

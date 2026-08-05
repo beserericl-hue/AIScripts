@@ -136,6 +136,7 @@ class CoverageReviewRequest(BaseModel):
     MCC import) gets per-spec score/gaps/strengths WITHOUT re-reading the doc."""
     programLevel: str
     specs: list[CoverageSpecItem]
+    libraryFileNames: list[str] = Field(default_factory=list)
 
 
 class MatrixInferColumnsRequest(BaseModel):
@@ -761,7 +762,7 @@ async def coverage_review_endpoint(req: CoverageReviewRequest, request: Request)
             }
             for s in req.specs
         ]
-        reviews = review_specs(req.programLevel, settings.anthropic_api_key, items)
+        reviews = review_specs(req.programLevel, settings.anthropic_api_key, items, library_file_names=req.libraryFileNames)
         return {
             "results": [
                 {
@@ -991,6 +992,7 @@ class SectionEvaluateRequest(BaseModel):
     supportingEvidenceText: list[str] = Field(default_factory=list)
     files: list[dict] = Field(default_factory=list)
     webLinks: list[str] = Field(default_factory=list)
+    libraryFileNames: list[str] = Field(default_factory=list)
 
 
 @app.post("/ai/files/extract", status_code=status.HTTP_200_OK)
@@ -1235,6 +1237,7 @@ async def section_evaluate(req: SectionEvaluateRequest, request: Request) -> dic
             supporting_evidence_text=req.supportingEvidenceText,
             files=req.files,
             web_links=req.webLinks,
+            library_file_names=req.libraryFileNames,
             hints_fn=hints_fn,
             settings=settings,
         )

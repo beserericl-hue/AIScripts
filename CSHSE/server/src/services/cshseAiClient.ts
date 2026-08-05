@@ -191,6 +191,7 @@ export interface SectionEvaluateRequest {
   supportingEvidenceText?: string[];
   files?: Array<{ s3Key?: string; filename?: string; mimeType?: string }>;
   webLinks?: string[];
+  libraryFileNames?: string[];
 }
 
 export interface SectionEvaluateVerdict {
@@ -352,6 +353,7 @@ export interface CoverageReviewRequest {
     narrativeText?: string;
     evidence?: Array<{ heading?: string; snippet?: string }>;
   }>;
+  libraryFileNames?: string[];
 }
 export interface CoverageResult {
   standardCode: string;

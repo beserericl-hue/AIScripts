@@ -46,6 +46,7 @@ def _build_prompt(
     files: list[dict],
     link_results: list[dict],
     correction_hints: str = "",
+    library_file_names: Optional[list[str]] = None,
 ) -> str:
     # Bound the evidence block to a fixed char budget so it can never push the
     # JSON-format instructions (built at the END of this prompt) past
@@ -81,6 +82,8 @@ def _build_prompt(
         )
         or "(none)"
     )
+    _lib = [n for n in (library_file_names or []) if n][:200]
+    library_block = "\n".join(f"- {n}" for n in _lib) or "(none)"
     hints_block = f"\n{correction_hints}\n" if correction_hints else ""
     return (
         "You are a CSHSE accreditation reader evaluating one specification of a "
@@ -92,6 +95,11 @@ def _build_prompt(
         f"=== Supporting evidence (text) ===\n{ev_block}\n\n"
         f"=== Submitted files ===\n{files_block}\n\n"
         f"=== Web links (scraped text; non-text links flagged) ===\n{links_block}\n\n"
+        f"=== Documents available in this submission's file library ===\n{library_block}\n"
+        "RULE — a cited document that EXISTS counts as provided: if the narrative names "
+        "a document and a matching name appears in the library list above, treat that "
+        "document as PROVIDED evidence; do NOT fail the spec or say a named document is "
+        "'not provided' when it is present in the library.\n\n"
         "Decide a verdict:\n"
         "- \"pass\": the criteria are largely or fully met.\n"
         "- \"needs_improvement\": partially met; fixable gaps.\n"
@@ -148,6 +156,7 @@ def _evaluate_one_spec(
     link_results: list[dict],
     client: Optional[Anthropic],
     correction_hints: str = "",
+    library_file_names: Optional[list[str]] = None,
 ) -> dict:
     std = str(spec.get("standardCode", ""))
     sp = str(spec.get("specCode", ""))
@@ -178,6 +187,7 @@ def _evaluate_one_spec(
         files=files,
         link_results=link_results,
         correction_hints=correction_hints,
+        library_file_names=library_file_names,
     )
     if len(prompt) > _MAX_INPUT_CHARS:
         prompt = prompt[:_MAX_INPUT_CHARS]
@@ -224,6 +234,7 @@ def evaluate_section(
     supporting_evidence_text: Optional[list[str]] = None,
     files: Optional[list[dict]] = None,
     web_links: Optional[list[str]] = None,
+    library_file_names: Optional[list[str]] = None,
     anthropic: Optional[Anthropic] = None,
     settings: Optional[Settings] = None,
     scrape_fn: Callable[[str], Any] = scrape_link,
@@ -278,6 +289,7 @@ def evaluate_section(
             link_results=link_results,
             client=client,
             correction_hints=_hints_for(spec),
+            library_file_names=library_file_names,
         )
         for spec in specs
     ]

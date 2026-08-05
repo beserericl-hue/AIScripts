@@ -252,6 +252,16 @@ export class ValidationService {
     let criteriaCoverage: Array<{ criterion: string; met: boolean; note?: string }> = [];
     let scrapedLinks: Array<{ url: string; evaluable: boolean; reason?: string }> = [];
     try {
+      // All library file names — so the evaluator can honor the "a cited document
+      // that EXISTS counts as provided" rule (match narrative mentions to files),
+      // even for files not explicitly assigned to this spec.
+      let libraryFileNames: string[] = [];
+      try {
+        const allFiles: any[] = await SupportingEvidence.find({ submissionId, isDeleted: { $ne: true } })
+          .select('file.originalName title')
+          .lean();
+        libraryFileNames = [...new Set(allFiles.map((f) => f.file?.originalName || f.title).filter(Boolean))].slice(0, 200);
+      } catch { /* best-effort */ }
       const out = await evaluateSection({
         institutionId,
         submissionId,
@@ -259,7 +269,8 @@ export class ValidationService {
         specs: [{ standardCode, specCode, criteria }],
         narrativeHtml: narrativeText,
         supportingEvidenceText: evidenceTexts,
-        webLinks
+        webLinks,
+        libraryFileNames
       });
       scrapedLinks = out?.links || [];
       const row = out?.perSpec?.[0];
