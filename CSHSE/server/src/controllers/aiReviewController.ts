@@ -2100,31 +2100,52 @@ export async function suggestStandardForEvidence(req: AuthenticatedRequest, res:
 }
 
 /**
- * POST /api/submissions/:submissionId/review/recompute-coverage
- * Run the AI coverage reviewer over the submission's filled spec buckets and
- * write score/covered/gaps/strengths back onto each — so the green/yellow/red
- * dot + its "why" tooltip have real data. Backfills imports that never ran the
- * reviewer (older MCC imports). Body { onlyMissing?: boolean } (default true).
+ * Which filled spec buckets should get a coverage assessment. A spec counts as
+ * "filled" if it has narrative, inline bucket evidence, OR File-Library files
+ * assigned to it. `onlyMissing` skips specs that already have a verdict.
  */
-export async function recomputeCoverage(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const submission = await _loadOwnedSubmission(req, res);
-  if (!submission) return;
+async function coverageCandidateKeys(submission: any, onlyMissing: boolean): Promise<string[]> {
   const state = (submission as any).aiReviewState;
-  if (!state || !state.buckets) {
-    res.status(409).json({ error: 'No review state / buckets to assess.' });
-    return;
+  if (!state || !state.buckets) return [];
+  const withFiles = new Set<string>();
+  try {
+    const libFiles: any[] = await SupportingEvidence.find({
+      submissionId: submission._id,
+      isDeleted: { $ne: true },
+      standardCode: { $exists: true, $ne: null },
+    }).select('standardCode specCode').lean();
+    for (const f of libFiles) {
+      if (f.standardCode) withFiles.add(`${String(f.standardCode)}.${f.specCode ? String(f.specCode) : ''}`);
+    }
+  } catch { /* best-effort */ }
+  const keys: string[] = [];
+  for (const [key, bAny] of Object.entries(state.buckets)) {
+    const b = bAny as any;
+    const std = b?.standardCode, spec = b?.specCode;
+    if (!std || !spec) continue;
+    const narr = b.narratives || [], evt = b.evidenceText || [], evf = b.evidenceFiles || [];
+    const hasFiles = withFiles.has(`${String(std)}.${String(spec)}`);
+    if (!(narr.length || evt.length || evf.length || hasFiles)) continue;
+    if (onlyMissing && (b.coverageScore != null || b.coverageCovered != null)) continue;
+    keys.push(key);
   }
-  const onlyMissing = req.body?.onlyMissing !== false; // default: fill the gaps
+  return keys;
+}
+
+/**
+ * Assess a BATCH of bucket keys (evidence-aware) and persist the results. Shared
+ * by the background coverageQueueWorker so a large re-check drains incrementally
+ * instead of blocking one request (which used to 524 at the edge). The reviewer
+ * sees the narrative + inline evidence + the File-Library files assigned to each
+ * spec (text extracted + cached on the doc). Returns the number assessed.
+ */
+export async function assessCoverageForKeys(submissionId: string, keys: string[]): Promise<number> {
+  const submission: any = await Submission.findById(submissionId);
+  if (!submission) return 0;
+  const state = (submission as any).aiReviewState;
+  if (!state || !state.buckets || keys.length === 0) return 0;
   const programLevel = String(submission.programLevel || 'bachelors');
 
-  // The reviewer must see the SAME evidence the coordinator does. Before, it got
-  // ONLY the bucket's inline evidenceText/evidenceFiles — so a spec whose support
-  // lives in the File Library (SupportingEvidence assigned by std+spec) was scored
-  // as "no supporting evidence provided" — a FALSE gap. AACC 18.g is the case the
-  // team flagged: an empty bucket but 3 assigned PDFs (Field Placement Agency
-  // Agreement, HIPAA Affidavit, HUS Program Manual) + web links in the narrative,
-  // scored 45% "gap". Gather the assigned library files per spec and extract their
-  // text (cached on the doc so repeat Check-coverage runs stay cheap).
   const filesByKey = new Map<string, any[]>();
   try {
     const libFiles: any[] = await SupportingEvidence.find({
@@ -2138,7 +2159,7 @@ export async function recomputeCoverage(req: AuthenticatedRequest, res: Response
       filesByKey.get(k)!.push(f);
     }
   } catch (e) {
-    console.warn('[recompute-coverage] could not load library evidence:', (e as any)?.message);
+    console.warn('[coverage] could not load library evidence:', (e as any)?.message);
   }
   const s3BucketName = process.env.AWS_S3_BUCKET_NAME || '';
   const extractEvidenceText = async (f: any): Promise<string> => {
@@ -2156,16 +2177,14 @@ export async function recomputeCoverage(req: AuthenticatedRequest, res: Response
   };
 
   const specs: Array<{ standardCode: string; specCode: string; narrativeText: string; evidence: any[]; _key: string }> = [];
-  for (const [key, bAny] of Object.entries(state.buckets)) {
-    const b = bAny as any;
+  for (const key of keys) {
+    const b = state.buckets[key] as any;
+    if (!b) continue;
     const std = b?.standardCode, spec = b?.specCode;
     if (!std || !spec) continue;
     const narr = b.narratives || [], evt = b.evidenceText || [], evf = b.evidenceFiles || [];
     const assigned = (filesByKey.get(`${String(std)}.${String(spec)}`) || []).slice(0, 8);
-    // A spec is "filled" if it has narrative, bucket evidence, OR assigned library
-    // files — the last was previously ignored, hiding real evidence from the dot.
     if (!(narr.length || evt.length || evf.length || assigned.length)) continue;
-    if (onlyMissing && (b.coverageScore != null || b.coverageCovered != null)) continue;
     const narrativeText = narr
       .map((n: any) => (n.htmlSnippet ? htmlToPlain(n.htmlSnippet) : n.snippet || ''))
       .join('\n\n')
@@ -2174,34 +2193,23 @@ export async function recomputeCoverage(req: AuthenticatedRequest, res: Response
       heading: e.heading || '',
       snippet: (e.htmlSnippet ? htmlToPlain(e.htmlSnippet) : e.snippet || '').slice(0, 1500),
     }));
-    // Append the File-Library files assigned to this spec (extract text in parallel).
     const assignedEvidence = await Promise.all(
       assigned.map(async (f: any) => {
         const t = await extractEvidenceText(f);
         const name = f.file?.originalName || f.title || 'Attached file';
-        return {
-          heading: name,
-          snippet: (t || `(attached file, no extractable text: ${name})`).slice(0, 1800),
-        };
+        return { heading: name, snippet: (t || `(attached file, no extractable text: ${name})`).slice(0, 1800) };
       })
     );
     evidence.push(...assignedEvidence);
     specs.push({ standardCode: String(std), specCode: String(spec), narrativeText, evidence, _key: key });
   }
-
-  if (specs.length === 0) {
-    res.json({ ok: true, assessed: 0, message: onlyMissing ? 'All filled specs already have a coverage assessment.' : 'No filled specs to assess.' });
-    return;
-  }
+  if (specs.length === 0) return 0;
 
   const { results, error } = await reviewCoverage({
     programLevel,
     specs: specs.map((s) => ({ standardCode: s.standardCode, specCode: s.specCode, narrativeText: s.narrativeText, evidence: s.evidence })),
   });
-  if (error && results.length === 0) {
-    res.status(502).json({ error: `Coverage review failed: ${error}` });
-    return;
-  }
+  if (error && results.length === 0) return 0;
   const byKey = new Map(results.map((r) => [`${r.standardCode}.${r.specCode}`, r]));
   let assessed = 0;
   for (const s of specs) {
@@ -2216,8 +2224,59 @@ export async function recomputeCoverage(req: AuthenticatedRequest, res: Response
   }
   (submission as any).markModified('aiReviewState');
   await persistAiReviewState(submission, state);
-  res.json({ ok: true, assessed, total: specs.length });
+  return assessed;
 }
+
+/**
+ * POST /api/submissions/:submissionId/review/recompute-coverage
+ * ENQUEUE the AI coverage reviewer over the filled spec buckets — the background
+ * coverageQueueWorker drains it in small batches, so a full re-check of every
+ * spec no longer blocks one request past the edge timeout (Cloudflare 524).
+ * Body { onlyMissing?: boolean } (default true → only assess specs with no dot).
+ * Poll GET .../review/coverage-progress for completion.
+ */
+export async function recomputeCoverage(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const state = (submission as any).aiReviewState;
+  if (!state || !state.buckets) {
+    res.status(409).json({ error: 'No review state / buckets to assess.' });
+    return;
+  }
+  const onlyMissing = req.body?.onlyMissing !== false;
+  const keys = await coverageCandidateKeys(submission, onlyMissing);
+  if (keys.length === 0) {
+    res.json({ ok: true, queued: 0, message: onlyMissing ? 'All filled specs already have a coverage assessment.' : 'No filled specs to assess.' });
+    return;
+  }
+  await Submission.updateOne(
+    { _id: submission._id },
+    {
+      $set: { coverageQueue: keys, coverageQueueTotal: keys.length, coverageQueueStartedAt: new Date() },
+      $unset: { coverageQueueDoneAt: '' },
+    }
+  );
+  res.json({ ok: true, queued: keys.length });
+}
+
+/**
+ * GET /api/submissions/:submissionId/review/coverage-progress
+ * Progress of the background coverage re-check queue.
+ */
+export async function getCoverageProgress(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const remaining = ((submission as any).coverageQueue || []).length;
+  const total = (submission as any).coverageQueueTotal || 0;
+  res.json({
+    total,
+    remaining,
+    done: Math.max(0, total - remaining),
+    running: remaining > 0,
+    doneAt: (submission as any).coverageQueueDoneAt || null,
+  });
+}
+
 
 /**
  * POST /api/submissions/:submissionId/review/strip-context-bleed

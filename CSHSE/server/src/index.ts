@@ -14,6 +14,7 @@ import {
 import { initializeSuperuser } from './services/superuserInit';
 import { runMigrations } from './services/migrations';
 import { startEvalQueueWorker } from './services/evalQueueWorker';
+import { startCoverageQueueWorker } from './services/coverageQueueWorker';
 
 // Import routes
 import importsRouter from './routes/imports';
@@ -278,6 +279,9 @@ const startServer = async () => {
     // Start the background AI-evaluation queue worker (drains
     // Submission.aiEvalQueue in small batches; survives restarts).
     startEvalQueueWorker();
+    // Drains Submission.coverageQueue in small batches (evidence-aware coverage
+    // reviewer) so a full "Recheck coverage" never blocks past the edge timeout.
+    startCoverageQueueWorker();
   } catch (error) {
     dbError = error instanceof Error ? error.message : 'Unknown database error';
     console.error('Database connection failed:', dbError);

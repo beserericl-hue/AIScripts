@@ -109,7 +109,7 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
 
   const [coverageState, setCoverageState] = useState<
     | { kind: 'idle' }
-    | { kind: 'running' }
+    | { kind: 'running'; done?: number; total?: number }
     | { kind: 'done'; assessed: number }
     | { kind: 'error'; message: string }
   >({ kind: 'idle' });
@@ -129,16 +129,40 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
   const handleCheckCoverage = async (onlyMissing: boolean = true) => {
     setCoverageState({ kind: 'running' });
     try {
-      const res = await api.post<{ ok: boolean; assessed?: number; error?: string }>(
+      // Enqueue — a background worker drains the coverage queue in small batches,
+      // so a full re-check of every spec never blocks this request past the edge
+      // timeout. We then poll progress until it drains.
+      const res = await api.post<{ ok: boolean; queued?: number; message?: string; error?: string }>(
         `/api/submissions/${submissionId}/review/recompute-coverage`,
         { onlyMissing }
       );
-      if (res.data?.ok) {
-        setCoverageState({ kind: 'done', assessed: res.data.assessed ?? 0 });
-        await loadPersistedReviewState();
-      } else {
+      if (!res.data?.ok) {
         setCoverageState({ kind: 'error', message: res.data?.error || 'Coverage review failed.' });
+        return;
       }
+      const queued = res.data.queued ?? 0;
+      if (queued === 0) {
+        setCoverageState({ kind: 'done', assessed: 0 });
+        await loadPersistedReviewState();
+        return;
+      }
+      // Poll until the background queue empties (guarded so it can't spin forever).
+      for (let i = 0; i < 600; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const p = await api.get<{ total: number; remaining: number; done: number; running: boolean }>(
+          `/api/submissions/${submissionId}/review/coverage-progress`
+        );
+        const prog = p.data;
+        if (!prog?.running) {
+          setCoverageState({ kind: 'done', assessed: prog?.done ?? queued });
+          await loadPersistedReviewState();
+          return;
+        }
+        setCoverageState({ kind: 'running', done: prog.done, total: prog.total });
+      }
+      // Timed out watching (worker still draining server-side) — refresh anyway.
+      setCoverageState({ kind: 'done', assessed: queued });
+      await loadPersistedReviewState();
     } catch (err: any) {
       const detail = err?.response?.data?.error || err?.message;
       setCoverageState({ kind: 'error', message: detail || 'Coverage review failed.' });
@@ -244,7 +268,9 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
             className="rounded border border-cshse-300 bg-white px-3 py-1 text-sm font-medium text-cshse-700 hover:bg-cshse-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {coverageState.kind === 'running'
-              ? '⏳ Checking coverage…'
+              ? (coverageState.total
+                  ? `⏳ Checking coverage… ${coverageState.done ?? 0}/${coverageState.total}`
+                  : '⏳ Checking coverage…')
               : coverageMissing > 0
               ? `✅ Check coverage (${coverageMissing})`
               : '🔄 Recheck coverage'}
