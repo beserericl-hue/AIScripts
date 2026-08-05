@@ -347,7 +347,8 @@ export class ValidationService {
     submissionId: string,
     standardCode: string,
     specCode: string,
-    status: 'pass' | 'fail'
+    status: 'pass' | 'fail',
+    verdict?: 'pass' | 'needs_improvement' | 'fail'
   ): Promise<void> {
     const statusKey = `${standardCode}_${specCode}`;
     const now = new Date();
@@ -359,6 +360,7 @@ export class ValidationService {
       [`standardsStatus.${statusKey}.validatedAt`]: now,
       [`standardsStatus.${statusKey}.lastModified`]: now,
     };
+    if (verdict) updateFields[`standardsStatus.${statusKey}.verdict`] = verdict;
     if (status === 'pass') {
       updateFields[`standardsStatus.${statusKey}.status`] = 'validated';
     }

@@ -22,7 +22,7 @@ export async function indexEvidenceFile(institutionId: string, submissionId: str
   try {
     if (s3Key && mime === 'application/pdf' && isS3Configured()) {
       const out = await extractEvidence({ ...base, documentS3Key: s3Key, documentMimeType: 'application/pdf' });
-      return out?.chunksUpserted || 0;
+      return out?.ready ? out.data.chunksUpserted || 0 : 0;
     }
     let text: string = typeof ev.extractedText === 'string' ? ev.extractedText : '';
     if (!text && s3Key && isS3Configured()) {
@@ -34,7 +34,7 @@ export async function indexEvidenceFile(institutionId: string, submissionId: str
     }
     if (!text.trim()) return 0;
     const out = await extractEvidence({ ...base, markdown: text });
-    return out?.chunksUpserted || 0;
+    return out?.ready ? out.data.chunksUpserted || 0 : 0;
   } catch (e) {
     console.warn('[evidenceIndexer] index failed for', name, ':', (e as any)?.message);
     return 0;
