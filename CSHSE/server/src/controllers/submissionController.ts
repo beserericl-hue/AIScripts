@@ -1193,6 +1193,7 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
 
     let totalSpecs = 0;
     let passedCount = 0;
+    let niCount = 0;
     let excludedCount = 0;
 
     for (const standard of allStandards) {
@@ -1200,13 +1201,28 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
         totalSpecs++;
         const key = `${standard.code}_${spec.code}`;
         const status = getStatus(key);
-        const passed = status?.validationStatus === 'pass';
+        const v = status?.verdict;
         const excluded = status?.excluded === true;
+        const passedStrict = v === 'pass' || (v == null && status?.validationStatus === 'pass');
+        const needsImprovement = v === 'needs_improvement';
+        // Gate: pass OR needs_improvement OR N/A clears; a hard 'fail' verdict
+        // or an unevaluated spec blocks.
+        const ok = passedStrict || needsImprovement || excluded;
 
-        if (passed) passedCount++;
+        if (passedStrict) passedCount++;
+        if (needsImprovement) niCount++;
         if (excluded) excludedCount++;
 
-        if (!passed && !excluded) {
+        if (ok) {
+          if (needsImprovement) {
+            warnings.push({
+              code: 'NEEDS_IMPROVEMENT',
+              message: `Standard ${standard.code}.${spec.code} passed as "needs improvement". You can submit, but you may want to strengthen it first.`,
+              standardCode: standard.code,
+              specCode: spec.code
+            });
+          }
+        } else {
           // Hard error — submit gate will refuse. Distinguish the common
           // sub-cases so the modal can be actionable ("write narrative" vs
           // "ask AI to re-evaluate" vs "mark N/A").
@@ -1221,7 +1237,7 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
               standardCode: standard.code,
               specCode: spec.code
             });
-          } else if (status?.validationStatus === 'fail') {
+          } else if (v === 'fail' || status?.validationStatus === 'fail') {
             errors.push({
               code: 'VALIDATION_FAILED',
               message: `Standard ${standard.code}.${spec.code} did not pass the AI evaluator. Address the rationale or mark it Not Applicable.`,
@@ -1263,8 +1279,9 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
       counts: {
         totalSpecs,
         passed: passedCount,
+        needsImprovement: niCount,
         excluded: excludedCount,
-        satisfied: passedCount + excludedCount,
+        satisfied: passedCount + niCount + excludedCount,
         missing: errors.length
       }
     });
@@ -1806,10 +1823,10 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       return res.status(500).json({ error: 'Standards definitions unavailable' });
     }
 
-    // Verify all specs are validated (pass) OR explicitly marked N/A (excluded).
-    // CR-050 — A spec is satisfied when validationStatus === 'pass' OR
-    // excluded === true. Specs that are neither (genuinely un-triaged gaps)
-    // still block submission so accidental omissions don't slip through.
+    // Verify every spec clears the gate: verdict pass OR needs_improvement, or
+    // explicitly marked N/A (excluded). A hard 'fail' verdict, or a spec that
+    // was never evaluated, still blocks submission so accidental omissions and
+    // genuine deficiencies don't slip through.
     const standardsStatus = submission.standardsStatus || new Map();
     const missingValidations: string[] = [];
 
@@ -1820,9 +1837,14 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
           ? standardsStatus.get(statusKey)
           : standardsStatus[statusKey];
 
-        const passed = status?.validationStatus === 'pass';
-        const excluded = status?.excluded === true;
-        if (!passed && !excluded) {
+        // pass OR needs_improvement OR N/A clears; a hard 'fail' verdict or an
+        // unevaluated spec blocks. Legacy rows have only the binary
+        // validationStatus (verdict absent) → fall back to it.
+        const v = status?.verdict;
+        const ok = v === 'pass' || v === 'needs_improvement'
+          || (v == null && status?.validationStatus === 'pass')
+          || status?.excluded === true;
+        if (!ok) {
           missingValidations.push(`Standard ${standard.code}, Spec ${spec.code}`);
         }
       }
