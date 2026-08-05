@@ -61,6 +61,16 @@ export const createParserTrainRun = async (req: AuthenticatedRequest, res: Respo
     const targetInstitutionId = req.body?.targetInstitutionId
       ? String(req.body.targetInstitutionId) : null;
     const { inst, pc } = await ensureSandbox();
+    // Retire every agent-learned rule (format / placement / split) left ACTIVE in
+    // the shared sandbox institution by PRIOR training runs. They are per-document
+    // artifacts scoped to the sandbox institution, so without this a previous
+    // doc's rule bleeds onto THIS run's document — e.g. a docx that learned
+    // forceFormat="template" would then force "template" on an unrelated PDF and
+    // break its parse. Each run re-learns its own rules during auto-refine.
+    await ParserRule.updateMany(
+      { ruleId: /^agent\./, 'scope.level': 'institution', 'scope.institutionId': inst._id, status: 'active' },
+      { $set: { status: 'retired', updatedAt: new Date() } }
+    );
     const sub: any = await Submission.create({
       submissionId: `PTRAIN-${Date.now().toString(36)}`,
       institutionName: inst.name, institutionId: inst._id,
