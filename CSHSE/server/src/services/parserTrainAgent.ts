@@ -117,6 +117,32 @@ async function settledContract(importId: string, timeoutMs = 90_000): Promise<Co
   return last;
 }
 
+// Re-parse the import and return its contract, RETRYING while the parse is
+// degraded. A single re-parse can transiently time out (AI-service under load)
+// and yield a near-empty result (few/no specs, anchors missing). When we already
+// know a clean parse is reachable (`wantSpecs` from the winning attempt), a lone
+// bad parse must NOT be persisted as the final state — retry until it reproduces
+// that quality, or the tries are exhausted. `wantSpecs<=0` → accept any parse
+// that completes with all items anchored.
+async function reparseStable(
+  importId: string,
+  programLevel: string,
+  wantSpecs: number,
+  tries = 4
+): Promise<ContractResult> {
+  let c = await settledContract(importId);
+  for (let i = 1; i <= tries; i++) {
+    await clearReviewState(importId);
+    await startAIImportForBatch(importId, programLevel, null as any);
+    const st = await pollParsed(importId);
+    c = await settledContract(importId);
+    const okSpecs = wantSpecs <= 0 || c.coverage.specsWithContent >= Math.floor(wantSpecs * 0.9);
+    const okAnchors = c.anchors.missing.length === 0;
+    if (st !== 'timeout' && st !== 'failed' && okSpecs && okAnchors) break;
+  }
+  return c;
+}
+
 async function persist(importId: string, state: RefineState) {
   const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
   if (imp?.submissionId) {
@@ -215,10 +241,10 @@ export function startAutoRefine(importId: string, programLevel: string, institut
         // Write the winner as the ACTIVE learned rule and re-parse once more so the
         // final review state on disk reflects the winning setting.
         const ruleId = await setFormatRule(importId, institutionId, best.candidate.forceFormat, best.candidate.forceFormat !== null);
-        await clearReviewState(importId);
-        await startAIImportForBatch(importId, programLevel, null as any);
-        await pollParsed(importId);
-        const cWin = await settledContract(importId);
+        // The winning attempt PROVED a clean parse is reachable under this rule;
+        // retry the write-back re-parse until it reproduces that quality so a
+        // transient timeout can't persist a degraded parse over the winner.
+        const cWin = await reparseStable(importId, programLevel, best.attempt.specsWithContent);
         state.winner = { candidate: best.attempt.candidate, ruleId: best.candidate.forceFormat ? ruleId : undefined, score: best.attempt.score };
 
         // PHASE 2 — autonomous rule synthesis: place the content the winning parse
@@ -232,12 +258,12 @@ export function startAutoRefine(importId: string, programLevel: string, institut
         const syn = await synthesizePlacementRules(importId, institutionId, programLevel, { activate: true });
         // un-bunch any spec the walker merged into a neighbour (e.g. 15.b into 15.a)
         const split = await synthesizeSplitRules(importId, institutionId, programLevel, { activate: true });
-        if (syn.synthesized.length || split.synthesized.length) {
-          await clearReviewState(importId);
-          await startAIImportForBatch(importId, programLevel, null as any);
-          await pollParsed(importId);
-        }
-        const cAfter = await settledContract(importId);
+        // Synthesis only ADDS placement/splits, so the post-synthesis parse must
+        // hold at least the winner's spec count with anchors intact — retry if a
+        // transient timeout degrades it.
+        const cAfter = (syn.synthesized.length || split.synthesized.length)
+          ? await reparseStable(importId, programLevel, specsBefore)
+          : await settledContract(importId);
         state.synthesis = {
           rulesSynthesized: syn.synthesized.length + split.synthesized.length,
           ruleIds: [...syn.synthesized, ...split.synthesized],
