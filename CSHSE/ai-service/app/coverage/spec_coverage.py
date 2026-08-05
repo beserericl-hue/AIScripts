@@ -26,7 +26,7 @@ from app.standards.loader import Specification
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 CONTENT_CHAR_LIMIT = 8000  # cap total content sent per spec to control cost
-MAX_TOKENS = 600
+MAX_TOKENS = 1200  # headroom so a verbose gaps/strengths reply isn't truncated mid-JSON
 
 _RETRYABLE_STATUSES = {429, 500, 502, 503, 504, 529}
 _MAX_RETRIES = 5
@@ -154,48 +154,58 @@ class CoverageReviewer:
     ) -> CoverageReview:
         evidence_items = evidence_items or []
         prompt = _build_prompt(spec, narrative_text, evidence_items, library_file_names)
-        try:
-            msg = self._call_with_retry(prompt)
-        except Exception as exc:
-            # Persistent failure — surface a non-empty CoverageReview so the
-            # caller doesn't crash on a long batch and the user sees the error.
-            # Include the API message (e.g. "credit balance is too low") in
-            # the suggestion field so the preview shows the real cause, not
-            # just the exception class name.
+        # Retry the call+parse a few times: haiku occasionally emits non-JSON (and a
+        # verbose gaps/strengths reply can cut the closing brace) — which used to
+        # surface as a hard "LLM returned non-JSON response" gap (a false 0.0). A
+        # fresh sample almost always parses. Transient API errors retry inside
+        # _call_with_retry.
+        raw = ""
+        for _attempt in range(3):
+            try:
+                msg = self._call_with_retry(prompt)
+            except Exception as exc:
+                return CoverageReview(
+                    standard_code=spec.standard_code,
+                    spec_code=spec.spec_code,
+                    is_covered=False,
+                    coverage_score=0.0,
+                    gaps=[f"coverage reviewer API error: {type(exc).__name__}"],
+                    strengths=[],
+                    suggestion=f"{type(exc).__name__}: {str(exc)[:400]}",
+                    raw_response="",
+                )
+            raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+            try:
+                parsed = _parse(raw)
+            except json.JSONDecodeError:
+                if _attempt < 2:
+                    time.sleep(0.5 * (_attempt + 1))
+                    continue
+                return CoverageReview(
+                    standard_code=spec.standard_code,
+                    spec_code=spec.spec_code,
+                    is_covered=False,
+                    coverage_score=0.0,
+                    gaps=["LLM returned non-JSON response"],
+                    strengths=[],
+                    suggestion=f"Raw response (truncated): {raw[:300]}",
+                    raw_response=raw,
+                )
             return CoverageReview(
                 standard_code=spec.standard_code,
                 spec_code=spec.spec_code,
-                is_covered=False,
-                coverage_score=0.0,
-                gaps=[f"coverage reviewer API error: {type(exc).__name__}"],
-                strengths=[],
-                suggestion=f"{type(exc).__name__}: {str(exc)[:400]}",
-                raw_response="",
-            )
-        raw = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
-        try:
-            parsed = _parse(raw)
-        except json.JSONDecodeError:
-            return CoverageReview(
-                standard_code=spec.standard_code,
-                spec_code=spec.spec_code,
-                is_covered=False,
-                coverage_score=0.0,
-                gaps=["LLM returned non-JSON response"],
-                strengths=[],
-                suggestion=f"Raw response (truncated): {raw[:300]}",
+                is_covered=bool(parsed.get("is_covered", False)),
+                coverage_score=float(parsed.get("coverage_score", 0.0)),
+                gaps=list(parsed.get("gaps", [])),
+                strengths=list(parsed.get("strengths", [])),
+                suggestion=str(parsed.get("suggestion", "")),
                 raw_response=raw,
             )
-
+        # Unreachable (the loop always returns), but keeps type-checkers happy.
         return CoverageReview(
-            standard_code=spec.standard_code,
-            spec_code=spec.spec_code,
-            is_covered=bool(parsed.get("is_covered", False)),
-            coverage_score=float(parsed.get("coverage_score", 0.0)),
-            gaps=list(parsed.get("gaps", [])),
-            strengths=list(parsed.get("strengths", [])),
-            suggestion=str(parsed.get("suggestion", "")),
-            raw_response=raw,
+            standard_code=spec.standard_code, spec_code=spec.spec_code,
+            is_covered=False, coverage_score=0.0, gaps=["LLM returned non-JSON response"],
+            strengths=[], suggestion="", raw_response=raw,
         )
 
 
