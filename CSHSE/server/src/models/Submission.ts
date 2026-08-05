@@ -207,6 +207,13 @@ export interface ISubmission extends Document {
   aiEvalQueueStartedAt?: Date;
   aiEvalQueueDoneAt?: Date;
 
+  // Background coverage-recompute queue (drained by coverageQueueWorker so a full
+  // "Recheck coverage" never blocks one request past the edge timeout).
+  coverageQueue?: string[];
+  coverageQueueTotal?: number;
+  coverageQueueStartedAt?: Date;
+  coverageQueueDoneAt?: Date;
+
   // Reader lock
   readerLock: IReaderLock;
 
@@ -374,6 +381,11 @@ const SubmissionSchema = new Schema<ISubmission>({
   aiEvalQueueTotal: { type: Number, default: undefined },
   aiEvalQueueStartedAt: { type: Date, default: undefined },
   aiEvalQueueDoneAt: { type: Date, default: undefined },
+  // Background coverage-recompute queue (see interface).
+  coverageQueue: { type: [String], default: undefined },
+  coverageQueueTotal: { type: Number, default: undefined },
+  coverageQueueStartedAt: { type: Date, default: undefined },
+  coverageQueueDoneAt: { type: Date, default: undefined },
   documents: [DocumentRefSchema],
   decision: DecisionSchema,
   assignedReaders: [{

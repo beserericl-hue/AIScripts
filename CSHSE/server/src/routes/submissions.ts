@@ -152,6 +152,7 @@ import {
   bulkAddEvidence,
   getReviewEvidenceDocPublicUrl,
   recomputeCoverage,
+  getCoverageProgress,
   denoiseNarratives,
   reconcileSpecLevel,
   suggestStandardForEvidence,
@@ -206,6 +207,8 @@ router.post('/:submissionId/review/reconcile-spec-level', submissionLockout, rec
 // panel can be routed. Suggest-only; the client confirms + saves via evidence PATCH.
 router.post('/:submissionId/evidence/:evidenceId/suggest-standard', suggestStandardForEvidence);
 router.get('/:submissionId/review/eval-progress', getEvalProgress);
+// Progress of the background coverage re-check queue.
+router.get('/:submissionId/review/coverage-progress', getCoverageProgress);
 // Autosave review-rail content (change-kind, reassign, edit, move, etc.).
 router.post('/:submissionId/review/save-state', submissionLockout, saveReviewState);
 // CR-048 — "I'm done reviewing": discard all remaining un-triaged drafts.
