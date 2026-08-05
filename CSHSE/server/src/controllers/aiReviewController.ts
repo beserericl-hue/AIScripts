@@ -2212,10 +2212,22 @@ export async function assessCoverageForKeys(submissionId: string, keys: string[]
     const narr = b.narratives || [], evt = b.evidenceText || [], evf = b.evidenceFiles || [];
     const assigned = (filesByKey.get(`${String(std)}.${String(spec)}`) || []).slice(0, 8);
     if (!(narr.length || evt.length || evf.length || assigned.length)) continue;
-    const narrativeText = narr
+    // Preserve cited web links: htmlToPlain drops <a href> URLs, and the coverage
+    // reviewer scrapes URLs it finds in the text — so append the (entity-decoded)
+    // hrefs here so cited web policies (e.g. an admissions catalog page) get fetched.
+    const specLinks = new Set<string>();
+    for (const n of narr as any[]) {
+      const h = (n?.htmlSnippet as string) || '';
+      for (const m of h.matchAll(/href=["']([^"']+)["']/gi)) {
+        const u = String(m[1]).replace(/&amp;/gi, '&').trim();
+        if (/^https?:\/\//i.test(u)) specLinks.add(u);
+      }
+    }
+    let narrativeText = narr
       .map((n: any) => (n.htmlSnippet ? htmlToPlain(n.htmlSnippet) : n.snippet || ''))
       .join('\n\n')
-      .slice(0, 12000);
+      .slice(0, 11500);
+    if (specLinks.size) narrativeText += '\n\nCited web links: ' + [...specLinks].slice(0, 8).join(' ');
     const evidence = [...evt, ...evf].map((e: any) => ({
       heading: e.heading || '',
       snippet: (e.htmlSnippet ? htmlToPlain(e.htmlSnippet) : e.snippet || '').slice(0, 1500),

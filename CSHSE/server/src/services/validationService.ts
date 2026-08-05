@@ -221,7 +221,7 @@ export class ValidationService {
     try {
       const seen = new Set<string>();
       const pushUrl = (u?: string) => {
-        const url = (u || '').trim().replace(/[)>.,;'"]+$/, '');
+        const url = (u || '').replace(/&amp;/gi, '&').trim().replace(/[)>.,;'"]+$/, '');
         if (!/^https?:\/\//i.test(url) || seen.has(url) || webLinks.length >= 8) return;
         seen.add(url);
         webLinks.push(url);
