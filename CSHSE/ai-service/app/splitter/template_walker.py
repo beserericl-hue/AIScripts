@@ -730,6 +730,7 @@ def _norm_def_text(t: str) -> str:
 def walk_template_blocks(
     blocks: list[tuple],
     markerless_spec_defs: dict[str, tuple[str, str]] | None = None,
+    max_standard: int | None = None,
 ) -> list[TemplateSection]:
     """Walk an in-document-order block stream into sections.
 
@@ -858,6 +859,21 @@ def walk_template_blocks(
                 markerless_hit = cand
 
         hit = markerless_hit or _match_heading(text)
+        # A numeric "Standard N" beyond the level's catalog max is not a real
+        # standard — it is trailing content (e.g. a GPA/grading scale
+        # "4.0 / A- 3.7 / B+ 3.3 …") that the ``N.letter`` heading pattern
+        # mis-read. Drop the heading so the text stays as body content instead of
+        # spawning phantom Standards 22-35. Marker-less hits are catalog-validated
+        # already, so only clamp pattern-matched hits.
+        if (
+            hit is not None
+            and markerless_hit is None
+            and max_standard
+            and hit[0] is not None
+            and str(hit[0]).isdigit()
+            and int(hit[0]) > max_standard
+        ):
+            hit = None
         if hit is not None and (markerless_hit is not None or _is_real_break(
             hit, text, current_spec_section, in_introduction, has_standards_region
         )):
@@ -934,6 +950,7 @@ def walk_template_docx(
     docx_path: str,
     base_id: str = "template",
     markerless_spec_defs: dict[str, tuple[str, str]] | None = None,
+    max_standard: int | None = None,
 ) -> tuple[list[Section], list[TemplateSection]]:
     """Open a DOCX and walk it. Returns ``(sections, raw_template_sections)``.
 
@@ -948,7 +965,9 @@ def walk_template_docx(
     """
     doc = Document(docx_path)
     blocks = list(_iter_block_items(doc))
-    raw_sections = walk_template_blocks(blocks, markerless_spec_defs=markerless_spec_defs)
+    raw_sections = walk_template_blocks(
+        blocks, markerless_spec_defs=markerless_spec_defs, max_standard=max_standard
+    )
 
     sections: list[Section] = []
     for raw in raw_sections:

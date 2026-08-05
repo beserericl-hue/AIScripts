@@ -1311,8 +1311,18 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
             if (sp.spec_text or "").strip()
         }
         job.warnings.append("rule-engine: marker-less-spec recovery enabled for this institution")
+    # The level's catalog max standard number — a numeric heading beyond it is
+    # mis-read trailing content, not a real standard (see walk_template_blocks).
+    _max_std = None
+    try:
+        _std_nums = [int(sp.standard_code) for sp in load_specifications(job.program_level)
+                     if str(sp.standard_code).isdigit()]
+        _max_std = max(_std_nums) if _std_nums else None
+    except Exception:
+        _max_std = None
     sections, raw_sections = walk_template_docx(
-        str(docx_path), base_id=job.job_id, markerless_spec_defs=_markerless_defs
+        str(docx_path), base_id=job.job_id, markerless_spec_defs=_markerless_defs,
+        max_standard=_max_std,
     )
     placeholders = [r for r in raw_sections if r.placeholder]
     job.placeholder_sections = [
