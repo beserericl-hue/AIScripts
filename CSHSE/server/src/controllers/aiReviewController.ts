@@ -283,6 +283,22 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
       }
     }
   }
+  // Stamp each spec bucket with its AUTHORITATIVE validation verdict so the rail
+  // dot mirrors the on-screen pass/fail (the reader-facing result) instead of a
+  // divergent coverage-reviewer score. Not persisted — derived on read.
+  const ss: any = (submission as any).standardsStatus;
+  const valOf = (std: string, spec: string): 'pass' | 'fail' | null => {
+    const k = `${std}_${spec}`;
+    const v = ss instanceof Map ? ss.get(k) : ss?.[k];
+    const st = v?.validationStatus;
+    return st === 'pass' || st === 'fail' ? st : null;
+  };
+  if (state?.buckets) {
+    for (const key of Object.keys(state.buckets)) {
+      const b: any = state.buckets[key];
+      if (b?.standardCode && b?.specCode) b.validationStatus = valOf(String(b.standardCode), String(b.specCode));
+    }
+  }
   res.json({
     submissionId: String(submission._id),
     aiReviewState: state,
