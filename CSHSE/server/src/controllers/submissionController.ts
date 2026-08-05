@@ -15,7 +15,7 @@ import { SupportingEvidence } from '../models/SupportingEvidence';
 import { Assignment } from '../models/Assignment';
 import { JointVenture } from '../models/JointVenture';
 import { getAllStandards } from '../data/standards';
-import { inferProgramLevel, levelFromInstitution } from '../data/levelStandards';
+import { inferProgramLevel, levelFromInstitution, getLevelStandards } from '../data/levelStandards';
 import { ingestCorrection } from '../services/cshseAiClient';
 import mongoose from 'mongoose';
 
@@ -1157,7 +1157,8 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const allStandards = getAllStandards();
+    // Level-aware catalog (matches the client gate + submitSelfStudy).
+    const allStandards = getLevelStandards(submission.programLevel) || getAllStandards();
 
     // standardsStatus may be a Map (live model) or plain object (.lean()).
     const ssRaw = submission.standardsStatus;
@@ -1822,7 +1823,11 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
     // `status`) — so final submit ALWAYS returned 400 "No active
     // specification found" and a PC could never submit. `activeSpec.standards`
     // was also undefined (Spec has no `standards` field).
-    const allStandards = getAllStandards();
+    // Use the submission's level-aware catalog (associate/bacc/masters) —
+    // the same source the client gate + /api/standards use — NOT the flat
+    // level-agnostic getAllStandards() (which has a different spec set and
+    // would block an associate program on specs it doesn't even have).
+    const allStandards = getLevelStandards(submission.programLevel) || getAllStandards();
     if (!allStandards || allStandards.length === 0) {
       return res.status(500).json({ error: 'Standards definitions unavailable' });
     }
