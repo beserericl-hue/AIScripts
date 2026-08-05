@@ -115,6 +115,9 @@ def extract_evidence_text(
     embedder = embedder or EmbeddingClient(settings.openai_api_key)
     store = store or VectorStore(settings.qdrant_url, settings.qdrant_api_key or None)
     store.ensure_collection(settings.evidence_collection)
+    # Idempotent re-index: drop this document's existing chunks first so a re-run
+    # replaces them instead of accumulating duplicates.
+    store.delete_by_filter(settings.evidence_collection, {"documentId": str(document_id)})
 
     vectors = [embedder.embed_one(c) for c in chunks]
     payloads = []

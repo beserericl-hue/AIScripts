@@ -24,6 +24,32 @@ from anthropic import Anthropic, APIStatusError, InternalServerError, RateLimitE
 
 from app.standards.loader import Specification
 from app.evidence.retrieve import retrieve_evidence_chunks
+from app.section_eval.scrape import scrape_link
+
+_URL_RE = re.compile(r"https?://[^\s\"'<>)]+")
+
+
+def _scrape_narrative_links(narrative_text: str, max_links: int = 4) -> list[tuple[str, str]]:
+    """Fetch http(s) URLs cited in the narrative so the reviewer can read
+    web-hosted evidence (catalogs, program websites) — mirrors the section
+    evaluator's link scraper. Best-effort; file:// and network paths are ignored."""
+    urls: list[str] = []
+    seen: set[str] = set()
+    for m in _URL_RE.finditer(narrative_text or ""):
+        u = m.group(0).rstrip(".,);:'\"")
+        if u not in seen:
+            seen.add(u)
+            urls.append(u)
+        if len(urls) >= max_links:
+            break
+    out: list[tuple[str, str]] = []
+    for u in urls:
+        try:
+            r = scrape_link(u)
+            out.append((u, (r.text[:1500] if r.evaluable else f"[not text-evaluable: {r.reason}]")))
+        except Exception:  # noqa: BLE001 — scraping is best-effort
+            out.append((u, "[fetch failed]"))
+    return out
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 CONTENT_CHAR_LIMIT = 8000  # cap total content sent per spec to control cost
@@ -51,6 +77,7 @@ def _build_prompt(
     evidence_items: list[tuple[str, str]],  # [(title, body)]
     library_file_names: Optional[list[str]] = None,
     retrieved_chunks: Optional[list] = None,
+    web_evidence: Optional[list] = None,
 ) -> str:
     parts = [
         "You are an experienced CSHSE accreditation reviewer evaluating whether",
@@ -101,6 +128,14 @@ def _build_prompt(
             "relevant to this Specification. Treat them as supporting evidence that EXISTS in the "
             "submission and credit them even if the narrative does not cite them by name."
         )
+
+    _web = web_evidence or []
+    if _web:
+        parts.append("")
+        parts.append("=== WEB LINKS CITED IN THE NARRATIVE (fetched page text) ===")
+        for _u, _t in _web[:4]:
+            parts.append(f"[{str(_u)[:80]}]: {str(_t)[:1000]}")
+        parts.append("Treat readable web-page text above as supporting evidence the narrative cites.")
 
     parts.extend([
         "",
@@ -174,7 +209,8 @@ class CoverageReviewer:
             if institution_id
             else []
         )
-        prompt = _build_prompt(spec, narrative_text, evidence_items, library_file_names, retrieved)
+        web_evidence = _scrape_narrative_links(narrative_text)
+        prompt = _build_prompt(spec, narrative_text, evidence_items, library_file_names, retrieved, web_evidence)
         # Retry the call+parse a few times: haiku occasionally emits non-JSON (and a
         # verbose gaps/strengths reply can cut the closing brace) — which used to
         # surface as a hard "LLM returned non-JSON response" gap (a false 0.0). A
