@@ -48,6 +48,7 @@ def _build_prompt(
     spec: Specification,
     narrative_text: str,
     evidence_items: list[tuple[str, str]],  # [(title, body)]
+    library_file_names: Optional[list[str]] = None,
 ) -> str:
     parts = [
         "You are an experienced CSHSE accreditation reviewer evaluating whether",
@@ -73,6 +74,19 @@ def _build_prompt(
     else:
         parts.append("=== SUPPORTING EVIDENCE ===")
         parts.append("(none provided)")
+
+    _lib = [n for n in (library_file_names or []) if n][:200]
+    if _lib:
+        parts.append("")
+        parts.append("=== DOCUMENTS AVAILABLE IN THIS SUBMISSION'S FILE LIBRARY ===")
+        parts.extend(_lib)
+        parts.append(
+            "RULE — a cited document that EXISTS counts as provided: when the narrative "
+            "names a document (manual, catalog, syllabus, report, appendix, agreement, "
+            "form, worksheet, etc.) and a matching name appears in the library list "
+            "above, treat that document as PROVIDED evidence. Do NOT report it as a gap "
+            "or lower the score for a named document that is present in the library."
+        )
 
     parts.extend([
         "",
@@ -136,9 +150,10 @@ class CoverageReviewer:
         spec: Specification,
         narrative_text: str,
         evidence_items: Optional[list[tuple[str, str]]] = None,
+        library_file_names: Optional[list[str]] = None,
     ) -> CoverageReview:
         evidence_items = evidence_items or []
-        prompt = _build_prompt(spec, narrative_text, evidence_items)
+        prompt = _build_prompt(spec, narrative_text, evidence_items, library_file_names)
         try:
             msg = self._call_with_retry(prompt)
         except Exception as exc:
@@ -190,6 +205,7 @@ def review_specs(
     items: list[dict],
     max_workers: int = 6,
     on_progress=None,
+    library_file_names: Optional[list[str]] = None,
 ) -> list[CoverageReview]:
     """Run the coverage reviewer over a batch of specs — the reusable primitive
     shared by every import pipeline (so no document is parsed without a coverage
@@ -218,7 +234,7 @@ def review_specs(
     results: list[CoverageReview] = []
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures = {
-            ex.submit(reviewer.review, spec, it.get("narrative_text") or "", it.get("evidence_items") or []): spec
+            ex.submit(reviewer.review, spec, it.get("narrative_text") or "", it.get("evidence_items") or [], library_file_names): spec
             for (spec, it) in tasks
         }
         done = 0
