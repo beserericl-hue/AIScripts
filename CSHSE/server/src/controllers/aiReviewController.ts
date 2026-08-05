@@ -32,6 +32,7 @@ import { downloadFileAsBuffer, generateS3Key, uploadFile, isS3Configured } from 
 import { v4 as uuidv4 } from 'uuid';
 import { extractFileText, reviewCoverage } from '../services/cshseAiClient';
 import { suggestStandardForFile, NarrativeTuple, titleFromFilename } from '../services/evidenceStandardSuggester';
+import { indexEvidenceFile, indexAllForSubmission } from '../services/evidenceIndexer';
 import { signFileAccessToken } from '../services/fileAccessToken';
 import { getLevelStandards, normalizeLevel } from '../data/levelStandards';
 
@@ -1953,6 +1954,10 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         tags: ['ai-import', 'bulk-import', evTag],
       });
 
+      // Index the new file's content into the evidence vector DB (best-effort,
+      // fire-and-forget so the upload response isn't blocked).
+      void indexEvidenceFile(String(institutionId), String(submission._id), ev).catch(() => undefined);
+
       // Detect a syllabus by name so the rail groups it correctly.
       const isSyllabus = /syllab|course outline/i.test(f.originalname);
       const doc: any = {
@@ -2100,6 +2105,28 @@ export async function suggestStandardForEvidence(req: AuthenticatedRequest, res:
 }
 
 /**
+ * POST /api/submissions/:submissionId/evidence/index-all
+ * Backfill: index EVERY supporting file's content into the per-institution
+ * Qdrant evidence collection (chunk + embed + upsert via cshse-ai) so the AI
+ * evaluators can semantically retrieve supporting passages across all documents,
+ * not just the ones the narrative names. Fire-and-forget (indexing ~200 files
+ * takes minutes) — poll the collection or re-run if it stalls.
+ */
+export async function indexEvidenceAll(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const institutionId = String(submission.institutionId);
+  const submissionId = String(submission._id);
+  const total = await SupportingEvidence.countDocuments({
+    submissionId, isDeleted: { $ne: true }, 'file.s3Key': { $exists: true, $ne: null },
+  });
+  indexAllForSubmission(institutionId, submissionId).catch((e) =>
+    console.error('[indexEvidenceAll] failed:', (e as any)?.message)
+  );
+  res.json({ ok: true, indexing: total });
+}
+
+/**
  * Which filled spec buckets should get a coverage assessment. A spec counts as
  * "filled" if it has narrative, inline bucket evidence, OR File-Library files
  * assigned to it. `onlyMissing` skips specs that already have a verdict.
@@ -2212,6 +2239,8 @@ export async function assessCoverageForKeys(submissionId: string, keys: string[]
   )].slice(0, 200);
   const { results, error } = await reviewCoverage({
     programLevel,
+    institutionId: String(submission.institutionId),
+    submissionId: String(submission._id),
     specs: specs.map((s) => ({ standardCode: s.standardCode, specCode: s.specCode, narrativeText: s.narrativeText, evidence: s.evidence })),
     libraryFileNames,
   });

@@ -156,6 +156,7 @@ import {
   denoiseNarratives,
   reconcileSpecLevel,
   suggestStandardForEvidence,
+  indexEvidenceAll,
   dedupeImports,
   stripContextBleed,
 } from '../controllers/aiReviewController';
@@ -206,6 +207,8 @@ router.post('/:submissionId/review/reconcile-spec-level', submissionLockout, rec
 // supports (reference-match + AI placement) so files that never hit the Review
 // panel can be routed. Suggest-only; the client confirms + saves via evidence PATCH.
 router.post('/:submissionId/evidence/:evidenceId/suggest-standard', suggestStandardForEvidence);
+// Backfill: index all supporting files' content into the evidence vector DB.
+router.post('/:submissionId/evidence/index-all', indexEvidenceAll);
 router.get('/:submissionId/review/eval-progress', getEvalProgress);
 // Progress of the background coverage re-check queue.
 router.get('/:submissionId/review/coverage-progress', getCoverageProgress);

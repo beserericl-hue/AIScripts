@@ -23,6 +23,7 @@ from typing import Optional
 from anthropic import Anthropic, APIStatusError, InternalServerError, RateLimitError
 
 from app.standards.loader import Specification
+from app.evidence.retrieve import retrieve_evidence_chunks
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 CONTENT_CHAR_LIMIT = 8000  # cap total content sent per spec to control cost
@@ -49,6 +50,7 @@ def _build_prompt(
     narrative_text: str,
     evidence_items: list[tuple[str, str]],  # [(title, body)]
     library_file_names: Optional[list[str]] = None,
+    retrieved_chunks: Optional[list] = None,
 ) -> str:
     parts = [
         "You are an experienced CSHSE accreditation reviewer evaluating whether",
@@ -86,6 +88,18 @@ def _build_prompt(
             "form, worksheet, etc.) and a matching name appears in the library list "
             "above, treat that document as PROVIDED evidence. Do NOT report it as a gap "
             "or lower the score for a named document that is present in the library."
+        )
+
+    _ret = retrieved_chunks or []
+    if _ret:
+        parts.append("")
+        parts.append("=== RELEVANT PASSAGES RETRIEVED FROM THE DOCUMENT LIBRARY (semantic search across ALL uploaded files) ===")
+        for _fn, _txt in _ret[:6]:
+            parts.append(f"[from {str(_fn)[:70]}]: {str(_txt)[:700]}")
+        parts.append(
+            "These passages were auto-retrieved from the institution's uploaded documents as most "
+            "relevant to this Specification. Treat them as supporting evidence that EXISTS in the "
+            "submission and credit them even if the narrative does not cite them by name."
         )
 
     parts.extend([
@@ -151,9 +165,16 @@ class CoverageReviewer:
         narrative_text: str,
         evidence_items: Optional[list[tuple[str, str]]] = None,
         library_file_names: Optional[list[str]] = None,
+        institution_id: Optional[str] = None,
+        submission_id: Optional[str] = None,
     ) -> CoverageReview:
         evidence_items = evidence_items or []
-        prompt = _build_prompt(spec, narrative_text, evidence_items, library_file_names)
+        retrieved = (
+            retrieve_evidence_chunks(institution_id, submission_id or "", f"{spec.standard_title}\n{spec.spec_text}")
+            if institution_id
+            else []
+        )
+        prompt = _build_prompt(spec, narrative_text, evidence_items, library_file_names, retrieved)
         # Retry the call+parse a few times: haiku occasionally emits non-JSON (and a
         # verbose gaps/strengths reply can cut the closing brace) — which used to
         # surface as a hard "LLM returned non-JSON response" gap (a false 0.0). A
@@ -216,6 +237,8 @@ def review_specs(
     max_workers: int = 6,
     on_progress=None,
     library_file_names: Optional[list[str]] = None,
+    institution_id: Optional[str] = None,
+    submission_id: Optional[str] = None,
 ) -> list[CoverageReview]:
     """Run the coverage reviewer over a batch of specs — the reusable primitive
     shared by every import pipeline (so no document is parsed without a coverage
@@ -244,7 +267,7 @@ def review_specs(
     results: list[CoverageReview] = []
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         futures = {
-            ex.submit(reviewer.review, spec, it.get("narrative_text") or "", it.get("evidence_items") or [], library_file_names): spec
+            ex.submit(reviewer.review, spec, it.get("narrative_text") or "", it.get("evidence_items") or [], library_file_names, institution_id, submission_id): spec
             for (spec, it) in tasks
         }
         done = 0

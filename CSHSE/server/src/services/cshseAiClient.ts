@@ -347,6 +347,8 @@ export async function extractFileText(req: FileExtractRequest): Promise<FileExtr
 
 export interface CoverageReviewRequest {
   programLevel: string;
+  institutionId?: string;
+  submissionId?: string;
   specs: Array<{
     standardCode: string;
     specCode: string;

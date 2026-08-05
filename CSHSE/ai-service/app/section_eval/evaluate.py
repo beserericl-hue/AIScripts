@@ -23,6 +23,7 @@ from anthropic import Anthropic
 
 from app.config import Settings, get_settings
 from app.section_eval.scrape import scrape_link, MAX_TEXT_CHARS
+from app.evidence.retrieve import retrieve_evidence_chunks
 
 _HAIKU_MODEL = "claude-haiku-4-5"
 # Headroom so the assembled prompt (narrative ≤6k + bounded evidence ≤9k +
@@ -47,6 +48,7 @@ def _build_prompt(
     link_results: list[dict],
     correction_hints: str = "",
     library_file_names: Optional[list[str]] = None,
+    retrieved_chunks: Optional[list] = None,
 ) -> str:
     # Bound the evidence block to a fixed char budget so it can never push the
     # JSON-format instructions (built at the END of this prompt) past
@@ -84,6 +86,8 @@ def _build_prompt(
     )
     _lib = [n for n in (library_file_names or []) if n][:200]
     library_block = "\n".join(f"- {n}" for n in _lib) or "(none)"
+    _ret = retrieved_chunks or []
+    retrieved_block = "\n".join(f"[from {str(fn)[:70]}]: {str(txt)[:700]}" for fn, txt in _ret[:6]) or "(none)"
     hints_block = f"\n{correction_hints}\n" if correction_hints else ""
     return (
         "You are a CSHSE accreditation reader evaluating one specification of a "
@@ -95,6 +99,10 @@ def _build_prompt(
         f"=== Supporting evidence (text) ===\n{ev_block}\n\n"
         f"=== Submitted files ===\n{files_block}\n\n"
         f"=== Web links (scraped text; non-text links flagged) ===\n{links_block}\n\n"
+        f"=== Relevant passages retrieved from the document library (semantic search) ===\n{retrieved_block}\n"
+        "These passages were auto-retrieved from the institution's uploaded documents as most "
+        "relevant to this spec; credit them as supporting evidence that EXISTS even if the "
+        "narrative does not cite them by name.\n\n"
         f"=== Documents available in this submission's file library ===\n{library_block}\n"
         "RULE — a cited document that EXISTS counts as provided: if the narrative names "
         "a document and a matching name appears in the library list above, treat that "
@@ -157,6 +165,8 @@ def _evaluate_one_spec(
     client: Optional[Anthropic],
     correction_hints: str = "",
     library_file_names: Optional[list[str]] = None,
+    institution_id: Optional[str] = None,
+    submission_id: Optional[str] = None,
 ) -> dict:
     std = str(spec.get("standardCode", ""))
     sp = str(spec.get("specCode", ""))
@@ -188,6 +198,10 @@ def _evaluate_one_spec(
         link_results=link_results,
         correction_hints=correction_hints,
         library_file_names=library_file_names,
+        retrieved_chunks=(
+            retrieve_evidence_chunks(institution_id, submission_id or "", str(spec.get("criteria", "")))
+            if institution_id else []
+        ),
     )
     if len(prompt) > _MAX_INPUT_CHARS:
         prompt = prompt[:_MAX_INPUT_CHARS]
@@ -290,6 +304,8 @@ def evaluate_section(
             client=client,
             correction_hints=_hints_for(spec),
             library_file_names=library_file_names,
+            institution_id=institution_id,
+            submission_id=submission_id,
         )
         for spec in specs
     ]

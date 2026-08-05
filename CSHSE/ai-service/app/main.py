@@ -155,6 +155,8 @@ class CoverageReviewRequest(BaseModel):
     programLevel: str
     specs: list[CoverageSpecItem]
     libraryFileNames: list[str] = Field(default_factory=list)
+    institutionId: str = ""
+    submissionId: str = "" 
 
 
 class MatrixInferColumnsRequest(BaseModel):
@@ -780,7 +782,7 @@ async def coverage_review_endpoint(req: CoverageReviewRequest, request: Request)
             }
             for s in req.specs
         ]
-        reviews = review_specs(req.programLevel, settings.anthropic_api_key, items, library_file_names=req.libraryFileNames)
+        reviews = review_specs(req.programLevel, settings.anthropic_api_key, items, library_file_names=req.libraryFileNames, institution_id=req.institutionId or None, submission_id=req.submissionId or None)
         return {
             "results": [
                 {
