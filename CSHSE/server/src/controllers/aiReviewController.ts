@@ -287,16 +287,18 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
   // dot mirrors the on-screen pass/fail (the reader-facing result) instead of a
   // divergent coverage-reviewer score. Not persisted — derived on read.
   const ss: any = (submission as any).standardsStatus;
-  const valOf = (std: string, spec: string): 'pass' | 'fail' | null => {
+  const verdictOf = (std: string, spec: string): 'pass' | 'needs_improvement' | 'fail' | null => {
     const k = `${std}_${spec}`;
     const v = ss instanceof Map ? ss.get(k) : ss?.[k];
-    const st = v?.validationStatus;
-    return st === 'pass' || st === 'fail' ? st : null;
+    if (v?.verdict === 'pass' || v?.verdict === 'needs_improvement' || v?.verdict === 'fail') return v.verdict;
+    if (v?.validationStatus === 'pass') return 'pass';
+    if (v?.validationStatus === 'fail') return 'fail';
+    return null;
   };
   if (state?.buckets) {
     for (const key of Object.keys(state.buckets)) {
       const b: any = state.buckets[key];
-      if (b?.standardCode && b?.specCode) b.validationStatus = valOf(String(b.standardCode), String(b.specCode));
+      if (b?.standardCode && b?.specCode) b.validationVerdict = verdictOf(String(b.standardCode), String(b.specCode));
     }
   }
   res.json({

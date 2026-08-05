@@ -37,7 +37,8 @@ export const runSectionValidation = async (req: AuthenticatedRequest, res: Respo
         submissionId,
         standardCode,
         specCode,
-        out.result.status === 'pass' ? 'pass' : 'fail'
+        out.result.status === 'pass' ? 'pass' : 'fail',
+        out.result.verdict
       );
     } catch (statusErr) {
       console.error('[Validation] standardsStatus update failed (non-fatal):', statusErr);

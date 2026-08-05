@@ -2408,8 +2408,18 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
     return standards.every(standard =>
       (standard.specifications || []).every(spec => {
-        const status = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
-        return status?.validationStatus === 'pass' || status?.excluded === true;
+        const status: any = submission.standardsStatus?.[`${standard.code}_${spec.code}`];
+        // Ready when the spec is substantively addressed (pass OR needs_improvement
+        // — a reader-facing verdict, not a hard fail) or marked Not Applicable.
+        // Only a hard 'fail' or an unassessed spec blocks submit. Legacy rows have
+        // only the binary validationStatus.
+        const v = status?.verdict;
+        return (
+          v === 'pass' ||
+          v === 'needs_improvement' ||
+          (v == null && status?.validationStatus === 'pass') ||
+          status?.excluded === true
+        );
       })
     );
   }, [standards, submission?.standardsStatus]);

@@ -59,9 +59,9 @@ export async function processEvalQueueTick(): Promise<void> {
     });
 
     await Promise.allSettled(
-      withContent.map((key) => {
+      withContent.map(async (key) => {
         const { std, spec } = parse(key);
-        return Promise.race([
+        const out: any = await Promise.race([
           svc.validateSection({
             submissionId: String(sub._id),
             standardCode: std,
@@ -71,6 +71,14 @@ export async function processEvalQueueTick(): Promise<void> {
           }),
           new Promise((_, rej) => setTimeout(() => rej(new Error('eval-timeout')), PER_CALL_MS)),
         ]);
+        // Reflect the verdict onto standardsStatus so the editor's validated
+        // counter + submit gate update from the QUEUE too (not only the per-spec
+        // Validate button) — otherwise a full "Validate All" left the gate stale.
+        if (out?.result) {
+          await svc
+            .updateSubmissionValidationStatus(String(sub._id), std, spec, out.result.status, out.result.verdict)
+            .catch(() => undefined);
+        }
       })
     );
 

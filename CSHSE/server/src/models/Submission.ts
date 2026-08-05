@@ -42,6 +42,7 @@ export interface IStandardStatusInfo {
   status: StandardStatus;
   completionPercentage: number;
   validationStatus?: ValidationStatus;
+  verdict?: 'pass' | 'needs_improvement' | 'fail';
   lastModified: Date;
   submittedAt?: Date;
   validatedAt?: Date;
@@ -253,6 +254,7 @@ const StandardStatusInfoSchema = new Schema<IStandardStatusInfo>({
     default: 'not_started'
   },
   completionPercentage: { type: Number, default: 0, min: 0, max: 100 },
+  verdict: { type: String, default: undefined },
   validationStatus: {
     type: String,
     enum: ['pending', 'pass', 'fail']
