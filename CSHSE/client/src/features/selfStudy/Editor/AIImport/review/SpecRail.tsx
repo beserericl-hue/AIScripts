@@ -75,6 +75,11 @@ type CoverageState = 'covered' | 'partial' | 'gap' | 'unassessed' | 'none';
  * ran). Empty specs show no dot.
  */
 export function coverageState(b: SpecBucket): CoverageState {
+  // The dot mirrors the AUTHORITATIVE validation verdict (what the reader report
+  // shows) so it never contradicts the on-screen pass/fail. Falls back to the
+  // coverage reviewer's score until the spec has been validated.
+  if (b.validationStatus === 'pass') return 'covered';
+  if (b.validationStatus === 'fail') return 'gap';
   const hasContent = !!(b.narratives.length || b.evidenceText.length || b.evidenceFiles.length);
   const assessed = b.coverageCovered !== null || b.coverageScore !== null;
   if (!assessed) return hasContent ? 'unassessed' : 'none';

@@ -120,6 +120,9 @@ export type SpecBucket = {
   coverageCovered: boolean | null;
   coverageGaps: string[];
   coverageStrengths: string[];
+  // Authoritative validation verdict (drives the rail dot so it matches the
+  // on-screen pass/fail). null until the spec has been validated.
+  validationStatus?: 'pass' | 'fail' | null;
 };
 
 // CR-039 — Standard-level (and document-level) introduction bucket. Lives
@@ -2011,6 +2014,7 @@ export const useAIImportStore = create<AIImportState>()(
                 specPrompt: b.specPrompt || existing.specPrompt,
                 coverageScore: b.coverageScore ?? existing.coverageScore,
                 coverageCovered: b.coverageCovered ?? existing.coverageCovered,
+                validationStatus: b.validationStatus ?? existing.validationStatus,
                 coverageGaps: b.coverageGaps?.length ? b.coverageGaps : existing.coverageGaps,
                 coverageStrengths: b.coverageStrengths?.length
                   ? b.coverageStrengths

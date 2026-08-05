@@ -229,6 +229,7 @@ def _evaluate_one_spec(
             msg = client.messages.create(
                 model=_HAIKU_MODEL,
                 max_tokens=_MAX_TOKENS_OUT,
+                temperature=0,
                 messages=[{"role": "user", "content": prompt}],
             )
             raw = "".join(b.text for b in msg.content if getattr(b, "text", None))
