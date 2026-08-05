@@ -14,6 +14,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    FilterSelector,
     MatchValue,
     PointStruct,
     VectorParams,
@@ -96,3 +97,20 @@ class VectorStore:
 
     def count(self, collection: str) -> int:
         return self._client.count(collection, exact=True).count
+
+    def delete_by_filter(self, collection: str, payload_filter: dict[str, Any]) -> None:
+        """Delete every point matching the payload filter — used to replace a
+        document's chunks before re-indexing so a re-run never duplicates."""
+        if not payload_filter:
+            return
+        qfilter = Filter(
+            must=[FieldCondition(key=k, match=MatchValue(value=v)) for k, v in payload_filter.items()]
+        )
+        try:
+            self._client.delete(
+                collection_name=collection,
+                points_selector=FilterSelector(filter=qfilter),
+                wait=True,
+            )
+        except Exception:  # noqa: BLE001 — best-effort (e.g. collection just created)
+            pass
