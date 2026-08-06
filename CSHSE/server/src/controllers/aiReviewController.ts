@@ -1021,6 +1021,11 @@ async function materializeApprovedToEditor(
     ...((submission as any).__evidenceStats || {}),
     items: fileItems.length, created: _evCreated, updated: _evUpdated, errors: _evErrors, firstError: _evFirstError,
   };
+  // Index newly-materialized supporting files into the institution vector store
+  // (fire-and-forget) so the coverage + validation evaluators can retrieve them.
+  if (fileItems.length > 0 && (submission as any).institutionId) {
+    void indexAllForSubmission(String((submission as any).institutionId), String(submission._id)).catch(() => undefined);
+  }
   return affected;
 }
 

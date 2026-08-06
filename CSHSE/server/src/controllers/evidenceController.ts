@@ -4,6 +4,7 @@ import { SupportingEvidence } from '../models/SupportingEvidence';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { Assignment } from '../models/Assignment';
+import { indexEvidenceFile } from '../services/evidenceIndexer';
 import { asyncHandler } from '../middleware/errorHandler';
 import {
   AppError,
@@ -429,6 +430,14 @@ export const uploadEvidence = asyncHandler(async (req: AuthenticatedRequest, res
       isReplace,
       hadPreviousVersion: !!existingCurrent,
     });
+
+    // Index the uploaded file into the institution's evidence vector store so the
+    // coverage + validation evaluators can retrieve it (per-institution firewall in
+    // ai-service). Fire-and-forget — indexing must never block or fail an upload.
+    if (evidence.evidenceType !== 'url') {
+      void indexEvidenceFile(String(resolvedInstitutionId), String(submissionId), evidence as any)
+        .catch((e: any) => console.warn('[Evidence] index-on-upload failed (non-fatal):', e?.message));
+    }
 
     // Return response without the file data
     const responseEvidence = evidence.toObject();

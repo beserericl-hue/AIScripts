@@ -68,6 +68,20 @@ const KIND_LABEL: Record<string, string> = {
 
 /** A readable file name: the real originalName, or — when that's just a number/
  *  letter from an import row — a label derived from its kind + standard. */
+/** Compact upload-date label, e.g. "Aug 6, 2026". */
+function formatUploadDate(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+/** True when the file was uploaded within the last 3 days (drives the "New" badge). */
+function isRecentUpload(iso?: string): boolean {
+  if (!iso) return false;
+  const t = new Date(iso).getTime();
+  return !isNaN(t) && Date.now() - t < 3 * 24 * 60 * 60 * 1000;
+}
+
 function prettyFileName(item: Evidence): string {
   const raw = item.file?.originalName || '';
   const dot = raw.lastIndexOf('.');
@@ -501,6 +515,14 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
               <span className="text-sm font-medium text-gray-800 truncate">
                 {title}
               </span>
+              {isRecentUpload(item.createdAt) && (
+                <span
+                  className="flex-shrink-0 text-[10px] font-semibold px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full uppercase tracking-wide"
+                  title="Uploaded in the last 3 days"
+                >
+                  New
+                </span>
+              )}
               {item.versionNumber && item.versionNumber > 1 && (
                 <span className="flex-shrink-0 text-xs px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
                   v{item.versionNumber}
@@ -509,6 +531,14 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
               {item.file?.size && (
                 <span className="flex-shrink-0 text-xs text-gray-400">
                   {formatFileSize(item.file.size)}
+                </span>
+              )}
+              {item.createdAt && (
+                <span
+                  className="flex-shrink-0 text-xs text-gray-400"
+                  title={`Uploaded ${new Date(item.createdAt).toLocaleString()}`}
+                >
+                  · Uploaded {formatUploadDate(item.createdAt)}
                 </span>
               )}
             </div>
@@ -576,6 +606,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
                     className="text-xs border border-gray-300 rounded px-1.5 py-1 max-w-[10rem]"
                   >
                     <option value="">Standard…</option>
+                    <option value="introduction">Introduction (program intro)</option>
                     {(standards || []).map((s) => (
                       <option key={s.code} value={s.code}>{s.code} — {s.title}</option>
                     ))}
@@ -583,7 +614,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
                   <select
                     value={assignSpec}
                     onChange={(e) => setAssignSpec(e.target.value)}
-                    disabled={!assignStd}
+                    disabled={!assignStd || assignStd === 'introduction'}
                     className="text-xs border border-gray-300 rounded px-1.5 py-1 disabled:opacity-50"
                   >
                     <option value="">Spec…</option>

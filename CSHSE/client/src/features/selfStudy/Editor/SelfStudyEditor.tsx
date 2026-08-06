@@ -3371,6 +3371,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 <ReviewSurface
                   submissionId={submissionId}
                   onClose={() => setActiveView('standards')}
+                  onOpenFileLibrary={() => setActiveView('files')}
                 />
               </SurfaceErrorBoundary>
             </main>

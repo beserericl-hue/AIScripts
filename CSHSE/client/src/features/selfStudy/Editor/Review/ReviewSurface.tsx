@@ -30,6 +30,8 @@ import { api } from '../../../../services/api';
 export interface ReviewSurfaceProps {
   submissionId: string;
   onClose: () => void;
+  /** Jump to the Supporting File Library view (for the new-files banner). */
+  onOpenFileLibrary?: () => void;
 }
 
 interface RedetectResult {
@@ -40,10 +42,36 @@ interface RedetectResult {
   detail?: string;
 }
 
-export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JSX.Element {
+export function ReviewSurface({ submissionId, onClose, onOpenFileLibrary }: ReviewSurfaceProps): JSX.Element {
   const setSubmissionId = useAIImportStore((s) => s.setSubmissionId);
   const loadPersistedReviewState = useAIImportStore((s) => s.loadPersistedReviewState);
   const importId = useAIImportStore((s) => s.importId);
+
+  // Supporting files land in the File Library, NOT the per-spec review cards, so
+  // the reviewer otherwise gets no signal that a coordinator uploaded files.
+  // Surface a banner counting new (last 3 days) + unassigned files.
+  const [fileSummary, setFileSummary] = useState<{ total: number; recent: number; unassigned: number } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get<{ evidence?: any[] }>(`/submissions/${submissionId}/evidence`);
+        const list: any[] = (res.data as any)?.evidence || (res.data as any) || [];
+        const live = list.filter((f) => !f.isDeleted);
+        const now = Date.now();
+        const recent = live.filter(
+          (f) => f.createdAt && now - new Date(f.createdAt).getTime() < 3 * 24 * 60 * 60 * 1000
+        ).length;
+        const unassigned = live.filter((f) => !f.standardCode).length;
+        if (!cancelled) setFileSummary({ total: live.length, recent, unassigned });
+      } catch {
+        if (!cancelled) setFileSummary(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [submissionId]);
 
   // CR-048 — "Finish review" bookkeeping. Compute how many drafts are
   // still un-triaged (neither approved nor discarded) so the button can
@@ -326,6 +354,31 @@ export function ReviewSurface({ submissionId, onClose }: ReviewSurfaceProps): JS
               the spec-approve → editor path. */}
         </div>
       </header>
+      {fileSummary && fileSummary.total > 0 && (fileSummary.recent > 0 || fileSummary.unassigned > 0) && (
+        <div
+          data-testid="review-new-files-banner"
+          className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-6 py-2 text-sm text-amber-900"
+        >
+          <span aria-hidden>📎</span>
+          <span>
+            <strong>{fileSummary.total}</strong> supporting file{fileSummary.total === 1 ? '' : 's'} in the library
+            {fileSummary.recent > 0 && (
+              <> · <strong>{fileSummary.recent}</strong> uploaded in the last 3 days</>
+            )}
+            {fileSummary.unassigned > 0 && (
+              <> · <strong>{fileSummary.unassigned}</strong> not yet assigned to a Standard</>
+            )}
+          </span>
+          {onOpenFileLibrary && (
+            <button
+              onClick={onOpenFileLibrary}
+              className="ml-auto rounded border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 whitespace-nowrap"
+            >
+              Open File Library →
+            </button>
+          )}
+        </div>
+      )}
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
         <ReviewStep />
       </div>
