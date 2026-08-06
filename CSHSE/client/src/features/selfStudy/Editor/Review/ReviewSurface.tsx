@@ -55,7 +55,7 @@ export function ReviewSurface({ submissionId, onClose, onOpenFileLibrary }: Revi
     let cancelled = false;
     (async () => {
       try {
-        const res = await api.get<{ evidence?: any[] }>(`/submissions/${submissionId}/evidence`);
+        const res = await api.get<{ evidence?: any[] }>(`/api/submissions/${submissionId}/evidence`);
         const list: any[] = (res.data as any)?.evidence || (res.data as any) || [];
         const live = list.filter((f) => !f.isDeleted);
         const now = Date.now();
