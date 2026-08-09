@@ -28,19 +28,19 @@ OUT = "server/src/assets/reader-report-templates"
 LEVELS = {
     "baccalaureate": {
         "file": "BACCALAUREATE Self_Study_Reader Report template_ Baccalaureate degree  July 2025.docx",
-        "keys": [None,None,None,None,None,None,"1","2","3","4","5","6","7","8","9","10",
+        "keys": ["introduction",None,None,None,None,None,"1","2","3","4","5","6","7","8","9","10",
                  "11","12","13","14","15","16","17","18","19","20","22"],
     },
     "associate": {
         "file": "ASSOCIATE Self_Study_Reader Report template_ Associate degree  July 2025.docx",
-        "keys": [None,"1","2","3","4","5","6","7","8","9","10",
+        "keys": ["introduction","1","2","3","4","5","6","7","8","9","10",
                  "11","12","13","14","15","16","17","18","19","20"],
     },
     "masters": {
         "file": "Self_Study_Reader_ template_ Master's degree July 2025.docx",
         # 20 fillable header rows in document order: intro, Standards 1-10,
         # curriculum-matrix intro, Standards 11-18.
-        "keys": [None,"1","2","3","4","5","6","7","8","9","10",
+        "keys": ["introduction","1","2","3","4","5","6","7","8","9","10",
                  None,"11","12","13","14","15","16","17","18"],
         # Masters header is a SINGLE tab-delimited paragraph carrying several
         # labels. docx.patchDocument replaces {{tokens}} INLINE (verified), so we

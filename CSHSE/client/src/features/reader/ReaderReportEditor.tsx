@@ -24,6 +24,11 @@ interface ReportSpec {
   // template captures these per spec, next to each specification).
   readerMark: 'compliant' | 'noncompliant' | '';
   readerComment: string;
+  // Lead-reader override layer (only a lead/admin sets these). The board report
+  // uses leadMark when present; the reader's original mark is preserved.
+  leadMark?: 'compliant' | 'noncompliant' | '';
+  leadComment?: string;
+  overriddenBy?: string;
 }
 interface ReportRow {
   code: string;
@@ -45,6 +50,9 @@ interface ReportData {
   updatedAt: string | null;
   completedAt?: string | null;
   readonly?: boolean;
+  // True when a lead reader / admin is viewing another reader's report: the
+  // checklist stays editable and edits land on the lead-override layer.
+  overrideMode?: boolean;
   reviewerId?: string;
   reviewerName?: string;
 }
@@ -179,9 +187,11 @@ export function ReaderReportEditor(): JSX.Element {
   });
   const evidenceLibrary = useMemo<SpecEvidence[]>(() => {
     return ((evidenceQuery.data?.evidence || []) as SpecEvidence[]).filter((e) =>
-      // exclude the generated reader-report PDF/DOCX artifacts; keep real files + links
+      // exclude ONLY the generated reader-report PDF/DOCX artifacts; keep every
+      // real categorized file (SpecFilesMenu synthesizes a label when a file
+      // record is missing originalName, so none are silently dropped).
       !(e.tags || []).some((t) => t.startsWith('reader-report')) &&
-      ((e.file && e.file.originalName) || e.evidenceType === 'url'));
+      (!!e.file || e.evidenceType === 'url'));
   }, [evidenceQuery.data]);
 
   // Jump to a comment: scroll to its spec, then to the inline marker on the
@@ -214,6 +224,19 @@ export function ReaderReportEditor(): JSX.Element {
 
   // Read-only when a lead reader / admin is viewing ANOTHER reviewer's report.
   const readonly = !!query.data?.readonly;
+  // Lead-reader override mode: the checklist is editable, but a lead's edits go
+  // to the spec's lead-override layer (leadMark/leadComment) and the board
+  // report uses `leadMark || readerMark` (lead wins). Non-lead viewers stay
+  // read-only via `readonly`.
+  const overrideMode = !!query.data?.overrideMode;
+  const effMark = (sp: ReportSpec): 'compliant' | 'noncompliant' | '' =>
+    overrideMode ? (sp.leadMark || sp.readerMark) : sp.readerMark;
+  const effComment = (sp: ReportSpec): string =>
+    overrideMode ? (sp.leadComment ?? '') : sp.readerComment;
+  const setMark = (code: string, spec: string, mark: 'compliant' | 'noncompliant' | '') =>
+    setSpec(code, spec, overrideMode ? { leadMark: mark } : { readerMark: mark });
+  const setComment = (code: string, spec: string, val: string) =>
+    setSpec(code, spec, overrideMode ? { leadComment: val } : { readerComment: val });
 
   useEffect(() => {
     if (query.data) {
@@ -267,11 +290,18 @@ export function ReaderReportEditor(): JSX.Element {
     mutationFn: async (opts?: { completed?: boolean }) => {
       // Persist the checklist PER SPECIFICATION (one row per spec).
       const specRows = rows.flatMap((r) =>
-        r.specs.map((sp) => ({ standardCode: r.code, specCode: sp.specCode, mark: sp.readerMark, comment: sp.readerComment }))
+        r.specs.map((sp) => ({
+          standardCode: r.code, specCode: sp.specCode,
+          // In lead-override mode we persist the lead's override (leadMark/
+          // leadComment); otherwise the reader's own mark/comment.
+          mark: overrideMode ? (sp.leadMark || '') : sp.readerMark,
+          comment: overrideMode ? (sp.leadComment || '') : sp.readerComment,
+        }))
       );
       const body: any = { rows: specRows, recommendation, acceptanceVote };
       if (opts && typeof opts.completed === 'boolean') body.completed = opts.completed;
-      const r = await api.put(`/api/reports/submission/${submissionId}/reader-report-data`, body);
+      const qs = viewReviewerId ? `?reviewerId=${encodeURIComponent(viewReviewerId)}` : '';
+      const r = await api.put(`/api/reports/submission/${submissionId}/reader-report-data${qs}`, body);
       return r.data as { updatedAt: string; completedAt: string | null };
     },
     onSuccess: (d) => {
@@ -634,7 +664,7 @@ export function ReaderReportEditor(): JSX.Element {
       <div className="space-y-3">
         {rows.map((r) => (
           <div key={r.code} id={`rr-row-${r.code}`} data-testid={`rr-row-${r.code}`} className="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4">
-            <h2 className="mb-2 text-sm font-semibold text-slate-800">Standard {r.code}: {r.title}</h2>
+            <h2 className="mb-2 text-sm font-semibold text-slate-800">{r.code === 'introduction' ? r.title : `Standard ${r.code}: ${r.title}`}</h2>
 
             {/* AI assessment — a TAG you click to reveal the AI's per-spec
                 verdicts (collapsed by default), like the self-study editor. */}
@@ -657,7 +687,7 @@ export function ReaderReportEditor(): JSX.Element {
                   <div className="lg:sticky lg:top-4 lg:w-80 lg:shrink-0">
                     <div data-testid={`rr-check-${r.code}-${sp.specCode}`} className="rounded-lg border-2 border-teal-300 bg-white shadow-sm">
                       <div className="flex items-center justify-between gap-2 rounded-t-md bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">
-                        <span>Reader’s checklist — Specification {r.code}.{sp.specCode}</span>
+                        <span>Reader’s checklist — {r.code === 'introduction' ? sp.specTitle : `Specification ${r.code}.${sp.specCode}`}</span>
                         {(() => {
                           // Prev/next walker across EVERY spec's checklist, in
                           // document order — jumps to and flashes the next/prev
@@ -712,14 +742,26 @@ export function ReaderReportEditor(): JSX.Element {
                             </div>
                           </details>
                         )}
+                        {(overrideMode || sp.overriddenBy || sp.leadMark) && (
+                          <div className="mb-1 flex flex-wrap items-center gap-2 px-0 text-[11px]">
+                            <span className="text-slate-500">
+                              Reader marked: <span className="font-semibold">{sp.readerMark ? (sp.readerMark === 'compliant' ? 'Compliant' : 'Non-Compliant') : '—'}</span>
+                            </span>
+                            {sp.leadMark && (
+                              <span className="rounded bg-purple-100 px-1.5 py-0.5 font-semibold text-purple-700" title={sp.overriddenBy ? `Overridden by ${sp.overriddenBy}` : 'Lead override'}>
+                                Lead override: {sp.leadMark === 'compliant' ? 'Compliant' : 'Non-Compliant'}{sp.overriddenBy ? ` — ${sp.overriddenBy}` : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center gap-5">
                           <label className={`inline-flex items-center gap-1.5 ${readonly ? '' : 'cursor-pointer'}`}>
                             <input
                               type="checkbox"
                               data-testid={`rr-c-${r.code}-${sp.specCode}`}
                               disabled={readonly}
-                              checked={sp.readerMark === 'compliant'}
-                              onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'compliant' ? '' : 'compliant' })}
+                              checked={effMark(sp) === 'compliant'}
+                              onChange={() => setMark(r.code, sp.specCode, effMark(sp) === 'compliant' ? '' : 'compliant')}
                               className="h-4 w-4 text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 disabled:opacity-60"
                               aria-label={`${r.code}.${sp.specCode} compliant`}
                             />
@@ -730,8 +772,8 @@ export function ReaderReportEditor(): JSX.Element {
                               type="checkbox"
                               data-testid={`rr-n-${r.code}-${sp.specCode}`}
                               disabled={readonly}
-                              checked={sp.readerMark === 'noncompliant'}
-                              onChange={() => setSpec(r.code, sp.specCode, { readerMark: sp.readerMark === 'noncompliant' ? '' : 'noncompliant' })}
+                              checked={effMark(sp) === 'noncompliant'}
+                              onChange={() => setMark(r.code, sp.specCode, effMark(sp) === 'noncompliant' ? '' : 'noncompliant')}
                               className="h-4 w-4 text-red-600 disabled:opacity-60"
                               aria-label={`${r.code}.${sp.specCode} non-compliant`}
                             />
@@ -745,9 +787,9 @@ export function ReaderReportEditor(): JSX.Element {
                           <textarea
                             id={`rr-comment-${r.code}-${sp.specCode}`}
                             data-testid={`rr-comment-${r.code}-${sp.specCode}`}
-                            value={sp.readerComment}
+                            value={effComment(sp)}
                             readOnly={readonly}
-                            onChange={(e) => setSpec(r.code, sp.specCode, { readerComment: e.target.value })}
+                            onChange={(e) => setComment(r.code, sp.specCode, e.target.value)}
                             placeholder="Note missing information or the reason for a non-compliant decision; note strengths."
                             rows={5}
                             className={`w-full resize-y rounded border border-slate-300 px-2 py-1.5 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300 ${readonly ? 'bg-slate-50' : ''}`}

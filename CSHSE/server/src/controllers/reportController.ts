@@ -7,6 +7,7 @@ import { Score } from '../models/Score';
 import { PDFGeneratorService } from '../services/pdfGenerator';
 import { generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
 import { ReaderReport } from '../models/ReaderReport';
+import { Comment } from '../models/Comment';
 import { Assignment } from '../models/Assignment';
 import { isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
@@ -337,10 +338,10 @@ function isLeadOrAdmin(req: AuthenticatedRequest): boolean {
  */
 async function resolveTargetReviewer(
   req: AuthenticatedRequest, submissionId: string
-): Promise<{ reviewerId: string; readonly: boolean } | null> {
+): Promise<{ reviewerId: string; readonly: boolean; overrideMode: boolean } | null> {
   const self = effectiveReviewerId(req);
   const requested = String((req.query.reviewerId as string) || '').trim();
-  if (!requested || requested === self) return { reviewerId: self, readonly: false };
+  if (!requested || requested === self) return { reviewerId: self, readonly: false, overrideMode: false };
   // Viewing someone else's report — only a lead reader (assigned) or admin may.
   if (!isLeadOrAdmin(req)) return null;
   if (!mongoose.Types.ObjectId.isValid(requested)) return null;
@@ -348,7 +349,10 @@ async function resolveTargetReviewer(
     .select('_id').lean();
   // The report must exist (the reader has started it); completion is NOT required.
   if (!other) return null;
-  return { reviewerId: requested, readonly: true };
+  // A lead reader / admin viewing another reader's report may OVERRIDE it: the
+  // checklist stays editable, but a lead's edits land on the reader's lead-
+  // override layer (leadMark/leadComment) rather than the reader's own marks.
+  return { reviewerId: requested, readonly: false, overrideMode: true };
 }
 
 /**
@@ -372,10 +376,14 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
     const saved = await ReaderReport.findOne({ submissionId, reviewerId }).lean();
     // Saved rows are stored per-SPECIFICATION (key = "std.spec"); legacy rows
     // with no specCode are keyed by standard alone.
-    const savedByKey: Record<string, { mark: string; comment: string }> = {};
+    const savedByKey: Record<string, { mark: string; comment: string; leadMark?: string; leadComment?: string; overriddenBy?: string }> = {};
     for (const r of saved?.rows || []) {
       const key = r.specCode ? `${r.standardCode}.${r.specCode}` : r.standardCode;
-      savedByKey[key] = { mark: r.mark, comment: r.comment };
+      savedByKey[key] = {
+        mark: r.mark, comment: r.comment,
+        leadMark: (r as any).leadMark || '', leadComment: (r as any).leadComment || '',
+        overriddenBy: (r as any).overriddenBy || '',
+      };
     }
 
     const standards = structure.standards.map((s) => ({
@@ -390,6 +398,11 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
           ...sp,
           readerMark: savedByKey[key]?.mark ?? (sp.aiMark || ''),
           readerComment: savedByKey[key]?.comment ?? '',
+          // Lead-reader override layer (drives the "Lead override" badge + the
+          // effective mark in the printed report). Blank when no override.
+          leadMark: savedByKey[key]?.leadMark ?? '',
+          leadComment: savedByKey[key]?.leadComment ?? '',
+          overriddenBy: savedByKey[key]?.overriddenBy ?? '',
         };
       }),
       // Standard-level fields kept for the AI tag / legacy fallback.
@@ -414,6 +427,7 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
       updatedAt: saved?.updatedAt || null,
       completedAt: saved?.completedAt || null,
       readonly: target.readonly,
+      overrideMode: target.overrideMode,
       reviewerId,
       reviewerName,
     });
@@ -433,14 +447,48 @@ export const saveReaderReportData = async (req: AuthenticatedRequest, res: Respo
     if (!mongoose.Types.ObjectId.isValid(submissionId)) return res.status(400).json({ error: 'Invalid submission id' });
     if (!(await readerMayAccess(req, submissionId))) return res.status(403).json({ error: 'Forbidden' });
 
-    const reviewerId = effectiveReviewerId(req);
+    const target = await resolveTargetReviewer(req, submissionId);
+    if (!target) return res.status(403).json({ error: 'Forbidden' });
+
     const body = req.body || {};
-    const rows = Array.isArray(body.rows) ? body.rows.map((r: any) => ({
+    const incoming = Array.isArray(body.rows) ? body.rows.map((r: any) => ({
       standardCode: String(r.standardCode || ''),
       specCode: String(r.specCode || ''),
       mark: ['compliant', 'noncompliant', ''].includes(r.mark) ? r.mark : '',
       comment: String(r.comment || ''),
     })).filter((r: any) => r.standardCode) : [];
+
+    // LEAD-OVERRIDE MODE — a lead reader / admin editing another reader's report.
+    // Merge the lead's marks/comments onto the reader's rows as a distinct
+    // override layer (leadMark/leadComment/overriddenBy); the reader's own
+    // mark/comment are preserved for provenance. The board report uses the
+    // override when present (lead wins).
+    if (target.overrideMode) {
+      const lu = await User.findById(effectiveReviewerId(req)).select('firstName lastName email').lean();
+      const leadName = ([lu?.firstName, lu?.lastName].filter(Boolean).join(' ') || lu?.email || 'Lead Reader');
+      const existing = await ReaderReport.findOne({ submissionId, reviewerId: target.reviewerId });
+      if (!existing) return res.status(404).json({ error: 'Reader report not found' });
+      const byKey = new Map<string, any>(existing.rows.map((r: any) => [`${r.standardCode}.${r.specCode || ''}`, r]));
+      for (const inc of incoming) {
+        const key = `${inc.standardCode}.${inc.specCode || ''}`;
+        const row: any = byKey.get(key);
+        if (row) {
+          row.leadMark = inc.mark; row.leadComment = inc.comment;
+          row.overriddenBy = leadName; row.overriddenAt = new Date();
+        } else {
+          existing.rows.push({
+            standardCode: inc.standardCode, specCode: inc.specCode, mark: '', comment: '',
+            leadMark: inc.mark, leadComment: inc.comment, overriddenBy: leadName, overriddenAt: new Date(),
+          } as any);
+        }
+      }
+      existing.markModified('rows');
+      await existing.save();
+      return res.json({ ok: true, overrideMode: true, updatedAt: (existing as any).updatedAt });
+    }
+
+    const reviewerId = target.reviewerId;
+    const rows = incoming;
     const recommendation = typeof body.recommendation === 'string' ? body.recommendation : '';
     const VOTES = ['accept', 'conditional', 'deny', 'hold', ''];
 
@@ -493,23 +541,68 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
     // the reader's per-SPECIFICATION marks/comments up to the standard: the
     // standard is Non-Compliant if ANY spec is, else Compliant if any spec is;
     // the comment concatenates each spec's note (labelled by spec).
-    const byStd = new Map<string, { specs: Array<{ spec: string; mark: string; comment: string }> }>();
+    // ALL inline margin comments (reader + lead + PC replies), grouped by
+    // std.spec, so the printed board/PC report includes them alongside the
+    // checklist — not just the checklist comment.
+    const inlineComments: any[] = await Comment.find({ submissionId })
+      .select('standardCode specCode authorName authorRole selectedText content replies createdAt')
+      .sort({ createdAt: 1 }).lean();
+    const roleLabel = (r?: string) =>
+      r === 'lead_reader' ? 'Lead Reader' : r === 'program_coordinator' ? 'Program Coordinator' : 'Reader';
+    const inlineBySpec = new Map<string, any[]>();
+    for (const c of inlineComments) {
+      const key = `${c.standardCode || ''}.${c.specCode || ''}`;
+      const arr = inlineBySpec.get(key) || [];
+      arr.push(c); inlineBySpec.set(key, arr);
+    }
+    const fmtInline = (c: any): string => {
+      const sel = String(c.selectedText || '').trim();
+      const who = `${c.authorName || roleLabel(c.authorRole)} (${roleLabel(c.authorRole)})`;
+      let s = `  • ${who}${sel ? ` on “${sel.slice(0, 70)}${sel.length > 70 ? '…' : ''}”` : ''}: ${String(c.content || '').trim()}`;
+      for (const rep of (c.replies || [])) {
+        s += `\n      ↳ ${rep.authorName || roleLabel(rep.authorRole)} (${roleLabel(rep.authorRole)}): ${String(rep.content || '').trim()}`;
+      }
+      return s;
+    };
+
+    // Effective per-spec decision = lead override when present, else reader mark.
+    const byStd = new Map<string, { specs: Array<{ spec: string; mark: string; comment: string; overriddenBy?: string }> }>();
+    const touchStd = (std: string) => { const g = byStd.get(std) || { specs: [] }; byStd.set(std, g); return g; };
     for (const r of saved?.rows || []) {
-      if (!r.mark && !(r.comment && r.comment.trim())) continue;
-      const g = byStd.get(r.standardCode) || { specs: [] };
-      g.specs.push({ spec: r.specCode || '', mark: r.mark || '', comment: r.comment || '' });
-      byStd.set(r.standardCode, g);
+      const effMark = (r as any).leadMark || r.mark || '';
+      const effComment = ((r as any).leadComment && String((r as any).leadComment).trim())
+        ? String((r as any).leadComment) : (r.comment || '');
+      const hasInline = inlineBySpec.has(`${r.standardCode}.${r.specCode || ''}`);
+      if (!effMark && !(effComment && effComment.trim()) && !hasInline) continue;
+      touchStd(r.standardCode).specs.push({
+        spec: r.specCode || '', mark: effMark, comment: effComment, overriddenBy: (r as any).overriddenBy,
+      });
+    }
+    // Include specs that have inline comments but no checklist row.
+    for (const c of inlineComments) {
+      const std = c.standardCode || ''; if (!std) continue;
+      const g = touchStd(std);
+      if (!g.specs.some((s) => s.spec === (c.specCode || ''))) {
+        g.specs.push({ spec: c.specCode || '', mark: '', comment: '' });
+      }
     }
     const overrides = new Map<string, { mark: '' | 'compliant' | 'noncompliant'; comment: string }>();
     for (const [stdCode, g] of byStd) {
       const anyNon = g.specs.some((s) => s.mark === 'noncompliant');
       const anyComp = g.specs.some((s) => s.mark === 'compliant');
       const mark: '' | 'compliant' | 'noncompliant' = anyNon ? 'noncompliant' : anyComp ? 'compliant' : '';
-      const comment = g.specs
-        .filter((s) => (s.comment && s.comment.trim()))
-        .map((s) => (s.spec ? `${stdCode}.${s.spec}: ${s.comment.trim()}` : s.comment.trim()))
-        .join('\n');
-      overrides.set(stdCode, { mark, comment });
+      const blocks: string[] = [];
+      for (const s of [...g.specs].sort((a, b) => a.spec.localeCompare(b.spec))) {
+        const label = s.spec ? `${stdCode}.${s.spec}` : stdCode;
+        const head: string[] = [];
+        if (s.mark) head.push(`[${s.mark === 'compliant' ? 'Compliant' : 'Non-Compliant'}${s.overriddenBy ? ` — lead override by ${s.overriddenBy}` : ''}]`);
+        if (s.comment && s.comment.trim()) head.push(s.comment.trim());
+        let block = `${label}${head.length ? ': ' + head.join(' — ') : ''}`;
+        const inl = (inlineBySpec.get(`${stdCode}.${s.spec}`) || []).map(fmtInline).join('\n');
+        if (inl) block += `\nComments:\n${inl}`;
+        blocks.push(block);
+      }
+      overrides.set(stdCode, { mark, comment: blocks.join('\n\n') });
     }
 
     const wantHtml = String(req.query.format || '').toLowerCase() === 'html';

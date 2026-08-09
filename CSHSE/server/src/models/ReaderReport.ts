@@ -14,6 +14,14 @@ export interface IReaderReportRow {
   specCode?: string;
   mark: 'compliant' | 'noncompliant' | '';
   comment: string;
+  // Lead-reader OVERRIDE layer. The lead reader reviews a reader's report and
+  // may override any spec's decision; the override is stored HERE (on the
+  // reader's own row) so the reader's original `mark`/`comment` is preserved for
+  // provenance. The board/PC-facing report uses `leadMark || mark` (lead wins).
+  leadMark?: 'compliant' | 'noncompliant' | '';
+  leadComment?: string;
+  overriddenBy?: string;   // lead reviewer's display name
+  overriddenAt?: Date | null;
 }
 
 export interface IReaderReport extends Document {
@@ -36,6 +44,10 @@ const ReaderReportRowSchema = new Schema<IReaderReportRow>({
   specCode: { type: String, default: '' },
   mark: { type: String, enum: ['compliant', 'noncompliant', ''], default: '' },
   comment: { type: String, default: '' },
+  leadMark: { type: String, enum: ['compliant', 'noncompliant', ''], default: undefined },
+  leadComment: { type: String, default: undefined },
+  overriddenBy: { type: String, default: undefined },
+  overriddenAt: { type: Date, default: undefined },
 }, { _id: false });
 
 const ReaderReportSchema = new Schema<IReaderReport>({

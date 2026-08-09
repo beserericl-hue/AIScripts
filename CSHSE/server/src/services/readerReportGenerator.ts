@@ -182,7 +182,9 @@ async function buildTemplatedDocx(
     inst_name: mk(data.institutionName),
     prog_name: mk(data.programName),
   };
-  for (const code of cfg.stds) {
+  // The Introduction section opens the official report (its checklist row is
+  // templated as {{c_introduction}}/{{n_introduction}}/{{cm_introduction}}).
+  for (const code of ['introduction', ...cfg.stds]) {
     const r = rollup.get(code) || { mark: null, comment: '' };
     patches[`c_${code}`] = mk(r.mark === 'compliant' ? '☒' : '☐');
     patches[`n_${code}`] = mk(r.mark === 'noncompliant' ? '☒' : '☐');
@@ -428,6 +430,46 @@ export async function renderReaderReportBuffers(
   return { pdf, docx };
 }
 
+/** Standard code for the synthetic Introduction section (opens the report). */
+export const INTRO_CODE = 'introduction';
+const CYCLE_LABEL: Record<string, string> = {
+  initial: 'Initial accreditation',
+  reaccreditation: 'Reaccreditation',
+  extension: 'Interim report / extension',
+};
+
+/**
+ * The Introduction section that opens the official Reader Report — the program
+ * Introduction narrative + the template's Program-Information checklist (each
+ * item Compliant/Non-Compliant). Fed by Submission.documentIntroduction + the
+ * submission metadata. Returns null only when the submission is missing.
+ */
+async function buildIntroSection(
+  submissionId: string, data: ReportData, evCount: Map<string, number>,
+): Promise<ReaderReportStandardRow | null> {
+  const sub: any = await Submission.findById(submissionId).select('documentIntroduction type').lean();
+  if (!sub) return null;
+  const introHtml = (sub.documentIntroduction as string) || '';
+  const cycle = CYCLE_LABEL[String(sub.type || '').toLowerCase()] || 'Not specified';
+  let introFiles = 0;
+  for (const [k, v] of evCount) if (k.startsWith(`${INTRO_CODE}.`)) introFiles += v;
+  const esc = (t: string) => String(t || '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' } as any)[c]);
+  const mk = (spec: string, title: string, html: string, ev = 0): ReaderReportSpec => ({
+    specCode: spec, specTitle: title, narrativeHtml: html, evidenceHtml: '',
+    verdict: undefined, aiMark: null, aiComment: '', evidenceCount: ev, excluded: false,
+  });
+  const specs: ReaderReportSpec[] = [
+    mk('a', 'Program Introduction', introHtml || '<p><em>No introduction narrative provided.</em></p>', introFiles),
+    mk('b', 'Certification of Self-Study page uploaded', '<p>Confirm the signed Certification of Self-Study page is present. If absent, do not proceed with the review.</p>'),
+    mk('c', 'Program Name', `<p>${esc(data.programName || '(not set)')}</p>`),
+    mk('d', 'Institution Name', `<p>${esc(data.institutionName || '(not set)')}</p>`),
+    mk('e', 'Accreditation cycle (five-year period)', `<p>${esc(cycle)}</p>`),
+    mk('f', 'Person responsible signed off on accuracy of the self-study', '<p>Confirm the accuracy sign-off is present.</p>'),
+    mk('g', 'Glossary of terms included', '<p>Confirm a glossary of terms used in the self-study and program materials is included (e.g., in the appendices).</p>'),
+  ];
+  return { code: INTRO_CODE, title: 'Introduction', aiMark: null, aiComment: '', specs };
+}
+
 /**
  * Structured per-standard reader-report data (for the editable Reader Report
  * screen): the official checklist rolled up from the AI verdicts. The reader/
@@ -447,7 +489,7 @@ export async function getReaderReportStructure(submissionId: string): Promise<Re
     const k = `${e.standardCode || ''}.${e.specCode || ''}`;
     evCount.set(k, (evCount.get(k) || 0) + 1);
   }
-  const standards: ReaderReportStandardRow[] = data.standards
+  const numberedStandards: ReaderReportStandardRow[] = data.standards
     .filter((s) => s.specs.some((sp) => !sp.excluded && (sp.narrative || sp.evidence || sp.verdict)))
     .map((s) => {
       const r = rollup.get(s.code) || { mark: null, comment: '' };
@@ -465,6 +507,16 @@ export async function getReaderReportStructure(submissionId: string): Promise<Re
         }));
       return { code: s.code, title: s.title, aiMark: r.mark, aiComment: r.comment, specs };
     });
+
+  // ── Introduction section (matches the official template's leading rows). The
+  // official reader report begins with the program Introduction + a
+  // Program-Information checklist BEFORE Standard 1. The reader reviews the
+  // Introduction narrative and marks each item Compliant / Non-Compliant.
+  const introSection = await buildIntroSection(submissionId, data, evCount);
+  const standards: ReaderReportStandardRow[] = introSection
+    ? [introSection, ...numberedStandards]
+    : numberedStandards;
+
   return {
     institutionName: data.institutionName,
     programName: data.programName,
