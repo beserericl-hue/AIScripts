@@ -72,8 +72,12 @@ async function docxText(buf: Buffer): Promise<string> {
   return xml;
 }
 
-/** Inject a token via the SSO hash-handoff and land on the reader-report screen. */
+/** Inject a token via the SSO hash-handoff and land on the reader-report screen.
+ *  Clears any prior identity first so switching users in one browser context
+ *  (reader → lead) actually re-authenticates. */
 async function openReport(page: Page, token: string, suffix = '') {
+  await page.goto(`${BASE}/login`);
+  await page.evaluate(() => { try { localStorage.clear(); sessionStorage.clear(); } catch { /* noop */ } });
   await page.goto(`${BASE}/reader-report/${SUB}${suffix}#token=${encodeURIComponent(token)}`);
   await page.waitForLoadState('networkidle');
   // Dismiss the first-run help tour so it doesn't obscure the inspection shots.
@@ -246,6 +250,39 @@ test.describe('Reader Report — introduction, files, comments, lead override', 
     expect(html, 'lead override comment in the board report').toContain('LEAD override — insufficient');
   });
 
+  // ── Issue 1/2 (v2) — each Introduction row has its OWN AI evaluation (rubric)
+  test('5) Introduction has a per-section AI evaluation from the Reader Form rubric', async () => {
+    const data = await getData(api, bearer(reader1));
+    const intro = (data.standards || []).find((s: any) => s.code === 'introduction');
+    const specs: any[] = intro.specs || [];
+    // Every one of the six official rows carries an AI verdict + rationale.
+    const withAi = specs.filter((s) => (s.aiComment || '').includes('AI verdict'));
+    expect(withAi.length, 'all six intro rows have an AI evaluation').toBe(6);
+    // Each row's narrative is its OWN slice (not one blob repeated) — the bulk
+    // rows differ in length.
+    const lens = specs.map((s) => (s.narrativeHtml || '').length);
+    expect(new Set(lens).size, 'intro rows carry distinct narrative slices').toBeGreaterThan(3);
+    // The section rolls up to Non-Compliant when any row is (row c here).
+    const c = specs.find((s) => s.specCode === 'c');
+    expect(['compliant', 'noncompliant']).toContain(String(c.aiMark));
+    fs.writeFileSync(path.join(ART, 'intro-ai-eval.json'),
+      JSON.stringify(specs.map((s) => ({ code: s.specCode, title: s.specTitle, aiMark: s.aiMark, ai: (s.aiComment || '').slice(0, 160), narrativeLen: (s.narrativeHtml || '').length })), null, 2));
+  });
+
+  // ── Issue 5 (curriculum) — the Lead Reader Report course list is auto-derived
+  test('6) Lead Reader Report course list is auto-populated (derived from syllabi)', async () => {
+    const res = await api.get(`/api/submissions/${SUB}/lead-reader-report`, { headers: bearer(lead) });
+    expect(res.ok(), `GET lead-reader-report → ${res.status()}`).toBeTruthy();
+    const sys = (await res.json()).system || {};
+    const prog: string[] = sys.programCourses || [];
+    const gen: string[] = sys.generalEducationCourses || [];
+    fs.writeFileSync(path.join(ART, 'lead-report-courses.json'), JSON.stringify({ programCourses: prog, generalEducationCourses: gen }, null, 2));
+    // Not "None listed" any more — courses come from the imported syllabi.
+    expect(prog.length + gen.length, 'courses were derived').toBeGreaterThan(0);
+    expect(prog.some((c) => /^CHS/.test(c)), 'program courses include CHS courses').toBeTruthy();
+    expect(gen.some((c) => /^(PSY|SOC|FYS)/.test(c)), 'general-ed courses include non-CHS courses').toBeTruthy();
+  });
+
   // ── UI inspection artifacts — screenshots of the actual report screen
   test('UI) Screenshots: Introduction section + lead-override view', async ({ page }) => {
     test.setTimeout(90_000);
@@ -260,10 +297,17 @@ test.describe('Reader Report — introduction, files, comments, lead override', 
     await page.getByTestId('rr-row-introduction').screenshot({ path: path.join(ART, 'ui-introduction-section.png') });
     await page.getByTestId('rr-nav-introduction').scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(ART, 'ui-report-top.png') });
+    // The Introduction's per-section AI assessment renders (rubric verdict).
+    await expect(page.getByTestId('rr-ai-spec-introduction-c'), 'intro-c AI assessment renders').toBeVisible();
+    await page.getByTestId('rr-ai-spec-introduction-c').screenshot({ path: path.join(ART, 'ui-intro-ai-eval.png') });
 
     // Lead opens the reader's report → override mode with the "Reader marked" provenance.
     await openReport(page, lead);
     await expect(page.getByTestId('reader-report-editor')).toBeVisible({ timeout: 20_000 });
+    // The lead sees a "Lead Reader Report" tab in the reader-report nav (item 3/4).
+    await expect(page.getByTestId('rr-nav-lead-reader-report'), 'lead-report tab visible for the lead').toBeVisible();
+    await page.getByTestId('rr-nav-lead-reader-report').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: path.join(ART, 'ui-lead-nav.png') });
     const viewBtn = page.getByTestId(`rr-view-reviewer-${READER1_ID}`);
     if (await viewBtn.count()) {
       await viewBtn.first().click();
