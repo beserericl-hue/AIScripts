@@ -1385,7 +1385,11 @@ export const getImportSourceFileUrl = async (req: Request, res: Response) => {
       fileName,
       sub: String((importRecord as any).submissionId || ''),
     });
-    const base = `${req.protocol}://${req.get('host')}`;
+    // Prefer the forwarded scheme (Railway terminates TLS at the edge, so
+    // req.protocol is 'http') — the Office web viewer needs an https src it can
+    // fetch directly, without relying on it to follow a 301.
+    const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() || req.protocol;
+    const base = `${proto}://${req.get('host')}`;
     return res.json({ url: `${base}/public-file/${token}`, mimeType: contentType, fileName, fileType });
   } catch (err: any) {
     console.error('[getImportSourceFileUrl] failed:', err);
