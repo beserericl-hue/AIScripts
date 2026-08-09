@@ -4,6 +4,7 @@ import {
   uploadDocument,
   getImport,
   getImportSourceFile,
+  getImportSourceFileUrl,
   getExtractedSections,
   getSectionContent,
   mapSection,
@@ -156,6 +157,9 @@ router.get('/:importId', getImport);
 // Stream the ORIGINAL uploaded document (raw bytes from S3) — used to pull the
 // current prod source doc and re-run it through the dev parser.
 router.get('/:importId/source-file', getImportSourceFile);
+// Signed public URL for the ORIGINAL document — Compare pane renders the true
+// source (Office viewer / PDF embed) beside the parser's reconstruction.
+router.get('/:importId/source-file-url', getImportSourceFileUrl);
 
 /**
  * @route   GET /api/imports/:importId/sections

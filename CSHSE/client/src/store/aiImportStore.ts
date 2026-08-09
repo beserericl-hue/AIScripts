@@ -398,6 +398,9 @@ interface AIImportState {
   // Identity
   importId: string | null;
   submissionId: string | null;
+  // True when the open submission is a Parser Train sandbox run — drives the
+  // Compare pane's "Flag out-of-sync" control (SU parser-error reporting).
+  trainingRun: boolean;
   // The submission the in-memory review buckets were last LOADED for. The
   // autosave refuses to write unless this equals `submissionId`, so a stale
   // store can never bleed one submission's content onto another.
@@ -623,6 +626,7 @@ interface AIImportState {
   popNextPendingFile: () => File | null;
   clearPendingFiles: () => void;
   setSubmissionId: (id: string) => void;
+  setTrainingRun: (v: boolean) => void;
   setUploadFile: (f: File | null) => void;
   setProgramLevel: (l: ProgramLevel) => void;
   setIsReimport: (v: boolean) => void;
@@ -731,6 +735,7 @@ interface AIImportState {
 const initialState = {
   importId: null,
   submissionId: null,
+  trainingRun: false,
   loadedForSubmissionId: null,
   jobId: null,
   step: 'upload' as WizardStep,
@@ -1325,6 +1330,7 @@ export const useAIImportStore = create<AIImportState>()(
             dirty: true
           };
         }),
+      setTrainingRun: (v) => set({ trainingRun: !!v } as any),
       setSubmissionId: (id) =>
     set((s) => {
       if (s.submissionId === id) return { submissionId: id } as any;

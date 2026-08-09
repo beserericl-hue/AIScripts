@@ -8,9 +8,11 @@
  * anchor/fuzzy locate so the document scrolls to this item's section.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, FileText, FileCheck2, Flag, ExternalLink } from 'lucide-react';
 import { fetchOrUseCachedHtml } from './ShowInSourceModal';
 import { openLinksInNewTab } from './linkNewTab';
+import { api } from '../../../../../services/api';
+import { useAIImportStore } from '../../../../../store/aiImportStore';
 
 interface SourceComparePaneProps {
   importId: string | null;
@@ -19,6 +21,12 @@ interface SourceComparePaneProps {
   /** Snippet text used to locate the section when the anchor is missing. */
   matchText: string;
 }
+
+type OrigState =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'ready'; url: string; mimeType: string; fileType: string }
+  | { kind: 'error'; message: string };
 
 function normalizeForSearch(s: string): string {
   return s.toLowerCase().replace(/\s+/g, ' ').trim();
@@ -36,10 +44,59 @@ export function SourceComparePane({
   sectionId,
   matchText
 }: SourceComparePaneProps): JSX.Element {
+  // Parser-train sandbox → show the "Flag out-of-sync" control (SU-only path).
+  const trainingRun = useAIImportStore((s) => s.trainingRun);
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const [matchKind, setMatchKind] = useState<'anchor' | 'fuzzy' | 'missing'>('missing');
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Which document the pane shows: the parser's reconstruction ('parsed') or the
+  // TRUE uploaded original ('original' — Office viewer / PDF embed), so the SU
+  // can see what the parse got wrong.
+  const [view, setView] = useState<'parsed' | 'original'>('parsed');
+  const [orig, setOrig] = useState<OrigState>({ kind: 'idle' });
+  const [flagged, setFlagged] = useState(false);
+
+  // Lazily mint the original-document public URL the first time it's shown.
+  useEffect(() => {
+    if (view !== 'original' || !importId) return;
+    if (orig.kind === 'ready' || orig.kind === 'loading') return;
+    let cancelled = false;
+    setOrig({ kind: 'loading' });
+    api.get(`/api/imports/${importId}/source-file-url`)
+      .then((res) => {
+        if (cancelled) return;
+        const d = res.data || {};
+        if (!d.url) throw new Error('No source URL returned.');
+        setOrig({ kind: 'ready', url: String(d.url), mimeType: String(d.mimeType || ''), fileType: String(d.fileType || '') });
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setOrig({ kind: 'error', message: err?.response?.data?.error || err?.message || 'Could not load the original document.' });
+      });
+    return () => { cancelled = true; };
+  }, [view, importId, orig.kind]);
+
+  // Flag the current item as out-of-sync with the original (parser-train note).
+  const flagOutOfSync = async () => {
+    if (!importId) return;
+    const note = window.prompt(
+      'Flag this item as out-of-sync with the original document (e.g. "CV appears in the body — should be routed to the appendix"):',
+      'Out of sync vs original: '
+    );
+    if (!note || !note.trim()) return;
+    try {
+      await api.post(`/api/parser-train/${importId}/note`, {
+        note: note.trim(),
+        sectionId: sectionId || undefined,
+        kind: 'out_of_sync',
+      });
+      setFlagged(true);
+      window.setTimeout(() => setFlagged(false), 4000);
+    } catch (err: any) {
+      alert(`Could not save the flag: ${err?.response?.data?.error || err?.message || err}`);
+    }
+  };
 
   // Scroll the source pane so `el` sits near the top. Set scrollTop directly
   // (reliable across large documents, unlike smooth scrollIntoView). Deferred
@@ -214,58 +271,119 @@ export function SourceComparePane({
 
   return (
     <div data-build="srcscroll3" className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-gray-200 bg-gray-50">
-      <div className="flex items-center gap-2 border-b border-gray-200 px-3 py-1.5">
-        <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Source document
-        </span>
-        {state.kind === 'ready' && matchKind === 'anchor' && (
-          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700">
-            located
-          </span>
+      <div className="flex flex-wrap items-center gap-2 border-b border-gray-200 px-3 py-1.5">
+        {/* Toggle: parser reconstruction vs the true uploaded original. */}
+        <div className="inline-flex overflow-hidden rounded border border-gray-300 text-[11px]">
+          <button
+            type="button"
+            data-testid="compare-view-parsed"
+            onClick={() => setView('parsed')}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 ${view === 'parsed' ? 'bg-cshse-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+          >
+            <FileText className="h-3 w-3" />Parsed source
+          </button>
+          <button
+            type="button"
+            data-testid="compare-view-original"
+            onClick={() => setView('original')}
+            title="Show the original uploaded document (ground truth)"
+            className={`inline-flex items-center gap-1 border-l border-gray-300 px-2 py-0.5 ${view === 'original' ? 'bg-cshse-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+          >
+            <FileCheck2 className="h-3 w-3" />Original document
+          </button>
+        </div>
+        {view === 'parsed' && state.kind === 'ready' && matchKind === 'anchor' && (
+          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700">located</span>
         )}
-        {state.kind === 'ready' && matchKind === 'fuzzy' && (
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
-            best-effort match
-          </span>
+        {view === 'parsed' && state.kind === 'ready' && matchKind === 'fuzzy' && (
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">best-effort match</span>
         )}
-        {state.kind === 'ready' && matchKind === 'missing' && (
-          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">
-            section not located — showing top
-          </span>
+        {view === 'parsed' && state.kind === 'ready' && matchKind === 'missing' && (
+          <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">section not located — showing top</span>
         )}
-        <span className="ml-auto text-[10px] text-gray-400">read-only · select to copy</span>
+        {trainingRun && (
+          <button
+            type="button"
+            data-testid="compare-flag-out-of-sync"
+            onClick={flagOutOfSync}
+            title="Flag this item as out-of-sync with the original document (records a parser-train error note)"
+            className={`ml-auto inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[11px] ${flagged ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-red-300 bg-white text-red-700 hover:bg-red-50'}`}
+          >
+            <Flag className="h-3 w-3" />{flagged ? 'Flagged ✓' : 'Flag out-of-sync'}
+          </button>
+        )}
+        <span className={`${trainingRun ? '' : 'ml-auto'} text-[10px] text-gray-400`}>read-only · select to copy</span>
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-auto p-3" data-testid="compare-source-pane">
-        {!importId && (
-          <div className="rounded border border-dashed border-gray-300 bg-white p-3 text-xs italic text-gray-500">
-            No source document is linked to this item.
-          </div>
-        )}
-        {state.kind === 'loading' && (
-          <div className="flex h-32 items-center justify-center text-sm text-gray-500">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-            Loading source…
-          </div>
-        )}
-        {state.kind === 'error' && (
-          <div className="rounded border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-            <AlertTriangle className="mr-1 inline h-3.5 w-3.5" aria-hidden />
-            {state.message}
-          </div>
-        )}
-        {state.kind === 'ready' && (
-          <div
-            ref={contentRef}
-            onClick={openLinksInNewTab}
-            className="prose prose-sm max-w-none text-sm
-              [&_a]:text-cshse-700 [&_a]:underline [&_a]:cursor-pointer
-              [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1
-              [&_img]:max-w-full"
-            // eslint-disable-next-line react/no-danger
-            dangerouslySetInnerHTML={{ __html: state.html }}
-          />
-        )}
-      </div>
+      {/* ORIGINAL document view — the true uploaded file, so the SU sees ground
+          truth vs the parser's reconstruction. */}
+      {view === 'original' && (
+        <div className="flex min-h-0 flex-1 flex-col" data-testid="compare-original-pane">
+          {orig.kind === 'loading' && (
+            <div className="flex h-32 items-center justify-center text-sm text-gray-500">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />Loading original document…
+            </div>
+          )}
+          {orig.kind === 'error' && (
+            <div className="m-3 rounded border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+              <AlertTriangle className="mr-1 inline h-3.5 w-3.5" aria-hidden />{orig.message}
+            </div>
+          )}
+          {orig.kind === 'ready' && (
+            <>
+              <div className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-1 text-[11px] text-gray-500">
+                <span>Original upload</span>
+                <a href={orig.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-cshse-700 hover:underline">
+                  Open in new tab <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              {orig.fileType === 'pdf' ? (
+                <iframe title="Original document" src={orig.url} className="min-h-0 w-full flex-1" />
+              ) : (
+                <iframe
+                  title="Original document"
+                  src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(orig.url)}`}
+                  className="min-h-0 w-full flex-1"
+                />
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* PARSED reconstruction — the anchored source HTML the parser produced. */}
+      {view === 'parsed' && (
+        <div ref={scrollRef} className="flex-1 overflow-auto p-3" data-testid="compare-source-pane">
+          {!importId && (
+            <div className="rounded border border-dashed border-gray-300 bg-white p-3 text-xs italic text-gray-500">
+              No source document is linked to this item.
+            </div>
+          )}
+          {state.kind === 'loading' && (
+            <div className="flex h-32 items-center justify-center text-sm text-gray-500">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+              Loading source…
+            </div>
+          )}
+          {state.kind === 'error' && (
+            <div className="rounded border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+              <AlertTriangle className="mr-1 inline h-3.5 w-3.5" aria-hidden />
+              {state.message}
+            </div>
+          )}
+          {state.kind === 'ready' && (
+            <div
+              ref={contentRef}
+              onClick={openLinksInNewTab}
+              className="prose prose-sm max-w-none text-sm
+                [&_a]:text-cshse-700 [&_a]:underline [&_a]:cursor-pointer
+                [&_table]:border-collapse [&_td]:border [&_td]:border-gray-300 [&_td]:px-2 [&_td]:py-1
+                [&_img]:max-w-full"
+              // eslint-disable-next-line react/no-danger
+              dangerouslySetInnerHTML={{ __html: state.html }}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

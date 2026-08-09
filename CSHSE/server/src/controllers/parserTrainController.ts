@@ -277,7 +277,7 @@ export const addParserTrainNote = async (req: AuthenticatedRequest, res: Respons
   if (!isSU(req)) { res.status(403).json({ error: 'Parser Train is superuser-only' }); return; }
   try {
     const importId = req.params.importId;
-    const { std, spec, ruleId, note, screenshot } = req.body || {};
+    const { std, spec, ruleId, note, screenshot, sectionId, kind } = req.body || {};
     if (!note && !screenshot) { res.status(400).json({ error: 'note or screenshot required' }); return; }
     const imp: any = await SelfStudyImport.findById(importId).select('submissionId').lean();
     if (!imp) { res.status(404).json({ error: 'import not found' }); return; }
@@ -285,7 +285,9 @@ export const addParserTrainNote = async (req: AuthenticatedRequest, res: Respons
     if (!sub?.trainingRun) { res.status(400).json({ error: 'not a Parser Train sandbox run' }); return; }
     // cap screenshot size (base64 data URI) so the state doc stays bounded (~2MB)
     const shot = typeof screenshot === 'string' && screenshot.length < 3_000_000 ? screenshot : undefined;
-    const entry = { at: new Date().toISOString(), std: std ?? null, spec: spec ?? null, ruleId: ruleId ?? null, note: String(note || ''), screenshot: shot };
+    // `kind` distinguishes a free note from an out-of-sync error flag; `sectionId`
+    // ties the flag to the compare item so it can be located in the source.
+    const entry = { at: new Date().toISOString(), std: std ?? null, spec: spec ?? null, ruleId: ruleId ?? null, sectionId: sectionId ?? null, kind: kind === 'out_of_sync' ? 'out_of_sync' : 'note', note: String(note || ''), screenshot: shot };
     await Submission.updateOne({ _id: imp.submissionId }, { $push: { 'parserTrainState.notes': entry } });
     res.json({ ok: true, note: { ...entry, screenshot: shot ? '[stored]' : undefined } });
   } catch (err: any) {

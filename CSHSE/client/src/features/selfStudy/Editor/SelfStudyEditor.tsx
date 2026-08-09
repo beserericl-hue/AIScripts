@@ -859,6 +859,12 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     refetchOnMount: 'always',
   });
 
+  // Mirror the submission's Parser-Train flag into the AI-import store so the
+  // Compare pane can show the "Flag out-of-sync" control on sandbox runs.
+  useEffect(() => {
+    useAIImportStore.getState().setTrainingRun(!!(submission as any)?.trainingRun);
+  }, [submission]);
+
   // 2026-06-09 — "Validate All": background AI-evaluation queue. The button
   // enqueues every spec-with-content server-side; this query polls progress
   // while a job runs so the UI shows "Validating X/Y" without blocking.

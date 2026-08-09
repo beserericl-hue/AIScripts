@@ -17,6 +17,7 @@ import * as s3Service from '../services/s3Service';
 import { DocumentVersion } from '../models/DocumentVersion';
 import { recordVersion } from '../services/documentVersionService';
 import { requireImportAccess, requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
+import { signFileAccessToken } from '../services/fileAccessToken';
 import { AuthenticatedRequest } from '../middleware/auth';
 import fs from 'fs/promises';
 import { createReadStream } from 'fs';
@@ -1342,6 +1343,53 @@ export const getImportSourceFile = async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('[getImportSourceFile] failed:', err);
     return res.status(500).json({ error: 'Failed to retrieve source file', detail: err?.message || String(err) });
+  }
+};
+
+/**
+ * Mint a short-lived PUBLIC URL for the import's ORIGINAL uploaded document so
+ * the Compare pane can render the true source (Office web viewer for .docx, a
+ * native embed for .pdf) beside the parser's reconstruction. Same S3-key
+ * resolution + access gate as getImportSourceFile; the URL is a signed
+ * /public-file/:token (reachable by the Office viewer, which can't send auth).
+ */
+export const getImportSourceFileUrl = async (req: Request, res: Response) => {
+  try {
+    const { importId } = req.params;
+    const _imp = await requireImportAccess(req, res, importId);
+    if (!_imp) return;
+    const importRecord = await SelfStudyImport.findById(importId);
+    if (!importRecord) return res.status(404).json({ error: 'Import not found' });
+
+    let s3Key = (importRecord as any).aiS3Key as string | undefined;
+    let mime: string | undefined;
+    if (!s3Key) {
+      const dv = (importRecord as any).aiDocumentVersionId
+        ? await DocumentVersion.findById((importRecord as any).aiDocumentVersionId).lean()
+        : await DocumentVersion.findOne({ importId: importRecord._id }).sort({ version: -1 }).lean();
+      if (dv) { s3Key = (dv as any).s3Key; mime = (dv as any).mimeType; }
+    }
+    if (!s3Key) return res.status(404).json({ error: 'No stored source file for this import.' });
+
+    const typeByFile: Record<string, string> = {
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      pdf: 'application/pdf',
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    };
+    const fileType = String((importRecord as any).fileType || '');
+    const contentType = mime || typeByFile[fileType] || 'application/octet-stream';
+    const fileName = String((importRecord as any).originalFilename || `source.${fileType || 'bin'}`);
+    const token = signFileAccessToken({
+      s3Key: String(s3Key),
+      mimeType: contentType,
+      fileName,
+      sub: String((importRecord as any).submissionId || ''),
+    });
+    const base = `${req.protocol}://${req.get('host')}`;
+    return res.json({ url: `${base}/public-file/${token}`, mimeType: contentType, fileName, fileType });
+  } catch (err: any) {
+    console.error('[getImportSourceFileUrl] failed:', err);
+    return res.status(500).json({ error: 'Failed to build source file URL', detail: err?.message || String(err) });
   }
 };
 
