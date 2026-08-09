@@ -265,6 +265,10 @@ test.describe('Reader Report — introduction, files, comments, lead override', 
     // The section rolls up to Non-Compliant when any row is (row c here).
     const c = specs.find((s) => s.specCode === 'c');
     expect(['compliant', 'noncompliant']).toContain(String(c.aiMark));
+    // Row 'a' ("Introduction") shows the FULL introduction narrative (not just
+    // the "A." heading) — regression guard for "Section A disappeared".
+    const a = specs.find((s) => s.specCode === 'a');
+    expect((a.narrativeHtml || '').length, 'intro row A carries the full narrative').toBeGreaterThan(1000);
     fs.writeFileSync(path.join(ART, 'intro-ai-eval.json'),
       JSON.stringify(specs.map((s) => ({ code: s.specCode, title: s.specTitle, aiMark: s.aiMark, ai: (s.aiComment || '').slice(0, 160), narrativeLen: (s.narrativeHtml || '').length })), null, 2));
   });
@@ -297,9 +301,15 @@ test.describe('Reader Report — introduction, files, comments, lead override', 
     await page.getByTestId('rr-row-introduction').screenshot({ path: path.join(ART, 'ui-introduction-section.png') });
     await page.getByTestId('rr-nav-introduction').scrollIntoViewIfNeeded();
     await page.screenshot({ path: path.join(ART, 'ui-report-top.png') });
-    // The Introduction's per-section AI assessment renders (rubric verdict).
-    await expect(page.getByTestId('rr-ai-spec-introduction-c'), 'intro-c AI assessment renders').toBeVisible();
-    await page.getByTestId('rr-ai-spec-introduction-c').screenshot({ path: path.join(ART, 'ui-intro-ai-eval.png') });
+    // The Introduction's per-section AI assessment renders (rubric verdict) and
+    // is colour-coded by verdict: a passing row is GREEN, a needs-improvement
+    // row is YELLOW (matching the rest of the program).
+    const aiPass = page.getByTestId('rr-ai-spec-introduction-a');
+    const aiFlag = page.getByTestId('rr-ai-spec-introduction-c');
+    await expect(aiFlag, 'intro-c AI assessment renders').toBeVisible();
+    await expect(aiPass, 'passing intro row is green').toHaveClass(/bg-emerald-50/);
+    await expect(aiFlag, 'needs-improvement intro row is yellow').toHaveClass(/bg-amber-50/);
+    await aiFlag.screenshot({ path: path.join(ART, 'ui-intro-ai-eval.png') });
 
     // Lead opens the reader's report → override mode with the "Reader marked" provenance.
     await openReport(page, lead);
