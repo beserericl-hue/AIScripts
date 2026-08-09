@@ -28,7 +28,7 @@ OUT = "server/src/assets/reader-report-templates"
 LEVELS = {
     "baccalaureate": {
         "file": "BACCALAUREATE Self_Study_Reader Report template_ Baccalaureate degree  July 2025.docx",
-        "keys": ["introduction",None,None,None,None,None,"1","2","3","4","5","6","7","8","9","10",
+        "keys": ["intro_a","intro_b","intro_c","intro_d","intro_e","intro_f","1","2","3","4","5","6","7","8","9","10",
                  "11","12","13","14","15","16","17","18","19","20","22"],
     },
     "associate": {

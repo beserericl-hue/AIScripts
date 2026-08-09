@@ -31,6 +31,10 @@ import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getAllStandards } from '../data/standards';
 import { brandedSectionChrome } from './docxBranding';
 
+// Template placeholder keys for the Introduction section: a rolled-up
+// {{*_introduction}} (associate/masters) + one {{*_intro_<a-f>}} per topic row
+// (baccalaureate — 6 rows across pages 1-4). See buildIntroSection.
+const INTRO_TEMPLATE_KEYS = ['introduction', 'intro_a', 'intro_b', 'intro_c', 'intro_d', 'intro_e', 'intro_f'];
 const VERDICT_LABEL: Record<string, string> = {
   pass: 'PASS',
   needs_improvement: 'NEEDS IMPROVEMENT',
@@ -182,9 +186,12 @@ async function buildTemplatedDocx(
     inst_name: mk(data.institutionName),
     prog_name: mk(data.programName),
   };
-  // The Introduction section opens the official report (its checklist row is
-  // templated as {{c_introduction}}/{{n_introduction}}/{{cm_introduction}}).
-  for (const code of ['introduction', ...cfg.stds]) {
+  // The Introduction section opens the official report. The baccalaureate
+  // template has one row PER intro topic ({{c_intro_a}}..{{c_intro_f}}); the
+  // associate/masters templates roll it into a single {{c_introduction}} row.
+  // We emit patches for BOTH; patchDocument ignores placeholders a template
+  // doesn't contain.
+  for (const code of [...INTRO_TEMPLATE_KEYS, ...cfg.stds]) {
     const r = rollup.get(code) || { mark: null, comment: '' };
     patches[`c_${code}`] = mk(r.mark === 'compliant' ? '☒' : '☐');
     patches[`n_${code}`] = mk(r.mark === 'noncompliant' ? '☒' : '☐');
@@ -410,10 +417,14 @@ export async function renderReaderReportBuffers(
   let rollup: Map<string, StandardRollup>;
   if (readerOverrides) {
     // Reader's report: ONLY the reader's marks + comments (no AI text in print).
+    // Include the Introduction section (not part of the numbered-standards
+    // catalog) so its override reaches {{c_introduction}}/{{n_introduction}}/
+    // {{cm_introduction}} in the template.
     rollup = new Map<string, StandardRollup>();
-    for (const std of data.standards) {
-      const ov = readerOverrides.get(std.code);
-      rollup.set(std.code, {
+    const codes = new Set<string>([...INTRO_TEMPLATE_KEYS, ...data.standards.map((s) => s.code)]);
+    for (const code of codes) {
+      const ov = readerOverrides.get(code);
+      rollup.set(code, {
         mark: ov?.mark === 'compliant' || ov?.mark === 'noncompliant' ? ov.mark : null,
         comment: ov?.comment || '',
       });
@@ -458,14 +469,18 @@ async function buildIntroSection(
     specCode: spec, specTitle: title, narrativeHtml: html, evidenceHtml: '',
     verdict: undefined, aiMark: null, aiComment: '', evidenceCount: ev, excluded: false,
   });
+  // The 6 topic rows of the official Introduction / General Program
+  // Characteristics section (pages 1-4 of the template), in template order.
+  // Spec 'a' carries the full self-study Introduction narrative for review;
+  // b-f are the sub-topics the reader marks against it. Codes a-f map 1:1 to
+  // the template rows {{c_intro_a}}..{{c_intro_f}}.
   const specs: ReaderReportSpec[] = [
-    mk('a', 'Program Introduction', introHtml || '<p><em>No introduction narrative provided.</em></p>', introFiles),
-    mk('b', 'Certification of Self-Study page uploaded', '<p>Confirm the signed Certification of Self-Study page is present. If absent, do not proceed with the review.</p>'),
-    mk('c', 'Program Name', `<p>${esc(data.programName || '(not set)')}</p>`),
-    mk('d', 'Institution Name', `<p>${esc(data.institutionName || '(not set)')}</p>`),
-    mk('e', 'Accreditation cycle (five-year period)', `<p>${esc(cycle)}</p>`),
-    mk('f', 'Person responsible signed off on accuracy of the self-study', '<p>Confirm the accuracy sign-off is present.</p>'),
-    mk('g', 'Glossary of terms included', '<p>Confirm a glossary of terms used in the self-study and program materials is included (e.g., in the appendices).</p>'),
+    mk('a', 'Introduction', introHtml || '<p><em>No introduction narrative provided.</em></p>', introFiles),
+    mk('b', 'Required Introductory Material: General Introduction to the Program', introHtml || '<p><em>See the program Introduction above.</em></p>', introFiles),
+    mk('c', 'Describe the Program', '<p>Confirm the Introduction describes the program (organizational structure, history, degree(s) offered, mission) without duplicating the Specifications.</p>'),
+    mk('d', `Interim Report and Review / Reaccreditations only${cycle && cycle !== 'Not specified' ? ` — this submission: ${esc(cycle)}` : ''}`, `<p>Applies to Interim Reports and Reaccreditations. Accreditation cycle for this submission: ${esc(cycle)}.</p>`),
+    mk('e', 'Delivery at Multiple Sites', '<p>If the program is delivered at multiple sites, confirm the Introduction addresses each site.</p>'),
+    mk('f', 'Hybrid or Online Course Delivery', '<p>If more than 50% of required human-service courses are delivered hybrid/online, confirm the Introduction addresses it.</p>'),
   ];
   return { code: INTRO_CODE, title: 'Introduction', aiMark: null, aiComment: '', specs };
 }
