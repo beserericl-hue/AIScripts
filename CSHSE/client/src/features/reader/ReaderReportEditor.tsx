@@ -75,6 +75,34 @@ const VOTE_OPTIONS: { value: Exclude<AcceptanceVote, ''>; label: string; cls: st
 ];
 const voteLabel = (v?: AcceptanceVote) => VOTE_OPTIONS.find((o) => o.value === v)?.label || '—';
 
+// AI-evaluation colour convention — matches the rest of the program (the review
+// rail dots): pass → green, needs improvement → yellow, fail → red. Full literal
+// class strings so Tailwind keeps them.
+const AI_TONE: Record<'green' | 'amber' | 'red' | 'slate', { box: string; summary: string; hint: string; body: string }> = {
+  green: { box: 'border-emerald-200 bg-emerald-50', summary: 'text-emerald-800 hover:bg-emerald-100', hint: 'text-emerald-600', body: 'border-emerald-200 text-emerald-900' },
+  amber: { box: 'border-amber-200 bg-amber-50', summary: 'text-amber-800 hover:bg-amber-100', hint: 'text-amber-600', body: 'border-amber-200 text-amber-900' },
+  red: { box: 'border-red-200 bg-red-50', summary: 'text-red-800 hover:bg-red-100', hint: 'text-red-600', body: 'border-red-200 text-red-900' },
+  slate: { box: 'border-slate-200 bg-slate-50', summary: 'text-slate-700 hover:bg-slate-100', hint: 'text-slate-500', body: 'border-slate-200 text-slate-800' },
+};
+function aiTone(verdict?: string, mark?: 'compliant' | 'noncompliant' | null): 'green' | 'amber' | 'red' | 'slate' {
+  const v = (verdict || '').toLowerCase();
+  if (v === 'pass') return 'green';
+  if (v === 'needs_improvement') return 'amber';
+  if (v === 'fail') return 'red';
+  if (mark === 'compliant') return 'green';
+  if (mark === 'noncompliant') return 'amber';
+  return 'slate';
+}
+function aiVerdictLabel(verdict?: string, mark?: 'compliant' | 'noncompliant' | null): string {
+  const v = (verdict || '').toLowerCase();
+  if (v === 'pass') return 'Compliant';
+  if (v === 'needs_improvement') return 'Needs Improvement';
+  if (v === 'fail') return 'Non-Compliant';
+  if (mark === 'compliant') return 'Compliant';
+  if (mark === 'noncompliant') return 'Non-Compliant';
+  return '';
+}
+
 export function ReaderReportEditor(): JSX.Element {
   const { submissionId = '' } = useParams<{ submissionId: string }>();
   const navigate = useNavigate();
@@ -699,11 +727,11 @@ export function ReaderReportEditor(): JSX.Element {
             {/* AI assessment — a TAG you click to reveal the AI's per-spec
                 verdicts (collapsed by default), like the self-study editor. */}
             {r.aiComment && (
-              <details data-testid={`rr-ai-${r.code}`} className="mb-3 rounded-lg border border-amber-200 bg-amber-50">
-                <summary className="cursor-pointer list-none px-3 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 rounded-lg">
-                  ⓘ AI assessment{r.aiMark ? ` — ${r.aiMark === 'compliant' ? 'Compliant' : 'Non-Compliant'}` : ''} <span className="font-normal text-amber-600">(click to view)</span>
+              <details data-testid={`rr-ai-${r.code}`} className={`mb-3 rounded-lg border ${AI_TONE[aiTone(undefined, r.aiMark)].box}`}>
+                <summary className={`cursor-pointer list-none px-3 py-2 text-sm font-semibold rounded-lg ${AI_TONE[aiTone(undefined, r.aiMark)].summary}`}>
+                  ⓘ AI assessment{r.aiMark ? ` — ${aiVerdictLabel(undefined, r.aiMark)}` : ''} <span className={`font-normal ${AI_TONE[aiTone(undefined, r.aiMark)].hint}`}>(click to view)</span>
                 </summary>
-                <div className="border-t border-amber-200 px-3 py-2 text-xs whitespace-pre-wrap text-amber-900">{r.aiComment}</div>
+                <div className={`border-t px-3 py-2 text-xs whitespace-pre-wrap ${AI_TONE[aiTone(undefined, r.aiMark)].body}`}>{r.aiComment}</div>
               </details>
             )}
 
@@ -761,13 +789,13 @@ export function ReaderReportEditor(): JSX.Element {
                             (verdict + rationale + suggestions), so the reasoning
                             stays in view next to the checklist while scrolling. */}
                         {(sp.aiComment || sp.aiMark) && (
-                          <details data-testid={`rr-ai-spec-${r.code}-${sp.specCode}`} className="rounded-md border border-amber-200 bg-amber-50">
-                            <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-100">
+                          <details data-testid={`rr-ai-spec-${r.code}-${sp.specCode}`} className={`rounded-md border ${AI_TONE[aiTone(sp.verdict, sp.aiMark)].box}`}>
+                            <summary className={`flex cursor-pointer list-none items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold ${AI_TONE[aiTone(sp.verdict, sp.aiMark)].summary}`}>
                               <Sparkles className="h-3.5 w-3.5" />
-                              Why the AI says{sp.aiMark ? ` “${sp.aiMark === 'compliant' ? 'Compliant' : 'Non-Compliant'}”` : ' this'}
-                              <span className="ml-auto font-normal text-amber-600">view</span>
+                              Why the AI says{(sp.verdict || sp.aiMark) ? ` “${aiVerdictLabel(sp.verdict, sp.aiMark)}”` : ' this'}
+                              <span className={`ml-auto font-normal ${AI_TONE[aiTone(sp.verdict, sp.aiMark)].hint}`}>view</span>
                             </summary>
-                            <div className="max-h-64 overflow-y-auto border-t border-amber-200 px-2.5 py-2 text-xs whitespace-pre-wrap text-amber-900">
+                            <div className={`max-h-64 overflow-y-auto border-t px-2.5 py-2 text-xs whitespace-pre-wrap ${AI_TONE[aiTone(sp.verdict, sp.aiMark)].body}`}>
                               {sp.aiComment || 'No AI rationale was recorded for this specification.'}
                             </div>
                           </details>
