@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, Users, Lock, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, ClipboardCheck, Users, Lock, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
@@ -568,8 +568,38 @@ export function ReaderReportEditor(): JSX.Element {
           >
             <ClipboardList className="h-4 w-4 flex-shrink-0" />Reader Report
           </button>
+          {/* Lead reader / admin: once the reader reports are done, this is where
+              the lead assembles the Lead Reader Report to the VPA (Request Board
+              Action). Visible only to the lead reader / admin on every form. */}
+          {isLeadOrAdmin && (
+            <button
+              data-testid="rr-nav-lead-reader-report"
+              onClick={() => navigate(`/self-study/${submissionId}?view=lead-reader-report`)}
+              title="Open the Lead Reader Report (to the VPA / Request Board Action)"
+              className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap text-indigo-700 hover:bg-indigo-50 border border-indigo-200"
+            >
+              <ClipboardCheck className="h-4 w-4 flex-shrink-0" />Lead Reader Report
+            </button>
+          )}
         </div>
       </nav>
+
+      {/* After the lead reader completes their OWN reader report, point them to
+          the Lead Reader Report — the board-facing next step they previously had
+          no way to reach from here. */}
+      {isLeadOrAdmin && completedAt && !viewReviewerId && (
+        <button
+          data-testid="rr-goto-lead-report"
+          onClick={() => navigate(`/self-study/${submissionId}?view=lead-reader-report`)}
+          className="mb-4 flex w-full items-center justify-between gap-3 rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-3 text-left hover:bg-indigo-100"
+        >
+          <span className="flex items-center gap-2 text-sm font-medium text-indigo-900">
+            <ClipboardCheck className="h-4 w-4 flex-shrink-0" />
+            Your reader report is complete — continue to the Lead Reader Report (to the VPA / Request Board Action).
+          </span>
+          <span aria-hidden className="text-indigo-500">→</span>
+        </button>
+      )}
 
       {/* Lead reader / admin: oversee every reader's report. Each reader's report
           becomes openable here once that reader marks it complete. */}

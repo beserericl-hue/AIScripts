@@ -3,6 +3,7 @@ import { Submission } from '../models/Submission';
 import { Assignment } from '../models/Assignment';
 import { Comment } from '../models/Comment';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
+import { SupportingEvidence } from '../models/SupportingEvidence';
 import { SiteVisit } from '../models/SiteVisit';
 import { LeadReaderReport } from '../models/LeadReaderReport';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
@@ -41,6 +42,58 @@ const TYPE_TO_STATUS: Record<string, 'initial' | 'reaccreditation' | 'interim'> 
   extension: 'interim',
 };
 
+// Course prefixes that always denote a Human-Services / program course (so a
+// program whose own courses are outnumbered by gen-ed syllabi is still split
+// correctly). Everything else falls back to the "most common prefix = program"
+// heuristic in deriveCoursesFromSyllabi.
+const KNOWN_PROGRAM_PREFIXES = new Set(['chs', 'hs', 'hsv', 'hserv', 'hmsv', 'hums', 'hsrv', 'hser']);
+
+/** Turn a syllabus-TOC slug ("chs-315-515-group-counseling") into a display
+ *  label ("CHS 315/515 — Group Counseling") + its lowercased prefix. */
+function parseCourseSlug(slug: string): { prefix: string; label: string } | null {
+  const parts = String(slug).split('-').filter(Boolean);
+  if (parts.length === 0) return null;
+  const prefix = parts[0].toLowerCase();
+  let i = 1;
+  const nums: string[] = [];
+  while (i < parts.length && /^\d+[a-z]?$/i.test(parts[i])) { nums.push(parts[i]); i++; }
+  const name = parts.slice(i).join(' ').trim();
+  const titled = name.replace(/\b\w/g, (c) => c.toUpperCase());
+  const label = `${prefix.toUpperCase()}${nums.length ? ' ' + nums.join('/') : ''}${titled ? ' — ' + titled : ''}`.trim();
+  return { prefix, label };
+}
+
+/** Derive the course list from imported syllabi (their `rev:syllabus-toc:<n>:<slug>`
+ *  tags) when the curriculum matrix has no named courses. Splits Program vs
+ *  General-Education by course prefix. */
+async function deriveCoursesFromSyllabi(submissionId: any): Promise<{ general: string[]; program: string[] }> {
+  const ev: any[] = await SupportingEvidence.find({
+    submissionId,
+    isDeleted: { $ne: true },
+    tags: { $regex: '^rev:syllabus-toc:' },
+  }).select('tags').lean();
+  const slugs = new Set<string>();
+  for (const e of ev) {
+    for (const t of e.tags || []) {
+      const mt = /^rev:syllabus-toc:\d+:(.+)$/.exec(String(t));
+      if (mt && mt[1]) slugs.add(mt[1]);
+    }
+  }
+  const parsed = [...slugs].map(parseCourseSlug).filter(Boolean) as Array<{ prefix: string; label: string }>;
+  if (parsed.length === 0) return { general: [], program: [] };
+  // Program prefix = the most common prefix among the syllabi (the program's own courses).
+  const freq = new Map<string, number>();
+  for (const p of parsed) freq.set(p.prefix, (freq.get(p.prefix) || 0) + 1);
+  let dominant = ''; let best = 0;
+  for (const [pre, n] of freq) if (n > best) { best = n; dominant = pre; }
+  const isProgram = (pre: string) => KNOWN_PROGRAM_PREFIXES.has(pre) || pre === dominant;
+  const program: string[] = []; const general: string[] = [];
+  for (const p of parsed.sort((a, b) => a.label.localeCompare(b.label))) {
+    (isProgram(p.prefix) ? program : general).push(p.label);
+  }
+  return { general, program };
+}
+
 /** Build the system-generated sections from live submission data. */
 export async function buildSystemSections(submission: any) {
   const submissionId = submission._id;
@@ -71,8 +124,20 @@ export async function buildSystemSections(submission: any) {
       .flatMap((m) => (m.courses || []).slice().sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0)))
       .map(courseLabel)
       .filter(Boolean);
-  const generalEducationCourses = collect('non_human_services_courses');
-  const programCourses = [...collect('human_services_courses'), ...collect('custom')];
+  let generalEducationCourses = collect('non_human_services_courses');
+  let programCourses = [...collect('human_services_courses'), ...collect('custom')];
+  // Fallback: many submitted matrices have UNNAMED course columns (the grid was
+  // imported without course headers), so `courses` is empty and both lists come
+  // back blank. Derive the course list from the imported syllabi — their
+  // table-of-contents entries carry clean course identifiers (e.g.
+  // "chs-360-counseling-strategies-for-individuals") — so the lead reader
+  // doesn't have to re-key the curriculum. Program vs General-Education is split
+  // by course prefix (the program's own prefix vs everything else).
+  if (generalEducationCourses.length === 0 && programCourses.length === 0) {
+    const derived = await deriveCoursesFromSyllabi(submissionId);
+    generalEducationCourses = derived.general;
+    programCourses = derived.program;
+  }
 
   // Compiled non-compliance: specs whose validation failed, with reader comments.
   const status =
