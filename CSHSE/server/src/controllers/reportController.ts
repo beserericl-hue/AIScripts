@@ -605,6 +605,25 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
       overrides.set(stdCode, { mark, comment: blocks.join('\n\n') });
     }
 
+    // Per-TOPIC Introduction rows: the baccalaureate template has one checklist
+    // row per intro topic ({{c_intro_a}}..{{c_intro_f}}), so fill each from the
+    // reader's intro spec (lead override wins) with its inline comments. The
+    // rolled-up 'introduction' entry above still covers the associate/masters
+    // single-row templates.
+    for (const r of saved?.rows || []) {
+      if (r.standardCode !== 'introduction') continue;
+      const effMark = (r as any).leadMark || r.mark || '';
+      const effComment = ((r as any).leadComment && String((r as any).leadComment).trim())
+        ? String((r as any).leadComment) : (r.comment || '');
+      const inl = (inlineBySpec.get(`introduction.${r.specCode || ''}`) || []).map(fmtInline).join('\n');
+      let cmt = (effComment || '').trim();
+      if (inl) cmt += (cmt ? '\n' : '') + 'Comments:\n' + inl;
+      overrides.set(`intro_${r.specCode || 'a'}`, {
+        mark: effMark === 'compliant' ? 'compliant' : effMark === 'noncompliant' ? 'noncompliant' : '',
+        comment: cmt,
+      });
+    }
+
     const wantHtml = String(req.query.format || '').toLowerCase() === 'html';
     const buffers = await renderReaderReportBuffers(submissionId, overrides);
     if (!buffers) return res.status(404).json({ error: 'Submission not found' });
