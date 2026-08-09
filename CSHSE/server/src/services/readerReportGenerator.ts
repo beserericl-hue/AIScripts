@@ -29,6 +29,7 @@ import { ValidationResult } from '../models/ValidationResult';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getAllStandards } from '../data/standards';
+import { INTRO_RUBRIC, INTRO_STANDARD_CODE, splitIntroductionHtml } from '../data/introRubric';
 import { brandedSectionChrome } from './docxBranding';
 
 // Template placeholder keys for the Introduction section: a rolled-up
@@ -458,31 +459,56 @@ const CYCLE_LABEL: Record<string, string> = {
 async function buildIntroSection(
   submissionId: string, data: ReportData, evCount: Map<string, number>,
 ): Promise<ReaderReportStandardRow | null> {
-  const sub: any = await Submission.findById(submissionId).select('documentIntroduction type').lean();
+  const sub: any = await Submission.findById(submissionId)
+    .select('documentIntroduction type standardsStatus').lean();
   if (!sub) return null;
   const introHtml = (sub.documentIntroduction as string) || '';
-  const cycle = CYCLE_LABEL[String(sub.type || '').toLowerCase()] || 'Not specified';
+  // Best-effort split of the one introduction narrative into the six official
+  // Reader Form rows so each row shows its own slice + comment form (not one
+  // big blob with a single comment box).
+  const slices = splitIntroductionHtml(introHtml);
+
+  // Latest AI verdict + rationale per intro row, from the ValidationResult docs
+  // the eval-queue worker writes when it scores each row against introRubric.
+  const vres: any[] = await ValidationResult.find({ submissionId, standardCode: INTRO_STANDARD_CODE })
+    .sort({ validatedAt: -1, createdAt: -1 }).lean();
+  const latestIntro = new Map<string, any>();
+  for (const r of vres) { const k = r.specCode || ''; if (!latestIntro.has(k)) latestIntro.set(k, r.result || r); }
+  const ss: any = sub.standardsStatus || {};
+  const verdictFor = (spec: string): string | undefined => {
+    const r = latestIntro.get(spec);
+    if (r?.verdict) return r.verdict;
+    const st = ss instanceof Map ? ss.get(`${INTRO_STANDARD_CODE}_${spec}`) : ss[`${INTRO_STANDARD_CODE}_${spec}`];
+    return st?.verdict;
+  };
+
   let introFiles = 0;
   for (const [k, v] of evCount) if (k.startsWith(`${INTRO_CODE}.`)) introFiles += v;
-  const esc = (t: string) => String(t || '').replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' } as any)[c]);
-  const mk = (spec: string, title: string, html: string, ev = 0): ReaderReportSpec => ({
-    specCode: spec, specTitle: title, narrativeHtml: html, evidenceHtml: '',
-    verdict: undefined, aiMark: null, aiComment: '', evidenceCount: ev, excluded: false,
+
+  const specs: ReaderReportSpec[] = INTRO_RUBRIC.map((row) => {
+    const res = latestIntro.get(row.specCode);
+    const verdict = verdictFor(row.specCode);
+    const slice = (slices[row.specCode] || '').trim();
+    // Fallback narrative: the general row ('a') falls back to the whole intro;
+    // conditional rows explain they may not apply.
+    const html = slice
+      || (row.specCode === 'a' && introHtml ? introHtml : '')
+      || `<p><em>${row.conditional
+        ? 'Not separately addressed in the introduction — the reader confirms whether this applies to the program.'
+        : 'See the program Introduction above.'}</em></p>`;
+    return {
+      specCode: row.specCode, specTitle: row.title, narrativeHtml: html, evidenceHtml: '',
+      verdict, aiMark: verdictToMark(verdict),
+      aiComment: specAiText({ verdict, rationale: res?.rationale || res?.feedback, suggestions: res?.suggestions || res?.missingElements || [] }),
+      evidenceCount: evCount.get(`${INTRO_CODE}.${row.specCode}`) || introFiles, excluded: false,
+    };
   });
-  // The 6 topic rows of the official Introduction / General Program
-  // Characteristics section (pages 1-4 of the template), in template order.
-  // Spec 'a' carries the full self-study Introduction narrative for review;
-  // b-f are the sub-topics the reader marks against it. Codes a-f map 1:1 to
-  // the template rows {{c_intro_a}}..{{c_intro_f}}.
-  const specs: ReaderReportSpec[] = [
-    mk('a', 'Introduction', introHtml || '<p><em>No introduction narrative provided.</em></p>', introFiles),
-    mk('b', 'Required Introductory Material: General Introduction to the Program', introHtml || '<p><em>See the program Introduction above.</em></p>', introFiles),
-    mk('c', 'Describe the Program', '<p>Confirm the Introduction describes the program (organizational structure, history, degree(s) offered, mission) without duplicating the Specifications.</p>'),
-    mk('d', `Interim Report and Review / Reaccreditations only${cycle && cycle !== 'Not specified' ? ` — this submission: ${esc(cycle)}` : ''}`, `<p>Applies to Interim Reports and Reaccreditations. Accreditation cycle for this submission: ${esc(cycle)}.</p>`),
-    mk('e', 'Delivery at Multiple Sites', '<p>If the program is delivered at multiple sites, confirm the Introduction addresses each site.</p>'),
-    mk('f', 'Hybrid or Online Course Delivery', '<p>If more than 50% of required human-service courses are delivered hybrid/online, confirm the Introduction addresses it.</p>'),
-  ];
-  return { code: INTRO_CODE, title: 'Introduction', aiMark: null, aiComment: '', specs };
+
+  // Section rollup: Non-Compliant if any row is, else Compliant if any row was scored.
+  const anyNon = specs.some((s) => s.aiMark === 'noncompliant');
+  const anyPass = specs.some((s) => s.aiMark === 'compliant');
+  const mark: 'compliant' | 'noncompliant' | null = anyNon ? 'noncompliant' : anyPass ? 'compliant' : null;
+  return { code: INTRO_CODE, title: 'Introduction', aiMark: mark, aiComment: '', specs };
 }
 
 /**

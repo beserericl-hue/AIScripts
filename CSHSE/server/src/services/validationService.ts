@@ -4,6 +4,7 @@ import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getStandardByCode } from '../data/standards';
 import { getSpecCriteria } from '../data/levelStandards';
+import { INTRO_STANDARD_CODE, getIntroRubricRow } from '../data/introRubric';
 import { evaluateSection, extractFileText } from './cshseAiClient';
 import { isS3Configured } from './s3Service';
 
@@ -127,6 +128,17 @@ export class ValidationService {
           `[ValidationService] rubric ${standardCode}.${specCode} level=${programLevel} ` +
             `source=${levelCrit.source} ("${(levelCrit.standardTitle || '').slice(0, 40)}")`
         );
+      }
+      // Introduction rows are evaluated against the official Reader Form rubric
+      // (introRubric), not standardsByLevel. The ai-service /ai/section/evaluate
+      // endpoint is code-agnostic, so we feed the per-row criteria here and the
+      // verdict is stored at standardsStatus.introduction_<spec> like any spec.
+      if (standardCode === INTRO_STANDARD_CODE) {
+        const introRow = getIntroRubricRow(specCode);
+        if (introRow?.criteria) {
+          criteria = introRow.criteria;
+          console.log(`[ValidationService] intro rubric ${INTRO_STANDARD_CODE}.${specCode} ("${introRow.title.slice(0, 40)}")`);
+        }
       }
       if (!narrativeText && submission?.narratives) {
         const narr: any = submission.narratives;

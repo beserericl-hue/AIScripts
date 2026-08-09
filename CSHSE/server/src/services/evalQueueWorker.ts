@@ -14,6 +14,7 @@
 import { Submission } from '../models/Submission';
 import { ValidationService } from './validationService';
 import { generateAndStoreReaderReport } from './readerReportGenerator';
+import { INTRO_STANDARD_CODE } from '../data/introRubric';
 
 const TICK_MS = 4000;
 const BATCH = 3;            // specs evaluated per tick (matches the old CONCURRENCY)
@@ -29,7 +30,7 @@ export async function processEvalQueueTick(): Promise<void> {
     // One submission with a non-empty queue per tick (fair across submissions).
     const sub: any = await Submission.findOne({
       aiEvalQueue: { $exists: true, $not: { $size: 0 } },
-    }).select('_id aiEvalQueue narratives');
+    }).select('_id aiEvalQueue narratives documentIntroduction');
     if (!sub) return;
 
     const queue: string[] = Array.isArray(sub.aiEvalQueue) ? sub.aiEvalQueue : [];
@@ -38,6 +39,11 @@ export async function processEvalQueueTick(): Promise<void> {
 
     const svc = new ValidationService();
     const getContent = (std: string, spec: string): string => {
+      // Introduction rows evaluate the whole self-study introduction against
+      // each row's Reader Form rubric (so conditional rows — multiple sites /
+      // hybrid-online / reaccreditation — can be judged "not applicable →
+      // compliant" rather than skipped for empty content).
+      if (std === INTRO_STANDARD_CODE) return (sub.documentIntroduction as string) || '';
       const stdMap = sub.narratives?.get?.(std);
       const entry = stdMap?.get?.(spec);
       return entry?.content || '';
