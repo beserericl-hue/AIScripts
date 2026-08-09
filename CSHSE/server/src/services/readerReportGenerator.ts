@@ -489,13 +489,15 @@ async function buildIntroSection(
     const res = latestIntro.get(row.specCode);
     const verdict = verdictFor(row.specCode);
     const slice = (slices[row.specCode] || '').trim();
-    // Fallback narrative: the general row ('a') falls back to the whole intro;
-    // conditional rows explain they may not apply.
-    const html = slice
-      || (row.specCode === 'a' && introHtml ? introHtml : '')
-      || `<p><em>${row.conditional
-        ? 'Not separately addressed in the introduction — the reader confirms whether this applies to the program.'
-        : 'See the program Introduction above.'}</em></p>`;
+    // Row 'a' ("Introduction") always shows the FULL introduction narrative — it
+    // is the general-overview row of the official form and its own anchor slice
+    // is just the "A." heading (so it looked empty). Rows b–f show their focused
+    // slice; conditional rows explain they may not apply.
+    const html = row.specCode === 'a'
+      ? (introHtml || '<p><em>No introduction narrative provided.</em></p>')
+      : (slice || `<p><em>${row.conditional
+          ? 'Not separately addressed in the introduction — the reader confirms whether this applies to the program.'
+          : 'See the program Introduction above.'}</em></p>`);
     return {
       specCode: row.specCode, specTitle: row.title, narrativeHtml: html, evidenceHtml: '',
       verdict, aiMark: verdictToMark(verdict),
