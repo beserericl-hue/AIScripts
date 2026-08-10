@@ -161,8 +161,10 @@ const CommentSchema = new Schema<IComment>({
     required: true
   },
   authorRole: {
+    // 'program_coordinator' — the PC's submit-time "Needs Improvement"
+    // acknowledgement notes are stored as comments (shown in the Reader Report).
     type: String,
-    enum: ['reader', 'lead_reader'],
+    enum: ['reader', 'lead_reader', 'program_coordinator'],
     required: true
   },
   content: {
