@@ -1297,6 +1297,11 @@ _GENERIC_APPENDIX_RE = re.compile(
 )
 
 
+# A block that opens with a standard/spec code ("2.", "5.d.", "10.b ") is a
+# narrative spec response, not an appendix document.
+_SPEC_START_RE = re.compile(r"^\d{1,2}[.)]\s*[a-z]?[.) ]")
+
+
 def _detect_generic_appendix_docs(sections: list) -> tuple[list, list]:
     """Heuristic detector for GENERIC appendix documents embedded inline in a
     template self-study (meeting minutes, handbooks, course-sequence charts,
@@ -1320,6 +1325,14 @@ def _detect_generic_appendix_docs(sections: list) -> tuple[list, list]:
         wc = sec.word_count or len(text.split())
         head_window = text[:600]
         mt = _GENERIC_APPENDIX_RE.search(head_window)
+        # A spec RESPONSE ("2. Describe…", "5.d. Provide…", "10.b …") is
+        # narrative — never pull it out even if it mentions a handbook /
+        # sequence. Skip when the block (or its heading) opens with a spec-code
+        # marker; real appendix docs (Faculty Meeting Minutes, By-Laws) don't.
+        _lead = ((sec.heading or "") + " " + text).lstrip()[:24]
+        if _SPEC_START_RE.match(_lead):
+            keep.append(sec)
+            continue
         # Require a decent-sized block so a one-line narrative mention of a
         # handbook / minutes doesn't get pulled out of a standard.
         if wc >= 150 and mt is not None:
