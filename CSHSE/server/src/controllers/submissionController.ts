@@ -5,6 +5,8 @@ import { Institution } from '../models/Institution';
 import { hasRoleAt, isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
 import { requireSubmissionAccess, requireCanImport } from '../services/submissionAccessGuard';
 import { ValidationResult } from '../models/ValidationResult';
+import { Comment } from '../models/Comment';
+import { getReaderReportStructure } from '../services/readerReportGenerator';
 import { ValidationService } from '../services/validationService';
 import { emailService } from '../services/emailService';
 import { recordAuditEvent } from '../services/auditLog';
@@ -1794,6 +1796,43 @@ export const createSubmission = async (req: AuthenticatedRequest, res: Response)
  * - Locks the self-study (program coordinator becomes read-only)
  * - Notifies the lead reader
  */
+
+/**
+ * GET /api/submissions/:submissionId/needs-improvement
+ *
+ * The list of specs whose AI evaluation verdict is "Needs Improvement", with the
+ * AI's rationale. Drives the submit-confirmation modal (AACC / Nicole): the PC
+ * acknowledges each one with a note explaining why it stands (school policy, a
+ * non-public page, to be discussed at the site visit…) before the self-study is
+ * submitted. Reuses the reader-report structure so the verdicts + rationale
+ * match exactly what the readers will see.
+ */
+export const getNeedsImprovement = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const submission = await requireSubmissionAccess(req as any, res, req.params.submissionId);
+    if (!submission) return;
+    const structure = await getReaderReportStructure(String(submission._id));
+    const items: any[] = [];
+    for (const s of structure?.standards || []) {
+      for (const sp of s.specs || []) {
+        if (sp.verdict === 'needs_improvement') {
+          items.push({
+            standardCode: s.code,
+            specCode: sp.specCode,
+            standardTitle: s.title,
+            specTitle: sp.specTitle,
+            rationale: sp.aiComment || '',
+          });
+        }
+      }
+    }
+    return res.json({ items });
+  } catch (err: any) {
+    console.error('[getNeedsImprovement] failed:', err);
+    return res.status(500).json({ error: 'Failed to load needs-improvement list', detail: err?.message || String(err) });
+  }
+};
+
 export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
@@ -1941,6 +1980,41 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       console.error('[submit] enqueue full AI evaluation failed (non-fatal):', seedErr);
     }
 
+    // AACC (Nicole) — at submit the PC acknowledges each "Needs Improvement" AI
+    // finding with a note explaining why it stands (school policy, a non-public
+    // page, to be discussed at the site visit…). Persist each note as a
+    // Program-Coordinator COMMENT on that spec so it appears in the Reader
+    // Report's comments section — the readers + lead reader see why the
+    // needs-improvement remains. Non-fatal: a note failure never blocks submit.
+    try {
+      const niNotes: any[] = Array.isArray(req.body?.needsImprovementNotes) ? req.body.needsImprovementNotes : [];
+      const imp = (req.user as any)?.impersonation;
+      const pcId = imp?.impersonatedUserId || req.user!.id;
+      const pcName = imp?.impersonatedUserName || req.user!.name || req.user!.email || 'Program Coordinator';
+      const commentDocs: any[] = [];
+      for (const n of niNotes) {
+        const note = String(n?.note || '').trim();
+        const std = String(n?.standardCode || '').trim();
+        if (!note || !std) continue;
+        commentDocs.push({
+          submissionId,
+          standardCode: std,
+          specCode: String(n?.specCode || '') || null,
+          selectedText: `Needs Improvement — ${std}${n?.specCode ? '.' + n.specCode : ''}`,
+          selectionStart: 0,
+          selectionEnd: 0,
+          authorId: new mongoose.Types.ObjectId(String(pcId)),
+          authorName: pcName,
+          authorRole: 'program_coordinator',
+          content: note,
+          replies: [],
+        });
+      }
+      if (commentDocs.length) await Comment.insertMany(commentDocs);
+    } catch (niErr) {
+      console.error('[submit] needs-improvement PC notes failed (non-fatal):', niErr);
+    }
+
     // CR-006 audit trail — record the final-submit event with the optional
     // submission note the PC enters in the confirm modal.
     const submissionNote = typeof req.body?.submissionNote === 'string'
@@ -1976,28 +2050,35 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       reason: didOverride ? overrideReason : submissionNote
     });
 
-    // Notify lead reader if assigned
-    if (submission.leadReader) {
-      try {
-        const leadReader = await User.findById(submission.leadReader);
+    // Notify the lead reader that the self-study has been submitted. Prefer the
+    // submission's own lead reader; fall back to the lead reader assigned to the
+    // INSTITUTION (AACC: the lead is assigned at the institution level, so at
+    // submit time there may be no submission-level lead yet).
+    try {
+      let leadReaderId: any = submission.leadReader;
+      if (!leadReaderId) {
+        const inst: any = await Institution.findById(submission.institutionId).select('assignedLeadReaderId').lean();
+        leadReaderId = inst?.assignedLeadReaderId;
+      }
+      if (leadReaderId) {
+        const leadReader = await User.findById(leadReaderId);
         const submitter = await User.findById(submission.submitterId);
-
-        if (leadReader && submitter) {
+        if (leadReader) {
           const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
           await emailService.sendSelfStudySubmittedEmail({
             leadReaderName: `${leadReader.firstName} ${leadReader.lastName}`,
             leadReaderEmail: leadReader.email,
             programName: submission.programName,
             institutionName: submission.institutionName,
-            submitterName: `${submitter.firstName} ${submitter.lastName}`,
+            submitterName: submitter ? `${submitter.firstName} ${submitter.lastName}` : (req.user!.name || 'Program Coordinator'),
             submissionLink: `${baseUrl}/self-study/${submission._id}`,
             submittedAt: new Date()
           });
         }
-      } catch (emailError) {
-        console.error('Failed to send submission notification email:', emailError);
-        // Don't fail the submission if email fails
       }
+    } catch (emailError) {
+      console.error('Failed to send submission notification email:', emailError);
+      // Don't fail the submission if email fails
     }
 
     return res.json({

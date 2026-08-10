@@ -8,6 +8,20 @@ export interface PreflightIssue {
   specCode?: string;
 }
 
+export interface NeedsImprovementItem {
+  standardCode: string;
+  specCode: string;
+  standardTitle: string;
+  specTitle: string;
+  rationale: string;
+}
+
+export interface NeedsImprovementNote {
+  standardCode: string;
+  specCode: string;
+  note: string;
+}
+
 export interface PreflightResult {
   submitDisabled: boolean;
   errors: PreflightIssue[];
@@ -30,8 +44,14 @@ interface FinalSubmitModalProps {
   // event. A clean submit passes `override` undefined.
   onConfirm: (
     submissionNote: string,
-    override?: { reason: string }
+    override?: { reason: string },
+    needsImprovementNotes?: NeedsImprovementNote[]
   ) => Promise<void> | void;
+  // AACC (Nicole) — specs the AI flagged "Needs Improvement". The PC records a
+  // note per item at submit (why it stands: school policy, non-public page…);
+  // each becomes a Program-Coordinator comment in the Reader Report.
+  needsImprovement?: NeedsImprovementItem[];
+  needsImprovementLoading?: boolean;
   validated: number;
   total: number;
   busy: boolean;
@@ -65,9 +85,14 @@ export function FinalSubmitModal({
   busy,
   preflight,
   preflightLoading,
-  onGoToSpec
+  onGoToSpec,
+  needsImprovement,
+  needsImprovementLoading
 }: FinalSubmitModalProps): JSX.Element | null {
   const [note, setNote] = useState('');
+  // Per-spec PC acknowledgement notes for the Needs-Improvement items, keyed by
+  // "std.spec".
+  const [niNotes, setNiNotes] = useState<Record<string, string>>({});
   // CR-008 / S10.3 — override-with-reason state. Only relevant when preflight
   // reports blocking errors.
   const [overrideChecked, setOverrideChecked] = useState(false);
@@ -81,6 +106,7 @@ export function FinalSubmitModal({
       setNote('');
       setOverrideChecked(false);
       setOverrideReason('');
+      setNiNotes({});
     }
   }, [open]);
 
@@ -107,10 +133,17 @@ export function FinalSubmitModal({
     (hasErrors && !(overrideChecked && reasonOk));
 
   const handleConfirm = async () => {
+    const niPayload: NeedsImprovementNote[] = (needsImprovement || [])
+      .map((it) => ({
+        standardCode: it.standardCode,
+        specCode: it.specCode,
+        note: (niNotes[`${it.standardCode}.${it.specCode}`] || '').trim(),
+      }))
+      .filter((n) => n.note.length > 0);
     if (hasErrors && overrideChecked) {
-      await onConfirm(note.trim(), { reason: overrideReason.trim() });
+      await onConfirm(note.trim(), { reason: overrideReason.trim() }, niPayload);
     } else {
-      await onConfirm(note.trim());
+      await onConfirm(note.trim(), undefined, niPayload);
     }
   };
 
@@ -127,7 +160,7 @@ export function FinalSubmitModal({
     >
       <div
         ref={dialogRef}
-        className="w-full max-w-lg rounded-xl bg-white shadow-2xl"
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-2xl"
       >
         <header className="flex items-start justify-between border-b border-gray-200 px-6 py-4">
           <div className="flex items-center gap-3">
@@ -152,7 +185,7 @@ export function FinalSubmitModal({
           </button>
         </header>
 
-        <div className="space-y-4 px-6 py-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-4">
           <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
             <div className="flex items-start gap-2">
               <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-700" aria-hidden />
@@ -269,6 +302,59 @@ export function FinalSubmitModal({
                   <li key={`${w.code}-${i}`}>{w.message}</li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* AACC (Nicole) — acknowledge each AI "Needs Improvement" finding with
+              a note explaining why it stands (school policy, non-public page, to
+              be discussed at the site visit…). Each note becomes a Program-
+              Coordinator comment in the Reader Report so the readers see why. */}
+          {needsImprovementLoading && (
+            <div className="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              <span>Loading the AI "Needs Improvement" findings…</span>
+            </div>
+          )}
+          {!needsImprovementLoading && needsImprovement && needsImprovement.length > 0 && (
+            <div data-testid="ni-notes-section" className="rounded-md border border-yellow-300 bg-yellow-50 p-3">
+              <p className="text-sm font-semibold text-yellow-900">
+                {needsImprovement.length} specification{needsImprovement.length === 1 ? '' : 's'} the AI marked "Needs Improvement"
+              </p>
+              <p className="mt-0.5 text-xs text-yellow-800">
+                For each, add a note explaining why it stands (e.g. "not implemented because of school policy", "on a page that isn't publicly accessible", "to be discussed at the site visit"). Your notes appear in the Reader Report as Program-Coordinator comments.
+              </p>
+              <div className="mt-3 space-y-3">
+                {needsImprovement.map((it) => {
+                  const key = `${it.standardCode}.${it.specCode}`;
+                  return (
+                    <div key={key} data-testid={`ni-item-${key}`} className="rounded border border-yellow-200 bg-white p-2.5">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-sm font-medium text-gray-900">
+                          Standard {it.standardCode}{it.specCode ? `.${it.specCode}` : ''}
+                          {it.specTitle ? <span className="font-normal text-gray-600"> — {it.specTitle}</span> : null}
+                        </span>
+                        <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">Needs Improvement</span>
+                      </div>
+                      {it.rationale && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-xs text-amber-700">Why the AI flagged this</summary>
+                          <div className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">{it.rationale}</div>
+                        </details>
+                      )}
+                      <textarea
+                        data-testid={`ni-note-${key}`}
+                        value={niNotes[key] || ''}
+                        onChange={(e) => setNiNotes((m) => ({ ...m, [key]: e.target.value }))}
+                        disabled={busy}
+                        rows={2}
+                        maxLength={2000}
+                        placeholder="Your note (why this remains) — shown to the readers…"
+                        className="mt-2 w-full rounded-md border border-gray-300 px-2.5 py-1.5 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500 disabled:bg-gray-50"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

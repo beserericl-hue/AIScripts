@@ -43,7 +43,7 @@ import { SpecNotApplicable } from './SpecNotApplicable';
 import { ReviewSurface } from './Review/ReviewSurface';
 import { SurfaceErrorBoundary } from '../../../components/SurfaceErrorBoundary';
 import { MatrixSurface } from './Review/MatrixSurface';
-import { FinalSubmitModal } from './FinalSubmitModal';
+import { FinalSubmitModal, type NeedsImprovementItem, type NeedsImprovementNote } from './FinalSubmitModal';
 import { CurriculumMatrixEditor } from '../MatrixEditor';
 import { FileLibrary } from '../FileLibrary';
 import { LeadReaderReportPage } from '../LeadReaderReport/LeadReaderReportPage';
@@ -1096,9 +1096,12 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // Accepts an optional submissionNote — the PC's confirm-modal message.
   // Persisted on the final-submit audit-log entry.
   const submitSelfStudyMutation = useMutation({
-    mutationFn: async (args?: { submissionNote?: string; override?: { reason: string } }) => {
+    mutationFn: async (args?: { submissionNote?: string; override?: { reason: string }; needsImprovementNotes?: NeedsImprovementNote[] }) => {
       const response = await api.post(`/api/submissions/${submissionId}/submit`, {
         submissionNote: args?.submissionNote ?? '',
+        // AACC (Nicole) — the PC's per-spec notes on each "Needs Improvement"
+        // finding; the server writes them as Program-Coordinator comments.
+        needsImprovementNotes: args?.needsImprovementNotes ?? [],
         // CR-008 / S10.3 — override-with-reason. Only sent when the PC chose to
         // submit despite blocking preflight errors; the server records a
         // dedicated `submission.final_submit_override` audit event.
@@ -2310,6 +2313,18 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     refetchOnWindowFocus: false,
   });
 
+  // AACC (Nicole) — the AI "Needs Improvement" findings, fetched with the
+  // modal so the PC can annotate each before submitting.
+  const needsImprovementQuery = useQuery({
+    queryKey: ['submission-needs-improvement', submissionId],
+    queryFn: async () => {
+      const r = await api.get(`/api/submissions/${submissionId}/needs-improvement`);
+      return (r.data?.items ?? []) as NeedsImprovementItem[];
+    },
+    enabled: !!submissionId && finalSubmitOpen,
+    refetchOnWindowFocus: false,
+  });
+
   // CR-008 — "Go to" from a preflight error row navigates to the spec in
   // the editor and closes the modal so the PC lands on the fix surface.
   const handleGoToSpec = useCallback(
@@ -2322,14 +2337,14 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     []
   );
   const handleFinalSubmitConfirm = useCallback(
-    async (submissionNote: string, override?: { reason: string }) => {
+    async (submissionNote: string, override?: { reason: string }, needsImprovementNotes?: NeedsImprovementNote[]) => {
       try {
         // Flush any pending debounced editor save BEFORE the submit locks the
         // submission — a save that lands after the lock would be rejected (403)
         // and the edit lost. Best-effort: a flush failure must not block submit.
         try { await narrativeFlushRef.current?.(); } catch { /* ignore */ }
         try { await docIntroFlushRef.current?.(); } catch { /* ignore */ }
-        await submitSelfStudyMutation.mutateAsync({ submissionNote, override });
+        await submitSelfStudyMutation.mutateAsync({ submissionNote, override, needsImprovementNotes });
         setFinalSubmitOpen(false);
       } catch (err) {
         // Leave the modal open so the PC can read the error + retry.
@@ -4648,6 +4663,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         preflight={preflightQuery.data ?? null}
         preflightLoading={preflightQuery.isLoading}
         onGoToSpec={handleGoToSpec}
+        needsImprovement={needsImprovementQuery.data ?? []}
+        needsImprovementLoading={needsImprovementQuery.isLoading}
       />
 
           </div>
