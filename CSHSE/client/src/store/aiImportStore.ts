@@ -189,7 +189,7 @@ export type CVItem = {
 // button rather than a wall of body text. Detection + .docx generation +
 // S3 upload live in later phases; this Phase 1 lands the data shape so
 // follow-on work doesn't require schema churn.
-export type EvidenceDocSubKind = 'paper' | 'syllabus';
+export type EvidenceDocSubKind = 'paper' | 'syllabus' | 'appendix';
 export type EvidenceDocItem = {
   sectionId: string;
   docSubKind: EvidenceDocSubKind;

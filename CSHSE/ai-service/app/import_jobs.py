@@ -1281,6 +1281,74 @@ class _MccSubspecRecommender:
         return best_spec, conf, rationale
 
 
+# Distinctive first-page signals of a GENERIC appendix document — the kinds the
+# CV / paper / syllabus detectors don't recognize (meeting minutes, handbooks,
+# course-sequence charts, bylaws, org charts). Kept deliberately narrow to avoid
+# swallowing narrative that merely MENTIONS one of these.
+_GENERIC_APPENDIX_RE = re.compile(
+    r"(?im)("
+    r"faculty meeting minutes|department meeting minutes|meeting minutes|minutes of the|"
+    r"advisory (board|council) minutes|advisory (board|council) meeting|"
+    r"suggested (course )?sequence|recommended (course )?sequence|course sequence chart|course rotation|"
+    r"four[-\s]year (course )?(plan|sequence)|program sequence|sequence of courses|"
+    r"field (placement|experience) handbook|student handbook|program handbook|faculty handbook|internship handbook|practicum handbook|"
+    r"by[-\s]?laws|organi[sz]ational chart|committee roster|faculty roster|program roster"
+    r")"
+)
+
+
+def _detect_generic_appendix_docs(sections: list) -> tuple[list, list]:
+    """Heuristic detector for GENERIC appendix documents embedded inline in a
+    template self-study (meeting minutes, handbooks, course-sequence charts,
+    bylaws, org charts) that the CV / paper / syllabus detectors miss. A LARGE
+    section whose opening text carries a distinctive appendix signal is pulled
+    out to supporting evidence (docSubKind='appendix'); everything else is kept
+    in the matcher stream untouched.
+
+    Returns ``(detections, remaining_sections)``. Opt-in — the caller only runs
+    this when the institution has enabled appendix-evidence extraction, and the
+    superuser reviews the results in the Parser Train run (mis-fires are
+    reassignable / flaggable), so the heuristic can be moderately eager without
+    risking a real institution's default parse.
+    """
+    from app.splitter.appendix_paper_detector import EvidenceDocDetection
+
+    dets: list = []
+    keep: list = []
+    for sec in sections:
+        text = sec.markdown or ""
+        wc = sec.word_count or len(text.split())
+        head_window = text[:600]
+        mt = _GENERIC_APPENDIX_RE.search(head_window)
+        # Require a decent-sized block so a one-line narrative mention of a
+        # handbook / minutes doesn't get pulled out of a standard.
+        if wc >= 150 and mt is not None:
+            heading = (sec.heading or "").strip()
+            # The template walker often labels an appendix by the standards it
+            # supports ("Standard 1c and 4b") — useless as a title, so prefer
+            # the matched appendix phrase in that case.
+            if not heading or heading.lower().startswith("standard"):
+                title = mt.group(0).strip().title()
+            else:
+                title = heading
+            summary = " ".join(text.split())[:240]
+            dets.append(
+                EvidenceDocDetection(
+                    section_id=sec.id,
+                    doc_sub_kind="appendix",
+                    title=title[:120],
+                    summary=summary,
+                    byte_offset_start=getattr(sec, "byte_offset_start", 0) or 0,
+                    page_count_estimate=max(1, wc // 450),
+                    image_count=0,
+                    body=text,
+                )
+            )
+        else:
+            keep.append(sec)
+    return dets, keep
+
+
 def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     """Template-format path. Mirrors scripts/build_template_preview.run_template_preview
     but builds in-memory result instead of writing an Obsidian file."""
@@ -1416,7 +1484,10 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
                 _eset = {t[:200].strip() for t in _ed_dropped if t and t.strip()}
                 sections = [s for s in sections if (s.markdown or "").strip()[:200] not in _eset]
             _ed_post, sections = detect_evidence_docs(sections)
-            _ed_all = _ed_pre + _ed_post
+            # #2 — generic appendix documents (minutes / handbooks / sequences /
+            # bylaws) the paper+syllabus detectors don't recognize.
+            _ga_dets, sections = _detect_generic_appendix_docs(sections)
+            _ed_all = _ed_pre + _ed_post + _ga_dets
             if _ed_all:
                 _persist_evidence_docs_to_s3(job, _ed_all)
             _docs_wire = [evidence_doc_to_dict(d) for d in _ed_all]
@@ -1425,9 +1496,10 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
                 job.evidence_docs = (job.evidence_docs or []) + _docs_wire
                 _n_syll = sum(1 for d in _docs_wire if d.get("docSubKind") == "syllabus")
                 _n_paper = sum(1 for d in _docs_wire if d.get("docSubKind") == "paper")
-                _stage_done(job, "evidence_doc_detector", f"{_n_paper} paper(s) + {_n_syll} syllabus(es) → supporting evidence; removed from narratives")
+                _n_apx = sum(1 for d in _docs_wire if d.get("docSubKind") == "appendix")
+                _stage_done(job, "evidence_doc_detector", f"{_n_paper} paper(s) + {_n_syll} syllabus(es) + {_n_apx} appendix doc(s) → supporting evidence; removed from narratives")
             else:
-                _stage_skipped(job, "evidence_doc_detector", "no paper / syllabus headers matched")
+                _stage_skipped(job, "evidence_doc_detector", "no paper / syllabus / appendix headers matched")
         except Exception as exc:  # noqa: BLE001
             job.warnings.append(f"evidence_doc_detector (template): {type(exc).__name__}: {exc}")
             _stage_done(job, "evidence_doc_detector", f"skipped ({type(exc).__name__})")
@@ -1814,7 +1886,37 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
     job.buckets = buckets
     job.tags = tags
     job.introductions = intro_struct
+    # #3 — curriculum matrix. By default the template pipeline leaves matrices
+    # empty and the grid lands as fragmented "Table:" cards in evidenceFiles.
+    # When appendix extraction is on, pull the matrix into a STRUCTURED
+    # job.matrices (Matrix editor + per-spec deep-links) and drop the fragmented
+    # matrix table cards so it isn't double-counted. Off → unchanged ([]).
     job.matrices = []
+    if _do_appendix_evidence and _tpl_html_bytes:
+        try:
+            _mtx = _extract_matrices_safe(job, _tpl_html_bytes)
+        except Exception as exc:  # noqa: BLE001
+            _mtx = []
+            job.warnings.append(f"matrix-extract (template): {type(exc).__name__}: {exc}")
+        job.matrices = _mtx or []
+        if _mtx:
+            _MTX_SIG = re.compile(
+                r"cshse-matrix-row|matrix-hsr|matrix-non-hsr|Knowledge,\s*Theory,\s*Skills",
+                re.I,
+            )
+            _removed = 0
+            for _b in buckets.values():
+                _kept = []
+                for _it in (_b.get("evidenceFiles") or []):
+                    _h = (_it.get("htmlSnippet") or "") + " " + (_it.get("snippet") or "")
+                    if _MTX_SIG.search(_h):
+                        _removed += 1
+                    else:
+                        _kept.append(_it)
+                _b["evidenceFiles"] = _kept
+            job.warnings.append(
+                f"matrix-extract: {len(_mtx)} structured matrix(es); removed {_removed} fragmented matrix table card(s) from evidence"
+            )
 
 
 def _run_self_study_pipeline(job: JobRecord, docx_path: Path) -> None:

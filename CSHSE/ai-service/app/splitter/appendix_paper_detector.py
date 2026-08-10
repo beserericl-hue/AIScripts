@@ -90,7 +90,7 @@ _SYLLABUS_KEYWORDS_RE = re.compile(
 # ----------------------------------------------------------------------
 
 
-DocSubKind = Literal["paper", "syllabus"]
+DocSubKind = Literal["paper", "syllabus", "appendix"]
 
 
 @dataclass

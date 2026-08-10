@@ -527,7 +527,9 @@ function EvidenceDocPreview({
   containerRef,
 }: EvidenceDocPreviewProps): JSX.Element {
   const submissionId = useAIImportStore((s) => s.submissionId);
-  const kindLabel = doc.docSubKind === 'syllabus' ? 'Course syllabus' : 'Appendix paper';
+  const kindLabel = doc.docSubKind === 'syllabus' ? 'Course syllabus'
+    : doc.docSubKind === 'appendix' ? 'Appendix document'
+    : 'Appendix paper';
   return (
     <aside
       ref={containerRef as any}

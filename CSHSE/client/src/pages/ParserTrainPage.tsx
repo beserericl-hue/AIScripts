@@ -43,7 +43,12 @@ export default function ParserTrainPage() {
   const [err, setErr] = useState('');
 
   // active run being trained
-  const [run, setRun] = useState<{ submissionId: string; pcUserId: string; programLevel: Level } | null>(null);
+  const [run, setRun] = useState<{ submissionId: string; pcUserId: string; programLevel: Level; institutionId?: string } | null>(null);
+  // Opt-in: extract inline appendices (CVs / syllabi / papers / minutes /
+  // handbooks / the curriculum matrix) into supporting evidence instead of
+  // standard narratives. Sets the institution-scoped enableAppendixEvidence
+  // rule before the parse; off by default (default-preserving).
+  const [extractAppendices, setExtractAppendices] = useState(false);
   const [importId, setImportId] = useState('');
   const [parseStatus, setParseStatus] = useState('');
   const [detectedFormat, setDetectedFormat] = useState('');
@@ -103,7 +108,7 @@ export default function ParserTrainPage() {
     setErr(''); setBusy('Creating run…');
     try {
       const { data } = await api.post('/api/parser-train', { programLevel: level });
-      setRun({ submissionId: data.submissionId, pcUserId: data.pcUserId, programLevel: data.programLevel });
+      setRun({ submissionId: data.submissionId, pcUserId: data.pcUserId, programLevel: data.programLevel, institutionId: data.institutionId });
       setImportId(''); setParseStatus(''); setDetectedFormat(''); setContract(null); setProposals([]); setActivated(null);
       await loadRuns();
     } catch (e: any) { setErr(e?.response?.data?.error || String(e)); }
@@ -123,6 +128,19 @@ export default function ParserTrainPage() {
       const up = await api.post('/api/imports/upload', fd, { headers: { ...IMPERSONATE(run.pcUserId), 'Content-Type': undefined } as any });
       const impId = up.data.importId;
       setImportId(impId);
+      // Opt-in appendix extraction: enable the institution-scoped rule BEFORE
+      // start-ai so the parse pulls inline CVs / syllabi / papers / minutes /
+      // handbooks / the matrix into supporting evidence.
+      if (extractAppendices && run.institutionId) {
+        setBusy('Enabling appendix extraction…');
+        await api.post('/api/parser-train/set-rule', {
+          ruleId: `su-appendix-evidence-${run.institutionId}`,
+          scope: { level: 'institution', institutionId: run.institutionId },
+          match: { format: 'template', region: 'document', signature: {} },
+          extract: { enableAppendixEvidence: true },
+          activate: true,
+        });
+      }
       setBusy('Starting parser…');
       await api.post(`/api/imports/${impId}/start-ai`, { programLevel: run.programLevel, forceFormat: null }, { headers: IMPERSONATE(run.pcUserId) });
       setParseStatus('queued');
@@ -233,6 +251,23 @@ export default function ParserTrainPage() {
           </button>
           {run && <span className="text-sm text-green-700">Run ready · {run.programLevel}</span>}
         </div>
+        {/* Opt-in appendix extraction (template docs). Off by default so every
+            institution parses as before; enable it here to pull inline CVs /
+            syllabi / papers / minutes / handbooks / the curriculum matrix into
+            supporting evidence for THIS run's institution. */}
+        <label className="mt-3 flex items-start gap-2 text-sm text-gray-700" title="Enables the institution-scoped enableAppendixEvidence rule before the parse">
+          <input
+            type="checkbox"
+            data-testid="pt-extract-appendices"
+            checked={extractAppendices}
+            onChange={(e) => setExtractAppendices(e.target.checked)}
+            className="mt-0.5"
+          />
+          <span>
+            <span className="font-medium">Extract inline appendices as supporting evidence</span>{' '}
+            <span className="text-gray-500">— pull embedded CVs, syllabi, papers, meeting minutes, handbooks, and the curriculum matrix out of the standard narratives (template docs). Opt-in; the detectors can over-fire, so review the results before approving.</span>
+          </span>
+        </label>
       </section>
 
       {/* 2 — import the document */}
