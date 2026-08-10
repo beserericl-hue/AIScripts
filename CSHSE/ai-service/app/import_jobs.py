@@ -1340,6 +1340,88 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
         f"{len(raw_sections)} sections ({len(sections)} authored, {len(placeholders)} placeholder)",
     )
 
+    # ── Appendix evidence extraction (parity with the self-study pipeline).
+    # Template self-studies routinely EMBED faculty CVs and appendix papers /
+    # syllabi / project samples inline. Without this pass the template walker
+    # swept them into standard NARRATIVES (they became text under a standard
+    # instead of stored supporting-evidence files). Mirrors
+    # _run_self_study_pipeline: detect from the document HTML + the section
+    # stream, PULL the matched sections out of the matcher input, and route
+    # them to job.cvs / job.evidence_docs. Default-preserving: the detectors
+    # fire only on real CV/paper/syllabus signals, so a template with none
+    # (e.g. AACC/Kennesaw) is untouched. Matrix extraction is intentionally
+    # left to the existing table routing to avoid double-counting the grid.
+    import io as _io
+    import mammoth as _mammoth
+    try:
+        with open(docx_path, "rb") as _f:
+            _html_str = _mammoth.convert_to_html(_io.BytesIO(_f.read())).value
+        _tpl_html_bytes = _html_str.encode("utf-8")
+    except Exception as exc:  # noqa: BLE001 — never sink the import over evidence extraction
+        _tpl_html_bytes = b""
+        job.warnings.append(f"template evidence-extract: mammoth failed ({type(exc).__name__})")
+
+    if _tpl_html_bytes:
+        _toc_dets: list = []
+        _stage_started(job, "cv_detector", "template")
+        try:
+            from app.splitter.cv_detector import detect_cvs, detect_cvs_from_html, cv_to_dict
+            from app.splitter.toc_detector import (
+                parse_toc as _parse_toc,
+                parse_sub_tocs as _parse_sub_tocs,
+                anchor_in_body as _toc_anchor_in_body,
+                merge_cv_detections as _merge_cv_dets,
+                merge_evidence_doc_detections as _merge_ed_dets,
+            )
+            _cv_pre, _cv_dropped = detect_cvs_from_html(_tpl_html_bytes)
+            if _cv_dropped:
+                _dset = {t[:200].strip() for t in _cv_dropped if t and t.strip()}
+                sections = [s for s in sections if (s.markdown or "").strip()[:200] not in _dset]
+            _cv_post, sections = detect_cvs(sections)
+            _cvs_wire = [cv_to_dict(cv) for cv in (_cv_pre + _cv_post)]
+            _main_toc = _parse_toc(_tpl_html_bytes)
+            _sub_toc = _parse_sub_tocs(_tpl_html_bytes)
+            _toc_entries = _main_toc + _sub_toc
+            _toc_dets = _toc_anchor_in_body(_tpl_html_bytes, _toc_entries) if _toc_entries else []
+            _cvs_wire = _merge_cv_dets(_cvs_wire, _toc_dets)
+            if _cvs_wire:
+                job.cvs = (job.cvs or []) + _cvs_wire
+                _stage_done(job, "cv_detector", f"{len(_cvs_wire)} CV(s) → supporting evidence; removed from narratives")
+            else:
+                _stage_skipped(job, "cv_detector", "no CV anchors matched")
+        except Exception as exc:  # noqa: BLE001
+            job.warnings.append(f"cv_detector (template): {type(exc).__name__}: {exc}")
+            _stage_done(job, "cv_detector", f"skipped ({type(exc).__name__})")
+
+        _stage_started(job, "evidence_doc_detector", "template")
+        try:
+            from app.splitter.appendix_paper_detector import (
+                detect_evidence_docs,
+                detect_evidence_docs_from_html,
+                evidence_doc_to_dict,
+            )
+            from app.splitter.toc_detector import merge_evidence_doc_detections as _merge_ed_dets2
+            _ed_pre, _ed_dropped = detect_evidence_docs_from_html(_tpl_html_bytes)
+            if _ed_dropped:
+                _eset = {t[:200].strip() for t in _ed_dropped if t and t.strip()}
+                sections = [s for s in sections if (s.markdown or "").strip()[:200] not in _eset]
+            _ed_post, sections = detect_evidence_docs(sections)
+            _ed_all = _ed_pre + _ed_post
+            if _ed_all:
+                _persist_evidence_docs_to_s3(job, _ed_all)
+            _docs_wire = [evidence_doc_to_dict(d) for d in _ed_all]
+            _docs_wire = _merge_ed_dets2(_docs_wire, _toc_dets)
+            if _docs_wire:
+                job.evidence_docs = (job.evidence_docs or []) + _docs_wire
+                _n_syll = sum(1 for d in _docs_wire if d.get("docSubKind") == "syllabus")
+                _n_paper = sum(1 for d in _docs_wire if d.get("docSubKind") == "paper")
+                _stage_done(job, "evidence_doc_detector", f"{_n_paper} paper(s) + {_n_syll} syllabus(es) → supporting evidence; removed from narratives")
+            else:
+                _stage_skipped(job, "evidence_doc_detector", "no paper / syllabus headers matched")
+        except Exception as exc:  # noqa: BLE001
+            job.warnings.append(f"evidence_doc_detector (template): {type(exc).__name__}: {exc}")
+            _stage_done(job, "evidence_doc_detector", f"skipped ({type(exc).__name__})")
+
     # Introduction routing seed (template path). The walker deterministically
     # tags the document Introduction (front matter + intro prompts + glossary →
     # introduction:document) and each Standard's framing (the "Standard N: …
