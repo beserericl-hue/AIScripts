@@ -8,6 +8,7 @@ import {
   submitStandard,
   revertStandard,
   submitSelfStudy,
+  getNeedsImprovement,
   revalidateFailed,
   getFailedValidations,
   getSpecEvaluation,
@@ -235,6 +236,8 @@ router.get('/:submissionId/preflight', getSubmissionPreflight);
  * @access  Private (Program Coordinator only - must be owner)
  */
 router.post('/:submissionId/submit', submitSelfStudy);
+// Needs-Improvement AI evals (with rationale) for the submit-confirmation modal.
+router.get('/:submissionId/needs-improvement', getNeedsImprovement);
 
 /**
  * @route   POST /api/submissions/:submissionId/unlock
