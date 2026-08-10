@@ -291,19 +291,10 @@ export function FinalSubmitModal({
               </div>
             </div>
           )}
-          {!preflightLoading && preflight && preflight.warnings.length > 0 && (
-            <div
-              data-testid="preflight-warnings"
-              className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
-            >
-              <p className="mb-1 font-medium">Worth checking before you submit:</p>
-              <ul className="list-disc space-y-0.5 pl-5">
-                {preflight.warnings.map((w, i) => (
-                  <li key={`${w.code}-${i}`}>{w.message}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/* The preflight "warnings" list (each needs-improvement spec restated)
+              was removed — it duplicated the acknowledgement section below, which
+              lists the same specs WITH a note field. The PC already knows the AI
+              flagged them; they just need to annotate each. */}
 
           {/* AACC (Nicole) — acknowledge each AI "Needs Improvement" finding with
               a note explaining why it stands (school policy, non-public page, to
