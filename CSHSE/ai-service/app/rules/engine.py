@@ -239,6 +239,21 @@ class RuleEngine:
                 return True
         return False
 
+    def wants_appendix_evidence(self) -> bool:
+        """True when an active rule enables inline-appendix extraction on the
+        TEMPLATE pipeline (``extract.enableAppendixEvidence``): detect embedded
+        faculty CVs + appendix papers/syllabi and route them to supporting
+        evidence instead of standard narratives. Off unless a rule for THIS
+        institution turns it on — never global — because the CV / paper
+        detectors can over-fire on some template documents (mis-reading
+        narrative as a syllabus), so the SU opts in per institution after
+        confirming the extraction in a Parser Train run. Consumed by
+        _run_template_pipeline."""
+        for rule in self._rules:
+            if (rule.get("extract") or {}).get("enableAppendixEvidence") is True:
+                return True
+        return False
+
     # ------------------------------------------------------------ forceFormat
     def force_format(self) -> str | None:
         """First active rule's ``extract.forceFormat``, if any.

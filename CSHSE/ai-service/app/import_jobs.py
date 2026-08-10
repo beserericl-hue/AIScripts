@@ -1340,26 +1340,36 @@ def _run_template_pipeline(job: JobRecord, docx_path: Path) -> None:
         f"{len(raw_sections)} sections ({len(sections)} authored, {len(placeholders)} placeholder)",
     )
 
-    # ── Appendix evidence extraction (parity with the self-study pipeline).
-    # Template self-studies routinely EMBED faculty CVs and appendix papers /
-    # syllabi / project samples inline. Without this pass the template walker
-    # swept them into standard NARRATIVES (they became text under a standard
-    # instead of stored supporting-evidence files). Mirrors
+    # ── Appendix evidence extraction (parity with the self-study pipeline),
+    # OPT-IN per institution. Template self-studies routinely EMBED faculty CVs
+    # and appendix papers / syllabi / project samples inline; without this pass
+    # the template walker swept them into standard NARRATIVES (text under a
+    # standard instead of stored supporting-evidence files). Mirrors
     # _run_self_study_pipeline: detect from the document HTML + the section
-    # stream, PULL the matched sections out of the matcher input, and route
-    # them to job.cvs / job.evidence_docs. Default-preserving: the detectors
-    # fire only on real CV/paper/syllabus signals, so a template with none
-    # (e.g. AACC/Kennesaw) is untouched. Matrix extraction is intentionally
-    # left to the existing table routing to avoid double-counting the grid.
-    import io as _io
-    import mammoth as _mammoth
-    try:
-        with open(docx_path, "rb") as _f:
-            _html_str = _mammoth.convert_to_html(_io.BytesIO(_f.read())).value
-        _tpl_html_bytes = _html_str.encode("utf-8")
-    except Exception as exc:  # noqa: BLE001 — never sink the import over evidence extraction
-        _tpl_html_bytes = b""
-        job.warnings.append(f"template evidence-extract: mammoth failed ({type(exc).__name__})")
+    # stream, PULL the matched sections out of the matcher input, and route them
+    # to job.cvs / job.evidence_docs.
+    #
+    # GATED behind a Parser Train rule (extract.enableAppendixEvidence) and OFF
+    # by default: the CV / appendix-paper detectors can over-fire on some
+    # template documents (mis-reading a narrative response as a "syllabus"), so
+    # every institution parses EXACTLY as before until the SU confirms the
+    # extraction in a Parser Train run and enables it for THAT institution.
+    # Matrix extraction stays with the existing table routing (no double-count).
+    _do_appendix_evidence = bool(
+        getattr(job, "rule_engine", None) and job.rule_engine.wants_appendix_evidence()
+    )
+    _tpl_html_bytes = b""
+    if _do_appendix_evidence:
+        job.warnings.append("rule-engine: inline-appendix evidence extraction enabled for this institution")
+        import io as _io
+        import mammoth as _mammoth
+        try:
+            with open(docx_path, "rb") as _f:
+                _html_str = _mammoth.convert_to_html(_io.BytesIO(_f.read())).value
+            _tpl_html_bytes = _html_str.encode("utf-8")
+        except Exception as exc:  # noqa: BLE001 — never sink the import over evidence extraction
+            _tpl_html_bytes = b""
+            job.warnings.append(f"template evidence-extract: mammoth failed ({type(exc).__name__})")
 
     if _tpl_html_bytes:
         _toc_dets: list = []
