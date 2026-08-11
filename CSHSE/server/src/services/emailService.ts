@@ -45,6 +45,8 @@ export interface EmailOptions {
   html?: string;
   /** Per-user identity — replies route here; From stays branded (cshse@…). */
   replyTo?: string;
+  /** Blind-copied recipients (e.g. the superuser on a submit notification). */
+  bcc?: string | string[];
   attachments?: EmailAttachment[];
 }
 
@@ -100,6 +102,8 @@ export interface SelfStudySubmittedEmailData {
   submitterName: string;
   submissionLink: string;
   submittedAt: Date;
+  /** Blind-copied on the notification (e.g. the superuser oversight mailbox). */
+  bccEmails?: string[];
 }
 
 class EmailService {
@@ -125,6 +129,7 @@ class EmailService {
         html: options.html,
         text: options.text,
         replyTo: options.replyTo,
+        bcc: options.bcc,
         attachments: options.attachments,
       });
       console.log(`Email sent to ${options.to}: ${options.subject} (${provider} ${messageId})`);
@@ -394,7 +399,8 @@ ${BRAND_FOOTER_TEXT}
       to: data.leadReaderEmail,
       subject: `Self-Study Submitted for Review - ${data.programName}`,
       html,
-      text
+      text,
+      bcc: data.bccEmails && data.bccEmails.length ? data.bccEmails : undefined
     });
   }
 
