@@ -2064,6 +2064,12 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
         const leadReader = await User.findById(leadReaderId);
         const submitter = await User.findById(submission.submitterId);
         if (leadReader) {
+          // BCC the superuser(s) so every submission notification is visible to
+          // the oversight account, even though no reader is explicitly assigned.
+          const superusers: any[] = await User.find({ isSuperuser: true }).select('email').lean();
+          const bccEmails = Array.from(new Set(
+            superusers.map((u) => (u.email || '').trim()).filter((e) => e && e !== leadReader.email)
+          ));
           const baseUrl = process.env.CLIENT_URL || 'http://localhost:5173';
           await emailService.sendSelfStudySubmittedEmail({
             leadReaderName: `${leadReader.firstName} ${leadReader.lastName}`,
@@ -2072,7 +2078,8 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
             institutionName: submission.institutionName,
             submitterName: submitter ? `${submitter.firstName} ${submitter.lastName}` : (req.user!.name || 'Program Coordinator'),
             submissionLink: `${baseUrl}/self-study/${submission._id}`,
-            submittedAt: new Date()
+            submittedAt: new Date(),
+            bccEmails
           });
         }
       }
