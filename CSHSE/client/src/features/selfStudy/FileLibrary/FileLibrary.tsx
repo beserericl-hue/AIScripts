@@ -171,9 +171,11 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
   const allEvidence: Evidence[] = evidenceData?.evidence || [];
 
   // CR-074 — the files that block submit: uploaded but never assigned to a
-  // Standard (mirrors the server gate + the Review banner count).
+  // Standard (mirrors the server gate + the Review banner count). Exclude the
+  // auto-generated Reader Report PDF/DOCX (no standardCode, but not stray
+  // uploads — the submit gate ignores them too).
   const unassignedItems = useMemo(
-    () => allEvidence.filter((e) => !e.standardCode),
+    () => allEvidence.filter((e) => !e.standardCode && !(e.tags || []).some((t) => String(t).startsWith('reader-report'))),
     [allEvidence]
   );
   const unassignedCount = unassignedItems.length;

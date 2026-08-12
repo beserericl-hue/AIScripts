@@ -62,7 +62,13 @@ export function ReviewSurface({ submissionId, onClose, onOpenFileLibrary }: Revi
         const recent = live.filter(
           (f) => f.createdAt && now - new Date(f.createdAt).getTime() < 3 * 24 * 60 * 60 * 1000
         ).length;
-        const unassigned = live.filter((f) => !f.standardCode).length;
+        // CR-074 — exclude system-generated artifacts (the auto-built Reader
+        // Report PDF/DOCX carry no standardCode but are NOT stray uploads). They
+        // were what made the banner read "2 not yet assigned" indefinitely and
+        // the submit gate ignores them, so the count must match.
+        const unassigned = live.filter(
+          (f) => !f.standardCode && !(f.tags || []).some((t: string) => String(t).startsWith('reader-report'))
+        ).length;
         if (!cancelled) setFileSummary({ total: live.length, recent, unassigned });
       } catch {
         if (!cancelled) setFileSummary(null);
