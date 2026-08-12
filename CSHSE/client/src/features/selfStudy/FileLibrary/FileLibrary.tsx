@@ -102,14 +102,21 @@ interface FileLibraryProps {
   // (a reader clicks "Open files for 1.a" on the Reader Report).
   scrollToSpec?: { std: string; spec: string } | null;
   onScrollConsumed?: () => void;
+  // CR-074 — the submit modal deep-links here with 'unassigned' so the PC lands
+  // on the "Unassigned only" view (the files that block submit). Consumed once.
+  initialFilter?: 'all' | 'unassigned';
+  onFilterConsumed?: () => void;
 }
 
-export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = null, onScrollConsumed }: FileLibraryProps) {
+export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = null, onScrollConsumed, initialFilter = 'all', onFilterConsumed }: FileLibraryProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Accordion state — which standards are expanded
   const [expandedStandards, setExpandedStandards] = useState<Set<string>>(new Set());
+  // CR-074 — assignment filter: show everything, or only files not yet assigned
+  // to a Standard (the blocking set the submit gate enforces).
+  const [assignmentFilter, setAssignmentFilter] = useState<'all' | 'unassigned'>(initialFilter);
 
   // Upload form state
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -133,6 +140,9 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
   const [assignFor, setAssignFor] = useState<string | null>(null);
   const [assignStd, setAssignStd] = useState('');
   const [assignSpec, setAssignSpec] = useState('');
+  // CR-074 — bulk-assign target for the "Assign all unassigned" action.
+  const [bulkAssignStd, setBulkAssignStd] = useState('');
+  const [bulkAssignSpec, setBulkAssignSpec] = useState('');
   // AI classify: the last suggestion returned for the file being assigned, shown
   // as a hint below the dropdowns (label + confidence). Cleared when the panel closes.
   const [assignHint, setAssignHint] = useState<{ label: string; confidence?: number } | null>(null);
@@ -160,10 +170,39 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
 
   const allEvidence: Evidence[] = evidenceData?.evidence || [];
 
-  // Group evidence by standardCode → specCode
+  // CR-074 — the files that block submit: uploaded but never assigned to a
+  // Standard (mirrors the server gate + the Review banner count).
+  const unassignedItems = useMemo(
+    () => allEvidence.filter((e) => !e.standardCode),
+    [allEvidence]
+  );
+  const unassignedCount = unassignedItems.length;
+
+  // Honour a deep-link request to show only the unassigned files (from the
+  // submit modal's hard block). Apply once, expand the group, then consume.
+  useEffect(() => {
+    if (initialFilter === 'unassigned') {
+      setAssignmentFilter('unassigned');
+      setExpandedStandards((prev) => new Set(prev).add('unassigned'));
+      onFilterConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFilter]);
+
+  // If the last unassigned file gets assigned while the filter is active, drop
+  // back to the full view so the PC isn't staring at an empty list.
+  useEffect(() => {
+    if (assignmentFilter === 'unassigned' && unassignedCount === 0 && !isLoading) {
+      setAssignmentFilter('all');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentFilter, unassignedCount, isLoading]);
+
+  // Group evidence by standardCode → specCode (respecting the assignment filter)
   const evidenceByStandard = useMemo(() => {
+    const source = assignmentFilter === 'unassigned' ? unassignedItems : allEvidence;
     const grouped: Record<string, Record<string, Evidence[]>> = {};
-    for (const item of allEvidence) {
+    for (const item of source) {
       const std = item.standardCode || 'unassigned';
       const spec = item.specCode || 'general';
       if (!grouped[std]) grouped[std] = {};
@@ -171,7 +210,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
       grouped[std][spec].push(item);
     }
     return grouped;
-  }, [allEvidence]);
+  }, [allEvidence, unassignedItems, assignmentFilter]);
 
   // Deep-link: when a reader opens the library targeting a spec, expand that
   // standard and scroll/flash its files. Runs once the evidence has loaded.
@@ -307,6 +346,28 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
     },
     onError: (error: any) => {
       setUploadError(error.response?.data?.error || 'Failed to assign standard');
+    },
+  });
+
+  // CR-074 — bulk-assign every currently-unassigned file to one target
+  // (a Standard/spec or the Introduction), so the PC can clear the whole
+  // submit-blocking set in one action.
+  const bulkAssignMutation = useMutation({
+    mutationFn: async () => {
+      if (!bulkAssignStd) return;
+      for (const item of unassignedItems) {
+        await api.patch(
+          `${API_BASE}/submissions/${submissionId}/evidence/${item._id}`,
+          { standardCode: bulkAssignStd, specCode: bulkAssignStd === 'introduction' ? undefined : (bulkAssignSpec || undefined) }
+        );
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['evidence', submissionId] });
+      setBulkAssignStd(''); setBulkAssignSpec('');
+    },
+    onError: (error: any) => {
+      setUploadError(error.response?.data?.error || 'Failed to assign files');
     },
   });
 
@@ -1179,7 +1240,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
         </div>
       )}
 
-      {/* Expand/Collapse controls */}
+      {/* Expand/Collapse controls + CR-074 assignment filter chips */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-100 flex-shrink-0">
         <button
           onClick={expandAll}
@@ -1194,7 +1255,93 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
         >
           Collapse All
         </button>
+
+        {/* Show all / Unassigned-only. The unassigned chip carries the count so
+            the PC can see at a glance whether any files still block submit. */}
+        <div className="ml-auto flex items-center gap-1" data-testid="file-library-filter">
+          <button
+            type="button"
+            data-testid="file-filter-all"
+            onClick={() => setAssignmentFilter('all')}
+            className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+              assignmentFilter === 'all'
+                ? 'bg-teal-100 text-teal-800'
+                : 'text-gray-500 hover:bg-gray-100'
+            }`}
+          >
+            All files
+          </button>
+          <button
+            type="button"
+            data-testid="file-filter-unassigned"
+            onClick={() => setAssignmentFilter('unassigned')}
+            className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+              assignmentFilter === 'unassigned'
+                ? 'bg-amber-200 text-amber-900'
+                : unassignedCount > 0
+                  ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                  : 'text-gray-400 hover:bg-gray-100'
+            }`}
+          >
+            Unassigned
+            <span
+              className={`rounded-full px-1.5 text-[10px] ${
+                unassignedCount > 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              {unassignedCount}
+            </span>
+          </button>
+        </div>
       </div>
+
+      {/* CR-074 — bulk "assign all unassigned" so the PC can clear the whole
+          blocking set at once (there was previously only per-file assign +
+          "un-approve all", with no matching bulk approve). */}
+      {!readOnly && assignmentFilter === 'unassigned' && unassignedCount > 0 && (
+        <div
+          data-testid="bulk-assign-unassigned"
+          className="flex flex-wrap items-center gap-2 border-b border-amber-100 bg-amber-50/60 px-4 py-2 text-sm"
+        >
+          <span className="font-medium text-amber-900">
+            Assign all {unassignedCount} unassigned file{unassignedCount === 1 ? '' : 's'} to:
+          </span>
+          <select
+            data-testid="bulk-assign-standard"
+            value={bulkAssignStd}
+            onChange={(e) => { setBulkAssignStd(e.target.value); setBulkAssignSpec(''); }}
+            className="rounded border border-amber-300 bg-white px-2 py-1 text-sm"
+          >
+            <option value="">Choose…</option>
+            <option value="introduction">Introduction (program intro)</option>
+            {(standards || []).map((s) => (
+              <option key={s.code} value={s.code}>Standard {s.code} — {s.title}</option>
+            ))}
+          </select>
+          <select
+            data-testid="bulk-assign-spec"
+            value={bulkAssignSpec}
+            onChange={(e) => setBulkAssignSpec(e.target.value)}
+            disabled={!bulkAssignStd || bulkAssignStd === 'introduction'}
+            className="rounded border border-amber-300 bg-white px-2 py-1 text-sm disabled:bg-gray-50 disabled:text-gray-400"
+          >
+            <option value="">Whole standard</option>
+            {(standards || []).find((s) => s.code === bulkAssignStd)?.specifications.map((sp) => (
+              <option key={sp.code} value={sp.code}>{bulkAssignStd}.{sp.code}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            data-testid="bulk-assign-apply"
+            onClick={() => bulkAssignMutation.mutate()}
+            disabled={!bulkAssignStd || bulkAssignMutation.isPending}
+            className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+          >
+            {bulkAssignMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Assign all
+          </button>
+        </div>
+      )}
 
       {/* Accordion list */}
       <div className="flex-1 overflow-y-auto p-4">

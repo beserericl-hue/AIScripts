@@ -78,7 +78,25 @@ interface WorkflowSummaryProps {
   onOpenSelfStudy: () => void;
   /** Trigger the final-submit flow. */
   onSubmit: () => void;
+  /** CR-074 — the submission's lifecycle status. Once submitted the IMPORT +
+   *  DRAFTS triage steps are cleared and a "Submitted for review" state shows. */
+  submissionStatus?: string;
+  submittedAt?: string | null;
 }
+
+// CR-074 — statuses at/after submit. The PC dashboard clears the draft-triage
+// pipeline and shows a read-only submitted state once the study reaches these.
+const SUBMITTED_STATUSES = [
+  'submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant',
+];
+const STATUS_LABEL: Record<string, string> = {
+  submitted: 'Submitted — awaiting reader assignment',
+  under_review: 'Under review',
+  readers_assigned: 'Readers assigned — review in progress',
+  review_complete: 'Reader review complete',
+  compliant: 'Found compliant',
+  non_compliant: 'Found non-compliant',
+};
 
 function SectionShell({
   step,
@@ -144,6 +162,8 @@ export function WorkflowSummary({
   onOpenReview,
   onOpenSelfStudy,
   onSubmit,
+  submissionStatus,
+  submittedAt,
 }: WorkflowSummaryProps): JSX.Element {
   if (isLoading) {
     return (
@@ -157,6 +177,7 @@ export function WorkflowSummary({
   const selfStudy = summary?.selfStudy;
   const submit = summary?.submit;
   const imp = summary?.import ?? null;
+  const isSubmitted = !!submissionStatus && SUBMITTED_STATUSES.includes(submissionStatus);
 
   const validated = selfStudy?.specsValidated ?? 0;
   const total = selfStudy?.specsTotal ?? 0;
@@ -164,7 +185,43 @@ export function WorkflowSummary({
 
   return (
     <div className="space-y-6" data-testid="workflow-summary">
-      {/* 1. IMPORT --------------------------------------------------------- */}
+      {/* CR-074 — once submitted, the PC's landing page leads with the
+          submitted state (not the draft-triage pipeline). */}
+      {isSubmitted && (
+        <div
+          data-testid="workflow-submitted-banner"
+          className="rounded-xl border border-green-200 bg-green-50 p-5"
+        >
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="mt-0.5 h-6 w-6 flex-shrink-0 text-green-600" />
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-semibold text-green-900">
+                Submitted for review
+              </p>
+              <p className="mt-0.5 text-sm text-green-800">
+                {STATUS_LABEL[submissionStatus!] || 'Submitted'}
+                {submittedAt ? ` · ${format(new Date(submittedAt), 'MMM d, yyyy')}` : ''}
+              </p>
+              <p className="mt-2 text-sm text-green-800">
+                Your self-study is now read-only. You can view and print it, and
+                the reader report as it develops. Contact the administrator if you
+                need to make changes.
+              </p>
+              <button
+                type="button"
+                onClick={onOpenSelfStudy}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg border border-green-300 bg-white px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100"
+              >
+                View self-study
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 1. IMPORT — draft-triage step; cleared once submitted. */}
+      {!isSubmitted && (
       <SectionShell step={1} label="Import" hint="Your uploaded self-study">
         {imp ? (
           <div className="flex items-center justify-between gap-4">
@@ -203,8 +260,10 @@ export function WorkflowSummary({
           </div>
         )}
       </SectionShell>
+      )}
 
-      {/* 2. DRAFTS -------------------------------------------------------- */}
+      {/* 2. DRAFTS — the draft-review panel; cleared for the PC once submitted. */}
+      {!isSubmitted && (
       <SectionShell
         step={2}
         label="Drafts"
@@ -288,6 +347,7 @@ export function WorkflowSummary({
           </button>
         </div>
       </SectionShell>
+      )}
 
       {/* 3. SELF-STUDY ---------------------------------------------------- */}
       <SectionShell step={3} label="Self-Study" hint="Committed content">
@@ -339,36 +399,46 @@ export function WorkflowSummary({
 
       {/* 4. SUBMIT -------------------------------------------------------- */}
       <SectionShell step={4} label="Submit">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-3 text-sm text-gray-600">
-            <Clock className="w-5 h-5 text-gray-400" />
-            <span>
-              {submit?.deadline
-                ? `Deadline ${format(new Date(submit.deadline), 'MMM d, yyyy')}`
-                : 'No deadline set'}
-              {' · '}
-              {validated}/{total} validated
-              {' · '}
-              <span className={submit?.ready ? 'text-green-600 font-medium' : 'text-amber-600'}>
-                {submit?.ready ? 'Ready to submit' : 'Not ready to submit'}
-              </span>
+        {isSubmitted ? (
+          <div className="flex items-center gap-3 text-sm" data-testid="dashboard-submit-done">
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
+            <span className="text-gray-700">
+              {STATUS_LABEL[submissionStatus!] || 'Submitted'}
+              {submittedAt ? ` · ${format(new Date(submittedAt), 'MMM d, yyyy')}` : ''}
             </span>
           </div>
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={!submit?.ready}
-            data-testid="dashboard-submit-cta"
-            className={`flex-shrink-0 flex items-center gap-2 px-5 py-2 text-sm rounded-lg font-medium ${
-              submit?.ready
-                ? 'text-white bg-primary-600 hover:bg-primary-700'
-                : 'text-gray-400 bg-gray-100 cursor-not-allowed'
-            }`}
-          >
-            <Send className="w-4 h-4" />
-            Submit Self-Study for Review
-          </button>
-        </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3 text-sm text-gray-600">
+              <Clock className="w-5 h-5 text-gray-400" />
+              <span>
+                {submit?.deadline
+                  ? `Deadline ${format(new Date(submit.deadline), 'MMM d, yyyy')}`
+                  : 'No deadline set'}
+                {' · '}
+                {validated}/{total} validated
+                {' · '}
+                <span className={submit?.ready ? 'text-green-600 font-medium' : 'text-amber-600'}>
+                  {submit?.ready ? 'Ready to submit' : 'Not ready to submit'}
+                </span>
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onSubmit}
+              disabled={!submit?.ready}
+              data-testid="dashboard-submit-cta"
+              className={`flex-shrink-0 flex items-center gap-2 px-5 py-2 text-sm rounded-lg font-medium ${
+                submit?.ready
+                  ? 'text-white bg-primary-600 hover:bg-primary-700'
+                  : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+              }`}
+            >
+              <Send className="w-4 h-4" />
+              Submit Self-Study for Review
+            </button>
+          </div>
+        )}
       </SectionShell>
     </div>
   );

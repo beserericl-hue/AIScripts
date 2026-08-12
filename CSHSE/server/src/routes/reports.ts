@@ -9,7 +9,8 @@ import {
   getReaderReportData,
   saveReaderReportData,
   downloadReaderReport,
-  listReaderReports
+  listReaderReports,
+  getReaderDashboard
 } from '../controllers/reportController';
 import { authenticate } from '../middleware/auth';
 
@@ -17,6 +18,10 @@ const router = Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+// CR-074 — reader/lead "Reader Self Study" dashboard panel: assigned studies +
+// this reviewer's per-intro / per-spec read-marked progress. One call.
+router.get('/reader-dashboard', getReaderDashboard);
 
 // ============================================
 // READER REPORT PDF ROUTES

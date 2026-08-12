@@ -9,6 +9,7 @@ import { generateAndStoreReaderReport, getReaderReportStructure, renderReaderRep
 import { ReaderReport } from '../models/ReaderReport';
 import { Comment } from '../models/Comment';
 import { Assignment } from '../models/Assignment';
+import { Submission } from '../models/Submission';
 import { isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
@@ -722,5 +723,96 @@ export const listReaderReports = async (req: AuthenticatedRequest, res: Response
   } catch (error) {
     console.error('List reader reports error:', error);
     return res.status(500).json({ error: 'Failed to list reader reports' });
+  }
+};
+
+/**
+ * CR-074 — GET /api/reports/reader-dashboard
+ * The reader/lead-reader "Reader Self Study" panel: the self-studies assigned
+ * to the current reviewer (via active Assignment — the same access source
+ * listSubmissions uses), each annotated with THIS reviewer's reader-report
+ * progress: how many Introduction rows and how many numbered specs they have
+ * marked (compliant/non-compliant) vs the totals. Drives the dashboard so the
+ * separate "Review queue" screen is no longer needed.
+ */
+const READER_VISIBLE_ON_DASHBOARD = [
+  'submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant'
+];
+
+export const getReaderDashboard = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const reviewerId = effectiveReviewerId(req);
+    if (!reviewerId) return res.status(401).json({ error: 'Not authenticated' });
+
+    // Active assignments are the source of truth for what this reviewer may read.
+    const assignments = await Assignment.find({ userId: reviewerId, status: 'active' })
+      .select('submissionId assignmentType').lean();
+    const subIds = assignments.map((a) => a.submissionId);
+    const typeBySub = new Map(assignments.map((a) => [String(a.submissionId), a.assignmentType]));
+    if (subIds.length === 0) return res.json({ items: [] });
+
+    const subs = await Submission.find({
+      _id: { $in: subIds },
+      status: { $in: READER_VISIBLE_ON_DASHBOARD }
+    })
+      .select('institutionName programName programLevel status submittedAt updatedAt')
+      .lean();
+
+    // This reviewer's saved reports across those submissions (marks = "read").
+    const reports = await ReaderReport.find({ submissionId: { $in: subIds }, reviewerId })
+      .select('submissionId rows completedAt updatedAt acceptanceVote').lean();
+    const reportBySub = new Map(reports.map((r) => [String(r.submissionId), r]));
+
+    const items: any[] = [];
+    for (const sub of subs) {
+      const sid = String(sub._id);
+      const structure = await getReaderReportStructure(sid);
+      let introTotal = 0, specsTotal = 0;
+      if (structure) {
+        for (const s of structure.standards) {
+          const n = (s.specs || []).length;
+          if (String(s.code).toLowerCase() === 'introduction') introTotal += n;
+          else specsTotal += n;
+        }
+      }
+      // Count THIS reviewer's marked rows (a non-empty mark or lead override).
+      const rep = reportBySub.get(sid);
+      let introMarked = 0, specsMarked = 0;
+      for (const row of (rep?.rows || []) as any[]) {
+        const marked = !!(row.leadMark || row.mark);
+        if (!marked) continue;
+        if (String(row.standardCode).toLowerCase() === 'introduction') introMarked++;
+        else specsMarked++;
+      }
+      items.push({
+        _id: sid,
+        institutionName: sub.institutionName,
+        programName: sub.programName,
+        programLevel: sub.programLevel,
+        status: sub.status,
+        submittedAt: (sub as any).submittedAt || null,
+        updatedAt: sub.updatedAt || null,
+        assignmentType: typeBySub.get(sid) || 'reader',
+        progress: {
+          introMarked, introTotal,
+          specsMarked, specsTotal,
+          totalMarked: introMarked + specsMarked,
+          total: introTotal + specsTotal,
+          completedAt: rep?.completedAt || null,
+          acceptanceVote: rep?.acceptanceVote || '',
+        }
+      });
+    }
+    // Most-recently-submitted first.
+    items.sort((a, b) => {
+      const ta = a.submittedAt ? new Date(a.submittedAt).getTime() : 0;
+      const tb = b.submittedAt ? new Date(b.submittedAt).getTime() : 0;
+      return tb - ta;
+    });
+
+    return res.json({ items });
+  } catch (error) {
+    console.error('Reader dashboard error:', error);
+    return res.status(500).json({ error: 'Failed to load reader dashboard' });
   }
 };
