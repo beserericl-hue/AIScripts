@@ -185,6 +185,30 @@ export function ReaderReportEditor(): JSX.Element {
     commentsBySpec.get(`${std}.${spec}`) || EMPTY_COMMENTS;
   const refreshComments = () => { allCommentsQuery.refetch(); };
 
+  // CR-074 — the Program Coordinator's submit-time notes: their written response
+  // to each AI "needs improvement" flag (why it stands — school policy, a
+  // non-public page, to be discussed at the site visit…). They arrive as
+  // Comments with authorRole 'program_coordinator' and no text anchor, so the
+  // reader would otherwise never see them on-screen. Surface them (a) in each
+  // flagged spec's checklist card, and (b) via a top navigator that walks them.
+  const pcNotes = useMemo(
+    () => (allCommentsQuery.data?.comments || []).filter((c) => c.authorRole === 'program_coordinator'),
+    [allCommentsQuery.data]
+  );
+  const pcNotesForSpec = (std: string, spec: string): FullComment[] =>
+    pcNotes.filter((c) => c.standardCode === std && (c.specCode || '') === spec);
+  const pcNoteSpecs = useMemo(() => {
+    const withNote = new Set(pcNotes.map((c) => `${c.standardCode}.${c.specCode || ''}`));
+    return orderedSpecs.filter((s) => withNote.has(`${s.std}.${s.spec}`));
+  }, [pcNotes, orderedSpecs]);
+  const [pcNoteIdx, setPcNoteIdx] = useState(0);
+  const jumpToPcNote = (i: number) => {
+    if (!pcNoteSpecs.length) return;
+    const n = ((i % pcNoteSpecs.length) + pcNoteSpecs.length) % pcNoteSpecs.length;
+    setPcNoteIdx(n);
+    scrollToSpec(pcNoteSpecs[n].std, pcNoteSpecs[n].spec);
+  };
+
   // Global comment order + lookup, so each comment card carries its own prev/next
   // that walks EVERY comment (the navigation lives on the comment, not a top bar).
   const orderedCommentIds = useMemo(() => {
@@ -719,6 +743,54 @@ export function ReaderReportEditor(): JSX.Element {
         prev/next to walk every comment. Your work autosaves.
       </p>
 
+      {/* CR-074 — Program Coordinator notes navigator. The PC explains, at
+          submit, why each AI "needs improvement" flag stands; walk them here so
+          the reader reads each justification before marking that spec. */}
+      {pcNotes.length > 0 && (
+        <div data-testid="rr-pc-notes-nav" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-start gap-2 text-sm text-amber-900">
+              <MessageSquare className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <span>
+                <span className="font-semibold">Program Coordinator notes ({pcNotes.length})</span>
+                <span className="text-amber-800"> — the PC's response to the AI's flags (why each stands: school policy, a non-public page, to be discussed at the site visit…). They also appear on each flagged specification's checklist.</span>
+              </span>
+            </div>
+            <div className="flex flex-shrink-0 items-center gap-1">
+              <button
+                type="button"
+                data-testid="rr-pc-notes-prev"
+                disabled={pcNoteSpecs.length < 2}
+                onClick={() => jumpToPcNote(pcNoteIdx - 1)}
+                title="Previous note"
+                className="rounded border border-amber-300 p-1 text-amber-700 hover:bg-amber-100 disabled:opacity-40"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </button>
+              <span className="tabular-nums text-xs text-amber-700">{pcNoteSpecs.length ? pcNoteIdx + 1 : 0}/{pcNoteSpecs.length}</span>
+              <button
+                type="button"
+                data-testid="rr-pc-notes-next"
+                disabled={pcNoteSpecs.length < 2}
+                onClick={() => jumpToPcNote(pcNoteIdx + 1)}
+                title="Next note"
+                className="rounded border border-amber-300 p-1 text-amber-700 hover:bg-amber-100 disabled:opacity-40"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                data-testid="rr-pc-notes-first"
+                onClick={() => jumpToPcNote(0)}
+                className="ml-1 inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
+              >
+                Jump to first note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
         {rows.map((r) => (
           <div key={r.code} id={`rr-row-${r.code}`} data-testid={`rr-row-${r.code}`} className="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4">
@@ -800,6 +872,22 @@ export function ReaderReportEditor(): JSX.Element {
                             </div>
                           </details>
                         )}
+                        {/* CR-074 — the Program Coordinator's note for THIS spec
+                            (their submit-time response to the AI flag). Shown
+                            right by the checklist so the reader weighs it while
+                            marking Compliant / Non-Compliant. */}
+                        {pcNotesForSpec(r.code, sp.specCode).map((c) => (
+                          <div
+                            key={c._id}
+                            data-testid={`rr-pc-note-${r.code}-${sp.specCode}`}
+                            className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-2"
+                          >
+                            <div className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                              <MessageSquare className="h-3 w-3" /> Program Coordinator's note
+                            </div>
+                            <div className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap text-xs text-amber-900">{c.content}</div>
+                          </div>
+                        ))}
                         {(overrideMode || sp.overriddenBy || sp.leadMark) && (
                           <div className="mb-1 flex flex-wrap items-center gap-2 px-0 text-[11px]">
                             <span className="text-slate-500">
@@ -911,7 +999,10 @@ export function ReaderReportEditor(): JSX.Element {
                         standardCode={r.code}
                         specCode={sp.specCode}
                         html={`${sp.narrativeHtml || ''}${sp.evidenceHtml ? `<p class="rr-evidence-label">Supporting evidence</p>${sp.evidenceHtml}` : ''}`}
-                        comments={commentsForSpec(r.code, sp.specCode)}
+                        /* PC notes have no text anchor + are shown in the checklist
+                           card instead, so keep only text-anchored reader/lead
+                           comments in the inline margin. */
+                        comments={commentsForSpec(r.code, sp.specCode).filter((c) => c.authorRole !== 'program_coordinator')}
                         currentUserRole={effectiveRole as any}
                         proseClassName={proseCls}
                         onCommentAdded={refreshComments}
