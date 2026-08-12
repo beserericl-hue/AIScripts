@@ -56,7 +56,9 @@ test.describe('CR-074 reader report — PC notes surfaced', () => {
     const firstCard = page.getByTestId(`rr-pc-note-${first}`);
     await expect(firstCard).toBeVisible({ timeout: 10000 });
     await expect(firstCard).toContainText(/Program Coordinator/i);
-    await expect(firstCard).toContainText(/school policy|not publicly accessible|non-public|site visit/i);
+    // The actual PC note text renders (a snippet passed in, so this is portable
+    // across the dev fixture and the real AACC data).
+    if (cfg.firstNote) await expect(firstCard).toContainText(cfg.firstNote);
 
     // Next → the second note's card.
     if (cfg.notes.length > 1) {
