@@ -53,9 +53,9 @@ interface SpecFilesMenuProps {
 
 /**
  * The per-spec "Files" control on the Reader Report. Instead of navigating away
- * to the File Library, it drops a menu of the files LINKED TO THIS spec, grouped
- * by kind (Syllabi / CVs / Projects / …). Clicking a file VIEWS its contents in
- * place (a preview modal) — the reader never leaves the Reader Report.
+ * to the File Library, it drops a menu of the files ASSIGNED TO THIS spec (or
+ * its parent standard), grouped by kind (Syllabi / CVs / Projects / …). Clicking
+ * a file VIEWS its contents in place — the reader never leaves the Reader Report.
  */
 export function SpecFilesMenu({ submissionId, files, standardCode, specCode }: SpecFilesMenuProps): JSX.Element {
   const [open, setOpen] = useState(false);
@@ -69,11 +69,18 @@ export function SpecFilesMenu({ submissionId, files, standardCode, specCode }: S
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  // Items tagged to THIS spec float to the top of their kind group, so the
-  // reader sees what's specific first, then the rest of the program library.
-  const here = (f: SpecEvidence) => (f.standardCode === standardCode && (f.specCode || '') === specCode ? 0 : 1);
+  // Only the files RELEVANT to this section: those assigned directly to this
+  // spec (standardCode + specCode match) OR to the parent standard as a whole
+  // (same standard, no spec). Program-wide / other-standard / unassigned files
+  // are NOT shown — the reader wants this section's evidence, not the whole
+  // 249-file library.
+  const relevant = files.filter(
+    (f) => f.standardCode === standardCode && ((f.specCode || '') === specCode || !f.specCode)
+  );
+  // Spec-specific items float above standard-level ones within each kind group.
+  const here = (f: SpecEvidence) => ((f.specCode || '') === specCode ? 0 : 1);
   const buckets = KIND_BUCKET
-    .map((b) => ({ ...b, items: files.filter((f) => kindOf(f) === b.key).sort((a, c) => here(a) - here(c)) }))
+    .map((b) => ({ ...b, items: relevant.filter((f) => kindOf(f) === b.key).sort((a, c) => here(a) - here(c)) }))
     .filter((b) => b.items.length > 0);
 
   return (
@@ -81,15 +88,15 @@ export function SpecFilesMenu({ submissionId, files, standardCode, specCode }: S
       <button
         data-testid={`rr-files-${standardCode}-${specCode}`}
         onClick={() => setOpen((v) => !v)}
-        disabled={files.length === 0}
+        disabled={relevant.length === 0}
         className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-        title={files.length ? 'View the imported supporting files — CVs, syllabi, projects, documents — and open any to read it' : 'No supporting files imported'}
+        title={relevant.length ? 'View the supporting files assigned to this section — open any to read it' : 'No files assigned to this specification'}
       >
-        <FolderOpen className="h-3.5 w-3.5" />Files ({files.length})
-        {files.length > 0 && <ChevronDown className="h-3 w-3" />}
+        <FolderOpen className="h-3.5 w-3.5" />Files ({relevant.length})
+        {relevant.length > 0 && <ChevronDown className="h-3 w-3" />}
       </button>
 
-      {open && files.length > 0 && (
+      {open && relevant.length > 0 && (
         <div
           data-testid={`rr-files-menu-${standardCode}-${specCode}`}
           className="absolute right-0 z-30 mt-1 max-h-96 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl"

@@ -66,5 +66,16 @@ test.describe('CR-074 reader report — PC notes surfaced', () => {
       const second = cfg.notes[1].replace('.', '-');
       await expect(page.getByTestId(`rr-pc-note-${second}`)).toBeVisible({ timeout: 10000 });
     }
+
+    // The per-spec Files menu is FILTERED to this section's assigned files, not
+    // the whole library. cfg.filesCheck = { spec, count } (a spec whose Files
+    // button should show a small, section-scoped count — never the 249-file lib).
+    if (cfg.filesCheck) {
+      const btn = page.getByTestId(`rr-files-${cfg.filesCheck.spec.replace('.', '-')}`);
+      await expect(btn).toContainText(`Files (${cfg.filesCheck.count})`);
+    }
+    if (cfg.filesEmptySpec) {
+      await expect(page.getByTestId(`rr-files-${cfg.filesEmptySpec.replace('.', '-')}`)).toContainText('Files (0)');
+    }
   });
 });
