@@ -28,6 +28,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { JointVentureBadge } from '../../components/JointVentureBadge';
 import { WorkflowSummary, type WorkflowSummaryData } from './WorkflowSummary';
+import { ReaderSelfStudyPanel } from './ReaderSelfStudyPanel';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -563,6 +564,8 @@ export function Dashboard() {
             }
             onOpenSelfStudy={() => navigate(pcEditorPath())}
             onSubmit={() => navigate(pcEditorPath())}
+            submissionStatus={mySubmissionData?.submissions?.[0]?.status}
+            submittedAt={mySubmissionData?.submissions?.[0]?.submittedAt}
           />
 
           {/* CR-047 — accreditation-admin panels demoted below the workflow,
@@ -725,6 +728,13 @@ export function Dashboard() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* CR-074 — readers + lead readers see their assigned self-studies +
+            per-intro/per-spec read progress here (the old "Review queue" screen
+            folded into the dashboard). */}
+        {(effectiveRole === 'reader' || effectiveRole === 'lead_reader') && (
+          <ReaderSelfStudyPanel />
+        )}
+
         {/* Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
           <div className="flex items-center gap-2 mb-4">

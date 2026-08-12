@@ -20,7 +20,28 @@ import { getAllStandards } from '../data/standards';
 import { inferProgramLevel, levelFromInstitution, getLevelStandards } from '../data/levelStandards';
 import { INTRO_STANDARD_CODE, INTRO_SPEC_CODES } from '../data/introRubric';
 import { ingestCorrection } from '../services/cshseAiClient';
+import { ensureInstitutionReaderAssignments } from '../services/readerAssignmentService';
 import mongoose from 'mongoose';
+
+/**
+ * CR-074 — a self-study cannot be submitted while supporting files remain
+ * unassigned to a Standard. Once submitted the study is read-only, so a file
+ * the PC uploaded but never classified would be stranded, invisible, and never
+ * reach a reader. Mirrors the Review banner's "N not yet assigned to a
+ * Standard" count (listEvidence: isDeleted:false, no standardCode), excluding
+ * system-generated artifacts (reader-report PDFs/DOCX) which legitimately carry
+ * no standardCode.
+ */
+async function findUnassignedEvidence(submissionId: string) {
+  return SupportingEvidence.find({
+    submissionId: new mongoose.Types.ObjectId(submissionId),
+    isDeleted: false,
+    $or: [{ standardCode: { $exists: false } }, { standardCode: null }, { standardCode: '' }],
+    tags: { $not: { $elemMatch: { $regex: /^reader-report/ } } }
+  })
+    .select('_id file.originalName title')
+    .lean();
+}
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -1275,18 +1296,37 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
     // report's job.
     // (left for the reader-report phase; not surfacing as warning today)
 
+    // CR-074 — unassigned supporting files hard-block submit (mirror the
+    // submitSelfStudy gate exactly). Surface as one actionable error so the
+    // modal can deep-link the PC to the File Library's "Unassigned only" view.
+    const unassigned = await findUnassignedEvidence(submissionId);
+    if (unassigned.length > 0) {
+      errors.push({
+        code: 'UNASSIGNED_FILES',
+        message:
+          `${unassigned.length} uploaded file${unassigned.length === 1 ? ' has' : 's have'} not been assigned to a Standard. ` +
+          `Open the File Library, filter to "Unassigned", and assign or remove ${unassigned.length === 1 ? 'it' : 'them'} before submitting.`,
+        standardCode: '',
+        specCode: ''
+      });
+    }
+
     const submitDisabled = errors.length > 0;
     return res.json({
       submitDisabled,
       errors,
       warnings,
+      unassignedFiles: unassigned
+        .slice(0, 25)
+        .map((e: any) => ({ id: String(e._id), name: e?.file?.originalName || e?.title || 'Untitled file' })),
       counts: {
         totalSpecs,
         passed: passedCount,
         needsImprovement: niCount,
         excluded: excludedCount,
         satisfied: passedCount + niCount + excludedCount,
-        missing: errors.length
+        missing: errors.length,
+        unassignedFiles: unassigned.length
       }
     });
   } catch (error) {
@@ -1852,6 +1892,25 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       return res.status(400).json({ error: 'Self-study has already been submitted' });
     }
 
+    // CR-074 — HARD block: every uploaded supporting file must be assigned to a
+    // Standard (or the Introduction) before submit. After submit the study is
+    // read-only, so an unassigned file would be permanently stranded and never
+    // reach a reader (the AACC bug where a file stayed invisible). This is NOT
+    // overridable — the PC must resolve the files first (the File Library's
+    // "Unassigned only" filter surfaces exactly these).
+    const unassignedEvidence = await findUnassignedEvidence(submissionId);
+    if (unassignedEvidence.length > 0) {
+      return res.status(400).json({
+        error: 'UNASSIGNED_FILES',
+        message:
+          'Some uploaded files have not been assigned to a Standard. Assign or remove them before submitting — after submit the self-study becomes read-only.',
+        unassignedCount: unassignedEvidence.length,
+        unassignedFiles: unassignedEvidence
+          .slice(0, 25)
+          .map((e: any) => e?.file?.originalName || e?.title || 'Untitled file')
+      });
+    }
+
     // S2A.0 — resolve the required standards/specs from the CSHSE rubric
     // definitions in code (getAllStandards), same source the PC dashboard's
     // workflow-summary uses. The previous `Spec.findOne({ isActive: true })`
@@ -1942,6 +2001,27 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
     };
 
     await submission.save();
+
+    // CR-074 — the institution's standing lead reader (and any standing readers)
+    // are assigned at the INSTITUTION level, not per-submission, so they never
+    // received an Assignment doc on submit and the study never reached their
+    // dashboard (the Lauri/AACC bug). Reconcile Assignment docs now so the
+    // submitted study is visible the moment it lands. Idempotent + fail-soft;
+    // status stays 'submitted' (explicit assignReaders still owns
+    // readers_assigned). Mirrors leadReader/assignedReaders onto the submission.
+    try {
+      const imp = (req.user as any)?.impersonation;
+      const { assignedUsers } = await ensureInstitutionReaderAssignments(submission, {
+        id: imp?.impersonatedUserId || req.user!.id,
+        name: imp?.impersonatedUserName || req.user!.name || req.user!.email,
+        role: req.user!.role
+      });
+      if (assignedUsers.length > 0) {
+        await submission.save();
+      }
+    } catch (assignErr) {
+      console.error('[submit] auto-assign institution readers failed (non-fatal):', assignErr);
+    }
 
     // 2026-06-09 — Submit also QUEUES a full "Validate all": every spec with
     // content is enqueued onto the background AI-evaluation queue (drained by the

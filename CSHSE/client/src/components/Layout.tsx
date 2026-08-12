@@ -172,7 +172,10 @@ export default function Layout() {
   if (!isReaderRole || isAdminLikeRole) {
     navigation.push({ name: 'Self-Study', href: '/self-study', icon: DocumentIcon, tourStep: 'self-study' });
   }
-  if (isReaderRole || isAdminLikeRole) {
+  // CR-074 — readers + lead readers no longer get a separate "Review queue"
+  // nav item; their assigned self-studies now live on the Home dashboard
+  // ("Reader Self Study" panel). Admins/superusers keep the surface for triage.
+  if (isAdminLikeRole) {
     navigation.push({ name: 'Review queue', href: '/reader', icon: DocumentIcon, tourStep: 'review-queue' });
   }
   // Sprint 5.1 — Compilations tab for lead readers + admins (CR-009).

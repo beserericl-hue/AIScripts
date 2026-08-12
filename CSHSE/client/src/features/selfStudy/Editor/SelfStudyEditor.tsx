@@ -742,6 +742,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [fileScrollTarget, setFileScrollTarget] = useState<
     { std: string; spec: string } | null
   >(null);
+  // CR-074 — when the submit modal deep-links to the File Library it requests
+  // the "unassigned only" view so the PC lands directly on the blocking files.
+  const [fileLibraryFilter, setFileLibraryFilter] = useState<'all' | 'unassigned'>('all');
 
   // Reviewer comment state
   const [highlightedComment, setHighlightedComment] = useState<{ id: string; selectedText: string } | null>(null);
@@ -2460,6 +2463,20 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // writes with 403 LOCKED, but the UI should never let them try).
   const isEditingDisabled = isReadOnly || (isProgramCoordinator && isSubmissionLocked);
 
+  // CR-074 — once the study is submitted the import/review/matrix triage panels
+  // are archived. If a stale activeView or a ?view= deep-link would land a PC on
+  // one of them, redirect to the read-only Standards view.
+  useEffect(() => {
+    if (
+      isProgramCoordinator &&
+      isSubmissionLocked &&
+      (activeView === 'review-surface' || activeView === 'ai-import' || activeView === 'matrix-surface')
+    ) {
+      setActiveView('standards');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isProgramCoordinator, isSubmissionLocked, activeView]);
+
   // Navigate to next/prev spec
   // One linear sequence through the self-study: for each Standard (in order) its
   // Introduction panel (spec = null → shows the document + standard introduction)
@@ -2654,9 +2671,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   <div className="fixed inset-0 z-30" onClick={() => setToolbarMenuOpen(false)} />
                   <div className="absolute left-0 mt-1 z-40 w-56 rounded-md border border-gray-200 bg-white py-1 shadow-lg text-sm" role="menu">
                     {([
-                      isProgramCoordinator && canImport && { label: 'Import file', fn: () => setShowImportFile(true) },
-                      isProgramCoordinator && { label: 'Review drafts', fn: () => setActiveView('review-surface') },
-                      isProgramCoordinator && { label: 'Curriculum Matrix drafts', fn: () => setActiveView('matrix-surface') },
+                      isProgramCoordinator && !isSubmissionLocked && canImport && { label: 'Import file', fn: () => setShowImportFile(true) },
+                      isProgramCoordinator && !isSubmissionLocked && { label: 'Review drafts', fn: () => setActiveView('review-surface') },
+                      isProgramCoordinator && !isSubmissionLocked && { label: 'Curriculum Matrix drafts', fn: () => setActiveView('matrix-surface') },
                       { label: 'Introduction', fn: () => setActiveView('introduction') },
                       { label: 'Standards', fn: () => setActiveView('standards') },
                       { label: 'Curriculum Matrix', fn: () => setActiveView('curriculum') },
@@ -2687,8 +2704,10 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 i.e. a maximized laptop) they collapse into the "Menu" hamburger
                 above so the header stays a single compact row. */}
             <div className="hidden 2xl:flex flex-wrap items-end gap-x-4 gap-y-2 border-l pl-3 border-gray-200">
-              {/* GROUP: IMPORT (PC only) — bring content in. */}
-              {isProgramCoordinator && (
+              {/* GROUP: IMPORT (PC only) — bring content in. CR-074: archived
+                  once the study is submitted (read-only) — the import/triage
+                  workflow and its data are no longer relevant to the PC. */}
+              {isProgramCoordinator && !isSubmissionLocked && (
                 <div className="flex flex-col gap-0.5">
                   <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                     Import
@@ -2725,8 +2744,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 </div>
               )}
 
-              {/* GROUP: DRAFTS (PC only) — triage what the import produced. */}
-              {isProgramCoordinator && (
+              {/* GROUP: DRAFTS (PC only) — triage what the import produced.
+                  CR-074: archived once submitted (read-only). */}
+              {isProgramCoordinator && !isSubmissionLocked && (
                 <div className="flex flex-col gap-0.5">
                   <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                     Drafts
@@ -3315,6 +3335,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 readOnly={isEditingDisabled}
                 scrollToSpec={fileScrollTarget}
                 onScrollConsumed={() => setFileScrollTarget(null)}
+                initialFilter={fileLibraryFilter}
+                onFilterConsumed={() => setFileLibraryFilter('all')}
               />
             </main>
           )}
@@ -4663,6 +4685,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         preflight={preflightQuery.data ?? null}
         preflightLoading={preflightQuery.isLoading}
         onGoToSpec={handleGoToSpec}
+        onOpenFileLibrary={() => {
+          setFinalSubmitOpen(false);
+          setFileLibraryFilter('unassigned');
+          setActiveView('files');
+        }}
         needsImprovement={needsImprovementQuery.data ?? []}
         needsImprovementLoading={needsImprovementQuery.isLoading}
       />

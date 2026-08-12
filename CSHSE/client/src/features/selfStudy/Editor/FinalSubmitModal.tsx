@@ -26,12 +26,17 @@ export interface PreflightResult {
   submitDisabled: boolean;
   errors: PreflightIssue[];
   warnings: PreflightIssue[];
+  // CR-074 — files uploaded but never assigned to a Standard. A HARD block
+  // (not overridable): after submit the study is read-only and the file would
+  // be stranded.
+  unassignedFiles?: { id: string; name: string }[];
   counts: {
     totalSpecs: number;
     passed: number;
     excluded: number;
     satisfied: number;
     missing: number;
+    unassignedFiles?: number;
   };
 }
 
@@ -62,6 +67,9 @@ interface FinalSubmitModalProps {
   preflight?: PreflightResult | null;
   preflightLoading?: boolean;
   onGoToSpec?: (standardCode: string, specCode: string) => void;
+  // CR-074 — jump to the File Library filtered to unassigned files so the PC
+  // can resolve the hard block.
+  onOpenFileLibrary?: () => void;
 }
 
 /**
@@ -86,6 +94,7 @@ export function FinalSubmitModal({
   preflight,
   preflightLoading,
   onGoToSpec,
+  onOpenFileLibrary,
   needsImprovement,
   needsImprovementLoading
 }: FinalSubmitModalProps): JSX.Element | null {
@@ -122,14 +131,22 @@ export function FinalSubmitModal({
 
   if (!open) return null;
 
-  const hasErrors = !!preflight && preflight.errors.length > 0;
+  // CR-074 — unassigned-file errors are a HARD block, separate from the
+  // overridable validation gaps. The override checkbox never clears them.
+  const unassignedFiles = (preflight?.unassignedFiles) || [];
+  const hasUnassignedBlock =
+    unassignedFiles.length > 0 ||
+    !!preflight?.errors.some((e) => e.code === 'UNASSIGNED_FILES');
+  const overridableErrors = (preflight?.errors || []).filter((e) => e.code !== 'UNASSIGNED_FILES');
+  const hasErrors = overridableErrors.length > 0;
   const reasonOk = overrideReason.trim().length >= 10;
-  // The submit button is blocked while preflight is loading or busy. When
-  // preflight has errors, submit is only enabled if the PC has checked
-  // override AND supplied a >=10-char reason.
+  // The submit button is blocked while preflight is loading or busy. The
+  // unassigned-files block cannot be overridden. Overridable errors are only
+  // cleared with the override checkbox AND a >=10-char reason.
   const submitBlocked =
     busy ||
     preflightLoading ||
+    hasUnassignedBlock ||
     (hasErrors && !(overrideChecked && reasonOk));
 
   const handleConfirm = async () => {
@@ -216,17 +233,58 @@ export function FinalSubmitModal({
               <span>Running pre-submission checks…</span>
             </div>
           )}
-          {!preflightLoading && preflight && preflight.errors.length > 0 && (
+          {/* CR-074 — unassigned-files HARD block. Not overridable: the study
+              becomes read-only at submit, so a stranded file would never reach a
+              reader. The PC must open the File Library and assign or remove
+              them. */}
+          {!preflightLoading && hasUnassignedBlock && (
+            <div
+              role="alert"
+              data-testid="preflight-unassigned-files"
+              className="rounded-md border border-red-300 bg-red-50 p-3 text-sm"
+            >
+              <p className="font-semibold text-red-900">
+                {unassignedFiles.length > 0
+                  ? `${unassignedFiles.length} file${unassignedFiles.length === 1 ? '' : 's'} not yet assigned to a Standard`
+                  : 'Some files are not yet assigned to a Standard'}
+              </p>
+              <p className="mt-0.5 text-xs text-red-800">
+                You can't submit until every uploaded file is assigned to a Standard (or the Introduction). After submit the self-study is read-only, so an unassigned file would be stranded.
+              </p>
+              {unassignedFiles.length > 0 && (
+                <ul className="mt-2 max-h-28 list-disc space-y-0.5 overflow-y-auto pl-5 text-red-900">
+                  {unassignedFiles.slice(0, 12).map((f) => (
+                    <li key={f.id} className="leading-snug">{f.name}</li>
+                  ))}
+                  {unassignedFiles.length > 12 && (
+                    <li className="list-none pt-1 text-xs text-red-700">…and {unassignedFiles.length - 12} more.</li>
+                  )}
+                </ul>
+              )}
+              {onOpenFileLibrary && (
+                <button
+                  type="button"
+                  data-testid="preflight-open-file-library"
+                  onClick={onOpenFileLibrary}
+                  className="mt-3 inline-flex items-center gap-1 rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100"
+                >
+                  Open File Library → Unassigned
+                  <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                </button>
+              )}
+            </div>
+          )}
+          {!preflightLoading && preflight && overridableErrors.length > 0 && (
             <div
               role="alert"
               data-testid="preflight-errors"
               className="rounded-md border border-red-200 bg-red-50 p-3 text-sm"
             >
               <p className="mb-2 font-medium text-red-900">
-                {preflight.errors.length} item{preflight.errors.length === 1 ? '' : 's'} need attention before Submit:
+                {overridableErrors.length} item{overridableErrors.length === 1 ? '' : 's'} need attention before Submit:
               </p>
               <ul className="max-h-44 space-y-1 overflow-y-auto">
-                {preflight.errors.slice(0, 12).map((err, i) => (
+                {overridableErrors.slice(0, 12).map((err, i) => (
                   <li key={`${err.code}-${i}`} className="flex items-start justify-between gap-2 text-red-900">
                     <span className="leading-snug">{err.message}</span>
                     {onGoToSpec && err.standardCode && err.specCode && (
@@ -242,8 +300,8 @@ export function FinalSubmitModal({
                     )}
                   </li>
                 ))}
-                {preflight.errors.length > 12 && (
-                  <li className="pt-1 text-xs text-red-700">…and {preflight.errors.length - 12} more.</li>
+                {overridableErrors.length > 12 && (
+                  <li className="pt-1 text-xs text-red-700">…and {overridableErrors.length - 12} more.</li>
                 )}
               </ul>
 
