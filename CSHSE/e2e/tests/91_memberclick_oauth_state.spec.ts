@@ -16,6 +16,9 @@ const MC_STATE = process.env.E2E_MC_STATE ?? '';
 const EXPIRED = 'Sign-in link expired';
 
 test.describe('MemberClick OAuth — persistent state', () => {
+  // Tests 1 & 2 share ONE single-use state (found → then consumed), so they must
+  // run serially, not in parallel workers (a race would consume it out of order).
+  test.describe.configure({ mode: 'serial' });
   test.skip(!MC_STATE, 'set E2E_MC_STATE (run scratchpad/prep_mcstate.cjs in-container first)');
   let api: APIRequestContext;
   test.beforeAll(async () => { api = await request.newContext({ baseURL: BASE }); });
