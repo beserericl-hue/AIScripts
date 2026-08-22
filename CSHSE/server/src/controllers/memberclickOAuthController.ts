@@ -32,6 +32,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
 import { User } from '../models/User';
+import { OAuthState, OAUTH_STATE_TTL_MS } from '../models/OAuthState';
 import { notInvitedPage } from './ssoTicketController';
 
 interface OAuthCfg {
@@ -61,20 +62,45 @@ function oauthCfg(): OAuthCfg {
   };
 }
 
-// Short-lived CSRF `state` -> returnTo store (10 min TTL). In-memory is fine:
-// the value only lives between the authorize redirect and the callback, on the
-// same instance in the common case; a miss just asks the user to click again.
+// Short-lived CSRF `state` -> returnTo store. PERSISTED in MongoDB (with a TTL
+// index) so it survives a server restart or a future multi-replica scale-out —
+// the in-memory Map alone was lost between the authorize redirect and the
+// callback, producing a silent "Sign-in link expired" (the AACC/Julia symptom).
+// The in-memory copy is kept as a fast-path fallback if Mongo transiently fails.
 const stateStore = new Map<string, { returnTo: string; expiresAt: number }>();
-function putState(returnTo: string): string {
+
+async function putState(returnTo: string): Promise<string> {
   const s = crypto.randomBytes(16).toString('hex');
-  stateStore.set(s, { returnTo, expiresAt: Date.now() + 10 * 60 * 1000 });
+  stateStore.set(s, { returnTo, expiresAt: Date.now() + OAUTH_STATE_TTL_MS });
   if (stateStore.size > 5000) {
     const now = Date.now();
     for (const [k, v] of stateStore) if (v.expiresAt < now) stateStore.delete(k);
   }
+  try {
+    await OAuthState.create({ state: s, returnTo });
+  } catch (e: any) {
+    // Non-fatal: fall back to the in-memory copy (works within one instance,
+    // no-restart case). Log so a persistent-store outage is visible.
+    console.log(`[mc-oauth] state-persist-failed (in-memory fallback) ${String(e?.message || e)}`);
+  }
   return s;
 }
-function takeState(s: string): { returnTo: string } | null {
+
+async function takeState(s: string): Promise<{ returnTo: string } | null> {
+  // Prefer the persistent store (survives restarts / multiple instances).
+  try {
+    const doc: any = await OAuthState.findOneAndDelete({ state: s }).lean();
+    if (doc) {
+      stateStore.delete(s);
+      // The TTL index purges lazily (~60s), so double-check the age here.
+      const ageMs = Date.now() - new Date(doc.createdAt).getTime();
+      if (ageMs > OAUTH_STATE_TTL_MS) return null;
+      return { returnTo: doc.returnTo || '/dashboard' };
+    }
+  } catch (e: any) {
+    console.log(`[mc-oauth] state-read-failed (in-memory fallback) ${String(e?.message || e)}`);
+  }
+  // Fallback: in-memory (same-instance no-restart case, or a Mongo error above).
   const rec = stateStore.get(s);
   if (!rec) return null;
   stateStore.delete(s);
@@ -132,7 +158,7 @@ export function extractEmail(profile: any): string {
 }
 
 /** GET /sso/v1/memberclick/login — kick off the OAuth Authorization Code flow. */
-export function memberclickLogin(req: Request, res: Response): void {
+export async function memberclickLogin(req: Request, res: Response): Promise<void> {
   const c = oauthCfg();
   if (!c.clientId || !c.redirectUri.startsWith('http')) {
     res
@@ -148,7 +174,7 @@ export function memberclickLogin(req: Request, res: Response): void {
   }
   const rawReturn = String((req.query.returnTo as string) || '/dashboard');
   const returnTo = rawReturn.startsWith('/') ? rawReturn : '/dashboard';
-  const state = putState(returnTo);
+  const state = await putState(returnTo);
   const u = new URL(c.authorizeUrl);
   u.searchParams.set('response_type', 'code');
   u.searchParams.set('client_id', c.clientId);
@@ -175,8 +201,14 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
     return;
   }
 
-  const st = state ? takeState(state) : null;
+  const st = state ? await takeState(state) : null;
   if (!code || !st) {
+    // Previously silent — the #1 blind spot behind "no error in the logs". Log
+    // exactly which half is missing so an expired/lost-state failure (the
+    // Julia symptom) is diagnosable instead of invisible.
+    console.log(
+      `[mc-oauth] callback-invalid-state hasCode=${!!code} statePrefix=${state.slice(0, 8) || '(none)'} stateFound=${!!st}`
+    );
     res
       .status(400)
       .type('text/html')
@@ -252,8 +284,13 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
       return;
     }
 
-    // 3) Match to a CSHSE user (invited/active) and mint the session.
-    const user = await User.findOne({ email, isActive: true });
+    // 3) Match to a CSHSE user (invited/active) and mint the session. The match
+    // is CASE-INSENSITIVE: `extractEmail` lower-cases the MemberClick email, but
+    // a user record provisioned with mixed-case (e.g. "Name@School.edu") would
+    // otherwise never match. Anchored regex on the escaped, already-lowercased
+    // address.
+    const emailPattern = new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    const user = await User.findOne({ email: emailPattern, isActive: true });
     if (!user) {
       console.log(`[mc-oauth] not-provisioned email=${email}`);
       res.status(403).type('text/html').send(notInvitedPage());
