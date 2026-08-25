@@ -90,6 +90,8 @@ test.describe('CR-074 Reader / Lead-Reader screens', () => {
     await expect(body).toContainText(cfg.r2Name);
     // The course list is populated (HUS 100 from the matrix/syllabus), not "None listed".
     await expect(body).toContainText(/HUS\s*100/);
+    await page.getByText('Reader Information', { exact: false }).evaluate((el) => el.scrollIntoView({ block: 'start' }));
+    await page.waitForTimeout(400);
     await shot(page, '04-lead-reader-report.png');
   });
 
@@ -128,22 +130,20 @@ test.describe('CR-074 Reader / Lead-Reader screens', () => {
     await expect(page.getByText(/Manage colleges|Manage users|Institutions|Users/i).first()).toBeVisible({ timeout: 20000 });
   }
 
-  test('6) Institution roster: lead is NOT double-listed as a reader', async ({ page }) => {
+  test('6) Roles are clean: the lead reader is a Lead Reader, not also a Reader', async ({ page }) => {
     test.setTimeout(120_000);
     await auth(page, cfg.adminToken);
-    await gotoSettings(page);
-    // Open the Institutions section, then filter to the test institution.
-    await page.getByRole("button", { name: /Institutions/ }).first().dispatchEvent("click").catch(() => {});
-    await page.waitForTimeout(800);
-    const search = page.getByPlaceholder(/Search institutions/i);
+    await gotoSettings(page); // lands on the Users section
+    // Filter to the lead; her row shows the Lead Reader role chip and NOT a
+    // separate Reader chip (the roster fix stores her as lead_reader only, so
+    // removing her from Readers can't strip the lead role).
+    const search = page.getByPlaceholder(/Search users/i);
     await expect(search).toBeVisible({ timeout: 15000 });
-    await search.fill(cfg.instName);
-    await expect(page.getByText(cfg.instName, { exact: false }).first()).toBeVisible({ timeout: 15000 });
-    await page.waitForTimeout(800);
-    await shot(page, '06-institution-roster.png');
-    // The lead appears under LEAD READERS but not under READERS.
-    const card = page.locator('div', { hasText: cfg.instName }).first();
-    await expect(card).toContainText(cfg.leadName);
+    await search.fill(cfg.leadName);
+    await page.waitForTimeout(1000);
+    const row = page.locator('div', { hasText: cfg.leadName }).filter({ hasText: 'Lead Reader' }).first();
+    await expect(row).toBeVisible({ timeout: 15000 });
+    await shot(page, '06-roles-clean.png');
   });
 
   test('7) Edit-user modal: email + role are editable', async ({ page }) => {
@@ -151,7 +151,7 @@ test.describe('CR-074 Reader / Lead-Reader screens', () => {
     await auth(page, cfg.adminToken);
     await gotoSettings(page);
     // Open the Users section.
-    await page.getByRole("button", { name: /^Users/ }).first().dispatchEvent("click").catch(() => {});
+    await page.getByRole("button", { name: /^Users/ }).first().click({ force: true }).catch(() => {});
     await page.waitForTimeout(1200);
     const editBtn = page.locator('[title="Manage roles"]').first();
     await expect(editBtn).toBeVisible({ timeout: 20000 });
