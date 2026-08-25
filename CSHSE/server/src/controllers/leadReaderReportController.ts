@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Submission } from '../models/Submission';
 import { Assignment } from '../models/Assignment';
+import { User } from '../models/User';
 import { Comment } from '../models/Comment';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
@@ -63,23 +64,49 @@ function parseCourseSlug(slug: string): { prefix: string; label: string } | null
   return { prefix, label };
 }
 
-/** Derive the course list from imported syllabi (their `rev:syllabus-toc:<n>:<slug>`
- *  tags) when the curriculum matrix has no named courses. Splits Program vs
+/** Pull a "PREFIX NUMBER" course identifier out of a syllabus FILE NAME, e.g.
+ *  "HUS 275 Master Syllabi.pdf" → {prefix:'hus', label:'HUS 275'}. Used when the
+ *  syllabi were imported without TOC tags (so `rev:syllabus-toc:` is absent). */
+function parseCourseFromFileName(name: string): { prefix: string; label: string } | null {
+  const base = String(name || '').replace(/\.[a-z0-9]+$/i, '');
+  const mt = /\b([A-Za-z]{2,4})\s*[-_ ]?\s*(\d{2,4}[A-Za-z]?)\b/.exec(base);
+  if (!mt) return null;
+  const prefix = mt[1].toLowerCase();
+  // A short trailing title after the code (best-effort), stopping at filler words.
+  const after = base.slice((mt.index || 0) + mt[0].length).replace(/[_-]+/g, ' ').trim();
+  const title = after.replace(/\b(master|masters|syllabus|syllabi|updated|final|v?\d{4}|fall|spring|summer)\b/gi, '').trim();
+  const label = `${prefix.toUpperCase()} ${mt[2]}${title ? ' — ' + title.replace(/\b\w/g, (c) => c.toUpperCase()) : ''}`.trim();
+  return { prefix, label };
+}
+
+/** Derive the course list from imported syllabi when the curriculum matrix has
+ *  no named courses. Sources, in order: `rev:syllabus-toc:<n>:<slug>` tags (rich),
+ *  then syllabus FILE NAMES (kind:syllabus) as a fallback. Splits Program vs
  *  General-Education by course prefix. */
 async function deriveCoursesFromSyllabi(submissionId: any): Promise<{ general: string[]; program: string[] }> {
   const ev: any[] = await SupportingEvidence.find({
     submissionId,
     isDeleted: { $ne: true },
-    tags: { $regex: '^rev:syllabus-toc:' },
-  }).select('tags').lean();
-  const slugs = new Set<string>();
+    $or: [{ tags: { $regex: '^rev:syllabus-toc:' } }, { tags: { $regex: '^kind:syllabus' } }],
+  }).select('tags file.originalName').lean();
+  const parsedMap = new Map<string, { prefix: string; label: string }>();
+  const add = (p: { prefix: string; label: string } | null) => {
+    if (p && !parsedMap.has(p.label.toLowerCase())) parsedMap.set(p.label.toLowerCase(), p);
+  };
   for (const e of ev) {
-    for (const t of e.tags || []) {
-      const mt = /^rev:syllabus-toc:\d+:(.+)$/.exec(String(t));
-      if (mt && mt[1]) slugs.add(mt[1]);
+    const tags = (e.tags || []).map(String);
+    const tocTags = tags.filter((t: string) => /^rev:syllabus-toc:\d+:/.test(t));
+    if (tocTags.length) {
+      for (const t of tocTags) {
+        const mt = /^rev:syllabus-toc:\d+:(.+)$/.exec(t);
+        if (mt && mt[1]) add(parseCourseSlug(mt[1]));
+      }
+    } else if (tags.some((t: string) => t.startsWith('kind:syllabus'))) {
+      // No TOC tags on this syllabus — fall back to its file name.
+      add(parseCourseFromFileName(e.file?.originalName || ''));
     }
   }
-  const parsed = [...slugs].map(parseCourseSlug).filter(Boolean) as Array<{ prefix: string; label: string }>;
+  const parsed = [...parsedMap.values()];
   if (parsed.length === 0) return { general: [], program: [] };
   // Program prefix = the most common prefix among the syllabi (the program's own courses).
   const freq = new Map<string, number>();
@@ -98,17 +125,24 @@ async function deriveCoursesFromSyllabi(submissionId: any): Promise<{ general: s
 export async function buildSystemSections(submission: any) {
   const submissionId = submission._id;
 
-  // Readers from active assignments; the lead reader is stamped on each.
+  // Readers from active assignments. CR-074 — the Assignment field is
+  // `assignmentType` ('lead_reader' | 'reader'), NOT `role` (which doesn't
+  // exist on the schema). The LEAD reader is the lead_reader assignment (or the
+  // submission.leadReader fallback); the ADDITIONAL readers are the 'reader'
+  // assignments ONLY — previously EVERY assignment (including the lead) was
+  // listed as an additional reader and the lead slot came back blank.
   const assignments: any[] = await Assignment.find({ submissionId, status: 'active' })
-    .select('userName role leadReaderName')
+    .select('userName assignmentType userId')
     .lean();
-  const leadReaderName =
-    assignments.find((a) => a.leadReaderName)?.leadReaderName ||
-    assignments.find((a) => a.role === 'lead_reader')?.userName ||
-    '';
+  let leadReaderName = assignments.find((a) => a.assignmentType === 'lead_reader')?.userName || '';
+  if (!leadReaderName && submission.leadReader) {
+    const lead: any = await User.findById(submission.leadReader).select('firstName lastName').lean();
+    if (lead) leadReaderName = `${lead.firstName || ''} ${lead.lastName || ''}`.trim();
+  }
   const additionalReaders = assignments
+    .filter((a) => a.assignmentType === 'reader')
     .map((a) => a.userName)
-    .filter((n) => n && n !== leadReaderName);
+    .filter(Boolean);
 
   // Required courses from the curriculum matrices: non-human-services → General
   // Education; human-services → Program courses.
