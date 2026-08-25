@@ -99,6 +99,10 @@ export function UserManagement() {
   const [roleUser, setRoleUser] = useState<User | null>(null);
   const [roleDraft, setRoleDraft] = useState<RoleAssignment[]>([]);
   const [roleError, setRoleError] = useState<string | null>(null);
+  // CR-074 — the edit-user modal now also edits the login EMAIL (must match
+  // MemberClick SSO). Saved together with the roles.
+  const [emailDraft, setEmailDraft] = useState('');
+  const [savingEdits, setSavingEdits] = useState(false);
 
   // Fetch users
   const { data: usersData, isLoading: usersLoading } = useQuery({
@@ -298,6 +302,32 @@ export function UserManagement() {
             : []);
     setRoleUser(user);
     setRoleDraft(seed);
+    setEmailDraft(user.email || '');
+  };
+
+  // CR-074 — save the edit-user modal: the email (admin-updatable) THEN the
+  // role assignments, so changing the login address + roles is one action.
+  const saveUserEdits = async () => {
+    if (!roleUser) return;
+    setRoleError(null);
+    setSavingEdits(true);
+    try {
+      const newEmail = emailDraft.trim().toLowerCase();
+      if (newEmail && newEmail !== (roleUser.email || '').toLowerCase()) {
+        await api.put(`/api/users/${roleUser._id}`, { email: newEmail });
+      }
+      await api.put(`/api/users/${roleUser._id}/role-assignments`, { roleAssignments: roleDraft });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['institutions'] });
+      setRoleUser(null);
+      setRoleDraft([]);
+      setEmailDraft('');
+      setRoleError(null);
+    } catch (err: any) {
+      setRoleError(err?.response?.data?.error || 'Failed to save changes');
+    } finally {
+      setSavingEdits(false);
+    }
   };
 
   // Client-side mirror of the server's Rule 1 (no PC + reviewer in one
@@ -844,15 +874,32 @@ export function UserManagement() {
             <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
               <div className="flex items-center justify-between border-b border-gray-200 p-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900">Manage roles — {roleUser.name}</h3>
-                  <p className="text-sm text-gray-500">{roleUser.email}</p>
+                  <h3 className="text-lg font-semibold text-gray-900">Edit user — {roleUser.name}</h3>
                 </div>
-                <button onClick={() => { setRoleUser(null); setRoleError(null); }} className="rounded p-1 text-gray-400 hover:bg-gray-100">
+                <button onClick={() => { setRoleUser(null); setRoleError(null); setEmailDraft(''); }} className="rounded p-1 text-gray-400 hover:bg-gray-100">
                   <XCircle className="h-5 w-5" />
                 </button>
               </div>
 
               <div className="max-h-[60vh] space-y-3 overflow-y-auto p-4">
+                {/* CR-074 — editable login email (must match MemberClick SSO). */}
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-gray-700" htmlFor="edit-user-email">
+                    Email <span className="font-normal text-gray-400">(login address — used by MemberClick SSO)</span>
+                  </label>
+                  <input
+                    id="edit-user-email"
+                    data-testid="edit-user-email"
+                    type="email"
+                    value={emailDraft}
+                    onChange={(e) => setEmailDraft(e.target.value)}
+                    className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    placeholder="name@example.com"
+                  />
+                </div>
+
+                <div className="border-t border-gray-100 pt-3">
+                  <p className="mb-1 text-sm font-semibold text-gray-700">Roles</p>
                 <p className="text-sm text-gray-600">
                   A user can hold different roles at different institutions (e.g. Program Coordinator at one,
                   Reader/Lead Reader at another). They cannot be a Program Coordinator and a reviewer at the
@@ -906,6 +953,7 @@ export function UserManagement() {
                 >
                   <UserPlus className="h-4 w-4" /> Add role
                 </button>
+                </div>
 
                 {(conflict || roleError) && (
                   <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{conflict || roleError}</p>
@@ -913,16 +961,17 @@ export function UserManagement() {
               </div>
 
               <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 p-4">
-                <button onClick={() => { setRoleUser(null); setRoleError(null); }} className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900">
+                <button onClick={() => { setRoleUser(null); setRoleError(null); setEmailDraft(''); }} className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900">
                   Cancel
                 </button>
                 <button
-                  onClick={() => roleMutation.mutate({ userId: roleUser._id, roleAssignments: roleDraft })}
-                  disabled={!!conflict || roleMutation.isPending}
+                  data-testid="edit-user-save"
+                  onClick={saveUserEdits}
+                  disabled={!!conflict || savingEdits}
                   className="flex items-center gap-2 rounded-lg bg-teal-600 px-4 py-2 text-sm text-white hover:bg-teal-700 disabled:opacity-50"
                 >
-                  {roleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-                  Save roles
+                  {savingEdits ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                  Save changes
                 </button>
               </div>
             </div>

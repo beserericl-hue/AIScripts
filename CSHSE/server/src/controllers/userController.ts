@@ -2,8 +2,10 @@ import { Request, Response } from 'express';
 import { User } from '../models/User';
 import { Institution } from '../models/Institution';
 import { Invitation } from '../models/Invitation';
+import { Submission } from '../models/Submission';
 import mongoose from 'mongoose';
 import { isGlobalAdmin, institutionIdsWithRole, validateRoleAssignments } from '../services/roleResolver';
+import { ensureInstitutionReaderAssignments } from '../services/readerAssignmentService';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -184,8 +186,32 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response) => {
     // Fields that users can update themselves
     const selfUpdateFields = ['firstName', 'lastName'];
 
-    // Fields that only admin can update
-    const adminOnlyFields = ['role', 'status', 'permissions', 'institutionId', 'isActive'];
+    // Fields that only admin can update. `email` is admin-updatable (needed so
+    // an admin can correct a member's login address — it must match MemberClick
+    // SSO) but is handled specially below (normalized + uniqueness-checked).
+    const adminOnlyFields = ['role', 'status', 'permissions', 'institutionId', 'isActive', 'email'];
+
+    // CR-074 — admin email change: normalize (trim + lower-case, matching the
+    // MemberClick extractEmail lower-casing) and reject a collision with another
+    // user, so the login address stays unique + resolvable by SSO.
+    if (typeof updates.email === 'string' && (userRole === 'admin')) {
+      const newEmail = updates.email.trim().toLowerCase();
+      if (newEmail && newEmail !== (user.email || '').toLowerCase()) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+          return res.status(400).json({ error: 'Please enter a valid email address.' });
+        }
+        const clash = await User.findOne({
+          _id: { $ne: user._id },
+          email: new RegExp(`^${newEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+        }).select('_id').lean();
+        if (clash) {
+          return res.status(409).json({ error: 'Another user already has that email address.' });
+        }
+        user.email = newEmail;
+      }
+      // Whether changed or not, don't let the generic loop below re-apply it.
+      delete updates.email;
+    }
 
     // SECURITY (isolation audit) — fields that must NEVER be settable through
     // this generic endpoint. `isSuperuser` was previously writable by any admin
@@ -509,8 +535,10 @@ export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Res
             .map((a: any) => a.role)
         );
         const uid = user._id as mongoose.Types.ObjectId;
-        // Readers array — add/remove this user.
-        const isReader = myRoles.has('reader') || myRoles.has('lead_reader');
+        // Readers array — add/remove this user. CR-074: the LEAD reader is NOT a
+        // "reader" here (it has its own assignedLeadReaderId slot), so the
+        // roster's Readers column doesn't double-list the lead.
+        const isReader = myRoles.has('reader');
         const already = (inst.assignedReaderIds || []).some((r: any) => String(r) === String(uid));
         if (isReader && !already) inst.assignedReaderIds.push(uid);
         if (!isReader && already) inst.assignedReaderIds = inst.assignedReaderIds.filter((r: any) => String(r) !== String(uid));
@@ -522,6 +550,28 @@ export const setUserRoleAssignments = async (req: AuthenticatedRequest, res: Res
         if (!myRoles.has('program_coordinator') && String(inst.programCoordinatorId || '') === String(uid)) inst.programCoordinatorId = undefined as any;
         await inst.save();
       } catch { /* best-effort */ }
+    }
+
+    // CR-074 — propagate the roster change to per-submission Assignment docs for
+    // each touched institution's ALREADY-SUBMITTED studies. Reader access is
+    // gated on an active Assignment; previously these were only reconciled at
+    // submit time, so a reader added AFTER submit never gained access (Annette /
+    // Nicole not appearing on AACC). Idempotent create/refresh; fail-soft.
+    try {
+      const READER_VISIBLE = ['submitted', 'under_review', 'readers_assigned', 'review_complete', 'compliant', 'non_compliant'];
+      for (const instId of touched) {
+        const subs = await Submission.find({ institutionId: instId, status: { $in: READER_VISIBLE } });
+        for (const sub of subs) {
+          const { assignedUsers } = await ensureInstitutionReaderAssignments(sub, {
+            id: req.user!.id,
+            name: req.user!.name,
+            role: req.user!.role,
+          });
+          if (assignedUsers.length > 0) await sub.save();
+        }
+      }
+    } catch (reconErr) {
+      console.error('[roles] assignment reconcile (non-fatal):', reconErr);
     }
 
     return res.json({

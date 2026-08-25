@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Download, Loader2, AlertTriangle, FileText, Check } from 'lucide-react';
 import { api } from '../../../services/api';
 
@@ -188,8 +189,12 @@ export function FilePreviewModal({
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+  // Rendered through a portal to <body> so it escapes any `position: sticky` /
+  // transformed ancestor (e.g. the Reader Report's sticky checklist card) that
+  // would otherwise trap this modal inside a lower stacking context and let
+  // sibling cards paint over it. z-[100] keeps it above every in-page overlay.
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50"
@@ -369,6 +374,7 @@ export function FilePreviewModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

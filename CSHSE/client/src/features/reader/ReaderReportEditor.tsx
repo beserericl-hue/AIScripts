@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, ClipboardCheck, Users, Lock, CheckCircle2, MessageSquare, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, ClipboardCheck, Users, Lock, CheckCircle2, MessageSquare, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
@@ -151,6 +151,9 @@ export function ReaderReportEditor(): JSX.Element {
   // in the margin next to the text they flag, so the page isn't squeezed by a
   // duplicate list. The "Comments" button still opens it on demand.
   const [commentsOpen, setCommentsOpen] = useState(false);
+  // CR-074 — full-screen "focus" mode: the report + comment columns fill the
+  // viewport (over the app header/menu) so it's readable on small laptops.
+  const [focusMode, setFocusMode] = useState(false);
   // The comment the reader navigated to (next/prev or from the chat window).
   // Used to FLASH the highlighted text it anchors to (inside the table).
   const [highlightComment, setHighlightComment] = useState<{ std: string; spec?: string; commentId: string } | null>(null);
@@ -469,11 +472,19 @@ export function ReaderReportEditor(): JSX.Element {
     '[&_th]:border [&_th]:border-slate-300 [&_th]:bg-slate-100 [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_th]:font-semibold ' +
     '[&_a]:text-teal-700 [&_a]:underline';
   return (
-    <div className="flex w-full flex-wrap items-start gap-6 px-4">
+    <div
+      data-testid="reader-report-root"
+      className={
+        focusMode
+          ? 'fixed inset-0 z-[60] flex w-full flex-wrap items-start gap-6 overflow-y-auto bg-white px-4'
+          : 'flex w-full flex-wrap items-start gap-6 px-4'
+      }
+    >
     <div data-testid="reader-report-editor" className="min-w-0 flex-1 py-6">
       {/* Header + nav back to the self-study editor */}
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
         <div>
+          {!focusMode && (
           <button
             data-testid="reader-report-back"
             onClick={() => navigate(`/self-study/${submissionId}`)}
@@ -481,6 +492,7 @@ export function ReaderReportEditor(): JSX.Element {
           >
             <ChevronLeft className="h-4 w-4" /> <span>Back to Self-Study (view &amp; comment)</span>
           </button>
+          )}
           <h1 className="text-xl font-semibold text-slate-900">Reader Report — {data.levelTitle}</h1>
           <p className="text-sm text-slate-600">{data.institutionName} · {data.programName}</p>
           {readonly ? (
@@ -498,6 +510,17 @@ export function ReaderReportEditor(): JSX.Element {
         </div>
         <div className="flex items-center gap-2">
           {savedAt && <span className="text-xs text-emerald-600 inline-flex items-center gap-1"><Check className="h-3.5 w-3.5" />Saved</span>}
+          {/* Full-screen focus mode — hide the app + section menus, keep the
+              report + comment columns. Easier on small laptops. */}
+          <button
+            data-testid="reader-report-fullscreen"
+            onClick={() => setFocusMode((v) => !v)}
+            className={`inline-flex items-center gap-1 rounded border px-2.5 py-1.5 text-sm ${focusMode ? 'border-teal-300 bg-teal-50 text-teal-800' : 'border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+            title={focusMode ? 'Exit full screen' : 'Full screen — report + comments only'}
+          >
+            {focusMode ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            {focusMode ? 'Exit full screen' : 'Full screen'}
+          </button>
           {/* Toggle the "All comments" chat window docked on the right. */}
           <button
             data-testid="reader-report-comments-toggle"
@@ -577,7 +600,9 @@ export function ReaderReportEditor(): JSX.Element {
       </div>
       {/* Top menu: jump straight to any part of the self-study without losing
           your place. The Reader Report is the active tab here; the others
-          deep-link into the self-study editor's matching section. */}
+          deep-link into the self-study editor's matching section. Hidden in
+          full-screen focus mode. */}
+      {!focusMode && (
       <nav data-testid="reader-report-nav" className="mb-4 flex flex-col gap-1">
         <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Self-Study</span>
         <div className="flex flex-wrap items-center gap-1">
@@ -635,6 +660,7 @@ export function ReaderReportEditor(): JSX.Element {
           )}
         </div>
       </nav>
+      )}
 
       {/* After the lead reader completes their OWN reader report, point them to
           the Lead Reader Report — the board-facing next step they previously had
@@ -736,12 +762,14 @@ export function ReaderReportEditor(): JSX.Element {
 
       {dlError && <p className="mb-2 text-sm text-red-600">{dlError}</p>}
 
+      {!focusMode && (
       <p className="mb-4 text-sm text-slate-500">
         For each specification: click the AI assessment tag to see the AI's view, read the narrative and
         supporting evidence, fill the checklist (Compliant / Non-Compliant + Score) and add comments by
         selecting text. Each comment appears in the margin next to the text it flags, with its own
         prev/next to walk every comment. Your work autosaves.
       </p>
+      )}
 
       {/* CR-074 — Program Coordinator notes navigator. The PC explains, at
           submit, why each AI "needs improvement" flag stands; walk them here so

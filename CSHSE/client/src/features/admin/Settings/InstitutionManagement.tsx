@@ -241,9 +241,15 @@ export function InstitutionManagement() {
       ? u.roleAssignments.map((a: any) => ({ role: a.role, institutionId: String(a.institutionId) }))
       : (u.role && u.institutionId && u.role !== 'admin'
           ? [{ role: u.role, institutionId: String(u.institutionId) }] : []);
+  // CR-074 — each column shows EXACTLY its role. Previously the Readers column
+  // also unioned in lead readers, so a lead (stored as a single 'lead_reader'
+  // assignment) appeared in BOTH columns — and removing them from Readers
+  // deleted their lead_reader assignment (stripping the lead role). Lead readers
+  // now show only under Lead Readers; the "a lead can also do reader work"
+  // semantic is enforced server-side (roleResolver), not by this display.
   const rosterFor = (institutionId: string, role: string): any[] =>
     allUsers.filter((u) => userAssignments(u).some(
-      (a) => a.institutionId === institutionId && (a.role === role || (role === 'reader' && a.role === 'lead_reader'))
+      (a) => a.institutionId === institutionId && a.role === role
     ));
   const setRolesMutation = useMutation({
     mutationFn: async ({ userId, roleAssignments }: { userId: string; roleAssignments: any[] }) => {
@@ -272,8 +278,11 @@ export function InstitutionManagement() {
   };
   const removeRole = (user: any, role: string, institutionId: string) => {
     setRosterError(null);
+    // Remove ONLY the exact role at this institution — never widen 'reader' to
+    // also strip 'lead_reader' (that was the bug that deleted the lead role when
+    // removing someone from the Readers column).
     const next = userAssignments(user).filter(
-      (a) => !(a.institutionId === institutionId && (a.role === role || (role === 'reader' && a.role === 'lead_reader')))
+      (a) => !(a.institutionId === institutionId && a.role === role)
     );
     setRolesMutation.mutate({ userId: user._id, roleAssignments: next });
   };
