@@ -64,47 +64,53 @@ function parseCourseSlug(slug: string): { prefix: string; label: string } | null
   return { prefix, label };
 }
 
-/** Pull a "PREFIX NUMBER" course identifier out of a syllabus FILE NAME, e.g.
- *  "HUS 275 Master Syllabi.pdf" → {prefix:'hus', label:'HUS 275'}. Used when the
- *  syllabi were imported without TOC tags (so `rev:syllabus-toc:` is absent). */
-function parseCourseFromFileName(name: string): { prefix: string; label: string } | null {
+/** Pull EVERY "PREFIX ###" course code out of a file name (a course number is a
+ *  standalone 3-digit token, so "HUS 100 Master Syllabi.pdf" → HUS 100 and
+ *  "AACC_SyllabusTemplate_ENG 101_FA23.pdf" → ENG 101; the 4-digit years like
+ *  2025 and 2-digit "FA23" don't match). Returns one entry per distinct code. */
+function parseCoursesFromFileName(name: string): Array<{ prefix: string; label: string }> {
   const base = String(name || '').replace(/\.[a-z0-9]+$/i, '');
-  const mt = /\b([A-Za-z]{2,4})\s*[-_ ]?\s*(\d{2,4}[A-Za-z]?)\b/.exec(base);
-  if (!mt) return null;
-  const prefix = mt[1].toLowerCase();
-  // A short trailing title after the code (best-effort), stopping at filler words.
-  const after = base.slice((mt.index || 0) + mt[0].length).replace(/[_-]+/g, ' ').trim();
-  const title = after.replace(/\b(master|masters|syllabus|syllabi|updated|final|v?\d{4}|fall|spring|summer)\b/gi, '').trim();
-  const label = `${prefix.toUpperCase()} ${mt[2]}${title ? ' — ' + title.replace(/\b\w/g, (c) => c.toUpperCase()) : ''}`.trim();
-  return { prefix, label };
+  const out: Array<{ prefix: string; label: string }> = [];
+  const re = /\b([A-Za-z]{2,4})[ _-]?(\d{3})([A-Za-z])?\b/g;
+  let mt: RegExpExecArray | null;
+  while ((mt = re.exec(base)) !== null) {
+    const prefix = mt[1].toLowerCase();
+    out.push({ prefix, label: `${mt[1].toUpperCase()} ${mt[2]}${mt[3] ? mt[3].toUpperCase() : ''}` });
+  }
+  return out;
 }
 
-/** Derive the course list from imported syllabi when the curriculum matrix has
- *  no named courses. Sources, in order: `rev:syllabus-toc:<n>:<slug>` tags (rich),
- *  then syllabus FILE NAMES (kind:syllabus) as a fallback. Splits Program vs
- *  General-Education by course prefix. */
+/** Derive the course list from imported evidence when the curriculum matrix has
+ *  no named courses. Sources: `rev:syllabus-toc:<n>:<slug>` tags (rich labels)
+ *  when present, otherwise the course code in ANY evidence FILE NAME (syllabi,
+ *  the matrix PDF, mapping tools…). Splits Program vs General-Education by course
+ *  prefix. This is what fills the Lead Reader Report's required-course list for
+ *  studies whose matrix was uploaded as a document but never parsed into
+ *  structured rows (e.g. AACC — HUS/BIO/COM/CTA/CTP/MAT courses from ~16 syllabi). */
 async function deriveCoursesFromSyllabi(submissionId: any): Promise<{ general: string[]; program: string[] }> {
   const ev: any[] = await SupportingEvidence.find({
     submissionId,
     isDeleted: { $ne: true },
-    $or: [{ tags: { $regex: '^rev:syllabus-toc:' } }, { tags: { $regex: '^kind:syllabus' } }],
   }).select('tags file.originalName').lean();
+  // Prefer rich TOC labels; index the file-name codes by "PREFIX ###" so a TOC
+  // label supersedes a bare code for the same course.
   const parsedMap = new Map<string, { prefix: string; label: string }>();
-  const add = (p: { prefix: string; label: string } | null) => {
-    if (p && !parsedMap.has(p.label.toLowerCase())) parsedMap.set(p.label.toLowerCase(), p);
+  const codeKey = (label: string) => (label.match(/\b[A-Z]{2,4}\s\d{3}[A-Z]?\b/)?.[0] || label).toUpperCase();
+  const addRich = (p: { prefix: string; label: string } | null) => {
+    if (!p) return;
+    parsedMap.set(codeKey(p.label), p); // rich labels overwrite bare codes
+  };
+  const addCode = (p: { prefix: string; label: string }) => {
+    const k = codeKey(p.label);
+    if (!parsedMap.has(k)) parsedMap.set(k, p);
   };
   for (const e of ev) {
     const tags = (e.tags || []).map(String);
-    const tocTags = tags.filter((t: string) => /^rev:syllabus-toc:\d+:/.test(t));
-    if (tocTags.length) {
-      for (const t of tocTags) {
-        const mt = /^rev:syllabus-toc:\d+:(.+)$/.exec(t);
-        if (mt && mt[1]) add(parseCourseSlug(mt[1]));
-      }
-    } else if (tags.some((t: string) => t.startsWith('kind:syllabus'))) {
-      // No TOC tags on this syllabus — fall back to its file name.
-      add(parseCourseFromFileName(e.file?.originalName || ''));
+    for (const t of tags) {
+      const mt = /^rev:syllabus-toc:\d+:(.+)$/.exec(t);
+      if (mt && mt[1]) addRich(parseCourseSlug(mt[1]));
     }
+    for (const c of parseCoursesFromFileName(e.file?.originalName || '')) addCode(c);
   }
   const parsed = [...parsedMap.values()];
   if (parsed.length === 0) return { general: [], program: [] };
