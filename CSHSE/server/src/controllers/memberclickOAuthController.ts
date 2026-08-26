@@ -31,9 +31,42 @@ import { Request, Response } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import axios from 'axios';
+import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { OAuthState, OAUTH_STATE_TTL_MS } from '../models/OAuthState';
 import { notInvitedPage } from './ssoTicketController';
+
+/**
+ * Durable, queryable SSO flow log (collection `ssoauthevents`). Railway's
+ * console-log retrieval across deployments is unreliable and the callback
+ * branches only log when the callback FIRES — so when a member gets redirected
+ * to MemberClick and never returns, there is nothing to read. This records
+ * EVERY step (login redirect + callback, at every outcome) with the member's
+ * device/IP so a support case (e.g. Julia) can be traced by querying Mongo
+ * directly. Fire-and-forget; never blocks or breaks the sign-in. Self-expires
+ * after 30 days via a TTL index created on first write.
+ */
+let ssoLogTtlEnsured = false;
+async function logSso(step: string, req: Request, extra: Record<string, any> = {}): Promise<void> {
+  try {
+    const db = mongoose.connection?.db;
+    if (!db) return;
+    const col = db.collection('ssoauthevents');
+    if (!ssoLogTtlEnsured) {
+      ssoLogTtlEnsured = true;
+      col.createIndex({ at: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 }).catch(() => {});
+    }
+    const fwd = (req.headers['x-forwarded-for'] as string) || '';
+    await col.insertOne({
+      step,
+      at: new Date(),
+      ip: (fwd.split(',')[0] || (req.socket as any)?.remoteAddress || '').trim(),
+      ua: String(req.headers['user-agent'] || '').slice(0, 240),
+      referer: String(req.headers['referer'] || req.headers['referrer'] || '').slice(0, 240),
+      ...extra,
+    });
+  } catch { /* fire-and-forget: logging must never break sign-in */ }
+}
 
 interface OAuthCfg {
   clientId: string;
@@ -182,6 +215,14 @@ export async function memberclickLogin(req: Request, res: Response): Promise<voi
   u.searchParams.set('scope', c.scope);
   u.searchParams.set('state', state);
   console.log(`[mc-oauth] login redirect state=${state.slice(0, 8)} redirect_uri=${c.redirectUri}`);
+  void logSso('login', req, {
+    state: state.slice(0, 8),
+    redirectUri: c.redirectUri,
+    clientId: c.clientId.slice(0, 6),
+    scope: c.scope,
+    authorizeHost: (() => { try { return new URL(c.authorizeUrl).host; } catch { return c.authorizeUrl; } })(),
+    returnTo,
+  });
   res.redirect(302, u.toString());
 }
 
@@ -192,8 +233,19 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
   const state = String((req.query.state as string) || '');
   const providerError = String((req.query.error as string) || '');
 
+  // Durable record that a callback FIRED (the key signal — proves the member
+  // returned from MemberClick) + every query param MemberClick sent back.
+  void logSso('callback', req, {
+    hasCode: !!code,
+    providerError: providerError || undefined,
+    errorDescription: String((req.query.error_description as string) || '') || undefined,
+    state: state ? state.slice(0, 8) : '(none)',
+    query: Object.keys(req.query).join(','),
+  });
+
   if (providerError) {
     console.log(`[mc-oauth] callback provider-error=${providerError}`);
+    void logSso('callback-outcome', req, { outcome: 'provider-error', providerError });
     res
       .status(400)
       .type('text/html')
@@ -209,6 +261,7 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
     console.log(
       `[mc-oauth] callback-invalid-state hasCode=${!!code} statePrefix=${state.slice(0, 8) || '(none)'} stateFound=${!!st}`
     );
+    void logSso('callback-outcome', req, { outcome: 'invalid-state', hasCode: !!code, stateFound: !!st });
     res
       .status(400)
       .type('text/html')
@@ -248,6 +301,7 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
           tokenResp.data
         ).slice(0, 240)}`
       );
+      void logSso('callback-outcome', req, { outcome: 'token-exchange-failed', tokenStatus: tokenResp.status });
       res
         .status(400)
         .type('text/html')
@@ -268,6 +322,7 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
     });
     if (me.status >= 400) {
       console.log(`[mc-oauth] userinfo-failed status=${me.status} body=${JSON.stringify(me.data).slice(0, 200)}`);
+      void logSso('callback-outcome', req, { outcome: 'userinfo-failed', userinfoStatus: me.status });
       res
         .status(400)
         .type('text/html')
@@ -277,6 +332,7 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
     const email = extractEmail(me.data);
     if (!email) {
       console.log(`[mc-oauth] no-email profile-keys=${Object.keys(me.data || {}).slice(0, 25).join(',')}`);
+      void logSso('callback-outcome', req, { outcome: 'no-email', profileKeys: Object.keys(me.data || {}).slice(0, 25).join(',') });
       res
         .status(400)
         .type('text/html')
@@ -293,6 +349,7 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
     const user = await User.findOne({ email: emailPattern, isActive: true });
     if (!user) {
       console.log(`[mc-oauth] not-provisioned email=${email}`);
+      void logSso('callback-outcome', req, { outcome: 'not-provisioned', email });
       res.status(403).type('text/html').send(notInvitedPage());
       return;
     }
@@ -315,12 +372,14 @@ export async function memberclickCallback(req: Request, res: Response): Promise<
     const returnTo = st.returnTo || '/dashboard';
     const target = `${returnTo}${returnTo.includes('#') ? '&' : '#'}token=${encodeURIComponent(token)}`;
     console.log(`[mc-oauth] ok email=${email} returnTo=${returnTo}`);
+    void logSso('callback-outcome', req, { outcome: 'ok', email });
     res.redirect(303, target);
   } catch (e: any) {
     const detail = e?.response?.data
       ? JSON.stringify(e.response.data).slice(0, 200)
       : String(e?.message || e);
     console.log(`[mc-oauth] callback-exception ${detail}`);
+    void logSso('callback-outcome', req, { outcome: 'exception', detail: detail.slice(0, 200) });
     res
       .status(400)
       .type('text/html')
