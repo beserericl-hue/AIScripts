@@ -57,6 +57,10 @@ export interface IUser extends Document {
   //   'both'            — MemberClick SSO OR the CSHSE password UI (has a password)
   //   'memberclick-only'— MemberClick SSO only (no password; e.g. bulk-added members)
   loginMethod: 'both' | 'memberclick-only';
+  // Password-reset (site login only). The RAW token is emailed; only its SHA-256
+  // hash is stored, with a short expiry. memberclick-only users never get one.
+  resetPasswordTokenHash?: string;
+  resetPasswordExpires?: Date;
   lastLogin?: Date;
   invitedAt?: Date;
   invitedBy?: mongoose.Types.ObjectId;
@@ -106,6 +110,8 @@ const UserSchema = new Schema<IUser>({
     type: String
     // Not required initially - set when user accepts invitation
   },
+  resetPasswordTokenHash: { type: String },
+  resetPasswordExpires: { type: Date },
   firstName: {
     type: String,
     required: true,

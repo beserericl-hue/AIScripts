@@ -191,6 +191,49 @@ ${BRAND_FOOTER_TEXT}
     });
   }
 
+  /** Password-reset email (site login only). Includes the spam-folder reminder
+   *  the reset flow requires, since the mail is sent from the courseworx domain. */
+  async sendPasswordResetEmail(data: { to: string; name?: string; resetLink: string }): Promise<boolean> {
+    const hello = data.name ? `Hello ${data.name},` : 'Hello,';
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #1a365d; color: white; padding: 20px; text-align: center;">
+          <h1 style="margin: 0;">CSHSE Self-Study Portal</h1>
+        </div>
+        <div style="padding: 30px; background-color: #f8f9fa;">
+          <h2 style="color: #1a365d;">Reset your password</h2>
+          <p>${hello}</p>
+          <p>We received a request to reset the password for your CSHSE Self-Study Portal account. Click the button below to choose a new password:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${data.resetLink}" style="background-color: #157347; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset my password</a>
+          </div>
+          <p style="color: #666; font-size: 14px;">This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email — your password won't change.</p>
+          <p style="background:#fff8e1;border:1px solid #f0e0a0;border-radius:6px;padding:12px 14px;color:#7a5b00;font-size:14px;">
+            Don't see this email? Please <strong>check your spam or junk folder</strong> for a message from <strong>cshse.courseworx.media</strong>.
+          </p>
+        </div>
+        ${BRAND_FOOTER_HTML}
+      </div>
+    `;
+    const text = `${hello}
+
+We received a request to reset the password for your CSHSE Self-Study Portal account.
+Open the link below to choose a new password (expires in 1 hour):
+${data.resetLink}
+
+If you didn't request a password reset, you can safely ignore this email.
+
+Don't see this email? Please check your spam or junk folder for a message from cshse.courseworx.media.
+
+${BRAND_FOOTER_TEXT}`;
+    return this.sendEmail({
+      to: data.to,
+      subject: 'Reset your CSHSE Self-Study Portal password',
+      html,
+      text,
+    });
+  }
+
   async sendStandardSubmittedEmail(data: StandardSubmittedEmailData): Promise<boolean> {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
