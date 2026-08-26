@@ -5,6 +5,8 @@ import DashboardPage from './pages/DashboardPage';
 import SelfStudyPage from './pages/SelfStudyPage';
 import AdminPage from './pages/AdminPage';
 import AcceptInvitationPage from './pages/AcceptInvitationPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import ImpersonationSelector from './pages/ImpersonationSelector';
 import ReaderDashboardPage from './pages/ReaderDashboardPage';
 import ReaderReviewPage from './pages/ReaderReviewPage';
@@ -72,6 +74,8 @@ function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route
         path="/impersonate"
         element={

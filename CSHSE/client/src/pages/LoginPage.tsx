@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 export default function LoginPage() {
@@ -7,6 +7,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [params] = useSearchParams();
+  const justReset = params.get('reset') === '1';
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
 
@@ -46,6 +48,11 @@ export default function LoginPage() {
 
           {/* Login Form */}
           <form className="space-y-5" onSubmit={handleSubmit}>
+            {justReset && (
+              <div className="alert alert-success" data-testid="login-reset-done">
+                Your password has been reset. Please sign in with your new password.
+              </div>
+            )}
             {error && (
               <div className="alert alert-error">
                 {error}
@@ -100,6 +107,16 @@ export default function LoginPage() {
                 'Sign in'
               )}
             </button>
+
+            <div className="text-center">
+              <Link
+                to="/forgot-password"
+                data-testid="forgot-password-link"
+                className="text-sm font-medium text-primary-700 hover:text-primary-800 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
           </form>
 
           {/* Footer */}

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Request, Response } from 'express';
 import { User } from '../models/User';
 import { verifyInvitation, acceptInvitation } from '../controllers/invitationController';
+import { forgotPassword, resetPassword } from '../controllers/passwordResetController';
 import { recordAuditEvent } from '../services/auditLog';
 import { ImpersonationContext } from '../middleware/requestContext';
 import jwt from 'jsonwebtoken';
@@ -104,6 +105,15 @@ router.get('/verify-invitation/:token', verifyInvitation);
  * @access  Public
  */
 router.post('/accept-invitation', acceptInvitation);
+
+/**
+ * @route   POST /api/auth/forgot-password  { email }   (Public)
+ *          POST /api/auth/reset-password    { token, password }  (Public)
+ * @desc    Two-step self-service password reset for SITE (password) logins.
+ *          memberclick-only users get {memberclickOnly:true} → contact MC admin.
+ */
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
 
 /**
  * @route   POST /api/auth/refresh
