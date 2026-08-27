@@ -115,29 +115,41 @@ class EmailService {
    */
   async sendEmail(options: EmailOptions): Promise<boolean> {
     // Prefer SendGrid (deliverable to strict receivers); fall back to Postal.
-    const useSendgrid = isSendgridConfigured();
-    if (!useSendgrid && !isPostalConfigured()) {
+    // The fallback is RUNTIME, not just config-time: if SendGrid is configured
+    // but the send itself fails (e.g. 401 "Maximum credits exceeded", a network
+    // blip), we retry through Postal when it's configured. Otherwise an expired
+    // SendGrid plan silently drops every email — invitations, password resets,
+    // the lot — even though a working Postal server is sitting right there.
+    const providers: Array<{ name: string; send: typeof sendgridSendEmail }> = [];
+    if (isSendgridConfigured()) providers.push({ name: 'sendgrid', send: sendgridSendEmail });
+    if (isPostalConfigured()) providers.push({ name: 'postal', send: postalSendEmail });
+    if (providers.length === 0) {
       console.warn('Email not sent - no provider configured (SENDGRID_API_KEY / POSTAL_API_KEY missing)');
       return false;
     }
-    const send = useSendgrid ? sendgridSendEmail : postalSendEmail;
-    const provider = useSendgrid ? 'sendgrid' : 'postal';
-    try {
-      const { messageId } = await send({
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-        replyTo: options.replyTo,
-        bcc: options.bcc,
-        attachments: options.attachments,
-      });
-      console.log(`Email sent to ${options.to}: ${options.subject} (${provider} ${messageId})`);
-      return true;
-    } catch (error) {
-      console.error('Failed to send email:', error);
-      return false;
+    const payload = {
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+      replyTo: options.replyTo,
+      bcc: options.bcc,
+      attachments: options.attachments,
+    };
+    let lastError: unknown = null;
+    for (const { name, send } of providers) {
+      try {
+        const { messageId } = await send(payload);
+        console.log(`Email sent to ${options.to}: ${options.subject} (${name} ${messageId})`);
+        return true;
+      } catch (error) {
+        lastError = error;
+        console.error(`Failed to send email via ${name}:`, error);
+        // Try the next configured provider (if any) before giving up.
+      }
     }
+    console.error('Failed to send email: all providers failed:', lastError);
+    return false;
   }
 
   async sendInvitationEmail(data: InvitationEmailData): Promise<boolean> {
