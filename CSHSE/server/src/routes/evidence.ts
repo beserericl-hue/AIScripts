@@ -12,7 +12,9 @@ import {
   getEvidencePublicUrl,
   linkEvidence,
   unlinkEvidence,
-  getEvidenceStats
+  getEvidenceStats,
+  listRequiredDocuments,
+  REQUIRED_DOC_TYPES
 } from '../controllers/evidenceController';
 import { authenticate } from '../middleware/auth';
 import { submissionLockout } from '../middleware/submissionLockout';
@@ -117,6 +119,36 @@ router.post(
   upload.single('file'),
   uploadEvidence
 );
+
+/**
+ * @route   POST /api/submissions/:submissionId/required-documents
+ * @route   GET  /api/submissions/:submissionId/required-documents
+ * @desc    CR-074 — Required program documents (VP-for-Accreditation letter,
+ *          institutional support letter, …). Deliberately NOT behind
+ *          submissionLockout: the PC/admin may add these AFTER the self-study is
+ *          locked. Stored as Introduction-section evidence with a
+ *          [[REQUIRED_DOC:<type>]] marker so they surface in the reader report;
+ *          readers/leads can list + download them.
+ * @access  Upload: Program Coordinator / Admin (enforced in uploadEvidence).
+ *          List: anyone with submission access (readers + leads included).
+ */
+router.post(
+  '/submissions/:submissionId/required-documents',
+  upload.single('file'),
+  (req, res, next) => {
+    const type = String(req.body?.requiredDocType || 'other').toLowerCase();
+    const label = REQUIRED_DOC_TYPES[type] || 'Required Document';
+    // Force the Introduction section so the doc appears in the reader report,
+    // and stamp the description marker the list endpoint filters on.
+    req.body.standardCode = 'introduction';
+    req.body.specCode = 'a';
+    const extra = typeof req.body?.description === 'string' && req.body.description.trim()
+      ? ` — ${req.body.description.trim()}` : '';
+    req.body.description = `[[REQUIRED_DOC:${type}]] ${label}${extra}`;
+    return uploadEvidence(req, res, next);
+  }
+);
+router.get('/submissions/:submissionId/required-documents', listRequiredDocuments);
 
 /**
  * @route   POST /api/submissions/:submissionId/evidence/url
