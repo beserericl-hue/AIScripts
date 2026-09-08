@@ -81,6 +81,10 @@ function stripHtml(html?: string | null): string {
 
 interface SpecBlock {
   std: string; spec: string; title: string;
+  // The official standard/specification LANGUAGE (the criteria the reader reads
+  // the narrative against). Carried through so the Reader Report can show the
+  // full standard text on demand, the way the paper reader form does.
+  text: string;
   narrative: string; evidence: string;
   narrativeHtml: string; evidenceHtml: string;
   verdict?: string; rationale?: string; suggestions: string[]; excluded: boolean;
@@ -135,6 +139,7 @@ async function gatherReportData(submissionId: string): Promise<ReportData> {
       const st = getStatus(std.code, sp.code);
       specs.push({
         std: std.code, spec: sp.code, title: sp.title || '',
+        text: ((sp as any).text as string) || sp.title || '',
         narrative: stripHtml(n?.content), evidence: stripHtml(n?.supportingEvidenceText),
         narrativeHtml: (n?.content as string) || '', evidenceHtml: (n?.supportingEvidenceText as string) || '',
         verdict: res?.verdict, rationale: res?.rationale || res?.feedback,
@@ -362,6 +367,9 @@ export async function generateAndStoreReaderReport(
 export interface ReaderReportSpec {
   specCode: string;
   specTitle: string;
+  // The official standard/specification language for this row, so the Reader
+  // Report can show the full standard text on demand (a "View standard" popup).
+  specText?: string;
   narrativeHtml: string;
   evidenceHtml: string;
   verdict?: string;
@@ -500,17 +508,20 @@ async function buildIntroSection(
     const res = latestIntro.get(row.specCode);
     const verdict = verdictFor(row.specCode);
     const slice = (slices[row.specCode] || '').trim();
-    // Row 'a' ("Introduction") always shows the FULL introduction narrative — it
-    // is the general-overview row of the official form and its own anchor slice
-    // is just the "A." heading (so it looked empty). Rows b–f show their focused
-    // slice; conditional rows explain they may not apply.
-    const html = row.specCode === 'a'
-      ? (introHtml || '<p><em>No introduction narrative provided.</em></p>')
-      : (slice || `<p><em>${row.conditional
-          ? 'Not separately addressed in the introduction — the reader confirms whether this applies to the program.'
-          : 'See the program Introduction above.'}</em></p>`);
+    // Show each row its OWN slice. Row 'a' ("Introduction") is the general
+    // opening (document start → the first official sub-section), so it no longer
+    // dumps the ENTIRE introduction — that made rows b–f look like they repeated
+    // row a over and over (the readers' complaint). Row 'a' falls back to the
+    // full narrative only when the split found no sub-sections at all; rows b–f
+    // fall back to a short note (conditional rows explain they may not apply).
+    const html = slice
+      || (row.specCode === 'a'
+          ? (introHtml || '<p><em>No introduction narrative provided.</em></p>')
+          : `<p><em>${row.conditional
+              ? 'Not separately addressed in the introduction — the reader confirms whether this applies to the program.'
+              : 'See the program Introduction above.'}</em></p>`);
     return {
-      specCode: row.specCode, specTitle: row.title, narrativeHtml: html, evidenceHtml: '',
+      specCode: row.specCode, specTitle: row.title, specText: row.criteria, narrativeHtml: html, evidenceHtml: '',
       verdict, aiMark: verdictToMark(verdict),
       aiComment: specAiText({ verdict, rationale: res?.rationale || res?.feedback, suggestions: res?.suggestions || res?.missingElements || [] }),
       evidenceCount: evCount.get(`${INTRO_CODE}.${row.specCode}`) || introFiles, excluded: false,
@@ -551,14 +562,25 @@ export async function getReaderReportStructure(submissionId: string): Promise<Re
       // supporting evidence right on the report screen.
       const specs: ReaderReportSpec[] = s.specs
         .filter((sp) => !sp.excluded && (sp.narrativeHtml || sp.evidenceHtml))
-        .map((sp) => ({
-          specCode: sp.spec, specTitle: sp.title,
-          narrativeHtml: sp.narrativeHtml, evidenceHtml: sp.evidenceHtml,
-          verdict: sp.verdict, aiMark: verdictToMark(sp.verdict),
-          aiComment: specAiText(sp),
-          evidenceCount: evCount.get(`${s.code}.${sp.spec}`) || 0,
-          excluded: sp.excluded,
-        }));
+        .map((sp) => {
+          // Suppress a "supporting evidence" block that merely repeats the
+          // narrative (some self-studies paste the same text into both fields —
+          // readers complained the evidence just echoed what they'd just read).
+          // Compare the stripped text; drop the evidence only on a clear
+          // duplicate (identical, or one fully contains the other).
+          const narrT = (sp.narrative || '').trim();
+          const evT = (sp.evidence || '').trim();
+          const dupEvidence = evT.length > 0 && narrT.length > 0 &&
+            (narrT === evT || narrT.includes(evT) || evT.includes(narrT));
+          return {
+            specCode: sp.spec, specTitle: sp.title, specText: sp.text,
+            narrativeHtml: sp.narrativeHtml, evidenceHtml: dupEvidence ? '' : sp.evidenceHtml,
+            verdict: sp.verdict, aiMark: verdictToMark(sp.verdict),
+            aiComment: specAiText(sp),
+            evidenceCount: evCount.get(`${s.code}.${sp.spec}`) || 0,
+            excluded: sp.excluded,
+          };
+        });
       return { code: s.code, title: s.title, aiMark: r.mark, aiComment: r.comment, specs };
     });
 

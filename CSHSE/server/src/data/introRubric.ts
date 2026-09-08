@@ -118,8 +118,12 @@ export function splitIntroductionHtml(introHtml: string): Record<string, string>
     starts.push({ code: row.specCode, idx });
     if (idx !== -1) cursor = idx + 1;
   }
-  // Row a always starts at 0 if its anchor wasn't found before the others.
-  if (starts[0].idx === -1) starts[0].idx = 0;
+  // Row a ("Introduction") is the general opening, so it ALWAYS starts at the
+  // document beginning and runs to the first sub-section (row b's anchor). Its
+  // own anchor ("A."/"Introduction") often sits right before row b's heading,
+  // which made slice a a 2-char "A." and pushed the whole overview into no row —
+  // and the caller then showed the FULL intro under row a, duplicating b–f.
+  starts[0].idx = 0;
   // Build slices: each found row runs to the next found row's start.
   for (let i = 0; i < starts.length; i++) {
     const s = starts[i];
