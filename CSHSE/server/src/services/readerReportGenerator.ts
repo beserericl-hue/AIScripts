@@ -511,15 +511,25 @@ async function buildIntroSection(
     // Show each row its OWN slice. Row 'a' ("Introduction") is the general
     // opening (document start → the first official sub-section), so it no longer
     // dumps the ENTIRE introduction — that made rows b–f look like they repeated
-    // row a over and over (the readers' complaint). Row 'a' falls back to the
-    // full narrative only when the split found no sub-sections at all; rows b–f
-    // fall back to a short note (conditional rows explain they may not apply).
-    const html = slice
-      || (row.specCode === 'a'
-          ? (introHtml || '<p><em>No introduction narrative provided.</em></p>')
-          : `<p><em>${row.conditional
-              ? 'Not separately addressed in the introduction — the reader confirms whether this applies to the program.'
-              : 'See the program Introduction above.'}</em></p>`);
+    // row a over and over (the readers' complaint). Rows b–f fall back to a
+    // short note (conditional rows explain they may not apply).
+    let html: string;
+    if (row.specCode === 'a') {
+      // If the intro opens directly with a sub-section (no separate overview
+      // paragraph), row 'a' slice is just a heading fragment — show a pointer
+      // rather than a bare "A.". Fall back to the FULL intro only when the
+      // split found no sub-sections at all (nothing "below" to point to).
+      const hasSubsections = INTRO_RUBRIC.slice(1).some((rw) => (slices[rw.specCode] || '').trim());
+      html = stripHtml(slice).length >= 40
+        ? slice
+        : hasSubsections
+          ? '<p><em>The program introduction opens directly with the material shown in the sections below.</em></p>'
+          : (introHtml || '<p><em>No introduction narrative provided.</em></p>');
+    } else {
+      html = slice || `<p><em>${row.conditional
+        ? 'Not separately addressed in the introduction — the reader confirms whether this applies to the program.'
+        : 'See the program Introduction above.'}</em></p>`;
+    }
     return {
       specCode: row.specCode, specTitle: row.title, specText: row.criteria, narrativeHtml: html, evidenceHtml: '',
       verdict, aiMark: verdictToMark(verdict),
