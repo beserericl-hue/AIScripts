@@ -29,6 +29,7 @@ import { useAuthStore } from '../../store/authStore';
 import { JointVentureBadge } from '../../components/JointVentureBadge';
 import { WorkflowSummary, type WorkflowSummaryData } from './WorkflowSummary';
 import { ReaderSelfStudyPanel } from './ReaderSelfStudyPanel';
+import RequiredDocuments from '../../components/RequiredDocuments';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -567,6 +568,15 @@ export function Dashboard() {
             submissionStatus={mySubmissionData?.submissions?.[0]?.status}
             submittedAt={mySubmissionData?.submissions?.[0]?.submittedAt}
           />
+
+          {/* CR-074 — Required program documents (VP-accreditation / institutional
+              support letters). The PC can add these even AFTER submit; readers +
+              leads see them in the reader report. */}
+          {pcSubmissionId && (
+            <div className="mt-8">
+              <RequiredDocuments submissionId={pcSubmissionId} canUpload={true} />
+            </div>
+          )}
 
           {/* CR-047 — accreditation-admin panels demoted below the workflow,
               collapsed by default (auto-expanded when there's pending content). */}

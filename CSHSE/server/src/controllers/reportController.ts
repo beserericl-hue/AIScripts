@@ -10,6 +10,8 @@ import { ReaderReport } from '../models/ReaderReport';
 import { Comment } from '../models/Comment';
 import { Assignment } from '../models/Assignment';
 import { Submission } from '../models/Submission';
+import { ValidationResult } from '../models/ValidationResult';
+import { ingestCorrection } from '../services/cshseAiClient';
 import { isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
@@ -442,6 +444,55 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
  * PUT /api/reports/submission/:submissionId/reader-report-data
  * Save the current reader's edits (per-standard mark + comment + recommendation).
  */
+/**
+ * CR-049 learning loop for the Reader Report. When a reader's OWN report mark
+ * disagrees with the AI verdict, feed the correction to the institution's
+ * learning store (the same `section_eval_override` path the Reader Review
+ * override control uses) AND stamp the verdict on the latest ValidationResult,
+ * so the model learns from corrections readers make in the Reader Report too
+ * (previously only the separate override control fed the loop). Fires only on a
+ * CHANGED mark vs. what's already stored, so a plain autosave doesn't re-ingest.
+ * Best-effort — the caller never awaits/blocks the save on this.
+ */
+async function feedReaderReportCorrections(
+  submissionId: string,
+  priorMark: Map<string, string>,
+  rows: Array<{ standardCode: string; specCode: string; mark: string; comment: string }>,
+): Promise<void> {
+  const submission = await Submission.findById(submissionId).select('institutionId programLevel').lean();
+  if (!submission) return;
+  const toVerdict = (m: string) => (m === 'compliant' ? 'pass' : m === 'noncompliant' ? 'fail' : '');
+  for (const row of rows) {
+    if (row.mark !== 'compliant' && row.mark !== 'noncompliant') continue;
+    const key = `${row.standardCode}.${row.specCode || ''}`;
+    if ((priorMark.get(key) || '') === row.mark) continue; // unchanged → nothing new to learn
+    const verdict = toVerdict(row.mark);
+    const latest: any = await ValidationResult.findOne({
+      submissionId, standardCode: row.standardCode, specCode: row.specCode,
+    }).sort({ validatedAt: -1 });
+    const aiVerdict = latest?.result?.verdict;
+    // Only a genuine DISAGREEMENT with the AI is worth feeding back.
+    if (aiVerdict && aiVerdict === verdict) continue;
+    if (latest) {
+      latest.result.verdict = verdict;
+      latest.result.readerOverridden = true;
+      if (row.comment) latest.result.readerOverrideNote = String(row.comment).slice(0, 2000);
+      latest.markModified('result');
+      await latest.save();
+    }
+    await ingestCorrection({
+      correctionId: new mongoose.Types.ObjectId().toString(),
+      institutionId: (submission as any).institutionId?.toString() || '',
+      programLevel: (submission as any).programLevel || 'bachelors',
+      expectedStd: row.standardCode,
+      expectedSpec: row.specCode,
+      expectedSectionType: 'narrative_response',
+      sourceText: row.comment ? String(row.comment) : `reader report → ${verdict}`,
+      correctionType: 'section_eval_override',
+    });
+  }
+}
+
 export const saveReaderReportData = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { submissionId } = req.params;
@@ -490,6 +541,15 @@ export const saveReaderReportData = async (req: AuthenticatedRequest, res: Respo
 
     const reviewerId = target.reviewerId;
     const rows = incoming;
+    // CR-049 — capture the CURRENTLY-stored marks BEFORE we overwrite them, so
+    // the learning feed can tell which marks actually changed, then feed reader
+    // corrections (mark disagrees with the AI) to the store. Best-effort,
+    // non-blocking on the async feed; only the prior-mark read is awaited.
+    const priorDoc = await ReaderReport.findOne({ submissionId, reviewerId }).select('rows').lean();
+    const priorMark = new Map<string, string>();
+    for (const r of (priorDoc?.rows as any[]) || []) priorMark.set(`${r.standardCode}.${r.specCode || ''}`, r.mark || '');
+    void feedReaderReportCorrections(submissionId, priorMark, rows)
+      .catch((e) => console.error('[CR-049] reader-report correction feed failed', e));
     const recommendation = typeof body.recommendation === 'string' ? body.recommendation : '';
     const VOTES = ['accept', 'conditional', 'deny', 'hold', ''];
 

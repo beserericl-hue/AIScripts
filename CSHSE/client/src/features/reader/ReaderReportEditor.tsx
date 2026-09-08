@@ -8,6 +8,7 @@ import { FormattedCommentable } from './FormattedCommentable';
 import { AllCommentsDrawer } from './AllCommentsDrawer';
 import { SpecFilesMenu, type SpecEvidence } from './SpecFilesMenu';
 import { SpecMatrixModal } from './SpecMatrixModal';
+import RequiredDocuments from '../../components/RequiredDocuments';
 
 interface ReportSpec {
   specCode: string;
@@ -820,6 +821,16 @@ export function ReaderReportEditor(): JSX.Element {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* CR-074 — Required program documents (VP-accreditation / institutional
+          support letters) the PC supplied, so the reader/lead can read them
+          alongside the self-study. Read-only here; the PC uploads on the
+          dashboard. Hidden in focus mode and while viewing a peer report. */}
+      {!focusMode && submissionId && (
+        <div className="mb-4">
+          <RequiredDocuments submissionId={submissionId} canUpload={false} />
         </div>
       )}
 

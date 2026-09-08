@@ -201,6 +201,55 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
 });
 
 /**
+ * CR-074 — Required program documents (VP-for-Accreditation letter,
+ * institutional support letter, etc.) that the program must supply but that may
+ * arrive AFTER the self-study is locked. They are stored as Introduction-section
+ * supporting evidence with a `[[REQUIRED_DOC:<type>]]` description marker (so
+ * they surface in the reader report) and listed here for the PC to manage and
+ * for readers/leads to download.
+ */
+export const REQUIRED_DOC_TYPES: Record<string, string> = {
+  'vp-accreditation-letter': 'VP for Accreditation Letter',
+  'institutional-support-letter': 'Institutional Support Letter',
+  'other': 'Other Required Document',
+};
+const REQUIRED_DOC_MARKER = /^\[\[REQUIRED_DOC:([a-z0-9-]+)\]\]\s*(.*)$/i;
+
+export const listRequiredDocuments = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { submissionId } = req.params;
+  const userId = (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id;
+  const userRole = req.user?.role;
+  const isSuperuser = req.user?.isSuperuser || (req.user as any)?.realIsSuperuser;
+  if (!userId || !userRole) throw new AuthorizationError('Authentication required');
+  const { hasAccess, institution } = await verifyEvidenceAccess(userId, userRole, submissionId, undefined, isSuperuser);
+  if (!hasAccess) throw new AuthorizationError('You do not have access to this submission');
+
+  const filter: any = {
+    submissionId: new mongoose.Types.ObjectId(submissionId),
+    isDeleted: false,
+    description: /^\[\[REQUIRED_DOC:/,
+    $or: [{ isCurrentVersion: true }, { isCurrentVersion: { $exists: false } }],
+  };
+  if (userRole !== 'admin' && institution) filter.institutionId = institution._id;
+
+  const items = await SupportingEvidence.find(filter).select('-file.data').sort({ createdAt: -1 }).lean();
+  const documents = items.map((e: any) => {
+    const m = REQUIRED_DOC_MARKER.exec(e.description || '');
+    const type = (m?.[1] || 'other').toLowerCase();
+    return {
+      id: String(e._id),
+      requiredDocType: type,
+      typeLabel: REQUIRED_DOC_TYPES[type] || 'Required Document',
+      note: (m?.[2] || '').replace(/^([^—]*—\s*)/, '').trim(), // any free-text after the label
+      originalName: e.file?.originalName || e.originalName || 'document',
+      uploadedAt: e.createdAt,
+      downloadUrl: `/api/submissions/${submissionId}/evidence/${e._id}/download`,
+    };
+  });
+  res.json({ documents, types: REQUIRED_DOC_TYPES });
+});
+
+/**
  * Get a single evidence item
  */
 export const getEvidence = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
