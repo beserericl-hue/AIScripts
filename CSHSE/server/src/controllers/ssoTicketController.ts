@@ -258,6 +258,75 @@ export async function ssoRedeemTicket(req: Request, res: Response): Promise<Resp
   res.redirect(303, target);
 }
 
+// ------------------------------------------------- memberclick menu-link login
+
+/**
+ * GET /sso/v1/menu?key=<API_KEY>&email=<member email>&returnTo=/dashboard
+ *
+ * The simplest MemberClick integration: a member-area MENU ITEM / LINK. Because
+ * a menu item is a plain browser GET, this accepts the sso-login API key and the
+ * member's email (filled by a MemberClick merge tag) directly in the URL, then
+ * hands off to the existing /sso/v1/start browser flow (mint 30-day JWT → land
+ * logged in). No email, no password, no OAuth auth code.
+ *
+ * The API key sits in the link, so treat it as a SHARED SECRET: it is scoped to
+ * sso-login only, revocable/rotatable from the portal admin, and every use is
+ * logged here for audit.
+ */
+export async function ssoMenuLogin(req: Request, res: Response): Promise<Response | void> {
+  const requestId = crypto.randomBytes(8).toString('hex');
+  const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+  const errorPage = (title: string, msg: string, status = 400) =>
+    res.status(status).type('text/html').send(
+      `<html><body style="font-family:Arial,sans-serif;max-width:520px;margin:60px auto;text-align:center">
+        <h1 style="color:#1a365d">${title}</h1><p style="color:#444">${msg}</p>
+        <p><a href="/login">Go to the sign-in page</a></p></body></html>`
+    );
+  try {
+    const rawKey = (req.query?.key ?? '').toString().trim();
+    const email = (req.query?.email ?? '').toString().toLowerCase().trim();
+    // returnTo must be an internal path (leading single slash) — no open redirect.
+    let returnTo = (req.query?.returnTo ?? '/dashboard').toString();
+    if (!returnTo.startsWith('/') || returnTo.startsWith('//')) returnTo = '/dashboard';
+
+    if (!rawKey) {
+      console.log(`[sso-menu] outcome=missing-key ip=${ip} request_id=${requestId}`);
+      return errorPage('Sign-in link is not configured', 'This sign-in link is missing its access key. Please contact your CSHSE administrator.', 400);
+    }
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const apiKey = await APIKey.findOne({ keyHash, isActive: true });
+    if (!apiKey || apiKey.scope !== 'sso-login') {
+      console.log(`[sso-menu] outcome=invalid-key ip=${ip} request_id=${requestId}`);
+      return errorPage('Sign-in unavailable', 'This sign-in link is no longer valid. Please contact your CSHSE administrator.', 401);
+    }
+    if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
+      console.log(`[sso-menu] outcome=expired-key keyId=${apiKey._id} ip=${ip} request_id=${requestId}`);
+      return errorPage('Sign-in unavailable', 'This sign-in link has expired. Please contact your CSHSE administrator.', 401);
+    }
+    if (!email || !/^[\w.+-]+@([\w-]+\.)+[\w-]{2,}$/.test(email)) {
+      console.log(`[sso-menu] outcome=invalid-email keyId=${apiKey._id} ip=${ip} request_id=${requestId}`);
+      return errorPage('We couldn\'t read your email', 'The MemberClick link did not pass a valid email address. Please contact your CSHSE administrator.', 400);
+    }
+    // Only sign in an ACTIVE, known account (audited).
+    const user = await User.findOne({ email, isActive: true });
+    if (!user || user.status === 'disabled') {
+      console.log(`[sso-menu] outcome=user-not-found email=${email} keyId=${apiKey._id} ip=${ip} request_id=${requestId}`);
+      return res.status(403).type('text/html').send(notInvitedPage(requestId));
+    }
+
+    apiKey.lastUsedAt = new Date();
+    apiKey.usageCount = (apiKey.usageCount || 0) + 1;
+    apiKey.save().catch(() => { /* best-effort */ });
+
+    const { ticket } = _mintTicket({ email, returnTo, apiKeyId: apiKey._id?.toString(), source: 'memberclick' });
+    console.log(`[sso-menu] outcome=ok email=${email} keyId=${apiKey._id} ip=${ip} returnTo=${returnTo} request_id=${requestId}`);
+    return res.redirect(303, `/sso/v1/start?ticket=${ticket}`);
+  } catch (err) {
+    console.error('[sso-menu] error:', err);
+    return errorPage('Sign-in error', 'Something went wrong signing you in. Please try again or contact your CSHSE administrator.', 500);
+  }
+}
+
 // --------------------------------------------------------- memberclick relay
 
 /**
