@@ -29,6 +29,7 @@ import { ValidationResult } from '../models/ValidationResult';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getAllStandards } from '../data/standards';
+import { getLevelStandards } from '../data/levelStandards';
 import { INTRO_RUBRIC, INTRO_STANDARD_CODE, splitIntroductionHtml } from '../data/introRubric';
 import { brandedSectionChrome } from './docxBranding';
 
@@ -116,7 +117,17 @@ async function gatherReportData(submissionId: string): Promise<ReportData> {
   }
 
   const standards: ReportData['standards'] = [];
-  for (const std of getAllStandards()) {
+  // Enumerate specs from the LEVEL-AWARE catalog (associate / baccalaureate /
+  // masters), the same source the self-study editor uses — NOT the flat
+  // getAllStandards(), whose numbering diverges by level. For associate, flat
+  // Standard 20 is "Technology" (specs a–c) while the associate program's
+  // Standard 20 is "Field Experience" (specs a–j); enumerating the flat set
+  // rendered the report's Standard 20 with the wrong title and dropped every
+  // spec after c (the narrative for 20.d–20.j exists but was never iterated),
+  // which is exactly the "misaligned + nothing after 20.C" the readers saw.
+  // Falls back to the flat catalog only if a level catalog is somehow absent.
+  const catalog = getLevelStandards(submission?.programLevel) || getAllStandards();
+  for (const std of catalog) {
     const specs: SpecBlock[] = [];
     for (const sp of std.specifications || []) {
       const n = narrFor(std.code, sp.code);
