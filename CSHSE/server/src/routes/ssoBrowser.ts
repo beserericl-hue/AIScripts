@@ -14,13 +14,15 @@
  *     ticket internally + redirects to /sso/v1/start.
  */
 import { Router } from 'express';
-import { ssoRedeemTicket, ssoFromMemberClick } from '../controllers/ssoTicketController';
+import { ssoRedeemTicket, ssoFromMemberClick, ssoMenuLogin } from '../controllers/ssoTicketController';
 import { memberclickLogin, memberclickCallback } from '../controllers/memberclickOAuthController';
 
 const router = Router();
 
 router.get('/v1/start', ssoRedeemTicket);
 router.post('/v1/from-memberclick', ssoFromMemberClick);
+// MemberClick member-area MENU LINK: key + email in the URL → logged in.
+router.get('/v1/menu', ssoMenuLogin);
 
 // MemberClick OAuth (the reliable per-member SSO). The member-portal link points
 // at /login; MemberClick sends them back to /callback already identified.
