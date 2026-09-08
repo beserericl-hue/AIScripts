@@ -203,6 +203,47 @@ ${BRAND_FOOTER_TEXT}
     });
   }
 
+  /** Passwordless sign-in link (magic link). One-time, short-lived; the link
+   *  lands on a confirm page with a button so email security scanners can't burn
+   *  the token. Includes the spam-folder reminder (sent from the courseworx domain). */
+  async sendLoginLinkEmail(data: { to: string; name?: string; loginLink: string }): Promise<boolean> {
+    const hello = data.name ? `Hello ${data.name},` : 'Hello,';
+    const html = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #1a365d; color: white; padding: 20px; text-align: center;">
+          <h1 style="margin: 0;">CSHSE Self-Study Portal</h1>
+        </div>
+        <div style="padding: 30px; background-color: #f8f9fa;">
+          <h2 style="color: #1a365d;">Your sign-in link</h2>
+          <p>${hello}</p>
+          <p>Click the button below to sign in to the CSHSE Self-Study Portal. No password needed.</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${data.loginLink}" style="background-color: #157347; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">Sign in to the portal</a>
+          </div>
+          <p style="color: #666; font-size: 14px;">This link expires in 30 minutes and can be used once. If you didn't request it, you can safely ignore this email.</p>
+          <p style="background:#fff8e1;border:1px solid #f0e0a0;border-radius:6px;padding:12px 14px;color:#7a5b00;font-size:14px;">
+            Don't see this email? Please <strong>check your spam or junk folder</strong> for a message from <strong>cshse.courseworx.media</strong>.
+          </p>
+        </div>
+        ${BRAND_FOOTER_HTML}
+      </div>
+    `;
+    const text = `${hello}
+
+Click the link below to sign in to the CSHSE Self-Study Portal (no password needed).
+This link expires in 30 minutes and can be used once:
+${data.loginLink}
+
+If you didn't request it, you can safely ignore this email.
+${BRAND_FOOTER_TEXT}`;
+    return this.sendEmail({
+      to: data.to,
+      subject: 'Your CSHSE Self-Study Portal sign-in link',
+      html,
+      text,
+    });
+  }
+
   /** Password-reset email (site login only). Includes the spam-folder reminder
    *  the reset flow requires, since the mail is sent from the courseworx domain. */
   async sendPasswordResetEmail(data: { to: string; name?: string; resetLink: string }): Promise<boolean> {
