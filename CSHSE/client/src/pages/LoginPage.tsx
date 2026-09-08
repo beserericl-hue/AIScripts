@@ -9,6 +9,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [params] = useSearchParams();
   const justReset = params.get('reset') === '1';
+  const linkError = params.get('linkError') === '1';
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
 
@@ -51,6 +52,11 @@ export default function LoginPage() {
             {justReset && (
               <div className="alert alert-success" data-testid="login-reset-done">
                 Your password has been reset. Please sign in with your new password.
+              </div>
+            )}
+            {linkError && (
+              <div className="alert alert-error" data-testid="login-link-error">
+                That sign-in link is invalid or has expired. Please request a new one.
               </div>
             )}
             {error && (
@@ -108,11 +114,18 @@ export default function LoginPage() {
               )}
             </button>
 
-            <div className="text-center">
+            <div className="flex flex-col items-center gap-1.5">
+              <Link
+                to="/sign-in-link"
+                data-testid="sign-in-link-link"
+                className="text-sm font-semibold text-primary-700 hover:text-primary-800 hover:underline"
+              >
+                Email me a sign-in link (no password)
+              </Link>
               <Link
                 to="/forgot-password"
                 data-testid="forgot-password-link"
-                className="text-sm font-medium text-primary-700 hover:text-primary-800 hover:underline"
+                className="text-xs font-medium text-gray-500 hover:text-gray-700 hover:underline"
               >
                 Forgot password?
               </Link>

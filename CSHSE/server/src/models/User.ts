@@ -61,6 +61,10 @@ export interface IUser extends Document {
   // hash is stored, with a short expiry. memberclick-only users never get one.
   resetPasswordTokenHash?: string;
   resetPasswordExpires?: Date;
+  // Passwordless "email me a sign-in link" (magic link). The RAW token is emailed;
+  // only its SHA-256 hash is stored, with a short expiry. Single-use.
+  loginLinkTokenHash?: string;
+  loginLinkExpires?: Date;
   lastLogin?: Date;
   invitedAt?: Date;
   invitedBy?: mongoose.Types.ObjectId;
@@ -112,6 +116,8 @@ const UserSchema = new Schema<IUser>({
   },
   resetPasswordTokenHash: { type: String },
   resetPasswordExpires: { type: Date },
+  loginLinkTokenHash: { type: String },
+  loginLinkExpires: { type: Date },
   firstName: {
     type: String,
     required: true,

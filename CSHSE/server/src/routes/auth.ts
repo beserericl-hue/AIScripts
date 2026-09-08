@@ -3,6 +3,7 @@ import { Request, Response } from 'express';
 import { User } from '../models/User';
 import { verifyInvitation, acceptInvitation } from '../controllers/invitationController';
 import { forgotPassword, resetPassword } from '../controllers/passwordResetController';
+import { requestLoginLink, consumeLoginLink } from '../controllers/loginLinkController';
 import { recordAuditEvent } from '../services/auditLog';
 import { ImpersonationContext } from '../middleware/requestContext';
 import jwt from 'jsonwebtoken';
@@ -114,6 +115,15 @@ router.post('/accept-invitation', acceptInvitation);
  */
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
+
+/**
+ * @route   POST /api/auth/login-link            { email }   (Public)
+ *          GET  /api/auth/login-link/consume?token=...      (Public)
+ * @desc    Passwordless "email me a sign-in link" (magic link). No MemberClick,
+ *          no password — the emailed one-time link signs the member in.
+ */
+router.post('/login-link', requestLoginLink);
+router.get('/login-link/consume', consumeLoginLink);
 
 /**
  * @route   POST /api/auth/refresh

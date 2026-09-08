@@ -7,6 +7,8 @@ import AdminPage from './pages/AdminPage';
 import AcceptInvitationPage from './pages/AcceptInvitationPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import SignInLinkPage from './pages/SignInLinkPage';
+import SignInLinkConfirmPage from './pages/SignInLinkConfirmPage';
 import ImpersonationSelector from './pages/ImpersonationSelector';
 import ReaderDashboardPage from './pages/ReaderDashboardPage';
 import ReaderReviewPage from './pages/ReaderReviewPage';
@@ -76,6 +78,8 @@ function App() {
       <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/sign-in-link" element={<SignInLinkPage />} />
+      <Route path="/sign-in-link/confirm" element={<SignInLinkConfirmPage />} />
       <Route
         path="/impersonate"
         element={
