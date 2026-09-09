@@ -268,6 +268,21 @@ export function UserManagement() {
     }
   });
 
+  // Enable (re-activate) a disabled user — the counterpart to Disable, so an
+  // admin can turn an account back on from the UI (there was no button before,
+  // only the server endpoint).
+  const enableMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await api.post(`/api/users/${id}/enable`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+    onError: (err: any) => {
+      pushToast(err?.response?.data?.error || 'Failed to enable user.', 'error');
+    }
+  });
+
   const users: User[] = usersData?.users || [];
   const invitations: Invitation[] = invitationsData?.invitations || [];
   const institutions = institutionsData?.institutions || [];
@@ -619,13 +634,24 @@ export function UserManagement() {
                           <Edit2 className="w-4 h-4" />
                         </button>
                       )}
-                      <button
-                        onClick={() => disableMutation.mutate(user._id)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                        title="Disable user"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {user.status === 'disabled' ? (
+                        <button
+                          onClick={() => enableMutation.mutate(user._id)}
+                          disabled={enableMutation.isPending}
+                          className="flex items-center gap-1 rounded px-2 py-1 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+                          title="Enable user (re-activate this account)"
+                        >
+                          <CheckCircle className="w-4 h-4" /> Enable
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => disableMutation.mutate(user._id)}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          title="Disable user"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
