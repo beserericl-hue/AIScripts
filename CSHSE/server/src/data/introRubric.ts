@@ -66,7 +66,11 @@ export const INTRO_RUBRIC: IntroRubricRow[] = [
     title: 'Delivery at Multiple Sites',
     criteria:
       'If the Program is delivered at multiple sites, the introduction addresses the delivery at each site. If the program is delivered at a single site this row is not applicable and should be treated as Compliant.',
-    anchors: ['multiple sites', 'delivered at multiple'],
+    // Anchor on the START of the heading sentence ("If the Program is delivered
+    // at multiple sites") — not the mid-sentence "delivered at multiple", which
+    // split the sentence and left "If the Program is" dangling on the previous
+    // intro row.
+    anchors: ['If the Program is delivered at multiple', 'If the program is delivered', 'delivered at multiple sites', 'multiple sites'],
     conditional: true,
   },
   {
