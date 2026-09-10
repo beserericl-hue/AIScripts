@@ -84,7 +84,11 @@ export function SpecFilesMenu({ submissionId, files, standardCode, specCode }: S
     .filter((b) => b.items.length > 0);
 
   return (
-    <div className="relative" ref={ref}>
+    // When the menu is OPEN, lift this whole control into a high stacking
+    // context so the dropdown paints ABOVE the next specification's sticky
+    // "Reader's checklist" card (which comes later in the DOM and otherwise
+    // covers a z-30 dropdown from the row above it).
+    <div className={`relative ${open ? 'z-50' : ''}`} ref={ref}>
       <button
         data-testid={`rr-files-${standardCode}-${specCode}`}
         onClick={() => setOpen((v) => !v)}
@@ -99,7 +103,7 @@ export function SpecFilesMenu({ submissionId, files, standardCode, specCode }: S
       {open && relevant.length > 0 && (
         <div
           data-testid={`rr-files-menu-${standardCode}-${specCode}`}
-          className="absolute right-0 z-30 mt-1 max-h-96 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl"
+          className="absolute right-0 z-50 mt-1 max-h-96 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl"
         >
           {buckets.map((b) => (
             <div key={b.key} className="mb-1">
