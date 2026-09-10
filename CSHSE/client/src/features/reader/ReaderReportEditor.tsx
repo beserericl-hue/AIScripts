@@ -159,6 +159,33 @@ export function ReaderReportEditor(): JSX.Element {
   // CR-074 — full-screen "focus" mode: the report + comment columns fill the
   // viewport (over the app header/menu) so it's readable on small laptops.
   const [focusMode, setFocusMode] = useState(false);
+
+  // Remember the reader's place in the report. Clicking a link that leaves the
+  // report (e.g. the Standards/Files buttons jump to the self-study editor) and
+  // pressing Back used to drop them at the very top. In normal mode the WINDOW
+  // scrolls, so we persist window.scrollY per submission and restore it once the
+  // rows have rendered. (Focus mode scrolls its own container, so it's skipped.)
+  const scrollKey = `rr-scroll-${submissionId}`;
+  const scrollRestored = useRef(false);
+  useEffect(() => {
+    if (focusMode) return;
+    const onScroll = () => { try { sessionStorage.setItem(scrollKey, String(window.scrollY)); } catch { /* ignore */ } };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [scrollKey, focusMode]);
+  useEffect(() => {
+    if (focusMode || scrollRestored.current || rows.length === 0) return;
+    // If the URL targets something specific (a deep-linked comment/spec), let
+    // that logic own the scroll — don't fight it.
+    if (window.location.search || window.location.hash) { scrollRestored.current = true; return; }
+    let saved = 0;
+    try { saved = parseInt(sessionStorage.getItem(scrollKey) || '0', 10) || 0; } catch { /* ignore */ }
+    scrollRestored.current = true;
+    if (saved > 0) {
+      // Two frames so the rows have laid out before we scroll.
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, saved)));
+    }
+  }, [rows.length, scrollKey, focusMode]);
   // The comment the reader navigated to (next/prev or from the chat window).
   // Used to FLASH the highlighted text it anchors to (inside the table).
   const [highlightComment, setHighlightComment] = useState<{ std: string; spec?: string; commentId: string } | null>(null);
