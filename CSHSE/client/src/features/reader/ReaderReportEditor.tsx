@@ -17,6 +17,11 @@ interface ReportSpec {
   // (a "View the standard" disclosure) so the reader can read the narrative
   // against the actual standard, the way the paper reader form prints it.
   specText?: string;
+  // Intro-section only: a section header to render above this row (e.g.
+  // "A. Introduction"), and whether this row is a Yes/No "Included" GATE (the
+  // Certification page) rather than a Compliant/Non-Compliant line.
+  groupLabel?: string;
+  gate?: 'yesno';
   narrativeHtml: string;
   evidenceHtml: string;
   verdict?: string;
@@ -995,9 +1000,9 @@ export function ReaderReportEditor(): JSX.Element {
                               checked={effMark(sp) === 'compliant'}
                               onChange={() => setMark(r.code, sp.specCode, effMark(sp) === 'compliant' ? '' : 'compliant')}
                               className="h-4 w-4 text-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 disabled:opacity-60"
-                              aria-label={`${r.code}.${sp.specCode} compliant`}
+                              aria-label={`${r.code}.${sp.specCode} ${sp.gate === 'yesno' ? 'included' : 'compliant'}`}
                             />
-                            <span className="text-sm font-semibold text-emerald-700">Compliant</span>
+                            <span className="text-sm font-semibold text-emerald-700">{sp.gate === 'yesno' ? 'Included — Yes' : 'Compliant'}</span>
                           </label>
                           <label className={`inline-flex items-center gap-1.5 ${readonly ? '' : 'cursor-pointer'}`}>
                             <input
@@ -1007,9 +1012,9 @@ export function ReaderReportEditor(): JSX.Element {
                               checked={effMark(sp) === 'noncompliant'}
                               onChange={() => setMark(r.code, sp.specCode, effMark(sp) === 'noncompliant' ? '' : 'noncompliant')}
                               className="h-4 w-4 text-red-600 disabled:opacity-60"
-                              aria-label={`${r.code}.${sp.specCode} non-compliant`}
+                              aria-label={`${r.code}.${sp.specCode} ${sp.gate === 'yesno' ? 'not included' : 'non-compliant'}`}
                             />
-                            <span className="text-sm font-semibold text-red-700">Non-Compliant</span>
+                            <span className="text-sm font-semibold text-red-700">{sp.gate === 'yesno' ? 'Not included — No' : 'Non-Compliant'}</span>
                           </label>
                         </div>
                         <div>
@@ -1072,9 +1077,17 @@ export function ReaderReportEditor(): JSX.Element {
                   </div>
               );
               return (
-                <div key={sp.specCode} id={`rr-spec-${r.code}-${sp.specCode}`} className="mb-4 scroll-mt-4 rounded border border-slate-200 bg-slate-50 p-3">
+                <React.Fragment key={sp.specCode}>
+                {/* Official Reader-Form section header (e.g. "A. Introduction",
+                    "B. Glossary of terms", conditional-group labels). */}
+                {sp.groupLabel && (
+                  <div data-testid={`rr-group-${r.code}-${sp.specCode}`} className="mb-2 mt-5 border-b-2 border-indigo-200 pb-1 text-sm font-bold uppercase tracking-wide text-indigo-900">
+                    {sp.groupLabel}
+                  </div>
+                )}
+                <div id={`rr-spec-${r.code}-${sp.specCode}`} className={`mb-4 scroll-mt-4 rounded border p-3 ${sp.gate === 'yesno' ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
                   <h3 className="mb-2 flex items-baseline gap-2 text-sm font-semibold text-slate-700">
-                    <span className="rounded bg-teal-600 px-2 py-0.5 text-xs font-bold text-white">{r.code}.{sp.specCode}</span>
+                    <span className="rounded bg-teal-600 px-2 py-0.5 text-xs font-bold text-white">{r.code === 'introduction' ? sp.specCode : `${r.code}.${sp.specCode}`}</span>
                     <span>{sp.specTitle}</span>
                   </h3>
                   {/* Column order: narrative (wide) | checklist | comments. */}
@@ -1110,6 +1123,7 @@ export function ReaderReportEditor(): JSX.Element {
                     </div>
                   )}
                 </div>
+                </React.Fragment>
               );
             })}
           </div>

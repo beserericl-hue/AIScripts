@@ -18,7 +18,7 @@ import { Assignment } from '../models/Assignment';
 import { JointVenture } from '../models/JointVenture';
 import { getAllStandards } from '../data/standards';
 import { inferProgramLevel, levelFromInstitution, getLevelStandards } from '../data/levelStandards';
-import { INTRO_STANDARD_CODE, INTRO_SPEC_CODES } from '../data/introRubric';
+import { INTRO_STANDARD_CODE, INTRO_EVAL_SPEC_CODES } from '../data/introRubric';
 import { ingestCorrection } from '../services/cshseAiClient';
 import { ensureInstitutionReaderAssignments } from '../services/readerAssignmentService';
 import mongoose from 'mongoose';
@@ -2045,7 +2045,9 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
       // against its rubric (introRubric) so the Reader Report shows an AI verdict
       // per introduction section, completed at submit like the numbered specs.
       if (((submission.documentIntroduction as string) || '').replace(/<[^>]*>/g, '').trim().length > 0) {
-        for (const spec of INTRO_SPEC_CODES) keys.push(`${INTRO_STANDARD_CODE}.${spec}`);
+        // Skip the Certification page — it's a Yes/No "Included" gate, not an
+        // AI-scored Compliant/Non-Compliant line.
+        for (const spec of INTRO_EVAL_SPEC_CODES) keys.push(`${INTRO_STANDARD_CODE}.${spec}`);
       }
       if (keys.length > 0) {
         await Submission.updateOne(
