@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { X, Grid3X3, FileText, Loader2 } from 'lucide-react';
 import { api } from '../../services/api';
@@ -67,8 +68,10 @@ export function SpecMatrixModal({ submissionId, focusStandard, focusSpecText, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, focusSpecText, matrix]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+  return createPortal(
+    // Portaled to <body> at z-[100] so it can never be trapped inside (or
+    // covered by) the report's sticky cards / focus-mode overlay.
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div data-testid="rr-matrix-modal" className="flex max-h-[92vh] w-full max-w-5xl flex-col rounded-lg bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-slate-200 px-5 py-3">
           <h3 className="flex items-center gap-2 text-base font-semibold text-slate-900">
@@ -125,7 +128,8 @@ export function SpecMatrixModal({ submissionId, focusStandard, focusSpecText, on
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FolderOpen, FileText, ChevronDown, Eye, Link2, ExternalLink } from 'lucide-react';
 import { FilePreviewModal } from '../selfStudy/FileLibrary/FilePreviewModal';
 
@@ -60,11 +61,37 @@ interface SpecFilesMenuProps {
 export function SpecFilesMenu({ submissionId, files, standardCode, specCode }: SpecFilesMenuProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<SpecEvidence | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  // The dropdown is rendered through a PORTAL to <body> with FIXED positioning
+  // so it can never be covered by a later element's sticky checklist card (or
+  // clipped by an overflow ancestor) — the recurring "files blocked by the next
+  // spec's box" bug. We track the button's viewport rect to place it.
+  const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) { setCoords(null); return; }
+    const place = () => {
+      const b = buttonRef.current?.getBoundingClientRect();
+      if (b) setCoords({ top: b.bottom + 4, right: Math.max(8, window.innerWidth - b.right) });
+    };
+    place();
+    // Reposition while the reader scrolls/resizes so the menu tracks its button.
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (buttonRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
@@ -84,12 +111,9 @@ export function SpecFilesMenu({ submissionId, files, standardCode, specCode }: S
     .filter((b) => b.items.length > 0);
 
   return (
-    // When the menu is OPEN, lift this whole control into a high stacking
-    // context so the dropdown paints ABOVE the next specification's sticky
-    // "Reader's checklist" card (which comes later in the DOM and otherwise
-    // covers a z-30 dropdown from the row above it).
-    <div className={`relative ${open ? 'z-50' : ''}`} ref={ref}>
+    <div className="relative">
       <button
+        ref={buttonRef}
         data-testid={`rr-files-${standardCode}-${specCode}`}
         onClick={() => setOpen((v) => !v)}
         disabled={relevant.length === 0}
@@ -100,10 +124,12 @@ export function SpecFilesMenu({ submissionId, files, standardCode, specCode }: S
         {relevant.length > 0 && <ChevronDown className="h-3 w-3" />}
       </button>
 
-      {open && relevant.length > 0 && (
+      {open && relevant.length > 0 && coords && createPortal(
         <div
+          ref={menuRef}
           data-testid={`rr-files-menu-${standardCode}-${specCode}`}
-          className="absolute right-0 z-50 mt-1 max-h-96 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl"
+          style={{ position: 'fixed', top: coords.top, right: coords.right, zIndex: 1000 }}
+          className="max-h-96 w-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl"
         >
           {buckets.map((b) => (
             <div key={b.key} className="mb-1">
@@ -140,7 +166,8 @@ export function SpecFilesMenu({ submissionId, files, standardCode, specCode }: S
               ))}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
 
       {preview && (
