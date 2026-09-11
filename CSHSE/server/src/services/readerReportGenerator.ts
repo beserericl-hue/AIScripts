@@ -30,7 +30,7 @@ import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getAllStandards } from '../data/standards';
 import { getLevelStandards } from '../data/levelStandards';
-import { INTRO_RUBRIC, INTRO_STANDARD_CODE, splitIntroductionHtml } from '../data/introRubric';
+import { INTRO_RUBRIC, INTRO_STANDARD_CODE } from '../data/introRubric';
 import { brandedSectionChrome } from './docxBranding';
 
 // Template placeholder keys for the Introduction section: a rolled-up
@@ -370,6 +370,11 @@ export interface ReaderReportSpec {
   // The official standard/specification language for this row, so the Reader
   // Report can show the full standard text on demand (a "View standard" popup).
   specText?: string;
+  // Intro-section only: a section header to render above this row (e.g.
+  // "A. Introduction"), and whether the row is a Yes/No "Included" GATE (the
+  // Certification page) rather than a Compliant/Non-Compliant line.
+  groupLabel?: string;
+  gate?: 'yesno';
   narrativeHtml: string;
   evidenceHtml: string;
   verdict?: string;
@@ -482,10 +487,6 @@ async function buildIntroSection(
     .select('documentIntroduction type standardsStatus').lean();
   if (!sub) return null;
   const introHtml = (sub.documentIntroduction as string) || '';
-  // Best-effort split of the one introduction narrative into the six official
-  // Reader Form rows so each row shows its own slice + comment form (not one
-  // big blob with a single comment box).
-  const slices = splitIntroductionHtml(introHtml);
 
   // Latest AI verdict + rationale per intro row, from the ValidationResult docs
   // the eval-queue worker writes when it scores each row against introRubric.
@@ -505,35 +506,23 @@ async function buildIntroSection(
   for (const [k, v] of evCount) if (k.startsWith(`${INTRO_CODE}.`)) introFiles += v;
 
   const specs: ReaderReportSpec[] = INTRO_RUBRIC.map((row) => {
+    const isGate = row.gate === 'yesno';
     const res = latestIntro.get(row.specCode);
-    const verdict = verdictFor(row.specCode);
-    const slice = (slices[row.specCode] || '').trim();
-    // Show each row its OWN slice. Row 'a' ("Introduction") is the general
-    // opening (document start → the first official sub-section), so it no longer
-    // dumps the ENTIRE introduction — that made rows b–f look like they repeated
-    // row a over and over (the readers' complaint). Rows b–f fall back to a
-    // short note (conditional rows explain they may not apply).
-    let html: string;
-    if (row.specCode === 'a') {
-      // If the intro opens directly with a sub-section (no separate overview
-      // paragraph), row 'a' slice is just a heading fragment — show a pointer
-      // rather than a bare "A.". Fall back to the FULL intro only when the
-      // split found no sub-sections at all (nothing "below" to point to).
-      const hasSubsections = INTRO_RUBRIC.slice(1).some((rw) => (slices[rw.specCode] || '').trim());
-      html = stripHtml(slice).length >= 40
-        ? slice
-        : hasSubsections
-          ? '<p><em>The program introduction opens directly with the material shown in the sections below.</em></p>'
-          : (introHtml || '<p><em>No introduction narrative provided.</em></p>');
-    } else {
-      html = slice || `<p><em>${row.conditional
-        ? 'Not separately addressed in the introduction — the reader confirms whether this applies to the program.'
-        : 'See the program Introduction above.'}</em></p>`;
-    }
+    const verdict = isGate ? undefined : verdictFor(row.specCode);
+    // 1:1 with the paper form: each row is its own checklist line evaluated
+    // against the official criteria (shown via "View Standard"). The program's
+    // full Introduction narrative is shown ONCE, on the first "A. Introduction"
+    // row ('a'), so the reader reads it there and marks each line below it — no
+    // per-row narrative slicing (that split sentences and duplicated text).
+    const html = row.specCode === 'a'
+      ? (introHtml || '<p><em>No introduction narrative provided.</em></p>')
+      : '';
     return {
-      specCode: row.specCode, specTitle: row.title, specText: row.criteria, narrativeHtml: html, evidenceHtml: '',
-      verdict, aiMark: verdictToMark(verdict),
-      aiComment: specAiText({ verdict, rationale: res?.rationale || res?.feedback, suggestions: res?.suggestions || res?.missingElements || [] }),
+      specCode: row.specCode, specTitle: row.title, specText: row.criteria,
+      groupLabel: row.groupLabel, gate: row.gate,
+      narrativeHtml: html, evidenceHtml: '',
+      verdict, aiMark: isGate ? null : verdictToMark(verdict),
+      aiComment: isGate ? '' : specAiText({ verdict, rationale: res?.rationale || res?.feedback, suggestions: res?.suggestions || res?.missingElements || [] }),
       evidenceCount: evCount.get(`${INTRO_CODE}.${row.specCode}`) || introFiles, excluded: false,
     };
   });
