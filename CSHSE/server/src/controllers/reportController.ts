@@ -666,23 +666,18 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
       overrides.set(stdCode, { mark, comment: blocks.join('\n\n') });
     }
 
-    // Per-TOPIC Introduction rows: the baccalaureate template has one checklist
-    // row per intro topic ({{c_intro_a}}..{{c_intro_f}}), so fill each from the
-    // reader's intro spec (lead override wins) with its inline comments. The
-    // rolled-up 'introduction' entry above still covers the associate/masters
-    // single-row templates.
-    for (const r of saved?.rows || []) {
-      if (r.standardCode !== 'introduction') continue;
-      const effMark = (r as any).leadMark || r.mark || '';
-      const effComment = ((r as any).leadComment && String((r as any).leadComment).trim())
-        ? String((r as any).leadComment) : (r.comment || '');
-      const inl = (inlineBySpec.get(`introduction.${r.specCode || ''}`) || []).map(fmtInline).join('\n');
-      let cmt = (effComment || '').trim();
-      if (inl) cmt += (cmt ? '\n' : '') + 'Comments:\n' + inl;
-      overrides.set(`intro_${r.specCode || 'a'}`, {
-        mark: effMark === 'compliant' ? 'compliant' : effMark === 'noncompliant' ? 'noncompliant' : '',
-        comment: cmt,
-      });
+    // Introduction → the official form has ONE checklist decision for the whole
+    // Introduction ("A. Introduction"). The associate/masters templates use a
+    // single {{c_introduction}} cell (filled by the generic rollup above); the
+    // baccalaureate template has {{c_intro_a}}..{{c_intro_f}} cells. Now that the
+    // ONLINE Introduction is the full 1:1 structure (cert + A sub-items + B),
+    // put the COMPLETE rolled-up intro (verdict + per-line detail) into the first
+    // baccalaureate cell (intro_a) and blank the rest, so every level shows the
+    // whole Introduction in one decision cell that matches the paper form.
+    const introRollup = overrides.get('introduction');
+    if (introRollup) {
+      overrides.set('intro_a', introRollup);
+      for (const c of ['b', 'c', 'd', 'e', 'f']) overrides.set(`intro_${c}`, { mark: '', comment: '' });
     }
 
     const wantHtml = String(req.query.format || '').toLowerCase() === 'html';
