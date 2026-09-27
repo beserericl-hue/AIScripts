@@ -10,6 +10,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { Search, AlertTriangle, FileText, Grid3x3, BookOpen, User, FileBox } from 'lucide-react';
+import { HoverTooltip } from './HoverTooltip';
 import type {
   SpecBucket,
   PlaceholderSection,
@@ -551,13 +552,14 @@ export function SpecRail({
                           {covState !== 'none' && (
                             // Hovering the dot explains WHY this color — the
                             // coverage status + the AI's specific gaps/strengths.
-                            // Its own `title` overrides the row's spec-title tip.
-                            <span
+                            // A portal tooltip (not a native `title`, which the
+                            // row button's own title stole and which frequently
+                            // never rendered) so the reason reliably displays.
+                            <HoverTooltip
                               className="cursor-help"
-                              data-testid={`coverage-dot-${key}`}
-                              data-coverage-state={covState}
-                              title={coverageReason(b)}
-                              onClick={(e) => e.stopPropagation()}
+                              testId={`coverage-dot-${key}`}
+                              coverageState={covState}
+                              text={coverageReason(b)}
                             >
                               {covState === 'unassessed' ? (
                                 // Gray hollow dot — visibly distinct from the
@@ -580,7 +582,7 @@ export function SpecRail({
                                   : 'not yet assessed'}
                                 . {coverageReason(b)}
                               </span>
-                            </span>
+                            </HoverTooltip>
                           )}
                         </span>
                       </button>

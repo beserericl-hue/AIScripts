@@ -97,6 +97,11 @@ describe('<SpecRail />', () => {
       {
         standardCode: '1',
         specCode: 'c',
+        // A gap = ASSESSED (score present) but low + not covered. Without the
+        // coverage fields this is 'unassessed' (gray) under the honest-dots
+        // rule, not a red gap — the glyph assertion below needs a real verdict.
+        coverageScore: 0.25,
+        coverageCovered: false,
         narratives: [{ sectionId: 's', heading: 'h', snippet: 's', confidence: 1, wordCount: 5, rationale: '' } as any],
       },
     );

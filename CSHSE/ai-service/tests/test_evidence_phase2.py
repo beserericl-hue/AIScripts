@@ -30,9 +30,15 @@ class _SpyStore:
     def __init__(self) -> None:
         self.upserts: list[dict] = []
         self.searches: list[dict] = []
+        self.deletes: list[dict] = []
 
     def ensure_collection(self, name: str) -> None:
         pass
+
+    def delete_by_filter(self, collection, payload_filter) -> None:
+        # extract_evidence_text de-dupes a re-import by deleting the document's
+        # prior chunks before re-indexing. Record the call so tests can assert it.
+        self.deletes.append({"collection": collection, "filter": payload_filter})
 
     def upsert(self, collection, *, vectors, payloads, ids):
         self.upserts.append({"collection": collection, "payloads": payloads, "ids": ids})

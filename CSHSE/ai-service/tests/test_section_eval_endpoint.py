@@ -124,7 +124,7 @@ def test_patched_llm_yields_pass_verdict_through_endpoint(client, monkeypatch):
         def __init__(self, *a, **k):
             self.messages = SimpleNamespace(create=self._create)
 
-        def _create(self, *, model, max_tokens, messages):
+        def _create(self, *, model, max_tokens, messages, **_kwargs):  # accept temperature= and future kwargs
             payload = json.dumps({"verdict": "pass", "rationale": "meets criteria", "criteriaCoverage": [], "improvementSuggestions": []})
             return SimpleNamespace(content=[SimpleNamespace(text=payload)])
 
@@ -187,7 +187,7 @@ def test_endpoint_wires_hints_fn_from_corrections_store(client, monkeypatch):
         def __init__(self, *a, **k):
             self.messages = SimpleNamespace(create=self._create)
 
-        def _create(self, *, model, max_tokens, messages):
+        def _create(self, *, model, max_tokens, messages, **_kwargs):  # accept temperature= and future kwargs
             seen_prompts.append(messages[0]["content"])
             payload = json.dumps({"verdict": "pass", "rationale": "ok", "criteriaCoverage": [], "improvementSuggestions": []})
             return SimpleNamespace(content=[SimpleNamespace(text=payload)])
@@ -239,7 +239,7 @@ def test_endpoint_skips_hints_when_disabled(client, monkeypatch):
         def __init__(self, *a, **k):
             self.messages = SimpleNamespace(create=self._create)
 
-        def _create(self, *, model, max_tokens, messages):
+        def _create(self, *, model, max_tokens, messages, **_kwargs):  # accept temperature= and future kwargs
             seen_prompts.append(messages[0]["content"])
             return SimpleNamespace(content=[SimpleNamespace(text=json.dumps({"verdict": "pass", "rationale": "ok", "criteriaCoverage": [], "improvementSuggestions": []}))])
 
@@ -276,7 +276,7 @@ def test_endpoint_hint_qdrant_failure_does_not_break_eval(client, monkeypatch):
         def __init__(self, *a, **k):
             self.messages = SimpleNamespace(create=self._create)
 
-        def _create(self, *, model, max_tokens, messages):
+        def _create(self, *, model, max_tokens, messages, **_kwargs):  # accept temperature= and future kwargs
             return SimpleNamespace(content=[SimpleNamespace(text=json.dumps({"verdict": "pass", "rationale": "ok", "criteriaCoverage": [], "improvementSuggestions": []}))])
 
     import app.section_eval.evaluate as ev_mod
@@ -314,7 +314,7 @@ def test_endpoint_skips_hints_when_no_institution(client, monkeypatch):
         def __init__(self, *a, **k):
             self.messages = SimpleNamespace(create=self._create)
 
-        def _create(self, *, model, max_tokens, messages):
+        def _create(self, *, model, max_tokens, messages, **_kwargs):  # accept temperature= and future kwargs
             return SimpleNamespace(content=[SimpleNamespace(text=json.dumps({"verdict": "pass", "rationale": "ok", "criteriaCoverage": [], "improvementSuggestions": []}))])
 
     import app.section_eval.evaluate as ev_mod

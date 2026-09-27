@@ -42,7 +42,9 @@ describe('FinalSubmitModal — pre-existing behavior', () => {
       target: { value: 'PC note  ' },
     });
     fireEvent.click(screen.getByTestId('final-submit-confirm'));
-    expect(onConfirm).toHaveBeenCalledWith('PC note');
+    // onConfirm now also carries the override payload (undefined here) and the
+    // per-spec Needs-Improvement notes (none in baseProps → []).
+    expect(onConfirm).toHaveBeenCalledWith('PC note', undefined, []);
   });
 });
 
@@ -82,7 +84,7 @@ describe('FinalSubmitModal — CR-008 preflight', () => {
     expect(onGoToSpec).toHaveBeenCalledWith('3', 'b');
   });
 
-  it('renders warnings without disabling Submit', () => {
+  it('warnings do not disable Submit (the standalone warnings list was removed as duplicative)', () => {
     const preflight: PreflightResult = {
       submitDisabled: false,
       errors: [],
@@ -90,8 +92,11 @@ describe('FinalSubmitModal — CR-008 preflight', () => {
       counts: { totalSpecs: 50, passed: 35, excluded: 15, satisfied: 50, missing: 0 },
     };
     render(<FinalSubmitModal {...baseProps} preflight={preflight} />);
-    expect(screen.getByTestId('preflight-warnings')).toBeInTheDocument();
-    expect(screen.getByText(/15 of 50 specs are N\/A/i)).toBeInTheDocument();
+    // The generic preflight-warnings block was removed (it duplicated the
+    // Needs-Improvement acknowledgement section). What still matters: a
+    // warning-only preflight shows no error block and keeps Submit enabled.
+    expect(screen.queryByTestId('preflight-warnings')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('preflight-errors')).not.toBeInTheDocument();
     expect(screen.getByTestId('final-submit-confirm')).toBeEnabled();
   });
 

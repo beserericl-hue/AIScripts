@@ -141,12 +141,14 @@ describe('<UploadStep />', () => {
     expect(useAIImportStore.getState().programLevel).toBe('masters');
   });
 
-  it('re-import + force-template checkboxes update the store', async () => {
+  it('re-import checkbox + Format select update the store', async () => {
     render(<UploadStep />);
     const reimport = screen.getByRole('checkbox', { name: /This is a re-import/i });
-    const forceTpl = screen.getByRole('checkbox', { name: /Treat this upload as template format/i });
     await userEvent.click(reimport);
-    await userEvent.click(forceTpl);
+    // Force-format is a select now (auto-detect / CSHSE template / free-form /
+    // narrative), not the old "Treat this upload as template format" checkbox.
+    const format = screen.getByRole('combobox', { name: /Format/i });
+    await userEvent.selectOptions(format, 'template');
     expect(useAIImportStore.getState().isReimport).toBe(true);
     expect(useAIImportStore.getState().forceFormat).toBe('template');
   });
