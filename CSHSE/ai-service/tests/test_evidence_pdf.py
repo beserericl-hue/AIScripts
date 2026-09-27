@@ -143,6 +143,11 @@ def test_pipeline_round_trip_pdf_to_evidence_text() -> None:
         def ensure_collection(self, name: str) -> None:
             pass
 
+        def delete_by_filter(self, collection, payload_filter) -> None:
+            # extract_evidence_text now de-dupes a re-import by deleting the
+            # document's prior chunks before re-indexing.
+            pass
+
         def upsert(self, collection, *, vectors, payloads, ids):
             self.upserts.append({"collection": collection, "payloads": payloads, "ids": ids})
 

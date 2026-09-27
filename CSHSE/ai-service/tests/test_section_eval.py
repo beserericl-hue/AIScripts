@@ -146,7 +146,7 @@ class _FakeAnthropic:
         self.prompts: list[str] = []
         self.messages = SimpleNamespace(create=self._create)
 
-    def _create(self, *, model, max_tokens, messages):
+    def _create(self, *, model, max_tokens, messages, **_kwargs):  # accept temperature= and future kwargs
         self.prompts.append(messages[0]["content"])
         payload = json.dumps({
             "verdict": self._verdict,

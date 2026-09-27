@@ -155,12 +155,19 @@ describe('<ItemCardList />', () => {
   it('Approve all fires onApproveAll with every rowId in the active view', async () => {
     const onApproveAll = vi.fn();
     const bucket = mkBucket({
+      standardCode: '1',
+      specCode: 'a',
       narratives: [
         mkItem({ sectionId: 's1' }),
         mkItem({ sectionId: 's2' }),
         mkItem({ sectionId: 's3' }),
       ],
     });
+    // "Approve all" now approves the WHOLE standard, so it collects rowIds from
+    // every bucket of that standard in the store (allBuckets), not just the
+    // bucket prop. Seed the store so standardApproveIds is populated (otherwise
+    // the button is correctly disabled with nothing to approve).
+    useAIImportStore.setState({ buckets: { '1.a': bucket } });
     render(
       <ItemCardList
         selectedKey="1.a"

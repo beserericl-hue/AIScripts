@@ -20,21 +20,25 @@ beforeEach(() => {
 });
 
 describe('bugReporterScreenshot flag gating', () => {
-  it('is disabled by default', () => {
-    expect(isScreenshotEnabled()).toBe(false);
-  });
-
-  it('captureScreenshot resolves to null when disabled (never imports html2canvas)', async () => {
-    expect(await captureScreenshot()).toBeNull();
-  });
-
-  it('localStorage opt-in flips the flag on', () => {
-    localStorage.setItem(SCREENSHOT_FLAG_KEY, 'on');
+  // Auto-capture is now ON by default (bug reports must carry an image); it is
+  // OPT-OUT via localStorage `cshse:bug-screenshot` = "off" (or build env
+  // VITE_ENABLE_BUG_SCREENSHOT=false).
+  it('is enabled by default', () => {
     expect(isScreenshotEnabled()).toBe(true);
   });
 
-  it('a non-"on" localStorage value keeps it disabled', () => {
-    localStorage.setItem(SCREENSHOT_FLAG_KEY, 'yes');
+  it('captureScreenshot resolves to null when explicitly disabled (never imports html2canvas)', async () => {
+    localStorage.setItem(SCREENSHOT_FLAG_KEY, 'off');
+    expect(await captureScreenshot()).toBeNull();
+  });
+
+  it('localStorage "off" opt-out flips the flag off', () => {
+    localStorage.setItem(SCREENSHOT_FLAG_KEY, 'off');
     expect(isScreenshotEnabled()).toBe(false);
+  });
+
+  it('a non-"off" localStorage value keeps it enabled', () => {
+    localStorage.setItem(SCREENSHOT_FLAG_KEY, 'yes');
+    expect(isScreenshotEnabled()).toBe(true);
   });
 });

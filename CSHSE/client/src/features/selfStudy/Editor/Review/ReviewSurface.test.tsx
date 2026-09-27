@@ -41,12 +41,12 @@ describe('<ReviewSurface />', () => {
     expect(screen.getByTestId('review-step-stub')).toBeInTheDocument();
   });
 
-  it('renders a Back to editor button that fires the onClose callback', async () => {
-    const onClose = vi.fn();
-    render(<ReviewSurface submissionId="sub-1" onClose={onClose} />);
-    const btn = screen.getByRole('button', { name: /back to editor/i });
-    await userEvent.click(btn);
-    expect(onClose).toHaveBeenCalledTimes(1);
+  it('does NOT render a Back-to-editor button (removed in CR-064)', () => {
+    // CR-064 removed the "Back to editor" button — it was confusing and
+    // redundant with the top workflow tabs, which already navigate. onClose
+    // stays wired for the spec-approve → editor path (no button drives it).
+    render(<ReviewSurface submissionId="sub-1" onClose={() => {}} />);
+    expect(screen.queryByRole('button', { name: /back to editor/i })).not.toBeInTheDocument();
   });
 
   it('sets submissionId on the store on mount', () => {

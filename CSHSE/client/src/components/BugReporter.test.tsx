@@ -12,6 +12,16 @@ import {
   _clearCapturedConsoleErrorsForTest,
 } from './BugReporter';
 
+// The connected reporter captures a screenshot BEFORE opening the modal (so the
+// shot isn't the modal backdrop), then opens in the promise's .finally. Mock the
+// capture so the open is deterministic and html2canvas (unsupported in jsdom)
+// never runs — no test here asserts on the screenshot itself.
+vi.mock('./bugReporterScreenshot', () => ({
+  isScreenshotEnabled: () => true,
+  captureScreenshot: () => Promise.resolve(null),
+  SCREENSHOT_FLAG_KEY: 'cshse:bug-screenshot',
+}));
+
 const handlers = {
   onChangeDescription: vi.fn(),
   onOpen: vi.fn(),
@@ -32,13 +42,14 @@ describe('BugReporterView', () => {
     expect(screen.queryByTestId('bug-reporter-modal')).not.toBeInTheDocument();
   });
 
-  it('opens the modal when the open-bug-reporter event fires', () => {
+  it('opens the modal when the open-bug-reporter event fires', async () => {
     render(<BugReporter />);
     expect(screen.queryByTestId('bug-reporter-modal')).not.toBeInTheDocument();
     act(() => {
       window.dispatchEvent(new Event('open-bug-reporter'));
     });
-    expect(screen.getByTestId('bug-reporter-modal')).toBeInTheDocument();
+    // The modal opens in the screenshot promise's .finally() — async, so wait.
+    expect(await screen.findByTestId('bug-reporter-modal')).toBeInTheDocument();
   });
 
   it('opens the modal with description input + Send button disabled when empty', () => {
