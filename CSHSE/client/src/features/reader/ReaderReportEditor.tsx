@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, ClipboardCheck, Users, Lock, CheckCircle2, MessageSquare, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, ClipboardCheck, Users, Lock, CheckCircle2, MessageSquare, Sparkles, Maximize2, Minimize2, ListTree } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
@@ -124,6 +124,10 @@ export function ReaderReportEditor(): JSX.Element {
   const isLeadOrAdmin = effectiveRole === 'lead_reader' || effectiveRole === 'admin';
 
   const [rows, setRows] = useState<ReportRow[]>([]);
+  // "Jump to" navigator — which standards are expanded to show their specs.
+  const [navExpanded, setNavExpanded] = useState<Set<string>>(() => new Set());
+  const toggleNav = (code: string) =>
+    setNavExpanded((s) => { const n = new Set(s); n.has(code) ? n.delete(code) : n.add(code); return n; });
 
   // Flat, in-document-order list of every specification across all standards, so
   // each checklist panel can carry prev/next buttons that walk to the next
@@ -517,6 +521,68 @@ export function ReaderReportEditor(): JSX.Element {
           : 'flex w-full flex-wrap items-start gap-6 px-4'
       }
     >
+    {/* "Jump to" navigator — rapid access to Introduction / any standard / any
+        specification or sub-specification (mirrors the self-study editor's
+        outline). Sticky left rail on large screens; hidden in focus mode. */}
+    {!focusMode && rows.length > 0 && (
+      <nav
+        data-testid="rr-nav-sidebar"
+        className="sticky top-4 hidden max-h-[calc(100vh-2rem)] w-56 shrink-0 self-start overflow-y-auto rounded-lg border border-slate-200 bg-white py-2 text-sm shadow-sm lg:block"
+      >
+        <div className="flex items-center gap-1.5 px-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+          <ListTree className="h-3.5 w-3.5" /> Jump to
+        </div>
+        {rows.map((r) => {
+          const isIntro = r.code === 'introduction';
+          const open = navExpanded.has(r.code);
+          const firstSpec = r.specs[0]?.specCode || '';
+          return (
+            <div key={r.code}>
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => toggleNav(r.code)}
+                  className="p-1 text-slate-400 hover:text-slate-700"
+                  aria-label={open ? `Collapse ${r.code}` : `Expand ${r.code}`}
+                >
+                  {open ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                </button>
+                <button
+                  type="button"
+                  data-testid={`rr-nav-std-${r.code}`}
+                  onClick={() => { setNavExpanded((s) => { const n = new Set(s); n.add(r.code); return n; }); scrollToSpec(r.code, firstSpec); }}
+                  className="min-w-0 flex-1 truncate rounded px-1 py-1 text-left font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-800"
+                  title={r.title}
+                >
+                  {isIntro ? 'Introduction' : `Standard ${r.code}${r.title ? `: ${r.title}` : ''}`}
+                </button>
+              </div>
+              {open && (
+                <div className="ml-4 border-l border-slate-100 pl-1">
+                  {r.specs.map((sp) => (
+                    <React.Fragment key={sp.specCode}>
+                      {sp.groupLabel && (
+                        <div className="px-2 pt-1.5 text-[10px] font-bold uppercase tracking-wide text-indigo-800">{sp.groupLabel}</div>
+                      )}
+                      <button
+                        type="button"
+                        data-testid={`rr-nav-spec-${r.code}-${sp.specCode}`}
+                        onClick={() => scrollToSpec(r.code, sp.specCode)}
+                        className="flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-xs text-slate-600 hover:bg-teal-50 hover:text-teal-800"
+                        title={sp.specTitle}
+                      >
+                        <span className="shrink-0 rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-500">{isIntro ? sp.specCode : `${r.code}.${sp.specCode}`}</span>
+                        <span className="min-w-0 flex-1 truncate">{sp.specTitle}</span>
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+    )}
     <div data-testid="reader-report-editor" className="min-w-0 flex-1 py-6">
       {/* Header + nav back to the self-study editor */}
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
