@@ -42,7 +42,9 @@ import {
   PAPERS_KEY,
   SYLLABI_KEY,
   isIntroKey,
-  introBucketKeyFromSpecKey
+  introBucketKeyFromSpecKey,
+  coverageReason,
+  coverageState
 } from './SpecRail';
 import { nearestPlacedNeighborFor } from './nearestPlacedNeighbor';
 import { tableizeIfBareRows } from './tableizeHtml';
@@ -1340,6 +1342,26 @@ export function ItemCardList({
         className="min-h-0 flex-1 overflow-auto p-4"
         aria-label="Items for selected spec"
       >
+        {/* CR-074 — persistent "why is this red/yellow" panel. The AI
+            coverage_verifier's verdict, gaps and strengths were previously only
+            visible on the rail-dot hover tooltip, so coordinators (and readers)
+            couldn't see WHY a spec was flagged ("it's not telling me why").
+            Surface it inline above the cards for every partially-covered or gap
+            spec — including specs with no routed items, which still carry a
+            verdict assessed against the source. Green/covered specs stay clean
+            (the hover tooltip still explains them). */}
+        {bucket && (coverageState(bucket) === 'gap' || coverageState(bucket) === 'partial') && (
+          <div
+            data-testid="spec-coverage-why"
+            className={`mb-4 whitespace-pre-line rounded border p-3 text-xs ${
+              coverageState(bucket) === 'gap'
+                ? 'border-red-200 bg-red-50 text-red-900'
+                : 'border-amber-200 bg-amber-50 text-amber-900'
+            }`}
+          >
+            {coverageReason(bucket)}
+          </div>
+        )}
         {items.length === 0 ? (
           <div className="rounded border border-dashed border-gray-300 bg-white p-8 text-center text-sm text-gray-500">
             <div>

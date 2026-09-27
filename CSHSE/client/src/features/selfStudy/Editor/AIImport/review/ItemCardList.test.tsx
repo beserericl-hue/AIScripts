@@ -179,6 +179,62 @@ describe('<ItemCardList />', () => {
     expect(onApproveAll).toHaveBeenCalledWith(['s1', 's2', 's3']);
   });
 
+  it('CR-074: shows WHY a red spec is flagged even when no items were routed', () => {
+    // 7.c on the KSU import: coverage_verifier assessed it (0.35) and returned
+    // gaps, but the matcher routed nothing. The coordinator must still see why.
+    const bucket = mkBucket({
+      standardCode: '7',
+      specCode: 'c',
+      narratives: [],
+      evidenceText: [],
+      evidenceFiles: [],
+      coverageScore: 0.35,
+      coverageCovered: false,
+      coverageGaps: ['No description of the actual evaluation process or timeline'],
+      coverageStrengths: ['Faculty CVs are provided'],
+    });
+    render(
+      <ItemCardList
+        selectedKey="7.c"
+        bucket={bucket}
+        unplacedTags={[]}
+        placeholders={[]}
+        matrices={[]}
+        selectedSectionId={null}
+        onSelect={() => {}}
+        onBulkAction={() => {}}
+      />
+    );
+    const why = screen.getByTestId('spec-coverage-why');
+    expect(why).toBeInTheDocument();
+    expect(why).toHaveTextContent(/Gap/i);
+    expect(why).toHaveTextContent(/No description of the actual evaluation process/);
+    // The empty-spec "didn't route anything" message still renders too.
+    expect(screen.getByText(/didn't route anything to 7\.c/)).toBeInTheDocument();
+  });
+
+  it('CR-074: no coverage "why" banner for a covered (green) spec', () => {
+    const bucket = mkBucket({
+      narratives: [mkItem({ sectionId: 's1', heading: 'Good narrative' })],
+      coverageScore: 0.95,
+      coverageCovered: true,
+      coverageStrengths: ['Thorough'],
+    });
+    render(
+      <ItemCardList
+        selectedKey="1.a"
+        bucket={bucket}
+        unplacedTags={[]}
+        placeholders={[]}
+        matrices={[]}
+        selectedSectionId={null}
+        onSelect={() => {}}
+        onBulkAction={() => {}}
+      />
+    );
+    expect(screen.queryByTestId('spec-coverage-why')).not.toBeInTheDocument();
+  });
+
   it('kind chip toggles fire onChangeKind with the chosen ItemKind', async () => {
     const onChangeKind = vi.fn();
     const bucket = mkBucket({

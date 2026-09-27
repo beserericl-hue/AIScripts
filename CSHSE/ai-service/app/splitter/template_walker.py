@@ -92,10 +92,19 @@ _HEADING_PATTERNS = [
     # ON THE SAME LINE. It's a Standard ROOT: a std hint, NO spec. The specs
     # (1a., 1b., …) follow underneath. (Must precede the bare-standard rule.)
     re.compile(r"^\s*Standard\s+(?P<std>\d{1,2})\s*:", re.IGNORECASE),
-    # "1.a." / "11.b" — dotted spec form (Handbook canonical form)
-    re.compile(r"^\s*(?P<std>\d{1,2})\.(?P<spec>[a-j])\.?\s"),
+    # "1.a." / "11.b" — dotted spec form (Handbook canonical form). The
+    # separator after the spec letter is ``(?:\.|\s|$)`` — a period, whitespace,
+    # or end-of-string. This deliberately matches three shapes a non-table
+    # ("WITHOUT TABLE FORMAT") self-study produces that the old ``\.?\s`` missed:
+    #   • a marker ALONE on its own paragraph — "7.c." / "7c." (period + EOL),
+    #   • a marker whose prompt is glued on with no space — "5b.Provide…"
+    #     (period immediately followed by a letter),
+    #   • a bare "7c" with no period at all (EOL).
+    # Missing these dropped the substandard's content into the PREVIOUS spec and
+    # left the real bucket empty ("the matcher didn't route anything to 7.c").
+    re.compile(r"^\s*(?P<std>\d{1,2})\.(?P<spec>[a-j])(?:\.|\s|$)"),
     # "1a." / "2b" — undotted spec form (template intro-section form)
-    re.compile(r"^\s*(?P<std>\d{1,2})(?P<spec>[a-j])\.?\s"),
+    re.compile(r"^\s*(?P<std>\d{1,2})(?P<spec>[a-j])(?:\.|\s|$)"),
     # Section root like "1." / "2." / "Standard 1" — std hint without spec
     re.compile(r"^\s*(?P<std>\d{1,2})\.\s"),
     re.compile(r"^\s*Standard\s+(?P<std>\d{1,2})\b\s*$", re.IGNORECASE),

@@ -134,6 +134,55 @@ def test_walker_cuts_on_heading_and_accumulates_body():
     assert "Board of Regents" in sections[1].body_text
 
 
+def test_match_heading_bare_marker_on_its_own_line():
+    # CR-074 (Kennesaw "WITHOUT TABLE FORMAT" draft): a substandard marker alone
+    # on its own paragraph — the prompt/response lives in the paragraph(s) below.
+    # These MUST be recognised as spec headings; missing them merged the
+    # substandard's content into the previous spec and left its bucket empty
+    # ("the matcher didn't route anything to 7.c").
+    assert _match_heading("7c.") == ("7", "c")
+    assert _match_heading("7c") == ("7", "c")
+    assert _match_heading("7.c.") == ("7", "c")
+    assert _match_heading("16d") == ("16", "d")
+
+
+def test_match_heading_marker_with_glued_prompt_no_space():
+    # KSU draft form: "5b.Provide documentation…" — a period with NO following
+    # space, prompt glued straight on. The period itself delimits the marker.
+    assert _match_heading(" 5b.Provide documentation of policies") == ("5", "b")
+    assert _match_heading("11.b.Describe the process") == ("11", "b")
+
+
+def test_match_heading_rejects_word_prefixed_number():
+    # Guard against false positives from prose that happens to start digit+letter.
+    assert _match_heading("5am and the meeting began") is None
+    assert _match_heading("3D printing is used in the lab") is None
+
+
+def test_walker_splits_bare_substandard_marker_into_own_section():
+    # Regression for the KSU 7.c drop: Standard 7 with a bare "7c." marker line.
+    paras = _texts(
+        "Standard 7: Personnel Roles, Responsibilities, and Evaluation",
+        "7a. Document faculty responsibility.",
+        "Faculty set curriculum policy.",
+        "7b. Essential program roles.",
+        "Roles include administration.",
+        "7c.",
+        "Describe the process for faculty and staff evaluation.",
+        "Evaluations occur annually via student surveys and administrative review.",
+        "7d. Document how the evaluative process is used.",
+        "Findings feed the performance review plan.",
+    )
+    sections = walk_template_paragraphs(paras)
+    routed = {(s.standard_hint, s.spec_hint) for s in sections}
+    assert ("7", "c") in routed, "bare '7c.' marker must open its own spec section"
+    seven_c = next(s for s in sections if (s.standard_hint, s.spec_hint) == ("7", "c"))
+    assert "annually" in seven_c.body_text
+    # 7b must NOT swallow 7c's evaluation content any more.
+    seven_b = next(s for s in sections if (s.standard_hint, s.spec_hint) == ("7", "b"))
+    assert "annually" not in seven_b.body_text
+
+
 def test_walker_marks_empty_section_as_placeholder():
     paras = _texts(
         "5a. Describe the physical location",
