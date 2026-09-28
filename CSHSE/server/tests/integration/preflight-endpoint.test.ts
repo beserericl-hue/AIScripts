@@ -12,6 +12,7 @@ import mongoose from 'mongoose';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { getAllStandards } from '../../src/data/standards';
+import { getLevelStandards } from '../../src/data/levelStandards';
 import { createUser, signTokenFor } from '../helpers/factories';
 
 let _c = 0;
@@ -32,7 +33,9 @@ async function seedSubmission(overrides: any = {}) {
 
 function allPassing(): Record<string, any> {
   const out: Record<string, any> = {};
-  for (const std of getAllStandards()) {
+  // Preflight mirrors the submit gate, which validates against the LEVEL
+  // catalog (getLevelStandards) — a superset of the flat getAllStandards().
+  for (const std of getLevelStandards('bachelors') || getAllStandards()) {
     for (const spec of std.specifications || []) {
       out[`${std.code}_${spec.code}`] = {
         status: 'validated',

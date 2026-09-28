@@ -14,7 +14,7 @@ import mongoose from 'mongoose';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 let _c = 0;
 async function seedSubmission(overrides: any = {}) {
@@ -52,6 +52,7 @@ describe('S2A.1 — audit on every reader-lock transition (CR-006)', () => {
       assignedReaders: [reader._id],
       status: 'submitted',
     });
+    await assignToSubmission(sub, reader, 'reader');
     const res = await request(app)
       .post(`/api/submissions/${sub._id}/lock`)
       .set('Authorization', `Bearer ${signTokenFor(reader as any)}`)
@@ -80,6 +81,7 @@ describe('S2A.1 — audit on every reader-lock transition (CR-006)', () => {
         lockReason: 'reader_review',
       },
     });
+    await assignToSubmission(sub, reader, 'reader');
     const res = await request(app)
       .delete(`/api/submissions/${sub._id}/lock`)
       .set('Authorization', `Bearer ${signTokenFor(reader as any)}`);
@@ -106,6 +108,7 @@ describe('S2A.1 — audit on every reader-lock transition (CR-006)', () => {
         lockReason: 'reader_review',
       },
     });
+    await assignToSubmission(sub, reader, 'reader');
     const res = await request(app)
       .post(`/api/submissions/${sub._id}/send-back`)
       .set('Authorization', `Bearer ${signTokenFor(reader as any)}`)

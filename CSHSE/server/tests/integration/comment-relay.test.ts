@@ -13,7 +13,7 @@ import app from '../../src/index';
 import { Comment } from '../../src/models/Comment';
 import { Submission } from '../../src/models/Submission';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 let _c = 0;
 async function seedSubmission(submitterId: mongoose.Types.ObjectId) {
@@ -74,6 +74,7 @@ describe('CR-004 — PC visibility of comments', () => {
     const { user: pc } = await createUser({ role: 'program_coordinator' });
     const { user: reader } = await createUser({ role: 'reader' });
     const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, reader, 'reader');
     await seedComment(sub._id, reader._id, 'Jane Reader');
 
     const res = await request(app)
@@ -121,6 +122,7 @@ describe('CR-023 — relay/unrelay/escalate transitions', () => {
     const { user: reader } = await createUser({ role: 'reader' });
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, lead, 'lead_reader');
     const cmt = await seedComment(sub._id, reader._id, 'Jane Reader');
 
     const relay = await request(app)
@@ -151,6 +153,7 @@ describe('CR-023 — relay/unrelay/escalate transitions', () => {
     const { user: reader } = await createUser({ role: 'reader' });
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, lead, 'lead_reader');
     const cmt = await seedComment(sub._id, reader._id, 'Jane', { relayed: true, pcLabel: 'Reader A' });
 
     const res = await request(app)
@@ -193,6 +196,7 @@ describe('CR-023 — relay/unrelay/escalate transitions', () => {
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const { user: reader } = await createUser({ role: 'reader' });
     const sub = await seedSubmission(new mongoose.Types.ObjectId() as any);
+    await assignToSubmission(sub, lead, 'lead_reader');
     const cmt = await seedComment(sub._id, reader._id, 'Jane');
 
     const res = await request(app)
@@ -210,6 +214,7 @@ describe('CR-023 — relay/unrelay/escalate transitions', () => {
     const { user: pc } = await createUser({ role: 'program_coordinator' });
     const { user: reader } = await createUser({ role: 'reader' });
     const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, lead, 'lead_reader');
     await seedComment(sub._id, reader._id, 'A'); // unrelayed
     await seedComment(sub._id, reader._id, 'B', { relayed: true, pcLabel: 'Reader B' }); // relayed
     await seedComment(sub._id, reader._id, 'C', { relayed: true, boardEscalated: true }); // escalated

@@ -3,9 +3,30 @@ import { ChangeRequest } from '../models/ChangeRequest';
 import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { SiteVisit } from '../models/SiteVisit';
+import { Assignment } from '../models/Assignment';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 import { AuthenticatedRequest } from '../middleware/auth';
 import mongoose from 'mongoose';
+
+/**
+ * SECURITY (cross-tenant): the set of submission ids a lead_reader OVERSEES —
+ * ones they hold an active Assignment to, plus ones whose institution lists
+ * them as the designated lead. Used to scope change-request LISTS so a lead
+ * reader can only enumerate requests for submissions they oversee, never every
+ * institution's. Admins/superusers bypass this (they see all).
+ */
+async function overseenSubmissionIds(req: AuthenticatedRequest): Promise<string[]> {
+  const effId = String((req.user as any)?.impersonation?.impersonatedUserId || req.user?.id || '');
+  if (!effId) return [];
+  const [assigned, designatedInsts] = await Promise.all([
+    Assignment.find({ userId: effId, status: 'active' }).distinct('submissionId'),
+    Institution.find({ assignedLeadReaderId: effId }).distinct('_id'),
+  ]);
+  const designatedSubs = designatedInsts.length
+    ? await Submission.find({ institutionId: { $in: designatedInsts } }).distinct('_id')
+    : [];
+  return [...new Set([...assigned, ...designatedSubs].map((x) => String(x)))];
+}
 
 /**
  * Get all change requests
@@ -22,12 +43,22 @@ export const getChangeRequests = async (req: AuthenticatedRequest, res: Response
     if (type) query.type = type;
     if (status) query.status = status;
 
-    // Filter based on role. Admin and lead_reader see all institutions' change
-    // requests (board oversight). EVERY other role — program_coordinator and any
-    // plain reader/other role — is scoped to only their OWN requests, so no role
-    // can enumerate another institution's change requests.
-    if (userRole !== 'admin' && userRole !== 'lead_reader') {
-      query.requestedBy = userId;
+    // Filter based on role (cross-tenant scoping). Admin/superuser see all. A
+    // lead_reader sees ONLY change requests for submissions they oversee (active
+    // assignment or designated institution lead) — not every institution's.
+    // Every other role is scoped to their OWN requests.
+    const isElevated = userRole === 'admin' || (req.user as any)?.isSuperuser === true;
+    if (!isElevated) {
+      if (userRole === 'lead_reader') {
+        const overseen = await overseenSubmissionIds(req);
+        if (query.submissionId) {
+          if (!overseen.includes(String(query.submissionId))) query.submissionId = { $in: [] };
+        } else {
+          query.submissionId = { $in: overseen };
+        }
+      } else {
+        query.requestedBy = userId;
+      }
     }
 
     const pageNum = parseInt(page as string, 10);
@@ -210,6 +241,14 @@ export const approveChangeRequest = async (req: AuthenticatedRequest, res: Respo
       return res.status(404).json({ error: 'Change request not found' });
     }
 
+    // SECURITY (cross-tenant): the role check is global. Bind the caller to this
+    // request's submission so a lead_reader can only approve requests for a
+    // submission they oversee (active Assignment) — not any institution's.
+    if ((changeRequest as any).submissionId) {
+      const _sub = await requireSubmissionAccess(req, res, (changeRequest as any).submissionId);
+      if (!_sub) return;
+    }
+
     if (changeRequest.status !== 'pending') {
       return res.status(400).json({ error: `Cannot approve a ${changeRequest.status} request` });
     }
@@ -293,6 +332,13 @@ export const denyChangeRequest = async (req: AuthenticatedRequest, res: Response
     const changeRequest = await ChangeRequest.findById(id);
     if (!changeRequest) {
       return res.status(404).json({ error: 'Change request not found' });
+    }
+
+    // SECURITY (cross-tenant): bind the caller to this request's submission so a
+    // lead_reader can only deny requests for a submission they oversee.
+    if ((changeRequest as any).submissionId) {
+      const _sub = await requireSubmissionAccess(req, res, (changeRequest as any).submissionId);
+      if (!_sub) return;
     }
 
     if (changeRequest.status !== 'pending') {
@@ -422,9 +468,12 @@ export const getPendingChangeRequests = async (req: AuthenticatedRequest, res: R
 
     const query: any = { status: 'pending' };
 
-    // For lead reader, show only requests where they haven't responded yet
-    if (userRole === 'lead_reader') {
+    // For a lead reader: only requests they haven't responded to yet, AND only
+    // for submissions they oversee (cross-tenant scoping). Admin/superuser: all.
+    const isElevated = userRole === 'admin' || (req.user as any)?.isSuperuser === true;
+    if (userRole === 'lead_reader' && !isElevated) {
       query['approvals.leadReader.approved'] = { $exists: false };
+      query.submissionId = { $in: await overseenSubmissionIds(req) };
     }
 
     const pendingRequests = await ChangeRequest.find(query)

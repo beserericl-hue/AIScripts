@@ -20,6 +20,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
 import { getAllStandards } from '../../src/data/standards';
+import { getLevelStandards } from '../../src/data/levelStandards';
 import { createUser, signTokenFor } from '../helpers/factories';
 
 let _c = 0;
@@ -80,7 +81,9 @@ describe('CR-050 — mark spec not applicable', () => {
 
   it('submitSelfStudy succeeds when one spec is excluded and the rest are pass', async () => {
     // Seed: every spec validated 'pass' EXCEPT 1.a which is excluded.
-    const allStandards = getAllStandards();
+    // Use the LEVEL catalog the submit gate validates against (superset of
+    // the flat getAllStandards()).
+    const allStandards = getLevelStandards('bachelors') || getAllStandards();
     const standardsStatus: Record<string, any> = {};
     for (const std of allStandards) {
       for (const spec of std.specifications || []) {

@@ -30,6 +30,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
 import { getAllStandards } from '../../src/data/standards';
+import { getLevelStandards } from '../../src/data/levelStandards';
 import { createUser, signTokenFor } from '../helpers/factories';
 
 let _c = 0;
@@ -248,7 +249,9 @@ describe('R.1 — known-broken submit paths (characterization)', () => {
   // them actually passable; CR-050 will let intentionally-omitted specs
   // count as satisfied).
   it('submitSelfStudy succeeds when every spec is validated pass (S2A.0)', async () => {
-    const allStandards = getAllStandards();
+    // Seed against the LEVEL catalog the submit gate validates against
+    // (getLevelStandards is a superset of the flat getAllStandards()).
+    const allStandards = getLevelStandards('bachelors') || getAllStandards();
     const standardsStatus: Record<string, any> = {};
     for (const std of allStandards) {
       for (const spec of std.specifications || []) {

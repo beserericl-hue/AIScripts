@@ -24,13 +24,16 @@ import { SupportingEvidence } from '../../src/models/SupportingEvidence';
 import { Institution } from '../../src/models/Institution';
 import { createUser, signTokenFor } from '../helpers/factories';
 
-async function seedSubmission(userId: any) {
-  const inst = await Institution.create({
-    name: `CVAssign Inst ${Date.now().toString(36)}`,
+async function makeInstitution() {
+  return Institution.create({
+    name: `CVAssign Inst ${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
     type: 'university',
     address: { street: '1', city: 'X', state: 'CA', zip: '90000', country: 'USA' },
     primaryContact: { name: 'A', email: 'a@x.test', phone: '555-0000' },
   } as any);
+}
+
+async function seedSubmission(userId: any, inst: any) {
   return Submission.create({
     submissionId: `CVA-${Date.now().toString(36)}`,
     institutionName: inst.name,
@@ -63,9 +66,10 @@ async function seedImport(submission: any, userId: any, cvs: any[]) {
 
 describe('CV spec-assignment packaging at Apply', () => {
   it('packages an ASSIGNED CV into a routed SupportingEvidence, skips an UNASSIGNED one', async () => {
-    const { user } = await createUser();
+    const institution = await makeInstitution();
+    const { user } = await createUser({ institutionId: institution._id });
     const token = signTokenFor(user as any);
-    const submission = await seedSubmission(user._id);
+    const submission = await seedSubmission(user._id, institution);
     const cvs = [
       {
         sectionId: 'cv-assigned',
@@ -113,9 +117,10 @@ describe('CV spec-assignment packaging at Apply', () => {
   });
 
   it('honors routing.std/spec as the assignment source when resolved* is absent', async () => {
-    const { user } = await createUser();
+    const institution = await makeInstitution();
+    const { user } = await createUser({ institutionId: institution._id });
     const token = signTokenFor(user as any);
-    const submission = await seedSubmission(user._id);
+    const submission = await seedSubmission(user._id, institution);
     const cvs = [
       {
         sectionId: 'cv-routing',
@@ -140,9 +145,10 @@ describe('CV spec-assignment packaging at Apply', () => {
   });
 
   it('re-apply with the same idempotency key does not double-package', async () => {
-    const { user } = await createUser();
+    const institution = await makeInstitution();
+    const { user } = await createUser({ institutionId: institution._id });
     const token = signTokenFor(user as any);
-    const submission = await seedSubmission(user._id);
+    const submission = await seedSubmission(user._id, institution);
     const cvs = [
       {
         sectionId: 'cv-idem',

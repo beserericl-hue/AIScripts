@@ -14,7 +14,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { Notification } from '../../src/models/Notification';
 import { notify } from '../../src/services/notificationService';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -34,6 +34,10 @@ async function seed() {
     type: 'initial',
     status: 'under_review'
   });
+
+  // The lead oversees the submission (active assignment) so createThread — now
+  // gated by submission access — succeeds; readers gain access as participants.
+  await assignToSubmission(sub, lead, 'lead_reader');
 
   return {
     sid: String(sub._id),

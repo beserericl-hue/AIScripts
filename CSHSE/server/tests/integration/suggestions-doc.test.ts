@@ -23,7 +23,7 @@ import { Submission } from '../../src/models/Submission';
 import { Comment } from '../../src/models/Comment';
 import { ValidationResult } from '../../src/models/ValidationResult';
 import { Score } from '../../src/models/Score';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 async function readDocxBodyText(buffer: Buffer): Promise<string> {
   const zip = await JSZip.loadAsync(buffer);
@@ -50,6 +50,9 @@ async function seed() {
     type: 'initial',
     status: 'review_complete'
   });
+
+  // The lead reviewer reaches the submission through an ACTIVE Assignment.
+  await assignToSubmission(sub, lead, 'lead_reader');
 
   // Reader 1 leaves an UNRELAYED comment on 1.a (PC must never see).
   await Comment.create({
@@ -262,6 +265,7 @@ describe('CR-003 / S11.1 — 0-3 reader scores in the suggestions DOCX', () => {
       type: 'initial',
       status: 'review_complete'
     });
+    await assignToSubmission(sub, lead, 'lead_reader');
     // A spec with ONLY a score (no comment) — must still surface.
     await Score.create({
       submissionId: sub._id,

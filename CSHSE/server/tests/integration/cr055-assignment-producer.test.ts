@@ -22,14 +22,16 @@ import request from 'supertest';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { Assignment } from '../../src/models/Assignment';
+import { Institution } from '../../src/models/Institution';
 import { createUser, signTokenFor } from '../helpers/factories';
 
 let _c = 0;
-async function seedSubmission(status = 'submitted'): Promise<any> {
+async function seedSubmission(status = 'submitted', institutionId?: any): Promise<any> {
   _c += 1;
   return Submission.create({
     submissionId: `CR055-${Date.now().toString(36)}-${_c}`,
     institutionName: 'Assignment U',
+    institutionId,
     programName: 'Human Services',
     programLevel: 'bachelors',
     submitterId: (await createUser({ role: 'program_coordinator' })).user._id,
@@ -109,7 +111,18 @@ describe('CR-055 — POST /api/reviews/submissions/:id/assign creates Assignment
   it('a lead_reader can assign on a not-yet-locked submission (no reason needed)', async () => {
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const { user: r1 } = await createUser({ role: 'reader' });
-    const sub = await seedSubmission('in_progress');
+    // The institution's DESIGNATED lead oversees the submission (production
+    // auto-assigns the lead on submit). Using the designated-lead path grants
+    // oversight WITHOUT adding an extra Assignment doc, so the active-count
+    // assertion below stays exact.
+    const institution = await Institution.create({
+      name: 'Assignment U',
+      type: 'university',
+      address: { street: '1', city: 'X', state: 'CA', zip: '90000', country: 'USA' },
+      primaryContact: { name: 'A', email: 'a@x.test', title: 'Director', phone: '555-0000' },
+      assignedLeadReaderId: lead._id,
+    } as any);
+    const sub = await seedSubmission('in_progress', institution._id);
 
     const res = await request(app)
       .post(`/api/reviews/submissions/${String(sub._id)}/assign`)

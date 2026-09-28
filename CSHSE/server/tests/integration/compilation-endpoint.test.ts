@@ -28,7 +28,7 @@ import { Score } from '../../src/models/Score';
 import { LeadFinalScore } from '../../src/models/LeadFinalScore';
 import { Assignment } from '../../src/models/Assignment';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -41,7 +41,7 @@ async function waitForAudit(query: Record<string, unknown>, tries = 60): Promise
   return null;
 }
 
-async function seed(opts: { excluded?: boolean } = {}) {
+async function seed(opts: { excluded?: boolean; assignLead?: boolean } = {}) {
   const { user: admin } = await createUser({ role: 'admin' });
   const { user: lead } = await createUser({ role: 'lead_reader' });
   const { user: r1 } = await createUser({ role: 'reader', firstName: 'Reader', lastName: 'Alpha' });
@@ -68,6 +68,13 @@ async function seed(opts: { excluded?: boolean } = {}) {
     status: 'review_complete',
     standardsStatus
   });
+
+  // The lead reviewer reaches the submission through an ACTIVE lead_reader
+  // Assignment (the cross-tenant guard requires it). Opt out with
+  // assignLead:false for a test that must probe the no-assignment path.
+  if (opts.assignLead !== false) {
+    await assignToSubmission(sub, lead, 'lead_reader');
+  }
 
   // Three readers vote on spec 1.a:
   //   r1=3, r2=2, r3=0 → disagreement + zero
@@ -420,7 +427,10 @@ describe('CR-009 follow-on — GET /api/submissions/:id/final-scores (reader vis
     expect(res.status).toBe(403);
   });
 
-  it('lead reader can read final-scores without an assignment (elevated)', async () => {
+  it('the institution lead reader (assigned) can read final-scores', async () => {
+    // lead_readers are SCOPED, not board-global: the institution's lead is
+    // auto-assigned on submit, so the real production state is an ACTIVE
+    // lead_reader Assignment. seed() creates that assignment by default.
     const { sid, lead } = await seed();
     await request(app)
       .put(`/api/submissions/${sid}/compilation/final-score`)

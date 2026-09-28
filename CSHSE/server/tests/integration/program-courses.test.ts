@@ -25,7 +25,9 @@ async function seedSubmission() {
     address: { street: '1 Test St', city: 'Test', state: 'TS', zip: '00000', country: 'US' },
     primaryContact: { name: 'Test Contact', email: 'tc@example.com', title: 'Director', phone: '555-0100' }
   } as any);
-  const { user } = await createUser();
+  // The PC must belong to the submission's institution — the cross-tenant guard
+  // grants a Program Coordinator access only AT that institution (hasRoleAt).
+  const { user } = await createUser({ institutionId: institution._id });
   const submission = await Submission.create({
     submissionId: `sub-${Date.now()}`,
     institutionId: institution._id,

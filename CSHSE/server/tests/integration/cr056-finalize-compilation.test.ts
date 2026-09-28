@@ -25,7 +25,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { Notification } from '../../src/models/Notification';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 async function waitForNote(query: Record<string, unknown>, tries = 60): Promise<any> {
   for (let i = 0; i < tries; i++) {
@@ -66,6 +66,9 @@ describe('CR-056 — POST /api/submissions/:id/compilation/finalize', () => {
     const { user: adminA } = await createUser({ role: 'admin' });
     const { user: adminB } = await createUser({ role: 'admin' });
     const sub = await seedSubmission('under_review');
+    // The institution's lead oversees this submission (assigned) — the real
+    // production state, since the lead is auto-assigned on submit.
+    await assignToSubmission(sub, lead, 'lead_reader');
 
     const res = await request(app)
       .post(`/api/submissions/${String(sub._id)}/compilation/finalize`)
@@ -104,6 +107,7 @@ describe('CR-056 — POST /api/submissions/:id/compilation/finalize', () => {
   it('is idempotent on an already review_complete submission', async () => {
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const sub = await seedSubmission('review_complete');
+    await assignToSubmission(sub, lead, 'lead_reader');
     const res = await request(app)
       .post(`/api/submissions/${String(sub._id)}/compilation/finalize`)
       .set('Authorization', `Bearer ${signTokenFor(lead as any)}`);
@@ -114,6 +118,7 @@ describe('CR-056 — POST /api/submissions/:id/compilation/finalize', () => {
   it('409 from a non-advanceable status (draft)', async () => {
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const sub = await seedSubmission('draft');
+    await assignToSubmission(sub, lead, 'lead_reader');
     const res = await request(app)
       .post(`/api/submissions/${String(sub._id)}/compilation/finalize`)
       .set('Authorization', `Bearer ${signTokenFor(lead as any)}`);
@@ -123,6 +128,7 @@ describe('CR-056 — POST /api/submissions/:id/compilation/finalize', () => {
   it('409 when the board has already decided (compliant)', async () => {
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const sub = await seedSubmission('compliant');
+    await assignToSubmission(sub, lead, 'lead_reader');
     const res = await request(app)
       .post(`/api/submissions/${String(sub._id)}/compilation/finalize`)
       .set('Authorization', `Bearer ${signTokenFor(lead as any)}`);

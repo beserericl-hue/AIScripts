@@ -18,7 +18,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { Comment } from '../../src/models/Comment';
 import { Notification } from '../../src/models/Notification';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -51,6 +51,7 @@ describe('CR-010 / S12.2 — comment relay notifies the PC', () => {
     const { user: reader } = await createUser({ role: 'reader' });
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, lead, 'lead_reader');
     const cmt: any = await Comment.create({
       submissionId: sub._id,
       standardCode: '1',
@@ -83,6 +84,7 @@ describe('CR-010 / S12.2 — comment relay notifies the PC', () => {
     const { user: reader } = await createUser({ role: 'reader' });
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const sub = await seedSubmission(pc._id as any);
+    await assignToSubmission(sub, lead, 'lead_reader');
     const cmt: any = await Comment.create({
       submissionId: sub._id, standardCode: '1', specCode: 'a', selectedText: 'g',
       selectionStart: 0, selectionEnd: 1, authorId: reader._id, authorName: 'J',

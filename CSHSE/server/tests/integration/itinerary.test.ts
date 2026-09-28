@@ -18,7 +18,7 @@ import { Submission } from '../../src/models/Submission';
 import { SiteVisit } from '../../src/models/SiteVisit';
 import { SiteVisitChecklistItem } from '../../src/models/SiteVisitChecklistItem';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -32,22 +32,29 @@ async function waitForAudit(query: Record<string, unknown>, tries = 60): Promise
 }
 
 async function seed(opts: { withVisit?: boolean } = {}) {
+  const institutionId = new mongoose.Types.ObjectId();
   const { user: admin } = await createUser({ role: 'admin' });
   const { user: lead } = await createUser({ role: 'lead_reader', firstName: 'Lead', lastName: 'Linda' });
   const { user: reader } = await createUser({ role: 'reader' });
-  const { user: pc } = await createUser({ role: 'program_coordinator' });
+  // The submission PC belongs to the submission's institution (the guard grants
+  // a PC access only AT that institution). otherPc stays institution-less → 403.
+  const { user: pc } = await createUser({ role: 'program_coordinator', institutionId: institutionId.toString() });
   const { user: otherPc } = await createUser({ role: 'program_coordinator' });
 
   const sub: any = await Submission.create({
     submissionId: `IT-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`,
     institutionName: 'Itin U',
-    institutionId: new mongoose.Types.ObjectId(),
+    institutionId,
     programName: 'HS',
     programLevel: 'bachelors',
     submitterId: pc._id,
     type: 'initial',
     status: 'review_complete'
   });
+
+  // Lead + reader reach the submission through ACTIVE Assignments.
+  await assignToSubmission(sub, lead, 'lead_reader');
+  await assignToSubmission(sub, reader, 'reader');
 
   let visit: any = null;
   if (opts.withVisit !== false) {

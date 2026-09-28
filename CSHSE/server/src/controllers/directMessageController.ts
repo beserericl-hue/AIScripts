@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import { DirectMessageThread, DirectMessage, DmParticipantRole } from '../models/DirectMessage';
 import { User } from '../models/User';
 import { notifyMany } from '../services/notificationService';
+import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 // ---------------------------------------------------------------------------
 // CR-010 / Sprint 5.4 — Portal direct messaging.
@@ -132,6 +133,14 @@ export const createThread = async (req: AuthenticatedRequest, res: Response) => 
     }
 
     const { submissionId } = req.params;
+
+    // SECURITY (cross-tenant): a reader/lead may only start a thread on a
+    // submission they can access (active assignment); admins/superusers pass.
+    {
+      const _sub = await requireSubmissionAccess(req as any, res, submissionId);
+      if (!_sub) return;
+    }
+
     const {
       subject,
       participantIds = [],
