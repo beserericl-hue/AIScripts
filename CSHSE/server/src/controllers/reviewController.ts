@@ -4,6 +4,7 @@ import { Review, IReview, ComplianceStatus } from '../models/Review';
 import { Submission } from '../models/Submission';
 import { User } from '../models/User';
 import { Assignment } from '../models/Assignment';
+import { Institution } from '../models/Institution';
 import { recordAuditEvent } from '../services/auditLog';
 import { notify } from '../services/notificationService';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
@@ -601,6 +602,33 @@ export const assignReaders = async (req: AuthenticatedRequest, res: Response) =>
       return res.status(404).json({ error: 'Submission not found' });
     }
 
+    // SECURITY (cross-tenant): the role check above is GLOBAL — any lead_reader
+    // passes it. Without tying the caller to THIS submission, a lead_reader from
+    // another institution could self-assign (write an active Assignment for
+    // themselves) and thereby unlock the whole study, since every other guarded
+    // endpoint treats an active Assignment as access. A non-elevated caller may
+    // assign only to a submission they oversee: the institution's DESIGNATED
+    // lead reader, or someone who already holds an active assignment to it.
+    const isElevatedAssigner = req.user?.role === 'admin' || (req.user as any)?.isSuperuser === true;
+    if (!isElevatedAssigner) {
+      const effId = String((req.user as any)?.impersonation?.impersonatedUserId || req.user?.id || '');
+      const inst = submission.institutionId
+        ? await Institution.findById(submission.institutionId).select('assignedLeadReaderId').lean()
+        : null;
+      const isDesignatedLead =
+        !!(inst as any)?.assignedLeadReaderId && String((inst as any).assignedLeadReaderId) === effId;
+      const hasActiveAssignment = await Assignment.exists({
+        submissionId: submission._id,
+        userId: effId,
+        status: 'active',
+      });
+      if (!isDesignatedLead && !hasActiveAssignment) {
+        return res.status(403).json({
+          error: 'Forbidden: you do not oversee this submission',
+        });
+      }
+    }
+
     // CR-022 / Sprint 6 — assignment lockout after submit.
     // Once a submission reaches `submitted` or further, only admin may
     // change reader assignments, and the change requires a reason for
@@ -820,6 +848,13 @@ export const requestAssignmentChange = async (req: AuthenticatedRequest, res: Re
     const submission = await Submission.findById(submissionId);
     if (!submission) {
       return res.status(404).json({ error: 'Submission not found' });
+    }
+
+    // SECURITY (cross-tenant): a lead_reader may only request a change for a
+    // submission they oversee (active assignment) — not any institution's.
+    {
+      const _sub = await requireSubmissionAccess(req as any, res, submission);
+      if (!_sub) return;
     }
 
     const requesterName =

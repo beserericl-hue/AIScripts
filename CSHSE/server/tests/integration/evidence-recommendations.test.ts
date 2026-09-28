@@ -17,7 +17,7 @@ import mongoose from 'mongoose';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import * as ai from '../../src/services/cshseAiClient';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 let recommendSpy: ReturnType<typeof vi.spyOn>;
 
@@ -56,6 +56,9 @@ async function seed(opts: { withInstitution?: boolean } = {}) {
     submissionDoc.institutionId = new mongoose.Types.ObjectId();
   }
   const sub: any = await Submission.create(submissionDoc);
+  // Reviewer access requires an ACTIVE Assignment (the cross-tenant guard).
+  await assignToSubmission(sub, reader, 'reader');
+  await assignToSubmission(sub, lead, 'lead_reader');
   return {
     sid: String(sub._id),
     instId: submissionDoc.institutionId ? String(submissionDoc.institutionId) : null,

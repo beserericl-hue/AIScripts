@@ -14,7 +14,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { ValidationResult } from '../../src/models/ValidationResult';
 import * as cshseAiClient from '../../src/services/cshseAiClient';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 let _c = 0;
 async function seed(inst: mongoose.Types.ObjectId) {
@@ -50,6 +50,7 @@ describe('CR-049 Phase 4b — reader override endpoint', () => {
     const inst = new mongoose.Types.ObjectId();
     const sub = await seed(inst);
     const { user: reader } = await createUser({ role: 'reader', institutionId: inst.toString() });
+    await assignToSubmission(sub, reader, 'reader');
 
     const res = await request(app)
       .post(`/api/submissions/${sub._id}/standards/1/specs/a/override`)

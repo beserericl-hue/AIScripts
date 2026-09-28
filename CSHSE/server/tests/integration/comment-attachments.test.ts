@@ -21,7 +21,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { Comment } from '../../src/models/Comment';
 import * as s3 from '../../src/services/s3Service';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 let uploadSpy: ReturnType<typeof vi.spyOn>;
 let downloadSpy: ReturnType<typeof vi.spyOn>;
@@ -65,6 +65,10 @@ async function seed() {
     assignedReaders: [reader._id],
     leadReader: lead._id
   });
+
+  // The cross-tenant guard grants reviewer access only via an ACTIVE Assignment.
+  await assignToSubmission(sub, reader, 'reader');
+  await assignToSubmission(sub, lead, 'lead_reader');
 
   const unrelayedComment: any = await Comment.create({
     submissionId: sub._id,

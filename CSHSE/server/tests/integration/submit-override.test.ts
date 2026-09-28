@@ -20,6 +20,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
 import { getAllStandards } from '../../src/data/standards';
+import { getLevelStandards } from '../../src/data/levelStandards';
 import { createUser, signTokenFor } from '../helpers/factories';
 
 // recordAuditEvent is fire-and-forget (void) in submitSelfStudy — poll briefly
@@ -50,7 +51,10 @@ async function seedSubmission(overrides: any = {}) {
 
 function allPassing(): Record<string, any> {
   const out: Record<string, any> = {};
-  for (const std of getAllStandards()) {
+  // The submit gate validates against the LEVEL catalog (getLevelStandards),
+  // which is a superset of the flat getAllStandards() — seed every spec the
+  // server actually requires so a genuinely-complete submission clears it.
+  for (const std of getLevelStandards('bachelors') || getAllStandards()) {
     for (const spec of std.specifications || []) {
       out[`${std.code}_${spec.code}`] = {
         status: 'validated',

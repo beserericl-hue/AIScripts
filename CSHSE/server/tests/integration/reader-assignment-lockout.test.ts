@@ -18,7 +18,7 @@ import mongoose from 'mongoose';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -49,6 +49,9 @@ describe('CR-022 — reader assignment lockout after submit', () => {
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const { user: r1 } = await createUser({ role: 'reader' });
     const sub = await seedSubmission('submitted');
+    // The lead oversees the submission (assigned) — so this 403 comes from the
+    // CR-022 locked-phase admin-only rule, NOT from lacking submission access.
+    await assignToSubmission(sub, lead, 'lead_reader');
 
     const res = await request(app)
       .post(`/api/reviews/submissions/${sub._id}/assign`)
@@ -100,6 +103,7 @@ describe('CR-022 — reader assignment lockout after submit', () => {
     const { user: lead } = await createUser({ role: 'lead_reader' });
     const { user: r1 } = await createUser({ role: 'reader' });
     const sub = await seedSubmission('draft');
+    await assignToSubmission(sub, lead, 'lead_reader');
 
     const res = await request(app)
       .post(`/api/reviews/submissions/${sub._id}/assign`)

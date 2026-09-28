@@ -18,7 +18,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { Notification } from '../../src/models/Notification';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 async function waitForNote(query: Record<string, unknown>, tries = 60): Promise<any> {
   for (let i = 0; i < tries; i++) {
@@ -58,6 +58,9 @@ describe('CR-022 / S13c — POST /reviews/submissions/:id/request-assignment-cha
     const { user: adminA } = await createUser({ role: 'admin' });
     const { user: adminB } = await createUser({ role: 'admin' });
     const sub = await seedSubmission('under_review');
+    // The lead oversees this submission (assigned) — production auto-assigns the
+    // institution's lead on submit, so it's the real state for this affordance.
+    await assignToSubmission(sub, lead, 'lead_reader');
 
     const res = await request(app)
       .post(`/api/reviews/submissions/${String(sub._id)}/request-assignment-change`)

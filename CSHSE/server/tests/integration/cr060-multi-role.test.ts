@@ -23,7 +23,7 @@ import { Submission } from '../../src/models/Submission';
 import { Institution } from '../../src/models/Institution';
 import { Assignment } from '../../src/models/Assignment';
 import { User } from '../../src/models/User';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 let _c = 0;
 
@@ -263,6 +263,10 @@ describe('CR-060 — multi-role per user', () => {
     ]);
     const pcOnly = await userWithRoles([{ role: 'program_coordinator', institutionId: A._id }]);
     const body = { standardCode: '1', specCode: 'a', score: 2 };
+
+    // The reviewer (reader@B) reaches submission B through an ACTIVE Assignment —
+    // the real state when a reader is put on a panel. pcOnly gets none (403).
+    await assignToSubmission(sub, cross, 'reader');
 
     // The cross-role user holds a reviewer role (reader@B) → may score, even
     // though their PRIMARY role is program_coordinator.

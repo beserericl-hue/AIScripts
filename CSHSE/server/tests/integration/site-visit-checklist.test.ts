@@ -21,7 +21,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { SiteVisitChecklistItem } from '../../src/models/SiteVisitChecklistItem';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -58,6 +58,10 @@ async function seed() {
     type: 'initial',
     status: 'review_complete'
   });
+
+  // Reviewer access requires an ACTIVE Assignment (the cross-tenant guard).
+  await assignToSubmission(sub, lead, 'lead_reader');
+  await assignToSubmission(sub, reader, 'reader');
 
   return {
     sid: String(sub._id),

@@ -15,7 +15,7 @@ import mongoose from 'mongoose';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { DirectMessageThread, DirectMessage } from '../../src/models/DirectMessage';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -35,6 +35,11 @@ async function seed() {
     type: 'initial',
     status: 'under_review'
   });
+
+  // The lead reviewer oversees the submission (active assignment) so they can
+  // start DM threads — createThread now requires submission access. Readers r1/r2
+  // gain access as thread PARTICIPANTS, and the PC stays excluded (403).
+  await assignToSubmission(sub, lead, 'lead_reader');
 
   return {
     sid: String(sub._id),

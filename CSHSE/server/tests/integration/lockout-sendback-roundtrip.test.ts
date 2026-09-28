@@ -32,7 +32,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 let _c = 0;
 function reviewState(overrides: any = {}) {
@@ -167,6 +167,7 @@ describe('E2E B — lead reader sends back → PC can add items again', () => {
       readerLock: { isLocked: true, lockedBy: lead._id, lockedByName: 'Lead', lockedByRole: 'lead_reader', lockedAt: new Date(), lockReason: 'lead_reader_review' },
       aiReviewState: reviewState(),
     });
+    await assignToSubmission(sub, lead, 'lead_reader');
 
     // While locked, the PC is read-only.
     const blocked = await request(app)
@@ -228,6 +229,7 @@ describe('E2E B — lead reader sends back → PC can add items again', () => {
       assignedReaders: [reader._id],
       readerLock: { isLocked: true, lockedBy: reader._id, lockedByName: 'Reader', lockedByRole: 'reader', lockedAt: new Date(), lockReason: 'reader_review' },
     });
+    await assignToSubmission(sub, reader, 'reader');
 
     await request(app)
       .post(`/api/submissions/${sub._id}/send-back`)

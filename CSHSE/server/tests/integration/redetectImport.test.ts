@@ -207,8 +207,9 @@ describe('POST /api/imports/:importId/redetect', () => {
   });
 
   it('returns 409 when the import has no aiS3Key', async () => {
-    const { user } = await createUser();
-    const sub = await seedSubmission(user._id);
+    const inst = new mongoose.Types.ObjectId();
+    const { user } = await createUser({ institutionId: inst.toString() });
+    const sub = await seedSubmission(user._id, inst);
     const imp = await seedImport(sub._id, user._id, { s3Key: null });
     const token = signTokenFor(user as any);
     const res = await request(app)
@@ -221,8 +222,9 @@ describe('POST /api/imports/:importId/redetect', () => {
   });
 
   it('returns 502 when the ai-service responds with ok:false', async () => {
-    const { user } = await createUser();
-    const sub = await seedSubmission(user._id);
+    const inst = new mongoose.Types.ObjectId();
+    const { user } = await createUser({ institutionId: inst.toString() });
+    const sub = await seedSubmission(user._id, inst);
     const imp = await seedImport(sub._id, user._id);
     const token = signTokenFor(user as any);
     stubAIService(() => new Response(
@@ -238,8 +240,9 @@ describe('POST /api/imports/:importId/redetect', () => {
   });
 
   it('returns 502 when the ai-service fetch itself fails', async () => {
-    const { user } = await createUser();
-    const sub = await seedSubmission(user._id);
+    const inst = new mongoose.Types.ObjectId();
+    const { user } = await createUser({ institutionId: inst.toString() });
+    const sub = await seedSubmission(user._id, inst);
     const imp = await seedImport(sub._id, user._id);
     const token = signTokenFor(user as any);
     global.fetch = vi.fn(async () => {
@@ -273,8 +276,9 @@ describe('POST /api/imports/:importId/redetect', () => {
 
   describe('happy path', () => {
     it('persists aiCVs + aiEvidenceDocs from the ai-service response', async () => {
-      const { user } = await createUser();
-      const sub = await seedSubmission(user._id);
+      const inst = new mongoose.Types.ObjectId();
+      const { user } = await createUser({ institutionId: inst.toString() });
+      const sub = await seedSubmission(user._id, inst);
       const imp = await seedImport(sub._id, user._id);
       const token = signTokenFor(user as any);
       const aiResp = buildAIResponse();
@@ -302,8 +306,9 @@ describe('POST /api/imports/:importId/redetect', () => {
     });
 
     it('runs the ai-service call with the import + submission + s3 key payload', async () => {
-      const { user } = await createUser();
-      const sub = await seedSubmission(user._id);
+      const inst = new mongoose.Types.ObjectId();
+      const { user } = await createUser({ institutionId: inst.toString() });
+      const sub = await seedSubmission(user._id, inst);
       const imp = await seedImport(sub._id, user._id, { s3Key: 'imports/test/source.docx' });
       const token = signTokenFor(user as any);
       const calls = stubAIService(() => new Response(
@@ -324,8 +329,9 @@ describe('POST /api/imports/:importId/redetect', () => {
     });
 
     it('merges the new CVs into Submission.aiReviewState so the Review surface picks them up', async () => {
-      const { user } = await createUser();
-      const sub = await seedSubmission(user._id);
+      const inst = new mongoose.Types.ObjectId();
+      const { user } = await createUser({ institutionId: inst.toString() });
+      const sub = await seedSubmission(user._id, inst);
       const imp = await seedImport(sub._id, user._id);
       const token = signTokenFor(user as any);
       stubAIService(() => new Response(
@@ -347,8 +353,9 @@ describe('POST /api/imports/:importId/redetect', () => {
     });
 
     it('returns counts + tocDiagnostics verbatim from the ai-service', async () => {
-      const { user } = await createUser();
-      const sub = await seedSubmission(user._id);
+      const inst = new mongoose.Types.ObjectId();
+      const { user } = await createUser({ institutionId: inst.toString() });
+      const sub = await seedSubmission(user._id, inst);
       const imp = await seedImport(sub._id, user._id);
       const token = signTokenFor(user as any);
       stubAIService(() => new Response(
@@ -370,8 +377,9 @@ describe('POST /api/imports/:importId/redetect', () => {
     });
 
     it('includes "TOC pass recovered N" blurb when the TOC contributed', async () => {
-      const { user } = await createUser();
-      const sub = await seedSubmission(user._id);
+      const inst = new mongoose.Types.ObjectId();
+      const { user } = await createUser({ institutionId: inst.toString() });
+      const sub = await seedSubmission(user._id, inst);
       const imp = await seedImport(sub._id, user._id);
       const token = signTokenFor(user as any);
       stubAIService(() => new Response(
@@ -389,8 +397,9 @@ describe('POST /api/imports/:importId/redetect', () => {
     });
 
     it('does NOT include the TOC blurb when tocAdded is all zero', async () => {
-      const { user } = await createUser();
-      const sub = await seedSubmission(user._id);
+      const inst = new mongoose.Types.ObjectId();
+      const { user } = await createUser({ institutionId: inst.toString() });
+      const sub = await seedSubmission(user._id, inst);
       const imp = await seedImport(sub._id, user._id);
       const token = signTokenFor(user as any);
       stubAIService(() => new Response(
@@ -408,8 +417,9 @@ describe('POST /api/imports/:importId/redetect', () => {
     });
 
     it('is idempotent — re-detecting twice does NOT duplicate CVs in aiReviewState', async () => {
-      const { user } = await createUser();
-      const sub = await seedSubmission(user._id);
+      const inst = new mongoose.Types.ObjectId();
+      const { user } = await createUser({ institutionId: inst.toString() });
+      const sub = await seedSubmission(user._id, inst);
       const imp = await seedImport(sub._id, user._id);
       const token = signTokenFor(user as any);
       stubAIService(() => new Response(
@@ -443,8 +453,9 @@ describe('POST /api/imports/:importId/redetect', () => {
 
   describe('TOC source labelling', () => {
     it('preserves routing.source on CVs so the UI can distinguish pattern vs TOC', async () => {
-      const { user } = await createUser();
-      const sub = await seedSubmission(user._id);
+      const inst = new mongoose.Types.ObjectId();
+      const { user } = await createUser({ institutionId: inst.toString() });
+      const sub = await seedSubmission(user._id, inst);
       const imp = await seedImport(sub._id, user._id);
       const token = signTokenFor(user as any);
       stubAIService(() => new Response(
