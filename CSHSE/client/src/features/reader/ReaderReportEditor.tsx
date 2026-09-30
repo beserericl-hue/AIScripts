@@ -334,6 +334,29 @@ export function ReaderReportEditor(): JSX.Element {
   const setComment = (code: string, spec: string, val: string) =>
     setSpec(code, spec, overrideMode ? { leadComment: val } : { readerComment: val });
 
+  // Non-Compliant navigator — Lauri asked to see everything marked Non-Compliant
+  // without scrolling the whole 105-row report. Walk the specs currently marked
+  // Non-Compliant (reader's mark, or the lead's override when in override mode).
+  const nonCompliantSpecs = useMemo(() => {
+    const out: { std: string; spec: string; title: string }[] = [];
+    for (const r of rows)
+      for (const sp of r.specs)
+        if ((overrideMode ? (sp.leadMark || sp.readerMark) : sp.readerMark) === 'noncompliant')
+          out.push({ std: r.code, spec: sp.specCode, title: sp.specTitle });
+    return out;
+  }, [rows, overrideMode]);
+  const [ncIdx, setNcIdx] = useState(0);
+  const jumpToNc = (i: number) => {
+    if (!nonCompliantSpecs.length) return;
+    const n = ((i % nonCompliantSpecs.length) + nonCompliantSpecs.length) % nonCompliantSpecs.length;
+    setNcIdx(n);
+    scrollToSpec(nonCompliantSpecs[n].std, nonCompliantSpecs[n].spec);
+  };
+  // Jump straight to the acceptance vote + recommendation at the foot of the
+  // report (Lauri: the reaccredit decision "is at the very bottom").
+  const scrollToRecommendation = () =>
+    document.getElementById('rr-vote')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   useEffect(() => {
     if (query.data) {
       setRows(query.data.standards);
@@ -922,6 +945,61 @@ export function ReaderReportEditor(): JSX.Element {
         </div>
       )}
 
+      {/* Quick access — jump through Non-Compliant specs (no scrolling the whole
+          report) and jump to the acceptance vote / recommendation at the foot. */}
+      <div data-testid="rr-quickbar" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span
+            data-testid="rr-nc-count"
+            className={`inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs font-semibold ${nonCompliantSpecs.length ? 'bg-red-50 text-red-700' : 'bg-slate-100 text-slate-500'}`}
+          >
+            {nonCompliantSpecs.length} Non-Compliant
+          </span>
+          {nonCompliantSpecs.length > 0 && (
+            <span className="flex items-center gap-1">
+              <button
+                type="button"
+                data-testid="rr-nc-prev"
+                disabled={nonCompliantSpecs.length < 2}
+                onClick={() => jumpToNc(ncIdx - 1)}
+                title="Previous Non-Compliant"
+                className="rounded border border-red-300 p-1 text-red-700 hover:bg-red-100 disabled:opacity-40"
+              >
+                <ChevronUp className="h-4 w-4" />
+              </button>
+              <span className="tabular-nums text-xs text-red-700">{ncIdx + 1}/{nonCompliantSpecs.length}</span>
+              <button
+                type="button"
+                data-testid="rr-nc-next"
+                disabled={nonCompliantSpecs.length < 2}
+                onClick={() => jumpToNc(ncIdx + 1)}
+                title="Next Non-Compliant"
+                className="rounded border border-red-300 p-1 text-red-700 hover:bg-red-100 disabled:opacity-40"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                data-testid="rr-nc-first"
+                onClick={() => jumpToNc(0)}
+                className="ml-1 inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+              >
+                Jump to first Non-Compliant
+              </button>
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          data-testid="rr-jump-recommendation"
+          onClick={scrollToRecommendation}
+          className="inline-flex items-center gap-1 rounded-md border border-teal-300 bg-teal-50 px-3 py-1.5 text-xs font-medium text-teal-800 hover:bg-teal-100"
+          title="Jump to the acceptance vote + recommendation at the foot of the report"
+        >
+          Your vote / recommendation <ChevronDown className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
       {/* CR-074 — Required program documents (VP-accreditation / institutional
           support letters) the PC supplied, so the reader/lead can read them
           alongside the self-study. Read-only here; the PC uploads on the
@@ -955,7 +1033,7 @@ export function ReaderReportEditor(): JSX.Element {
               // The reader's checklist column — rendered BETWEEN the narrative and
               // the comments so the order is: narrative (wide) | checklist | comments.
               const checklistNode = (
-                  <div className="lg:sticky lg:top-4 lg:w-80 lg:shrink-0">
+                  <div className="lg:sticky lg:top-4 lg:w-72 lg:shrink-0">
                     <div data-testid={`rr-check-${r.code}-${sp.specCode}`} className="rounded-lg border-2 border-teal-300 bg-white shadow-sm">
                       <div className="flex items-center justify-between gap-2 rounded-t-md bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">
                         <span>Reader’s checklist — {r.code === 'introduction' ? sp.specTitle : `Specification ${r.code}.${sp.specCode}`}</span>
@@ -1197,7 +1275,7 @@ export function ReaderReportEditor(): JSX.Element {
       </div>
 
       {/* Acceptance vote — the poll the lead reader tallies across readers. */}
-      <div data-testid="rr-vote" className="mt-5 rounded-lg border border-slate-200 bg-white p-4">
+      <div id="rr-vote" data-testid="rr-vote" className="mt-5 scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="mb-2 text-sm font-semibold text-slate-800">Your vote on acceptance</h2>
         <div className="flex flex-wrap gap-2">
           {VOTE_OPTIONS.map((o) => {
