@@ -31,6 +31,7 @@ import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getAllStandards } from '../data/standards';
 import { getLevelStandards } from '../data/levelStandards';
 import { INTRO_RUBRIC, INTRO_STANDARD_CODE } from '../data/introRubric';
+import { splitIntroByRubric } from './introNarrativeSplit';
 import { brandedSectionChrome } from './docxBranding';
 
 // Template placeholder keys for the Introduction section: a rolled-up
@@ -505,18 +506,24 @@ async function buildIntroSection(
   let introFiles = 0;
   for (const [k, v] of evCount) if (k.startsWith(`${INTRO_CODE}.`)) introFiles += v;
 
+  // Split the program's Introduction narrative into per-reader-form-row chunks:
+  // each numbered Introduction section is shown under its MATCHING row (a–r),
+  // mapped by the official criteria its prompt echoes — NOT by the program's own
+  // numbering, which drifts from the form. If the narrative has no detectable
+  // section markers, the whole thing falls back onto row 'a' (prior behavior).
+  const introSplit = splitIntroByRubric(introHtml);
   const specs: ReaderReportSpec[] = INTRO_RUBRIC.map((row) => {
     const isGate = row.gate === 'yesno';
     const res = latestIntro.get(row.specCode);
     const verdict = isGate ? undefined : verdictFor(row.specCode);
-    // 1:1 with the paper form: each row is its own checklist line evaluated
-    // against the official criteria (shown via "View Standard"). The program's
-    // full Introduction narrative is shown ONCE, on the first "A. Introduction"
-    // row ('a'), so the reader reads it there and marks each line below it — no
-    // per-row narrative slicing (that split sentences and duplicated text).
-    const html = row.specCode === 'a'
-      ? (introHtml || '<p><em>No introduction narrative provided.</em></p>')
-      : '';
+    let html = introSplit.matchedSections > 0
+      ? (introSplit.bySpec.get(row.specCode) || '')
+      : (row.specCode === 'a' ? introHtml : '');
+    // Row 'a' is the catch-all: always show something there when a narrative
+    // exists (preamble + unmatched sections land here), never leave it blank.
+    if (row.specCode === 'a' && !html.trim()) {
+      html = introHtml || '<p><em>No introduction narrative provided.</em></p>';
+    }
     return {
       specCode: row.specCode, specTitle: row.title, specText: row.criteria,
       groupLabel: row.groupLabel, gate: row.gate,
