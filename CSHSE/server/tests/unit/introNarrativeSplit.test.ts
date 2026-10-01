@@ -59,7 +59,13 @@ describe('splitIntroByRubric — per-row Introduction split', () => {
     expect(text(bySpec.get('c') || '')).toMatch(/institutional context/i);
     expect(text(bySpec.get('e') || '')).toMatch(/course requirements/i);       // AACC "6."
     expect(text(bySpec.get('k') || '')).toMatch(/multiple sites/i);            // AACC "4."
-    expect(text(bySpec.get('o') || '')).toMatch(/hybrid|online/i);             // AACC "5."
+    // AACC's hybrid section (its "5.") is specifically about technical training
+    // & support → it lands in the hybrid group (o/p/q), on the row the CONTENT
+    // addresses (q = "adequate technical training and support").
+    const hybrid = text(`${bySpec.get('o') || ''}${bySpec.get('p') || ''}${bySpec.get('q') || ''}`);
+    expect(hybrid).toMatch(/hybrid|online|technical/i);
+    // The institution overview (its "2.") lands on row b, not the degree row a.
+    expect(text(bySpec.get('b') || '')).toMatch(/Anne Arundel|nationally recognized/i);
     // Fidelity: the concatenated chunks together are not shorter than the
     // substantive source (allow for whitespace/marker reshuffling).
     const joined = [...bySpec.values()].join('');
