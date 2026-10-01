@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, ClipboardCheck, Users, Lock, CheckCircle2, MessageSquare, Sparkles, Maximize2, Minimize2, ListTree } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, ClipboardCheck, Users, Lock, CheckCircle2, MessageSquare, Sparkles, Maximize2, Minimize2, ListTree, Filter } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
@@ -345,13 +345,16 @@ export function ReaderReportEditor(): JSX.Element {
           out.push({ std: r.code, spec: sp.specCode, title: sp.specTitle });
     return out;
   }, [rows, overrideMode]);
-  const [ncIdx, setNcIdx] = useState(0);
-  const jumpToNc = (i: number) => {
-    if (!nonCompliantSpecs.length) return;
-    const n = ((i % nonCompliantSpecs.length) + nonCompliantSpecs.length) % nonCompliantSpecs.length;
-    setNcIdx(n);
-    scrollToSpec(nonCompliantSpecs[n].std, nonCompliantSpecs[n].spec);
-  };
+  // FILTER (not a jump): show only the Non-Compliant sections, with a toggle
+  // back to the full report. Keyed set for a fast per-spec lookup while rendering.
+  const [onlyNonCompliant, setOnlyNonCompliant] = useState(false);
+  const nonCompliantKeys = useMemo(
+    () => new Set(nonCompliantSpecs.map((s) => `${s.std}.${s.spec}`)),
+    [nonCompliantSpecs],
+  );
+  // Never hide everything: if the filter is on but nothing is Non-Compliant
+  // (e.g. the reader just cleared the last mark), show the full report.
+  const filterActive = onlyNonCompliant && nonCompliantSpecs.length > 0;
   // Jump straight to the acceptance vote + recommendation at the foot of the
   // report (Lauri: the reaccredit decision "is at the very bottom").
   const scrollToRecommendation = () =>
@@ -956,37 +959,21 @@ export function ReaderReportEditor(): JSX.Element {
             {nonCompliantSpecs.length} Non-Compliant
           </span>
           {nonCompliantSpecs.length > 0 && (
-            <span className="flex items-center gap-1">
-              <button
-                type="button"
-                data-testid="rr-nc-prev"
-                disabled={nonCompliantSpecs.length < 2}
-                onClick={() => jumpToNc(ncIdx - 1)}
-                title="Previous Non-Compliant"
-                className="rounded border border-red-300 p-1 text-red-700 hover:bg-red-100 disabled:opacity-40"
-              >
-                <ChevronUp className="h-4 w-4" />
-              </button>
-              <span className="tabular-nums text-xs text-red-700">{ncIdx + 1}/{nonCompliantSpecs.length}</span>
-              <button
-                type="button"
-                data-testid="rr-nc-next"
-                disabled={nonCompliantSpecs.length < 2}
-                onClick={() => jumpToNc(ncIdx + 1)}
-                title="Next Non-Compliant"
-                className="rounded border border-red-300 p-1 text-red-700 hover:bg-red-100 disabled:opacity-40"
-              >
-                <ChevronDown className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                data-testid="rr-nc-first"
-                onClick={() => jumpToNc(0)}
-                className="ml-1 inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700"
-              >
-                Jump to first Non-Compliant
-              </button>
-            </span>
+            <button
+              type="button"
+              data-testid="rr-nc-filter"
+              aria-pressed={filterActive}
+              onClick={() => setOnlyNonCompliant((v) => !v)}
+              title={filterActive ? 'Show the full report again' : 'Hide everything except the Non-Compliant sections'}
+              className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ${
+                filterActive
+                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  : 'border border-red-300 text-red-700 hover:bg-red-50'
+              }`}
+            >
+              <Filter className="h-3.5 w-3.5" />
+              {filterActive ? 'Showing Non-Compliant only — Show all' : 'Show only Non-Compliant'}
+            </button>
           )}
         </div>
         <button
@@ -1011,7 +998,14 @@ export function ReaderReportEditor(): JSX.Element {
       )}
 
       <div className="space-y-3">
-        {rows.map((r) => (
+        {rows.map((r) => {
+          // When the Non-Compliant FILTER is on, show only this standard's
+          // Non-Compliant specs, and drop the standard entirely if it has none.
+          const visibleSpecs = filterActive
+            ? r.specs.filter((sp) => nonCompliantKeys.has(`${r.code}.${sp.specCode}`))
+            : r.specs;
+          if (filterActive && visibleSpecs.length === 0) return null;
+          return (
           <div key={r.code} id={`rr-row-${r.code}`} data-testid={`rr-row-${r.code}`} className="scroll-mt-4 rounded-lg border border-slate-200 bg-white p-4">
             <h2 className="mb-2 text-sm font-semibold text-slate-800">{r.code === 'introduction' ? r.title : `Standard ${r.code}: ${r.title}`}</h2>
 
@@ -1029,7 +1023,7 @@ export function ReaderReportEditor(): JSX.Element {
             {/* Each specification: its narrative + supporting evidence, with the
                 official reader-report checklist (Compliant / Non-Compliant /
                 Reader's Comments) right beside it — matching the template. */}
-            {r.specs.map((sp) => {
+            {visibleSpecs.map((sp) => {
               // The reader's checklist column — rendered BETWEEN the narrative and
               // the comments so the order is: narrative (wide) | checklist | comments.
               const checklistNode = (
@@ -1271,7 +1265,8 @@ export function ReaderReportEditor(): JSX.Element {
               );
             })}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Acceptance vote — the poll the lead reader tallies across readers. */}
