@@ -49,22 +49,38 @@ function tokens(text: string): Set<string> {
   return out;
 }
 
-// Distinctive token signature per rubric row (from title + criteria).
+/** Normalize a phrase to lowercase words joined by single spaces (for title containment). */
+function normPhrase(s: string): string {
+  return strip(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// Distinctive token + normalized-title signature per rubric row. The groupLabel
+// (e.g. "If the Program is delivered at multiple sites", "Hybrid or Online Course
+// Delivery") is folded in — it appears only on the FIRST row of each conditional
+// group, so a program's single group-header section ("5. Hybrid/Online course
+// delivery…") lands on that group's first row (o), not a later sibling (q).
 const ROW_SIG = INTRO_RUBRIC.map((row) => ({
   specCode: row.specCode,
   isGate: row.gate === 'yesno',
-  sig: tokens(`${row.title} ${row.criteria}`),
+  sig: tokens(`${row.title} ${row.criteria} ${row.groupLabel || ''}`),
+  titleNorm: normPhrase(row.title),
 }));
 
 function bestRowFor(promptText: string): string | null {
   const pt = tokens(promptText);
+  const pn = normPhrase(promptText);
   if (pt.size === 0) return null;
   let best: { code: string; score: number } | null = null;
   for (const r of ROW_SIG) {
     if (r.isGate) continue; // the Certification gate takes no narrative
-    let overlap = 0;
-    for (const t of r.sig) if (pt.has(t)) overlap += 1;
-    if (overlap >= 2 && (!best || overlap > best.score)) best = { code: r.specCode, score: overlap };
+    let score = 0;
+    for (const t of r.sig) if (pt.has(t)) score += 1;
+    // Strong signal: the section's prompt echoes this row's official TITLE
+    // (the self-study copies it). Weight by title length so a longer, more
+    // specific title wins — "...institutional context of the Program" (row c)
+    // beats "Describe the institution" (row b) for the 2b section.
+    if (r.titleNorm.length >= 10 && pn.includes(r.titleNorm)) score += 100 + r.titleNorm.length;
+    if (score >= 2 && (!best || score > best.score)) best = { code: r.specCode, score };
   }
   return best ? best.code : null;
 }
