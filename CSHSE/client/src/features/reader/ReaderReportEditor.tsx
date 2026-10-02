@@ -355,6 +355,18 @@ export function ReaderReportEditor(): JSX.Element {
   // Never hide everything: if the filter is on but nothing is Non-Compliant
   // (e.g. the reader just cleared the last mark), show the full report.
   const filterActive = onlyNonCompliant && nonCompliantSpecs.length > 0;
+  // Navigate to any section from the sidebar/top nav. If the Non-Compliant
+  // filter is hiding the target, turn the filter OFF first, then scroll — so a
+  // reader can always reach every section and never gets stuck in the filtered
+  // view (Lauri: "I can't get out of that section to review other sections").
+  const goToSection = (std: string, spec: string) => {
+    if (filterActive && !nonCompliantKeys.has(`${std}.${spec}`)) {
+      setOnlyNonCompliant(false);
+      setTimeout(() => scrollToSpec(std, spec), 90); // after the full report re-renders
+    } else {
+      scrollToSpec(std, spec);
+    }
+  };
   // Jump straight to the acceptance vote + recommendation at the foot of the
   // report (Lauri: the reaccredit decision "is at the very bottom").
   const scrollToRecommendation = () =>
@@ -576,7 +588,7 @@ export function ReaderReportEditor(): JSX.Element {
                 <button
                   type="button"
                   data-testid={`rr-nav-std-${r.code}`}
-                  onClick={() => { setNavExpanded((s) => { const n = new Set(s); n.add(r.code); return n; }); scrollToSpec(r.code, firstSpec); }}
+                  onClick={() => { setNavExpanded((s) => { const n = new Set(s); n.add(r.code); return n; }); goToSection(r.code, firstSpec); }}
                   className="min-w-0 flex-1 truncate rounded px-1 py-1 text-left font-medium text-slate-700 hover:bg-teal-50 hover:text-teal-800"
                   title={r.title}
                 >
@@ -593,9 +605,15 @@ export function ReaderReportEditor(): JSX.Element {
                       <button
                         type="button"
                         data-testid={`rr-nav-spec-${r.code}-${sp.specCode}`}
-                        onClick={() => scrollToSpec(r.code, sp.specCode)}
-                        className="flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-xs text-slate-600 hover:bg-teal-50 hover:text-teal-800"
-                        title={sp.specTitle}
+                        onClick={() => goToSection(r.code, sp.specCode)}
+                        className={`flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-xs hover:bg-teal-50 hover:text-teal-800 ${
+                          filterActive && !nonCompliantKeys.has(`${r.code}.${sp.specCode}`)
+                            ? 'text-slate-300'
+                            : 'text-slate-600'
+                        }`}
+                        title={filterActive && !nonCompliantKeys.has(`${r.code}.${sp.specCode}`)
+                          ? `${sp.specTitle} — hidden by the Non-Compliant filter; click to show all and go here`
+                          : sp.specTitle}
                       >
                         <span className="shrink-0 rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-500">{isIntro ? sp.specCode : `${r.code}.${sp.specCode}`}</span>
                         <span className="min-w-0 flex-1 truncate">{sp.specTitle}</span>
@@ -964,15 +982,17 @@ export function ReaderReportEditor(): JSX.Element {
               data-testid="rr-nc-filter"
               aria-pressed={filterActive}
               onClick={() => setOnlyNonCompliant((v) => !v)}
-              title={filterActive ? 'Show the full report again' : 'Hide everything except the Non-Compliant sections'}
+              title={filterActive
+                ? 'Turn the filter off and show every section again'
+                : 'Hide every section except the Non-Compliant ones'}
               className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium ${
                 filterActive
-                  ? 'bg-red-600 text-white hover:bg-red-700'
+                  ? 'border border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200'
                   : 'border border-red-300 text-red-700 hover:bg-red-50'
               }`}
             >
-              <Filter className="h-3.5 w-3.5" />
-              {filterActive ? 'Showing Non-Compliant only — Show all' : 'Show only Non-Compliant'}
+              {filterActive ? <X className="h-3.5 w-3.5" /> : <Filter className="h-3.5 w-3.5" />}
+              {filterActive ? 'Show all sections' : 'Show only Non-Compliant'}
             </button>
           )}
         </div>
@@ -994,6 +1014,32 @@ export function ReaderReportEditor(): JSX.Element {
       {!focusMode && submissionId && (
         <div className="mb-4">
           <RequiredDocuments submissionId={submissionId} canUpload={false} />
+        </div>
+      )}
+
+      {/* Unmistakable filtered-state banner so a reader always knows the report
+          is filtered and how to get back to the full view. */}
+      {filterActive && (
+        <div
+          data-testid="rr-filter-banner"
+          className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
+        >
+          <span className="flex items-center gap-2">
+            <Filter className="h-4 w-4 shrink-0" />
+            <span>
+              <strong>Filtered view</strong> — showing only the {nonCompliantSpecs.length} Non-Compliant
+              section{nonCompliantSpecs.length === 1 ? '' : 's'}. Every other section is hidden (click one in the
+              “Jump to” list to come back here).
+            </span>
+          </span>
+          <button
+            type="button"
+            data-testid="rr-filter-banner-clear"
+            onClick={() => setOnlyNonCompliant(false)}
+            className="inline-flex shrink-0 items-center gap-1 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-red-300 hover:bg-red-100"
+          >
+            <X className="h-3.5 w-3.5" />Show all sections
+          </button>
         </div>
       )}
 
@@ -1027,7 +1073,7 @@ export function ReaderReportEditor(): JSX.Element {
               // The reader's checklist column — rendered BETWEEN the narrative and
               // the comments so the order is: narrative (wide) | checklist | comments.
               const checklistNode = (
-                  <div className="lg:sticky lg:top-4 lg:w-72 lg:shrink-0">
+                  <div className="lg:sticky lg:top-4 lg:w-64 lg:shrink-0">
                     <div data-testid={`rr-check-${r.code}-${sp.specCode}`} className="rounded-lg border-2 border-teal-300 bg-white shadow-sm">
                       <div className="flex items-center justify-between gap-2 rounded-t-md bg-teal-50 px-3 py-2 text-xs font-semibold text-teal-800">
                         <span>Reader’s checklist — {r.code === 'introduction' ? sp.specTitle : `Specification ${r.code}.${sp.specCode}`}</span>
