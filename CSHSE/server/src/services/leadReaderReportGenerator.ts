@@ -69,6 +69,7 @@ function emptyReport() {
     strengthsFromSiteVisit: '',
     nonComplianceText: '',
     requiredCoursesOverride: '',
+    siteVisitorLabels: [] as Array<{ name: string; label: string }>,
     recommendation: '' as '' | 'accredit_no_conditions' | 'conditional' | 'deny' | 'hold',
     conditionalRequirements: '',
     holdExplanation: '',
@@ -81,6 +82,21 @@ function emptyReport() {
 
 type SystemSections = Awaited<ReturnType<typeof buildSystemSections>>;
 type ReportFields = ReturnType<typeof emptyReport>;
+
+/** Resolve the site-visitor roster: the lead reader first (default SV1), then
+ *  each additional reader (SV2, SV3, …), applying any lead-saved label
+ *  overrides keyed by reader name. */
+function siteVisitorRoster(
+  system: SystemSections,
+  report: ReportFields
+): Array<{ name: string; label: string }> {
+  const overrides = Array.isArray(report.siteVisitorLabels) ? report.siteVisitorLabels : [];
+  const names = [system.leadReaderName, ...(system.additionalReaders || [])].filter(Boolean);
+  return names.map((name, idx) => {
+    const o = overrides.find((x) => x && x.name === name && String(x.label || '').trim());
+    return { name, label: o ? String(o.label).trim() : `SV${idx + 1}` };
+  });
+}
 
 /** Load submission + system sections + saved editable fields. */
 async function loadData(
@@ -234,8 +250,55 @@ async function buildDocx(system: SystemSections, report: ReportFields): Promise<
 
   // --- Reader Information ---
   children.push(sectionHeading('Reader Information'));
-  children.push(labelValue('Lead Reader/Site Visitor (SV1)', system.leadReaderName));
-  children.push(labelValue('Additional Readers', (system.additionalReaders || []).join(', ')));
+  const roster = siteVisitorRoster(system, report);
+  if (roster.length) {
+    const [lead, ...additional] = roster;
+    children.push(labelValue(`Lead Reader / Site Visitor (${lead.label})`, lead.name));
+    for (const r of additional) {
+      children.push(labelValue(`Additional Reader / Site Visitor (${r.label})`, r.name));
+    }
+  } else {
+    children.push(labelValue('Lead Reader / Site Visitor (SV1)', system.leadReaderName));
+    children.push(labelValue('Additional Readers', (system.additionalReaders || []).join(', ')));
+  }
+
+  // --- Reader Consensus on Non-Compliance (ranked by how many readers flagged) ---
+  const consensus = system.consensus;
+  if (consensus && consensus.standards.length) {
+    children.push(sectionHeading('Reader Consensus on Non-Compliance'));
+    children.push(
+      new Paragraph({
+        spacing: { after: 60 },
+        children: [
+          new TextRun({
+            text: `${consensus.completedReaders} of ${consensus.totalReaders} reader(s) have completed their review. Standards are ranked by how many readers independently marked them non-compliant.`,
+            italics: true,
+            size: 18,
+          }),
+        ],
+      })
+    );
+    for (const s of consensus.standards) {
+      children.push(
+        new Paragraph({
+          spacing: { before: 40 },
+          children: [
+            new TextRun({ text: `${s.label}: `, bold: true }),
+            new TextRun({ text: `${s.nonCompliantCount} of ${consensus.totalReaders} readers non-compliant` }),
+            new TextRun({ text: s.readerNames.length ? ` — ${s.readerNames.join(', ')}` : '', italics: true }),
+          ],
+        })
+      );
+      if (s.specs.length) {
+        children.push(
+          new Paragraph({
+            spacing: { after: 20 },
+            children: [new TextRun({ text: `Specifications: ${s.specs.join(', ')}`, size: 18, color: '808080' })],
+          })
+        );
+      }
+    }
+  }
 
   // --- Required Courses ---
   children.push(sectionHeading('List of Required Courses used to meet compliance of Standards'));
@@ -412,8 +475,42 @@ function buildPdf(system: SystemSections, report: ReportFields): Promise<Buffer>
 
     // Reader Information
     heading('Reader Information');
-    lv('Lead Reader/Site Visitor (SV1)', system.leadReaderName);
-    lv('Additional Readers', (system.additionalReaders || []).join(', '));
+    const roster = siteVisitorRoster(system, report);
+    if (roster.length) {
+      const [lead, ...additional] = roster;
+      lv(`Lead Reader / Site Visitor (${lead.label})`, lead.name);
+      for (const r of additional) lv(`Additional Reader / Site Visitor (${r.label})`, r.name);
+    } else {
+      lv('Lead Reader / Site Visitor (SV1)', system.leadReaderName);
+      lv('Additional Readers', (system.additionalReaders || []).join(', '));
+    }
+
+    // Reader Consensus on Non-Compliance
+    const consensus = system.consensus;
+    if (consensus && consensus.standards.length) {
+      heading('Reader Consensus on Non-Compliance');
+      doc
+        .fontSize(9)
+        .fillColor('#374151')
+        .font('Helvetica-Oblique')
+        .text(
+          `${consensus.completedReaders} of ${consensus.totalReaders} reader(s) have completed their review. Standards are ranked by how many readers independently marked them non-compliant.`
+        );
+      doc.font('Helvetica');
+      for (const s of consensus.standards) {
+        doc.fontSize(10).fillColor('#111827');
+        doc.font('Helvetica-Bold').text(`${s.label}: `, { continued: true });
+        doc
+          .font('Helvetica')
+          .text(
+            `${s.nonCompliantCount} of ${consensus.totalReaders} readers non-compliant` +
+              (s.readerNames.length ? ` — ${s.readerNames.join(', ')}` : '')
+          );
+        if (s.specs.length) {
+          doc.fontSize(8).fillColor('#808080').text(`Specifications: ${s.specs.join(', ')}`);
+        }
+      }
+    }
 
     // Required Courses
     heading('List of Required Courses used to meet compliance of Standards');
