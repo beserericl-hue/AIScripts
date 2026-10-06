@@ -8,6 +8,7 @@ import { SupportingEvidence } from '../models/SupportingEvidence';
 import { SiteVisit } from '../models/SiteVisit';
 import { LeadReaderReport } from '../models/LeadReaderReport';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { buildReaderConsensus } from '../services/readerConsensus';
 import {
   generateLeadReaderReportDocx,
   generateLeadReaderReportPdf,
@@ -302,4 +303,30 @@ export async function downloadLeadReaderReport(req: AuthenticatedRequest, res: R
     console.error('Download lead reader report error:', error);
     res.status(500).json({ error: 'Failed to generate the Lead Reader Report.' });
   }
+}
+
+/**
+ * GET /api/submissions/:submissionId/site-visit-review
+ * Site-Visit Review consensus — per standard, which readers marked it
+ * non-compliant vs compliant (who agreed / who didn't). Lead reader / admin
+ * only (readers must never see other readers' verdicts), gated the same way as
+ * the Lead Reader Report. Powers the "Site-Visit Review" popup on the Reader
+ * Report; it is a review tool and is NOT printed on any report.
+ */
+export async function getSiteVisitReview(req: AuthenticatedRequest, res: Response): Promise<void> {
+  if (!isLeadOrAdmin(req)) {
+    res.status(403).json({ error: 'Only a lead reader or admin may open the Site-Visit Review.' });
+    return;
+  }
+  const submission = await requireSubmissionAccess(req as any, res, req.params.submissionId);
+  if (!submission) return;
+
+  const assignments: any[] = await Assignment.find({ submissionId: submission._id, status: 'active' })
+    .select('userName userId')
+    .lean();
+  const nameById = new Map<string, string>();
+  for (const a of assignments) if (a.userId) nameById.set(String(a.userId), a.userName || '');
+
+  const consensus = await buildReaderConsensus(submission._id, nameById);
+  res.json(consensus);
 }
