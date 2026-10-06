@@ -40,12 +40,11 @@ export interface ILeadReaderReport extends Document {
   // --- Required courses override (auto-generated from the matrix by default) ---
   requiredCoursesOverride: string;    // when non-empty, replaces the auto list
 
-  // --- Site-visitor labels (SV1 / SV2 / …) keyed by reader display name. The
-  // lead reader assigns each reader of the site their site-visitor designation;
-  // these labels appear on the Reader Information section of the downloaded
-  // report. When a reader has no saved label the report defaults the lead reader
-  // to SV1 and each additional reader to SV2, SV3, … in order. ---
-  siteVisitorLabels: Array<{ name: string; label: string }>;
+  // --- Site visitors. There are exactly two: the lead reader is always SV1,
+  // and the lead reader designates ONE of the additional readers as SV2. This
+  // stores the display name of that second site visitor (empty = none chosen);
+  // it appears on the Reader Information section of the downloaded report. ---
+  secondSiteVisitorName: string;
 
   // --- Recommendations (lead-reader decision) ---
   recommendation: LeadReaderRecommendation | '';
@@ -87,15 +86,7 @@ const LeadReaderReportSchema = new Schema<ILeadReaderReport>(
     strengthsFromSiteVisit: { type: String, default: '' },
     nonComplianceText: { type: String, default: '' },
     requiredCoursesOverride: { type: String, default: '' },
-    siteVisitorLabels: {
-      type: [
-        new Schema<{ name: string; label: string }>(
-          { name: { type: String, default: '' }, label: { type: String, default: '' } },
-          { _id: false }
-        ),
-      ],
-      default: [],
-    },
+    secondSiteVisitorName: { type: String, default: '' },
     recommendation: {
       type: String,
       enum: ['accredit_no_conditions', 'conditional', 'deny', 'hold', ''],
