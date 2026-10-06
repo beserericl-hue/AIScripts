@@ -51,19 +51,6 @@ export interface CompilationRow {
   excludedReason?: string;
 }
 
-export interface ReaderConsensus {
-  totalReaders: number;
-  completedReaders: number;
-  readers: Array<{ name: string; completed: boolean; nonCompliantStandards: string[] }>;
-  standards: Array<{
-    standardCode: string;
-    label: string;
-    nonCompliantCount: number;
-    readerNames: string[];
-    specs: string[];
-  }>;
-}
-
 export interface CompilationPayload {
   submissionId: string;
   institutionName: string;
@@ -72,61 +59,6 @@ export interface CompilationPayload {
   status: string;
   readers: CompilationReader[];
   rows: CompilationRow[];
-  consensus?: ReaderConsensus;
-}
-
-/**
- * Reader consensus on non-compliance — ranks each standard by how many readers
- * independently marked it non-compliant (3 of 3 → 2 of 3 → 1 of 3). A working
- * tool for the lead reader to review here and address at the site visit (it is
- * deliberately NOT part of the board-facing Lead Reader Report).
- */
-function ConsensusPanel({ consensus }: { consensus: ReaderConsensus }): JSX.Element | null {
-  if (!consensus || consensus.standards.length === 0) return null;
-  const total = consensus.totalReaders || 1;
-  return (
-    <div
-      data-testid="compilation-consensus"
-      className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-    >
-      <h2 className="text-base font-semibold text-slate-900">Reader Consensus on Non-Compliance</h2>
-      <p className="mb-3 mt-1 text-xs text-slate-500">
-        {consensus.completedReaders} of {consensus.totalReaders} reader(s) completed · ranked by how
-        many readers independently marked each standard non-compliant. Review here and address at the
-        site visit.
-      </p>
-      <ul className="space-y-1.5">
-        {consensus.standards.map((s) => {
-          const tone =
-            s.nonCompliantCount >= consensus.totalReaders
-              ? 'bg-red-100 text-red-800 border-red-200'
-              : s.nonCompliantCount / total >= 0.5
-              ? 'bg-amber-100 text-amber-800 border-amber-200'
-              : 'bg-yellow-50 text-yellow-800 border-yellow-200';
-          return (
-            <li
-              key={s.standardCode}
-              data-testid={`compilation-consensus-std-${s.standardCode}`}
-              className="flex items-start gap-3 rounded border border-slate-100 px-2 py-1.5"
-            >
-              <span className={`mt-0.5 shrink-0 rounded border px-2 py-0.5 text-xs font-bold ${tone}`}>
-                {s.nonCompliantCount}/{consensus.totalReaders}
-              </span>
-              <div className="min-w-0">
-                <span className="text-sm font-semibold text-slate-800">{s.label}</span>
-                {s.readerNames.length > 0 && (
-                  <span className="ml-2 text-xs text-slate-500">{s.readerNames.join(', ')}</span>
-                )}
-                {s.specs.length > 0 && (
-                  <div className="text-xs text-slate-400">Specs: {s.specs.join(', ')}</div>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
 }
 
 export type SuggestionsExportMode = 'internal' | 'pc_facing';
@@ -464,7 +396,6 @@ export function CompilationTabView({
           </div>
           <ReaderReportsLink submissionId={data.submissionId} />
         </header>
-        {data.consensus && <ConsensusPanel consensus={data.consensus} />}
         {lockedPhase && (
           <AssignmentChangeRequestBox
             requestState={requestState}
@@ -496,8 +427,6 @@ export function CompilationTabView({
         </div>
         <ReaderReportsLink submissionId={data.submissionId} />
       </header>
-
-      {data.consensus && <ConsensusPanel consensus={data.consensus} />}
 
       {lockedPhase && (
         <AssignmentChangeRequestBox

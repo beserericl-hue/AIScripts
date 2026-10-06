@@ -8,7 +8,6 @@ import { User } from '../models/User';
 import { SiteVisitChecklistItem } from '../models/SiteVisitChecklistItem';
 import { recordAuditEvent } from '../services/auditLog';
 import { notify } from '../services/notificationService';
-import { buildReaderConsensus } from '../services/readerConsensus';
 import { generateSuggestionsDocx, SuggestionsMode } from '../services/suggestionsDocx';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
@@ -224,15 +223,6 @@ export const getCompilation = async (req: AuthenticatedRequest, res: Response) =
       return a.specCode.localeCompare(b.specCode, undefined, { numeric: true });
     });
 
-    // Reader consensus on non-compliance (ranked) — the lead reader's tool to
-    // review which standards the readers most agree are out of compliance and
-    // address at the site visit. Reads each reader's own ReaderReport marks
-    // (independent of the 0-3 Scores above). Seed names from the compilation's
-    // reader list; any missing reviewer is resolved from User.
-    const consensusNames = new Map<string, string>();
-    for (const r of readers.values()) consensusNames.set(r.id, r.name);
-    const consensus = await buildReaderConsensus(submission._id, consensusNames);
-
     return res.json({
       submissionId: String(submission._id),
       institutionName: submission.institutionName,
@@ -240,8 +230,7 @@ export const getCompilation = async (req: AuthenticatedRequest, res: Response) =
       programLevel: submission.programLevel,
       status: submission.status,
       readers: Array.from(readers.values()).sort((a, b) => a.name.localeCompare(b.name)),
-      rows,
-      consensus
+      rows
     });
   } catch (error) {
     console.error('Get compilation error:', error);
