@@ -23,19 +23,6 @@ type Recommendation =
   | 'hold'
   | '';
 
-interface ReaderConsensus {
-  totalReaders: number;
-  completedReaders: number;
-  readers: Array<{ name: string; completed: boolean; nonCompliantStandards: string[] }>;
-  standards: Array<{
-    standardCode: string;
-    label: string;
-    nonCompliantCount: number;
-    readerNames: string[];
-    specs: string[];
-  }>;
-}
-
 interface LeadReaderReportSystem {
   institutionName: string;
   programName: string;
@@ -48,7 +35,6 @@ interface LeadReaderReportSystem {
   generalEducationCourses: string[];
   programCourses: string[];
   nonCompliance: Array<{ spec: string; comments: string[] }>;
-  consensus?: ReaderConsensus;
 }
 
 interface LeadReaderReportFields {
@@ -64,7 +50,7 @@ interface LeadReaderReportFields {
   strengthsFromSiteVisit: string;
   nonComplianceText: string;
   requiredCoursesOverride: string;
-  siteVisitorLabels: Array<{ name: string; label: string }>;
+  secondSiteVisitorName: string;
   recommendation: Recommendation;
   conditionalRequirements: string;
   holdExplanation: string;
@@ -95,7 +81,7 @@ const emptyFields = (defaults?: {
   strengthsFromSiteVisit: '',
   nonComplianceText: '',
   requiredCoursesOverride: '',
-  siteVisitorLabels: [],
+  secondSiteVisitorName: '',
   recommendation: '',
   conditionalRequirements: '',
   holdExplanation: '',
@@ -203,17 +189,6 @@ export function LeadReaderReportPage({ submissionId }: { submissionId: string })
     setFields((f) => ({ ...f, [key]: value }));
   }, []);
 
-  // Upsert one reader's site-visitor label (SV1/SV2/…) keyed by name.
-  const setSvLabel = useCallback((name: string, label: string) => {
-    dirtyRef.current = true;
-    setFields((f) => {
-      const list = Array.isArray(f.siteVisitorLabels) ? [...f.siteVisitorLabels] : [];
-      const i = list.findIndex((x) => x.name === name);
-      if (i >= 0) list[i] = { name, label };
-      else list.push({ name, label });
-      return { ...f, siteVisitorLabels: list };
-    });
-  }, []);
 
   // Debounced autosave (2s) — mirrors the reader-report editor's dirty-flag
   // autosave. The explicit Save button below flushes immediately.
@@ -307,15 +282,6 @@ export function LeadReaderReportPage({ submissionId }: { submissionId: string })
     );
   }
   const sys = system;
-
-  // Site-visitor roster: lead reader first (default SV1), then additional
-  // readers (SV2, SV3, …). The lead can relabel any of them; the label shows on
-  // the downloaded report.
-  const svRoster = [sys.leadReaderName, ...sys.additionalReaders].filter(Boolean);
-  const svLabelFor = (name: string, idx: number): string => {
-    const o = (fields.siteVisitorLabels || []).find((x) => x.name === name && x.label.trim());
-    return o ? o.label : `SV${idx + 1}`;
-  };
 
   return (
     <div
@@ -522,97 +488,52 @@ export function LeadReaderReportPage({ submissionId }: { submissionId: string })
         {/* 2. Reader Information */}
         <Section n={2} title="Reader Information">
           <p className="text-xs text-slate-500">
-            Assign each reader of this site their site-visitor label (SV1, SV2, …). These labels
-            appear on the downloaded report. By default the lead reader is SV1 and each additional
-            reader is SV2, SV3, …
+            There are two site visitors. The lead reader is always SV1. Choose which additional
+            reader is the second site visitor (SV2) — both appear on the downloaded report.
           </p>
-          {svRoster.length > 0 ? (
-            <div className="space-y-2">
-              {svRoster.map((name, idx) => (
-                <div
-                  key={`${name}-${idx}`}
-                  data-testid={`lrr-reader-row-${idx}`}
-                  className="flex items-center gap-3"
-                >
-                  <div className="flex-1">
-                    <span className="text-sm font-medium text-slate-800">{name}</span>
-                    <span className="ml-2 text-xs text-slate-400">
-                      {idx === 0 ? 'Lead Reader' : 'Additional reader'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <label className="text-xs text-slate-500" htmlFor={`lrr-sv-label-${idx}`}>
-                      Label
-                    </label>
-                    <input
-                      id={`lrr-sv-label-${idx}`}
-                      data-testid={`lrr-sv-label-${idx}`}
-                      type="text"
-                      value={svLabelFor(name, idx)}
-                      onChange={(e) => setSvLabel(name, e.target.value)}
-                      className="w-20 rounded border border-slate-300 px-2 py-1 text-sm text-slate-800 focus:outline-none focus:ring-1 focus:ring-teal-300"
-                      aria-label={`Site-visitor label for ${name}`}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm italic text-slate-400">No readers assigned yet.</p>
-          )}
-        </Section>
-
-        {/* Reader consensus on non-compliance (read-only, ranked) */}
-        {sys.consensus && sys.consensus.standards.length > 0 && (
-          <div
-            data-testid="lrr-consensus"
-            className="rounded-lg border border-slate-200 bg-white p-4"
-          >
-            <h2 className="text-base font-semibold text-slate-900">
-              Reader Consensus on Non-Compliance
-            </h2>
-            <p className="mb-3 mt-1 text-xs text-slate-500">
-              {sys.consensus.completedReaders} of {sys.consensus.totalReaders} reader(s) completed ·
-              ranked by how many readers independently marked each standard non-compliant.
-            </p>
-            <ul className="space-y-1.5">
-              {sys.consensus.standards.map((s) => {
-                const total = sys.consensus!.totalReaders || 1;
-                const ratio = s.nonCompliantCount / total;
-                const tone =
-                  s.nonCompliantCount >= sys.consensus!.totalReaders
-                    ? 'bg-red-100 text-red-800 border-red-200'
-                    : ratio >= 0.5
-                    ? 'bg-amber-100 text-amber-800 border-amber-200'
-                    : 'bg-yellow-50 text-yellow-800 border-yellow-200';
-                return (
-                  <li
-                    key={s.standardCode}
-                    data-testid={`lrr-consensus-std-${s.standardCode}`}
-                    className="flex items-start gap-3 rounded border border-slate-100 px-2 py-1.5"
-                  >
-                    <span
-                      className={`mt-0.5 shrink-0 rounded border px-2 py-0.5 text-xs font-bold ${tone}`}
-                    >
-                      {s.nonCompliantCount}/{sys.consensus!.totalReaders}
-                    </span>
-                    <div className="min-w-0">
-                      <span className="text-sm font-semibold text-slate-800">{s.label}</span>
-                      {s.readerNames.length > 0 && (
-                        <span className="ml-2 text-xs text-slate-500">
-                          {s.readerNames.join(', ')}
-                        </span>
-                      )}
-                      {s.specs.length > 0 && (
-                        <div className="text-xs text-slate-400">Specs: {s.specs.join(', ')}</div>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+          <div>
+            <span className={labelCls}>Lead Reader / Site Visitor (SV1)</span>
+            <p className="text-sm text-slate-800">{sys.leadReaderName || '—'}</p>
           </div>
-        )}
+          <div>
+            <span className={labelCls}>Second Site Visitor (SV2)</span>
+            {sys.additionalReaders.length > 0 ? (
+              <div className="space-y-1.5" role="radiogroup" aria-label="Second site visitor">
+                {sys.additionalReaders.map((name, idx) => (
+                  <label
+                    key={name}
+                    data-testid={`lrr-sv2-option-${idx}`}
+                    className="flex cursor-pointer items-center gap-2 text-sm text-slate-800"
+                  >
+                    <input
+                      type="radio"
+                      name="lrr-sv2"
+                      className="h-4 w-4 text-teal-600"
+                      checked={fields.secondSiteVisitorName === name}
+                      onChange={() => setField('secondSiteVisitorName', name)}
+                    />
+                    {name}
+                  </label>
+                ))}
+                <label
+                  data-testid="lrr-sv2-none"
+                  className="flex cursor-pointer items-center gap-2 text-sm text-slate-500"
+                >
+                  <input
+                    type="radio"
+                    name="lrr-sv2"
+                    className="h-4 w-4 text-teal-600"
+                    checked={!fields.secondSiteVisitorName}
+                    onChange={() => setField('secondSiteVisitorName', '')}
+                  />
+                  No second site visitor
+                </label>
+              </div>
+            ) : (
+              <p className="text-sm italic text-slate-400">No additional readers assigned yet.</p>
+            )}
+          </div>
+        </Section>
 
         {/* 3. List of Required Courses used to meet compliance of Standards */}
         <Section n={3} title="List of Required Courses used to meet compliance of Standards">

@@ -7,7 +7,6 @@ import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { SiteVisit } from '../models/SiteVisit';
 import { LeadReaderReport } from '../models/LeadReaderReport';
-import { ReaderReport } from '../models/ReaderReport';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 import {
   generateLeadReaderReportDocx,
@@ -128,93 +127,6 @@ async function deriveCoursesFromSyllabi(submissionId: any): Promise<{ general: s
   return { general, program };
 }
 
-/** Per-standard non-compliance consensus across every reader who has evaluated.
- *  Uses each reader's OWN mark (the independent reader vote — not the lead
- *  reader's override layer). For each numbered standard it counts how many
- *  readers marked at least one specification in it non-compliant, and ranks the
- *  standards most-flagged first, so the lead reader can see where the readers
- *  most agree a program is out of compliance (3 of 3 → 2 of 3 → 1 of 3). */
-async function buildReaderConsensus(
-  submissionId: any,
-  nameById: Map<string, string>
-): Promise<{
-  totalReaders: number;
-  completedReaders: number;
-  readers: Array<{ name: string; completed: boolean; nonCompliantStandards: string[] }>;
-  standards: Array<{
-    standardCode: string;
-    label: string;
-    nonCompliantCount: number;
-    readerNames: string[];
-    specs: string[];
-  }>;
-}> {
-  const reports: any[] = await ReaderReport.find({ submissionId })
-    .select('reviewerId rows completedAt')
-    .lean();
-
-  // Resolve any reviewer not already named by an active assignment (e.g. a
-  // reader whose assignment was later changed) from the User collection.
-  const missing = reports
-    .map((r) => String(r.reviewerId))
-    .filter((id) => id && !nameById.has(id));
-  if (missing.length) {
-    const users: any[] = await User.find({ _id: { $in: missing } })
-      .select('firstName lastName')
-      .lean();
-    for (const u of users) {
-      nameById.set(String(u._id), `${u.firstName || ''} ${u.lastName || ''}`.trim() || 'Reader');
-    }
-  }
-
-  const readers: Array<{ name: string; completed: boolean; nonCompliantStandards: string[] }> = [];
-  const tally = new Map<string, { names: Set<string>; specs: Set<string> }>();
-  for (const rep of reports) {
-    const rows: any[] = rep.rows || [];
-    // A reader only counts once they have actually evaluated (≥1 mark set).
-    const hasMarks = rows.some((r) => r.mark === 'compliant' || r.mark === 'noncompliant');
-    if (!hasMarks) continue;
-    const name = nameById.get(String(rep.reviewerId)) || 'Reader';
-    const ncStds = new Set<string>();
-    for (const r of rows) {
-      if (r.mark !== 'noncompliant') continue;
-      const std = String(r.standardCode || '');
-      if (!/^\d+$/.test(std)) continue; // numbered standards only (not "introduction")
-      ncStds.add(std);
-      if (!tally.has(std)) tally.set(std, { names: new Set(), specs: new Set() });
-      const t = tally.get(std)!;
-      t.names.add(name);
-      if (r.specCode) t.specs.add(`${std}${r.specCode}`);
-    }
-    readers.push({
-      name,
-      completed: !!rep.completedAt,
-      nonCompliantStandards: [...ncStds].sort((a, b) => Number(a) - Number(b)),
-    });
-  }
-
-  const standards = [...tally.entries()]
-    .map(([standardCode, t]) => ({
-      standardCode,
-      label: `Standard ${standardCode}`,
-      nonCompliantCount: t.names.size,
-      readerNames: [...t.names],
-      specs: [...t.specs].sort(),
-    }))
-    .sort(
-      (a, b) =>
-        b.nonCompliantCount - a.nonCompliantCount ||
-        Number(a.standardCode) - Number(b.standardCode)
-    );
-
-  return {
-    totalReaders: readers.length,
-    completedReaders: readers.filter((r) => r.completed).length,
-    readers: readers.sort((a, b) => a.name.localeCompare(b.name)),
-    standards,
-  };
-}
-
 /** Build the system-generated sections from live submission data. */
 export async function buildSystemSections(submission: any) {
   const submissionId = submission._id;
@@ -237,14 +149,6 @@ export async function buildSystemSections(submission: any) {
     .filter((a) => a.assignmentType === 'reader')
     .map((a) => a.userName)
     .filter(Boolean);
-
-  // Reader-consensus tally (how many readers marked each standard non-compliant,
-  // ranked). Seed the reviewer-name map from the active assignments.
-  const nameById = new Map<string, string>();
-  for (const a of assignments) {
-    if (a.userId) nameById.set(String(a.userId), a.userName || '');
-  }
-  const consensus = await buildReaderConsensus(submissionId, nameById);
 
   // Required courses from the curriculum matrices: non-human-services → General
   // Education; human-services → Program courses.
@@ -316,7 +220,6 @@ export async function buildSystemSections(submission: any) {
     generalEducationCourses,
     programCourses,
     nonCompliance,
-    consensus,
   };
 }
 
@@ -340,7 +243,7 @@ const EDITABLE_FIELDS = [
   'vpaRecipients', 'contactInfo', 'accreditationStatus', 'initialAccreditationDate',
   'lastReaccreditationDate', 'siteVisitDate', 'noSiteVisitRequired', 'programDescription',
   'strengthsFromSelfStudy', 'strengthsFromSiteVisit', 'nonComplianceText',
-  'requiredCoursesOverride', 'siteVisitorLabels', 'recommendation', 'conditionalRequirements',
+  'requiredCoursesOverride', 'secondSiteVisitorName', 'recommendation', 'conditionalRequirements',
   'holdExplanation', 'additionalRecommendations', 'nextSelfStudySuggestions', 'submittedByName',
   'submissionDate',
 ] as const;
