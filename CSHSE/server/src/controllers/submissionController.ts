@@ -54,6 +54,8 @@ interface AuthenticatedRequest extends Request {
     institutionId?: string;
     // Set when a superuser is impersonating; scoping uses impersonatedUserId.
     impersonation?: { impersonatedUserId?: string; impersonatedRole?: string };
+    // Multi-role users — the validated role/institution they chose to act as.
+    activeContext?: { role: string; institutionId: string; institutionName?: string };
   };
 }
 
@@ -1613,11 +1615,22 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
       //   (b) every submission they hold an ACTIVE assignment to, restricted to
       //       reader-visible statuses (CR-007 assigned-only; the explicit
       //       `?status=` is INTERSECTED with the allow-list, never widening it).
-      const pcInsts = institutionIdsWithRole(req.user, 'program_coordinator')
+      // Multi-role scoping. An ACTIVE CONTEXT (the role the user chose to act
+      // as) narrows the list to that one role at that one institution. An
+      // explicit ?institutionId= is INTERSECTED with the user's own scopes —
+      // never ignored — so a PC dashboard asking for its own institution can't
+      // be handed another institution's study the user only reviews.
+      const active = req.user?.activeContext;
+      const wantInst = institutionId ? String(institutionId) : (active ? active.institutionId : null);
+      const includePc = !active || active.role === 'program_coordinator';
+      const includeAssigned = !active || active.role !== 'program_coordinator';
+      const pcInsts = (includePc ? institutionIdsWithRole(req.user, 'program_coordinator') : [])
+        .filter((id) => !wantInst || String(id) === wantInst)
         .map((id) => new mongoose.Types.ObjectId(id));
       const effectiveReaderId = req.user?.impersonation?.impersonatedUserId || req.user?.id;
-      const assignments = await Assignment.find({ userId: effectiveReaderId, status: 'active' })
-        .select('submissionId').lean();
+      const assignments = includeAssigned
+        ? await Assignment.find({ userId: effectiveReaderId, status: 'active' }).select('submissionId').lean()
+        : [];
       const assignedIds = assignments.map((a) => a.submissionId);
 
       const or: any[] = [];
@@ -1630,7 +1643,9 @@ export const listSubmissions = async (req: AuthenticatedRequest, res: Response) 
         const allowed = requestedStatuses
           ? requestedStatuses.filter((s) => READER_VISIBLE_STATUSES.includes(s))
           : READER_VISIBLE_STATUSES;
-        or.push({ _id: { $in: assignedIds }, status: { $in: allowed.length ? allowed : ['__forbidden__'] } });
+        const clause: any = { _id: { $in: assignedIds }, status: { $in: allowed.length ? allowed : ['__forbidden__'] } };
+        if (wantInst && mongoose.Types.ObjectId.isValid(wantInst)) clause.institutionId = new mongoose.Types.ObjectId(wantInst);
+        or.push(clause);
       }
 
       if (or.length === 0) {

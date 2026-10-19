@@ -11,6 +11,9 @@ interface UserOption {
   role: 'admin' | 'program_coordinator' | 'lead_reader' | 'reader';
   institutionId?: string;
   institutionName?: string;
+  // Multi-role users — carried into the impersonated identity so the header
+  // role switcher also works while a superuser views as them.
+  roleAssignments?: Array<{ role: string; institutionId: string; institutionName?: string }>;
 }
 
 const roles = [
@@ -125,6 +128,11 @@ export default function ImpersonationSelector() {
       role: selectedUser.role,
       institutionId: selectedUser.institutionId,
       institutionName: selectedUser.institutionName,
+      roleAssignments: (selectedUser.roleAssignments || []).map((a) => ({
+        role: String(a.role),
+        institutionId: String((a as any).institutionId?._id || a.institutionId),
+        institutionName: a.institutionName,
+      })),
     };
     startImpersonation(selectedUser.role, userObj);
     navigate('/dashboard');

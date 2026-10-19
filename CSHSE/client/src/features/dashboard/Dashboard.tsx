@@ -442,11 +442,20 @@ export function Dashboard() {
   // 2). PC chips open the Self-Study editor; reviewer chips open the reader
   // queue (this dashboard, reader view).
   const renderRolesCard = () => {
-    const ras = effectiveUser?.roleAssignments || [];
+    const ras = useAuthStore.getState().getRoleAssignments();
     if (ras.length < 2) return null;
     const roleLabel = (r: string) =>
       r === 'program_coordinator' ? 'Program Coordinator' : r === 'lead_reader' ? 'Lead Reader' : 'Reader';
-    const go = (r: string) => navigate(r === 'program_coordinator' ? '/self-study' : '/dashboard');
+    const isActive = (a: { role: string; institutionId: string }) =>
+      a.role === effectiveUser?.role && String(a.institutionId) === String(effectiveUser?.institutionId);
+    // Choosing a chip SWITCHES the active role (same as the header switcher),
+    // then lands on that role's home — not just a navigation.
+    const go = (a: { role: string; institutionId: string; institutionName?: string }) => {
+      if (!isActive(a)) {
+        useAuthStore.getState().setActiveContext({ role: a.role, institutionId: String(a.institutionId), institutionName: a.institutionName });
+      }
+      navigate(a.role === 'program_coordinator' ? '/self-study' : '/dashboard');
+    };
     return (
       <div className="max-w-7xl mx-auto px-6 pt-6">
         <div className="rounded-lg border border-gray-200 bg-white p-4">
@@ -455,9 +464,11 @@ export function Dashboard() {
             {ras.map((a, i) => (
               <button
                 key={i}
-                onClick={() => go(a.role)}
-                title={`Open your ${roleLabel(a.role)} work at ${a.institutionName || a.institutionId}`}
-                className="inline-flex items-center gap-1.5 rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-sm text-teal-800 hover:bg-teal-100"
+                onClick={() => go(a)}
+                data-testid={`role-chip-${i}`}
+                aria-pressed={isActive(a)}
+                title={`Work as ${roleLabel(a.role)} at ${a.institutionName || a.institutionId}`}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-sm ${isActive(a) ? 'border-teal-600 bg-teal-600 text-white' : 'border-teal-200 bg-teal-50 text-teal-800 hover:bg-teal-100'}`}
               >
                 <span className="font-medium">{roleLabel(a.role)}</span>
                 <span className="text-teal-400">·</span>
