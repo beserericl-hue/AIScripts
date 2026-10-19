@@ -58,8 +58,8 @@ export default function RoleSwitcher() {
         className="user-role-badge inline-flex items-center gap-1.5 max-w-[22rem] cursor-pointer hover:bg-gray-200"
         data-testid="role-switcher-button"
       >
-        <span className="font-semibold">{ROLE_LABEL[current.role] || current.role.replace('_', ' ')}</span>
-        {currentName && <span className="truncate text-gray-500">· {currentName}</span>}
+        <span className="whitespace-nowrap font-semibold">{ROLE_LABEL[current.role] || current.role.replace('_', ' ')}</span>
+        {currentName && <span className="min-w-0 truncate text-gray-500">· {currentName}</span>}
         <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" />
         </svg>
