@@ -31,6 +31,12 @@ api.interceptors.request.use((config) => {
           }
         }
       }
+      // Multi-role users — the role/institution chosen in the header switcher.
+      // The server validates it against the user's own assignments.
+      if (state?.activeContext?.role && state.activeContext.institutionId) {
+        config.headers['X-Active-Role'] = state.activeContext.role;
+        config.headers['X-Active-Institution-Id'] = String(state.activeContext.institutionId);
+      }
     } catch {
       // Ignore parse errors
     }

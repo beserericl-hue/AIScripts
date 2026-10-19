@@ -11,6 +11,7 @@ import { Toast } from './Toast';
 import { HintLayer } from '../features/tour/HintLayer';
 import { TourRunner } from '../features/tour/TourRunner';
 import { TourAutoStart } from '../features/tour/TourAutoStart';
+import RoleSwitcher from './RoleSwitcher';
 
 // Simple icon components
 const HomeIcon = () => (
@@ -211,9 +212,10 @@ export default function Layout() {
     ? `${effectiveUser.firstName} ${effectiveUser.lastName}`
     : `${user?.firstName} ${user?.lastName}`;
 
-  const displayRole = impersonation.isImpersonating
-    ? impersonation.impersonatedRole
-    : user?.role;
+  // The role actually in effect (impersonated role, or a multi-role user's
+  // chosen active role) — not the raw primary role on the user record.
+  const displayRole = effectiveRole;
+  const hasRoleSwitcher = !isCurrentlySuperuser && useAuthStore.getState().getRoleAssignments().length >= 2;
 
   // Full-width routes (no max-w-7xl cap): the self-study editor AND the reader
   // report — both need the room for a wide narrative + checklist + comments.
@@ -316,9 +318,13 @@ export default function Layout() {
               <span className="user-name hidden sm:block">
                 {displayName}
               </span>
-              <span className={`user-role-badge ${isCurrentlySuperuser ? 'bg-purple-100 text-purple-700' : ''}`}>
-                {isCurrentlySuperuser ? 'Superuser' : displayRole?.replace('_', ' ')}
-              </span>
+              {hasRoleSwitcher ? (
+                <RoleSwitcher />
+              ) : (
+                <span className={`user-role-badge ${isCurrentlySuperuser ? 'bg-purple-100 text-purple-700' : ''}`}>
+                  {isCurrentlySuperuser ? 'Superuser' : displayRole?.replace('_', ' ')}
+                </span>
+              )}
               {/* Switch Role button for superusers not currently impersonating */}
               {user?.isSuperuser && !impersonation.isImpersonating && (
                 <button

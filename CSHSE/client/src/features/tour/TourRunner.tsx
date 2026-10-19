@@ -56,7 +56,7 @@ export function TourRunner(): JSX.Element | null {
   // Resolve viewer role for step filtering. Superuser sees every step.
   const role: Role = isSuperuser()
     ? 'superuser'
-    : ((user?.role as Role | undefined) ?? 'program_coordinator');
+    : ((useAuthStore.getState().getEffectiveRole() as Role | undefined) || (user?.role as Role | undefined) || 'program_coordinator');
 
   // Steps are resolved by a settle loop (below), NOT a one-shot snapshot.
   // Several screens — most notably the Drafts → Review surface — mount their

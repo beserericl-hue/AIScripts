@@ -26,6 +26,24 @@ interface User {
   preferences?: UserPreferences;
 }
 
+// Multi-role users — the role at an institution the user is currently acting
+// as (e.g. Reader at AACC vs Program Coordinator at Guttman). Chosen from the
+// header role switcher; validated against the user's own roleAssignments here
+// AND on the server (X-Active-Role / X-Active-Institution-Id), so it can only
+// ever select a role the user already holds.
+export interface ActiveContext {
+  role: string;
+  institutionId: string;
+  institutionName?: string;
+}
+
+type RoleAssignment = { role: string; institutionId: string; institutionName?: string };
+
+function holds(u: User | null | undefined, ctx: ActiveContext | null | undefined): boolean {
+  if (!u || !ctx) return false;
+  return (u.roleAssignments || []).some((a) => a.role === ctx.role && String(a.institutionId) === String(ctx.institutionId));
+}
+
 interface ImpersonationState {
   isImpersonating: boolean;
   originalUser: User | null;
@@ -40,6 +58,10 @@ interface AuthState {
   isLoading: boolean;
   impersonation: ImpersonationState;
   needsImpersonationSelection: boolean;
+  activeContext: ActiveContext | null;
+  setActiveContext: (ctx: ActiveContext | null) => void;
+  getRoleAssignments: () => RoleAssignment[];
+  getActiveContext: () => ActiveContext | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
@@ -71,6 +93,33 @@ export const useAuthStore = create<AuthState>()(
         impersonatedUser: undefined,
       },
       needsImpersonationSelection: false,
+      activeContext: null,
+
+      // The identity whose roles the switcher offers: the impersonated user
+      // while a superuser views as someone, otherwise the signed-in user.
+      // Role-only impersonation has no specific identity → no switcher.
+      getRoleAssignments: () => {
+        const { user, impersonation } = get();
+        if (impersonation.isImpersonating) return impersonation.impersonatedUser?.roleAssignments || [];
+        if (user?.isSuperuser || user?.role === 'admin') return [];
+        return user?.roleAssignments || [];
+      },
+
+      getActiveContext: () => {
+        const { user, impersonation, activeContext } = get();
+        const ident = impersonation.isImpersonating ? impersonation.impersonatedUser : user;
+        if (impersonation.isImpersonating && !impersonation.impersonatedUser) return null;
+        if (!impersonation.isImpersonating && (user?.isSuperuser || user?.role === 'admin')) return null;
+        return holds(ident, activeContext) ? activeContext : null;
+      },
+
+      setActiveContext: (ctx) => {
+        // The effective identity's scope changes — drop every cached query so
+        // nothing from the previous role is shown (or clicked into) under the
+        // new one.
+        queryClient.clear();
+        set({ activeContext: ctx });
+      },
 
       login: async (email: string, password: string) => {
         const response = await api.post('/api/auth/login', { email, password });
@@ -85,6 +134,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
           isLoading: false,
           needsImpersonationSelection: needsSelection,
+          activeContext: null,
           impersonation: {
             isImpersonating: false,
             originalUser: null,
@@ -103,6 +153,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
           isLoading: false,
           needsImpersonationSelection: false,
+          activeContext: null,
           impersonation: {
             isImpersonating: false,
             originalUser: null,
@@ -122,8 +173,12 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await api.get('/api/auth/me');
           const user = response.data.user;
+          const { activeContext, impersonation } = get();
+          // Drop a persisted active context the user no longer holds.
+          const keep = impersonation.isImpersonating ? activeContext : (holds(user, activeContext) ? activeContext : null);
           set({
             user,
+            activeContext: keep,
             isAuthenticated: true,
             isLoading: false,
             // Don't reset impersonation state on checkAuth - keep existing session
@@ -165,6 +220,7 @@ export const useAuthStore = create<AuthState>()(
             impersonatedUser: impersonatedUser || null,
           },
           needsImpersonationSelection: false,
+          activeContext: null,
         });
 
         // CR-058 — record the impersonation start in the append-only audit
@@ -207,6 +263,7 @@ export const useAuthStore = create<AuthState>()(
             impersonatedUser: undefined,
           },
           needsImpersonationSelection: true, // Return to selection screen
+          activeContext: null,
         });
 
         // CR-058 — record the impersonation stop (fire-and-forget).
@@ -235,6 +292,8 @@ export const useAuthStore = create<AuthState>()(
 
       getEffectiveRole: () => {
         const { user, impersonation } = get();
+        const ctx = get().getActiveContext();
+        if (ctx) return ctx.role;
         if (impersonation.isImpersonating && impersonation.impersonatedRole) {
           return impersonation.impersonatedRole;
         }
@@ -243,10 +302,12 @@ export const useAuthStore = create<AuthState>()(
 
       getEffectiveUser: () => {
         const { user, impersonation } = get();
-        if (impersonation.isImpersonating && impersonation.impersonatedUser) {
-          return impersonation.impersonatedUser;
+        const base = impersonation.isImpersonating && impersonation.impersonatedUser ? impersonation.impersonatedUser : user;
+        const ctx = get().getActiveContext();
+        if (base && ctx) {
+          return { ...base, role: ctx.role as User['role'], institutionId: ctx.institutionId, institutionName: ctx.institutionName || base.institutionName };
         }
-        return user;
+        return base;
       },
 
       isSuperuser: () => {
@@ -304,6 +365,7 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         impersonation: state.impersonation,
         needsImpersonationSelection: state.needsImpersonationSelection,
+        activeContext: state.activeContext,
       }),
     }
   )

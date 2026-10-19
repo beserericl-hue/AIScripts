@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User';
 import { runWithRequestContext, ImpersonationContext } from './requestContext';
+import { resolveActiveContext, isGlobalAdmin } from '../services/roleResolver';
 
 /**
  * Extended Request interface with user information from JWT
@@ -31,7 +32,31 @@ export interface AuthenticatedRequest extends Request {
     // impersonation session. `role` above is the *effective* (impersonated)
     // role; this captures the true actor + the chosen identity.
     impersonation?: ImpersonationContext;
+    // Multi-role users — the role/institution the user chose to act as for this
+    // request (X-Active-Role + X-Active-Institution-Id), validated against their
+    // own roleAssignments. When set, `role` and `institutionId` above ARE the
+    // active context. Absent = primary role (legacy behaviour).
+    activeContext?: { role: string; institutionId: string; institutionName?: string };
   };
+}
+
+/**
+ * Apply a multi-role user's chosen active context (role at institution) to
+ * req.user. Validated against the effective identity's own assignments, so it
+ * can only ever NARROW the session to a role the user already holds — never
+ * elevate. Ignored for global admins (they are not institution-scoped) and for
+ * role-only impersonation (there is no specific identity to scope).
+ */
+export function applyActiveContext(req: AuthenticatedRequest, roleOnlyImpersonation: boolean): void {
+  if (!req.user || roleOnlyImpersonation || isGlobalAdmin(req.user as any)) return;
+  const role = req.headers['x-active-role'] as string | undefined;
+  const inst = req.headers['x-active-institution-id'] as string | undefined;
+  if (!role || !inst) return;
+  const ctx = resolveActiveContext(req.user as any, role, inst);
+  if (!ctx) return;
+  req.user.role = ctx.role;
+  req.user.institutionId = ctx.institutionId;
+  req.user.activeContext = ctx;
 }
 
 /** Decode a header value the client URI-encoded (names may contain spaces/unicode). */
@@ -171,6 +196,7 @@ export const authenticate = async (
         realIsSuperuser: user.isSuperuser,
         impersonation
       };
+      applyActiveContext(req, isImpersonating && !assumedSpecificUser);
 
       // CR-058 — bind the impersonation context for the request's async
       // lifetime so `recordAuditEvent` auto-flags every governance action
@@ -231,6 +257,7 @@ export const optionalAuth = async (
           })),
           isSuperuser: user.isSuperuser
         };
+        applyActiveContext(req, false);
       }
     } catch {
       // Token invalid - continue without authentication

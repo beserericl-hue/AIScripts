@@ -184,3 +184,25 @@ export function validateRoleAssignments(
   }
   return { ok: true, normalized };
 }
+
+/**
+ * Active role context (multi-role users). A user who holds different roles at
+ * different institutions (e.g. Program Coordinator at A, Reader at B) picks ONE
+ * of their assignments as the active context; the client sends it as
+ * X-Active-Role / X-Active-Institution-Id. This returns the matching assignment
+ * ONLY when the bearer actually holds exactly that role at exactly that
+ * institution — otherwise null, so a forged header can never elevate (admin is
+ * never an institution-scoped assignment and therefore never selectable).
+ */
+export function resolveActiveContext(
+  u: RoleBearer | null | undefined,
+  role: unknown,
+  institutionId: unknown
+): { role: string; institutionId: string; institutionName?: string } | null {
+  const r = typeof role === 'string' ? role.trim() : '';
+  const inst = idStr(institutionId).trim();
+  if (!u || !r || !inst || !SCOPED_ROLES.has(r)) return null;
+  const match = effectiveAssignments(u).find((a) => String(a.role) === r && idStr(a.institutionId) === inst);
+  if (!match) return null;
+  return { role: r, institutionId: inst, institutionName: (match as any).institutionName };
+}

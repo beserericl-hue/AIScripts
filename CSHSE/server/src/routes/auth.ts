@@ -83,7 +83,14 @@ router.post('/login', async (req: Request, res: Response) => {
         institutionId: user.institutionId?.toString() || null,
         institutionName: user.institutionName,
         permissions: user.permissions,
-        isSuperuser: user.isSuperuser
+        isSuperuser: user.isSuperuser,
+        // Multi-role users need their assignments straight after login so the
+        // header role switcher is available without waiting for /me.
+        roleAssignments: (user.roleAssignments || []).map((a: any) => ({
+          role: String(a.role),
+          institutionId: a.institutionId?.toString?.() || String(a.institutionId),
+          institutionName: a.institutionName
+        }))
       },
       expiresIn: thirtyDaysInSeconds
     });
