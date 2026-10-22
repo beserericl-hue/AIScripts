@@ -48,9 +48,16 @@ const bulkEvidenceUpload = multer({
     // Some browsers (and non-browser clients) send Office files as a generic
     // application/octet-stream — fall back to the extension so xlsx/pptx aren't
     // wrongly rejected. The extractor + storage key off the real bytes anyway.
-    const okExt = /\.(pdf|docx?|pptx?|xlsx?|png|jpe?g|gif|webp|tiff?)$/i.test(file.originalname || '');
+    // `.url` = a Windows internet shortcut — stored as LINK evidence.
+    const okExt = /\.(pdf|docx?|pptx?|xlsx?|png|jpe?g|gif|webp|tiff?|url)$/i.test(file.originalname || '');
     if (allowed.includes(file.mimetype) || okExt) cb(null, true);
-    else cb(new Error(`File type not allowed: ${file.mimetype}`));
+    else {
+      // Never fail the WHOLE batch because one file in a folder drop is an
+      // unsupported type — skip it and report it back to the coordinator.
+      const r: any = _req;
+      (r.skippedFiles = r.skippedFiles || []).push({ fileName: file.originalname, reason: `File type not supported (${file.mimetype || 'unknown'})` });
+      cb(null, false);
+    }
   },
 });
 

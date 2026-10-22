@@ -1894,6 +1894,8 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
   if (!submission) return;
   const files = (req as any).files as Express.Multer.File[] | undefined;
   if (!files || files.length === 0) {
+    const skipped = ((req as any).skippedFiles || []) as Array<{ fileName: string; reason: string }>;
+    if (skipped.length) { res.status(400).json({ error: 'None of the selected files can be uploaded.', skipped }); return; }
     res.status(400).json({ error: 'No files uploaded (field name must be "files").' });
     return;
   }
@@ -1928,6 +1930,39 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
   const processOne = async (f: Express.Multer.File): Promise<{ doc: any; summary: any }> => {
       const sectionId = `bulk-${uuidv4()}`;
       const title = titleFromFilename(f.originalname);
+
+      // Duplicate guard — the SAME file (name + size) already in this
+      // self-study's library is not uploaded again (a retry must not pile up
+      // hidden versions). Reported back so the coordinator sees it.
+      const dup: any = await SupportingEvidence.findOne({
+        submissionId: submission._id,
+        isDeleted: { $ne: true },
+        isCurrentVersion: { $ne: false },
+        'file.originalName': f.originalname,
+        'file.size': f.size,
+      }).select('_id standardCode specCode').lean();
+      if (dup) {
+        return { doc: null, summary: { fileName: f.originalname, duplicateOf: String(dup._id), placedStd: dup.standardCode || null, placedSpec: dup.specCode || null, note: 'Already in your File Library — not uploaded again.' } };
+      }
+
+      // `.url` internet shortcut → LINK evidence (no file bytes to store).
+      if (/\.url$/i.test(f.originalname)) {
+        const href = (f.buffer.toString('utf8').match(/^\s*URL\s*=\s*(\S+)/im) || [])[1];
+        if (!href || !/^https?:\/\//i.test(href)) throw new Error('This shortcut has no web address (URL=…) inside.');
+        const { best, suggestions } = await suggestStandardForFile({ title, filename: f.originalname, text: '', narratives, programLevel, institutionId: String(institutionId) });
+        const placeNow = !!(best && best.source === 'filename' && best.confidence >= 0.9);
+        const ev = await SupportingEvidence.create({
+          institutionId, submissionId: submission._id, uploadedBy: userId || submission.submitterId,
+          ...(placeNow ? { standardCode: best!.standardCode, ...(best!.specCode ? { specCode: best!.specCode } : {}) } : {}),
+          evidenceType: 'url',
+          url: { href, title, addedBy: userId || submission.submitterId, addedAt: new Date() },
+          description: title, versionNumber: 1, isCurrentVersion: true, isDeleted: false, linkedNarratives: [],
+          tags: ['ai-import', 'bulk-import', 'link-shortcut'],
+        });
+        return { doc: null, summary: { sectionId, fileName: f.originalname, fileId: String(ev._id), link: href,
+          placedStd: placeNow ? best!.standardCode : null, placedSpec: placeNow ? best!.specCode || null : null,
+          aiSuggestionRationale: best ? best.rationale : (suggestions[0] ? 'Not confident — please assign.' : 'Could not determine a standard — please assign.') } };
+      }
       const mime = normalizeMime(f.mimetype, f.originalname);
       const versionId = uuidv4();
       const s3Key = generateS3Key(String(institutionId), versionId, f.originalname);
@@ -1950,11 +1985,17 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
       // Create the SupportingEvidence row NOW (unassigned) so it's already in
       // the File Library; the rev tag is the upsert key set-approved uses later.
       const evTag = `rev:${sectionId}`;
+      // When the FILENAME itself declares the placement (Standard/Std/4.b, or an
+      // appendix the self-study maps to a standard), file it there NOW so it
+      // shows under the right standard in the File Library at once. Weaker
+      // (topic) guesses still wait for the coordinator's Approve.
+      const placeNow = !!(best && best.source === 'filename' && best.confidence >= 0.9);
       const ev = await SupportingEvidence.create({
         institutionId,
         submissionId: submission._id,
         uploadedBy: userId || submission.submitterId,
-        // no standardCode/specCode yet — Approve stamps it.
+        ...(placeNow ? { standardCode: best!.standardCode, ...(best!.specCode ? { specCode: best!.specCode } : {}) } : {}),
+        // otherwise no standardCode/specCode yet — Approve stamps it.
         evidenceType: (mime || '').startsWith('image/') ? 'image' : 'document',
         file: {
           filename: f.originalname,
@@ -2027,6 +2068,11 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
           }
           const refs: Array<{ std: string; spec?: string }> = [];
           if (best?.standardCode) refs.push({ std: best.standardCode, spec: best.specCode });
+          // Every other spec the self-study cites this file in (appendix item /
+          // exact title) — so the evaluator reads it for each of them.
+          for (const c of best?.alsoCitedIn || []) {
+            if (!refs.some((r) => r.std === c.standardCode && r.spec === c.specCode)) refs.push({ std: c.standardCode, spec: c.specCode });
+          }
           for (const std of [...cited].sort((a, b) => Number(a) - Number(b))) {
             if (std !== best?.standardCode) refs.push({ std, spec: undefined });
           }
@@ -2036,7 +2082,8 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
       };
       return {
         doc,
-        summary: { ...doc, extractedTextChars: text.length, extractError: extracted.error },
+        summary: { ...doc, extractedText: undefined, extractedTextChars: text.length, extractError: extracted.error,
+          placedStd: placeNow ? best!.standardCode : null, placedSpec: placeNow ? best!.specCode || null : null },
       };
   };
 
@@ -2058,7 +2105,7 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
   const added: any[] = [];
   for (let i = 0; i < files.length; i++) {
     if (results[i]) {
-      state.evidenceDocs.push(results[i]!.doc);
+      if (results[i]!.doc) state.evidenceDocs.push(results[i]!.doc);
       added.push(results[i]!.summary);
     } else if (errors[i]) {
       added.push(errors[i]);
@@ -2068,7 +2115,9 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
   (submission as any).markModified('aiReviewState');
   await persistAiReviewState(submission, state);
 
-  res.json({ ok: true, count: added.filter((a) => a.sectionId).length, added });
+  const skipped = ((req as any).skippedFiles || []) as Array<{ fileName: string; reason: string }>;
+  res.json({ ok: true, count: added.filter((a) => a.sectionId).length, added, skipped,
+    duplicates: added.filter((a) => a.duplicateOf).length });
 }
 
 /**

@@ -17,6 +17,7 @@
  *  - Keyboard navigation: ArrowUp/Down + j/k navigate between cards,
  *    Enter selects, Space toggles the card's checkbox.
  */
+import { BulkUploadResults, BulkUploadRow } from '../../BulkUploadResults';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search, Loader2 } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
@@ -2422,7 +2423,7 @@ function CVsView({ cvs, onShowInSource, approvedIds, onToggleApproval, onApprove
 // imported narratives + the AI placement matcher. The suggestion pre-fills the
 // card's routing dropdowns; Approve stamps the (std, spec) onto the file.
 const BULK_ACCEPT =
-  '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff';
+  '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff,.url';
 
 function BulkEvidenceDropZone({
   submissionId,
@@ -2434,6 +2435,8 @@ function BulkEvidenceDropZone({
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string>('');
+  const [rows, setRows] = useState<BulkUploadRow[] | null>(null);
+  const [skipped, setSkipped] = useState<Array<{ fileName: string; reason: string }>>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const upload = useCallback(
@@ -2450,13 +2453,15 @@ function BulkEvidenceDropZone({
           { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300_000 }
         );
         const count = resp.data?.count ?? files.length;
-        setStatus(`Added ${count} file${count === 1 ? '' : 's'} — review the suggested standards below.`);
+        setRows((resp.data?.added || []) as BulkUploadRow[]);
+        setSkipped(resp.data?.skipped || []);
+        setStatus(`Added ${count} file${count === 1 ? '' : 's'} — where each one was filed is listed below.`);
         await onUploaded();
       } catch (err: any) {
+        setSkipped(err?.response?.data?.skipped || []);
         setStatus(`Upload failed: ${err?.response?.data?.error || err?.message || 'unknown error'}`);
       } finally {
         setBusy(false);
-        window.setTimeout(() => setStatus(''), 6000);
       }
     },
     [submissionId, onUploaded]
@@ -2507,6 +2512,9 @@ function BulkEvidenceDropZone({
           }}
         />
       </div>
+      {(rows || skipped.length > 0) && (
+        <div className="mt-2"><BulkUploadResults rows={rows || []} skipped={skipped} /></div>
+      )}
       {status && (
         <p className="mt-2 text-xs text-gray-600" data-testid="bulk-evidence-status">
           {status}

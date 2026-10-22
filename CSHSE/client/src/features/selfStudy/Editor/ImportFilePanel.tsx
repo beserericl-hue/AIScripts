@@ -34,6 +34,7 @@ import {
   FilePlus2,
 } from 'lucide-react';
 import { api } from '../../../services/api';
+import { BulkUploadResults, BulkUploadRow } from './BulkUploadResults';
 
 // Mirror FileUpload.tsx's accept list + cap (those constants aren't exported).
 const ALLOWED_TYPES = [
@@ -123,7 +124,45 @@ export function ImportFilePanel({
     return null;
   };
 
+  // Several files at once (a folder of appendices): never keep only the first.
+  // Send them all through the placing importer, which files each one by its
+  // name (Standard 4…, 4.b…, or an appendix the self-study maps to a standard)
+  // and reports where every file went.
+  const [bulkRows, setBulkRows] = useState<BulkUploadRow[] | null>(null);
+  const [bulkSkipped, setBulkSkipped] = useState<Array<{ fileName: string; reason: string }>>([]);
+  const handleMany = async (files: File[]) => {
+    setError(null);
+    setImported(null);
+    setPreview(null);
+    setBulkRows(null);
+    setBulkSkipped([]);
+    setUploading(true);
+    try {
+      const form = new FormData();
+      files.forEach((f) => form.append('files', f));
+      const res = await api.post(`/api/submissions/${submissionId}/review/bulk-evidence`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 300_000,
+      });
+      setBulkRows((res.data?.added || []) as BulkUploadRow[]);
+      setBulkSkipped(res.data?.skipped || []);
+      refreshEvidence();
+    } catch (err: any) {
+      setBulkSkipped(err?.response?.data?.skipped || []);
+      setError(err?.response?.data?.error || err?.message || 'Upload failed.');
+    } finally {
+      setUploading(false);
+    }
+  };
+  const handleFiles = (list: FileList | File[] | null | undefined) => {
+    const files = Array.from(list || []);
+    if (files.length === 0) return;
+    if (files.length > 1 || /\.url$/i.test(files[0].name)) void handleMany(files);
+    else void handleFile(files[0]);
+  };
+
   const handleFile = async (file: File) => {
+    setBulkRows(null);
     setError(null);
     const v = validate(file);
     if (v) {
@@ -286,9 +325,11 @@ export function ImportFilePanel({
 
       <div className="flex-1 overflow-auto p-4 space-y-4">
         <p className="text-xs text-gray-500">
-          Bring in one file (CV, syllabus, project, or a section draft). It is
-          saved to your File Library automatically. Then select any part of the
-          preview and paste it into your narrative or as a file summary.
+          Bring in one file (CV, syllabus, project, or a section draft) to preview
+          it and paste from it — it is filed under the specification you have
+          open. Dropping <b>several files</b> (a folder of appendices) files each
+          one where it belongs: name files “Standard 4 …”, “4.b …”, or by the
+          appendix your self-study cites (“Appendix IV 9 …”).
         </p>
 
         {/* Drop zone */}
@@ -305,8 +346,7 @@ export function ImportFilePanel({
           onDrop={(e) => {
             e.preventDefault();
             setIsDragging(false);
-            const f = e.dataTransfer.files?.[0];
-            if (f) void handleFile(f);
+            handleFiles(e.dataTransfer.files);
           }}
           onClick={() => !readOnly && fileInputRef.current?.click()}
           className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
@@ -323,7 +363,7 @@ export function ImportFilePanel({
           <span className="mt-2 text-sm text-gray-600">
             {uploading
               ? 'Uploading…'
-              : 'Drag a file here, or click to browse'}
+              : 'Drag files here, or click to browse'}
           </span>
           <span className="mt-1 text-[11px] text-gray-400">
             PDF, Word, PowerPoint, Excel, or image · up to 50MB
@@ -331,16 +371,20 @@ export function ImportFilePanel({
           <input
             ref={fileInputRef}
             type="file"
-            accept={ALLOWED_TYPES.join(',')}
+            multiple
+            accept={[...ALLOWED_TYPES, '.url'].join(',')}
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void handleFile(f);
+              handleFiles(e.target.files);
               e.target.value = '';
             }}
             className="hidden"
             data-testid="import-file-input"
           />
         </div>
+
+        {(bulkRows || bulkSkipped.length > 0) && (
+          <BulkUploadResults rows={bulkRows || []} skipped={bulkSkipped} />
+        )}
 
         {error && (
           <div className="flex items-start gap-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
