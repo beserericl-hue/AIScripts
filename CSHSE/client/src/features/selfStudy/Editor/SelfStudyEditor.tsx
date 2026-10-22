@@ -2758,7 +2758,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                           : 'text-gray-600 hover:bg-gray-100'
                       }`}
                       title={canImport
-                        ? 'Import file — bring in one CV, syllabus, project, or section draft and paste its content into a standard or as supporting evidence.'
+                        ? 'Import file — bring in one CV, syllabus, project, or section draft and paste its content into a standard, or select several files at once and each is filed under the Standard it belongs to.'
                         : 'A superuser must impersonate a Program Coordinator to import. Use Switch Role to view as a PC.'}
                     >
                       <FileUp className="w-4 h-4 flex-shrink-0" />
