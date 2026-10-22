@@ -39,6 +39,8 @@ export interface Suggestion {
   /** 'reference' = named/content match in the narrative; 'semantic' = SpecMatcher. */
   source: 'reference' | 'semantic' | 'filename';
   rationale: string;
+  /** Other specs whose text cites this same file (appendix item or exact title). */
+  alsoCitedIn?: Array<{ standardCode: string; specCode?: string }>;
 }
 
 // Words too common in a CSHSE self-study to discriminate between standards.
@@ -99,6 +101,155 @@ export function explicitStandardFromName(name: string): { std: string; spec?: st
     if (n >= 1 && n <= 30) return { std: String(n), spec: m[2] ? m[2].toLowerCase() : undefined };
   }
   return null;
+}
+
+// ---------------------------------------------------------------- appendices
+//
+// Many self-studies organise their evidence as numbered APPENDICES per standard
+// ("Appendix IV Standard IV Program Evaluation"), and coordinators name the
+// files to match: "APPENDIX IV 9 Alumni Survey Data.pdf" = appendix IV, item 9.
+// Routing reads (1) the appendix numeral from the filename, (2) the self-study's
+// OWN appendix→standard mapping ("Appendix II Standard I …" — appendix numbers
+// do not always equal standard numbers), and (3) where the self-study cites the
+// item, to pick the sub-specification.
+
+const ROMAN_VALUES: Record<string, number> = { i: 1, v: 5, x: 10, l: 50, c: 100 };
+
+/** Roman (i..c) or arabic numeral → integer; null when not a numeral. */
+export function numeralToInt(raw: string): number | null {
+  const s = (raw || '').trim().toLowerCase();
+  if (/^\d{1,2}$/.test(s)) return parseInt(s, 10);
+  if (!/^[ivxlc]+$/.test(s)) return null;
+  let total = 0;
+  for (let i = 0; i < s.length; i++) {
+    const v = ROMAN_VALUES[s[i]], n = ROMAN_VALUES[s[i + 1]] || 0;
+    total += v < n ? -v : v;
+  }
+  return total > 0 ? total : null;
+}
+
+/**
+ * "APPENDIX IV 9 Alumni Survey Data.pdf" → { appendix: 4, label: 'IV', item: 9, rest: 'Alumni Survey Data' }
+ * "Appendix 4 - Exit Survey.pdf"         → { appendix: 4, label: '4', rest: 'Exit Survey' }
+ * Only matches at the START of the name, so a title that merely mentions an
+ * appendix is not misread.
+ */
+export function appendixFromName(name: string): { appendix: number; label: string; item?: number; rest: string } | null {
+  const base = (name || '').replace(/\.[a-z0-9]+$/i, '').replace(/[_]+/g, ' ').trim();
+  const m = base.match(/^(?:appendix|appx|app\.)\s*[-.#:]?\s*([ivxlc]+|\d{1,2})\b[\s.\-:#]*(?:(\d{1,2})(?=[\s.\-:]|$))?[\s.\-:]*(.*)$/i);
+  if (!m) return null;
+  const appendix = numeralToInt(m[1]);
+  if (!appendix || appendix > 30) return null;
+  const item = m[2] ? parseInt(m[2], 10) : undefined;
+  return { appendix, label: m[1].toUpperCase(), item, rest: (m[3] || '').trim() };
+}
+
+/**
+ * The self-study's own appendix → standard mapping, read from phrases like
+ * "Appendix IV Standard IV Program Evaluation" or "Appendix II - Standard 1".
+ * Majority vote per appendix (a stray typo can't flip it).
+ */
+export function appendixStandardMap(narratives: NarrativeTuple[]): Map<number, string> {
+  const votes = new Map<number, Map<string, number>>();
+  const re = /appendix\s+([ivxlc]+|\d{1,2})\s*[-–:,.]?\s*(?:for\s+)?(?:standard|std\.?)\s*([ivxlc]+|\d{1,2})\b/gi;
+  for (const n of narratives) {
+    for (const m of (n.content || '').matchAll(re)) {
+      const a = numeralToInt(m[1]);
+      const st = numeralToInt(m[2]);
+      if (!a || !st || st > 30) continue;
+      const per = votes.get(a) || new Map<string, number>();
+      per.set(String(st), (per.get(String(st)) || 0) + 1);
+      votes.set(a, per);
+    }
+  }
+  const out = new Map<number, string>();
+  for (const [a, per] of votes) {
+    const best = [...per.entries()].sort((x, y) => y[1] - x[1])[0];
+    if (best) out.set(a, best[0]);
+  }
+  return out;
+}
+
+/**
+ * Route an appendix-named file. Returns a high-confidence 'filename' suggestion
+ * (the coordinator named the appendix) or null when the name has no appendix.
+ */
+export function appendixRoute(
+  file: { filename: string; title?: string },
+  narratives: NarrativeTuple[]
+): Suggestion | null {
+  const a = appendixFromName(file.filename) || (file.title ? appendixFromName(file.title) : null);
+  if (!a) return null;
+  const map = appendixStandardMap(narratives);
+  const mapped = map.get(a.appendix);
+  const std = mapped || (a.appendix >= 1 && a.appendix <= 21 ? String(a.appendix) : null);
+  if (!std) return null;
+
+  // Sub-specification: the spec (within that standard) whose text cites this
+  // item — "Appendix IV … 9 Alumni Survey Data" — or names the file's title.
+  const titleWords = normalizePhrase(a.rest).split(' ').filter((w) => w.length >= 3 && !/^\d+$/.test(w));
+  const titleHead = titleWords.slice(0, 3).join(' ');
+  const inStd = narratives.filter((n) => n.standardCode === std && n.specCode);
+  let spec: string | undefined;
+  let how = '';
+  if (a.item !== undefined && titleWords.length) {
+    // The item must be cited right after an appendix reference, e.g.
+    // "see Appendix IV Program Evaluation, 8 Results from Exit Survey …" — a
+    // bare "8 results" elsewhere (list numbering) is not a citation. Matched on
+    // normalised text, so "14. Student …" reads as "14 student …".
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const labels = [a.label.toLowerCase(), String(a.appendix)];
+    const citeRe = new RegExp(
+      `appendix (?:${labels.map(esc).join('|')})\\b.{0,200}?\\b${a.item} (?:\\d{4} )?${esc(titleWords[0])}`
+    );
+    const hit = inStd.find((n) => citeRe.test(normalizePhrase(n.content)));
+    if (hit) { spec = hit.specCode; how = `item ${a.item} is cited in ${std}.${spec}`; }
+  }
+  const titleSpread = titleHead.length >= 8
+    ? narratives.filter((n) => n.specCode && normalizePhrase(n.content).includes(titleHead)).length
+    : 0;
+  if (!spec && titleHead.length >= 8 && titleSpread <= 8) {
+    const hit = inStd.find((n) => normalizePhrase(n.content).includes(titleHead));
+    if (hit) { spec = hit.specCode; how = `“${a.rest}” is named in ${std}.${spec}`; }
+  }
+  // Every OTHER spec (any standard) that cites this file — by appendix item or
+  // by its exact title — so the evaluator reads it there too.
+  const also: Array<{ standardCode: string; specCode?: string }> = [];
+  {
+    const esc = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const labels = [a.label.toLowerCase(), String(a.appendix)];
+    const citeRe = a.item !== undefined && titleWords.length
+      ? new RegExp(`appendix (?:${labels.map(esc).join('|')})\\b.{0,200}?\\b${a.item} (?:\\d{4} )?${esc(titleWords[0])}`)
+      : null;
+    const titleOk = titleWords.length >= 2 && titleHead.length >= 8;
+    const seen = new Set<string>([`${std}.${spec || ''}`]);
+    const byItem: NarrativeTuple[] = [];
+    const byTitle: NarrativeTuple[] = [];
+    for (const n of narratives) {
+      if (!n.specCode) continue;
+      const norm = normalizePhrase(n.content);
+      if (citeRe && citeRe.test(norm)) byItem.push(n);
+      else if (titleOk && norm.includes(titleHead)) byTitle.push(n);
+    }
+    // A title found in MANY specs is template boilerplate (e.g. every
+    // curriculum spec lists "Learning Contract"), not a citation — ignore it.
+    const MAX_TITLE_SPECS = 8;
+    for (const n of [...byItem, ...(byTitle.length <= MAX_TITLE_SPECS ? byTitle : [])]) {
+      const key = `${n.standardCode}.${n.specCode}`;
+      if (!seen.has(key)) { seen.add(key); also.push({ standardCode: n.standardCode, specCode: n.specCode as string }); }
+    }
+  }
+  const stdWhy = mapped
+    ? `Appendix ${a.label} is Standard ${std} in your self-study`
+    : `Appendix ${a.label} → Standard ${std}`;
+  return {
+    standardCode: std,
+    specCode: spec,
+    confidence: mapped ? 0.95 : 0.8,
+    source: 'filename',
+    rationale: `Filename names Appendix ${a.label}${a.item !== undefined ? ' item ' + a.item : ''}: ${stdWhy}${how ? '; ' + how : ''}`,
+    alsoCitedIn: also,
+  };
 }
 
 /**
@@ -245,6 +396,8 @@ export async function suggestStandardForFile(opts: {
   //    outright. Authoritative; we trust it and skip the AI call.
   const filenameSuggestions: Suggestion[] = [];
   const explicit = explicitStandardFromName(opts.filename) || explicitStandardFromName(opts.title);
+  const appendixHit = explicit ? null : appendixRoute({ filename: opts.filename, title: opts.title }, opts.narratives);
+  if (appendixHit) filenameSuggestions.push(appendixHit);
   if (explicit) {
     filenameSuggestions.push({
       standardCode: explicit.std,
