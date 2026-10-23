@@ -750,7 +750,7 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
       <div key={spec.code} id={`file-spec-${standardCode}-${spec.code}`} className="mb-3 scroll-mt-4">
         <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded text-sm">
           <span className="font-medium text-gray-600">
-            {standardCode}.{spec.code}
+            {spec.code === 'general' ? `Standard ${standardCode}` : `${standardCode}.${spec.code}`}
           </span>
           <span className="text-gray-500">{spec.title}</span>
           <span className="text-xs text-gray-400 ml-auto">
@@ -802,6 +802,17 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
             {standard.specifications.map((spec) =>
               renderSpecSection(standard.code, spec)
             )}
+            {/* Files filed on the Standard itself (no sub-spec) or under a
+                sub-spec code this level doesn't define — counted in the badge,
+                so they must be listed too. */}
+            {Object.keys(evidenceByStandard[standard.code] || {})
+              .filter((code) => !standard.specifications.some((s) => s.code === code))
+              .map((code) =>
+                renderSpecSection(standard.code, {
+                  code,
+                  title: code === 'general' ? 'Whole standard (no sub-specification)' : 'Sub-specification not in this level',
+                })
+              )}
             {/* Show empty state if no files for this standard */}
             {fileCount === 0 && (
               <div className="py-6 text-center text-sm text-gray-400">
