@@ -85,6 +85,15 @@ describe('<HoverTooltip />', () => {
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument(); // …leaving closes it
   });
 
+  it('a keyboard-focused dot keeps its tip through a scroll (tab scrolls it into view)', () => {
+    render(<HoverTooltip text="kbd" testId="dot"><span>🟡</span></HoverTooltip>);
+    const dot = screen.getByTestId('dot');
+    dot.focus();
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+    fireEvent.scroll(window);
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+  });
+
   it('pressing inside the dot does not close it', () => {
     openByHover();
     fireEvent.mouseDown(screen.getByTestId('dot'));
