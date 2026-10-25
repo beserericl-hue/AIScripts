@@ -9,6 +9,12 @@
  * a real element, portaled to <body> so the rail's `overflow-auto` can't clip
  * it, positioned against the trigger's bounding box, shown immediately on
  * mouseenter/focus and dismissed on mouseleave/blur/Escape.
+ *
+ * Sticky-tip fix (Kennesaw, Oct 2026): a mouse click used to FOCUS the dot, and
+ * focus kept the tip open — clicking elsewhere on non-focusable page areas (Safari)
+ * left it up, and returning to the window re-fired focus and popped it back. Now a
+ * click never focuses the dot, focus opens the tip only for keyboard users, and
+ * any outside press, window switch, scroll or Escape closes it.
  */
 import { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -48,18 +54,37 @@ export function HoverTooltip({
 
   const open = useCallback(() => place(), [place]);
   const close = useCallback(() => setPos(null), []);
+  // Set while a pointer press is in progress so the focus it causes is ignored.
+  const pointerDown = useRef(false);
 
-  // Reposition on scroll/resize while open so the tip tracks the dot.
+  // While open: close on any press outside the dot, a window switch, a scroll
+  // (the dot moved out from under the pointer) or Escape anywhere.
+  const isOpen = pos !== null;
   useLayoutEffect(() => {
-    if (!pos) return;
-    const onMove = () => place();
-    window.addEventListener('scroll', onMove, true);
-    window.addEventListener('resize', onMove);
-    return () => {
-      window.removeEventListener('scroll', onMove, true);
-      window.removeEventListener('resize', onMove);
+    if (!isOpen) return;
+    const onPress = (e: Event) => {
+      if (!triggerRef.current?.contains(e.target as Node)) close();
     };
-  }, [pos, place]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    document.addEventListener('pointerdown', onPress, true);
+    document.addEventListener('mousedown', onPress, true);
+    document.addEventListener('touchstart', onPress, true);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('blur', close);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('pointerdown', onPress, true);
+      document.removeEventListener('mousedown', onPress, true);
+      document.removeEventListener('touchstart', onPress, true);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('blur', close);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [isOpen, close]);
 
   return (
     <span
@@ -70,7 +95,17 @@ export function HoverTooltip({
       data-coverage-state={coverageState}
       onMouseEnter={open}
       onMouseLeave={close}
-      onFocus={open}
+      onMouseDown={(e) => {
+        // A click should not leave the dot focused (focus would pin the tip).
+        pointerDown.current = true;
+        e.preventDefault();
+      }}
+      onMouseUp={() => {
+        pointerDown.current = false;
+      }}
+      onFocus={() => {
+        if (!pointerDown.current) open();
+      }}
       onBlur={close}
       onKeyDown={(e) => {
         if (e.key === 'Escape') close();
