@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { HoverTooltip } from './HoverTooltip';
 
 describe('<HoverTooltip />', () => {
@@ -88,7 +88,7 @@ describe('<HoverTooltip />', () => {
   it('a keyboard-focused dot keeps its tip through a scroll (tab scrolls it into view)', () => {
     render(<HoverTooltip text="kbd" testId="dot"><span>🟡</span></HoverTooltip>);
     const dot = screen.getByTestId('dot');
-    dot.focus();
+    act(() => dot.focus());
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
     fireEvent.scroll(window);
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
