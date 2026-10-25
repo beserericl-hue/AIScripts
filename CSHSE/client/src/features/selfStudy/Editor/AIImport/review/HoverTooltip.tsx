@@ -58,7 +58,9 @@ export function HoverTooltip({
   const pointerDown = useRef(false);
 
   // While open: close on any press outside the dot, a window switch, a scroll
-  // (the dot moved out from under the pointer) or Escape anywhere.
+  // (the dot moved out from under the pointer) or Escape anywhere. A keyboard-
+  // focused dot keeps its tip through a scroll (tabbing to an off-screen dot
+  // scrolls it into view) and the tip follows it.
   const isOpen = pos !== null;
   useLayoutEffect(() => {
     if (!isOpen) return;
@@ -72,19 +74,23 @@ export function HoverTooltip({
     document.addEventListener('mousedown', onPress, true);
     document.addEventListener('touchstart', onPress, true);
     document.addEventListener('keydown', onKey);
+    const onScroll = () => {
+      if (document.activeElement === triggerRef.current) place();
+      else close();
+    };
     window.addEventListener('blur', close);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
     return () => {
       document.removeEventListener('pointerdown', onPress, true);
       document.removeEventListener('mousedown', onPress, true);
       document.removeEventListener('touchstart', onPress, true);
       document.removeEventListener('keydown', onKey);
       window.removeEventListener('blur', close);
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
     };
-  }, [isOpen, close]);
+  }, [isOpen, close, place]);
 
   return (
     <span
