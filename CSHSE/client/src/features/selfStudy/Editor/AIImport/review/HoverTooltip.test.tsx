@@ -43,4 +43,51 @@ describe('<HoverTooltip />', () => {
     );
     expect(screen.getByTestId('dot')).toHaveAttribute('data-coverage-state', 'gap');
   });
+
+  // Sticky-tip regression (Kennesaw, Oct 2026)
+  const openByHover = () => {
+    render(
+      <div>
+        <HoverTooltip text="sticky tip" testId="dot"><span>🟢</span></HoverTooltip>
+        <p data-testid="elsewhere">editor text</p>
+      </div>,
+    );
+    fireEvent.mouseEnter(screen.getByTestId('dot'));
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+  };
+
+  it('closes when the user clicks anywhere else on the page', () => {
+    openByHover();
+    fireEvent.mouseDown(screen.getByTestId('elsewhere'));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('closes when the window loses focus, on scroll, and on Escape pressed anywhere', () => {
+    openByHover();
+    fireEvent.blur(window);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByTestId('dot'));
+    fireEvent.scroll(window);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.mouseEnter(screen.getByTestId('dot'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('a mouse click does not pin the tip open via focus', () => {
+    openByHover();
+    const dot = screen.getByTestId('dot');
+    const md = fireEvent.mouseDown(dot);
+    expect(md).toBe(false); // default prevented → the dot is not focused by the click
+    fireEvent.focus(dot); // even if focus arrives during the press…
+    fireEvent.mouseUp(dot);
+    fireEvent.mouseLeave(dot);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument(); // …leaving closes it
+  });
+
+  it('pressing inside the dot does not close it', () => {
+    openByHover();
+    fireEvent.mouseDown(screen.getByTestId('dot'));
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+  });
 });
