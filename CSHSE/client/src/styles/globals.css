@@ -74,7 +74,7 @@
   }
 
   .app-header-inner {
-    @apply flex justify-between items-center h-16;
+    @apply flex justify-between items-center h-14;
   }
 
   .app-logo {
