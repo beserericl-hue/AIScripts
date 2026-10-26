@@ -1,9 +1,22 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { HoverTooltip } from './HoverTooltip';
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const renderDot = (text = 'sticky tip') =>
+  render(
+    <div>
+      <HoverTooltip text={text} testId="dot"><span>🟢</span></HoverTooltip>
+      <p data-testid="elsewhere">editor text</p>
+    </div>,
+  );
+
 describe('<HoverTooltip />', () => {
-  it('shows the tip on mouseenter and hides on mouseleave', () => {
+  it('shows the tip on mouseenter and hides shortly after mouseleave', () => {
+    vi.useFakeTimers();
     render(
       <HoverTooltip text={'🔴 Gap — only 35% met.\nWhat still needs work:\n•  No evaluation process'} testId="dot">
         <span>🔴</span>
@@ -15,11 +28,11 @@ describe('<HoverTooltip />', () => {
 
     fireEvent.mouseEnter(screen.getByTestId('dot'));
     const tip = screen.getByRole('tooltip');
-    expect(tip).toBeInTheDocument();
     expect(tip).toHaveTextContent(/Gap/);
     expect(tip).toHaveTextContent(/No evaluation process/);
 
     fireEvent.mouseLeave(screen.getByTestId('dot'));
+    act(() => { vi.advanceTimersByTime(300); });
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
@@ -44,45 +57,31 @@ describe('<HoverTooltip />', () => {
     expect(screen.getByTestId('dot')).toHaveAttribute('data-coverage-state', 'gap');
   });
 
-  // Sticky-tip regression (Kennesaw, Oct 2026)
-  const openByHover = () => {
-    render(
-      <div>
-        <HoverTooltip text="sticky tip" testId="dot"><span>🟢</span></HoverTooltip>
-        <p data-testid="elsewhere">editor text</p>
-      </div>,
-    );
-    fireEvent.mouseEnter(screen.getByTestId('dot'));
-    expect(screen.getByRole('tooltip')).toBeInTheDocument();
-  };
-
+  // ---- Sticky-tip regression (Kennesaw, Oct 2026) ----
   it('closes when the user clicks anywhere else on the page', () => {
-    openByHover();
+    renderDot();
+    fireEvent.mouseEnter(screen.getByTestId('dot'));
     fireEvent.mouseDown(screen.getByTestId('elsewhere'));
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
-  it('closes when the window loses focus, on scroll, and on Escape pressed anywhere', () => {
-    openByHover();
+  it('a hover tip closes on window blur, page scroll and Escape anywhere', () => {
+    renderDot();
+    const dot = screen.getByTestId('dot');
+    fireEvent.mouseEnter(dot);
     fireEvent.blur(window);
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-    fireEvent.mouseEnter(screen.getByTestId('dot'));
+    fireEvent.mouseEnter(dot);
     fireEvent.scroll(window);
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
-    fireEvent.mouseEnter(screen.getByTestId('dot'));
+    fireEvent.mouseEnter(dot);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
-  it('a mouse click does not pin the tip open via focus', () => {
-    openByHover();
-    const dot = screen.getByTestId('dot');
-    const md = fireEvent.mouseDown(dot);
-    expect(md).toBe(false); // default prevented → the dot is not focused by the click
-    fireEvent.focus(dot); // even if focus arrives during the press…
-    fireEvent.mouseUp(dot);
-    fireEvent.mouseLeave(dot);
-    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument(); // …leaving closes it
+  it('a mouse click does not focus the dot', () => {
+    renderDot();
+    expect(fireEvent.mouseDown(screen.getByTestId('dot'))).toBe(false); // default prevented
   });
 
   it('a keyboard-focused dot keeps its tip through a scroll (tab scrolls it into view)', () => {
@@ -94,9 +93,69 @@ describe('<HoverTooltip />', () => {
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
   });
 
-  it('pressing inside the dot does not close it', () => {
-    openByHover();
-    fireEvent.mouseDown(screen.getByTestId('dot'));
+  // ---- Readable-tip follow-up (Kennesaw, Oct 2026) ----
+  it('the pointer can move from the dot onto the tip without it closing', () => {
+    vi.useFakeTimers();
+    renderDot();
+    const dot = screen.getByTestId('dot');
+    fireEvent.mouseEnter(dot);
+    fireEvent.mouseLeave(dot);
+    fireEvent.mouseEnter(screen.getByRole('tooltip'));
+    act(() => { vi.advanceTimersByTime(1000); });
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
+    fireEvent.mouseLeave(screen.getByRole('tooltip'));
+    act(() => { vi.advanceTimersByTime(300); });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('scrolling inside the tip to read it never closes it', () => {
+    renderDot('long text');
+    fireEvent.mouseEnter(screen.getByTestId('dot'));
+    const tip = screen.getByRole('tooltip');
+    fireEvent.scroll(tip);
+    fireEvent.mouseDown(tip);
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+  });
+
+  it('caps the tip to the room on screen so long text scrolls inside it', () => {
+    renderDot('long text');
+    fireEvent.mouseEnter(screen.getByTestId('dot'));
+    const tip = screen.getByRole('tooltip');
+    expect(tip.style.maxHeight).toMatch(/px$/);
+    expect(tip.className).toMatch(/overflow-y-auto/);
+  });
+
+  it('clicking the dot pins the tip: it survives leaving, page scroll and window switch', () => {
+    vi.useFakeTimers();
+    renderDot();
+    const dot = screen.getByTestId('dot');
+    fireEvent.mouseEnter(dot);
+    fireEvent.click(dot);
+    expect(screen.getByRole('tooltip')).toHaveAttribute('data-pinned', 'true');
+    fireEvent.mouseLeave(dot);
+    act(() => { vi.advanceTimersByTime(2000); });
+    fireEvent.scroll(window);
+    fireEvent.blur(window);
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+  });
+
+  it('a pinned tip closes on an outside click, Escape, its × button, or a second click on the dot', () => {
+    renderDot();
+    const dot = screen.getByTestId('dot');
+    fireEvent.click(dot);
+    fireEvent.mouseDown(screen.getByTestId('elsewhere'));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    fireEvent.click(dot);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    fireEvent.click(dot);
+    fireEvent.click(screen.getByTestId('dot-tip-close'));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    fireEvent.click(dot);
+    fireEvent.click(dot);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 });

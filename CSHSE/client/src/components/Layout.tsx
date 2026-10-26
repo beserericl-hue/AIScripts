@@ -279,7 +279,7 @@ export default function Layout() {
                 <img
                   src="/cshse-logo.svg"
                   alt="CSHSE"
-                  className="h-14 w-14"
+                  className="h-10 w-10"
                 />
                 <span className="app-logo-text hidden md:block">Self-Study Portal</span>
               </Link>

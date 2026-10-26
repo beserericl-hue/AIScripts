@@ -1167,7 +1167,7 @@ function FullReviewStep(): JSX.Element {
 
   return (
     <div className="flex flex-1 min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-1.5">
+      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-1">
         {/* CR-068 — clickable counts. Each toggles a flat, cross-spec list of
             that item type so the PC can QA all of one kind in a single pass. */}
         <div data-tour="review-summary" className="flex items-center gap-1 text-xs text-gray-500">
@@ -1203,7 +1203,7 @@ function FullReviewStep(): JSX.Element {
               disabled={navIndex <= 0}
               title="Previous panel"
               aria-label="Previous panel"
-              className="p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-l-md"
+              className="p-1 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-l-md"
             >
               <ChevronUp className="w-4 h-4" />
             </button>
@@ -1214,7 +1214,7 @@ function FullReviewStep(): JSX.Element {
               disabled={navIndex >= 0 && navIndex >= navKeys.length - 1}
               title="Next panel"
               aria-label="Next panel"
-              className="p-1.5 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-r-md"
+              className="p-1 text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed rounded-r-md"
             >
               <ChevronDown className="w-4 h-4" />
             </button>
@@ -1256,7 +1256,7 @@ function FullReviewStep(): JSX.Element {
           {bgReview.data?.running ? (
             <span
               data-testid="bg-review-indicator"
-              className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700"
+              className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700"
               title="Your approved text is already in the editor. The AI review runs in the background — each specification is marked reviewed as its evaluation finishes. You can keep working."
             >
               <Sparkles className="h-3.5 w-3.5 animate-pulse" aria-hidden /> AI review running in the
@@ -1266,7 +1266,7 @@ function FullReviewStep(): JSX.Element {
             <span
               data-tour="review-apply"
               data-testid="approve-auto-apply-hint"
-              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700"
+              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
               title="Approving an item writes it into the standards editor automatically — no separate Apply step."
             >
               <Rocket className="h-3.5 w-3.5" aria-hidden /> Approve → saved to editor

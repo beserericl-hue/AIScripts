@@ -299,7 +299,7 @@ export function ReviewSurface({ submissionId, onClose, onOpenFileLibrary }: Revi
                 ? `Run the AI coverage review for the ${coverageMissing} spec(s) that haven't been assessed yet — populates the score, gaps and strengths behind each dot. No re-reading of the document.`
                 : 'Recheck coverage: re-run the AI review for EVERY filled spec, re-reading the File-Library evidence assigned to each. Use this to refresh assessments after assigning files or editing narratives.'
             }
-            className="rounded border border-cshse-300 bg-white px-3 py-1 text-sm font-medium text-cshse-700 hover:bg-cshse-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-cshse-300 bg-white px-2.5 py-0.5 text-sm font-medium text-cshse-700 hover:bg-cshse-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {coverageState.kind === 'running'
               ? (coverageState.total
@@ -331,7 +331,7 @@ export function ReviewSurface({ submissionId, onClose, onOpenFileLibrary }: Revi
                 ? 'Re-detect requires an existing import on this submission.'
                 : 'Re-run cv_detector + appendix_paper_detector + introduction_detector against the persisted DOCX. ~5-10 seconds. Existing review state (approvals, edits) is preserved.'
             }
-            className="rounded border border-cshse-300 bg-white px-3 py-1 text-sm font-medium text-cshse-700 hover:bg-cshse-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-cshse-300 bg-white px-2.5 py-0.5 text-sm font-medium text-cshse-700 hover:bg-cshse-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {redetectState.kind === 'running' ? '⏳ Re-detecting…' : '🔍 Re-run detectors'}
           </button>
@@ -347,7 +347,7 @@ export function ReviewSurface({ submissionId, onClose, onOpenFileLibrary }: Revi
                 ? 'Every draft has been triaged (approved or discarded).'
                 : `Mark the ${unresolvedCount} remaining un-reviewed draft(s) as "not included". Reversible from the Discarded list.`
             }
-            className="rounded border border-amber-300 bg-white px-3 py-1 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded border border-amber-300 bg-white px-2.5 py-0.5 text-sm font-medium text-amber-700 hover:bg-amber-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {finishing
               ? '⏳ Finishing…'
@@ -363,7 +363,7 @@ export function ReviewSurface({ submissionId, onClose, onOpenFileLibrary }: Revi
       {fileSummary && fileSummary.total > 0 && (fileSummary.recent > 0 || fileSummary.unassigned > 0) && (
         <div
           data-testid="review-new-files-banner"
-          className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-6 py-2 text-sm text-amber-900"
+          className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-6 py-1 text-xs text-amber-900"
         >
           <span aria-hidden>📎</span>
           <span>
@@ -378,7 +378,7 @@ export function ReviewSurface({ submissionId, onClose, onOpenFileLibrary }: Revi
           {onOpenFileLibrary && (
             <button
               onClick={onOpenFileLibrary}
-              className="ml-auto rounded border border-amber-300 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100 whitespace-nowrap"
+              className="ml-auto rounded border border-amber-300 bg-white px-2.5 py-0.5 text-xs font-medium text-amber-800 hover:bg-amber-100 whitespace-nowrap"
             >
               Open File Library →
             </button>

@@ -42,6 +42,8 @@ export interface PhaseIndicatorProps {
   /** Fires when the PC clicks the Submit chip — parent scrolls to / focuses
    *  the standalone Submit CTA (the chip is a marker, not the action). */
   onSubmitClick: () => void;
+  /** Render inline in a header row (no padding of its own). */
+  compact?: boolean;
 }
 
 /** Map the current view to its workflow phase. */
@@ -58,7 +60,8 @@ export function PhaseIndicator({
   draftsCount,
   validated,
   totalSpecs,
-  onSubmitClick
+  onSubmitClick,
+  compact = false
 }: PhaseIndicatorProps): JSX.Element {
   const current = phaseForView(activeView);
 
@@ -100,7 +103,7 @@ export function PhaseIndicator({
   return (
     <nav
       aria-label="Self-study workflow steps"
-      className="flex flex-wrap items-center gap-1 px-4 py-2"
+      className={`flex flex-wrap items-center gap-1 ${compact ? '' : 'px-4 py-2'}`}
       data-testid="phase-indicator"
     >
       {chips.map((chip, i) => {

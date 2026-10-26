@@ -338,7 +338,7 @@ function AIImportTabButton({
         startOver();
         setActiveView('ai-import');
       }}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
         !canImport
           ? 'text-gray-300 cursor-not-allowed'
           : activeView === 'ai-import' ? 'bg-teal-100 text-teal-700' : 'text-gray-600 hover:bg-gray-100'
@@ -403,7 +403,7 @@ function ReviewSurfaceButton({
     <button
       onClick={() => !disabled && setActiveView('review-surface')}
       disabled={disabled}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
         disabled
           ? 'text-gray-400 cursor-not-allowed'
           : activeView === 'review-surface'
@@ -445,7 +445,7 @@ function MatrixSurfaceButton({
     <button
       onClick={() => hasContent && setActiveView('matrix-surface')}
       disabled={!hasContent}
-      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
         !hasContent
           ? 'text-gray-400 cursor-not-allowed'
           : activeView === 'matrix-surface'
@@ -2601,13 +2601,33 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           tab row, progress, and Submit button never overlap. At ≥1400px
           they sit on one line; below that the right cluster (progress +
           Submit) wraps below the tabs without losing any controls. */}
-      <header className={`flex-shrink-0 bg-white border-b border-gray-200 px-4 py-2${focusMode ? ' hidden' : ''}`}>
-        {/* CR-045 — wizard phase indicator strip. Shows the PC where they
+      <header className={`flex-shrink-0 bg-white border-b border-gray-200 px-4 py-1.5${focusMode ? ' hidden' : ''}`}>
+        <div className="flex flex-wrap items-center gap-y-1.5 gap-x-4">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => navigate('/self-study')}
+              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Back to Self-Study"
+            >
+              <Home className="w-5 h-5 text-gray-600" />
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold leading-tight text-gray-900 truncate">
+                Self-Study Editor
+              </h1>
+              <p className="text-xs text-gray-500 truncate max-w-[20rem]">
+                {submission?.institutionName} - {submission?.programName}
+              </p>
+            </div>
+          </div>
+          {/* CR-045 — wizard phase indicator strip. Shows the PC where they
             are in the 4-step guided workflow. PC-only (the wizard
             workflow doesn't apply to readers). Hidden on the full-screen
-            Review/Matrix draft surfaces to reclaim vertical work area. */}
+            Review/Matrix draft surfaces to reclaim vertical work area. Sits in
+            the title row (compact) instead of its own row. */}
         {isProgramCoordinator && activeView !== 'review-surface' && activeView !== 'matrix-surface' && (
           <PhaseIndicator
+            compact
             activeView={activeView}
             setActiveView={setActiveView}
             draftsCount={draftsCount}
@@ -2625,24 +2645,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             }}
           />
         )}
-        <div className="flex flex-wrap items-center gap-y-2 gap-x-4">
-          <div className="flex items-center gap-3 flex-shrink-0">
-            <button
-              onClick={() => navigate('/self-study')}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              title="Back to Self-Study"
-            >
-              <Home className="w-5 h-5 text-gray-600" />
-            </button>
-            <div className="min-w-0">
-              <h1 className="text-xl font-semibold text-gray-900 truncate">
-                Self-Study Editor
-              </h1>
-              <p className="text-sm text-gray-500 truncate max-w-[24rem]">
-                {submission?.institutionName} - {submission?.programName}
-              </p>
-            </div>
-          </div>
 
           {/* Compact controls: a full-screen toggle (give the work area the whole
               viewport) + a hamburger that collapses the toolbar on narrow screens
@@ -2694,7 +2696,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 min-w-0">
+          <div className={`flex flex-wrap items-center gap-3 min-w-0 ${activeView !== 'review-surface' && activeView !== 'matrix-surface' ? '2xl:order-last 2xl:basis-full' : ''}`}>
             {/* CR-045 — toolbar grouped by workflow phase. Left-to-right
                 matches the data flow: IMPORT → DRAFTS → SELF-STUDY. Each
                 group carries a plain-English label so a teacher reads the
@@ -2703,12 +2705,12 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             {/* The grouped nav buttons show at wide widths; below 2xl (~1536px,
                 i.e. a maximized laptop) they collapse into the "Menu" hamburger
                 above so the header stays a single compact row. */}
-            <div className="hidden 2xl:flex flex-wrap items-end gap-x-4 gap-y-2 border-l pl-3 border-gray-200">
+            <div className="hidden 2xl:flex flex-wrap items-center gap-x-4 gap-y-1 border-l pl-3 border-gray-200">
               {/* GROUP: IMPORT (PC only) — bring content in. CR-074: archived
                   once the study is submitted (read-only) — the import/triage
                   workflow and its data are no longer relevant to the PC. */}
               {isProgramCoordinator && !isSubmissionLocked && (
-                <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-1">
                   <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                     Import
                   </span>
@@ -2726,7 +2728,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       onClick={() => { if (canImport) setShowImportFile((v) => !v); }}
                       disabled={!canImport}
                       data-testid="import-file-button"
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                         !canImport
                           ? 'text-gray-300 cursor-not-allowed'
                           : showImportFile
@@ -2747,7 +2749,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
               {/* GROUP: DRAFTS (PC only) — triage what the import produced.
                   CR-074: archived once submitted (read-only). */}
               {isProgramCoordinator && !isSubmissionLocked && (
-                <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-1">
                   <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                     Drafts
                   </span>
@@ -2760,7 +2762,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
               {/* GROUP: SELF-STUDY — the published deliverable. Visible to
                   every role (readers author nothing but still navigate it). */}
-              <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-1">
                 <span className="px-1 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
                   Self-Study
                 </span>
@@ -2772,7 +2774,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   <button
                     data-tour="ss-tab-introduction"
                     onClick={() => setActiveView('introduction')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                       activeView === 'introduction'
                         ? 'bg-teal-100 text-teal-700'
                         : 'text-gray-600 hover:bg-gray-100'
@@ -2785,7 +2787,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   <button
                     data-tour="ss-tab-standards"
                     onClick={() => setActiveView('standards')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                       activeView === 'standards'
                         ? 'bg-teal-100 text-teal-700'
                         : 'text-gray-600 hover:bg-gray-100'
@@ -2797,7 +2799,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   <button
                     data-tour="ss-tab-curriculum"
                     onClick={() => setActiveView('curriculum')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                       activeView === 'curriculum'
                         ? 'bg-teal-100 text-teal-700'
                         : 'text-gray-600 hover:bg-gray-100'
@@ -2809,7 +2811,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   <button
                     data-tour="ss-tab-files"
                     onClick={() => setActiveView('files')}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                       activeView === 'files'
                         ? 'bg-teal-100 text-teal-700'
                         : 'text-gray-600 hover:bg-gray-100'
@@ -2826,7 +2828,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       data-testid="nav-lead-reader-report"
                       onClick={() => setActiveView('lead-reader-report')}
                       title="Lead Reader Report to VPA to Request Board Action — the board-facing recommendation document"
-                      className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                         activeView === 'lead-reader-report'
                           ? 'bg-teal-100 text-teal-700'
                           : 'text-gray-600 hover:bg-gray-100'
@@ -2845,7 +2847,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       data-tour="ss-reader-report"
                       onClick={() => navigate(`/reader-report/${submissionId}`)}
                       title="Open the Reader Report — view, edit and save your assessment"
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
                     >
                       <ClipboardList className="w-4 h-4 flex-shrink-0" />
                       Reader Report
@@ -2857,7 +2859,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       data-testid="reader-report-pdf-toolbar"
                       onClick={() => downloadReport(reportFiles.pdf!.id, reportFiles.pdf!.name)}
                       title="Download the Reader Report (PDF)"
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100"
                     >
                       <Download className="w-4 h-4 flex-shrink-0" />
                       Reader Report
@@ -2894,7 +2896,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     onClick={() => validateAllMutation.mutate()}
                     disabled={validateAllMutation.isPending || !!evalProgress?.running}
                     title="Run the AI review against every specification (runs in the background)"
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-primary-300 text-primary-700 hover:bg-primary-50 disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border border-primary-300 text-primary-700 hover:bg-primary-50 disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     {evalProgress?.running ? (
                       <>
@@ -2925,7 +2927,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   data-testid="submit-self-study-cta"
                   onClick={handleSubmitSelfStudy}
                   disabled={submitSelfStudyMutation.isPending || !isSelfStudyReadyForSubmit || isSubmissionLocked}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors whitespace-nowrap ${
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
                     isSubmissionLocked
                       ? 'bg-green-600 text-white cursor-default'
                       : 'bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed'
