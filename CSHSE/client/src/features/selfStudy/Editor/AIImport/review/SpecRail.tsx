@@ -101,7 +101,9 @@ function coverageIcon(b: SpecBucket): string {
 }
 
 /** Trim one gap/strength sentence so a hover tooltip stays a sane height. */
-function clip(s: string, n = 180): string {
+// The tip scrolls (HoverTooltip caps its height), so explanations are shown in
+// full — the clip is only a guard against a runaway model response.
+function clip(s: string, n = 1200): string {
   const t = (s || '').replace(/\s+/g, ' ').trim();
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 }
@@ -156,12 +158,12 @@ export function coverageReason(b: SpecBucket): string {
   if (gaps.length) {
     lines.push('');
     lines.push(state === 'covered' ? 'To strengthen it further:' : 'What still needs work:');
-    for (const g of gaps.slice(0, state === 'covered' ? 3 : 5)) lines.push(`•  ${clip(g)}`);
+    for (const g of gaps) lines.push(`•  ${clip(g)}`);
   }
   if (strengths.length) {
     lines.push('');
     lines.push('What’s working:');
-    for (const s of strengths.slice(0, 3)) lines.push(`•  ${clip(s)}`);
+    for (const s of strengths) lines.push(`•  ${clip(s)}`);
   }
   return lines.join('\n');
 }
