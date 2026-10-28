@@ -2,7 +2,16 @@
  * Postal thin-client contract test. No real network — global fetch is mocked.
  * Pins the wire format that the live courseworx.media instance requires.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
+import mongoose from 'mongoose';
+
+// vi.resetModules() (to re-read env at import) also drops the suite's SHARED
+// module graph (isolate:false), so every later test file re-evaluates the
+// model files against the same mongoose instance and dies with
+// OverwriteModelError. Clear the registry so they register cleanly.
+afterAll(() => {
+  for (const name of mongoose.modelNames()) mongoose.deleteModel(name);
+});
 
 const POSTAL_API_URL = 'https://postal-test.example';
 const POSTAL_DEFAULT_FROM = 'cshse@courseworx.media';
