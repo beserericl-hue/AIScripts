@@ -8,21 +8,7 @@
  * Negative: an unsupported file is skipped without failing the batch; a re-drop
  * of the same file is not uploaded again; a topic-only guess is NOT stamped.
  */
-import { describe, it, expect, vi } from 'vitest';
-
-vi.mock('../../src/services/s3Service', async (orig) => {
-  const real: any = await orig();
-  return { ...real, isS3Configured: () => true, uploadFile: vi.fn(async () => ({ bucket: 'test-bucket', key: 'k' })),
-    generateS3Key: (a: string, b: string, c: string) => `${a}/${b}/${c}` };
-});
-vi.mock('../../src/services/cshseAiClient', async (orig) => {
-  const real: any = await orig();
-  return { ...real, extractFileText: vi.fn(async () => ({ text: '' })), recommendPlacement: vi.fn(async () => ({ std: '9', spec: 'a', confidence: 0.4 })) };
-});
-vi.mock('../../src/services/evidenceIndexer', async (orig) => {
-  const real: any = await orig();
-  return { ...real, indexEvidenceFile: vi.fn(async () => undefined) };
-});
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 
 import request from 'supertest';
 import app from '../../src/index';
@@ -30,6 +16,23 @@ import { Institution } from '../../src/models/Institution';
 import { Submission } from '../../src/models/Submission';
 import { SupportingEvidence } from '../../src/models/SupportingEvidence';
 import { createUser, signTokenFor } from '../helpers/factories';
+import * as s3 from '../../src/services/s3Service';
+import * as ai from '../../src/services/cshseAiClient';
+import * as indexer from '../../src/services/evidenceIndexer';
+
+// Spy on the live module exports rather than vi.mock: the suite shares one
+// module graph (isolate:false), so a vi.mock factory is silently ignored once
+// an earlier test file has loaded the app — this file then hit the real
+// isS3Configured() and got 503 in a full run while passing alone.
+beforeAll(() => {
+  vi.spyOn(s3, 'isS3Configured').mockReturnValue(true);
+  vi.spyOn(s3, 'uploadFile').mockImplementation((async () => ({ bucket: 'test-bucket', key: 'k' })) as any);
+  vi.spyOn(s3, 'generateS3Key').mockImplementation(((a: string, b: string, c: string) => `${a}/${b}/${c}`) as any);
+  vi.spyOn(ai, 'extractFileText').mockImplementation((async () => ({ text: '' })) as any);
+  vi.spyOn(ai, 'recommendPlacement').mockImplementation((async () => ({ std: '9', spec: 'a', confidence: 0.4 })) as any);
+  vi.spyOn(indexer, 'indexEvidenceFile').mockImplementation((async () => undefined) as any);
+});
+afterAll(() => { vi.restoreAllMocks(); });
 
 async function setup() {
   const inst = await Institution.create({
