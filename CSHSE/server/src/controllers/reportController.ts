@@ -524,10 +524,16 @@ export const saveReaderReportData = async (req: AuthenticatedRequest, res: Respo
       for (const inc of incoming) {
         const key = `${inc.standardCode}.${inc.specCode || ''}`;
         const row: any = byKey.get(key);
+        // Only a real override (a lead mark or comment) is attributed to the
+        // lead. The editor autosaves every row, so stamping unconditionally
+        // labelled every spec "lead override" on the reader's printed report
+        // although the lead changed nothing (AACC, Oct 2026).
+        const overrides = !!(inc.mark || String(inc.comment || '').trim());
         if (row) {
           row.leadMark = inc.mark; row.leadComment = inc.comment;
-          row.overriddenBy = leadName; row.overriddenAt = new Date();
-        } else {
+          if (overrides) { row.overriddenBy = leadName; row.overriddenAt = new Date(); }
+          else { row.overriddenBy = undefined; row.overriddenAt = undefined; }
+        } else if (overrides) {
           existing.rows.push({
             standardCode: inc.standardCode, specCode: inc.specCode, mark: '', comment: '',
             leadMark: inc.mark, leadComment: inc.comment, overriddenBy: leadName, overriddenAt: new Date(),
@@ -634,8 +640,12 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
         ? String((r as any).leadComment) : (r.comment || '');
       const hasInline = inlineBySpec.has(`${r.standardCode}.${r.specCode || ''}`);
       if (!effMark && !(effComment && effComment.trim()) && !hasInline) continue;
+      // Attribute to the lead only when there is an actual lead mark/comment
+      // (older saves stamped overriddenBy on every row).
+      const realOverride = !!((r as any).leadMark || String((r as any).leadComment || '').trim());
       touchStd(r.standardCode).specs.push({
-        spec: r.specCode || '', mark: effMark, comment: effComment, overriddenBy: (r as any).overriddenBy,
+        spec: r.specCode || '', mark: effMark, comment: effComment,
+        overriddenBy: realOverride ? (r as any).overriddenBy : undefined,
       });
     }
     // Include specs that have this reader's inline comments but no checklist row.
