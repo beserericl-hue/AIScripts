@@ -228,6 +228,13 @@ describe('Lead Reader Report non-compliance section', () => {
     expect(ptext).not.toContain('PC-NOTE');
     expect(ptext).toContain('Accreditation with no conditions.');
     expect(ptext).not.toMatch(/[☐☒]/);
+    // …while the on-screen reference list (which the lead may copy from) DOES
+    // show it, along with the program details.
+    const scr = await request(app).get(`/api/submissions/${sub._id}/lead-reader-report`).set('Authorization', `Bearer ${token}`);
+    expect(scr.status).toBe(200);
+    expect(scr.body.system.nonCompliance.map((n: any) => n.spec)).toContain('5c');
+    expect(JSON.stringify(scr.body.system.nonCompliance)).toContain('PC-NOTE');
+    expect(scr.body.system.programName).toBe('Human Services');
   });
 
   it('POSITIVE: what the lead wrote is printed', async () => {
