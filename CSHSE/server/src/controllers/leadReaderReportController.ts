@@ -230,8 +230,14 @@ export async function getLeadReaderReport(req: AuthenticatedRequest, res: Respon
     res.status(403).json({ error: 'Only a lead reader or admin may open the Lead Reader Report.' });
     return;
   }
-  const submission = await requireSubmissionAccess(req as any, res, req.params.submissionId);
-  if (!submission) return;
+  const allowed = await requireSubmissionAccess(req as any, res, req.params.submissionId);
+  if (!allowed) return;
+  // The access guard loads only institutionId/submitterId/status; the system
+  // sections need the whole record (names, level, type, standardsStatus). With
+  // the projection the on-screen reference list was always empty while the
+  // download — which loads the full record — printed it (Lauri, Oct 2026).
+  const submission: any = await Submission.findById(allowed._id);
+  if (!submission) { res.status(404).json({ error: 'Submission not found' }); return; }
 
   const system = await buildSystemSections(submission);
   const saved: any =
