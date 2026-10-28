@@ -160,6 +160,33 @@ describe('Per-reader Reader Report download', () => {
     expect(text).not.toMatch(/[☐☒]/);
   });
 
+  it('NEGATIVE: a lead merely opening/autosaving a reader’s report is NOT printed as a "lead override"', async () => {
+    // The editor autosaves every row in lead mode with empty lead marks.
+    const put = await request(app)
+      .put(`/api/reports/submission/${ctx.sub._id}/reader-report-data?reviewerId=${ctx.readerA._id}`)
+      .set('Authorization', `Bearer ${ctx.leadToken}`)
+      .send({ rows: [{ standardCode: '4', specCode: 'a', mark: '', comment: '' }, { standardCode: '4', specCode: 'b', mark: '', comment: '' }] });
+    expect(put.status).toBe(200);
+    const saved: any = await ReaderReport.findOne({ submissionId: ctx.sub._id, reviewerId: ctx.readerA._id }).lean();
+    expect(saved.rows.filter((r: any) => r.overriddenBy)).toHaveLength(0);
+    // Stale stamps from before the fix (overriddenBy without a lead mark) don't print either.
+    await ReaderReport.updateOne({ _id: saved._id }, { $set: { 'rows.0.overriddenBy': 'Lauri Lead' } });
+    const res = await download(ctx.leadToken, 'docx', String(ctx.readerA._id));
+    expect(await docxText(res.body)).not.toContain('Lead override');
+  });
+
+  it('POSITIVE: a real lead override is printed with the lead’s name', async () => {
+    await request(app)
+      .put(`/api/reports/submission/${ctx.sub._id}/reader-report-data?reviewerId=${ctx.readerA._id}`)
+      .set('Authorization', `Bearer ${ctx.leadToken}`)
+      .send({ rows: [{ standardCode: '4', specCode: 'a', mark: 'noncompliant', comment: 'Lead disagrees' }] });
+    const rows = await docxRows((await download(ctx.leadToken, 'docx', String(ctx.readerA._id))).body);
+    const r4a = rowWith(rows, 'clearly stated measurable')!;
+    expect(r4a.slice(-3, -1)).toEqual(['☐', '☒']);
+    expect(r4a.join(' ')).toContain('Lead override by Lauri Lead');
+    expect(r4a.join(' ')).toContain('Lead disagrees');
+  });
+
   it('NEGATIVE: a reader cannot download another reader’s report', async () => {
     const res = await download(ctx.aToken, 'docx', String(ctx.readerB._id));
     expect(res.status).toBe(403);
