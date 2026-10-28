@@ -63,3 +63,37 @@ export function compliancePair(
   doc.x = doc.page.margins.left;
   doc.y = y + fontSize * 1.35;
 }
+
+// WinAnsi (Windows-1252) is all the built-in PDF fonts can encode. Text pasted
+// from Word (Symbol-font bullets U+F0B7, tabs, private-use glyphs, ☐/✓ …) came
+// out as garbage — Lauri's Lead Reader Report PDF read "•"–æ6ÇVFRPvidence…".
+const WINANSI_EXTRA = new Set('€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ');
+// Code point -> WinAnsi-safe replacement.
+const SUBSTITUTE = new Map<string, string>([
+  [0xF0B7, '•'], [0xF0A7, '•'], [0xF076, '•'], [0xF0D8, '•'], [0xF0FC, 'v'], [0x25AA, '•'],
+  [0x25CF, '•'], [0x25E6, '•'], [0x2023, '•'], [0x2043, '-'], [0x2212, '-'], [0x2010, '-'],
+  [0x2011, '-'], [0x00AD, ''], [0x200B, ''], [0x200C, ''], [0x200D, ''], [0xFEFF, ''],
+  [0x2028, '\n'], [0x2029, '\n'], [0x0009, '    '], [0x2610, '[ ]'], [0x2612, '[X]'], [0x2611, '[X]'],
+  [0x2713, 'v'], [0x2714, 'v'], [0x2192, '->'], [0x2190, '<-'], [0x2265, '>='], [0x2264, '<='],
+].map(([cp, v]) => [String.fromCodePoint(cp as number), v as string]));
+export function pdfSafe(s: string): string {
+  let out = '';
+  for (const ch of String(s).normalize('NFC')) {
+    const sub = SUBSTITUTE.get(ch);
+    if (sub !== undefined) { out += sub; continue; }
+    const c = ch.codePointAt(0)!;
+    if (ch === '\n' || (c >= 0x20 && c <= 0x7e) || (c >= 0xa0 && c <= 0xff) || WINANSI_EXTRA.has(ch)) out += ch;
+    else out += '?';
+  }
+  return out;
+}
+
+/** Route every doc.text() string through pdfSafe. */
+export function useSafeText<T>(doc: T): T {
+  const d = doc as any;
+  const orig = d.text.bind(d);
+  d.text = (t: any, ...rest: any[]) => orig(typeof t === 'string' ? pdfSafe(t) : t, ...rest);
+  const w = d.widthOfString.bind(d);
+  d.widthOfString = (t: any, ...rest: any[]) => w(typeof t === 'string' ? pdfSafe(t) : t, ...rest);
+  return doc;
+}

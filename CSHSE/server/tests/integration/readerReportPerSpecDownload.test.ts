@@ -237,6 +237,34 @@ describe('Lead Reader Report non-compliance section', () => {
     expect(scr.body.system.programName).toBe('Human Services');
   });
 
+  it('POSITIVE: Word-pasted bullets/tabs in the lead’s text print cleanly in the PDF (no garbage glyphs)', async () => {
+    const { sub } = await makeSubmission('associate');
+    const lead = (await createUser({ role: 'lead_reader', firstName: 'Lauri', lastName: 'Lead' })).user;
+    await assignToSubmission(sub, lead, 'lead_reader');
+    const bullet = String.fromCodePoint(0xf0b7), tab = String.fromCodePoint(9);
+    await LeadReaderReport.create({ submissionId: sub._id, recommendation: 'accredit_no_conditions',
+      nonComplianceText: `9b${'\n'}${bullet}${tab}Provide evidence of training schedules and attendance records.` } as any);
+    const pdf = await binary(request(app).get(`/api/submissions/${sub._id}/lead-reader-report/download?format=pdf`).set('Authorization', `Bearer ${signTokenFor(lead)}`));
+    const t = (await pdfParse(pdf.body)).text.replace(/\s+/g, ' ');
+    expect(t).toContain('• Provide evidence of training schedules');
+    expect(t).not.toMatch(/[æÇ]|VFRP/);
+  });
+
+  it('POSITIVE: the forms carry the July 2025 footer, not 2022/2023/2020', async () => {
+    for (const level of ['associate', 'bachelors', 'masters'] as const) {
+      const { sub } = await makeSubmission(level);
+      const reader = (await createUser({ role: 'reader', firstName: 'F', lastName: 'Ooter' })).user;
+      await assignToSubmission(sub, reader, 'reader');
+      await ReaderReport.create({ submissionId: sub._id, reviewerId: reader._id, rows: [] } as any);
+      const res = await binary(request(app).get(`/api/reports/submission/${sub._id}/reader-report/download?format=docx`).set('Authorization', `Bearer ${signTokenFor(reader)}`));
+      const zip = await JSZip.loadAsync(res.body);
+      const footer = (await zip.file('word/footer1.xml')!.async('string')).replace(/<[^>]+>/g, '');
+      expect(footer, level).toContain('July 2025');
+      expect(footer, level).not.toMatch(/July 20(20|22|23)/);
+      if (level === 'bachelors') expect(footer).toContain('Baccalaureate');
+    }
+  });
+
   it('POSITIVE: what the lead wrote is printed', async () => {
     const { sub } = await makeSubmission('associate');
     const lead = (await createUser({ role: 'lead_reader', firstName: 'Lauri', lastName: 'Lead' })).user;

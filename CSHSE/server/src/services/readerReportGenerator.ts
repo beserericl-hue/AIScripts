@@ -34,7 +34,7 @@ import { getLevelStandards } from '../data/levelStandards';
 import { INTRO_RUBRIC, INTRO_STANDARD_CODE } from '../data/introRubric';
 import { splitIntroByRubric } from './introNarrativeSplit';
 import { brandedSectionChrome } from './docxBranding';
-import { compliancePair, checkboxLine } from './pdfCheckbox';
+import { compliancePair, checkboxLine, useSafeText } from './pdfCheckbox';
 
 // Template placeholder keys for the Introduction section: a rolled-up
 // {{*_introduction}} (associate/masters) + one {{*_intro_<a-f>}} per topic row
@@ -382,7 +382,7 @@ function buildChecklistPdf(
   data: ReportData, rollup: Map<string, StandardRollup>, levelTitle: string, extras?: ReaderReportExtras,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'LETTER', margin: 54 });
+    const doc = useSafeText(new PDFDocument({ size: 'LETTER', margin: 54 }));
     const chunks: Buffer[] = [];
     doc.on('data', (c: Buffer) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
