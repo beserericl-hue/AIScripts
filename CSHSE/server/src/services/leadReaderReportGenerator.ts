@@ -28,7 +28,7 @@ import {
 import { Submission } from '../models/Submission';
 import { LeadReaderReport } from '../models/LeadReaderReport';
 import { buildSystemSections } from '../controllers/leadReaderReportController';
-import { checkboxLine as pdfCheckboxLine } from './pdfCheckbox';
+import { checkboxLine as pdfCheckboxLine, useSafeText } from './pdfCheckbox';
 import { brandedSectionChrome } from './docxBranding';
 
 const ORG_NAME = 'Council for Standards in Human Service Education';
@@ -325,7 +325,7 @@ async function buildDocx(system: SystemSections, report: ReportFields): Promise<
 
 function buildPdf(system: SystemSections, report: ReportFields): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'LETTER', margin: 54 });
+    const doc = useSafeText(new PDFDocument({ size: 'LETTER', margin: 54 }));
     const chunks: Buffer[] = [];
     doc.on('data', (c: Buffer) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
