@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import mammoth from 'mammoth';
-import { patchDocument, PatchType, TextRun } from 'docx';
+import { fillTemplate } from '../../src/services/readerReportGenerator';
 
 const TPL = path.resolve(__dirname, '../../src/assets/reader-report-templates/masters.docx');
 
@@ -32,8 +32,8 @@ describe("Master's reader-report template", () => {
   });
 
   it('fills institution/program + marks with NO leftover tokens', async () => {
-    const mk = (t: string) => ({ type: PatchType.PARAGRAPH, children: [new TextRun(t || '')] });
-    const patches: Record<string, any> = {
+    const mk = (t: string) => t;
+    const patches: Record<string, string> = {
       inst_name: mk('KENNESAW STATE UNIVERSITY'),
       prog_name: mk('HUMAN SERVICES (M.S.)'),
     };
@@ -43,17 +43,30 @@ describe("Master's reader-report template", () => {
       patches[`n_${i}`] = mk(compliant ? '☐' : '☒');
       patches[`cm_${i}`] = mk(`Draft comment ${i}.`);
     }
-    const out = (await patchDocument({
-      outputType: 'nodebuffer',
-      data: fs.readFileSync(TPL),
-      patches,
-      keepOriginalStyles: true,
-    })) as Buffer;
+    for (const k of ['c_introduction', 'n_introduction', 'cm_introduction', 'reader_recommendation']) {
+      patches[k] = mk('');
+    }
+    // These share the multi-label header paragraph with inst/prog: never empty
+    // (the generator writes underscores when unknown).
+    patches.reader_name = mk('Nancy Reader');
+    patches.report_date = mk('10/20/2026');
+    // Per-specification rows (scripts/add_spec_placeholders.py).
+    const specRows: string[] = JSON.parse(fs.readFileSync(path.join(path.dirname(TPL), 'spec-rows.json'), 'utf8')).masters;
+    expect(specRows.length).toBeGreaterThan(80);
+    for (const key of specRows) {
+      const k = key.replace('.', '_');
+      patches[`c_${k}`] = mk('☐');
+      patches[`n_${k}`] = mk('☐');
+      patches[`cm_${k}`] = mk(key === '7.b' ? 'Spec comment 7.b.' : '');
+    }
+    const out = await fillTemplate(fs.readFileSync(TPL), patches);
     const text = await textOf(out);
     expect(text).toContain('KENNESAW STATE UNIVERSITY');
     expect(text).toContain('HUMAN SERVICES (M.S.)');
     expect(text).toMatch(/Program Director/); // other labels preserved
     expect(text).toContain('Draft comment 7.');
+    expect(text).toContain('Spec comment 7.b.');
+    expect(text).toContain('Nancy Reader');
     expect(text.match(/\{\{[^}]+\}\}/g)).toBeNull(); // every token was filled
   });
 });
