@@ -24,6 +24,7 @@ import path from 'path';
 import PDFDocument from 'pdfkit';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, patchDocument, PatchType } from 'docx';
 import mongoose from 'mongoose';
+import JSZip from 'jszip';
 import { Submission } from '../models/Submission';
 import { ValidationResult } from '../models/ValidationResult';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
@@ -33,6 +34,7 @@ import { getLevelStandards } from '../data/levelStandards';
 import { INTRO_RUBRIC, INTRO_STANDARD_CODE } from '../data/introRubric';
 import { splitIntroByRubric } from './introNarrativeSplit';
 import { brandedSectionChrome } from './docxBranding';
+import { compliancePair, checkboxLine } from './pdfCheckbox';
 
 // Template placeholder keys for the Introduction section: a rolled-up
 // {{*_introduction}} (associate/masters) + one {{*_intro_<a-f>}} per topic row
@@ -65,6 +67,50 @@ function resolveLevel(programLevel?: string): { key: string; cfg?: { file: strin
 function templatePath(file: string): string {
   return path.join(__dirname, '..', 'assets', 'reader-report-templates', file);
 }
+
+// The baccalaureate form prints Field Experience as "Standard 22"; the catalog
+// (and every saved mark) calls it 21. Form key -> catalog code.
+const FORM_STD_ALIAS: Record<string, Record<string, string>> = { baccalaureate: { '22': '21' } };
+
+// Specs that have their own row (with {{c_/n_/cm_<std>_<spec>}} cells) on each
+// level's form — written by scripts/add_spec_placeholders.py.
+let specRowManifest: Record<string, string[]> | null = null;
+function specRows(levelKey: string): Set<string> {
+  if (!specRowManifest) {
+    try {
+      specRowManifest = JSON.parse(fs.readFileSync(templatePath('spec-rows.json'), 'utf8'));
+    } catch {
+      specRowManifest = {};
+    }
+  }
+  return new Set(specRowManifest?.[levelKey] || []);
+}
+
+/** "std.spec" keys that have their own row on this program level's form. */
+export function formSpecRows(programLevel?: string): Set<string> {
+  return specRows(resolveLevel(programLevel).key);
+}
+
+export type Mark = '' | 'compliant' | 'noncompliant';
+/**
+ * One reader's own report, for the per-reader download: their mark + comment
+ * on EVERY specification (keyed "std.spec"), who they are, and their
+ * recommendation to the Council. Lead readers send each reader's report to the
+ * Council, so it is marked per specification, not rolled up per standard.
+ */
+export interface ReaderReportExtras {
+  specs: Map<string, { mark: Mark; comment: string }>;
+  readerName: string;
+  reportDate: string;
+  acceptanceVote: string;
+  recommendation: string;
+}
+export const VOTE_OPTIONS: Array<[string, string]> = [
+  ['accept', 'Accreditation with no conditions.'],
+  ['conditional', 'Conditional accreditation because the program had a few noncompliance issues that require correction.'],
+  ['deny', 'Deny accreditation due to significant noncompliance.'],
+  ['hold', 'Hold a decision.'],
+];
 
 function stripHtml(html?: string | null): string {
   return String(html || '')
@@ -190,32 +236,117 @@ function rollupByStandard(data: ReportData): Map<string, StandardRollup> {
   return out;
 }
 
+/** The reader's recommendation to the Council, as printed on their report. */
+function recommendationText(x: ReaderReportExtras): string {
+  const lines = ['Reader’s recommendation to the Council:'];
+  for (const [v, label] of VOTE_OPTIONS) lines.push(`${x.acceptanceVote === v ? '☒' : '☐'} ${label}`);
+  if (x.recommendation.trim()) lines.push('', x.recommendation.trim());
+  return lines.join('\n');
+}
+
 /** Build the template-filled DOCX (the official checklist, AI-drafted). */
 async function buildTemplatedDocx(
-  cfg: { file: string; stds: string[] }, data: ReportData, rollup: Map<string, StandardRollup>
+  cfg: { file: string; stds: string[] }, levelKey: string, data: ReportData,
+  rollup: Map<string, StandardRollup>, extras?: ReaderReportExtras,
 ): Promise<Buffer> {
   const tpl = fs.readFileSync(templatePath(cfg.file));
-  const mk = (text: string) => ({ type: PatchType.PARAGRAPH, children: [new TextRun(text || '')] });
-  const mkMulti = (text: string) => ({
-    type: PatchType.PARAGRAPH,
-    children: (text ? text.split('\n') : ['']).map((ln, i) => new TextRun({ text: ln, break: i === 0 ? 0 : 1 })),
-  });
-  const patches: Record<string, any> = {
-    inst_name: mk(data.institutionName),
-    prog_name: mk(data.programName),
+  const fills: Record<string, string> = {
+    inst_name: data.institutionName,
+    prog_name: data.programName,
   };
   // The Introduction section opens the official report. The baccalaureate
   // template has one row PER intro topic ({{c_intro_a}}..{{c_intro_f}}); the
   // associate/masters templates roll it into a single {{c_introduction}} row.
-  // We emit patches for BOTH; patchDocument ignores placeholders a template
-  // doesn't contain.
+  // We emit fills for BOTH; tokens a template doesn't contain are ignored.
+  const alias = FORM_STD_ALIAS[levelKey] || {};
   for (const code of [...INTRO_TEMPLATE_KEYS, ...cfg.stds]) {
-    const r = rollup.get(code) || { mark: null, comment: '' };
-    patches[`c_${code}`] = mk(r.mark === 'compliant' ? '☒' : '☐');
-    patches[`n_${code}`] = mk(r.mark === 'noncompliant' ? '☒' : '☐');
-    patches[`cm_${code}`] = mkMulti(r.comment || '');
+    const r = rollup.get(alias[code] || code) || { mark: null, comment: '' };
+    fills[`c_${code}`] = r.mark === 'compliant' ? '☒' : '☐';
+    fills[`n_${code}`] = r.mark === 'noncompliant' ? '☒' : '☐';
+    fills[`cm_${code}`] = r.comment || '';
   }
-  return patchDocument({ outputType: 'nodebuffer', data: tpl, patches, keepOriginalStyles: true }) as Promise<Buffer>;
+  // Per-specification cells. A reader's download marks each spec on its own
+  // row; the AI draft leaves them empty for the reader.
+  for (const key of specRows(levelKey)) {
+    const [std, spec] = key.split('.');
+    const sp = extras?.specs.get(key);
+    const box = (on: boolean) => (extras ? (on ? '☒' : '☐') : '');
+    fills[`c_${std}_${spec}`] = box(sp?.mark === 'compliant');
+    fills[`n_${std}_${spec}`] = box(sp?.mark === 'noncompliant');
+    fills[`cm_${std}_${spec}`] = sp?.comment || '';
+  }
+  fills.reader_name = extras?.readerName || '________________________________';
+  fills.report_date = extras?.reportDate || '________________';
+  fills.reader_recommendation = extras ? recommendationText(extras) : '';
+  return fillTemplate(tpl, fills, extras ? VOTE_BOX_LABEL[extras.acceptanceVote] : undefined);
+}
+
+// The form's own recommendation checkbox (a Word checkbox control on the
+// associate/baccalaureate forms) is ticked for the reader's vote; the masters
+// form draws its boxes differently, so it relies on the recommendation block.
+const VOTE_BOX_LABEL: Record<string, string> = {
+  accept: 'Accreditation with no conditions',
+  conditional: 'Conditional accreditation because',
+  deny: 'Deny accreditation due',
+  hold: 'Hold a decision',
+};
+
+/** Tick the checkbox content control just before `label` in the
+ *  recommendation section; returns the XML unchanged if there is none. */
+function tickFormCheckbox(xml: string, label: string): string {
+  const section = xml.indexOf('Indicate your recommendation to the Council');
+  const at = section < 0 ? -1 : xml.indexOf(label, section);
+  if (at < 0) return xml;
+  const start = xml.lastIndexOf('<w:sdt>', at);
+  const end = start < 0 ? -1 : xml.indexOf('</w:sdt>', start);
+  if (start < 0 || end < 0 || end > at) return xml;
+  let sdt = xml.slice(start, end);
+  if (!sdt.includes('<w14:checkbox>')) return xml;
+  sdt = sdt.replace('<w14:checked w14:val="0"/>', '<w14:checked w14:val="1"/>');
+  sdt = sdt.includes('☐')
+    ? sdt.replace('☐', '☒')
+    : sdt.replace('<w:sdtContent/>',
+      '<w:sdtContent><w:r><w:rPr><w:rFonts w:ascii="MS Gothic" w:eastAsia="MS Gothic" w:hAnsi="MS Gothic"/></w:rPr><w:t>☒</w:t></w:r></w:sdtContent>');
+  return xml.slice(0, start) + sdt + xml.slice(end);
+}
+
+const xmlEscape = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/**
+ * Replace {{tokens}} in the template. Each token was inserted as one run, so it
+ * sits whole inside a single <w:t>: replace it in the XML directly (newlines
+ * become <w:br/>). docx.patchDocument rescans the whole document per token —
+ * ~17 s for the masters form's 62 standard tokens and ~105 s once every
+ * specification row has its own cells — so it now only handles any token that
+ * Word happened to split across runs.
+ */
+export async function fillTemplate(tpl: Buffer, fills: Record<string, string>, tickLabel?: string): Promise<Buffer> {
+  const zip = await JSZip.loadAsync(tpl);
+  const file = zip.file('word/document.xml');
+  if (!file) throw new Error('template has no word/document.xml');
+  let xml = await file.async('string');
+  if (tickLabel) xml = tickFormCheckbox(xml, tickLabel);
+  const filled = xml.replace(/<w:t(\s[^>]*)?>([^<]*)<\/w:t>/g, (whole, _attrs, text: string) => {
+    if (!text.includes('{{')) return whole;
+    const out = text.replace(/\{\{([a-z0-9_]+)\}\}/g, (tok, key: string) =>
+      key in fills ? xmlEscape(fills[key]).split('\n').join('</w:t><w:br/><w:t xml:space="preserve">') : tok);
+    return `<w:t xml:space="preserve">${out}</w:t>`;
+  });
+  zip.file('word/document.xml', filled);
+  let buf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+  const left = [...new Set((filled.match(/\{\{([a-z0-9_]+)\}\}/g) || []).map((t) => t.slice(2, -2)))]
+    .filter((k) => k in fills);
+  if (left.length) {
+    const patches: Record<string, any> = {};
+    for (const k of left) {
+      patches[k] = {
+        type: PatchType.PARAGRAPH,
+        children: (fills[k] ? fills[k].split('\n') : ['']).map((ln, i) => new TextRun({ text: ln, break: i === 0 ? 0 : 1 })),
+      };
+    }
+    buf = (await patchDocument({ outputType: 'nodebuffer', data: buf, patches, keepOriginalStyles: true })) as Buffer;
+  }
+  return buf;
 }
 
 /** Procedural fallback DOCX — used only if a level's template file is missing
@@ -243,8 +374,13 @@ async function buildProceduralDocx(data: ReportData, rollup: Map<string, Standar
   return Packer.toBuffer(doc);
 }
 
-/** Matching checklist PDF (mirrors the template's structure). */
-function buildChecklistPdf(data: ReportData, rollup: Map<string, StandardRollup>, levelTitle: string): Promise<Buffer> {
+/** Matching checklist PDF (mirrors the template's structure). With `extras`
+ *  (a reader's own download) every specification gets its own Compliant /
+ *  Non-Compliant line and the reader's recommendation is marked; checkboxes are
+ *  drawn as vectors because Helvetica has no ☐/☒ glyphs. */
+function buildChecklistPdf(
+  data: ReportData, rollup: Map<string, StandardRollup>, levelTitle: string, extras?: ReaderReportExtras,
+): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'LETTER', margin: 54 });
     const chunks: Buffer[] = [];
@@ -256,22 +392,46 @@ function buildChecklistPdf(data: ReportData, rollup: Map<string, StandardRollup>
     doc.moveDown(0.4);
     doc.fontSize(11).fillColor('#111827').text(`Institution's Name: ${data.institutionName}`);
     doc.text(`Program's Name: ${data.programName}`);
-    doc.fontSize(9).fillColor('#6b7280').text("Reader's Name and Credential: ____________________________     Date: ______________");
-    doc.moveDown(0.3);
-    doc.fontSize(8).fillColor('#6b7280').text('Compliance marks below are an AI-generated DRAFT rolled up from the per-specification AI verdicts. The assigned reader reviews and adjusts each mark and comment.');
+    if (extras) {
+      doc.text(`Reader's Name and Credential: ${extras.readerName}     Date: ${extras.reportDate}`);
+    } else {
+      doc.fontSize(9).fillColor('#6b7280').text("Reader's Name and Credential: ____________________________     Date: ______________");
+      doc.moveDown(0.3);
+      doc.fontSize(8).fillColor('#6b7280').text('Compliance marks below are an AI-generated DRAFT rolled up from the per-specification AI verdicts. The assigned reader reviews and adjusts each mark and comment.');
+    }
     doc.moveDown(0.6);
 
+    const comment = (text: string, indent = 0) => {
+      doc.fontSize(9).fillColor('#111827').text(text, doc.page.margins.left + indent, doc.y, { paragraphGap: 3 });
+      doc.x = doc.page.margins.left;
+    };
     for (const std of data.standards) {
       const r = rollup.get(std.code) || { mark: null, comment: '' };
-      if (r.mark === null && !r.comment) continue;
-      doc.fontSize(11).fillColor('#111827').text(`Standard ${std.code}: ${std.title}`);
-      const compMark = r.mark === 'compliant' ? '☒' : '☐';
-      const nonMark = r.mark === 'noncompliant' ? '☒' : '☐';
-      const color = r.mark === 'compliant' ? '#15803d' : r.mark === 'noncompliant' ? '#b91c1c' : '#6b7280';
-      doc.fontSize(10).fillColor(color).text(`${compMark} Compliant     ${nonMark} Non-Compliant`);
-      if (r.comment) {
-        doc.fontSize(9).fillColor('#374151').text('Reader’s Comments:');
-        doc.fontSize(9).fillColor('#111827').text(r.comment, { paragraphGap: 3 });
+      const specMarks = extras
+        ? std.specs.map((sp) => ({ sp, v: extras.specs.get(`${std.code}.${sp.spec}`) }))
+          .filter((x) => x.v && (x.v.mark || x.v.comment.trim()))
+        : [];
+      if (r.mark === null && !r.comment && !specMarks.length) continue;
+      if (doc.y > doc.page.height - 140) doc.addPage();
+      doc.fontSize(11).fillColor('#111827').font('Helvetica-Bold').text(`Standard ${std.code}: ${std.title}`);
+      doc.font('Helvetica');
+      if (!extras) {
+        compliancePair(doc, r.mark);
+        if (r.comment) {
+          doc.fontSize(9).fillColor('#374151').text('Reader’s Comments:');
+          comment(r.comment);
+        }
+      } else {
+        for (const { sp, v } of specMarks) {
+          if (doc.y > doc.page.height - 90) doc.addPage();
+          doc.moveDown(0.25);
+          doc.fontSize(10).fillColor('#111827').font('Helvetica-Bold')
+            .text(`${std.code}.${sp.spec}`, { continued: true })
+            .font('Helvetica').fillColor('#4b5563')
+            .text(`  ${(sp.text || sp.title || '').replace(/\s+/g, ' ').slice(0, 160)}${(sp.text || '').length > 160 ? '…' : ''}`);
+          compliancePair(doc, v!.mark, { indent: 12 });
+          if (v!.comment.trim()) comment(v!.comment.trim(), 12);
+        }
       }
       doc.moveDown(0.5);
     }
@@ -290,17 +450,22 @@ function buildChecklistPdf(data: ReportData, rollup: Map<string, StandardRollup>
     doc.addPage();
     doc.fontSize(12).fillColor('#111827').text('Recommendation to the Council');
     doc.moveDown(0.3);
-    doc.fontSize(10).fillColor('#374151').text('☐ Accreditation with no conditions');
-    doc.text('☐ Conditional accreditation (correctable noncompliance)');
-    doc.text('☐ Deny accreditation due to significant noncompliance');
-    doc.text('☐ Hold a decision');
+    for (const [v, label] of VOTE_OPTIONS) {
+      checkboxLine(doc, extras?.acceptanceVote === v, label);
+      doc.moveDown(0.15);
+    }
+    if (extras?.recommendation.trim()) {
+      doc.moveDown(0.4);
+      doc.fontSize(10).fillColor('#111827').font('Helvetica-Bold').text('Reader’s comments to the Council:');
+      doc.font('Helvetica').text(extras.recommendation.trim());
+    }
     doc.moveDown(1);
-    doc.text('Self-Study Reader Signature: ____________________________     Date: ______________');
+    doc.fontSize(10).fillColor('#374151')
+      .text('Self-Study Reader Signature (electronic signature accepted): ____________________________     Date: ______________');
     doc.end();
   });
 }
 
-/** Upsert one reader-report file (by tag) into the Supporting File Library. */
 async function upsertReportFile(submission: any, userId: any, fmt: 'pdf' | 'docx', buffer: Buffer): Promise<void> {
   const tag = `reader-report:${fmt}`;
   const filename = `Reader-Report-${String(submission.institutionName || 'submission').replace(/[^a-z0-9]+/gi, '-')}.${fmt}`;
@@ -351,7 +516,7 @@ export async function generateAndStoreReaderReport(
   let docxBuf: Buffer;
   let templated = false;
   if (cfg && fs.existsSync(templatePath(cfg.file))) {
-    docxBuf = await buildTemplatedDocx(cfg, data, rollup);
+    docxBuf = await buildTemplatedDocx(cfg, key, data, rollup);
     templated = true;
   } else {
     // No template file on disk (shouldn't happen — all 3 levels ship one) →
@@ -435,7 +600,8 @@ export interface ReaderReportStructure {
  */
 export async function renderReaderReportBuffers(
   submissionId: string,
-  readerOverrides?: Map<string, { mark: '' | 'compliant' | 'noncompliant'; comment: string }>
+  readerOverrides?: Map<string, { mark: '' | 'compliant' | 'noncompliant'; comment: string }>,
+  extras?: ReaderReportExtras,
 ): Promise<{ pdf: Buffer; docx: Buffer } | null> {
   const submission: any = await Submission.findById(submissionId).select('_id programLevel');
   if (!submission) return null;
@@ -458,12 +624,12 @@ export async function renderReaderReportBuffers(
   } else {
     rollup = rollupByStandard(data);
   }
-  const { cfg } = resolveLevel(data.programLevel || submission.programLevel);
+  const { key: levelKey, cfg } = resolveLevel(data.programLevel || submission.programLevel);
   const levelTitle = cfg?.title || "Master's Degree";
   const docx = (cfg && fs.existsSync(templatePath(cfg.file)))
-    ? await buildTemplatedDocx(cfg, data, rollup)
+    ? await buildTemplatedDocx(cfg, levelKey, data, rollup, extras)
     : await buildProceduralDocx(data, rollup, levelTitle);
-  const pdf = await buildChecklistPdf(data, rollup, levelTitle);
+  const pdf = await buildChecklistPdf(data, rollup, levelTitle, extras);
   return { pdf, docx };
 }
 

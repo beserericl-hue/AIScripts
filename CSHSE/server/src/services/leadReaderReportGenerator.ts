@@ -28,6 +28,7 @@ import {
 import { Submission } from '../models/Submission';
 import { LeadReaderReport } from '../models/LeadReaderReport';
 import { buildSystemSections } from '../controllers/leadReaderReportController';
+import { checkboxLine as pdfCheckboxLine } from './pdfCheckbox';
 import { brandedSectionChrome } from './docxBranding';
 
 const ORG_NAME = 'Council for Standards in Human Service Education';
@@ -268,20 +269,10 @@ async function buildDocx(system: SystemSections, report: ReportFields): Promise<
   // --- Non-compliance ---
   children.push(sectionHeading('Identify Standards and Specifications in question related to non-compliance'));
   children.push(new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: NONCOMPLIANCE_INSTRUCTION, italics: true, size: 18 })] }));
-  if (String(report.nonComplianceText || '').trim()) {
-    children.push(...docxParagraphsFor(report.nonComplianceText));
-  } else {
-    const items = system.nonCompliance || [];
-    if (items.length) {
-      for (const it of items) {
-        children.push(new Paragraph({ spacing: { before: 60 }, children: [new TextRun({ text: it.spec, bold: true })] }));
-        for (const cm of it.comments || []) children.push(new Paragraph({ children: [new TextRun(cm)] }));
-        if (!(it.comments || []).length) children.push(new Paragraph({ children: [new TextRun('')] }));
-      }
-    } else {
-      children.push(new Paragraph({ children: [new TextRun('')] }));
-    }
-  }
+  // Only what the lead reader wrote. The compiled list (AI-failed specs + every
+  // reviewer/PC comment) is an on-screen reference the lead may copy from; it is
+  // never printed on its own (Lauri, Oct 2026: notes she left out appeared).
+  children.push(...docxParagraphsFor(report.nonComplianceText));
 
   // --- Recommendations ---
   children.push(sectionHeading('Recommendations'));
@@ -362,9 +353,8 @@ function buildPdf(system: SystemSections, report: ReportFields): Promise<Buffer>
       const v = val(value);
       doc.fontSize(10).fillColor('#111827').font('Helvetica').text(v || ' ', { paragraphGap: 2 });
     };
-    const check = (on: boolean, text: string) => {
-      doc.fontSize(10).fillColor('#111827').font('Helvetica').text(`${box(on)} ${text}`);
-    };
+    // Vector boxes: Helvetica has no ☐/☒ glyphs, so the chosen option was unreadable.
+    const check = (on: boolean, text: string) => pdfCheckboxLine(doc, on, text);
 
     // Letterhead
     if (logoBuffer) {
@@ -449,21 +439,8 @@ function buildPdf(system: SystemSections, report: ReportFields): Promise<Buffer>
     heading('Identify Standards and Specifications in question related to non-compliance');
     doc.fontSize(9).fillColor('#374151').font('Helvetica-Oblique').text(NONCOMPLIANCE_INSTRUCTION);
     doc.font('Helvetica');
-    if (val(report.nonComplianceText)) {
-      para(report.nonComplianceText);
-    } else {
-      const items = system.nonCompliance || [];
-      if (items.length) {
-        for (const it of items) {
-          doc.moveDown(0.2);
-          doc.fontSize(10).fillColor('#111827').font('Helvetica-Bold').text(it.spec);
-          doc.font('Helvetica');
-          for (const cm of it.comments || []) doc.fontSize(10).fillColor('#111827').text(cm);
-        }
-      } else {
-        para('');
-      }
-    }
+    // Only what the lead reader wrote (see the DOCX builder).
+    para(report.nonComplianceText);
 
     // Recommendations
     heading('Recommendations');

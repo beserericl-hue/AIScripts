@@ -5,7 +5,7 @@ import { LeadReaderCompilation } from '../models/LeadReaderCompilation';
 import { User } from '../models/User';
 import { Score } from '../models/Score';
 import { PDFGeneratorService } from '../services/pdfGenerator';
-import { generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
+import { formSpecRows, generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
 import { ReaderReport } from '../models/ReaderReport';
 import { Comment } from '../models/Comment';
 import { Assignment } from '../models/Assignment';
@@ -598,14 +598,14 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
     if (!target) return res.status(403).json({ error: 'Forbidden' });
     const reviewerId = target.reviewerId;
     const saved = await ReaderReport.findOne({ submissionId, reviewerId }).lean();
-    // The official .docx template has one checklist cell per STANDARD, so roll
-    // the reader's per-SPECIFICATION marks/comments up to the standard: the
-    // standard is Non-Compliant if ANY spec is, else Compliant if any spec is;
-    // the comment concatenates each spec's note (labelled by spec).
-    // ALL inline margin comments (reader + lead + PC replies), grouped by
-    // std.spec, so the printed board/PC report includes them alongside the
-    // checklist — not just the checklist comment.
-    const inlineComments: any[] = await Comment.find({ submissionId })
+    // Each specification has its own row on the official form, and the lead
+    // reader sends EACH reader's report to the Council — so the download marks
+    // every specification on its own row (not one rolled-up box per standard)
+    // and carries only THIS reader's comments, name and recommendation
+    // (Lauri, Oct 2026). The standard's own box keeps the derived roll-up
+    // (Non-Compliant if any spec is); a spec without a form row (legacy rows,
+    // the Introduction checklist) is still written into the standard's comment.
+    const inlineComments: any[] = await Comment.find({ submissionId, authorId: reviewerId })
       .select('standardCode specCode authorName authorRole selectedText content replies createdAt')
       .sort({ createdAt: 1 }).lean();
     const roleLabel = (r?: string) =>
@@ -618,8 +618,7 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
     }
     const fmtInline = (c: any): string => {
       const sel = String(c.selectedText || '').trim();
-      const who = `${c.authorName || roleLabel(c.authorRole)} (${roleLabel(c.authorRole)})`;
-      let s = `  • ${who}${sel ? ` on “${sel.slice(0, 70)}${sel.length > 70 ? '…' : ''}”` : ''}: ${String(c.content || '').trim()}`;
+      let s = `  • ${sel ? `On “${sel.slice(0, 70)}${sel.length > 70 ? '…' : ''}”: ` : ''}${String(c.content || '').trim()}`;
       for (const rep of (c.replies || [])) {
         s += `\n      ↳ ${rep.authorName || roleLabel(rep.authorRole)} (${roleLabel(rep.authorRole)}): ${String(rep.content || '').trim()}`;
       }
@@ -639,7 +638,7 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
         spec: r.specCode || '', mark: effMark, comment: effComment, overriddenBy: (r as any).overriddenBy,
       });
     }
-    // Include specs that have inline comments but no checklist row.
+    // Include specs that have this reader's inline comments but no checklist row.
     for (const c of inlineComments) {
       const std = c.standardCode || ''; if (!std) continue;
       const g = touchStd(std);
@@ -647,6 +646,9 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
         g.specs.push({ spec: c.specCode || '', mark: '', comment: '' });
       }
     }
+    const sub: any = await Submission.findById(submissionId).select('programLevel').lean();
+    const formRows = formSpecRows(sub?.programLevel);
+    const specCells = new Map<string, { mark: '' | 'compliant' | 'noncompliant'; comment: string }>();
     const overrides = new Map<string, { mark: '' | 'compliant' | 'noncompliant'; comment: string }>();
     for (const [stdCode, g] of byStd) {
       const anyNon = g.specs.some((s) => s.mark === 'noncompliant');
@@ -654,17 +656,42 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
       const mark: '' | 'compliant' | 'noncompliant' = anyNon ? 'noncompliant' : anyComp ? 'compliant' : '';
       const blocks: string[] = [];
       for (const s of [...g.specs].sort((a, b) => a.spec.localeCompare(b.spec))) {
-        const label = s.spec ? `${stdCode}.${s.spec}` : stdCode;
+        const key = `${stdCode}.${s.spec}`;
+        const parts: string[] = [];
+        if (s.overriddenBy && s.mark) parts.push(`[Lead override by ${s.overriddenBy}]`);
+        if (s.comment && s.comment.trim()) parts.push(s.comment.trim());
+        const inl = (inlineBySpec.get(key) || []).map(fmtInline).join('\n');
+        const cellText = [parts.join(' '), inl ? `Comments:\n${inl}` : ''].filter(Boolean).join('\n');
+        const specMark: '' | 'compliant' | 'noncompliant' =
+          s.mark === 'compliant' || s.mark === 'noncompliant' ? s.mark : '';
+        specCells.set(key, { mark: specMark, comment: cellText });
+        if (s.spec && formRows.has(key)) continue;
+        const label = s.spec ? key : stdCode;
         const head: string[] = [];
         if (s.mark) head.push(`[${s.mark === 'compliant' ? 'Compliant' : 'Non-Compliant'}${s.overriddenBy ? ` — lead override by ${s.overriddenBy}` : ''}]`);
         if (s.comment && s.comment.trim()) head.push(s.comment.trim());
         let block = `${label}${head.length ? ': ' + head.join(' — ') : ''}`;
-        const inl = (inlineBySpec.get(`${stdCode}.${s.spec}`) || []).map(fmtInline).join('\n');
         if (inl) block += `\nComments:\n${inl}`;
         blocks.push(block);
       }
+      const nonSpecs = g.specs.filter((s) => s.mark === 'noncompliant' && s.spec && formRows.has(`${stdCode}.${s.spec}`))
+        .map((s) => `${stdCode}.${s.spec}`).sort();
+      if (nonSpecs.length) blocks.unshift(`Non-Compliant: ${nonSpecs.join(', ')} (see each specification below).`);
       overrides.set(stdCode, { mark, comment: blocks.join('\n\n') });
     }
+
+    const reviewer: any = await User.findById(reviewerId).select('name firstName lastName email').lean();
+    const readerName = reviewer?.name
+      || [reviewer?.firstName, reviewer?.lastName].filter(Boolean).join(' ')
+      || reviewer?.email || 'Reader';
+    const when = (saved as any)?.completedAt || (saved as any)?.updatedAt;
+    const extras = {
+      specs: specCells,
+      readerName,
+      reportDate: when ? new Date(when).toLocaleDateString('en-US') : '',
+      acceptanceVote: String((saved as any)?.acceptanceVote || ''),
+      recommendation: String((saved as any)?.recommendation || ''),
+    };
 
     // Introduction → the official form has ONE checklist decision for the whole
     // Introduction ("A. Introduction"). The associate/masters templates use a
@@ -681,7 +708,7 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
     }
 
     const wantHtml = String(req.query.format || '').toLowerCase() === 'html';
-    const buffers = await renderReaderReportBuffers(submissionId, overrides);
+    const buffers = await renderReaderReportBuffers(submissionId, overrides, extras);
     if (!buffers) return res.status(404).json({ error: 'Submission not found' });
 
     // Formatted in-browser view: convert the FILLED official template (DOCX) to
@@ -697,7 +724,8 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
       ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
       : 'application/pdf';
     res.setHeader('Content-Type', mime);
-    res.setHeader('Content-Disposition', `attachment; filename="Reader-Report.${format}"`);
+    const safeReader = readerName.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || 'Reader';
+    res.setHeader('Content-Disposition', `attachment; filename="Reader-Report-${safeReader}.${format}"`);
     return res.end(buf);
   } catch (error) {
     console.error('Download reader report error:', error);

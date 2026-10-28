@@ -540,7 +540,10 @@ export function ReaderReportEditor(): JSX.Element {
       });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = `Reader-Report.${fmt}`;
+      // The server names the file after the reader (lead readers download each
+      // reader's report to send to the Council).
+      const named = /filename="([^"]+)"/.exec(String(resp.headers['content-disposition'] || ''))?.[1];
+      a.href = url; a.download = named || `Reader-Report.${fmt}`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (e: any) {
