@@ -744,6 +744,14 @@ export function ReaderReportEditor(): JSX.Element {
           >
             <Download className="h-4 w-4" />Download report (Word)
           </button>
+          <button
+            data-testid="reader-report-download-pdf"
+            onClick={() => downloadGenerated('pdf')}
+            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            title="Download this Reader Report as a PDF (each specification marked, plus the recommendation)"
+          >
+            <Download className="h-4 w-4" />PDF
+          </button>
           {!readonly && (
             <button
               data-testid="reader-report-save"
