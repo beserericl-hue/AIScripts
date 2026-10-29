@@ -442,36 +442,43 @@
     "key": "intro_a_p1",
     "n": 1,
     "text": "Certification Page uploaded",
-    "introGroup": "intro_a"
+    "introGroup": "intro_a",
+    "follows": "cert"
    },
    {
     "key": "intro_a_p2",
     "n": 2,
     "text": "Program Name",
-    "introGroup": "intro_a"
+    "introGroup": "intro_a",
+    "follows": "cert"
    },
    {
     "key": "intro_a_p3",
     "n": 3,
     "text": "Institution Name",
-    "introGroup": "intro_a"
-   },
-   {
-    "key": "introduction_a",
-    "intro": "a",
-    "text": "Accreditation cycle for which CSHSE accreditation is being sought. (five year period)"
+    "introGroup": "intro_a",
+    "follows": "cert"
    },
    {
     "key": "intro_a_p4",
     "n": 4,
-    "text": "This Self-Study is submitted in request of Initial Reaccreditation, Interim Report and Review",
-    "introGroup": "intro_a"
+    "text": "Accreditation cycle for which CSHSE accreditation is being sought. (five year period)",
+    "introGroup": "intro_a",
+    "follows": "cert"
    },
    {
     "key": "intro_a_p5",
     "n": 5,
+    "text": "This Self-Study is submitted in request of Initial Reaccreditation, Interim Report and Review",
+    "introGroup": "intro_a",
+    "follows": "cert"
+   },
+   {
+    "key": "intro_a_p6",
+    "n": 6,
     "text": "Person responsible signed off on accuracy of self-study",
-    "introGroup": "intro_a"
+    "introGroup": "intro_a",
+    "follows": "cert"
    },
    {
     "key": "introduction_a",

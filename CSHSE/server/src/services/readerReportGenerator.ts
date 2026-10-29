@@ -93,7 +93,7 @@ function specRows(levelKey: string): Set<string> {
  * scripts/add_part_placeholders.py. Readers mark each part (Lauri, Oct 2026).
  */
 export interface FormPart { key: string; spec: string; n: number; text: string }
-interface FormIntroRow { key: string; intro?: string; introGroup?: string; n?: number; text?: string }
+interface FormIntroRow { key: string; intro?: string; introGroup?: string; follows?: string; n?: number; text?: string }
 let partManifest: Record<string, { parts: FormPart[]; intro: FormIntroRow[] }> | null = null;
 function specParts(levelKey: string): { parts: FormPart[]; intro: FormIntroRow[] } {
   if (!partManifest) {
@@ -319,8 +319,9 @@ async function buildTemplatedDocx(
     fills[`c_${p.key}`] = boxFor(extras, mark === 'compliant');
     fills[`n_${p.key}`] = boxFor(extras, mark === 'noncompliant');
   }
-  // Introduction rows: each item's own mark + comment; a row that is not an
-  // item of its own (e.g. "Program Name" under Program Information) takes the
+  // Introduction rows: each item's own mark + comment. A row that is not an
+  // item of its own follows the item it belongs to (the baccalaureate
+  // "Program Information" rows follow the certification check), else the
   // Introduction's overall mark.
   const introMark = rollup.get(INTRO_STANDARD_CODE)?.mark || '';
   for (const r of intro) {
@@ -330,7 +331,8 @@ async function buildTemplatedDocx(
       continue;
     }
     const sp = r.intro ? extras?.specs.get(`${INTRO_STANDARD_CODE}.${r.intro}`) : undefined;
-    const mark = r.intro ? sp?.mark || '' : introMark;
+    const mark = r.intro ? sp?.mark || ''
+      : r.follows ? extras?.specs.get(`${INTRO_STANDARD_CODE}.${r.follows}`)?.mark || '' : introMark;
     fills[`c_${r.key}`] = boxFor(extras, mark === 'compliant');
     fills[`n_${r.key}`] = boxFor(extras, mark === 'noncompliant');
     if (r.intro) fills[`cm_${r.key}`] = sp?.comment || '';
