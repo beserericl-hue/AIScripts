@@ -139,10 +139,17 @@ function labelValue(label: string, value: string): Paragraph {
   });
 }
 
-function checkboxLine(on: boolean, text: string, bold = false): Paragraph {
+// The default font has no ☐/☒ glyphs, so Word showed gibberish and the lead's
+// status / level / recommendation choices were unreadable (Lauri, Oct 2026).
+// Set the box in MS Gothic, as the CSHSE forms' own checkboxes are, and bold
+// the chosen option as the PDF does.
+function checkboxLine(on: boolean, text: string): Paragraph {
   return new Paragraph({
     spacing: { after: 40 },
-    children: [new TextRun({ text: `${box(on)} ${text}`, bold })],
+    children: [
+      new TextRun({ text: box(on), font: 'MS Gothic' }),
+      new TextRun({ text: ` ${text}`, bold: on }),
+    ],
   });
 }
 

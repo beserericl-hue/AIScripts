@@ -84,8 +84,9 @@ def find_cells(row):
 def prepend_run(cell, text):
     p = cell.paragraphs[0]
     r = p.add_run(text)
-    # move the new run to the front of the paragraph
-    p._p.insert(0, r._r)
+    # move the new run to the front of the paragraph — after <w:pPr>, which
+    # must stay the paragraph's first child or Word misreads the paragraph
+    p._p.insert(1 if p._p.pPr is not None else 0, r._r)
 
 def fill_header(doc, label, token):
     """Replace the underscores after a 'Label:' paragraph with a token."""
