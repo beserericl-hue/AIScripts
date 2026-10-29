@@ -58,6 +58,16 @@ interface ReportSpec {
   leadMark?: 'compliant' | 'noncompliant' | '';
   leadComment?: string;
   overriddenBy?: string;
+  // The spec's numbered parts as printed on the official form (4.a: 1.
+  // Measurable student learning outcomes, 2. Assessment plan, …), each marked
+  // on the form. '' = not marked separately: the part takes the spec's mark.
+  parts?: ReportPart[];
+}
+interface ReportPart {
+  n: number;
+  text: string;
+  mark: 'compliant' | 'noncompliant' | '';
+  leadMark?: 'compliant' | 'noncompliant' | '';
 }
 interface ReportRow {
   code: string;
@@ -350,6 +360,20 @@ export function ReaderReportEditor(): JSX.Element {
     overrideMode ? (sp.leadComment ?? '') : sp.readerComment;
   const setMark = (code: string, spec: string, mark: 'compliant' | 'noncompliant' | '') =>
     setSpec(code, spec, overrideMode ? { leadMark: mark } : { readerMark: mark });
+  // A part's own mark (lead's override in override mode), '' when it follows the spec.
+  const ownPartMark = (p: ReportPart) => (overrideMode ? (p.leadMark || '') : p.mark);
+  const effPartMark = (sp: ReportSpec, p: ReportPart) =>
+    (overrideMode ? (p.leadMark || p.mark) : p.mark) || effMark(sp);
+  // Ticking a part's box marks it on its own; ticking the box it already has on
+  // its own returns it to following the spec.
+  const setPartMark = (code: string, sp: ReportSpec, n: number, mark: 'compliant' | 'noncompliant') =>
+    setSpec(code, sp.specCode, {
+      parts: (sp.parts || []).map((p) => {
+        if (p.n !== n) return p;
+        const next = ownPartMark(p) === mark ? '' : mark;
+        return overrideMode ? { ...p, leadMark: next } : { ...p, mark: next };
+      }),
+    });
   const setComment = (code: string, spec: string, val: string) =>
     setSpec(code, spec, overrideMode ? { leadComment: val } : { readerComment: val });
 
@@ -461,6 +485,10 @@ export function ReaderReportEditor(): JSX.Element {
           // leadComment); otherwise the reader's own mark/comment.
           mark: overrideMode ? (sp.leadMark || '') : sp.readerMark,
           comment: overrideMode ? (sp.leadComment || '') : sp.readerComment,
+          // Only parts marked on their own; the rest follow the spec's mark.
+          parts: (sp.parts || [])
+            .map((p) => ({ n: p.n, mark: ownPartMark(p) }))
+            .filter((p) => p.mark),
         }))
       );
       const body: any = { rows: specRows, recommendation, acceptanceVote };
@@ -1255,6 +1283,57 @@ export function ReaderReportEditor(): JSX.Element {
                             <span className="text-sm font-semibold text-red-700">{sp.gate === 'yesno' ? 'Not included — No' : 'Non-Compliant'}</span>
                           </label>
                         </div>
+                        {/* The spec's numbered parts — each is marked on the
+                            official form (Lauri: "4a1, 4a2, 4a3 … each of those
+                            has to be marked"). A part follows the spec's mark
+                            until the reader marks it on its own. */}
+                        {!!sp.parts?.length && (
+                          <div data-testid={`rr-parts-${r.code}-${sp.specCode}`} className="rounded-md border border-slate-200 bg-slate-50/60">
+                            <div className="border-b border-slate-200 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              Parts of {r.code}.{sp.specCode}
+                            </div>
+                            <ul className="divide-y divide-slate-200">
+                              {sp.parts.map((p) => {
+                                const eff = effPartMark(sp, p);
+                                const own = !!ownPartMark(p) || (overrideMode && !!p.mark);
+                                return (
+                                  <li key={p.n} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2.5 py-1.5">
+                                    <span className="min-w-0 flex-1 text-xs text-slate-700">
+                                      <span className="font-semibold">{p.n}.</span> {p.text}
+                                    </span>
+                                    <label className={`inline-flex items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
+                                      <input
+                                        type="checkbox"
+                                        data-testid={`rr-part-c-${r.code}-${sp.specCode}-${p.n}`}
+                                        disabled={readonly}
+                                        checked={eff === 'compliant'}
+                                        onChange={() => setPartMark(r.code, sp, p.n, 'compliant')}
+                                        className="h-3.5 w-3.5 text-emerald-600 disabled:opacity-60"
+                                        aria-label={`${r.code}.${sp.specCode} part ${p.n} compliant`}
+                                      />
+                                      <span className="text-xs font-semibold text-emerald-700">Compliant</span>
+                                    </label>
+                                    <label className={`inline-flex items-center gap-1 ${readonly ? '' : 'cursor-pointer'}`}>
+                                      <input
+                                        type="checkbox"
+                                        data-testid={`rr-part-n-${r.code}-${sp.specCode}-${p.n}`}
+                                        disabled={readonly}
+                                        checked={eff === 'noncompliant'}
+                                        onChange={() => setPartMark(r.code, sp, p.n, 'noncompliant')}
+                                        className="h-3.5 w-3.5 text-red-600 disabled:opacity-60"
+                                        aria-label={`${r.code}.${sp.specCode} part ${p.n} non-compliant`}
+                                      />
+                                      <span className="text-xs font-semibold text-red-700">Non-Compliant</span>
+                                    </label>
+                                    <span data-testid={`rr-part-src-${r.code}-${sp.specCode}-${p.n}`} className="w-24 text-right text-[11px] text-slate-500">
+                                      {own ? 'marked separately' : eff ? `as ${r.code}.${sp.specCode}` : ''}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        )}
                         <div>
                           <label className="mb-1 block text-xs font-semibold text-slate-600" htmlFor={`rr-comment-${r.code}-${sp.specCode}`}>
                             Reader’s Comments
