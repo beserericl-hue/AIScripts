@@ -312,6 +312,40 @@ function tickFormCheckbox(xml: string, label: string): string {
 
 const xmlEscape = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** The font the CSHSE forms' own checkbox controls use for ☐/☒. */
+export const BOX_FONT = 'MS Gothic';
+const BOX_RFONTS = `<w:rFonts w:ascii="${BOX_FONT}" w:eastAsia="${BOX_FONT}" w:hAnsi="${BOX_FONT}" w:cs="${BOX_FONT}"/>`;
+
+/**
+ * Give every ☐/☒ its own run in MS Gothic. The form cells are Times New Roman,
+ * which has no ballot-box glyphs, so Word substituted a font and the boxes
+ * came out as gibberish (Lauri, Oct 2026). The rest of the run keeps its
+ * formatting.
+ */
+function setBoxFont(xml: string): string {
+  return xml.replace(/<w:r(\s[^>]*)?>((?:(?!<\/w:r>).)*?)<\/w:r>/gs, (run, attrs = '', body: string) => {
+    if (!/[☐☒]/.test(body) || body.includes(BOX_FONT)) return run;
+    const m = body.match(/^(<w:rPr>(?:(?!<\/w:rPr>).)*<\/w:rPr>)?((?:<w:t(?:\s[^>]*)?>[^<]*<\/w:t>|<w:br\/>)+)$/s);
+    if (!m) return run;
+    const rPr = m[1] || '';
+    const inner = rPr ? rPr.slice('<w:rPr>'.length, -'</w:rPr>'.length).replace(/<w:rFonts[^>]*\/>/, '') : '';
+    const style = inner.match(/^<w:rStyle[^>]*\/>/)?.[0] || '';
+    const boxPr = `<w:rPr>${style}${BOX_RFONTS}${inner.slice(style.length)}</w:rPr>`;
+    const out: string[] = [];
+    for (const part of m[2].match(/<w:t(?:\s[^>]*)?>[^<]*<\/w:t>|<w:br\/>/g)!) {
+      if (part === '<w:br/>') { out.push(`<w:r${attrs}>${rPr}<w:br/></w:r>`); continue; }
+      const text = part.replace(/^<w:t(?:\s[^>]*)?>/, '').replace(/<\/w:t>$/, '');
+      for (const seg of text.split(/([☐☒])/)) {
+        if (!seg) continue;
+        out.push(seg === '☐' || seg === '☒'
+          ? `<w:r${attrs}>${boxPr}<w:t>${seg}</w:t></w:r>`
+          : `<w:r${attrs}>${rPr}<w:t xml:space="preserve">${seg}</w:t></w:r>`);
+      }
+    }
+    return out.join('');
+  });
+}
+
 /**
  * Replace {{tokens}} in the template. Each token was inserted as one run, so it
  * sits whole inside a single <w:t>: replace it in the XML directly (newlines
@@ -326,12 +360,13 @@ export async function fillTemplate(tpl: Buffer, fills: Record<string, string>, t
   if (!file) throw new Error('template has no word/document.xml');
   let xml = await file.async('string');
   if (tickLabel) xml = tickFormCheckbox(xml, tickLabel);
-  const filled = xml.replace(/<w:t(\s[^>]*)?>([^<]*)<\/w:t>/g, (whole, _attrs, text: string) => {
+  let filled = xml.replace(/<w:t(\s[^>]*)?>([^<]*)<\/w:t>/g, (whole, _attrs, text: string) => {
     if (!text.includes('{{')) return whole;
     const out = text.replace(/\{\{([a-z0-9_]+)\}\}/g, (tok, key: string) =>
       key in fills ? xmlEscape(fills[key]).split('\n').join('</w:t><w:br/><w:t xml:space="preserve">') : tok);
     return `<w:t xml:space="preserve">${out}</w:t>`;
   });
+  filled = setBoxFont(filled);
   zip.file('word/document.xml', filled);
   let buf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
   const left = [...new Set((filled.match(/\{\{([a-z0-9_]+)\}\}/g) || []).map((t) => t.slice(2, -2)))]

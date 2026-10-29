@@ -58,6 +58,13 @@ async function docxText(buf: Buffer): Promise<string> {
   const xml = await (await JSZip.loadAsync(buf)).file('word/document.xml')!.async('string');
   return (xml.match(/<w:t(?: [^>]*)?>([^<]*)<\/w:t>/g) || []).map((t) => t.replace(/<[^>]+>/g, '')).join('');
 }
+/** Every run whose text holds a ☐/☒. */
+const boxRuns = (xml: string) => (xml.match(/<w:r(?:\s[^>]*)?>(?:(?!<\/w:r>).)*?<\/w:r>/gs) || [])
+  .filter((r) => /<w:t(?:\s[^>]*)?>[^<]*[☐☒]/.test(r));
+const paragraphWith = (xml: string, needle: string) =>
+  (xml.match(/<w:p[ >](?:(?!<\/w:p>).)*<\/w:p>/gs) || []).find((p) => p.includes(needle)) || '';
+const labelRun = (p: string, label: string) =>
+  (p.match(/<w:r(?:\s[^>]*)?>(?:(?!<\/w:r>).)*?<\/w:r>/gs) || []).find((r) => r.includes(label)) || '';
 const binary = (r: any) => r.buffer(true).parse((res: any, cb: any) => {
   const chunks: Buffer[] = [];
   res.on('data', (c: Buffer) => chunks.push(c));
@@ -238,6 +245,38 @@ describe("Master's form", () => {
   });
 });
 
+describe('Word checkboxes render (Lauri: "gibberish characters" in the Compliant/Non-Compliant columns)', () => {
+  for (const level of ['associate', 'bachelors', 'masters'] as const) {
+    it(`POSITIVE + NEGATIVE (${level}): every ☐/☒ is set in MS Gothic and no paragraph starts with a run before its properties`, async () => {
+      const { sub } = await makeSubmission(level);
+      const reader = (await createUser({ role: 'reader', firstName: 'Box', lastName: 'Font' })).user;
+      await assignToSubmission(sub, reader, 'reader');
+      await ReaderReport.create({
+        submissionId: sub._id, reviewerId: reader._id, acceptanceVote: 'accept',
+        rows: [
+          { standardCode: '4', specCode: 'a', mark: 'compliant', comment: 'ok' },
+          { standardCode: '4', specCode: 'b', mark: 'noncompliant', comment: 'missing' },
+        ],
+      } as any);
+      const res = await binary(request(app).get(`/api/reports/submission/${sub._id}/reader-report/download?format=docx`).set('Authorization', `Bearer ${signTokenFor(reader)}`));
+      expect(res.status).toBe(200);
+      const xml = await (await JSZip.loadAsync(res.body)).file('word/document.xml')!.async('string');
+      const runs = boxRuns(xml);
+      expect(runs.length, level).toBeGreaterThan(150);
+      const plain = runs.filter((r) => !r.includes('w:ascii="MS Gothic"'));
+      expect(plain.length, `${level}: ${plain[0]}`).toBe(0);
+      // A box run holds nothing but the box, so its font change can't leak into text.
+      for (const r of runs) expect(r.replace(/<[^>]+>/g, '')).toMatch(/^[☐☒]$/);
+      expect(xml).not.toMatch(/<w:p(?:\s[^>]*)?>(?:<w:r>(?:(?!<\/w:r>).)*<\/w:r>)+<w:pPr>/s);
+      // Marks still land where they did: 4.a compliant, 4.b non-compliant.
+      const rows = await docxRows(res.body);
+      // (the master's form has a blank spacer cell between the two box columns)
+      const r4b = rows.find((r) => r[r.length - 1] === 'missing')!.filter(Boolean);
+      expect(r4b.slice(-3, -1)).toEqual(['☐', '☒']);
+    });
+  }
+});
+
 describe('Lead Reader Report non-compliance section', () => {
   it('NEGATIVE: with the field left blank, the compiled reference (PC notes etc.) is NOT printed', async () => {
     const { sub, pc } = await makeSubmission('associate');
@@ -289,6 +328,28 @@ describe('Lead Reader Report non-compliance section', () => {
       expect(footer, level).toContain('July 2025');
       expect(footer, level).not.toMatch(/July 20(20|22|23)/);
       if (level === 'bachelors') expect(footer).toContain('Baccalaureate');
+    }
+  });
+
+  it('POSITIVE: Word shows the lead’s status, degree level and recommendation in a font that has the box glyphs, chosen option bold', async () => {
+    const { sub } = await makeSubmission('associate');
+    const lead = (await createUser({ role: 'lead_reader', firstName: 'Lauri', lastName: 'Lead' })).user;
+    await assignToSubmission(sub, lead, 'lead_reader');
+    await LeadReaderReport.create({ submissionId: sub._id, accreditationStatus: 'reaccreditation', recommendation: 'accredit_no_conditions' } as any);
+    const docx = await binary(request(app).get(`/api/submissions/${sub._id}/lead-reader-report/download?format=docx`).set('Authorization', `Bearer ${signTokenFor(lead)}`));
+    const xml = await (await JSZip.loadAsync(docx.body)).file('word/document.xml')!.async('string');
+    const runs = boxRuns(xml);
+    expect(runs.length).toBeGreaterThanOrEqual(11);
+    for (const r of runs) expect(r).toContain('w:ascii="MS Gothic"');
+    for (const label of ['Reaccreditation', 'Associate', 'Accreditation with no conditions.']) {
+      const p = paragraphWith(xml, ` ${label}`);
+      expect(p, label).toContain('☒');
+      expect(labelRun(p, label), label).toContain('<w:b/>');
+    }
+    for (const label of ['Interim Report and Review', 'Baccalaureate', 'Deny accreditation due to significant noncompliance.']) {
+      const p = paragraphWith(xml, ` ${label}`);
+      expect(p, label).toContain('☐');
+      expect(labelRun(p, label), label).not.toContain('<w:b/>');
     }
   });
 
