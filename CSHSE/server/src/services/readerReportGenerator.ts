@@ -86,9 +86,42 @@ function specRows(levelKey: string): Set<string> {
   return new Set(specRowManifest?.[levelKey] || []);
 }
 
-/** "std.spec" keys that have their own row on this program level's form. */
+/**
+ * The numbered PARTS of a specification (4.a: 1. Measurable student learning
+ * outcomes, 2. Assessment plan, …) and the Introduction rows, each with its own
+ * Compliant / Non-Compliant boxes on the form — written by
+ * scripts/add_part_placeholders.py. Readers mark each part (Lauri, Oct 2026).
+ */
+export interface FormPart { key: string; spec: string; n: number; text: string }
+interface FormIntroRow { key: string; intro?: string; introGroup?: string; n?: number; text?: string }
+let partManifest: Record<string, { parts: FormPart[]; intro: FormIntroRow[] }> | null = null;
+function specParts(levelKey: string): { parts: FormPart[]; intro: FormIntroRow[] } {
+  if (!partManifest) {
+    try {
+      partManifest = JSON.parse(fs.readFileSync(templatePath('spec-parts.json'), 'utf8'));
+    } catch {
+      partManifest = {};
+    }
+  }
+  return partManifest?.[levelKey] || { parts: [], intro: [] };
+}
+
+/** The numbered parts of each specification on this level's form, keyed "std.spec". */
+export function formSpecParts(programLevel?: string): Map<string, FormPart[]> {
+  const out = new Map<string, FormPart[]>();
+  for (const p of specParts(resolveLevel(programLevel).key).parts) {
+    out.set(p.spec, [...(out.get(p.spec) || []), p]);
+  }
+  return out;
+}
+
+/** "std.spec" keys that have their own row on this program level's form —
+ *  specifications, plus Introduction items (keyed "introduction.<code>"). */
 export function formSpecRows(programLevel?: string): Set<string> {
-  return specRows(resolveLevel(programLevel).key);
+  const key = resolveLevel(programLevel).key;
+  const rows = specRows(key);
+  for (const r of specParts(key).intro) if (r.intro && r.intro !== 'cert') rows.add(`${INTRO_STANDARD_CODE}.${r.intro}`);
+  return rows;
 }
 
 export type Mark = '' | 'compliant' | 'noncompliant';
@@ -100,6 +133,8 @@ export type Mark = '' | 'compliant' | 'noncompliant';
  */
 export interface ReaderReportExtras {
   specs: Map<string, { mark: Mark; comment: string }>;
+  /** A part's own mark, keyed "std.spec.n"; an unmarked part takes its spec's mark. */
+  parts?: Map<string, Mark>;
   readerName: string;
   reportDate: string;
   acceptanceVote: string;
@@ -244,6 +279,9 @@ function recommendationText(x: ReaderReportExtras): string {
   return lines.join('\n');
 }
 
+/** A reader's download ticks the box; the AI draft leaves it for the reader. */
+const boxFor = (extras: ReaderReportExtras | undefined, on: boolean) => (extras ? (on ? '☒' : '☐') : '');
+
 /** Build the template-filled DOCX (the official checklist, AI-drafted). */
 async function buildTemplatedDocx(
   cfg: { file: string; stds: string[] }, levelKey: string, data: ReportData,
@@ -270,10 +308,32 @@ async function buildTemplatedDocx(
   for (const key of specRows(levelKey)) {
     const [std, spec] = key.split('.');
     const sp = extras?.specs.get(key);
-    const box = (on: boolean) => (extras ? (on ? '☒' : '☐') : '');
-    fills[`c_${std}_${spec}`] = box(sp?.mark === 'compliant');
-    fills[`n_${std}_${spec}`] = box(sp?.mark === 'noncompliant');
+    fills[`c_${std}_${spec}`] = boxFor(extras, sp?.mark === 'compliant');
+    fills[`n_${std}_${spec}`] = boxFor(extras, sp?.mark === 'noncompliant');
     fills[`cm_${std}_${spec}`] = sp?.comment || '';
+  }
+  // Each numbered part of a spec: the reader's mark for the part, else the spec's.
+  const { parts, intro } = specParts(levelKey);
+  for (const p of parts) {
+    const mark = extras?.parts?.get(`${p.spec}.${p.n}`) || extras?.specs.get(p.spec)?.mark || '';
+    fills[`c_${p.key}`] = boxFor(extras, mark === 'compliant');
+    fills[`n_${p.key}`] = boxFor(extras, mark === 'noncompliant');
+  }
+  // Introduction rows: each item's own mark + comment; a row that is not an
+  // item of its own (e.g. "Program Name" under Program Information) takes the
+  // Introduction's overall mark.
+  const introMark = rollup.get(INTRO_STANDARD_CODE)?.mark || '';
+  for (const r of intro) {
+    if (r.key === 'cert_included') {
+      const m = extras?.specs.get(`${INTRO_STANDARD_CODE}.cert`)?.mark || '';
+      fills.cert_included = extras ? `${m === 'compliant' ? '☒' : '☐'} Yes   ${m === 'noncompliant' ? '☒' : '☐'} No` : '';
+      continue;
+    }
+    const sp = r.intro ? extras?.specs.get(`${INTRO_STANDARD_CODE}.${r.intro}`) : undefined;
+    const mark = r.intro ? sp?.mark || '' : introMark;
+    fills[`c_${r.key}`] = boxFor(extras, mark === 'compliant');
+    fills[`n_${r.key}`] = boxFor(extras, mark === 'noncompliant');
+    if (r.intro) fills[`cm_${r.key}`] = sp?.comment || '';
   }
   fills.reader_name = extras?.readerName || '________________________________';
   fills.report_date = extras?.reportDate || '________________';
@@ -415,7 +475,10 @@ async function buildProceduralDocx(data: ReportData, rollup: Map<string, Standar
  *  drawn as vectors because Helvetica has no ☐/☒ glyphs. */
 function buildChecklistPdf(
   data: ReportData, rollup: Map<string, StandardRollup>, levelTitle: string, extras?: ReaderReportExtras,
+  levelKey = '',
 ): Promise<Buffer> {
+  const partsBySpec = new Map<string, FormPart[]>();
+  for (const p of specParts(levelKey).parts) partsBySpec.set(p.spec, [...(partsBySpec.get(p.spec) || []), p]);
   return new Promise((resolve, reject) => {
     const doc = useSafeText(new PDFDocument({ size: 'LETTER', margin: 54 }));
     const chunks: Buffer[] = [];
@@ -440,6 +503,40 @@ function buildChecklistPdf(
       doc.fontSize(9).fillColor('#111827').text(text, doc.page.margins.left + indent, doc.y, { paragraphGap: 3 });
       doc.x = doc.page.margins.left;
     };
+    // Introduction — the form's first section; each item is marked on its own
+    // (it was missing from the PDF entirely — Lauri, Oct 2026).
+    if (extras) {
+      doc.fontSize(11).fillColor('#111827').font('Helvetica-Bold').text('Introduction');
+      doc.font('Helvetica');
+      for (const item of INTRO_RUBRIC) {
+        const v = extras.specs.get(`${INTRO_STANDARD_CODE}.${item.specCode}`);
+        if (doc.y > doc.page.height - 90) doc.addPage();
+        if (item.groupLabel) {
+          doc.moveDown(0.2);
+          doc.fontSize(9).fillColor('#374151').font('Helvetica-Bold').text(item.groupLabel).font('Helvetica');
+        }
+        doc.moveDown(0.2);
+        doc.fontSize(10).fillColor('#111827').text(item.title);
+        if (item.gate === 'yesno') {
+          const m = v?.mark || '';
+          checkboxLine(doc, m === 'compliant', 'Included — Yes', { indent: 12 });
+          checkboxLine(doc, m === 'noncompliant', 'Not included — No', { indent: 12 });
+        } else {
+          compliancePair(doc, v?.mark || '', { indent: 12 });
+        }
+        if (v?.comment.trim()) comment(v.comment.trim(), 12);
+      }
+      doc.moveDown(0.5);
+    } else {
+      const r = rollup.get(INTRO_STANDARD_CODE);
+      if (r && (r.mark || r.comment)) {
+        doc.fontSize(11).fillColor('#111827').font('Helvetica-Bold').text('Introduction');
+        doc.font('Helvetica');
+        compliancePair(doc, r.mark);
+        if (r.comment) comment(r.comment);
+        doc.moveDown(0.5);
+      }
+    }
     for (const std of data.standards) {
       const r = rollup.get(std.code) || { mark: null, comment: '' };
       const specMarks = extras
@@ -465,6 +562,14 @@ function buildChecklistPdf(
             .font('Helvetica').fillColor('#4b5563')
             .text(`  ${(sp.text || sp.title || '').replace(/\s+/g, ' ').slice(0, 160)}${(sp.text || '').length > 160 ? '…' : ''}`);
           compliancePair(doc, v!.mark, { indent: 12 });
+          // Each numbered part is marked too (its own mark, else the spec's).
+          for (const p of partsBySpec.get(`${std.code}.${sp.spec}`) || []) {
+            if (doc.y > doc.page.height - 70) doc.addPage();
+            doc.fontSize(9).fillColor('#374151')
+              .text(`${p.n}. ${p.text.replace(/\s+/g, ' ')}`, doc.page.margins.left + 24, doc.y);
+            doc.x = doc.page.margins.left;
+            compliancePair(doc, extras.parts?.get(`${std.code}.${sp.spec}.${p.n}`) || v!.mark, { fontSize: 9, indent: 24 });
+          }
           if (v!.comment.trim()) comment(v!.comment.trim(), 12);
         }
       }
@@ -664,7 +769,7 @@ export async function renderReaderReportBuffers(
   const docx = (cfg && fs.existsSync(templatePath(cfg.file)))
     ? await buildTemplatedDocx(cfg, levelKey, data, rollup, extras)
     : await buildProceduralDocx(data, rollup, levelTitle);
-  const pdf = await buildChecklistPdf(data, rollup, levelTitle, extras);
+  const pdf = await buildChecklistPdf(data, rollup, levelTitle, extras, levelKey);
   return { pdf, docx };
 }
 

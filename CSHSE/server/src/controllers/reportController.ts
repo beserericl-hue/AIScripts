@@ -5,7 +5,7 @@ import { LeadReaderCompilation } from '../models/LeadReaderCompilation';
 import { User } from '../models/User';
 import { Score } from '../models/Score';
 import { PDFGeneratorService } from '../services/pdfGenerator';
-import { formSpecRows, generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
+import { formSpecParts, formSpecRows, generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
 import { ReaderReport } from '../models/ReaderReport';
 import { Comment } from '../models/Comment';
 import { Assignment } from '../models/Assignment';
@@ -307,6 +307,16 @@ export const generateReaderReportNow = async (req: AuthenticatedRequest, res: Re
   }
 };
 
+type PartMark = { n: number; mark: '' | 'compliant' | 'noncompliant' };
+
+/** Part marks from a save request: only parts the reader marked explicitly. */
+function parsePartMarks(raw: unknown): PartMark[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((p: any) => Number.isInteger(p?.n) && p.n > 0 && (p.mark === 'compliant' || p.mark === 'noncompliant'))
+    .map((p: any) => ({ n: p.n, mark: p.mark }));
+}
+
 /** The effective reviewer id (the impersonated user when a SU is impersonating). */
 function effectiveReviewerId(req: AuthenticatedRequest): string {
   return (req.user as any)?.impersonation?.impersonatedUserId || req.user?.id || '';
@@ -379,15 +389,19 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
     const saved = await ReaderReport.findOne({ submissionId, reviewerId }).lean();
     // Saved rows are stored per-SPECIFICATION (key = "std.spec"); legacy rows
     // with no specCode are keyed by standard alone.
-    const savedByKey: Record<string, { mark: string; comment: string; leadMark?: string; leadComment?: string; overriddenBy?: string }> = {};
+    const savedByKey: Record<string, { mark: string; comment: string; leadMark?: string; leadComment?: string; overriddenBy?: string; parts?: PartMark[]; leadParts?: PartMark[] }> = {};
     for (const r of saved?.rows || []) {
       const key = r.specCode ? `${r.standardCode}.${r.specCode}` : r.standardCode;
       savedByKey[key] = {
         mark: r.mark, comment: r.comment,
         leadMark: (r as any).leadMark || '', leadComment: (r as any).leadComment || '',
         overriddenBy: (r as any).overriddenBy || '',
+        parts: (r as any).parts || [], leadParts: (r as any).leadParts || [],
       };
     }
+    // The numbered parts of each spec on this level's form (4.a.1, 4.a.2, …).
+    const formParts = formSpecParts(structure.programLevel);
+    const markOf = (list: PartMark[] | undefined, n: number) => (list || []).find((p) => p.n === n)?.mark || '';
 
     const standards = structure.standards.map((s) => ({
       ...s,
@@ -406,6 +420,12 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
           leadMark: savedByKey[key]?.leadMark ?? '',
           leadComment: savedByKey[key]?.leadComment ?? '',
           overriddenBy: savedByKey[key]?.overriddenBy ?? '',
+          // '' = not marked separately: the part takes the spec's mark.
+          parts: (formParts.get(key) || []).map((p) => ({
+            n: p.n, text: p.text,
+            mark: markOf(savedByKey[key]?.parts, p.n),
+            leadMark: markOf(savedByKey[key]?.leadParts, p.n),
+          })),
         };
       }),
       // Standard-level fields kept for the AI tag / legacy fallback.
@@ -508,6 +528,7 @@ export const saveReaderReportData = async (req: AuthenticatedRequest, res: Respo
       specCode: String(r.specCode || ''),
       mark: ['compliant', 'noncompliant', ''].includes(r.mark) ? r.mark : '',
       comment: String(r.comment || ''),
+      parts: parsePartMarks(r.parts),
     })).filter((r: any) => r.standardCode) : [];
 
     // LEAD-OVERRIDE MODE — a lead reader / admin editing another reader's report.
@@ -528,15 +549,17 @@ export const saveReaderReportData = async (req: AuthenticatedRequest, res: Respo
         // lead. The editor autosaves every row, so stamping unconditionally
         // labelled every spec "lead override" on the reader's printed report
         // although the lead changed nothing (AACC, Oct 2026).
-        const overrides = !!(inc.mark || String(inc.comment || '').trim());
+        const overrides = !!(inc.mark || String(inc.comment || '').trim() || inc.parts.length);
         if (row) {
           row.leadMark = inc.mark; row.leadComment = inc.comment;
+          row.leadParts = inc.parts.length ? inc.parts : undefined;
           if (overrides) { row.overriddenBy = leadName; row.overriddenAt = new Date(); }
           else { row.overriddenBy = undefined; row.overriddenAt = undefined; }
         } else if (overrides) {
           existing.rows.push({
             standardCode: inc.standardCode, specCode: inc.specCode, mark: '', comment: '',
             leadMark: inc.mark, leadComment: inc.comment, overriddenBy: leadName, overriddenAt: new Date(),
+            leadParts: inc.parts.length ? inc.parts : undefined,
           } as any);
         }
       }
@@ -633,6 +656,16 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
 
     // Effective per-spec decision = lead override when present, else reader mark.
     const byStd = new Map<string, { specs: Array<{ spec: string; mark: string; comment: string; overriddenBy?: string }> }>();
+    // A part's effective mark: the lead's override, else the reader's (unmarked
+    // parts take the spec's mark when the form is filled).
+    const partMarks = new Map<string, '' | 'compliant' | 'noncompliant'>();
+    for (const r of saved?.rows || []) {
+      for (const layer of [(r as any).parts, (r as any).leadParts]) {
+        for (const p of (layer || []) as PartMark[]) {
+          if (p.mark) partMarks.set(`${r.standardCode}.${r.specCode || ''}.${p.n}`, p.mark);
+        }
+      }
+    }
     const touchStd = (std: string) => { const g = byStd.get(std) || { specs: [] }; byStd.set(std, g); return g; };
     for (const r of saved?.rows || []) {
       const effMark = (r as any).leadMark || r.mark || '';
@@ -697,6 +730,7 @@ export const downloadReaderReport = async (req: AuthenticatedRequest, res: Respo
     const when = (saved as any)?.completedAt || (saved as any)?.updatedAt;
     const extras = {
       specs: specCells,
+      parts: partMarks,
       readerName,
       reportDate: when ? new Date(when).toLocaleDateString('en-US') : '',
       acceptanceVote: String((saved as any)?.acceptanceVote || ''),

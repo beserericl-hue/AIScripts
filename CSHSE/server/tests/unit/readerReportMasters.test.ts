@@ -59,6 +59,12 @@ describe("Master's reader-report template", () => {
       patches[`n_${k}`] = mk('☐');
       patches[`cm_${k}`] = mk(key === '7.b' ? 'Spec comment 7.b.' : '');
     }
+    // Numbered parts + Introduction rows (scripts/add_part_placeholders.py).
+    const parts = JSON.parse(fs.readFileSync(path.join(path.dirname(TPL), 'spec-parts.json'), 'utf8')).masters;
+    for (const p of [...parts.parts, ...parts.intro]) {
+      for (const pre of ['c_', 'n_', 'cm_']) patches[`${pre}${p.key}`] = mk('☐');
+    }
+    patches.cert_included = mk('☒ Yes   ☐ No');
     const out = await fillTemplate(fs.readFileSync(TPL), patches);
     const text = await textOf(out);
     expect(text).toContain('KENNESAW STATE UNIVERSITY');

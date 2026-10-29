@@ -22,6 +22,16 @@ export interface IReaderReportRow {
   leadComment?: string;
   overriddenBy?: string;   // lead reviewer's display name
   overriddenAt?: Date | null;
+  // The spec's numbered PARTS as printed on the form (4.a: 1. Measurable
+  // student learning outcomes, 2. Assessment plan, …). Only parts the reader
+  // marked differently are stored; an absent part takes the spec's mark.
+  parts?: IReaderReportPartMark[];
+  leadParts?: IReaderReportPartMark[];
+}
+
+export interface IReaderReportPartMark {
+  n: number;
+  mark: 'compliant' | 'noncompliant' | '';
 }
 
 export interface IReaderReport extends Document {
@@ -39,6 +49,11 @@ export interface IReaderReport extends Document {
   createdAt: Date;
 }
 
+const PartMarkSchema = new Schema<IReaderReportPartMark>({
+  n: { type: Number, required: true },
+  mark: { type: String, enum: ['compliant', 'noncompliant', ''], default: '' },
+}, { _id: false });
+
 const ReaderReportRowSchema = new Schema<IReaderReportRow>({
   standardCode: { type: String, required: true },
   specCode: { type: String, default: '' },
@@ -48,6 +63,8 @@ const ReaderReportRowSchema = new Schema<IReaderReportRow>({
   leadComment: { type: String, default: undefined },
   overriddenBy: { type: String, default: undefined },
   overriddenAt: { type: Date, default: undefined },
+  parts: { type: [PartMarkSchema], default: undefined },
+  leadParts: { type: [PartMarkSchema], default: undefined },
 }, { _id: false });
 
 const ReaderReportSchema = new Schema<IReaderReport>({

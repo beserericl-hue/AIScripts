@@ -1,0 +1,834 @@
+{
+ "associate": {
+  "parts": [
+   {
+    "key": "3_b_p1",
+    "n": 1,
+    "text": "A detailed description of the membership of the Advisory Committee (e.g. names, agencies, roles, relationship to program, etc.),",
+    "spec": "3.b"
+   },
+   {
+    "key": "3_b_p2",
+    "n": 2,
+    "text": "Minutes of advisory committee meetings from the last two years, and",
+    "spec": "3.b"
+   },
+   {
+    "key": "3_b_p3",
+    "n": 3,
+    "text": "A narrative or table of how the committee interfaces with the program in relationship to specific issues.",
+    "spec": "3.b"
+   },
+   {
+    "key": "4_a_p1",
+    "n": 1,
+    "text": "Measurable student learning outcomes.",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_a_p2",
+    "n": 2,
+    "text": "Assessment plan.",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_a_p3",
+    "n": 3,
+    "text": "Examples of assessment tools, e.g., rubrics, exams, portfolios, surveys, capstone evaluations, etc.",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_a_p4",
+    "n": 4,
+    "text": "A description of how the evaluation may or may not have resulted in any change.",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_b_p1",
+    "n": 1,
+    "text": "A history of program evaluations.",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_b_p2",
+    "n": 2,
+    "text": "A description of the methodology.",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_b_p3",
+    "n": 3,
+    "text": "A summative analysis of the most recent evaluation.",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_b_p4",
+    "n": 4,
+    "text": "A description of how and in what way the evaluation resulted in any change.",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_c_p1",
+    "n": 1,
+    "text": "An active link to student achievement indicators on the Program’s website. [NOTE: Program performance data and student outcomes, must, at minimum be posted on the program’s website and the links must be included in the self-study narrative. CHECK THE WEBSITE AND CONFIRM THAT THE INFORMATION IS THERE]",
+    "spec": "4.c"
+   },
+   {
+    "key": "4_c_p2",
+    "n": 2,
+    "text": "Aggregate data as evidence of student achievement (e.g. enrollment trends, retention, student learning outcomes, graduation rates and grade point average, student satisfaction, agency feedback, graduate transfer rates, graduate school or employment data, and alumni surveys)",
+    "spec": "4.c"
+   },
+   {
+    "key": "6_a_p1",
+    "n": 1,
+    "text": "Faculty have education in various disciplines and experience in human services or related fields.",
+    "spec": "6.a"
+   },
+   {
+    "key": "6_a_p2",
+    "n": 2,
+    "text": "Teaching faculty have no less than one degree above the level of certificate or degree in which they teach. It is recommended that faculty have no less than a master’s degree.",
+    "spec": "6.a"
+   },
+   {
+    "key": "7_b_p1",
+    "n": 1,
+    "text": "A brief description of how the essential roles are fulfilled in the program.",
+    "spec": "7.b"
+   },
+   {
+    "key": "7_b_p2",
+    "n": 2,
+    "text": "A table matching faculty and staff positions and names with these roles.",
+    "spec": "7.b"
+   },
+   {
+    "key": "8_a_p1",
+    "n": 1,
+    "text": "Includes intercultural fluency and accessibility training for faculty and staff",
+    "spec": "8.a"
+   },
+   {
+    "key": "8_b_p1",
+    "n": 1,
+    "text": "Includes the development of awareness, knowledge, and skills of intercultural fluency, accessibility, and culture.",
+    "spec": "8.b"
+   },
+   {
+    "key": "12_b_p1",
+    "n": 1,
+    "text": "Theories of group dynamics, and",
+    "spec": "12.b"
+   },
+   {
+    "key": "12_b_p2",
+    "n": 2,
+    "text": "Group facilitation skills.",
+    "spec": "12.b"
+   },
+   {
+    "key": "16_c_p1",
+    "n": 1,
+    "text": "Case management,",
+    "spec": "16.c"
+   },
+   {
+    "key": "16_c_p2",
+    "n": 2,
+    "text": "Intake interviewing,",
+    "spec": "16.c"
+   },
+   {
+    "key": "16_c_p3",
+    "n": 3,
+    "text": "Helping skills",
+    "spec": "16.c"
+   },
+   {
+    "key": "16_c_p4",
+    "n": 4,
+    "text": "Identification and use of appropriate resources and referrals",
+    "spec": "16.c"
+   },
+   {
+    "key": "16_c_p5",
+    "n": 5,
+    "text": "Group facilitation skills",
+    "spec": "16.c"
+   },
+   {
+    "key": "16_c_p6",
+    "n": 6,
+    "text": "Use of consultation.",
+    "spec": "16.c"
+   },
+   {
+    "key": "20_h_p1",
+    "n": 1,
+    "text": "Directly supervised client contact to",
+    "spec": "20.h"
+   },
+   {
+    "key": "20_h_p2",
+    "n": 2,
+    "text": "Indirectly supervised client contact.",
+    "spec": "20.h"
+   }
+  ],
+  "intro": [
+   {
+    "key": "cert_included",
+    "intro": "cert"
+   },
+   {
+    "key": "introduction_a",
+    "intro": "a",
+    "text": "Specify the degree(s) offered for which accreditation is being sought"
+   },
+   {
+    "key": "introduction_b",
+    "intro": "b",
+    "text": "Describe the institution\nDescribe the organizational structure, whether state or private, age of institution, brief history, etc."
+   },
+   {
+    "key": "introduction_c",
+    "intro": "c",
+    "text": "Describe the institutional context of the Program.  For example, include organization charts and structure, goals and objectives.  What levels of degrees are offered by the institution?"
+   },
+   {
+    "key": "introduction_d",
+    "intro": "d",
+    "text": "Describe the Program (This should not duplicate information requested in the Specifications for Standard 1.)\nBriefly describe the strengths of the Program and any attributes that make the Program unique."
+   },
+   {
+    "key": "introduction_e",
+    "intro": "e",
+    "text": "Describe institutional course requirements for all students and explain how they prepare students for study in the human services program.  For example, describe general education or liberal arts requirements of the institution."
+   },
+   {
+    "key": "introduction_f",
+    "intro": "f",
+    "text": "Include any other background information that may be pertinent such as action plans for identified problem areas, changing enrollment patterns, marketing strategies, or institutional or curricular restructuring."
+   },
+   {
+    "key": "introduction_g",
+    "intro": "g",
+    "text": "Interim Report and Review and Reaccreditations only\nInclude a copy of the letter from the Vice President of Accreditation (VPA) sent at the time of the prior accreditation notifying the Program of the disposition of the application for accreditation."
+   },
+   {
+    "key": "introduction_h",
+    "intro": "h",
+    "text": "Describe how each condition in the VPA letter has been addressed."
+   },
+   {
+    "key": "introduction_i",
+    "intro": "i",
+    "text": "Describe any major program changes since the prior accreditation."
+   },
+   {
+    "key": "introduction_j",
+    "intro": "j",
+    "text": "Describe any major curriculum changes since the prior accreditation."
+   },
+   {
+    "key": "introduction_k",
+    "intro": "k",
+    "text": "If the Program is delivered at multiple sites,\nFor each site:\nDescribe the physical location and any unique characteristics."
+   },
+   {
+    "key": "introduction_l",
+    "intro": "l",
+    "text": "Identify the faculty, directors, and staff."
+   },
+   {
+    "key": "introduction_m",
+    "intro": "m",
+    "text": "Describe the student population."
+   },
+   {
+    "key": "introduction_n",
+    "intro": "n",
+    "text": "Furnish evidence of formal policies and procedures that assure continuity and quality control of Program and Curriculum across all sites."
+   },
+   {
+    "key": "introduction_o",
+    "intro": "o",
+    "text": "Hybrid or Online Course Delivery: If more than 50% of required human service courses are offered in a hybrid/online format, the Program must:"
+   },
+   {
+    "key": "introduction_o",
+    "intro": "o",
+    "text": "Document how they assure that students enrolled in the program or course(s) are who they say they are"
+   },
+   {
+    "key": "introduction_p",
+    "intro": "p",
+    "text": "Demonstrate that common learning outcomes/objectives exist for both face- to- face and hybrid/online delivery"
+   },
+   {
+    "key": "introduction_q",
+    "intro": "q",
+    "text": "Provide documentation that the program provides adequate technical training and support for students and faculty"
+   },
+   {
+    "key": "introduction_r",
+    "intro": "r",
+    "text": "B. Include a glossary of terms as they are used in the self-study and Program materials (e.g., appendices) to provide clarity for the self-study readers."
+   }
+  ]
+ },
+ "baccalaureate": {
+  "parts": [
+   {
+    "key": "3_b_p1",
+    "n": 1,
+    "text": "A detailed description of the membership of the Advisory Committee (e.g. names, agencies, roles, relationship to program, etc.),",
+    "spec": "3.b"
+   },
+   {
+    "key": "3_b_p2",
+    "n": 2,
+    "text": "Minutes of advisory committee meetings from the last two years, and",
+    "spec": "3.b"
+   },
+   {
+    "key": "3_b_p3",
+    "n": 3,
+    "text": "Narrative describing how the committee interfaces with the program in relationship to specific issues.",
+    "spec": "3.b"
+   },
+   {
+    "key": "4_a_p1",
+    "n": 1,
+    "text": "Measurable student learning outcomes,",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_a_p2",
+    "n": 2,
+    "text": "Assessment plan",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_a_p3",
+    "n": 3,
+    "text": "Examples of assessment tools, e.g., rubrics, exams, portfolios, surveys, capstone evaluations, etc.",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_a_p4",
+    "n": 4,
+    "text": "A description of how the evaluation may or may not have resulted in any change",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_b_p1",
+    "n": 1,
+    "text": "A history of program evaluations,",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_b_p2",
+    "n": 2,
+    "text": "A description of the methodology,",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_b_p3",
+    "n": 3,
+    "text": "A summative analysis of the most recent evaluation, and",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_b_p4",
+    "n": 4,
+    "text": "A description of how and in what way the evaluation may or may not have resulted in any change.",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_c_p1",
+    "n": 1,
+    "text": "An active link to student achievement indicators on the Program’s website. [NOTE: Program performance data and student outcomes, must, at minimum be posted on the program’s website and the links must be included in the self-study narrative. CHECK THE WEBSITE AND CONFIRM THAT THE INFORMATION IS THERE]",
+    "spec": "4.c"
+   },
+   {
+    "key": "4_c_p2",
+    "n": 2,
+    "text": "Aggregate data as evidence of student achievement (e.g. enrollment trends, retention, student learning outcomes, graduation rates and grade point average, student satisfaction, agency feedback, graduate transfer rates, graduate school or employment data, and alumni surveys)",
+    "spec": "4.c"
+   },
+   {
+    "key": "6_a_p1",
+    "n": 1,
+    "text": "Teaching faculty should have no less than the actual certificate or degree in which they teach. It is recommended that faculty have no less than a master’s degree.",
+    "spec": "6.a"
+   },
+   {
+    "key": "7_b_p1",
+    "n": 1,
+    "text": "Provide a brief description of how the essential roles are fulfilled in the program",
+    "spec": "7.b"
+   },
+   {
+    "key": "7_b_p2",
+    "n": 2,
+    "text": "Provide a table matching faculty and staff positions and names with these roles.",
+    "spec": "7.b"
+   },
+   {
+    "key": "8_a_p1",
+    "n": 1,
+    "text": "Includes intercultural fluency and accessibility training for faculty and staff",
+    "spec": "8.a"
+   },
+   {
+    "key": "8_b_p1",
+    "n": 1,
+    "text": "Includes the development of awareness, knowledge, and skills of diversity and culture",
+    "spec": "8.b"
+   },
+   {
+    "key": "12_b_p1",
+    "n": 1,
+    "text": "Theories of group dynamics, and",
+    "spec": "12.b"
+   },
+   {
+    "key": "12_b_p2",
+    "n": 2,
+    "text": "Group facilitation skills.",
+    "spec": "12.b"
+   },
+   {
+    "key": "16_c_p1",
+    "n": 1,
+    "text": "Case management,",
+    "spec": "16.c"
+   },
+   {
+    "key": "16_f_p1",
+    "n": 1,
+    "text": "Group facilitation skills",
+    "spec": "16.f"
+   },
+   {
+    "key": "16_f_p2",
+    "n": 2,
+    "text": "Use of consultation.",
+    "spec": "16.f"
+   },
+   {
+    "key": "21_h_p1",
+    "n": 1,
+    "text": "Directly supervised client contact to",
+    "spec": "21.h"
+   },
+   {
+    "key": "21_h_p2",
+    "n": 2,
+    "text": "Indirectly supervised client contact.",
+    "spec": "21.h"
+   },
+   {
+    "key": "21_h_p3",
+    "n": 3,
+    "text": "An independent caseload OR assignment of administrative responsibility.",
+    "spec": "21.h"
+   }
+  ],
+  "intro": [
+   {
+    "key": "intro_a_p1",
+    "n": 1,
+    "text": "Certification Page uploaded",
+    "introGroup": "intro_a"
+   },
+   {
+    "key": "intro_a_p2",
+    "n": 2,
+    "text": "Program Name",
+    "introGroup": "intro_a"
+   },
+   {
+    "key": "intro_a_p3",
+    "n": 3,
+    "text": "Institution Name",
+    "introGroup": "intro_a"
+   },
+   {
+    "key": "introduction_a",
+    "intro": "a",
+    "text": "Accreditation cycle for which CSHSE accreditation is being sought. (five year period)"
+   },
+   {
+    "key": "intro_a_p4",
+    "n": 4,
+    "text": "This Self-Study is submitted in request of Initial Reaccreditation, Interim Report and Review",
+    "introGroup": "intro_a"
+   },
+   {
+    "key": "intro_a_p5",
+    "n": 5,
+    "text": "Person responsible signed off on accuracy of self-study",
+    "introGroup": "intro_a"
+   },
+   {
+    "key": "introduction_a",
+    "intro": "a",
+    "text": "Specify the degree offered for which accreditation is being sought."
+   },
+   {
+    "key": "introduction_b",
+    "intro": "b",
+    "text": "Describe the Institution"
+   },
+   {
+    "key": "introduction_b",
+    "intro": "b",
+    "text": "Describe the organizational structure, whether state or private, age of institution, brief history and so on."
+   },
+   {
+    "key": "introduction_c",
+    "intro": "c",
+    "text": "Describe the institutional context of the Program.  For example, include organization charts and structure, goals, and objectives.  What levels of degree are offered by the institution. For large programs with multiple sites, organization charts are extremely helpful to the Readers."
+   },
+   {
+    "key": "introduction_d",
+    "intro": "d",
+    "text": "Briefly describe the strengths of the Program and any attributes that make the Program unique."
+   },
+   {
+    "key": "introduction_e",
+    "intro": "e",
+    "text": "Describe institutional course requirements for all students and explain how they prepare students for study in the human services program. For example, describe general or liberal arts requirements of the institution."
+   },
+   {
+    "key": "introduction_f",
+    "intro": "f",
+    "text": "Include any other background information that may be pertinent such as action plans for identified problem areas, changing enrollment patterns, marketing strategies, or institutional or curricular restructuring."
+   },
+   {
+    "key": "introduction_g",
+    "intro": "g",
+    "text": "Include a copy of the letter from the Vice President of Accreditation (VPA) sent at the time of the prior accreditation notifying the Program of the disposition of the application for accreditation."
+   },
+   {
+    "key": "introduction_i",
+    "intro": "i",
+    "text": "Describe any major program changes since the prior accreditation."
+   },
+   {
+    "key": "introduction_j",
+    "intro": "j",
+    "text": "Describe any major curriculum changes since the prior accreditation."
+   },
+   {
+    "key": "introduction_k",
+    "intro": "k",
+    "text": "For each site:"
+   },
+   {
+    "key": "introduction_k",
+    "intro": "k",
+    "text": "Describe the physical location and any unique characteristics"
+   },
+   {
+    "key": "introduction_l",
+    "intro": "l",
+    "text": "Identify the faculty, directors, and staff"
+   },
+   {
+    "key": "introduction_m",
+    "intro": "m",
+    "text": "Describe the student population"
+   },
+   {
+    "key": "introduction_n",
+    "intro": "n",
+    "text": "Furnish evidence of formal policies and procedures that assure continuity and quality control of Program and Curriculum across all sites."
+   },
+   {
+    "key": "introduction_q",
+    "intro": "q",
+    "text": "Provide documentation that the program provides adequate technical training and support for students and faculty"
+   },
+   {
+    "key": "introduction_r",
+    "intro": "r",
+    "text": "Include a glossary of terms as they are used in the self-study and Program materials (e.g., appendices) to provide clarity for the self-study readers."
+   }
+  ]
+ },
+ "masters": {
+  "parts": [
+   {
+    "key": "3_c_p1",
+    "n": 1,
+    "text": "Minutes of advisory committee meetings from the last two years, and",
+    "spec": "3.c"
+   },
+   {
+    "key": "3_c_p2",
+    "n": 2,
+    "text": "Narrative describing how the committee interfaces with the program in relationship to specific issues.",
+    "spec": "3.c"
+   },
+   {
+    "key": "4_a_p1",
+    "n": 1,
+    "text": "Measurable student learning outcomes,",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_a_p2",
+    "n": 2,
+    "text": "Assessment plan, and",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_a_p3",
+    "n": 3,
+    "text": "Examples of assessment tools, e.g., rubrics, exams, portfolios, surveys, capstone evaluations, etc.",
+    "spec": "4.a"
+   },
+   {
+    "key": "4_b_p1",
+    "n": 1,
+    "text": "A history of program evaluations,",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_b_p2",
+    "n": 2,
+    "text": "A description of the methodology,",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_b_p3",
+    "n": 3,
+    "text": "A summative analysis of the most recent evaluation, and",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_b_p4",
+    "n": 4,
+    "text": "A description of how and in what way the evaluation resulted in any change.",
+    "spec": "4.b"
+   },
+   {
+    "key": "4_c_p1",
+    "n": 1,
+    "text": "An active link to student achievement indicators on the Program’s website. [NOTE: Program performance data and student outcomes, must, at minimum be posted on the program’s website and the links must be included in the self-study narrative. CHECK THE WEBSITE AND CONFIRM THAT THE INFORMATION IS THERE]",
+    "spec": "4.c"
+   },
+   {
+    "key": "4_c_p2",
+    "n": 2,
+    "text": "Aggregate data as evidence of student achievement (e.g. enrollment trends, retention, student learning outcomes, graduation rates and grade point average, student satisfaction, agency feedback, graduate transfer rates, graduate school or employment data, and alumni surveys)",
+    "spec": "4.c"
+   },
+   {
+    "key": "6_a_p1",
+    "n": 1,
+    "text": "If students choose a field placement as one of their graduation requirements, the involvement of field placement staff should meet the same educational requirements as teaching faculty.",
+    "spec": "6.a"
+   },
+   {
+    "key": "6_a_p2",
+    "n": 2,
+    "text": "Teaching faculty should have no less than the actual certificate or degree in which they teach. It is recommended that faculty have a doctoral degree.",
+    "spec": "6.a"
+   },
+   {
+    "key": "7_b_p1",
+    "n": 1,
+    "text": "Provide a brief description of how the essential roles are fulfilled in the program",
+    "spec": "7.b"
+   },
+   {
+    "key": "7_b_p2",
+    "n": 2,
+    "text": "Provide a table matching faculty and staff positions and names with these roles.",
+    "spec": "7.b"
+   },
+   {
+    "key": "8_a_p1",
+    "n": 1,
+    "text": "Includes intercultural fluency, accessibility principles training for faculty and staff",
+    "spec": "8.a"
+   },
+   {
+    "key": "8_b_p1",
+    "n": 1,
+    "text": "Includes the development of awareness, knowledge, and skills of intercultural fluency, accessibility, and culture.",
+    "spec": "8.b"
+   },
+   {
+    "key": "18_c_p1",
+    "n": 1,
+    "text": "If a fieldwork experience is required, provide documentation of written agreements with field agencies that specify the student's role, activities, outcomes, supervision, and field instruction.",
+    "spec": "18.c"
+   },
+   {
+    "key": "18_c_p2",
+    "n": 2,
+    "text": "If a fieldwork experience is required, provide syllabi for required seminars. Seminar hours are not included in field experience hours.",
+    "spec": "18.c"
+   },
+   {
+    "key": "18_c_p3",
+    "n": 3,
+    "text": "If a fieldwork experience is required, provide evidence that a minimum of one academic credit is awarded for each three hours of weekly field experience.",
+    "spec": "18.c"
+   },
+   {
+    "key": "18_c_p4",
+    "n": 4,
+    "text": "If a fieldwork experience is required, demonstrate that the field experience is structured with clear learning outcomes and methods of evaluation",
+    "spec": "18.c"
+   },
+   {
+    "key": "18_d_p1",
+    "n": 1,
+    "text": "If a field work experience is required, demonstrate that the program continually monitors the progress of each student and performs no less than one site visit to each field placement site per quarter or semester. The visit can be held as a direct site visit or with appropriate technology. The technology that is used should ensure that the field placement supervisor and student can be identified.",
+    "spec": "18.d"
+   },
+   {
+    "key": "18_d_p2",
+    "n": 2,
+    "text": "If a field work experience is required, demonstrate that there is a written plan of learning objectives, activities, and outcomes for each student that was conjointly developed and agreed to by the student, the program, and the agency supervisor.",
+    "spec": "18.d"
+   },
+   {
+    "key": "18_d_p3",
+    "n": 3,
+    "text": "If a field work experience is required, the program shall provide a minimum of 100 clock hours of field experience in a human service setting.",
+    "spec": "18.d"
+   },
+   {
+    "key": "18_e_p1",
+    "n": 1,
+    "text": "If fieldwork experience is waived, the program shall provide a capstone experience, either thesis or action research, that demonstrates conceptual mastery of the professional practice. Provide the specific criteria and expectations for completing the selected capstone experience.",
+    "spec": "18.e"
+   },
+   {
+    "key": "18_e_p2",
+    "n": 2,
+    "text": "If fieldwork experience is waived, the program shall provide a capstone experience, either thesis or action research, that demonstrates conceptual mastery of the professional practice. Provide the specific criteria for the assessment of the completed capstone project.",
+    "spec": "18.e"
+   }
+  ],
+  "intro": [
+   {
+    "key": "cert_included",
+    "intro": "cert"
+   },
+   {
+    "key": "introduction_a",
+    "intro": "a",
+    "text": "1. Specify the degree(s) offered for which accreditation is being sought"
+   },
+   {
+    "key": "introduction_b",
+    "intro": "b",
+    "text": "2.  Describe the institution"
+   },
+   {
+    "key": "introduction_b",
+    "intro": "b",
+    "text": "a.\tDescribe the organizational structure, whether state or private, age of institution, brief history, etc."
+   },
+   {
+    "key": "introduction_c",
+    "intro": "c",
+    "text": "b.\tDescribe the institutional context of the Program. For example, include organization charts and structure, goals and objectives. What levels of degrees are offered by the institution? For large programs with multiple sites, organizational charts are extremely helpful to the readers."
+   },
+   {
+    "key": "introduction_d",
+    "intro": "d",
+    "text": "3. Describe the Program (Do not duplicate information requested in the Specifications for Standard 1.)"
+   },
+   {
+    "key": "introduction_d",
+    "intro": "d",
+    "text": "a.\tBriefly describe the strengths of the Program and any attributes that make the Program unique."
+   },
+   {
+    "key": "introduction_e",
+    "intro": "e",
+    "text": "b. Describe institutional course requirements for all students and explain how they prepare students for study in the human services program."
+   },
+   {
+    "key": "introduction_f",
+    "intro": "f",
+    "text": "c.\tInclude any other background information that may be pertinent such as action plans for identified problem areas, changing enrollment patterns, marketing strategies, or institutional or curricular restructuring."
+   },
+   {
+    "key": "introduction_g",
+    "intro": "g",
+    "text": "Interim Report and Review and Reaccreditations only\nInclude a copy of the letter from the Vice President of Accreditation (VPA) sent at the time of the prior accreditation notifying the Program of the disposition of the application for accreditation."
+   },
+   {
+    "key": "introduction_h",
+    "intro": "h",
+    "text": "b. Describe how each condition in the VPA letter has been addressed."
+   },
+   {
+    "key": "introduction_i",
+    "intro": "i",
+    "text": "c.\tDescribe any major program changes since the prior accreditation."
+   },
+   {
+    "key": "introduction_j",
+    "intro": "j",
+    "text": "d. Describe any major curriculum changes since the prior accreditation."
+   },
+   {
+    "key": "introduction_k",
+    "intro": "k",
+    "text": "If the Program is delivered at multiple sites,\nFor each site:\nDescribe the physical location and any unique characteristics,"
+   },
+   {
+    "key": "introduction_l",
+    "intro": "l",
+    "text": "2.  Identify the faculty, directors, and staff, and"
+   },
+   {
+    "key": "introduction_m",
+    "intro": "m",
+    "text": "3.  Describe the student population"
+   },
+   {
+    "key": "introduction_n",
+    "intro": "n",
+    "text": "b.  Furnish evidence of formal policies and procedures that"
+   },
+   {
+    "key": "introduction_o",
+    "intro": "o",
+    "text": "Hybrid or Online Course Delivery: If more than 50% of required human service courses are offered in a hybrid/online format, the Program must:\nProvide a narrative and documentation which assures compliance with all Standards and Specifications"
+   },
+   {
+    "key": "introduction_o",
+    "intro": "o",
+    "text": "b. Document how they assure that students enrolled in the program or course(s) are who they say they are"
+   },
+   {
+    "key": "introduction_p",
+    "intro": "p",
+    "text": "c.\tDemonstrate that common learning outcomes/objectives exist for both face- to- face and hybrid/online delivery"
+   },
+   {
+    "key": "introduction_q",
+    "intro": "q",
+    "text": "d. Provide documentation that the program provides adequate technical training and support for students and faculty"
+   },
+   {
+    "key": "introduction_r",
+    "intro": "r",
+    "text": "B. Include a glossary of terms as they are used in the self- study and Program materials (e.g., appendices) to provide clarity for the self-study readers."
+   }
+  ]
+ }
+}
