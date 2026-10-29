@@ -176,6 +176,7 @@ describe('Reader Report parts on the other forms', () => {
       await ReaderReport.create({
         submissionId: sub._id, reviewerId: reader._id,
         rows: [
+          { standardCode: 'introduction', specCode: 'cert', mark: 'compliant', comment: '' },
           { standardCode: 'introduction', specCode: 'c', mark: 'noncompliant', comment: '' },
           { standardCode: '4', specCode: 'a', mark: 'compliant', comment: '' },
         ],
@@ -187,6 +188,13 @@ describe('Reader Report parts on the other forms', () => {
       const strip = (r: string[][]) => r.map((row) => row.map((c) => c.replace(/^(\d+|[a-z])[.)]\s*/, '')));
       expect(boxes(strip(rows), label)).toEqual(['☒', '☐']);
       expect(boxes(strip(rows), 'Describe the institutional context')).toEqual(['☐', '☒']);
+      if (level === 'bachelors') {
+        // Program Information rows follow the certification check (Yes), not the
+        // Introduction's overall mark (Non-Compliant here because of item c).
+        for (const l of ['Certification Page uploaded', 'Person responsible signed off']) {
+          expect(boxes(strip(rows), l), l).toEqual(['☒', '☐']);
+        }
+      }
       const xml = await (await JSZip.loadAsync(res.body)).file('word/document.xml')!.async('string');
       expect(xml).not.toMatch(/\{\{[a-z_0-9]+\}\}/);
     });

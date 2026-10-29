@@ -16,7 +16,9 @@ Adds, per level:
   {{c_<std>_<spec>_p<n>}} {{n_<std>_<spec>_p<n>}}   on the n-th part row of a spec
   {{c_introduction_<code>}} {{n_…}} {{cm_…}}          on the Introduction row for an
                                                       INTRO_RUBRIC item (matched by text)
-  {{c_<intro>_p<n>}} {{n_…}}                          on any other Introduction row
+  {{c_<intro>_p<n>}} {{n_…}}                          on any other Introduction row (the
+                                                      bacc Program Information rows follow
+                                                      the certification check)
   {{cert_included}}                                   in the certification "Included: Yes/No" cell
 and writes server/src/assets/reader-report-templates/spec-parts.json.
 """
@@ -109,7 +111,10 @@ def process(level, rubric):
             if (not label or not all(blank(cells[i]) for i in cols) or shaded(cells[0])
                     or NOT_A_PART.search(label) or unmarked(label)[:1].islower()):
                 continue
-            if is_intro:
+            # The baccalaureate form's "Program Information" block (intro_a:
+            # Certification Page uploaded, Program Name, …) is the certification
+            # check, not the A. Introduction items — those rows follow it.
+            if is_intro and parent != "intro_a":
                 best = max(rubric, key=lambda r: overlap(label, r["text"]))
                 if best["code"] != "cert" and overlap(label, best["text"]) >= 0.5:
                     key = f"introduction_{best['code']}"
@@ -126,6 +131,8 @@ def process(level, rubric):
             entry = {"key": key, "n": n, "text": unmarked(label)}
             if is_intro:
                 entry["introGroup"] = parent
+                if parent == "intro_a":
+                    entry["follows"] = "cert"
                 intro.append(entry)
             else:
                 std, spec = parent.split("_", 1)
