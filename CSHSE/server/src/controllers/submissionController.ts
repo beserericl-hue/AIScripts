@@ -2270,15 +2270,15 @@ export const setSpecPartApproval = async (req: AuthenticatedRequest, res: Respon
       return res.status(400).json({ error: `Specification ${standardCode}.${specCode} has no part ${req.body?.n}` });
     }
 
-    const key = `${standardCode}_${specCode}`;
-    const all = { ...partApprovalsOf(submission) };
-    const forSpec = { ...(all[key] || {}) };
-    if (approved) forSpec[String(n)] = { approvedBy: String(req.user?.id || ''), approvedAt: new Date() };
-    else delete forSpec[String(n)];
-    all[key] = forSpec;
-    (submission as any).specPartApprovals = all;
-    submission.markModified('specPartApprovals');
-    await submission.save();
+    // Set/unset just this part's path, atomically — never rewrite the whole map
+    // (two quick ticks, or a save of a stale copy, must not drop an approval).
+    const path = `specPartApprovals.${standardCode}_${specCode}.${n}`;
+    const update = approved
+      ? { $set: { [path]: { approvedBy: String(req.user?.id || ''), approvedAt: new Date() } } }
+      : { $unset: { [path]: '' } };
+    const saved = await Submission.findByIdAndUpdate(submission._id, update, { new: true, strict: false })
+      .select('specPartApprovals').lean();
+    const all = partApprovalsOf(saved);
     return res.json({ specPartApprovals: all });
   } catch (error) {
     console.error('Set spec part approval error:', error);
