@@ -295,15 +295,31 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
     if (v?.validationStatus === 'fail') return 'fail';
     return null;
   };
+  // Also on read: so old imports drop rows that aren't specifications at this
+  // level (bacc 16.d–f were really 16.c's numbered parts), EMPTY out-of-catalog
+  // buckets are left out of the response. Nothing is deleted from storage.
+  const level = (submission as any).programLevel;
+  const levelCatalog = getLevelStandards(level);
+  const inCatalog = new Set<string>();
+  for (const std of levelCatalog || []) for (const sp of std.specifications) inCatalog.add(`${std.code}.${sp.code}`);
+  let outState = state;
   if (state?.buckets) {
+    const buckets: Record<string, any> = {};
     for (const key of Object.keys(state.buckets)) {
       const b: any = state.buckets[key];
-      if (b?.standardCode && b?.specCode) b.validationVerdict = verdictOf(String(b.standardCode), String(b.specCode));
+      if (b?.standardCode && b?.specCode) {
+        const std = String(b.standardCode), spec = String(b.specCode);
+        const empty = !(b.narratives || []).length && !(b.evidenceText || []).length && !(b.evidenceFiles || []).length;
+        if (levelCatalog && /^\d+$/.test(std) && !inCatalog.has(`${std}.${spec}`) && empty) continue;
+        b.validationVerdict = verdictOf(std, spec);
+      }
+      buckets[key] = b;
     }
+    outState = { ...(typeof state.toObject === 'function' ? state.toObject() : state), buckets };
   }
   res.json({
     submissionId: String(submission._id),
-    aiReviewState: state,
+    aiReviewState: outState,
     aiMatrixState: matrixState
   });
 }

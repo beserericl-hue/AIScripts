@@ -19,6 +19,8 @@ import { JointVenture } from '../models/JointVenture';
 import { getAllStandards } from '../data/standards';
 import { inferProgramLevel, levelFromInstitution, getLevelStandards } from '../data/levelStandards';
 import { INTRO_STANDARD_CODE, INTRO_EVAL_SPEC_CODES } from '../data/introRubric';
+import { getSpecParts } from '../data/levelStandards';
+import { partApprovalsOf, unapprovedParts } from '../services/specPartApprovals';
 import { ingestCorrection } from '../services/cshseAiClient';
 import { ensureInstitutionReaderAssignments } from '../services/readerAssignmentService';
 import mongoose from 'mongoose';
@@ -1280,6 +1282,16 @@ export const getSubmissionPreflight = async (req: AuthenticatedRequest, res: Res
             });
           }
         }
+        // A spec with numbered parts (4.a.1 …) also needs every part approved.
+        const openParts = excluded ? [] : unapprovedParts(submission, standard.code, spec.code);
+        if (openParts.length) {
+          errors.push({
+            code: 'PARTS_NOT_APPROVED',
+            message: `Standard ${standard.code}.${spec.code} has ${openParts.length} numbered part${openParts.length === 1 ? '' : 's'} not yet approved (${openParts.map((p) => `${standard.code}.${spec.code}.${p.n}`).join(', ')}). Approve each part in Review or the Editor.`,
+            standardCode: standard.code,
+            specCode: spec.code
+          });
+        }
       }
     }
 
@@ -1966,6 +1978,10 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
         if (!ok) {
           missingValidations.push(`Standard ${standard.code}, Spec ${spec.code}`);
         }
+        const openParts = status?.excluded === true ? [] : unapprovedParts(submission, standard.code, spec.code);
+        if (openParts.length) {
+          missingValidations.push(`Standard ${standard.code}, Spec ${spec.code}: parts ${openParts.map((p) => p.n).join(', ')} not approved`);
+        }
       }
     }
 
@@ -2200,5 +2216,68 @@ export const submitSelfStudy = async (req: AuthenticatedRequest, res: Response) 
   } catch (error) {
     console.error('Submit self-study error:', error);
     return res.status(500).json({ error: 'Failed to submit self-study' });
+  }
+};
+
+/**
+ * GET /api/submissions/:submissionId/spec-parts
+ * The numbered parts of every specification at this submission's level that has
+ * them, with which parts are approved: { parts: { "4_a": [{n, text}] }, approvals }.
+ */
+export const getSpecPartsState = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!(await requireSubmissionAccess(req as any, res, req.params.submissionId))) return;
+    const full = await Submission.findById(req.params.submissionId).select('programLevel specPartApprovals').lean();
+    const parts: Record<string, Array<{ n: number; text: string }>> = {};
+    for (const std of getLevelStandards((full as any)?.programLevel) || []) {
+      for (const sp of std.specifications) {
+        const list = getSpecParts((full as any)?.programLevel, std.code, sp.code);
+        if (list.length) parts[`${std.code}_${sp.code}`] = list;
+      }
+    }
+    return res.json({ parts, approvals: partApprovalsOf(full) });
+  } catch (error) {
+    console.error('Get spec parts error:', error);
+    return res.status(500).json({ error: 'Failed to load specification parts' });
+  }
+};
+
+/**
+ * POST /api/submissions/:submissionId/spec-parts/approval
+ * Body { standardCode, specCode, n, approved }.
+ *
+ * Approve (or un-approve) one numbered part of a specification — e.g. 4.a.2.
+ * The Review rail and the Self-Study Editor both call this, so a part approved
+ * in one shows approved in the other. Only parts that exist in the
+ * submission's level catalog are accepted.
+ */
+export const setSpecPartApproval = async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const submission = await Submission.findById(req.params.submissionId);
+    if (!submission) return res.status(404).json({ error: 'Submission not found' });
+    if (!pcCanWrite(req.user, submission)) return res.status(403).json({ error: 'Not authorized' });
+
+    const standardCode = String(req.body?.standardCode ?? '').trim();
+    const specCode = String(req.body?.specCode ?? '').trim().toLowerCase();
+    const n = Number(req.body?.n);
+    const approved = req.body?.approved !== false && req.body?.approved !== 'false';
+    const parts = getSpecParts(submission.programLevel, standardCode, specCode);
+    if (!parts.some((p) => p.n === n)) {
+      return res.status(400).json({ error: `Specification ${standardCode}.${specCode} has no part ${req.body?.n}` });
+    }
+
+    const key = `${standardCode}_${specCode}`;
+    const all = { ...partApprovalsOf(submission) };
+    const forSpec = { ...(all[key] || {}) };
+    if (approved) forSpec[String(n)] = { approvedBy: String(req.user?.id || ''), approvedAt: new Date() };
+    else delete forSpec[String(n)];
+    all[key] = forSpec;
+    (submission as any).specPartApprovals = all;
+    submission.markModified('specPartApprovals');
+    await submission.save();
+    return res.json({ specPartApprovals: all });
+  } catch (error) {
+    console.error('Set spec part approval error:', error);
+    return res.status(500).json({ error: 'Failed to save part approval' });
   }
 };

@@ -159,7 +159,7 @@ BACCALAUREATE_SAMPLE: list[Specification] = [
 def load_specifications(program_level: ProgramLevel) -> list[Specification]:
     """Return the active Specification list for a program level.
 
-    Baccalaureate: returns the full 99-spec ``BACCALAUREATE_2025`` dataset
+    Baccalaureate: returns the full 96-spec ``BACCALAUREATE_2025`` dataset
     parsed from the official CSHSE Handbook PDF.
 
     Associate / Master's: TODO — same parser, different PDF (planned for

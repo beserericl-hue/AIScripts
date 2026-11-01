@@ -19,6 +19,7 @@
  * caller ever gets an empty rubric.
  */
 import catalog from './standardsByLevel.json';
+import specPartsCatalog from './specParts.json';
 import { getStandardByCode } from './standards';
 
 export type ProgramLevel = 'associate' | 'baccalaureate' | 'masters';
@@ -87,6 +88,29 @@ export function inferProgramLevel(programName?: string | null): 'associate' | 'b
   return 'bachelors';
 }
 
+export interface SpecPart {
+  /** 1-based part number, printed as "<std>.<spec>.<n>" (e.g. 4.a.2). */
+  n: number;
+  text: string;
+}
+
+const SPEC_PARTS = specPartsCatalog as unknown as Record<string, Record<string, string[]>>;
+
+/**
+ * The numbered sub-items ("parts") of a specification — e.g. 4.a.1–4.a.4.
+ * Only a few specifications have them (`specParts.json`, taken from the July
+ * 2025 Standards + Reader Report forms); every other spec returns []. Each part
+ * must be addressed in the narrative, approved in Review, and marked by readers.
+ */
+export function getSpecParts(
+  programLevel: string | null | undefined,
+  standardCode: string,
+  specCode: string
+): SpecPart[] {
+  const list = SPEC_PARTS[normalizeLevel(programLevel)]?.[`${standardCode}.${specCode}`];
+  return Array.isArray(list) ? list.map((text, i) => ({ n: i + 1, text })) : [];
+}
+
 export interface SpecCriteria {
   standardCode: string;
   specCode: string;
@@ -95,6 +119,17 @@ export interface SpecCriteria {
   criteria: string;
   /** Which catalog satisfied the lookup — for logging/diagnostics. */
   source: 'level' | 'legacy';
+}
+
+/**
+ * Spell the numbered parts out at the end of the rubric so the evaluator judges
+ * each one — a spec with parts is only met when every part is addressed.
+ */
+function withPartsChecklist(criteria: string, parts: SpecPart[]): string {
+  if (!parts.length) return criteria;
+  return `${criteria}\n\nThis specification has ${parts.length} numbered parts, and EACH must be addressed for it to be met:\n${parts
+    .map((p) => `${p.n}. ${p.text}`)
+    .join('\n')}`;
 }
 
 /**
@@ -115,7 +150,7 @@ export function getSpecCriteria(
       standardCode: String(standardCode),
       specCode: String(specCode),
       standardTitle: std.title || spec.title || '',
-      criteria: spec.criteria,
+      criteria: withPartsChecklist(spec.criteria, getSpecParts(level, standardCode, specCode)),
       source: 'level',
     };
   }
@@ -160,6 +195,7 @@ export function getLevelStandards(programLevel: string | null | undefined) {
           code: sc,
           title: std.title,
           text: std.specs[sc].criteria,
+          parts: getSpecParts(level, code, sc),
         })),
       };
     });

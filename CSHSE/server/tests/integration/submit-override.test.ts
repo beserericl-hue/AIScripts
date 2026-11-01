@@ -21,7 +21,7 @@ import { Submission } from '../../src/models/Submission';
 import { AuditLogEntry } from '../../src/models/AuditLogEntry';
 import { getAllStandards } from '../../src/data/standards';
 import { getLevelStandards } from '../../src/data/levelStandards';
-import { createUser, signTokenFor } from '../helpers/factories';
+import { createUser, signTokenFor, allPartsApproved } from '../helpers/factories';
 
 // recordAuditEvent is fire-and-forget (void) in submitSelfStudy — poll briefly
 // so the assertion isn't racing the async write.
@@ -46,6 +46,8 @@ async function seedSubmission(overrides: any = {}) {
     type: 'initial',
     status: overrides.status ?? 'in_progress',
     standardsStatus: overrides.standardsStatus,
+    // Numbered parts (4.a.1 …) approved — this file tests the other submit gates.
+    specPartApprovals: overrides.specPartApprovals ?? allPartsApproved('bachelors'),
   })) as any;
 }
 

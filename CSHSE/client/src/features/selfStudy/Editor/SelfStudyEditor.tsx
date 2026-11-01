@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { useSpecParts } from '../../../hooks/useSpecParts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Send,
@@ -2415,6 +2416,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // excluded === true (PC has explicitly marked it not applicable).
   // Mirrors the server's submitSelfStudy gate so the CTA's enabled state
   // matches what the server will actually accept.
+  // A spec with numbered parts (4.a.1 …) also needs every part approved.
+  const specPartsState = useSpecParts(submissionId);
   const isSelfStudyReadyForSubmit = React.useMemo(() => {
     if (!standards || !submission?.standardsStatus) return false;
 
@@ -2426,15 +2429,19 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         // Only a hard 'fail' or an unassessed spec blocks submit. Legacy rows have
         // only the binary validationStatus.
         const v = status?.verdict;
+        if (status?.excluded === true) return true;
+        const partsDone =
+          specPartsState.approvedCount(standard.code, spec.code) ===
+          specPartsState.partsOf(standard.code, spec.code).length;
         return (
-          v === 'pass' ||
-          v === 'needs_improvement' ||
-          (v == null && status?.validationStatus === 'pass') ||
-          status?.excluded === true
+          partsDone &&
+          (v === 'pass' ||
+            v === 'needs_improvement' ||
+            (v == null && status?.validationStatus === 'pass'))
         );
       })
     );
-  }, [standards, submission?.standardsStatus]);
+  }, [standards, submission?.standardsStatus, specPartsState]);
 
   // Check if submission is already submitted or locked.
   // Status list mirrors server/src/middleware/submissionLockout.ts so the
@@ -2937,7 +2944,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       ? "Self-study has been submitted for review"
                       : isSelfStudyReadyForSubmit
                       ? "Submit self-study for review - this will lock the document"
-                      : `All specifications must PASS validation before submitting (${validationProgress.validated} of ${validationProgress.total} passed; ${validationProgress.evaluated} reviewed)`
+                      : `All specifications must PASS validation, with every numbered part approved, before submitting (${validationProgress.validated} of ${validationProgress.total} passed; ${validationProgress.evaluated} reviewed)`
                   }
                 >
                   {submitSelfStudyMutation.isPending ? (
@@ -3074,6 +3081,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       setSelectedStandard(standardCode);
                       setSelectedSpec(specCode);
                     }}
+                    submissionId={submissionId}
+                    partsReadOnly={isEditingDisabled}
                   />
                 )}
               </aside>

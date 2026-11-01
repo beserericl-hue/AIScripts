@@ -1,3 +1,4 @@
+import { getLevelStandards, getSpecParts } from '../../src/data/levelStandards';
 import jwt from 'jsonwebtoken';
 import { User } from '../../src/models/User';
 import { Assignment } from '../../src/models/Assignment';
@@ -77,4 +78,20 @@ export function signTokenFor(
     secret,
     { expiresIn: opts.expiresIn ?? '1h' }
   );
+}
+
+/**
+ * Every numbered part (4.a.1 …) of every specification at `level` approved —
+ * seed it as `specPartApprovals` so a "ready to submit" fixture clears the
+ * part-approval gate.
+ */
+export function allPartsApproved(level: string): Record<string, Record<string, { approvedAt: Date }>> {
+  const out: Record<string, Record<string, { approvedAt: Date }>> = {};
+  for (const std of getLevelStandards(level) || []) {
+    for (const sp of std.specifications) {
+      const parts = getSpecParts(level, std.code, sp.code);
+      if (parts.length) out[`${std.code}_${sp.code}`] = Object.fromEntries(parts.map((p: any) => [String(p.n), { approvedAt: new Date() }]));
+    }
+  }
+  return out;
 }

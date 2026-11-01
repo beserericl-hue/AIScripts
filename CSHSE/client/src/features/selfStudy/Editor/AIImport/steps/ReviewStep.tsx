@@ -1292,6 +1292,7 @@ function FullReviewStep(): JSX.Element {
           evidenceDocs={evidenceDocs}
           missingFragmentCount={coverageReport?.missingFragments?.length || 0}
           onAddFromSourceForIntro={handleAddFromSourceForIntro}
+          submissionId={submissionId}
         />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {/* CR-068 — flat cross-spec list banner. */}

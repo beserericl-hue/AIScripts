@@ -136,7 +136,7 @@ describe('Reader Report — numbered parts and Introduction rows', () => {
     expect(put.status).toBe(200);
     const get = await request(app).get(`/api/reports/submission/${ctx.sub._id}/reader-report-data`).set('Authorization', `Bearer ${ctx.token}`);
     const a = get.body.standards.find((s: any) => s.code === '4').specs.find((s: any) => s.specCode === 'a');
-    expect(a.parts.map((p: any) => p.text)).toEqual(expect.arrayContaining(['Assessment plan.']));
+    expect(a.parts.map((p: any) => p.text)).toEqual(expect.arrayContaining(['Assessment plan (include timelines)']));
     expect(a.parts.length).toBe(4);
     expect(a.parts.find((p: any) => p.n === 3).mark).toBe('noncompliant');
     expect(a.parts.find((p: any) => p.n === 1).mark).toBe(''); // takes the spec's mark

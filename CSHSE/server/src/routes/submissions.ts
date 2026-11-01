@@ -15,6 +15,8 @@ import {
   evaluateSpec,
   recordSectionEvalOverride,
   markStandardComplete,
+  setSpecPartApproval,
+  getSpecPartsState,
   markSpecNotApplicable,
   clearSpecNotApplicable,
   adminUnlockSubmission,
@@ -315,6 +317,9 @@ router.post('/:submissionId/standards/:standardCode/specs/:specCode/override', r
  * @access  Private (Program Coordinator, Admin)
  */
 router.post('/:submissionId/standards/:standardCode/complete', submissionLockout, markStandardComplete);
+// Approve / un-approve one numbered part of a specification (4.a.2) — shared by Review + Editor.
+router.get('/:submissionId/spec-parts', getSpecPartsState);
+router.post('/:submissionId/spec-parts/approval', submissionLockout, setSpecPartApproval);
 
 /**
  * @route   POST /api/submissions/:submissionId/standards/:standardCode/specs/:specCode/not-applicable
