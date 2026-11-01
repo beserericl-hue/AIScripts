@@ -68,7 +68,7 @@ export function SpecPartsBadge({ submissionId, standardCode, specCode }: { submi
     <span
       data-testid={`parts-badge-${standardCode}-${specCode}`}
       title={`${done} of ${total} numbered parts approved`}
-      className={`rounded px-1 text-[10px] font-medium ${done === total ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
+      className={`whitespace-nowrap rounded px-1 text-[10px] font-medium ${done === total ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}
     >
       {done}/{total} parts
     </span>
