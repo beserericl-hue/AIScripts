@@ -200,6 +200,9 @@ export interface ISubmission extends Document {
   // import. Items here are pre-Apply; once approved they flow into
   // narratives + curriculumMatrices and leave aiReviewState.
   aiReviewState?: IAIReviewState;
+  // Approvals of a specification's numbered parts (4.a.1 …), shared by the
+  // Review rail and the Editor: { "<std>_<spec>": { "<n>": { approvedBy, approvedAt } } }.
+  specPartApprovals?: Record<string, Record<string, { approvedBy?: string; approvedAt?: Date }>>;
   // CR-043 — submission-scoped pre-Apply matrix state. Separate from
   // the post-Apply curriculumMatrices array.
   aiMatrixState?: IAIMatrixState;
@@ -385,6 +388,7 @@ const SubmissionSchema = new Schema<ISubmission>({
   // fresh submission; populated by receiveAICallback's merge on every
   // parse-complete.
   aiReviewState: { type: Schema.Types.Mixed, default: undefined },
+  specPartApprovals: { type: Schema.Types.Mixed, default: undefined },
   aiMatrixState: { type: Schema.Types.Mixed, default: undefined },
   // Background AI-evaluation queue (see interface).
   aiEvalQueue: { type: [String], default: undefined },

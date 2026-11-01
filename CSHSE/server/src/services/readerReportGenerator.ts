@@ -30,7 +30,7 @@ import { ValidationResult } from '../models/ValidationResult';
 import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { getAllStandards } from '../data/standards';
-import { getLevelStandards } from '../data/levelStandards';
+import { getLevelStandards, getSpecParts } from '../data/levelStandards';
 import { INTRO_RUBRIC, INTRO_STANDARD_CODE } from '../data/introRubric';
 import { splitIntroByRubric } from './introNarrativeSplit';
 import { brandedSectionChrome } from './docxBranding';
@@ -104,15 +104,6 @@ function specParts(levelKey: string): { parts: FormPart[]; intro: FormIntroRow[]
     }
   }
   return partManifest?.[levelKey] || { parts: [], intro: [] };
-}
-
-/** The numbered parts of each specification on this level's form, keyed "std.spec". */
-export function formSpecParts(programLevel?: string): Map<string, FormPart[]> {
-  const out = new Map<string, FormPart[]>();
-  for (const p of specParts(resolveLevel(programLevel).key).parts) {
-    out.set(p.spec, [...(out.get(p.spec) || []), p]);
-  }
-  return out;
 }
 
 /** "std.spec" keys that have their own row on this program level's form —
@@ -319,6 +310,26 @@ async function buildTemplatedDocx(
     fills[`c_${p.key}`] = boxFor(extras, mark === 'compliant');
     fills[`n_${p.key}`] = boxFor(extras, mark === 'noncompliant');
   }
+  // Some parts share their specification's row on the form (8.a.1 is printed
+  // inside "Demonstrate how the program 1. Includes …"), so they have no boxes
+  // of their own. When a reader marked such a part differently from its spec,
+  // say so in the spec's comment cell so the decision still reaches the Council.
+  if (extras?.parts?.size) {
+    const ownRow = new Set(parts.map((p) => `${p.spec}.${p.n}`));
+    for (const key of specRows(levelKey)) {
+      const [std, spec] = key.split('.');
+      const specMark = extras.specs.get(key)?.mark || '';
+      const notes = getSpecParts(levelKey, std, spec)
+        .filter((p) => !ownRow.has(`${key}.${p.n}`))
+        .map((p) => ({ p, m: extras.parts!.get(`${key}.${p.n}`) || '' }))
+        .filter(({ m }) => m && m !== specMark)
+        .map(({ p, m }) => `${key}.${p.n} (${p.text}): ${m === 'compliant' ? 'Compliant' : 'Non-Compliant'}`);
+      if (notes.length) {
+        const cm = fills[`cm_${std}_${spec}`];
+        fills[`cm_${std}_${spec}`] = [cm, ...notes].filter(Boolean).join(' · ');
+      }
+    }
+  }
   // Introduction rows: each item's own mark + comment. A row that is not an
   // item of its own follows the item it belongs to (the baccalaureate
   // "Program Information" rows follow the certification check), else the
@@ -479,8 +490,6 @@ function buildChecklistPdf(
   data: ReportData, rollup: Map<string, StandardRollup>, levelTitle: string, extras?: ReaderReportExtras,
   levelKey = '',
 ): Promise<Buffer> {
-  const partsBySpec = new Map<string, FormPart[]>();
-  for (const p of specParts(levelKey).parts) partsBySpec.set(p.spec, [...(partsBySpec.get(p.spec) || []), p]);
   return new Promise((resolve, reject) => {
     const doc = useSafeText(new PDFDocument({ size: 'LETTER', margin: 54 }));
     const chunks: Buffer[] = [];
@@ -565,7 +574,7 @@ function buildChecklistPdf(
             .text(`  ${(sp.text || sp.title || '').replace(/\s+/g, ' ').slice(0, 160)}${(sp.text || '').length > 160 ? '…' : ''}`);
           compliancePair(doc, v!.mark, { indent: 12 });
           // Each numbered part is marked too (its own mark, else the spec's).
-          for (const p of partsBySpec.get(`${std.code}.${sp.spec}`) || []) {
+          for (const p of getSpecParts(levelKey, std.code, sp.spec)) {
             if (doc.y > doc.page.height - 70) doc.addPage();
             doc.fontSize(9).fillColor('#374151')
               .text(`${p.n}. ${p.text.replace(/\s+/g, ' ')}`, doc.page.margins.left + 24, doc.y);

@@ -11,6 +11,7 @@
 import React, { useMemo, useState } from 'react';
 import { Search, AlertTriangle, FileText, Grid3x3, BookOpen, User, FileBox } from 'lucide-react';
 import { HoverTooltip } from './HoverTooltip';
+import { SpecPartsBadge, SpecPartsList } from '../../../SpecParts/SpecPartsList';
 import type {
   SpecBucket,
   PlaceholderSection,
@@ -64,6 +65,9 @@ interface SpecRailProps {
   // Introduction row. Opens ShowInSourceModal in selection mode
   // targeting that intro bucket key ('document' or 'standard-{N}').
   onAddFromSourceForIntro?: (introBucketKey: string) => void;
+  // Numbered parts (4.a.1 …) render under their spec with an Approve box each;
+  // they need the submission to load and save approvals.
+  submissionId?: string | null;
 }
 
 type CoverageState = 'covered' | 'partial' | 'gap' | 'unassessed' | 'none';
@@ -184,7 +188,8 @@ export function SpecRail({
   cvs,
   evidenceDocs,
   missingFragmentCount = 0,
-  onAddFromSourceForIntro
+  onAddFromSourceForIntro,
+  submissionId
 }: SpecRailProps): JSX.Element {
   const [filter, setFilter] = useState('');
 
@@ -548,6 +553,9 @@ export function SpecRail({
                           <span className="truncate text-xs text-gray-500">{b.standardTitle}</span>
                         </span>
                         <span className="flex items-center gap-1 text-xs">
+                          {submissionId && (
+                            <SpecPartsBadge submissionId={submissionId} standardCode={b.standardCode} specCode={b.specCode} />
+                          )}
                           {count > 0 && (
                             <span className="rounded bg-cshse-200 px-1.5 text-cshse-800">{count}</span>
                           )}
@@ -588,6 +596,14 @@ export function SpecRail({
                           )}
                         </span>
                       </button>
+                      {submissionId && (
+                        <SpecPartsList
+                          submissionId={submissionId}
+                          standardCode={b.standardCode}
+                          specCode={b.specCode}
+                          surface="rail"
+                        />
+                      )}
                     </li>
                   );
                 })}

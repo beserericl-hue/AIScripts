@@ -8,6 +8,7 @@ import {
   Clock,
   FileText,
 } from 'lucide-react';
+import { SpecPartsBadge, SpecPartsList } from '../SpecParts/SpecPartsList';
 
 interface SpecificationProgress {
   specCode: string;
@@ -32,6 +33,9 @@ interface StandardsNavigationProps {
   selectedSpec: string | null;
   onSelectStandard: (standardCode: string) => void;
   onSelectSpec: (standardCode: string, specCode: string) => void;
+  /** Lists each spec's numbered parts (4.a.1 …) with an Approve box. */
+  submissionId?: string | null;
+  partsReadOnly?: boolean;
 }
 
 /**
@@ -43,6 +47,8 @@ export function StandardsNavigation({
   selectedSpec,
   onSelectStandard,
   onSelectSpec,
+  submissionId,
+  partsReadOnly,
 }: StandardsNavigationProps) {
   // Group standards by part
   const groupedStandards = useMemo(() => {
@@ -69,6 +75,8 @@ export function StandardsNavigation({
               }
               onSelectStandard={onSelectStandard}
               onSelectSpec={onSelectSpec}
+              submissionId={submissionId}
+              partsReadOnly={partsReadOnly}
             />
           ))}
         </div>
@@ -90,6 +98,8 @@ export function StandardsNavigation({
               }
               onSelectStandard={onSelectStandard}
               onSelectSpec={onSelectSpec}
+              submissionId={submissionId}
+              partsReadOnly={partsReadOnly}
             />
           ))}
         </div>
@@ -105,6 +115,8 @@ interface StandardItemProps {
   selectedSpec: string | null;
   onSelectStandard: (standardCode: string) => void;
   onSelectSpec: (standardCode: string, specCode: string) => void;
+  submissionId?: string | null;
+  partsReadOnly?: boolean;
 }
 
 function StandardItem({
@@ -113,6 +125,8 @@ function StandardItem({
   selectedSpec,
   onSelectStandard,
   onSelectSpec,
+  submissionId,
+  partsReadOnly,
 }: StandardItemProps) {
   const [isExpanded, setIsExpanded] = React.useState(isSelected);
 
@@ -206,13 +220,22 @@ function StandardItem({
       {isExpanded && standard.specifications.length > 0 && (
         <div className="ml-4 pl-4 border-l-2 border-gray-200 space-y-1 pb-2">
           {standard.specifications.map((spec) => (
-            <SpecificationItem
-              key={spec.specCode}
-              spec={spec}
-              standardCode={standard.standardCode}
-              isSelected={selectedSpec === spec.specCode}
-              onClick={() => onSelectSpec(standard.standardCode, spec.specCode)}
-            />
+            <div key={spec.specCode}>
+              <SpecificationItem
+                spec={spec}
+                standardCode={standard.standardCode}
+                isSelected={selectedSpec === spec.specCode}
+                onClick={() => onSelectSpec(standard.standardCode, spec.specCode)}
+                submissionId={submissionId}
+              />
+              <SpecPartsList
+                submissionId={submissionId}
+                standardCode={standard.standardCode}
+                specCode={spec.specCode}
+                surface="editor-nav"
+                readOnly={partsReadOnly}
+              />
+            </div>
           ))}
         </div>
       )}
@@ -226,6 +249,7 @@ interface SpecificationItemProps {
   standardCode: string;
   isSelected: boolean;
   onClick: () => void;
+  submissionId?: string | null;
 }
 
 function SpecificationItem({
@@ -233,6 +257,7 @@ function SpecificationItem({
   standardCode,
   isSelected,
   onClick,
+  submissionId,
 }: SpecificationItemProps) {
   return (
     <button
@@ -250,6 +275,7 @@ function SpecificationItem({
       <span className="flex-1 truncate">
         {standardCode}.{spec.specCode} - {spec.specTitle}
       </span>
+      <SpecPartsBadge submissionId={submissionId} standardCode={standardCode} specCode={spec.specCode} />
     </button>
   );
 }

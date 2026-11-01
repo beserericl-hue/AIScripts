@@ -120,19 +120,20 @@ def test_baccalaureate_2025_registry_has_no_duplicate_keys():
 
 
 def test_baccalaureate_2025_registry_has_expected_count():
-    """The Handbook has 99 specs across 21 Standards — make sure the
-    registry exposes all of them. Drops from 99 indicate a regression."""
+    """The Handbook has 96 specs across 21 Standards — make sure the
+    registry exposes all of them. (It was 99 while 16.c's numbered parts were
+    mis-filed as phantom specs 16.d/16.e/16.f.)"""
     from app.standards.baccalaureate_2025 import BACCALAUREATE_2025
-    assert len(BACCALAUREATE_2025) == 99
+    assert len(BACCALAUREATE_2025) == 96
+    assert not [s for s in BACCALAUREATE_2025 if s.standard_code == '16' and s.spec_code in 'def']
 
 
 def test_load_specifications_dedupe_via_dict_is_lossless():
     """A common downstream pattern is ``{(s.standard_code, s.spec_code): s for s in specs}``.
 
-    With the registry fix, that dedupe should produce 99 entries — same
-    as the list length. Before the fix it produced 96.
+    That dedupe should produce one entry per spec — same as the list length.
     """
     from app.standards.loader import load_specifications
     specs = load_specifications("bachelors")
     spec_index = {(s.standard_code, s.spec_code): s for s in specs}
-    assert len(spec_index) == len(specs) == 99
+    assert len(spec_index) == len(specs) == 96

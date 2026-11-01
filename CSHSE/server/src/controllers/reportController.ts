@@ -5,7 +5,8 @@ import { LeadReaderCompilation } from '../models/LeadReaderCompilation';
 import { User } from '../models/User';
 import { Score } from '../models/Score';
 import { PDFGeneratorService } from '../services/pdfGenerator';
-import { formSpecParts, formSpecRows, generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
+import { getSpecParts } from '../data/levelStandards';
+import { formSpecRows, generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
 import { ReaderReport } from '../models/ReaderReport';
 import { Comment } from '../models/Comment';
 import { Assignment } from '../models/Assignment';
@@ -399,8 +400,7 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
         parts: (r as any).parts || [], leadParts: (r as any).leadParts || [],
       };
     }
-    // The numbered parts of each spec on this level's form (4.a.1, 4.a.2, …).
-    const formParts = formSpecParts(structure.programLevel);
+    // The numbered parts of each spec (4.a.1, 4.a.2, …) at this program level.
     const markOf = (list: PartMark[] | undefined, n: number) => (list || []).find((p) => p.n === n)?.mark || '';
 
     const standards = structure.standards.map((s) => ({
@@ -421,7 +421,7 @@ export const getReaderReportData = async (req: AuthenticatedRequest, res: Respon
           leadComment: savedByKey[key]?.leadComment ?? '',
           overriddenBy: savedByKey[key]?.overriddenBy ?? '',
           // '' = not marked separately: the part takes the spec's mark.
-          parts: (formParts.get(key) || []).map((p) => ({
+          parts: getSpecParts(structure.programLevel, s.code, sp.specCode).map((p) => ({
             n: p.n, text: p.text,
             mark: markOf(savedByKey[key]?.parts, p.n),
             leadMark: markOf(savedByKey[key]?.leadParts, p.n),

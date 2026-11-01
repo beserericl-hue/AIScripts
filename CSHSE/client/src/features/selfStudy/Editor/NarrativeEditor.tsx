@@ -52,6 +52,8 @@ import {
 } from 'lucide-react';
 import { useAutoSave } from '../../../hooks/useAutoSave';
 import { useValidationStatus } from '../../../hooks/useValidationStatus';
+import { useSpecParts } from '../../../hooks/useSpecParts';
+import { SpecPartsList } from '../SpecParts/SpecPartsList';
 
 interface NarrativeEditorProps {
   submissionId: string;
@@ -153,6 +155,7 @@ export function NarrativeEditor({
     standardCode,
     specCode,
   });
+  const specParts = useSpecParts(submissionId).partsOf(standardCode, specCode || '');
 
   // State for link dialog
   const [showLinkDialog, setShowLinkDialog] = useState(false);
@@ -657,6 +660,20 @@ export function NarrativeEditor({
               )}
             </div>
             <p className="text-sm text-teal-700">{standardText}</p>
+            {specParts.length > 0 && (
+              <div className="mt-2 rounded border border-teal-200 bg-white/70 px-3 py-2" data-testid="editor-parts-panel">
+                <p className="text-xs font-semibold text-teal-800">
+                  This specification has {specParts.length} numbered parts. Address each one in the narrative, then approve it.
+                </p>
+                <SpecPartsList
+                  submissionId={submissionId}
+                  standardCode={standardCode}
+                  specCode={specCode}
+                  surface="editor"
+                  readOnly={readOnly}
+                />
+              </div>
+            )}
 
           </div>
         )}

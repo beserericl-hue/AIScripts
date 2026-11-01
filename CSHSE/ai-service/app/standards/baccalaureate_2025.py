@@ -69,18 +69,14 @@ BACCALAUREATE_2025: list[Specification] = [
     Specification(standard_code='15', spec_code='a', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Knowledge and skills to analyze and assess the needs of clients or client groups.', program_level="bachelors", version="2025"),
     Specification(standard_code='15', spec_code='b', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Skills to develop goals, design and implement a plan of action.', program_level="bachelors", version="2025"),
     Specification(standard_code='15', spec_code='c', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Skills to evaluate the outcomes of the plan and the impact on the client or client group. 6. Client Interventions and Strategies Context: Human service professionals function as change agents and must therefore attain and develop a core of knowledge, theory, and skills to provide direct services and interventions to clients and client groups.', program_level="bachelors", version="2025"),
-    # Standard 16 has two independent letter-lists in the Handbook PDF —
-    # "Theory & Knowledge" (a/b/c) and "Skills" (a/b/c again). The parser
-    # originally flattened both groups onto the same letter codes, which
-    # collapsed 99 specs to 96 in any dict-keyed lookup. Disambiguate the
-    # second (Skills) trio to d/e/f so each Specification has a unique
-    # (standard_code, spec_code).
+    # Standard 16 has three specifications. "Intake interviewing", "Helping
+    # skills", "Identification and use of appropriate resources…", "Group
+    # facilitation" and "Use of consultation" are NUMBERED PARTS of 16.c (the
+    # July-2025 Reader Report form lists them as 16.c's items 1–6), not
+    # specifications — the old parse filed them as phantom 16.d/16.e/16.f.
     Specification(standard_code='16', spec_code='a', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Theory and knowledge bases of prevention, intervention, and maintenance strategies.', program_level="bachelors", version="2025"),
-    Specification(standard_code='16', spec_code='d', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Intake interviewing', program_level="bachelors", version="2025"),
     Specification(standard_code='16', spec_code='b', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Assess and analyze the needs of clients or client groups through observation, interviewing, active listening, consultation, and research.', program_level="bachelors", version="2025"),
-    Specification(standard_code='16', spec_code='e', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Helping skills:', program_level="bachelors", version="2025"),
-    Specification(standard_code='16', spec_code='c', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Knowledge and skill development in: 1. Case management', program_level="bachelors", version="2025"),
-    Specification(standard_code='16', spec_code='f', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Identification and use of appropriate resources and referrals. 2. Group facilitation 3. Use of consultation 7. Interpersonal Communication Context: The ability to create genuine and empathic relationships with others is central to the human services profession. These skills are applicable to all levels of education, and a greater proficiency is expected at each progressively higher level.', program_level="bachelors", version="2025"),
+    Specification(standard_code='16', spec_code='c', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Knowledge and skill development in the following areas: 1. Case management 2. Intake interviewing 3. Helping skills 4. Identification and use of appropriate resources and referrals 5. Group facilitation skills 6. Use of consultation.', program_level="bachelors", version="2025"),
     Specification(standard_code='17', spec_code='a', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Clarifying expectations.', program_level="bachelors", version="2025"),
     Specification(standard_code='17', spec_code='b', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Dealing effectively with conflict.', program_level="bachelors", version="2025"),
     Specification(standard_code='17', spec_code='c', standard_title='Knowledge, Theory, Skills, and Values', spec_text='Establishing rapport with clients.', program_level="bachelors", version="2025"),

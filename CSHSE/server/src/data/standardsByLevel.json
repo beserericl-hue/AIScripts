@@ -211,7 +211,7 @@
         },
         "d": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "The broader sociopolitical issues that affect human service systems 2. Human Systems Context: The human services professional must demonstrate an understanding of the structure and dynamics of organizations, communities, and society as well as the nature of individuals and groups. This understanding is prerequisite to the determination of appropriate responses to human needs."
+          "criteria": "The broader sociopolitical issues that affect human service systems"
         }
       }
     },
@@ -240,7 +240,7 @@
         },
         "f": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Emphasis on context and the role of intercultural fluency, including cultural group membership and individual identities in determining and meeting human needs. 3. Human Service Delivery Systems Context: The demand for services and the funding of educational programs has been closely related to identifiable human conditions including, among others: aging, delinquency, crime, poverty, mental illness, physical illness, chemical dependency, and disabilities. The needs that arise in these conditions provide the focus for the human services profession."
+          "criteria": "Emphasis on context and the role of intercultural fluency, including cultural group membership and individual identities in determining and meeting human needs."
         }
       }
     },
@@ -257,7 +257,7 @@
         },
         "c": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "The major models used to conceptualize and integrate prevention, maintenance, intervention, rehabilitation, and healthy functioning. 4. Discipline Inquiry and Information Literacy Context: The delivery of human services depends on the appropriate integration of various forms of information."
+          "criteria": "The major models used to conceptualize and integrate prevention, maintenance, intervention, rehabilitation, and healthy functioning."
         }
       }
     },
@@ -278,7 +278,7 @@
         },
         "d": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Using technology, including artificial intelligence, to locate, evaluate, and disseminate information. 5. Program Planning and Evaluation Context: A major component of the human services profession involves the assessment of the needs of clients and client groups and the planning of programs and interventions that will assist clients and client groups in promoting optimal functioning, growth, and goal attainment. At regular intervals, the outcomes must be evaluated, and necessary adjustments made to the plan, both at an individual client and program level."
+          "criteria": "Using technology, including artificial intelligence, to locate, evaluate, and disseminate information."
         }
       }
     },
@@ -295,7 +295,7 @@
         },
         "c": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Skills to evaluate the outcomes of the plan and the impact on the client or client group. 6. Client Interventions and Strategies Context: Human service professionals function as change agents and must therefore attain and develop a core of knowledge, theory, and skills to provide direct services and interventions to clients and client groups."
+          "criteria": "Skills to evaluate the outcomes of the plan and the impact on the client or client group."
         }
       }
     },
@@ -312,7 +312,7 @@
         },
         "c": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Knowledge and skill development in 1. Case Management: a. Intake interviewing b. Helping skills c. Identification and use of appropriate resources and referrals 2. Group facilitation 3. Use of consultation. 7. Interpersonal Communication Context: The ability to create genuine and empathic relationships with others is central to the human services profession. These skills apply to all levels of education, and a greater proficiency is expected at each progressively higher level."
+          "criteria": "Knowledge and skill development in the following areas: 1. Case management 2. Intake interviewing 3. Helping skills 4. Identification and use of appropriate resources and referrals 5. Group facilitation skills 6. Use of consultation."
         }
       }
     },
@@ -657,7 +657,7 @@
         },
         "d": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "The broader sociopolitical issues that affect human service systems. 2. Human Systems Context: The human services professional must demonstrate an understanding of the structure and dynamics of organizations, communities, and society as well as the nature of individuals and groups. This understanding is prerequisite to the determination of appropriate responses to human needs."
+          "criteria": "The broader sociopolitical issues that affect human service systems."
         }
       }
     },
@@ -694,7 +694,7 @@
         },
         "h": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Processes to analyze, interpret, and effect policies and laws at local, state, and national levels that influence services delivery systems. 3. Human Service Delivery Systems Context: The demand for services and the funding of educational programs has been closely related to identifiable human conditions including, among others: aging, delinquency, crime, poverty, mental illness, physical illness, chemical dependency, and disabilities. The needs that arise in these conditions provide the focus for the human services profession."
+          "criteria": "Processes to analyze, interpret, and effect policies and laws at local, state, and national levels that influence services delivery systems."
         }
       }
     },
@@ -723,7 +723,7 @@
         },
         "f": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Constituency building and other advocacy skills such as lobbying, grassroots movements, and community development and organizing. 4. Discipline Inquiry and Information Literacy Context: The delivery of human services depends on the appropriate integration of various forms of information."
+          "criteria": "Constituency building and other advocacy skills such as lobbying, grassroots movements, and community development and organizing."
         }
       }
     },
@@ -744,7 +744,7 @@
         },
         "d": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Using technology, including artificial intelligence, to locate, evaluate, and disseminate information. 5. Program Planning and Evaluation Context: A significant component of the human services profession involves assessing the needs of clients and client groups, and planning programs and interventions to assist them in promoting optimal functioning, growth, and goal attainment. At regular intervals, the outcomes must be evaluated, and necessary adjustments made to the plan, both at an individual client and program level."
+          "criteria": "Using technology, including artificial intelligence, to locate, evaluate, and disseminate information."
         }
       }
     },
@@ -761,7 +761,7 @@
         },
         "c": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Skills to evaluate the outcomes of the plan and the impact on the client or client group. 6. Client Interventions and Strategies Context: Human service professionals function as change agents and must therefore attain and develop a core of knowledge, theory, and skills to provide direct services and interventions to clients and client groups."
+          "criteria": "Skills to evaluate the outcomes of the plan and the impact on the client or client group."
         }
       }
     },
@@ -772,25 +772,13 @@
           "title": "Knowledge, Theory, Skills, and Values",
           "criteria": "Theory and knowledge bases of prevention, intervention, and maintenance strategies."
         },
-        "d": {
-          "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Intake interviewing"
-        },
         "b": {
           "title": "Knowledge, Theory, Skills, and Values",
           "criteria": "Assess and analyze the needs of clients or client groups through observation, interviewing, active listening, consultation, and research."
         },
-        "e": {
-          "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Helping skills:"
-        },
         "c": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Knowledge and skill development in: 1. Case management"
-        },
-        "f": {
-          "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Identification and use of appropriate resources and referrals. 2. Group facilitation 3. Use of consultation 7. Interpersonal Communication Context: The ability to create genuine and empathic relationships with others is central to the human services profession. These skills are applicable to all levels of education, and a greater proficiency is expected at each progressively higher level."
+          "criteria": "Knowledge and skill development in the following areas: 1. Case management 2. Intake interviewing 3. Helping skills 4. Identification and use of appropriate resources and referrals 5. Group facilitation skills 6. Use of consultation."
         }
       }
     },
@@ -811,7 +799,7 @@
         },
         "d": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Developing and sustaining behaviors that are congruent with the values and ethical standards outlined by the National Organization for Human Services/Council for Standards in Human Service Education (available at https://www.nationalhumanservices.org/ethical-standards-for- hsprofessionals). 8. Administrative Context: A holistic approach to human services recognizes direct and indirect services as components of the same system. Administrative support (indirect service) is essential to the effective delivery of direct services to clients or client groups."
+          "criteria": "Developing and sustaining behaviors that are congruent with the values and ethical standards outlined by the National Organization for Human Services/Council for Standards in Human Service Education (available at https://www.nationalhumanservices.org/ethical-standards-for- hsprofessionals)."
         }
       }
     },
@@ -1156,7 +1144,7 @@
         },
         "d": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Skills to analyze and interpret historical data for application in advocacy and social change. 2. Human Systems Context: The human services professional must understand the structure and dynamics of organizations, communities, and society as well as the nature of individuals and groups. This understanding is a prerequisite to the determination of appropriate responses to human needs."
+          "criteria": "Skills to analyze and interpret historical data for application in advocacy and social change."
         }
       }
     },
@@ -1181,7 +1169,7 @@
         },
         "e": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Processes to effect social change through advocacy work at all levels of society including community development, community and grassroots organizing, and local and global activism. 3. Human Services Delivery Systems Context: The demands for services, funding of educational programs, social justice, and advocacy have been closely related but not limited to aging, delinquency, crime, poverty, mental illness, physical illness, chemical dependency, and disabilities. The needs that arise provide the focus for the human services profession."
+          "criteria": "Processes to effect social change through advocacy work at all levels of society including community development, community and grassroots organizing, and local and global activism."
         }
       }
     },
@@ -1218,7 +1206,7 @@
         },
         "h": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Dealing effectively with conflict on varying levels of human service delivery systems 4. Disciplined Inquiry and Information Literacy Context: The delivery of effective human services depends on the appropriate integration of various forms of information."
+          "criteria": "Dealing effectively with conflict on varying levels of human service delivery systems"
         }
       }
     },
@@ -1255,7 +1243,7 @@
         },
         "h": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Inclusion of a culminating capstone experience, e.g. research project, scholarly paper, or action research project. 5. Program Planning and Evaluation Context: A major component of the human services profession involves assessing the needs of clients and client groups, and planning programs and interventions to assist them in promoting optimal functioning, growth, and goal attainment. At regular intervals, the outcomes must be evaluated, and necessary adjustments made to the plan, both at an individual client and program level."
+          "criteria": "Inclusion of a culminating capstone experience, e.g. research project, scholarly paper, or action research project."
         }
       }
     },
@@ -1276,7 +1264,7 @@
         },
         "d": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Knowledge, theory, and skills to perform a community-needs assessment. 6. Administrative Leadership Context: A holistic approach to human services recognizes direct and indirect services as components of the same system. Administrative support (indirect service) is essential to the effective delivery of direct services to clients or client groups"
+          "criteria": "Knowledge, theory, and skills to perform a community-needs assessment."
         }
       }
     },
@@ -1321,7 +1309,7 @@
         },
         "j": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Understanding the mission, vision, and ethical responsibilities of organizations and society as outlined by the Ethical Standards of the National Organization for Human Services (available at https://www.nationalhumanservices.org/ethical-standards-for-hs- professionals). 7. Legal and Ethical Practices Context: An understanding of laws, legal issues, and professional ethics as they relate to human services is necessary for informed practices and the protection of the rights of others."
+          "criteria": "Understanding the mission, vision, and ethical responsibilities of organizations and society as outlined by the Ethical Standards of the National Organization for Human Services (available at https://www.nationalhumanservices.org/ethical-standards-for-hs- professionals)."
         }
       }
     },
@@ -1354,7 +1342,7 @@
         },
         "g": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "Differentiation between ethical and legal standards. 8. Culminating Experiences Context: Culminating experiences are learning experiences in a human services delivery organization. It is a process of experiential learning that integrates the knowledge, theory, skills, and professional behaviors that are concurrently taught in the classroom. CSHSE requires master’s degree students to complete a learning experience that demonstrates competency in translating theory into practice, such as fieldwork experiences, a thesis, or an action research project. All options require a self-reflection process."
+          "criteria": "Differentiation between ethical and legal standards."
         }
       }
     },
@@ -1375,11 +1363,11 @@
         },
         "d": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "If a fieldwork experience is required, 1. Demonstrate that the field supervisors have a minimum of a master’s degree or comparable years of professional experience. It is strongly recommended that field supervisors have no less than 10 years of professional experience if they do not hold a master’s degree. 2. Demonstrate that the program continually monitors the progress of each student and performs no less than one site visit to each field placement site per quarter or semester. The visit can be held as a direct site visit or with appropriate technology. The technology used should ensure that both the field placement supervisor and the student can be identified. 3. Demonstrate that there is a written plan of learning objectives, activities, and outcomes for each student that was conjointly developed and agreed to by the student, the program, and the agency supervisor. 4. the program shall provide a minimum of 100 clock hours of field experience in a human service setting. 5. The program shall provide a capstone experience, either a thesis, action research, or a program development/evaluation proposal, that demonstrates conceptual mastery of the professional practice. Demonstrate the rationale for the selected capstone experience option."
+          "criteria": "If a fieldwork experience is required, 1. Demonstrate that the field supervisors have a minimum of a master’s degree or comparable years of professional experience. It is strongly recommended that field supervisors have no less than 10 years of professional experience if they do not hold a master’s degree. 2. Demonstrate that the program continually monitors the progress of each student and performs no less than one site visit to each field placement site per quarter or semester. The visit can be held as a direct site visit or with appropriate technology. The technology used should ensure that both the field placement supervisor and the student can be identified. 3. Demonstrate that there is a written plan of learning objectives, activities, and outcomes for each student that was conjointly developed and agreed to by the student, the program, and the agency supervisor. 4. the program shall provide a minimum of 100 clock hours of field experience in a human service setting."
         },
         "e": {
           "title": "Knowledge, Theory, Skills, and Values",
-          "criteria": "If fieldwork experience is waived, the program shall provide a capstone experience, either a thesis or action research, that demonstrates conceptual mastery of the professional practice. Provide the specific criteria and expectations for completing the selected capstone experience."
+          "criteria": "If fieldwork experience is waived, the program shall provide a capstone experience, either a thesis or action research, that demonstrates conceptual mastery of the professional practice. 1. Demonstrate the rationale for the selected capstone experience option. 2. Provide the specific criteria and expectations for completing the selected capstone experience. 3. Provide the specific criteria for the assessment of the completed capstone project."
         },
         "f": {
           "title": "Knowledge, Theory, Skills, and Values",
