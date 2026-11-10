@@ -19,9 +19,12 @@ export interface BulkUploadRow {
   sourcePath?: string;
   /** A same-file copy in another standard's folder was linked there too. */
   alsoLinkedTo?: { std: string; spec?: string | null } | null;
+  /** The self-study document itself (already imported) — intentionally not filed. */
+  skippedSelfStudy?: boolean;
 }
 
 export function placementLabel(r: BulkUploadRow): { text: string; tone: 'ok' | 'warn' | 'muted' | 'bad' } {
+  if (r.skippedSelfStudy) return { text: 'Your imported self-study document — not added as evidence', tone: 'muted' };
   if (r.error) return { text: `Not uploaded — ${r.error}`, tone: 'bad' };
   if (r.duplicateOf && r.alsoLinkedTo) return { text: `Same file already uploaded — also linked to Standard ${r.alsoLinkedTo.std}${r.alsoLinkedTo.spec ? '.' + r.alsoLinkedTo.spec : ''}`, tone: 'ok' };
   if (r.duplicateOf) return { text: r.placedStd ? `Already uploaded · Standard ${r.placedStd}${r.placedSpec ? '.' + r.placedSpec : ''}` : 'Already uploaded', tone: 'muted' };
@@ -34,9 +37,9 @@ export function BulkUploadResults({ rows, skipped = [] }: { rows: BulkUploadRow[
   const all: BulkUploadRow[] = [...rows, ...skipped.map((s) => ({ fileName: s.fileName, error: s.reason }))];
   if (!all.length) return null;
   const filed = all.filter((r) => r.placedStd && !r.duplicateOf).length;
-  const pending = all.filter((r) => !r.placedStd && !r.duplicateOf && !r.error).length;
+  const pending = all.filter((r) => !r.placedStd && !r.duplicateOf && !r.error && !r.skippedSelfStudy).length;
   const linked = all.filter((r) => r.duplicateOf && r.alsoLinkedTo).length;
-  const failed = all.filter((r) => r.error).length;
+  const failed = all.filter((r) => r.error && !r.skippedSelfStudy).length;
   const tone = { ok: 'text-emerald-700', warn: 'text-amber-700', muted: 'text-gray-500', bad: 'text-red-700' } as const;
   return (
     <div data-testid="bulk-upload-results" className="rounded-md border border-gray-200 bg-white">
