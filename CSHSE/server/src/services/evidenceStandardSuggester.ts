@@ -409,6 +409,9 @@ export async function suggestStandardForFile(opts: {
   narratives: NarrativeTuple[];
   programLevel: string;
   institutionId?: string;
+  /** The caller already knows the standard (the file's delivered folder says
+   *  "Standard 13") — skip the slow AI topic classifier for this file. */
+  skipSemantic?: boolean;
 }): Promise<{ suggestions: Suggestion[]; best?: Suggestion }> {
   const ref = referenceMatch({ title: opts.title, filename: opts.filename, text: opts.text }, opts.narratives);
   const refVerbatim = ref[0]?.confidence === 0.9 && /Named verbatim/.test(ref[0]?.rationale || '');
@@ -436,7 +439,7 @@ export async function suggestStandardForFile(opts: {
   //    so the AI classifier was ALWAYS skipped. That's the bug; now it runs
   //    exactly when the reference match is only keyword-level (Monica's case).
   const semanticSuggestions: Suggestion[] = [];
-  const skipSemantic = filenameSuggestions.length > 0 || refVerbatim;
+  const skipSemantic = filenameSuggestions.length > 0 || refVerbatim || !!opts.skipSemantic;
   if (!skipSemantic) {
     const probeText = (opts.text && opts.text.trim().length > 20 ? opts.text : opts.title).slice(0, 8000);
     try {
