@@ -46,12 +46,17 @@ const bulkEvidenceUpload = multer({
       'application/vnd.ms-excel',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/tiff',
+      'text/csv', 'application/csv',
     ];
+    const base = String(file.originalname || '').split('/').pop() || '';
+    // OS/editor junk inside a dropped folder (.DS_Store, ~$ Word lock files) —
+    // never evidence; dropped silently rather than reported as a failure.
+    if (/^\./.test(base) || /^~\$/.test(base) || /^(thumbs\.db|desktop\.ini)$/i.test(base)) { cb(null, false); return; }
     // Some browsers (and non-browser clients) send Office files as a generic
     // application/octet-stream — fall back to the extension so xlsx/pptx aren't
     // wrongly rejected. The extractor + storage key off the real bytes anyway.
     // `.url` = a Windows internet shortcut — stored as LINK evidence.
-    const okExt = /\.(pdf|docx?|pptx?|xlsx?|png|jpe?g|gif|webp|tiff?|url)$/i.test(file.originalname || '');
+    const okExt = /\.(pdf|docx?|pptx?|xlsx?|csv|png|jpe?g|gif|webp|tiff?|url)$/i.test(file.originalname || '');
     if (allowed.includes(file.mimetype) || okExt) cb(null, true);
     else {
       // Never fail the WHOLE batch because one file in a folder drop is an

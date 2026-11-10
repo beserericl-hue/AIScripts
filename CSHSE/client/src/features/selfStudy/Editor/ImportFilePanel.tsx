@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { BulkUploadResults, BulkUploadRow } from './BulkUploadResults';
+import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, uploadEvidenceInBatches } from './bulkEvidenceUpload';
 
 // Mirror FileUpload.tsx's accept list + cap (those constants aren't exported).
 const ALLOWED_TYPES = [
@@ -130,36 +131,41 @@ export function ImportFilePanel({
   // and reports where every file went.
   const [bulkRows, setBulkRows] = useState<BulkUploadRow[] | null>(null);
   const [bulkSkipped, setBulkSkipped] = useState<Array<{ fileName: string; reason: string }>>([]);
-  const handleMany = async (files: File[]) => {
+  const [bulkStatus, setBulkStatus] = useState<string>('');
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const handleMany = async (entries: EvidenceEntry[]) => {
     setError(null);
     setImported(null);
     setPreview(null);
     setBulkRows(null);
     setBulkSkipped([]);
     setUploading(true);
+    setBulkStatus(`Uploading ${entries.length} files…`);
     try {
-      const form = new FormData();
-      files.forEach((f) => form.append('files', f));
-      const res = await api.post(`/api/submissions/${submissionId}/review/bulk-evidence`, form, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 300_000,
+      // Batched (server cap 30/request) + folder paths, so a whole delivered
+      // folder tree ("Standard 13/…") files each document by its folder.
+      const out = await uploadEvidenceInBatches(submissionId, entries, (done, total, sofar) => {
+        setBulkRows([...sofar]);
+        setBulkStatus(`Uploaded ${done} of ${total} files…`);
+        refreshEvidence();
       });
-      setBulkRows((res.data?.added || []) as BulkUploadRow[]);
-      setBulkSkipped(res.data?.skipped || []);
+      setBulkRows(out.rows);
+      setBulkSkipped(out.skipped);
+      setBulkStatus(out.failedBatches ? `${out.failedBatches} batch(es) failed — drop those files again to retry.` : '');
       refreshEvidence();
     } catch (err: any) {
-      setBulkSkipped(err?.response?.data?.skipped || []);
       setError(err?.response?.data?.error || err?.message || 'Upload failed.');
     } finally {
       setUploading(false);
     }
   };
-  const handleFiles = (list: FileList | File[] | null | undefined) => {
-    const files = Array.from(list || []);
-    if (files.length === 0) return;
-    if (files.length > 1 || /\.url$/i.test(files[0].name)) void handleMany(files);
-    else void handleFile(files[0]);
+  const handleEntries = (entries: EvidenceEntry[]) => {
+    if (entries.length === 0) return;
+    // A folder (path has a "/") or several files → the placing bulk importer.
+    if (entries.length > 1 || entries[0].path.includes('/') || /\.url$/i.test(entries[0].file.name)) void handleMany(entries);
+    else void handleFile(entries[0].file);
   };
+  const handleFiles = (list: FileList | File[] | null | undefined) => handleEntries(entriesFromFileList(list));
 
   const handleFile = async (file: File) => {
     setBulkRows(null);
@@ -346,7 +352,7 @@ export function ImportFilePanel({
           onDrop={(e) => {
             e.preventDefault();
             setIsDragging(false);
-            handleFiles(e.dataTransfer.files);
+            void entriesFromDataTransfer(e.dataTransfer).then(handleEntries);
           }}
           onClick={() => !readOnly && fileInputRef.current?.click()}
           className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
@@ -363,7 +369,7 @@ export function ImportFilePanel({
           <span className="mt-2 text-sm text-gray-600">
             {uploading
               ? 'Uploading…'
-              : 'Drag files here, or click to browse'}
+              : 'Drag files or a folder here, or click to browse'}
           </span>
           <span className="mt-1 text-[11px] text-gray-400">
             PDF, Word, PowerPoint, Excel, or image · up to 50MB
@@ -380,7 +386,39 @@ export function ImportFilePanel({
             className="hidden"
             data-testid="import-file-input"
           />
+          <button
+            type="button"
+            data-testid="import-folder-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              folderInputRef.current?.click();
+            }}
+            className="mt-2 rounded border border-teal-300 bg-white px-2 py-0.5 text-[11px] font-medium text-teal-700 hover:bg-teal-50"
+          >
+            Choose a folder…
+          </button>
+          <input
+            ref={(el) => {
+              folderInputRef.current = el;
+              if (el) {
+                el.setAttribute('webkitdirectory', '');
+                el.setAttribute('directory', '');
+              }
+            }}
+            type="file"
+            multiple
+            className="hidden"
+            data-testid="import-folder-input"
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => {
+              handleEntries(entriesFromFileList(e.target.files));
+              e.target.value = '';
+            }}
+          />
         </div>
+        {bulkStatus && (
+          <p className="text-xs text-gray-600" data-testid="import-file-bulk-status">{bulkStatus}</p>
+        )}
 
         {(bulkRows || bulkSkipped.length > 0) && (
           <BulkUploadResults rows={bulkRows || []} skipped={bulkSkipped} />
