@@ -2449,9 +2449,16 @@ function BulkEvidenceDropZone({
       setSkipped([]);
       setStatus(`Uploading ${entries.length} file${entries.length === 1 ? '' : 's'} + matching to standards…`);
       try {
+        let lastRefresh = 0;
         const out = await uploadEvidenceInBatches(submissionId, entries, (done, total, sofar) => {
           setRows([...sofar]);
           setStatus(`Uploaded ${done} of ${total} file${total === 1 ? '' : 's'} — matching each to a standard…`);
+          // A whole folder can take a while — let the rail fill in as it goes
+          // instead of reading 0 until the very end.
+          if (done < total && done - lastRefresh >= 50) {
+            lastRefresh = done;
+            void Promise.resolve(onUploaded()).catch(() => undefined);
+          }
         });
         setRows(out.rows);
         setSkipped(out.skipped);
