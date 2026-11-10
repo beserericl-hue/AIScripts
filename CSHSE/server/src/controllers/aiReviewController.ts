@@ -31,7 +31,7 @@ import { applyAIImportCore } from './aiImportController';
 import { downloadFileAsBuffer, generateS3Key, uploadFile, isS3Configured } from '../services/s3Service';
 import { v4 as uuidv4 } from 'uuid';
 import { extractFileText, reviewCoverage } from '../services/cshseAiClient';
-import { suggestStandardForFile, NarrativeTuple, titleFromFilename } from '../services/evidenceStandardSuggester';
+import { suggestStandardForFile, NarrativeTuple, titleFromFilename, folderStandardFromPath } from '../services/evidenceStandardSuggester';
 import { indexEvidenceFile, indexAllForSubmission } from '../services/evidenceIndexer';
 import { signFileAccessToken } from '../services/fileAccessToken';
 import { getLevelStandards, normalizeLevel } from '../data/levelStandards';
@@ -1943,9 +1943,50 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
   const results: Array<{ doc: any; summary: any } | null> = new Array(files.length).fill(null);
   const errors: Array<any | null> = new Array(files.length).fill(null);
 
-  const processOne = async (f: Express.Multer.File): Promise<{ doc: any; summary: any }> => {
+  // Relative folder paths, parallel to files[] (sent by the folder-aware client
+  // as a JSON array). "Evidence/Standard 13/x.pdf" files x under Standard 13.
+  let relPaths: string[] = [];
+  try {
+    const raw = (req.body as any)?.paths;
+    const arr = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : [];
+    if (Array.isArray(arr)) relPaths = arr.map((x: any) => String(x || ''));
+  } catch { relPaths = []; }
+  const pathOf = (i: number, f: Express.Multer.File): string => {
+    const rp = relPaths[i];
+    // Only trust a path whose last segment IS this file (order safety).
+    return rp && rp.split(/[\\/]/).pop() === f.originalname ? rp : f.originalname;
+  };
+
+  // The same file (name+size) twice in ONE batch — the 2nd waits for the 1st,
+  // then takes the duplicate path (adds a link) instead of a racing 2nd upload.
+  const inFlight = new Map<string, Promise<unknown>>();
+
+  // Link an already-uploaded file to one more standard (a same-file copy that
+  // sits in another standard's folder). Updates its review-rail references so
+  // Approve materializes it under every standard folder it was delivered in.
+  const linkExisting = (evidenceId: string, ref: { std: string; spec?: string }): boolean => {
+    const d = (state.evidenceDocs || []).find((x: any) => String(x.fileId || '') === evidenceId);
+    if (!d) return false;
+    const refs: Array<{ std: string; spec?: string }> = Array.isArray(d.referencedBySpecs) ? d.referencedBySpecs : [];
+    if (!refs.length && (d.resolvedStd || d.routing?.std)) refs.push({ std: String(d.resolvedStd || d.routing?.std), spec: d.resolvedSpec || d.routing?.spec || undefined });
+    if (refs.some((r) => r.std === ref.std && (r.spec || '') === (ref.spec || ''))) { d.referencedBySpecs = refs; return true; }
+    refs.push(ref);
+    d.referencedBySpecs = refs;
+    if (!d.resolvedStd) { d.resolvedStd = ref.std; d.resolvedSpec = ref.spec; d.routing = { std: ref.std, spec: ref.spec, source: 'suggestion' }; }
+    d.alsoInFolders = [...(d.alsoInFolders || []), ref.std];
+    return true;
+  };
+
+  const processOne = async (f: Express.Multer.File, relPath: string): Promise<{ doc: any; summary: any }> => {
       const sectionId = `bulk-${uuidv4()}`;
       const title = titleFromFilename(f.originalname);
+      const folderHit = folderStandardFromPath(relPath);
+      const dupKey = `${f.originalname}::${f.size}`;
+      const prior = inFlight.get(dupKey);
+      let release: () => void = () => undefined;
+      if (prior) await prior.catch(() => undefined);
+      else inFlight.set(dupKey, new Promise<void>((r) => { release = r; }));
+      try {
 
       // Duplicate guard — the SAME file (name + size) already in this
       // self-study's library is not uploaded again (a retry must not pile up
@@ -1958,7 +1999,13 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         'file.size': f.size,
       }).select('_id standardCode specCode').lean();
       if (dup) {
-        return { doc: null, summary: { fileName: f.originalname, duplicateOf: String(dup._id), placedStd: dup.standardCode || null, placedSpec: dup.specCode || null, note: 'Already in your File Library — not uploaded again.' } };
+        // Same file delivered in ANOTHER standard's folder → it is evidence for
+        // that standard too: link it there instead of silently dropping it.
+        const differs = folderHit && !(String(dup.standardCode || '') === folderHit.std && (!folderHit.spec || dup.specCode === folderHit.spec));
+        const linked = differs ? linkExisting(String(dup._id), { std: folderHit!.std, spec: folderHit!.spec }) : false;
+        return { doc: null, summary: { fileName: f.originalname, sourcePath: relPath, duplicateOf: String(dup._id), placedStd: dup.standardCode || null, placedSpec: dup.specCode || null,
+          alsoLinkedTo: linked ? { std: folderHit!.std, spec: folderHit!.spec || null } : null,
+          note: linked ? `Already in your File Library — also linked to Standard ${folderHit!.std}${folderHit!.spec ? '.' + folderHit!.spec : ''} (from folder "${folderHit!.folder}").` : 'Already in your File Library — not uploaded again.' } };
       }
 
       // `.url` internet shortcut → LINK evidence (no file bytes to store).
@@ -1985,11 +2032,14 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
       const { bucket } = await uploadFile(s3Key, f.buffer, mime);
 
       // Extract text (best-effort) for suggestion + hidden AI-eval body.
-      const extracted = await extractFileText({ s3Key, s3Bucket: bucket, mimeType: mime, filename: f.originalname });
+      // CSV / plain text: read directly (the ai-service extractor has no csv path).
+      const extracted = /\.(csv|txt)$/i.test(f.originalname) || /^text\//.test(mime)
+        ? { text: f.buffer.toString('utf8').slice(0, 200_000), error: undefined as string | undefined }
+        : await extractFileText({ s3Key, s3Bucket: bucket, mimeType: mime, filename: f.originalname });
       const text = extracted.text || '';
 
       // Suggest a placement (reference-match + semantic).
-      const { suggestions, best } = await suggestStandardForFile({
+      const sugg = await suggestStandardForFile({
         title,
         filename: f.originalname,
         text,
@@ -1997,6 +2047,21 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         programLevel,
         institutionId: String(institutionId),
       });
+      const suggestions = sugg.suggestions;
+      let best = sugg.best;
+      // The FOLDER the coordinator filed it in ("Standard 13/") is as explicit
+      // as a filename — it wins over a topic guess. An explicit standard in the
+      // filename itself still wins over the folder (it is more specific); the
+      // folder's standard is then kept as an extra reference below.
+      if (folderHit && !(best && best.source === 'filename')) {
+        best = {
+          standardCode: folderHit.std,
+          specCode: folderHit.spec || (best && best.standardCode === folderHit.std ? best.specCode : undefined),
+          confidence: 0.92,
+          source: 'filename',
+          rationale: `Delivered in the folder "${folderHit.folder}"`,
+        };
+      }
 
       // Create the SupportingEvidence row NOW (unassigned) so it's already in
       // the File Library; the rev tag is the upsert key set-approved uses later.
@@ -2026,7 +2091,8 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         },
         description: title,
         // hidden extracted text — the AI evaluator reads metadata.description.
-        metadata: { description: text.slice(0, 20000) },
+        // sourcePath = where it sat in the coordinator's delivered folder tree.
+        metadata: { description: text.slice(0, 20000), ...(relPath !== f.originalname ? { sourcePath: relPath } : {}) },
         versionNumber: 1,
         isCurrentVersion: true,
         isDeleted: false,
@@ -2089,18 +2155,27 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
           for (const c of best?.alsoCitedIn || []) {
             if (!refs.some((r) => r.std === c.standardCode && r.spec === c.specCode)) refs.push({ std: c.standardCode, spec: c.specCode });
           }
+          // The folder's standard, when the filename named a different one.
+          if (folderHit && !refs.some((r) => r.std === folderHit.std)) refs.push({ std: folderHit.std, spec: folderHit.spec });
           for (const std of [...cited].sort((a, b) => Number(a) - Number(b))) {
             if (std !== best?.standardCode) refs.push({ std, spec: undefined });
           }
           return refs;
         })(),
         bulkImported: true,
+        ...(relPath !== f.originalname ? { sourcePath: relPath } : {}),
       };
+      // Into the review rail NOW (not after the batch) so a same-file copy later
+      // in this batch can link onto it.
+      state.evidenceDocs.push(doc);
       return {
         doc,
         summary: { ...doc, extractedText: undefined, extractedTextChars: text.length, extractError: extracted.error,
           placedStd: placeNow ? best!.standardCode : null, placedSpec: placeNow ? best!.specCode || null : null },
       };
+      } finally {
+        release();
+      }
   };
 
   let next = 0;
@@ -2109,7 +2184,7 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
       const i = next++;
       if (i >= files.length) return;
       try {
-        results[i] = await processOne(files[i]);
+        results[i] = await processOne(files[i], pathOf(i, files[i]));
       } catch (err: any) {
         console.error('[bulkAddEvidence] failed for', files[i].originalname, err?.message || err);
         errors[i] = { sectionId: null, fileName: files[i].originalname, error: err?.message || String(err) };
@@ -2121,7 +2196,6 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
   const added: any[] = [];
   for (let i = 0; i < files.length; i++) {
     if (results[i]) {
-      if (results[i]!.doc) state.evidenceDocs.push(results[i]!.doc);
       added.push(results[i]!.summary);
     } else if (errors[i]) {
       added.push(errors[i]);

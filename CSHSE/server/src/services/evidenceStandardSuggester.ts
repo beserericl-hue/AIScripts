@@ -103,6 +103,27 @@ export function explicitStandardFromName(name: string): { std: string; spec?: st
   return null;
 }
 
+/**
+ * Standard declared by the FOLDER a file was delivered in. Coordinators often
+ * hand over a folder tree organised per standard (ETSU:
+ * "CSHSE EVIDENCE AND LINKS/Standard 13/BG4BN2.pdf", "STD 4 Program Assessment/…").
+ * Reads the folder segments only (never the filename), deepest match wins.
+ *   "Evidence/Standard 13/x.pdf"        → { std: '13', folder: 'Standard 13' }
+ *   "Reacc/STD 14 Inquiry and Info/y"   → { std: '14', folder: 'STD 14 Inquiry and Info' }
+ *   "Faculty CVs/cv.pdf"                → null
+ */
+export function folderStandardFromPath(relPath: string | undefined | null): { std: string; spec?: string; folder: string } | null {
+  const segs = String(relPath || '').split(/[\\/]+/).filter(Boolean);
+  segs.pop(); // the filename itself
+  for (let i = segs.length - 1; i >= 0; i--) {
+    const hit = explicitStandardFromName(segs[i]);
+    // A folder only counts with the word form ("Standard 13", "STD 4 …") —
+    // the leading "4.a" code form is too loose for folder names like "2025".
+    if (hit && /\b(?:standard|std)\b/i.test(segs[i])) return { ...hit, folder: segs[i] };
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------- appendices
 //
 // Many self-studies organise their evidence as numbered APPENDICES per standard

@@ -64,7 +64,8 @@ describe('ImportFilePanel — multiple files', () => {
     post.mockRejectedValue({ response: { data: { error: 'None of the selected files can be uploaded.' } } });
     ui();
     fireEvent.change(screen.getByTestId('import-file-input'), { target: { files: [pdf('a.exe'), pdf('b.exe')] } });
-    await waitFor(() => expect(screen.getByText(/None of the selected files can be uploaded/)).toBeTruthy());
+    // Every file is listed as not uploaded, with the server's reason (never a silent success).
+    await waitFor(() => expect(screen.getAllByText(/Not uploaded — None of the selected files can be uploaded/)).toHaveLength(2));
   });
 });
 

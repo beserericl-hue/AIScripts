@@ -18,6 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import { BulkUploadResults, BulkUploadRow } from '../../BulkUploadResults';
+import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, uploadEvidenceInBatches } from '../../bulkEvidenceUpload';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search, Loader2 } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
@@ -2423,7 +2424,7 @@ function CVsView({ cvs, onShowInSource, approvedIds, onToggleApproval, onApprove
 // imported narratives + the AI placement matcher. The suggestion pre-fills the
 // card's routing dropdowns; Approve stamps the (std, spec) onto the file.
 const BULK_ACCEPT =
-  '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff,.url';
+  '.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.csv,.png,.jpg,.jpeg,.gif,.webp,.tif,.tiff,.url';
 
 function BulkEvidenceDropZone({
   submissionId,
@@ -2439,26 +2440,27 @@ function BulkEvidenceDropZone({
   const [skipped, setSkipped] = useState<Array<{ fileName: string; reason: string }>>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
+  const folderRef = useRef<HTMLInputElement | null>(null);
   const upload = useCallback(
-    async (files: File[]) => {
-      if (!submissionId || files.length === 0) return;
+    async (entries: EvidenceEntry[]) => {
+      if (!submissionId || entries.length === 0) return;
       setBusy(true);
-      setStatus(`Uploading ${files.length} file${files.length === 1 ? '' : 's'} + matching to standards…`);
+      setRows(null);
+      setSkipped([]);
+      setStatus(`Uploading ${entries.length} file${entries.length === 1 ? '' : 's'} + matching to standards…`);
       try {
-        const form = new FormData();
-        files.forEach((f) => form.append('files', f));
-        const resp = await api.post(
-          `/api/submissions/${submissionId}/review/bulk-evidence`,
-          form,
-          { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300_000 }
+        const out = await uploadEvidenceInBatches(submissionId, entries, (done, total, sofar) => {
+          setRows([...sofar]);
+          setStatus(`Uploaded ${done} of ${total} file${total === 1 ? '' : 's'} — matching each to a standard…`);
+        });
+        setRows(out.rows);
+        setSkipped(out.skipped);
+        setStatus(
+          `Added ${out.count} file${out.count === 1 ? '' : 's'} — where each one was filed is listed below.` +
+            (out.failedBatches ? ` ${out.failedBatches} batch(es) failed — those files are marked "Not uploaded"; drop them again to retry.` : '')
         );
-        const count = resp.data?.count ?? files.length;
-        setRows((resp.data?.added || []) as BulkUploadRow[]);
-        setSkipped(resp.data?.skipped || []);
-        setStatus(`Added ${count} file${count === 1 ? '' : 's'} — where each one was filed is listed below.`);
         await onUploaded();
       } catch (err: any) {
-        setSkipped(err?.response?.data?.skipped || []);
         setStatus(`Upload failed: ${err?.response?.data?.error || err?.message || 'unknown error'}`);
       } finally {
         setBusy(false);
@@ -2479,8 +2481,9 @@ function BulkEvidenceDropZone({
         onDrop={(e) => {
           e.preventDefault();
           setDragOver(false);
-          const files = Array.from(e.dataTransfer.files || []);
-          if (files.length) void upload(files);
+          void entriesFromDataTransfer(e.dataTransfer).then((entries) => {
+            if (entries.length) void upload(entries);
+          });
         }}
         onClick={() => inputRef.current?.click()}
         className={`flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed px-4 py-4 text-center transition-colors ${
@@ -2496,8 +2499,38 @@ function BulkEvidenceDropZone({
           Drop supporting files here to add them
         </span>
         <span className="text-[11px] text-gray-500">
-          PDF, Word, Excel, PowerPoint or images · we’ll suggest a Standard &amp; Sub-specification for each
+          Files or whole folders · PDF, Word, Excel, PowerPoint, CSV or images · we’ll suggest a Standard &amp; Sub-specification for each
         </span>
+        <button
+          type="button"
+          data-testid="bulk-evidence-folder-button"
+          onClick={(e) => {
+            e.stopPropagation();
+            folderRef.current?.click();
+          }}
+          className="mt-1 rounded border border-cshse-300 bg-white px-2 py-0.5 text-[11px] font-medium text-cshse-700 hover:bg-cshse-50"
+        >
+          Choose a folder…
+        </button>
+        <input
+          ref={(el) => {
+            folderRef.current = el;
+            if (el) {
+              el.setAttribute('webkitdirectory', '');
+              el.setAttribute('directory', '');
+            }
+          }}
+          type="file"
+          multiple
+          data-testid="bulk-evidence-folder-input"
+          className="hidden"
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            const entries = entriesFromFileList(e.target.files);
+            if (entries.length) void upload(entries);
+            e.target.value = '';
+          }}
+        />
         <input
           ref={inputRef}
           type="file"
@@ -2506,8 +2539,8 @@ function BulkEvidenceDropZone({
           data-testid="bulk-evidence-input"
           className="hidden"
           onChange={(e) => {
-            const files = Array.from(e.target.files || []);
-            if (files.length) void upload(files);
+            const entries = entriesFromFileList(e.target.files);
+            if (entries.length) void upload(entries);
             e.target.value = '';
           }}
         />

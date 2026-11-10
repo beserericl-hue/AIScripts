@@ -222,6 +222,44 @@ export default function SelfStudyPage() {
   const submissions: Submission[] = submissionsData?.submissions || [];
   const isLoading = institutionLoading || submissionsLoading;
 
+  // A coordinator's "Import" goes to the AI parser wizard (?view=import) — the
+  // same place the dashboard's "Open Importer" goes. The legacy upload modal
+  // parked the file at `awaiting_selection` (manual tagging) and spun forever,
+  // which is exactly what a brand-new institution's coordinator hit first
+  // (no submission yet → this page). Create the self-study first if needed.
+  const [openingImporter, setOpeningImporter] = useState(false);
+  const openImporter = async () => {
+    if (!isProgramCoordinator) {
+      setShowImportModal(true);
+      return;
+    }
+    const existing = submissions[0]?._id;
+    if (existing) {
+      navigate(`/self-study/${existing}?view=import`);
+      return;
+    }
+    if (!institution) {
+      setShowImportModal(true);
+      return;
+    }
+    setOpeningImporter(true);
+    try {
+      const r = await api.post('/api/submissions', {
+        institutionId: institution._id,
+        institutionName: institution.name,
+        programName: institution.specName || 'Self-Study',
+        programLevel: 'bachelors',
+      });
+      queryClient.invalidateQueries({ queryKey: ['my-submissions'] });
+      const id = r.data?.submission?._id;
+      if (id) navigate(`/self-study/${id}?view=import`);
+    } catch (err: any) {
+      alert(err?.response?.data?.error || 'Failed to create self-study');
+    } finally {
+      setOpeningImporter(false);
+    }
+  };
+
   // Poll import status
   useEffect(() => {
     if (!importId || importStep !== 'processing') return;
@@ -244,6 +282,12 @@ export default function SelfStudyPage() {
           if (importSubmissionId) {
             navigate(`/self-study/${importSubmissionId}`);
           }
+        } else if ((status.status as string) === 'awaiting_selection') {
+          // Parsed and waiting for section tagging — hand off to the editor
+          // (which owns the tagging flow) instead of spinning here forever.
+          clearInterval(pollInterval);
+          setShowImportModal(false);
+          if (importSubmissionId) navigate(`/self-study/${importSubmissionId}`);
         } else if (status.status === 'failed') {
           clearInterval(pollInterval);
           setUploadError(status.error || 'Document processing failed');
@@ -1006,7 +1050,9 @@ export default function SelfStudyPage() {
 
               {/* Import Existing Self-Study */}
               <button
-                onClick={() => setShowImportModal(true)}
+                onClick={() => void openImporter()}
+                disabled={openingImporter}
+                data-testid="open-ai-importer"
                 className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 text-left hover:border-primary-300 hover:shadow-md transition-all group"
               >
                 <div className="flex items-start gap-4">
@@ -1071,7 +1117,9 @@ export default function SelfStudyPage() {
               {/* Import Option for Existing Submission */}
               <div className="px-6 pb-6">
                 <button
-                  onClick={() => setShowImportModal(true)}
+                  onClick={() => void openImporter()}
+                disabled={openingImporter}
+                data-testid="open-ai-importer"
                   className="flex items-center gap-2 text-sm text-teal-600 hover:text-teal-700"
                 >
                   <Upload className="w-4 h-4" />

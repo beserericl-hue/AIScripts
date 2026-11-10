@@ -144,6 +144,8 @@ _RESPONSE_MARKER_RE = re.compile(r"^\s*Response\s*:\s*", re.IGNORECASE)
 # must not accumulate onto the previous spec's answer (the boundary-bleed bug:
 # the last spec of each standard swallowed the next standard's title + Context).
 _CONTEXT_MARKER_RE = re.compile(r"^\s*Context\s*:", re.IGNORECASE)
+# Roman-numeral PART header of the official template ("II. CURRICULUM: …").
+_PART_HEADER_RE = re.compile(r"^\s*(?:I{1,3}|IV|V)\.\s+[A-Z][A-Z ,:&'-]{6,}$")
 
 # Placeholder responses the institution hasn't filled in.
 _PLACEHOLDER_RE = re.compile(
@@ -225,6 +227,22 @@ def _is_front_matter(text: str) -> bool:
     return bool(_FRONT_MATTER_HEADINGS.match(text))
 
 
+# An inline COURSE CITATION, not a heading: "Standard 13: a (IKS-H)",
+# "Standard 19: a (S; M), b (S; M), …", "Standard 12: (KS; M)", "Standard 13: b".
+# Programs (ETSU) tag each course's evidence with these inside a spec answer;
+# read as a "Standard N:" ROOT they split every curriculum answer into that
+# Standard's introduction and emptied the specs. A real root continues with
+# prose ("Standard 4: The program shall…").
+_STD_CITATION_RE = re.compile(
+    r"^\s*Standard\s+\d{1,2}\s*:\s*(?:\(|[a-j]\s*(?:[(,;]|$))",
+    re.IGNORECASE,
+)
+
+
+def _is_std_citation(text: str) -> bool:
+    return bool(_STD_CITATION_RE.match(text or ""))
+
+
 def _match_heading(text: str) -> tuple[str | None, str | None] | None:
     """Return ``(std_hint, spec_hint)`` if ``text`` matches a heading pattern.
 
@@ -235,6 +253,8 @@ def _match_heading(text: str) -> tuple[str | None, str | None] | None:
     """
     if _is_front_matter(text):
         return (None, None)
+    if _is_std_citation(text):
+        return None
     for pat in _HEADING_PATTERNS:
         m = pat.match(text)
         if not m:
@@ -320,7 +340,84 @@ def _para_body_block(p) -> tuple:
     return ("p", text, f"<p>{_esc(text)}</p>", is_list)
 
 
+def _cell_items(cell) -> list:
+    """A cell's paragraphs AND nested tables, in document order (python-docx's
+    ``cell.paragraphs`` silently drops nested tables — ETSU answers 1.e, its
+    student-demographics spec, entirely in nested tables)."""
+    from docx.oxml.text.paragraph import CT_P
+    from docx.oxml.table import CT_Tbl
+    from docx.table import Table as _Table
+    from docx.text.paragraph import Paragraph as _Paragraph
+
+    out: list = []
+    for ch in cell._tc.iterchildren():
+        if isinstance(ch, CT_P):
+            out.append(_Paragraph(ch, cell))
+        elif isinstance(ch, CT_Tbl):
+            out.append(_Table(ch, cell))
+    return out
+
+
+def _is_table_item(it) -> bool:
+    return hasattr(it, "rows") and hasattr(it, "columns")
+
+
+def _item_block(it) -> tuple:
+    """Block for a cell item: a nested table → ("table", html, text, "nested");
+    a paragraph → the usual ('p', …) block."""
+    if _is_table_item(it):
+        return ("table", _table_to_html(it), _table_to_text(it), "nested")
+    return _para_body_block(it)
+
+
+def _has_nested_tables(cell) -> bool:
+    try:
+        return any(_is_table_item(i) for i in _cell_items(cell))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _split_cell(cell) -> tuple[str, list[tuple]]:
+    if _has_nested_tables(cell):
+        return _split_cell_with_tables(cell)
+    return _split_cell_paragraphs(cell)
+
+
+def _split_cell_with_tables(cell) -> tuple[str, list[tuple]]:
+    """``_split_cell`` for a cell that holds nested tables: same three answer
+    shapes, but the body keeps the nested tables in place."""
+    items = _cell_items(cell)
+
+    def live(it) -> bool:
+        return _is_table_item(it) or bool((it.text or "").strip())
+
+    for i, it in enumerate(items):
+        if not _is_table_item(it) and _RESP_STANDALONE_RE.match(it.text or ""):
+            prompt = " ".join((q.text or "").strip() for q in items[:i] if not _is_table_item(q) and (q.text or "").strip())
+            return (prompt.strip(), [_item_block(q) for q in items[i + 1:] if live(q)])
+    for i, it in enumerate(items):
+        if _is_table_item(it):
+            continue
+        t = it.text or ""
+        m = _RESP_INLINE_RE.search(t)
+        if m:
+            pre = " ".join((q.text or "").strip() for q in items[:i] if not _is_table_item(q) and (q.text or "").strip())
+            prompt = (pre + " " + t[: m.start()]).strip()
+            after = t[m.end():].strip()
+            body: list[tuple] = []
+            if after:
+                body.append(("p", after, f"<p>{_esc(after)}</p>", False))
+            body += [_item_block(q) for q in items[i + 1:] if live(q)]
+            return (prompt, body)
+    prompt_idx = next((i for i, it in enumerate(items) if not _is_table_item(it) and (it.text or "").strip()), None)
+    if prompt_idx is None:
+        return ("", [_item_block(q) for q in items if live(q)])
+    prompt = (items[prompt_idx].text or "").strip()
+    body = [_item_block(q) for i, q in enumerate(items) if i != prompt_idx and live(q)]
+    return (prompt, body)
+
+
+def _split_cell_paragraphs(cell) -> tuple[str, list[tuple]]:
     """Split a spec cell into ``(prompt_text, body_blocks)`` where body_blocks are
     the institution's answer paragraphs (as ('p', text, html, is_list) blocks).
 
@@ -359,24 +456,85 @@ def _split_cell(cell) -> tuple[str, list[tuple]]:
     return (prompt, body)
 
 
+def _is_std_header_cell(text: str):
+    """``Standard N:`` header cell (a root), never an inline course citation."""
+    if _is_std_citation(text):
+        return None
+    return _STD_HEADER_CELL_RE.match(text)
+
+
 def _looks_like_standard_table(table) -> bool:
     """True when any cell in the table opens with ``Standard N:`` — i.e. this is a
     per-Standard response table of the tabular official template."""
     try:
         for row in table.rows:
             for cell in row.cells:
-                if _STD_HEADER_CELL_RE.match(_cell_text(cell)):
+                if _is_std_header_cell(_cell_text(cell)):
                     return True
     except Exception:  # noqa: BLE001
         pass
     return False
 
 
+# A spec letter written INLINE at the start of the content cell, with no letter
+# column: "a If the program is less than five years old…" (ETSU Standard 3).
+# Lower-case letter + space + capitalised prompt word, so prose never matches.
+_INLINE_SPEC_RE = re.compile(r"^\s*(?P<letter>[a-j])[.)]?\s+(?=[A-Z])")
+
+
+def _marker_text(row) -> str:
+    """The row's marker cell text: ``cells[0]`` — or, when that is an empty
+    spacer column, the first non-empty cell IF it is a bare marker ("d.", "2.").
+    ETSU's 4-column table puts the letters in column 2 (column 1 is blank)."""
+    cells = list(row.cells)
+    c0 = _cell_text(cells[0]) if cells else ""
+    if c0.strip() or len(cells) < 2:
+        return c0
+    seen = set()
+    for c in cells:
+        if id(c._tc) in seen:
+            continue
+        seen.add(id(c._tc))
+        t = _cell_text(c)
+        if not t.strip():
+            continue
+        if _SPEC_LETTER_CELL_RE.match(t) or _INTRO_NUM_CELL_RE.match(t):
+            return t
+        return c0
+    return c0
+
+
+def _first_text_para(cell) -> str:
+    for p in cell.paragraphs:
+        if (p.text or "").strip():
+            return p.text
+    return ""
+
+
+def _inline_letter(row) -> str | None:
+    """Inline spec letter of a row whose letter column is empty/absent."""
+    cells = list(row.cells)
+    mk = _marker_text(row)
+    if len(cells) > 1 and mk.strip() and not _SPEC_LETTER_CELL_RE.match(mk):
+        return None
+    if _SPEC_LETTER_CELL_RE.match(mk):
+        return None  # a real letter column — not an inline letter
+    m = _INLINE_SPEC_RE.match(_first_text_para(_content_cell(row)))
+    return m.group("letter") if m else None
+
+
 def _first_spec_letter(table) -> str | None:
     for row in table.rows:
-        m = _SPEC_LETTER_CELL_RE.match(_cell_text(row.cells[0]))
+        m = _SPEC_LETTER_CELL_RE.match(_marker_text(row))
         if m:
             return m.group("letter").lower()
+    # Inline-letter tables (no letter column) — only an "a"…"j" that opens a row.
+    for row in table.rows:
+        if _STD_HEADER_CELL_RE.match(_cell_text(row.cells[0])) and not _is_std_citation(_cell_text(row.cells[0])):
+            return None
+        letter = _inline_letter(row)
+        if letter:
+            return letter
     return None
 
 
@@ -411,58 +569,99 @@ def _decompose_response_table(table, state: dict) -> list[tuple] | None:
     NOT a standard/spec response table (glossary, matrix, roster, credit grid) so
     the caller keeps it as an opaque evidence table.
 
-    Handles the two real-world wrinkles:
+    Handles the real-world wrinkles:
       * headerless CONTINUATION tables — Standards 5 and 10 in the AACC template
         have no ``Standard N:`` header cell. A headerless table whose first spec
         letter is ``a`` opens the NEXT sequential standard; one that resumes at a
         later letter continues the CURRENT standard.
       * sub-numbered items (``1.``, ``2.``) and wrapped rows accumulate as the
         current spec's body (never a new spec).
+      * (ETSU) a SECOND ``Standard N:`` header part-way down a table (14.d then
+        Standard 15 in one table) switches standard at that row;
+      * (ETSU) INLINE spec letters with no letter column ("a If the program…");
+      * (ETSU) a Standard table with NO letters at all (Standard 2) — its rows
+        are the specs in order (a, b, c…);
+      * (ETSU) answers held in NESTED tables inside the cell (Standard 1.e).
     """
     rows = list(table.rows)
     if not rows:
         return None
 
-    header_std = None
-    header_text = None
-    for r in rows:
+    # Header rows (true "Standard N:" roots — never inline course citations).
+    header_at: dict[int, tuple[str, str]] = {}
+    for ri, r in enumerate(rows):
         for c in r.cells:
-            m = _STD_HEADER_CELL_RE.match(_cell_text(c))
+            t = _cell_text(c)
+            m = _is_std_header_cell(t)
             if m:
-                header_std = m.group("std")
-                header_text = _cell_text(c)
+                header_at[ri] = (m.group("std"), t)
                 break
-        if header_std:
-            break
+    first_header = min(header_at) if header_at else None
 
-    if header_std is None:
-        first_letter = _first_spec_letter(table)
+    def row_letter(r) -> str | None:
+        c0 = _marker_text(r) if len(r.cells) > 1 else ""
+        lm = _SPEC_LETTER_CELL_RE.match(c0)
+        if lm:
+            return lm.group("letter").lower()
+        return None
+
+    # Std for the rows BEFORE the first header (or the whole table if none).
+    first_letter = _first_spec_letter(table)
+    has_lettered_pre_rows = first_header is not None and any(
+        row_letter(rows[i]) or _inline_letter(rows[i]) for i in range(first_header)
+    )
+    if first_header is None or has_lettered_pre_rows:
         if first_letter is None:
-            return None  # not a spec/standard table
-        last = state.get("last_std")
-        if first_letter == "a" and last:
-            std = str(int(last) + 1)          # headerless → next sequential standard
-        elif last:
-            std = str(last)                   # headerless continuation of current std
+            if first_header is None:
+                return None  # not a spec/standard table
+            std = header_at[first_header][0]
         else:
-            return None                        # no standard context yet → not a spec table
+            last = state.get("last_std")
+            if first_header is not None and not last:
+                std = header_at[first_header][0]
+            elif first_letter == "a" and last and first_header is None:
+                std = str(int(last) + 1)      # headerless → next sequential standard
+            elif last:
+                std = str(last)               # continuation of the current standard
+            else:
+                return None                    # no standard context yet → not a spec table
     else:
-        std = header_std
+        std = header_at[first_header][0]
 
     state["last_std"] = std
     state["seen_standard"] = True
 
-    blocks: list[tuple] = []
-    if header_std is not None and header_text:
-        # Standard ROOT — the normative "shall" statement; routes to that
-        # Standard's introduction (standardIntroductions[N]).
-        blocks.append(("p", header_text, f"<p>{_esc(header_text)}</p>", False))
+    # Letterless Standard SEGMENT (ETSU Standard 2; Stevenson Standard 3 shares
+    # a table with lettered Standard 4): a header whose rows — up to the next
+    # header — carry no letter at all (cell or inline). Its two-column content
+    # rows ARE the specs, in order. Decided per segment, never per table.
+    hdr_rows = sorted(header_at)
+    seg_letterless: dict[int, bool] = {}
+    for k, h in enumerate(hdr_rows):
+        end = hdr_rows[k + 1] if k + 1 < len(hdr_rows) else len(rows)
+        seg_letterless[h] = not any(row_letter(rows[i]) or _inline_letter(rows[i]) for i in range(h + 1, end))
+    cur_header = None
 
+    def _distinct_cells(r) -> int:
+        seen = set()
+        for c in r.cells:
+            seen.add(id(c._tc))
+        return len(seen)
+
+    blocks: list[tuple] = []
     cur_letter = None
-    for r in rows:
-        c0 = _cell_text(r.cells[0])
-        if _STD_HEADER_CELL_RE.match(c0):
-            continue  # header row already emitted
+    for ri, r in enumerate(rows):
+        if ri in header_at:
+            hstd, htext = header_at[ri]
+            # Standard ROOT — the normative "shall" statement; routes to that
+            # Standard's introduction (standardIntroductions[N]).
+            std = hstd
+            state["last_std"] = std
+            cur_letter = None
+            cur_header = ri
+            blocks.append(("p", htext, f"<p>{_esc(htext)}</p>", False))
+            continue
+        c0 = _marker_text(r)
         # The content cell is the last non-marker cell (2-col: "a. | content";
         # 3-col: "a. | a. | content"). A merged single-column row keeps it in
         # cell 0 → no letter marker → continuation.
@@ -479,10 +678,45 @@ def _decompose_response_table(table, state: dict) -> list[tuple] | None:
             blocks.extend(body)
             continue
 
+        inl = _inline_letter(r)
+        expected = "a" if cur_letter is None else chr(ord(cur_letter) + 1)
+        if inl and (inl == expected or (cur_letter is None and inl > "a")):
+            cur_letter = inl
+            prompt, body = _split_cell(content_cell)
+            prompt = _INLINE_SPEC_RE.sub("", prompt, count=1).strip()
+            blocks.append(("p", f"{std}.{cur_letter}. {prompt}".rstrip(), "", False))
+            blocks.extend(body)
+            continue
+
+        if (
+            cur_header is not None
+            and seg_letterless.get(cur_header)
+            and _distinct_cells(r) >= 2              # a full-width row is a title, not a spec
+            and _cell_text(content_cell).strip()
+            and not re.match(r"^\s*Specifications?\s+for\s+Standard", _cell_text(content_cell), re.I)
+        ):
+            cur_letter = "a" if cur_letter is None else chr(ord(cur_letter) + 1)
+            prompt, body = _split_cell(content_cell)
+            blocks.append(("p", f"{std}.{cur_letter}. {prompt}".rstrip(), "", False))
+            blocks.extend(body)
+            continue
+
         # Continuation row: a sub-numbered item ("1.", "2.") or a wrapped line —
         # accumulate as the CURRENT spec's body (never a new spec). Keep the
         # first-cell marker text (e.g. "2.") in front of the body line.
         if cur_letter is not None:
+            if _has_nested_tables(content_cell):
+                items = [i for i in _cell_items(content_cell) if _is_table_item(i) or (i.text or "").strip()]
+                first = True
+                for it in items:
+                    if not _is_table_item(it) and _RESP_STANDALONE_RE.match(it.text or ""):
+                        continue
+                    blk = _item_block(it)
+                    if first and c0 and blk[0] == "p":
+                        blk = ("p", f"{c0} {blk[1]}".strip(), f"<p>{_esc(c0)} </p>{blk[2]}", blk[3])
+                    first = False
+                    blocks.append(blk)
+                continue
             paras = [p for p in content_cell.paragraphs if (p.text or "").strip()]
             for k, p in enumerate(paras):
                 if _RESP_STANDALONE_RE.match(p.text or ""):
@@ -791,6 +1025,11 @@ def walk_template_blocks(
             # is missing"). It lands in the section it physically sits under.
             if current is not None and block[1]:
                 current.body_html_parts.append(block[1])
+            # A table nested INSIDE an answer cell IS the answer (ETSU 1.e
+            # student demographics) — its text counts as body so the spec is
+            # not treated as an unwritten placeholder.
+            if current is not None and len(block) > 3 and block[3] == "nested" and re.search(r"\w", block[2] or ""):
+                current.body_paragraphs.append(block[2])
             continue
 
         text = (block[1] if block else "").strip()
@@ -835,6 +1074,19 @@ def walk_template_blocks(
                     current.body_paragraphs.pop()
                     if current.body_html_parts:
                         current.body_html_parts.pop()
+            in_standard_descriptor = True
+            continue
+
+        # A Roman PART header inside the standards region ("II. CURRICULUM:
+        # BACCALAUREATE DEGREE") is template structure, never a response — it
+        # bled onto the last spec of Part I (ETSU 10.b). Skip it like a Context
+        # descriptor until the next real heading.
+        if (
+            not in_introduction
+            and has_standards_region
+            and current_spec_section is not None
+            and _PART_HEADER_RE.match(text)
+        ):
             in_standard_descriptor = True
             continue
 

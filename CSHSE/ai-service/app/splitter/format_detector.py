@@ -98,9 +98,13 @@ class FormatDetection:
 # ---------------------------------------------------------------- public API
 
 
+_STANDARD_COLON_RE = re.compile(r"^\s*Standard\s+(\d{1,2})\s*:", re.I)
+
+
 def detect_format_from_paragraphs(
     paragraphs: list[str],
     head_paragraphs: int = 20,
+    letter_cell_count: int = 0,
 ) -> FormatDetection:
     """Pure-function detector over a paragraph list.
 
@@ -122,7 +126,17 @@ def detect_format_from_paragraphs(
         if p and any(r.match(p.strip()) for r in _SELF_STUDY_HEADING_RES)
     )
 
+    distinct_standard_headings = len({
+        int(m.group(1))
+        for p in paragraphs
+        if p
+        for m in [_STANDARD_COLON_RE.match(p)]
+        if m
+    })
+
     signals: dict[str, int | bool] = {
+        "distinct_standard_headings": distinct_standard_headings,
+        "letter_cell_count": letter_cell_count,
         "template_title_in_head": template_title_hit,
         "response_marker_count": response_count,
         "template_heading_count": template_heading_count,
@@ -149,6 +163,22 @@ def detect_format_from_paragraphs(
                 f"{response_count} 'Response:' markers and "
                 f"{template_heading_count} template-style headings — "
                 "strong spec-as-outline signals."
+            ),
+        )
+    # The OFFICIAL tabular template answered WITHOUT "Response:" markers
+    # (ETSU, Nov 2026): every Standard has its "Standard N:" heading and its
+    # specs sit in table rows whose first cell is just the letter ("a.", "b.").
+    # Many distinct Standard headings + many letter-only cells is unambiguous —
+    # a free-form self-study has neither (Stevenson / KSU: 0 and 0).
+    if distinct_standard_headings >= 8 and letter_cell_count >= 15:
+        return FormatDetection(
+            format="template",
+            confidence=0.85,
+            signals=signals,
+            reasoning=(
+                f"{distinct_standard_headings} 'Standard N:' headings and "
+                f"{letter_cell_count} lettered specification cells — the "
+                "official CSHSE standards template answered in its tables."
             ),
         )
     # No strong template signals. Default to self_study with moderate
@@ -195,7 +225,31 @@ def detect_format(docx_path: str, head_paragraphs: int = 20) -> FormatDetection:
     cell_paras = _table_cell_paragraphs(doc)
     if cell_paras:
         paragraphs = paragraphs + cell_paras
-    return detect_format_from_paragraphs(paragraphs, head_paragraphs=head_paragraphs)
+    return detect_format_from_paragraphs(
+        paragraphs, head_paragraphs=head_paragraphs, letter_cell_count=_letter_cell_count(doc)
+    )
+
+
+_LETTER_CELL_RE = re.compile(r"^\s*[a-z]\.?\s*$", re.I)
+
+
+def _letter_cell_count(doc) -> int:
+    """How many table cells hold ONLY a specification letter ("a.", "b", …) —
+    the left column of the official template's per-Standard tables."""
+    n = 0
+    try:
+        for table in doc.tables:
+            for row in table.rows:
+                seen = set()
+                for cell in row.cells:
+                    if id(cell._tc) in seen:  # merged cells repeat
+                        continue
+                    seen.add(id(cell._tc))
+                    if _LETTER_CELL_RE.match(cell.text or ""):
+                        n += 1
+    except Exception:  # noqa: BLE001 — detection must never raise
+        return 0
+    return n
 
 
 def _table_cell_paragraphs(doc) -> list[str]:
