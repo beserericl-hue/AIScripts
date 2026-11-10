@@ -1957,6 +1957,15 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
     return rp && rp.split(/[\\/]/).pop() === f.originalname ? rp : f.originalname;
   };
 
+  // The self-study document itself usually sits in the delivered folder (ETSU:
+  // "Draft for Submission.docx" at the root AND in a working-copy subfolder).
+  // It is already imported as the narrative — don't file it as evidence.
+  const importedDocNames = new Set<string>(
+    (await SelfStudyImport.find({ submissionId: submission._id }).select('originalFilename').lean())
+      .map((i: any) => String(i.originalFilename || '').toLowerCase())
+      .filter(Boolean)
+  );
+
   // The same file (name+size) twice in ONE batch — the 2nd waits for the 1st,
   // then takes the duplicate path (adds a link) instead of a racing 2nd upload.
   const inFlight = new Map<string, Promise<unknown>>();
@@ -1980,6 +1989,10 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
   const processOne = async (f: Express.Multer.File, relPath: string): Promise<{ doc: any; summary: any }> => {
       const sectionId = `bulk-${uuidv4()}`;
       const title = titleFromFilename(f.originalname);
+      if (importedDocNames.has(f.originalname.toLowerCase())) {
+        return { doc: null, summary: { fileName: f.originalname, sourcePath: relPath, skippedSelfStudy: true,
+          error: 'This is your imported self-study document — not added as supporting evidence.' } };
+      }
       const folderHit = folderStandardFromPath(relPath);
       const dupKey = `${f.originalname}::${f.size}`;
       const prior = inFlight.get(dupKey);
