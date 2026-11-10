@@ -32,7 +32,9 @@ describe('ImportFilePanel — multiple files', () => {
     ui();
     fireEvent.change(screen.getByTestId('import-file-input'), { target: { files: [pdf('APPENDIX IV 9 Alumni Survey Data.pdf'), pdf('Budget.pdf')] } });
     await waitFor(() => expect(screen.getByTestId('bulk-upload-results')).toBeTruthy());
-    expect(post).toHaveBeenCalledTimes(1);
+    // 1 bulk upload + 1 AI pass over the unplaced file (Budget.pdf).
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    expect(post.mock.calls[1][0]).toBe('/api/submissions/sub1/evidence/ai-place-unassigned');
     const [url, form] = post.mock.calls[0];
     expect(url).toBe('/api/submissions/sub1/review/bulk-evidence');
     expect((form as FormData).getAll('files').map((f: any) => f.name)).toEqual(['APPENDIX IV 9 Alumni Survey Data.pdf', 'Budget.pdf']);

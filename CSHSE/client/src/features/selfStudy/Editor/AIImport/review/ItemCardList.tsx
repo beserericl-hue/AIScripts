@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import { BulkUploadResults, BulkUploadRow } from '../../BulkUploadResults';
-import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, uploadEvidenceInBatches } from '../../bulkEvidenceUpload';
+import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from '../../bulkEvidenceUpload';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search, Loader2 } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
@@ -2462,11 +2462,24 @@ function BulkEvidenceDropZone({
         });
         setRows(out.rows);
         setSkipped(out.skipped);
-        setStatus(
-          `Added ${out.count} file${out.count === 1 ? '' : 's'} — where each one was filed is listed below.` +
-            (out.failedBatches ? ` ${out.failedBatches} batch(es) failed — those files are marked "Not uploaded"; drop them again to retry.` : '')
-        );
+        const added = `Added ${out.count} file${out.count === 1 ? '' : 's'} — where each one was filed is listed below.` +
+          (out.failedBatches ? ` ${out.failedBatches} batch(es) failed — those files are marked "Not uploaded"; drop them again to retry.` : '');
+        setStatus(added);
         await onUploaded();
+        // Files the upload couldn't place: let the AI read them against the
+        // self-study and suggest a specification (tentative — accept in the
+        // File Library or Review).
+        const unplaced = out.rows.filter((r) => !r.placedStd && !r.duplicateOf && !r.error && !r.skippedSelfStudy).length;
+        if (unplaced > 0) {
+          setStatus(`${added} The AI is reading the ${unplaced} unplaced file${unplaced === 1 ? '' : 's'} to suggest where they belong…`);
+          const ai = await suggestPlacementsForUnassigned(submissionId, (done, remaining) =>
+            setStatus(`${added} AI suggestions: ${done} read${remaining ? `, ${remaining} to go` : ''}…`)
+          );
+          setStatus(ai.error
+            ? `${added} AI suggestions stopped (${ai.error}) — run "Suggest placements with AI" in the File Library.`
+            : `${added} The AI suggested a specification for ${ai.placed} unplaced file${ai.placed === 1 ? '' : 's'}${ai.workingFiles ? ` and flagged ${ai.workingFiles} as working material, not evidence` : ''} — accept them in the File Library.`);
+          await onUploaded();
+        }
       } catch (err: any) {
         setStatus(`Upload failed: ${err?.response?.data?.error || err?.message || 'unknown error'}`);
       } finally {

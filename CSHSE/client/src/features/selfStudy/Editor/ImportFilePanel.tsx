@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { BulkUploadResults, BulkUploadRow } from './BulkUploadResults';
-import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, uploadEvidenceInBatches } from './bulkEvidenceUpload';
+import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from './bulkEvidenceUpload';
 
 // Mirror FileUpload.tsx's accept list + cap (those constants aren't exported).
 const ALLOWED_TYPES = [
@@ -151,8 +151,20 @@ export function ImportFilePanel({
       });
       setBulkRows(out.rows);
       setBulkSkipped(out.skipped);
-      setBulkStatus(out.failedBatches ? `${out.failedBatches} batch(es) failed — drop those files again to retry.` : '');
+      const failedNote = out.failedBatches ? `${out.failedBatches} batch(es) failed — drop those files again to retry. ` : '';
+      setBulkStatus(failedNote);
       refreshEvidence();
+      const unplaced = out.rows.filter((r) => !r.placedStd && !r.duplicateOf && !r.error && !r.skippedSelfStudy).length;
+      if (unplaced > 0) {
+        setBulkStatus(`${failedNote}The AI is reading the ${unplaced} unplaced file${unplaced === 1 ? '' : 's'} to suggest where they belong…`);
+        const ai = await suggestPlacementsForUnassigned(submissionId, (done, remaining) =>
+          setBulkStatus(`${failedNote}AI suggestions: ${done} read${remaining ? `, ${remaining} to go` : ''}…`)
+        );
+        setBulkStatus(ai.error
+          ? `${failedNote}AI suggestions stopped (${ai.error}) — run "Suggest placements with AI" in the File Library.`
+          : `${failedNote}The AI suggested a specification for ${ai.placed} unplaced file${ai.placed === 1 ? '' : 's'}${ai.workingFiles ? ` and flagged ${ai.workingFiles} as working material` : ''} — accept them in the Supporting File Library.`);
+        refreshEvidence();
+      }
     } catch (err: any) {
       setError(err?.response?.data?.error || err?.message || 'Upload failed.');
     } finally {

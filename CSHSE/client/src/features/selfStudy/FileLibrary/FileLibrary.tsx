@@ -52,6 +52,15 @@ interface Evidence {
   };
   metadata?: {
     description?: string;
+    sourcePath?: string;
+    /** Tentative AI cross-reference placement (unassigned files only). */
+    aiPlacement?: {
+      kind: 'evidence' | 'working_file';
+      standardCode?: string | null;
+      specCode?: string | null;
+      confidence?: number;
+      reason?: string;
+    };
   };
   description?: string;
   tags?: string[];
@@ -409,6 +418,43 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
     },
   });
 
+  // AI cross-reference placement of the unassigned files — runs in chunks of 20
+  // on the server (each file: read it, find the self-study passages about it,
+  // pick the specification it supports). Results are TENTATIVE: shown on each
+  // file with Accept, and "Accept all ≥75%" files the confident ones.
+  const [aiPlaceStatus, setAiPlaceStatus] = useState<string>('');
+  const [aiPlacing, setAiPlacing] = useState(false);
+  const runAiPlacement = async () => {
+    setAiPlacing(true);
+    let done = 0, placed = 0, working = 0;
+    try {
+      for (let guard = 0; guard < 50; guard++) {
+        const res = await api.post(`${API_BASE}/submissions/${submissionId}/evidence/ai-place-unassigned`, {}, { timeout: 600_000 });
+        const d = res.data || {};
+        done += d.processed || 0; placed += d.placed || 0; working += d.workingFiles || 0;
+        setAiPlaceStatus(`AI read ${done} file${done === 1 ? '' : 's'}${d.remaining ? ` — ${d.remaining} to go…` : ''}`);
+        queryClient.invalidateQueries({ queryKey: ['evidence', submissionId] });
+        if (!d.remaining || !d.processed) break;
+      }
+      setAiPlaceStatus(`AI suggested a specification for ${placed} file${placed === 1 ? '' : 's'}${working ? ` and flagged ${working} as working material` : ''}. Review the suggestions below, then accept.`);
+    } catch (err: any) {
+      setAiPlaceStatus(`AI placement stopped: ${err?.response?.data?.error || err?.message || 'unknown error'}`);
+    } finally {
+      setAiPlacing(false);
+    }
+  };
+  const acceptAiMutation = useMutation({
+    mutationFn: async (v: { evidenceIds?: string[]; minConfidence?: number }) => {
+      const res = await api.post(`${API_BASE}/submissions/${submissionId}/evidence/accept-ai-placements`, v);
+      return res.data as { accepted: number };
+    },
+    onSuccess: (d) => {
+      queryClient.invalidateQueries({ queryKey: ['evidence', submissionId] });
+      if (d && typeof d.accepted === 'number' && d.accepted > 1) setAiPlaceStatus(`Filed ${d.accepted} files under their suggested specification.`);
+    },
+    onError: (error: any) => setUploadError(error.response?.data?.error || 'Failed to accept the AI suggestion'),
+  });
+
   const toggleStandard = (code: string) => {
     setExpandedStandards((prev) => {
       const next = new Set(prev);
@@ -608,6 +654,37 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
             {desc && (
               <p className="text-xs text-gray-500 truncate mt-0.5">{desc}</p>
             )}
+            {!item.standardCode && item.metadata?.aiPlacement && (() => {
+              const ai = item.metadata!.aiPlacement!;
+              const pct = typeof ai.confidence === 'number' ? Math.round(ai.confidence * 100) : null;
+              if (ai.kind === 'working_file') {
+                return (
+                  <p className="mt-1 text-[11px] text-gray-600" data-testid={`ai-pick-${item._id}`}>
+                    <Sparkles className="w-3 h-3 inline-block mr-1 -mt-0.5 text-purple-500" />
+                    Probably not evidence — looks like internal working material. <span className="text-gray-500">{ai.reason}</span>
+                  </p>
+                );
+              }
+              if (!ai.standardCode) return null;
+              return (
+                <p className="mt-1 text-[11px] text-purple-800 whitespace-normal" data-testid={`ai-pick-${item._id}`}>
+                  <Sparkles className="w-3 h-3 inline-block mr-1 -mt-0.5" />
+                  AI suggests <span className="font-semibold">{ai.standardCode}{ai.specCode ? `.${ai.specCode}` : ''}</span>
+                  {pct !== null && <span className={pct >= 75 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-gray-500'}> ({pct}%)</span>}
+                  {ai.reason && <span className="text-gray-600"> — {ai.reason}</span>}
+                  {!readOnly && (
+                    <button
+                      onClick={() => acceptAiMutation.mutate({ evidenceIds: [item._id] })}
+                      disabled={acceptAiMutation.isPending}
+                      data-testid={`ai-accept-${item._id}`}
+                      className="ml-2 rounded border border-purple-300 bg-white px-1.5 py-0.5 text-[11px] font-medium text-purple-700 hover:bg-purple-50 disabled:opacity-50"
+                    >
+                      Accept
+                    </button>
+                  )}
+                </p>
+              );
+            })()}
           </div>
         </div>
         <div className="flex items-center gap-1 ml-2 whitespace-nowrap flex-shrink-0">
@@ -890,6 +967,33 @@ export function FileLibrary({ submissionId, readOnly = false, scrollToSpec = nul
         </button>
         {isExpanded && (
           <div className="px-4 pb-4 pt-3 border-t border-amber-100">
+            {!readOnly && (() => {
+              const confident = unassignedFiles.filter((f: Evidence) => f.metadata?.aiPlacement?.kind === 'evidence' && f.metadata?.aiPlacement?.standardCode && (f.metadata?.aiPlacement?.confidence ?? 0) >= 0.75).length;
+              const unread = unassignedFiles.filter((f: Evidence) => !f.metadata?.aiPlacement).length;
+              return (
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-xs" data-testid="ai-place-bar">
+                  <button
+                    onClick={() => void runAiPlacement()}
+                    disabled={aiPlacing || unread === 0}
+                    data-testid="ai-place-run"
+                    className="flex items-center gap-1 rounded border border-purple-300 bg-purple-50 px-2 py-1 font-medium text-purple-800 hover:bg-purple-100 disabled:opacity-50"
+                    title="The AI reads each file and the parts of your self-study that mention it, then suggests the specification it supports"
+                  >
+                    {aiPlacing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    {unread ? `Suggest placements with AI (${unread})` : 'All files have an AI suggestion'}
+                  </button>
+                  <button
+                    onClick={() => acceptAiMutation.mutate({ minConfidence: 0.75 })}
+                    disabled={acceptAiMutation.isPending || confident === 0}
+                    data-testid="ai-accept-confident"
+                    className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-50"
+                  >
+                    Accept all suggestions at 75% or higher ({confident})
+                  </button>
+                  {aiPlaceStatus && <span className="text-gray-600" data-testid="ai-place-status">{aiPlaceStatus}</span>}
+                </div>
+              );
+            })()}
             {unassignedFiles.map(renderEvidenceItem)}
           </div>
         )}

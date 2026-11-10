@@ -1015,6 +1015,32 @@ class SectionEvaluateRequest(BaseModel):
     libraryFileNames: list[str] = Field(default_factory=list)
 
 
+class XrefPlacementRequest(BaseModel):
+    """Cross-reference placement for unassigned supporting-evidence files: the
+    program's own self-study passages + the level's specification prompts →
+    a TENTATIVE (std, spec) per file, or 'working_file' (not evidence)."""
+    specs: list[dict] = Field(description="[{std, spec, prompt}] for the program level.")
+    narratives: list[dict] = Field(description="[{std, spec, text}] — the imported self-study narratives.")
+    files: list[dict] = Field(description="[{id, name, path, text}] — up to 25 files.")
+
+
+@app.post("/ai/placement/xref", status_code=status.HTTP_200_OK)
+async def placement_xref(req: XrefPlacementRequest, request: Request) -> dict:
+    body = await request.body()
+    verify_hmac_signature(request, body)
+    s = get_settings()
+    if not s.anthropic_api_key:
+        raise HTTPException(status_code=503, detail="no Anthropic key configured")
+    if len(req.files) > 25:
+        raise HTTPException(status_code=400, detail="at most 25 files per request")
+    from starlette.concurrency import run_in_threadpool
+    from app.evidence.xref_placement import place_files
+
+    client = Anthropic(api_key=s.anthropic_api_key, max_retries=4)
+    results = await run_in_threadpool(place_files, client, req.specs, req.narratives, req.files, 6)
+    return {"results": results}
+
+
 @app.post("/ai/files/extract", status_code=status.HTTP_200_OK)
 async def files_extract(req: FileExtractRequest, request: Request) -> dict:
     """Extract plain text from a pdf/docx/xlsx/pptx (base64 or S3 key).
