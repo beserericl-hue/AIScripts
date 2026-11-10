@@ -2059,6 +2059,9 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         narratives,
         programLevel,
         institutionId: String(institutionId),
+        // Folder already names the standard → no AI topic call (a 380-file
+        // ETSU folder took ~30 min mostly waiting on the classifier).
+        skipSemantic: !!folderHit,
       });
       const suggestions = sugg.suggestions;
       let best = sugg.best;
