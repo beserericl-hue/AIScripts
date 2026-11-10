@@ -381,3 +381,33 @@ export async function reviewCoverage(req: CoverageReviewRequest): Promise<{ resu
     return { results: [], error: err?.message || String(err) };
   }
 }
+
+
+// ============================================================================
+// Cross-reference placement — self-study passages + spec prompts → tentative
+// (std, spec) per unassigned evidence file, or 'working_file' (not evidence).
+// ============================================================================
+export interface XrefPlacementResult {
+  id: string;
+  kind?: 'evidence' | 'working_file';
+  std?: string | null;
+  spec?: string | null;
+  alternate?: string | null;
+  confidence?: number;
+  reason?: string;
+  passageSpec?: string | null;
+  error?: string;
+}
+export async function xrefPlacement(req: {
+  specs: Array<{ std: string; spec: string; prompt: string }>;
+  narratives: Array<{ std: string; spec?: string; text: string }>;
+  files: Array<{ id: string; name: string; path?: string; text: string }>;
+}): Promise<{ results: XrefPlacementResult[]; error?: string }> {
+  try {
+    const res = await postSigned<{ results: XrefPlacementResult[] }>('/ai/placement/xref', req, 300_000);
+    if (res.status >= 400) return { results: [], error: `HTTP ${res.status}: ${(res.body as any)?.detail || ''}` };
+    return res.body;
+  } catch (err: any) {
+    return { results: [], error: err?.message || String(err) };
+  }
+}

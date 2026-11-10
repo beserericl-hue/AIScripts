@@ -78,6 +78,16 @@ export interface ISupportingEvidence extends Document {
     /** Where the file sat in the coordinator's delivered folder tree
      *  ("CSHSE EVIDENCE AND LINKS/Standard 13/BG4BN2.pdf"). */
     sourcePath?: string;
+    /** TENTATIVE AI placement for an unassigned file (cross-reference pass):
+     *  the coordinator accepts or overrides it. */
+    aiPlacement?: {
+      kind: 'evidence' | 'working_file';
+      standardCode?: string | null;
+      specCode?: string | null;
+      confidence?: number;
+      reason?: string;
+      at?: Date;
+    };
   };
 
   // Linking to narrative sections
@@ -201,7 +211,8 @@ const SupportingEvidenceSchema = new Schema<ISupportingEvidence>({
   metadata: {
     description: String,
     notes: String,
-    sourcePath: String
+    sourcePath: String,
+    aiPlacement: { type: Schema.Types.Mixed }
   },
 
   // Linking

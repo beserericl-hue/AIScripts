@@ -171,6 +171,8 @@ import {
   denoiseNarratives,
   reconcileSpecLevel,
   suggestStandardForEvidence,
+  aiPlaceUnassignedEvidence,
+  acceptAiPlacements,
   indexEvidenceAll,
   dedupeImports,
   stripContextBleed,
@@ -222,6 +224,9 @@ router.post('/:submissionId/review/reconcile-spec-level', submissionLockout, rec
 // supports (reference-match + AI placement) so files that never hit the Review
 // panel can be routed. Suggest-only; the client confirms + saves via evidence PATCH.
 router.post('/:submissionId/evidence/:evidenceId/suggest-standard', suggestStandardForEvidence);
+// AI cross-reference placement of unassigned library files (tentative) + accept.
+router.post('/:submissionId/evidence/ai-place-unassigned', submissionLockout, aiPlaceUnassignedEvidence);
+router.post('/:submissionId/evidence/accept-ai-placements', submissionLockout, acceptAiPlacements);
 // Backfill: index all supporting files' content into the evidence vector DB.
 router.post('/:submissionId/evidence/index-all', indexEvidenceAll);
 router.get('/:submissionId/review/eval-progress', getEvalProgress);

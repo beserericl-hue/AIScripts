@@ -30,7 +30,7 @@ import { ValidationService } from '../services/validationService';
 import { applyAIImportCore } from './aiImportController';
 import { downloadFileAsBuffer, generateS3Key, uploadFile, isS3Configured } from '../services/s3Service';
 import { v4 as uuidv4 } from 'uuid';
-import { extractFileText, reviewCoverage } from '../services/cshseAiClient';
+import { extractFileText, reviewCoverage, xrefPlacement } from '../services/cshseAiClient';
 import { suggestStandardForFile, NarrativeTuple, titleFromFilename, folderStandardFromPath } from '../services/evidenceStandardSuggester';
 import { indexEvidenceFile, indexAllForSubmission } from '../services/evidenceIndexer';
 import { signFileAccessToken } from '../services/fileAccessToken';
@@ -2021,6 +2021,8 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
     return true;
   };
 
+  // Multer hands us latin1-decoded names ("â\u0080\u0093" for "–"); fix once.
+  for (const f of files) f.originalname = fixLatin1Filename(f.originalname);
   const processOne = async (f: Express.Multer.File, relPath: string): Promise<{ doc: any; summary: any }> => {
       const sectionId = `bulk-${uuidv4()}`;
       const title = titleFromFilename(f.originalname);
@@ -2083,7 +2085,7 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
       // CSV / plain text: read directly (the ai-service extractor has no csv path).
       const extracted = /\.(csv|txt)$/i.test(f.originalname) || /^text\//.test(mime)
         ? { text: f.buffer.toString('utf8').slice(0, 200_000), error: undefined as string | undefined }
-        : await extractFileText({ s3Key, s3Bucket: bucket, mimeType: mime, filename: f.originalname });
+        : await extractFileTextWithRetry({ s3Key, s3Bucket: bucket, mimeType: mime, filename: f.originalname });
       const text = extracted.text || '';
 
       // Suggest a placement (reference-match + semantic).
@@ -2871,4 +2873,187 @@ export async function getReviewEvidenceDocPublicUrl(req: AuthenticatedRequest, r
   });
   const base = `${req.protocol}://${req.get('host')}`;
   res.json({ url: `${base}/public-file/${token}` });
+}
+
+
+// ============================================================================
+// AI cross-reference placement of UNASSIGNED supporting-evidence files
+// ============================================================================
+
+/** Multer decodes multipart filenames as latin1 — "Program Differentiators –
+ *  ETSU" arrives as "Program Differentiators â\u0080\u0093 ETSU". Undo it when
+ *  the string round-trips cleanly as UTF-8. */
+export function fixLatin1Filename(name: string): string {
+  const s = String(name || '');
+  if (!/[\u0080-\u00ff]/.test(s)) return s;
+  try {
+    const fixed = Buffer.from(s, 'latin1').toString('utf8');
+    return fixed.includes('\ufffd') ? s : fixed;
+  } catch {
+    return s;
+  }
+}
+
+/** Text extraction with one retry — under a large folder upload the
+ *  ai-service extractor sometimes times out (ETSU: 15 Word/Excel files that
+ *  extract in <3s locally came back empty). */
+export async function extractFileTextWithRetry(req: Parameters<typeof extractFileText>[0]) {
+  let r = await extractFileText(req);
+  if (!r.text && r.error && !/unsupported/i.test(r.error)) {
+    console.warn('[extract] retrying after:', req.filename, r.error);
+    r = await extractFileText(req);
+    if (!r.text && r.error) console.warn('[extract] failed twice:', req.filename, r.error);
+  }
+  return r;
+}
+
+const AI_PLACE_BATCH = 20;
+
+/**
+ * POST /api/submissions/:submissionId/evidence/ai-place-unassigned
+ * body { evidenceIds?: string[], force?: boolean }
+ *
+ * For up to 20 UNASSIGNED library files per call (the client loops while
+ * `remaining > 0`): read the file's text, retrieve the self-study passages that
+ * talk about it, and let the AI choose the specification it supports — or mark
+ * it an internal working file. Stored TENTATIVELY on the file
+ * (metadata.aiPlacement) and pre-selected in the Review rail; the coordinator
+ * accepts (one by one or "Accept all ≥75%") — nothing is filed automatically.
+ */
+export async function aiPlaceUnassignedEvidence(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const { evidenceIds, force } = (req.body || {}) as { evidenceIds?: string[]; force?: boolean };
+
+  const base: any = {
+    submissionId: submission._id,
+    isDeleted: { $ne: true },
+    isCurrentVersion: { $ne: false },
+    $or: [{ standardCode: { $exists: false } }, { standardCode: null }, { standardCode: '' }],
+  };
+  if (Array.isArray(evidenceIds) && evidenceIds.length) base._id = { $in: evidenceIds.filter((x) => mongoose.Types.ObjectId.isValid(x)) };
+  if (!force) base['metadata.aiPlacement'] = { $exists: false };
+  const todo: any[] = await SupportingEvidence.find(base).limit(AI_PLACE_BATCH);
+  const remainingAfter = Math.max(0, (await SupportingEvidence.countDocuments(base)) - todo.length);
+  if (!todo.length) {
+    res.json({ ok: true, processed: 0, remaining: 0, results: [] });
+    return;
+  }
+
+  const levelStandards = getLevelStandards(String(submission.programLevel || 'bachelors')) || [];
+  const specs = levelStandards.flatMap((st: any) => st.specifications.map((sp: any) => ({ std: String(st.code), spec: String(sp.code), prompt: String(sp.text || '') })));
+  const narratives = gatherNarrativeTuples(submission)
+    .filter((t) => t.specCode)
+    .map((t) => ({ std: t.standardCode, spec: t.specCode, text: t.content.slice(0, 40000) }));
+  const bucketName = process.env.AWS_S3_BUCKET_NAME || '';
+
+  const files: Array<{ id: string; name: string; path?: string; text: string }> = [];
+  for (const ev of todo) {
+    const name = fixLatin1Filename(ev.file?.originalName || ev.url?.title || ev.description || 'file');
+    let text = String(ev.metadata?.description || '');
+    if (!text && ev.file?.s3Key && isS3Configured() && !/\.(csv|txt)$/i.test(name)) {
+      const r = await extractFileTextWithRetry({ s3Key: ev.file.s3Key, s3Bucket: ev.file.s3Bucket || bucketName, mimeType: ev.file?.mimeType, filename: name });
+      text = r.text || '';
+      if (text) {
+        ev.metadata = { ...(ev.metadata?.toObject ? ev.metadata.toObject() : ev.metadata || {}), description: text.slice(0, 20000) };
+        ev.markModified('metadata');
+      }
+    }
+    if (ev.evidenceType === 'url' && ev.url?.href) text = `Web link: ${ev.url.href}\n${text}`;
+    files.push({ id: String(ev._id), name, path: ev.metadata?.sourcePath || '', text: text.slice(0, 12000) });
+  }
+
+  const out = await xrefPlacement({ specs, narratives, files });
+  if (out.error && !out.results.length) {
+    res.status(502).json({ error: `AI placement unavailable: ${out.error}` });
+    return;
+  }
+
+  const state = (submission as any).aiReviewState;
+  const docs: any[] = Array.isArray(state?.evidenceDocs) ? state.evidenceDocs : [];
+  const byId = new Map(out.results.map((r) => [String(r.id), r]));
+  let placed = 0, working = 0, low = 0, failed = 0;
+  for (const ev of todo) {
+    const r = byId.get(String(ev._id));
+    if (!r || r.error) { failed += 1; if (ev.isModified()) await ev.save(); continue; }
+    const conf = typeof r.confidence === 'number' ? r.confidence : 0;
+    const ai = { kind: r.kind || 'evidence', standardCode: r.std || null, specCode: r.spec || null, confidence: conf, reason: r.reason || '', at: new Date() };
+    ev.metadata = { ...(ev.metadata?.toObject ? ev.metadata.toObject() : ev.metadata || {}), aiPlacement: ai };
+    ev.markModified('metadata');
+    await ev.save();
+    if (ai.kind === 'working_file') working += 1;
+    else if (ai.standardCode && conf >= 0.5) placed += 1;
+    else low += 1;
+
+    const d = docs.find((x) => String(x.fileId || '') === String(ev._id));
+    if (d) {
+      const pct = Math.round(conf * 100);
+      if (ai.kind === 'working_file') {
+        d.aiWorkingFile = true;
+        d.aiSuggestionRationale = `Looks like internal working material, not evidence — ${ai.reason}`;
+      } else if (ai.standardCode) {
+        d.aiSuggestionRationale = `AI (tentative, ${pct}%): ${ai.reason}`;
+        d.aiSuggestionConfidence = conf;
+        d.aiTentative = true;
+        if (conf >= 0.5) {
+          d.resolvedStd = ai.standardCode;
+          d.resolvedSpec = ai.specCode || undefined;
+          d.routing = { std: ai.standardCode, spec: ai.specCode || undefined, source: 'ai-xref' };
+          const rest = (Array.isArray(d.referencedBySpecs) ? d.referencedBySpecs : []).filter((x: any) => !(String(x.std) === ai.standardCode && (x.spec || '') === (ai.specCode || '')));
+          d.referencedBySpecs = [{ std: ai.standardCode, spec: ai.specCode || undefined }, ...rest];
+        }
+      }
+    }
+  }
+  if (state && docs.length) {
+    (submission as any).markModified('aiReviewState');
+    await persistAiReviewState(submission, state);
+  }
+  res.json({ ok: true, processed: todo.length, placed, workingFiles: working, lowConfidence: low, failed, remaining: remainingAfter,
+    results: out.results.map((r) => ({ ...r })) });
+}
+
+/**
+ * POST /api/submissions/:submissionId/evidence/accept-ai-placements
+ * body { minConfidence?: number (default 0.75), evidenceIds?: string[] }
+ * Files the tentative AI placements: every unassigned file whose AI placement
+ * is evidence with confidence ≥ minConfidence (or, when evidenceIds is given,
+ * exactly those files regardless of confidence).
+ */
+export async function acceptAiPlacements(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  const { evidenceIds, minConfidence } = (req.body || {}) as { evidenceIds?: string[]; minConfidence?: number };
+  const min = typeof minConfidence === 'number' ? minConfidence : 0.75;
+  const q: any = {
+    submissionId: submission._id,
+    isDeleted: { $ne: true },
+    isCurrentVersion: { $ne: false },
+    $or: [{ standardCode: { $exists: false } }, { standardCode: null }, { standardCode: '' }],
+    'metadata.aiPlacement.kind': 'evidence',
+    'metadata.aiPlacement.standardCode': { $nin: [null, ''] },
+  };
+  if (Array.isArray(evidenceIds) && evidenceIds.length) q._id = { $in: evidenceIds.filter((x) => mongoose.Types.ObjectId.isValid(x)) };
+  else q['metadata.aiPlacement.confidence'] = { $gte: min };
+  const evs: any[] = await SupportingEvidence.find(q);
+  const state = (submission as any).aiReviewState;
+  const docs: any[] = Array.isArray(state?.evidenceDocs) ? state.evidenceDocs : [];
+  for (const ev of evs) {
+    const ai = ev.metadata.aiPlacement;
+    ev.standardCode = ai.standardCode;
+    ev.specCode = ai.specCode || undefined;
+    ev.tags = Array.from(new Set([...(ev.tags || []), 'ai-placed']));
+    await ev.save();
+    const d = docs.find((x) => String(x.fileId || '') === String(ev._id));
+    if (d) {
+      d.resolvedStd = ai.standardCode;
+      d.resolvedSpec = ai.specCode || undefined;
+      d.routing = { std: ai.standardCode, spec: ai.specCode || undefined, source: 'coordinator' };
+    }
+  }
+  if (state && docs.length && evs.length) {
+    (submission as any).markModified('aiReviewState');
+    await persistAiReviewState(submission, state);
+  }
+  res.json({ ok: true, accepted: evs.length });
 }

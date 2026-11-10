@@ -128,3 +128,27 @@ export async function uploadEvidenceInBatches(
   }
   return { rows, skipped, count, failedBatches };
 }
+
+/**
+ * After an upload, let the AI suggest a specification for every file that is
+ * still unassigned (server works 20 at a time; loop while some remain). The
+ * suggestions are tentative — shown in the File Library with Accept.
+ */
+export async function suggestPlacementsForUnassigned(
+  submissionId: string,
+  onProgress?: (done: number, remaining: number) => void
+): Promise<{ processed: number; placed: number; workingFiles: number; error?: string }> {
+  let processed = 0, placed = 0, workingFiles = 0;
+  try {
+    for (let guard = 0; guard < 50; guard++) {
+      const res = await api.post(`/api/submissions/${submissionId}/evidence/ai-place-unassigned`, {}, { timeout: 600_000 });
+      const d = res.data || {};
+      processed += d.processed || 0; placed += d.placed || 0; workingFiles += d.workingFiles || 0;
+      onProgress?.(processed, d.remaining || 0);
+      if (!d.remaining || !d.processed) break;
+    }
+    return { processed, placed, workingFiles };
+  } catch (err: any) {
+    return { processed, placed, workingFiles, error: err?.response?.data?.error || err?.message || 'AI placement failed' };
+  }
+}
