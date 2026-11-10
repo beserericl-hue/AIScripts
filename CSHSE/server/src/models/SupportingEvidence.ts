@@ -75,6 +75,9 @@ export interface ISupportingEvidence extends Document {
   metadata?: {
     description?: string;
     notes?: string;
+    /** Where the file sat in the coordinator's delivered folder tree
+     *  ("CSHSE EVIDENCE AND LINKS/Standard 13/BG4BN2.pdf"). */
+    sourcePath?: string;
   };
 
   // Linking to narrative sections
@@ -197,7 +200,8 @@ const SupportingEvidenceSchema = new Schema<ISupportingEvidence>({
   // Additional metadata
   metadata: {
     description: String,
-    notes: String
+    notes: String,
+    sourcePath: String
   },
 
   // Linking
