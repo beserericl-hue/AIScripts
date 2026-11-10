@@ -610,6 +610,31 @@ const SAVEABLE_FIELDS = [
   'resolvedMissingFragmentIds',
 ] as const;
 
+/**
+ * Merge the browser's evidenceDocs onto the server's for an autosave: the
+ * browser's version of each doc wins (it carries the coordinator's edits), but
+ * server-only BULK-imported docs are kept and server-added references are kept.
+ */
+export function mergeBulkEvidenceDocs(serverDocs: any[], clientDocs: any[]): any[] {
+  const out = clientDocs.map((d) => d);
+  const bySection = new Map<string, any>();
+  for (const d of out) if (d?.sectionId) bySection.set(String(d.sectionId), d);
+  for (const sd of serverDocs) {
+    if (!sd?.bulkImported || !sd.sectionId) continue;
+    const cd = bySection.get(String(sd.sectionId));
+    if (!cd) {
+      out.push(sd);
+      continue;
+    }
+    const refs: Array<{ std: string; spec?: string }> = Array.isArray(cd.referencedBySpecs) ? [...cd.referencedBySpecs] : [];
+    for (const r of Array.isArray(sd.referencedBySpecs) ? sd.referencedBySpecs : []) {
+      if (!refs.some((x) => String(x.std) === String(r.std) && (x.spec || '') === (r.spec || ''))) refs.push(r);
+    }
+    if (refs.length) cd.referencedBySpecs = refs;
+  }
+  return out;
+}
+
 export async function saveReviewState(req: AuthenticatedRequest, res: Response): Promise<void> {
   const submission = await _loadOwnedSubmission(req, res);
   if (!submission) return;
@@ -684,6 +709,16 @@ export async function saveReviewState(req: AuthenticatedRequest, res: Response):
     ? String((submission as any).institutionId)
     : null;
   // ────────────────────────────────────────────────────────────────────────
+
+  // A long folder upload adds evidence docs SERVER-side batch by batch while the
+  // coordinator may keep working in Review (each edit autosaves the browser's
+  // copy). The browser's evidenceDocs list can be stale — never let it drop
+  // bulk-imported docs it hasn't seen yet, and never drop folder links the
+  // server added to a doc both sides have (references only grow here; removing
+  // one goes through /evidence-doc-references).
+  if (Array.isArray(body.evidenceDocs) && Array.isArray(state.evidenceDocs)) {
+    body.evidenceDocs = mergeBulkEvidenceDocs(state.evidenceDocs, body.evidenceDocs);
+  }
 
   let touched = 0;
   for (const f of SAVEABLE_FIELDS) {
