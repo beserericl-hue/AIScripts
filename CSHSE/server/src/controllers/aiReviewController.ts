@@ -2156,7 +2156,8 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
       void indexEvidenceFile(String(institutionId), String(submission._id), ev).catch(() => undefined);
 
       // Detect a syllabus by name so the rail groups it correctly.
-      const isSyllabus = /syllab|course outline/i.test(f.originalname);
+      // …or by its delivered folder ("CSHSE EVIDENCE AND LINKS/Syllabi/…").
+      const isSyllabus = /syllab|course outline/i.test(f.originalname) || /(^|\/)[^/]*syllab[^/]*\//i.test(relPath);
       const doc: any = {
         sectionId,
         docSubKind: isSyllabus ? 'syllabus' : 'paper',
