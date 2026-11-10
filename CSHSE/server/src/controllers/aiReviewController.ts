@@ -2085,7 +2085,9 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
       // CSV / plain text: read directly (the ai-service extractor has no csv path).
       const extracted = /\.(csv|txt)$/i.test(f.originalname) || /^text\//.test(mime)
         ? { text: f.buffer.toString('utf8').slice(0, 200_000), error: undefined as string | undefined }
-        : await extractFileTextWithRetry({ s3Key, s3Bucket: bucket, mimeType: mime, filename: f.originalname });
+        // No retry here: a slow upload request trips the proxy's 100s limit
+        // (prod 524). Files left without text are filled by fill-missing-text.
+        : await extractFileText({ s3Key, s3Bucket: bucket, mimeType: mime, filename: f.originalname });
       const text = extracted.text || '';
 
       // Suggest a placement (reference-match + semantic).
@@ -2907,7 +2909,7 @@ export async function extractFileTextWithRetry(req: Parameters<typeof extractFil
   return r;
 }
 
-const AI_PLACE_BATCH = 20;
+const AI_PLACE_BATCH = 12; // keeps each call well under the prod proxy's 100s limit
 
 /**
  * POST /api/submissions/:submissionId/evidence/ai-place-unassigned
@@ -3056,4 +3058,60 @@ export async function acceptAiPlacements(req: AuthenticatedRequest, res: Respons
     await persistAiReviewState(submission, state);
   }
   res.json({ ok: true, accepted: evs.length });
+}
+
+
+/**
+ * POST /api/submissions/:submissionId/evidence/fill-missing-text
+ * Library files that have no extracted text (screenshots, scanned PDFs, or an
+ * extraction that timed out during a big upload) get read again — this time
+ * with OCR. Works within a ~60s budget per call (under the proxy's 100s limit);
+ * the client loops while `remaining > 0`. Each file is tried once
+ * (metadata.textAttemptedAt), so unreadable formats (.doc/.xls) don't loop.
+ * The text is what the AI evaluator and AI placement read.
+ */
+export async function fillMissingEvidenceText(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const submission = await _loadOwnedSubmission(req, res);
+  if (!submission) return;
+  if (!isS3Configured()) { res.status(503).json({ error: 'File storage (S3) is not configured on this server.' }); return; }
+  const q: any = {
+    submissionId: submission._id,
+    isDeleted: { $ne: true },
+    isCurrentVersion: { $ne: false },
+    'file.s3Key': { $exists: true, $ne: '' },
+    'metadata.textAttemptedAt': { $exists: false },
+    $or: [{ 'metadata.description': { $exists: false } }, { 'metadata.description': '' }, { 'metadata.description': null }],
+  };
+  const started = Date.now();
+  const BUDGET_MS = 60_000;
+  const bucketName = process.env.AWS_S3_BUCKET_NAME || '';
+  let processed = 0, filled = 0;
+  const filledNames: string[] = [];
+  for (;;) {
+    if (Date.now() - started > BUDGET_MS) break;
+    const ev: any = await SupportingEvidence.findOne(q);
+    if (!ev) break;
+    const name = fixLatin1Filename(ev.file?.originalName || 'file');
+    const r = await extractFileText({ s3Key: ev.file.s3Key, s3Bucket: ev.file.s3Bucket || bucketName, mimeType: ev.file?.mimeType, filename: name, ocr: true });
+    const text = (r.text || '').trim();
+    const meta = ev.metadata?.toObject ? ev.metadata.toObject() : { ...(ev.metadata || {}) };
+    meta.textAttemptedAt = new Date();
+    if (text) { meta.description = text.slice(0, 20000); filled += 1; filledNames.push(name); }
+    ev.metadata = meta;
+    ev.markModified('metadata');
+    await ev.save();
+    processed += 1;
+    if (text) {
+      // Keep the review rail's hidden copy in sync for the AI evaluator.
+      const state = (submission as any).aiReviewState;
+      const d = (state?.evidenceDocs || []).find((x: any) => String(x.fileId || '') === String(ev._id));
+      if (d) { d.extractedText = text.slice(0, 20000); d.summary = d.summary && d.summary !== d.title ? d.summary : text.slice(0, 400); (submission as any).__textDirty = true; }
+    }
+  }
+  if ((submission as any).__textDirty) {
+    (submission as any).markModified('aiReviewState');
+    await persistAiReviewState(submission, (submission as any).aiReviewState);
+  }
+  const remaining = await SupportingEvidence.countDocuments(q);
+  res.json({ ok: true, processed, filled, remaining, filledNames });
 }

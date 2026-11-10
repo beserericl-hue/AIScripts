@@ -86,7 +86,17 @@ export interface BulkUploadOutcome {
   failedBatches: number;
 }
 
-export const BULK_BATCH_SIZE = 10;
+// Small batches: production sits behind a proxy that cuts any request at 100s
+// (HTTP 524), and one batch can hold several large PDFs.
+export const BULK_BATCH_SIZE = 5;
+
+/** The proxy gave up (524/504/502) or the network dropped — the server may
+ *  still have stored the files, so the batch is re-sent once: the server's
+ *  name+size duplicate check makes that safe. */
+export function isRetryableUploadError(err: any): boolean {
+  const st = err?.response?.status;
+  return st === 524 || st === 504 || st === 502 || st === 503 || (!err?.response && !!err);
+}
 
 /**
  * Upload entries in sequential batches (server cap = 30/request; small batches
@@ -104,15 +114,35 @@ export async function uploadEvidenceInBatches(
   let failedBatches = 0;
   for (let i = 0; i < entries.length; i += BULK_BATCH_SIZE) {
     const batch = entries.slice(i, i + BULK_BATCH_SIZE);
-    const form = new FormData();
-    batch.forEach((e) => form.append('files', e.file));
-    form.append('paths', JSON.stringify(batch.map((e) => e.path)));
-    try {
-      const resp = await api.post(`/api/submissions/${submissionId}/review/bulk-evidence`, form, {
+    const send = () => {
+      const f = new FormData();
+      batch.forEach((e) => f.append('files', e.file));
+      f.append('paths', JSON.stringify(batch.map((e) => e.path)));
+      return api.post(`/api/submissions/${submissionId}/review/bulk-evidence`, f, {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 300_000,
       });
-      rows.push(...((resp.data?.added || []) as BulkUploadRow[]));
+    };
+    try {
+      let resp;
+      let retried = false;
+      try {
+        resp = await send();
+      } catch (first: any) {
+        if (!isRetryableUploadError(first)) throw first;
+        retried = true;
+        resp = await send();
+      }
+      let added = (resp.data?.added || []) as BulkUploadRow[];
+      if (retried) {
+        // The first attempt timed out at the proxy but the server finished it:
+        // the re-send reports those files as duplicates — they ARE uploaded.
+        added = added.map((r) => (r.duplicateOf && !r.alsoLinkedTo
+          ? { ...r, duplicateOf: undefined, note: 'Uploaded (confirmed after a slow first attempt)' }
+          : r));
+        count += added.filter((r) => !r.error).length - (resp.data?.count ?? 0);
+      }
+      rows.push(...added);
       skipped.push(...(resp.data?.skipped || []));
       count += resp.data?.count ?? 0;
     } catch (err: any) {
@@ -150,5 +180,31 @@ export async function suggestPlacementsForUnassigned(
     return { processed, placed, workingFiles };
   } catch (err: any) {
     return { processed, placed, workingFiles, error: err?.response?.data?.error || err?.message || 'AI placement failed' };
+  }
+}
+
+
+/**
+ * Re-read (with OCR) every library file that still has no text — screenshots,
+ * scanned PDFs, extractions that timed out during the upload. The server works
+ * ~60s per call; loop while some remain. Runs BEFORE the AI placement pass so
+ * the AI can read those files too.
+ */
+export async function fillMissingText(
+  submissionId: string,
+  onProgress?: (filled: number, remaining: number) => void
+): Promise<{ filled: number; error?: string }> {
+  let filled = 0;
+  try {
+    for (let guard = 0; guard < 100; guard++) {
+      const res = await api.post(`/api/submissions/${submissionId}/evidence/fill-missing-text`, {}, { timeout: 300_000 });
+      const d = res.data || {};
+      filled += d.filled || 0;
+      onProgress?.(filled, d.remaining || 0);
+      if (!d.remaining || !d.processed) break;
+    }
+    return { filled };
+  } catch (err: any) {
+    return { filled, error: err?.response?.data?.error || err?.message || 'text pass failed' };
   }
 }

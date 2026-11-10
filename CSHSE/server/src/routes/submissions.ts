@@ -172,6 +172,7 @@ import {
   reconcileSpecLevel,
   suggestStandardForEvidence,
   aiPlaceUnassignedEvidence,
+  fillMissingEvidenceText,
   acceptAiPlacements,
   indexEvidenceAll,
   dedupeImports,
@@ -227,6 +228,8 @@ router.post('/:submissionId/evidence/:evidenceId/suggest-standard', suggestStand
 // AI cross-reference placement of unassigned library files (tentative) + accept.
 router.post('/:submissionId/evidence/ai-place-unassigned', submissionLockout, aiPlaceUnassignedEvidence);
 router.post('/:submissionId/evidence/accept-ai-placements', submissionLockout, acceptAiPlacements);
+// Re-read (with OCR) library files that have no extracted text — screenshots, scans, timed-out extractions.
+router.post('/:submissionId/evidence/fill-missing-text', submissionLockout, fillMissingEvidenceText);
 // Backfill: index all supporting files' content into the evidence vector DB.
 router.post('/:submissionId/evidence/index-all', indexEvidenceAll);
 router.get('/:submissionId/review/eval-progress', getEvalProgress);

@@ -974,6 +974,7 @@ class FileExtractRequest(BaseModel):
     into Qdrant — it just returns the text so the Node side can reference-match
     it against the imported narratives and call ``/ai/placement/recommend``.
     """
+    ocr: bool = Field(default=False, description="Also OCR images and PDFs without a text layer (slower; backfill pass).")
     s3Key: str | None = Field(default=None, description="S3/Tigris object key; fetched server-side.")
     base64: str | None = Field(default=None, description="Inline file bytes (base64). Takes priority over s3Key.")
     mimeType: str = Field(default="", description="MIME type; dispatches the extractor (falls back to filename extension).")
@@ -1079,7 +1080,11 @@ async def files_extract(req: FileExtractRequest, request: Request) -> dict:
         raise HTTPException(status_code=400, detail="provide base64 or s3Key")
 
     try:
-        text = extract_text(data, mime_type=req.mimeType, filename=req.filename)
+        if req.ocr:
+            from starlette.concurrency import run_in_threadpool
+            text = await run_in_threadpool(lambda: extract_text(data, mime_type=req.mimeType, filename=req.filename, ocr=True))
+        else:
+            text = extract_text(data, mime_type=req.mimeType, filename=req.filename)
     except ValueError as exc:
         # Unsupported type or malformed file — a 400, not a 502.
         raise HTTPException(status_code=400, detail=str(exc))

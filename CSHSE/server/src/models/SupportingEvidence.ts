@@ -78,6 +78,9 @@ export interface ISupportingEvidence extends Document {
     /** Where the file sat in the coordinator's delivered folder tree
      *  ("CSHSE EVIDENCE AND LINKS/Standard 13/BG4BN2.pdf"). */
     sourcePath?: string;
+    /** When the fill-missing-text pass last tried this file (so a file with no
+     *  readable text — .doc/.xls — is not retried forever). */
+    textAttemptedAt?: Date;
     /** TENTATIVE AI placement for an unassigned file (cross-reference pass):
      *  the coordinator accepts or overrides it. */
     aiPlacement?: {
@@ -212,6 +215,7 @@ const SupportingEvidenceSchema = new Schema<ISupportingEvidence>({
     description: String,
     notes: String,
     sourcePath: String,
+    textAttemptedAt: Date,
     aiPlacement: { type: Schema.Types.Mixed }
   },
 

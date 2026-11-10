@@ -18,7 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import { BulkUploadResults, BulkUploadRow } from '../../BulkUploadResults';
-import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from '../../bulkEvidenceUpload';
+import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, fillMissingText, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from '../../bulkEvidenceUpload';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search, Loader2 } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
@@ -2469,6 +2469,13 @@ function BulkEvidenceDropZone({
         // Files the upload couldn't place: let the AI read them against the
         // self-study and suggest a specification (tentative — accept in the
         // File Library or Review).
+        // Screenshots / scans / timed-out extractions: read them (OCR) first so
+        // the AI evaluator and the placement pass can see their content.
+        setStatus(`${added} Reading images and scanned documents…`);
+        await fillMissingText(submissionId, (filled, remaining) =>
+          setStatus(`${added} Reading images and scanned documents: ${filled} read${remaining ? `, ${remaining} to go` : ''}…`)
+        );
+        setStatus(added);
         const unplaced = out.rows.filter((r) => !r.placedStd && !r.duplicateOf && !r.error && !r.skippedSelfStudy).length;
         if (unplaced > 0) {
           setStatus(`${added} The AI is reading the ${unplaced} unplaced file${unplaced === 1 ? '' : 's'} to suggest where they belong…`);
