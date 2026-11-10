@@ -35,7 +35,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { BulkUploadResults, BulkUploadRow } from './BulkUploadResults';
-import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from './bulkEvidenceUpload';
+import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, fillMissingText, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from './bulkEvidenceUpload';
 
 // Mirror FileUpload.tsx's accept list + cap (those constants aren't exported).
 const ALLOWED_TYPES = [
@@ -154,6 +154,11 @@ export function ImportFilePanel({
       const failedNote = out.failedBatches ? `${out.failedBatches} batch(es) failed — drop those files again to retry. ` : '';
       setBulkStatus(failedNote);
       refreshEvidence();
+      setBulkStatus(`${failedNote}Reading images and scanned documents…`);
+      await fillMissingText(submissionId, (filled, remaining) =>
+        setBulkStatus(`${failedNote}Reading images and scanned documents: ${filled} read${remaining ? `, ${remaining} to go` : ''}…`)
+      );
+      setBulkStatus(failedNote);
       const unplaced = out.rows.filter((r) => !r.placedStd && !r.duplicateOf && !r.error && !r.skippedSelfStudy).length;
       if (unplaced > 0) {
         setBulkStatus(`${failedNote}The AI is reading the ${unplaced} unplaced file${unplaced === 1 ? '' : 's'} to suggest where they belong…`);

@@ -20,6 +20,7 @@ can surface a 400 rather than a 502.
 from __future__ import annotations
 
 import io
+import re
 
 
 _MAX_BYTES = 50 * 1024 * 1024  # 50 MB — matches the upload cap.
@@ -126,9 +127,59 @@ def extract_text_from_docx_bytes(data: bytes) -> str:
     return (result.value or "")[:_MAX_TEXT_CHARS]
 
 
+def _ocr_image_bytes(data: bytes) -> str:
+    """OCR one image (screenshots of course activities, scanned letters).
+    Returns "" when tesseract / Pillow are unavailable."""
+    try:
+        import pytesseract
+        from PIL import Image
+    except Exception:  # noqa: BLE001
+        return ""
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.load()
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        return (pytesseract.image_to_string(img) or "").strip()[:_MAX_TEXT_CHARS]
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _ocr_pdf_bytes(data: bytes, max_pages: int = 12, dpi: int = 170) -> str:
+    """OCR an image-only / scanned PDF (no text layer). Page-capped for time."""
+    try:
+        import fitz  # PyMuPDF
+    except Exception:  # noqa: BLE001
+        return ""
+    try:
+        doc = fitz.open(stream=data, filetype="pdf")
+    except Exception:  # noqa: BLE001
+        return ""
+    out: list[str] = []
+    try:
+        for i, page in enumerate(doc):
+            if i >= max_pages:
+                break
+            try:
+                out.append(_ocr_image_bytes(page.get_pixmap(dpi=dpi).tobytes("png")))
+            except Exception:  # noqa: BLE001
+                continue
+    finally:
+        try:
+            doc.close()
+        except Exception:  # noqa: BLE001
+            pass
+    return "\n\n".join(t for t in out if t).strip()[:_MAX_TEXT_CHARS]
+
+
+_IMAGE_EXTS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff")
+
+
 # mimeType / extension → extractor. The route handler resolves by whichever it
 # has; extension wins when the browser sends a generic octet-stream.
-def extract_text(data: bytes, *, mime_type: str = "", filename: str = "") -> str:
+# ``ocr=True`` (the slower backfill pass only) also reads images and PDFs that
+# have no text layer — screenshots and scans are common supporting evidence.
+def extract_text(data: bytes, *, mime_type: str = "", filename: str = "", ocr: bool = False) -> str:
     """Dispatch to the right extractor by mimeType then filename extension.
 
     Returns the extracted text (possibly empty). Raises ``ValueError`` for an
@@ -149,5 +200,10 @@ def extract_text(data: bytes, *, mime_type: str = "", filename: str = "") -> str
     if is_("pdf", ".pdf"):
         from .pdf_extract import extract_text_from_pdf_bytes
 
-        return extract_text_from_pdf_bytes(data)
+        text = extract_text_from_pdf_bytes(data)
+        if ocr and len(re.sub(r"\s+", "", text or "")) < 40:
+            return _ocr_pdf_bytes(data) or text
+        return text
+    if ocr and (mt.startswith("image/") or fn.endswith(_IMAGE_EXTS)):
+        return _ocr_image_bytes(data)
     raise ValueError(f"unsupported file type for text extraction: mime={mime_type!r} name={filename!r}")

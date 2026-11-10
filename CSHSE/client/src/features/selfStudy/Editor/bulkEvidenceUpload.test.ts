@@ -76,7 +76,29 @@ describe('uploadEvidenceInBatches', () => {
     const entries = Array.from({ length: 15 }, (_, i) => ({ file: f(`f${i}.pdf`), path: `D/f${i}.pdf` }));
     const out = await uploadEvidenceInBatches('sub1', entries);
     expect(out.failedBatches).toBe(1);
-    expect(out.rows.filter((r) => r.error === 'Gateway timeout')).toHaveLength(10);
-    expect(out.count).toBe(5);
+    expect(out.rows.filter((r) => r.error === 'Gateway timeout')).toHaveLength(BULK_BATCH_SIZE);
+    expect(out.count).toBe(15 - BULK_BATCH_SIZE);
+  });
+  it('a batch the proxy cut off (524) is re-sent once; files the server already stored count as uploaded', async () => {
+    let n = 0;
+    post.mockImplementation(async (_u: string, form: FormData) => {
+      n += 1;
+      const names = (form.getAll('files') as File[]).map((x) => x.name);
+      if (n === 1) throw Object.assign(new Error('524'), { response: { status: 524, data: {} } });
+      // the re-send: the server finished the first attempt → duplicates
+      return { data: { count: 0, added: names.map((x) => ({ fileName: x, duplicateOf: 'ev1', placedStd: '6', placedSpec: 'a' })), skipped: [] } };
+    });
+    const entries = Array.from({ length: 3 }, (_, i) => ({ file: f(`cv${i}.pdf`), path: `Faculty CVs/cv${i}.pdf` }));
+    const out = await uploadEvidenceInBatches('sub1', entries);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(out.failedBatches).toBe(0);
+    expect(out.count).toBe(3);
+    expect(out.rows.every((r) => !r.duplicateOf && !r.error && r.placedStd === '6')).toBe(true);
+  });
+  it('a real rejection (400) is not re-sent', async () => {
+    post.mockRejectedValue(Object.assign(new Error('bad'), { response: { status: 400, data: { error: 'None of the selected files can be uploaded.' } } }));
+    const out = await uploadEvidenceInBatches('sub1', [{ file: f('a.exe'), path: 'a.exe' }]);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(out.failedBatches).toBe(1);
   });
 });

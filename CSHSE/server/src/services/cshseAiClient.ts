@@ -315,6 +315,8 @@ export interface FileExtractRequest {
   mimeType?: string;
   filename?: string;
   s3Bucket?: string;
+  /** Also OCR images / PDFs without a text layer (slow — backfill pass only). */
+  ocr?: boolean;
 }
 export interface FileExtractResult {
   text: string;
@@ -331,7 +333,7 @@ export interface FileExtractResult {
  */
 export async function extractFileText(req: FileExtractRequest): Promise<FileExtractResult> {
   try {
-    const res = await postSigned<FileExtractResult>('/ai/files/extract', req, 45_000);
+    const res = await postSigned<FileExtractResult>('/ai/files/extract', req, req.ocr ? 90_000 : 45_000);
     if (res.status >= 400) {
       return { text: '', title: req.filename || '', chars: 0, error: `HTTP ${res.status}: ${(res.body as any)?.detail || ''}` };
     }
