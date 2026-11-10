@@ -21,6 +21,6 @@ def test_pdf_without_text_layer_falls_back_to_ocr_only_when_asked(monkeypatch):
 
 def test_pdf_with_text_layer_is_not_ocrd(monkeypatch):
     import app.evidence.pdf_extract as pe
-    monkeypatch.setattr(pe, "extract_text_from_pdf_bytes", lambda data: "A real text layer with plenty of words in it.")
+    monkeypatch.setattr(pe, "extract_text_from_pdf_bytes", lambda data: "A real text layer with plenty of words in it, well over the OCR threshold.")
     monkeypatch.setattr(ox, "_ocr_pdf_bytes", lambda data: pytest.fail("should not OCR"))
     assert "real text layer" in ox.extract_text(b"%PDF-1.4", filename="x.pdf", ocr=True)
