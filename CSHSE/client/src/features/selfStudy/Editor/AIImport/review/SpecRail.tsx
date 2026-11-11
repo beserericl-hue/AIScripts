@@ -140,6 +140,17 @@ function clip(s: string, n = 1200): string {
  * needs work) and strengths (what's working). Surfaced as the dot's hover
  * tooltip so a coordinator sees the reason instead of guessing.
  */
+/** Short chip text for a spec's AI coverage verdict ("Partial — 65%"). */
+export function coverageChipLabel(b: SpecBucket): string {
+  const state = coverageState(b);
+  const pct = b.coverageScore !== null && b.coverageScore !== undefined ? ` — ${Math.round(b.coverageScore * 100)}%` : '';
+  if (state === 'covered') return `🟢 Covered${pct}`;
+  if (state === 'partial') return `🟡 Partial${pct}`;
+  if (state === 'gap') return `🔴 Gap${pct}`;
+  if (state === 'unassessed') return 'Not assessed';
+  return 'No content';
+}
+
 export function coverageReason(b: SpecBucket): string {
   const state = coverageState(b);
   const score = b.coverageScore;
