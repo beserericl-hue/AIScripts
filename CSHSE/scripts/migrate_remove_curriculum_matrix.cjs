@@ -191,6 +191,63 @@ async function main() {
     if (samples.length) console.log('[migrate] sample matrix documents:\n  ' + samples.join('\n  '));
   }
 
+  // 6) Stale AI output. Coverage notes and AI evaluations were written against
+  //    the OLD matrix-based 2.e criteria and the old matrix-aware prompts, so
+  //    they still tell programs to "provide a matrix". Clear them so the specs
+  //    are re-assessed against the current criteria ("Recheck coverage" /
+  //    "Validate" regenerate them). Every 2.e result is cleared (its criteria
+  //    changed); any other spec only when its AI text mentions the matrix.
+  {
+    const MX = /\bmatri(x|ces)\b/i;
+    const vr = db.collection('validationresults');
+    const staleVr = await vr.find({ $or: [
+      { standardCode: '2', specCode: 'e' },
+      { feedback: MX }, { rationale: MX }, { suggestions: MX }, { missingElements: MX },
+    ] }, { projection: { submissionId: 1, standardCode: 1, specCode: 1 } }).toArray();
+    bump('AI evaluation results to clear (2.e or mentioning the matrix)', staleVr.length);
+    const statusKeys = new Map(); // submissionId -> Set("std_spec")
+    for (const r of staleVr) {
+      const k = String(r.submissionId);
+      if (!statusKeys.has(k)) statusKeys.set(k, new Set());
+      statusKeys.get(k).add(`${r.standardCode}_${r.specCode}`);
+    }
+    if (APPLY && staleVr.length) await vr.deleteMany({ _id: { $in: staleVr.map((r) => r._id) } });
+    const subs = db.collection('submissions');
+    const cur = subs.find({ $or: [{ 'aiReviewState.buckets': { $exists: true } }, { standardsStatus: { $exists: true } }] },
+      { projection: { 'aiReviewState.buckets': 1, standardsStatus: 1 } });
+    for await (const sub of cur) {
+      const $set = {}; const $unset = {};
+      for (const [key, b] of Object.entries(sub.aiReviewState?.buckets || {})) {
+        if (!b || typeof b !== 'object') continue;
+        const is2e = String(b.standardCode) === '2' && String(b.specCode) === 'e';
+        const txt = JSON.stringify([b.coverageGaps, b.coverageStrengths, b.coverageReason, b.coverageSummary]);
+        if ((is2e && (b.coverageScore != null || b.coverageCovered != null)) || MX.test(txt)) {
+          bump('review buckets with stale AI coverage cleared');
+          // Bucket keys contain a dot ("2.e"); update the whole bucket object instead.
+          $set[`aiReviewState.buckets`] = $set[`aiReviewState.buckets`] || { ...sub.aiReviewState.buckets };
+          $set[`aiReviewState.buckets`][key] = { ...b, coverageScore: null, coverageCovered: null, coverageGaps: [], coverageStrengths: [] };
+        }
+      }
+      const keys = new Set(statusKeys.get(String(sub._id)) || []);
+      keys.add('2_e');
+      for (const k of keys) {
+        const st = sub.standardsStatus && sub.standardsStatus[k];
+        if (st && (st.validationStatus || st.verdict)) {
+          bump('spec statuses reset to not-evaluated');
+          $unset[`standardsStatus.${k}.validationStatus`] = '';
+          $unset[`standardsStatus.${k}.verdict`] = '';
+          $unset[`standardsStatus.${k}.validatedAt`] = '';
+        }
+      }
+      if (APPLY && (Object.keys($set).length || Object.keys($unset).length)) {
+        const upd = {};
+        if (Object.keys($set).length) upd.$set = $set;
+        if (Object.keys($unset).length) upd.$unset = $unset;
+        await subs.updateOne({ _id: sub._id }, upd);
+      }
+    }
+  }
+
   console.log('[migrate] counts:');
   for (const [k, v] of Object.entries(counts)) console.log(`  ${k}: ${v}`);
   if (!APPLY) console.log('[migrate] DRY-RUN — nothing written. Re-run with --apply to write.');
