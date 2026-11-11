@@ -18,6 +18,7 @@
  *    Enter selects, Space toggles the card's checkbox.
  */
 import { BulkUploadResults, BulkUploadRow } from '../../BulkUploadResults';
+import { scrollInPanel, resetHiddenFrames } from '../../../../../lib/scrollInPanel';
 import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, fillMissingText, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from '../../bulkEvidenceUpload';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search, Loader2 } from 'lucide-react';
@@ -1000,7 +1001,8 @@ export function ItemCardList({
   useEffect(() => {
     if (!selectedSectionId || !listRef.current) return;
     const target = listRef.current.querySelector(`[data-section-id="${CSS.escape(selectedSectionId)}"]`);
-    target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    scrollInPanel(target, { block: 'nearest' });
+    resetHiddenFrames(target);
   }, [selectedSectionId]);
 
   // Toggling a card's checkbox = approve / un-approve that item (persisted).

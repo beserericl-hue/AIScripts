@@ -9,6 +9,7 @@
  *   - "Unwritten": placeholder template sections (template format only)
  */
 import React, { useMemo, useState } from 'react';
+import { scrollInPanel, resetHiddenFrames } from '../../../../../lib/scrollInPanel';
 import { Search, AlertTriangle, FileText, Grid3x3, BookOpen, User, FileBox } from 'lucide-react';
 import { HoverTooltip } from './HoverTooltip';
 import { SpecPartsBadge, SpecPartsList } from '../../../SpecParts/SpecPartsList';
@@ -34,7 +35,8 @@ export function openPartCard(specKey: string, n: number, onSelect: (key: string)
   const find = () => {
     const el = document.querySelector<HTMLElement>(`[data-section-id$="::part-${n}"]`);
     if (el) {
-      el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      scrollInPanel(el, { block: 'start' });
+      resetHiddenFrames(el);
       el.classList.add('ring-2', 'ring-cshse-500');
       window.setTimeout(() => el.classList.remove('ring-2', 'ring-cshse-500'), 1800);
       return;
