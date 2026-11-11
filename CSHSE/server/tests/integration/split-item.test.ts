@@ -50,7 +50,6 @@ async function seedWithCard(pcId: mongoose.Types.ObjectId) {
           ],
           evidenceText: [],
           evidenceFiles: [],
-          matrixCells: [],
         },
       },
       tags: [],
@@ -121,7 +120,7 @@ describe('POST /review/split-item — move text to another subspec', () => {
     (sub as any).aiReviewState.buckets['2.b'] = {
       standardCode: '2', specCode: 'b', standardTitle: '', specPrompt: '',
       narratives: [{ sectionId: 'existing-2b', heading: 'Existing', snippet: 'existing', htmlSnippet: '<p>existing</p>', wordCount: 1, confidence: 1, acceptState: 'pending', rationale: '' }],
-      evidenceText: [], evidenceFiles: [], matrixCells: [],
+      evidenceText: [], evidenceFiles: [],
     };
     (sub as any).markModified('aiReviewState');
     await sub.save();

@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import { WebhookSettings } from '../models/WebhookSettings';
 import { Submission } from '../models/Submission';
 import { SelfStudyImport } from '../models/SelfStudyImport';
-import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { ValidationResult } from '../models/ValidationResult';
 import { User } from '../models/User';
 import { Review } from '../models/Review';
@@ -328,7 +327,6 @@ export const deleteInstitutionData = async (req: AuthenticatedRequest, res: Resp
     const deleteResults = {
       submissions: 0,
       imports: 0,
-      matrices: 0,
       validations: 0,
       gridFsFiles: 0
     };
@@ -360,13 +358,6 @@ export const deleteInstitutionData = async (req: AuthenticatedRequest, res: Resp
       });
       deleteResults.imports = importsResult.deletedCount;
       console.log(`[AdminController] Deleted ${deleteResults.imports} imports`);
-
-      // 2. Delete all curriculum matrices for these submissions
-      const matricesResult = await CurriculumMatrix.deleteMany({
-        submissionId: { $in: submissionIds }
-      });
-      deleteResults.matrices = matricesResult.deletedCount;
-      console.log(`[AdminController] Deleted ${deleteResults.matrices} matrices`);
 
       // 3. Delete all validation results for these submissions
       const validationsResult = await ValidationResult.deleteMany({

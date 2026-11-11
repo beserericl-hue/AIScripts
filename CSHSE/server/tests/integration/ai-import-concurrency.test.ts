@@ -9,7 +9,7 @@
  *                                          (status / queue / stage list),
  *                                          several per import, HMAC-signed
  *     POST /api/imports/:id/ai-callback ←  ONE terminal payload with the
- *                                          parsed buckets / tags / matrices,
+ *                                          parsed buckets / tags,
  *                                          HMAC-signed
  *
  * Two invariants must hold when MULTIPLE USERS import at once (the live
@@ -136,7 +136,6 @@ function terminalPayload(marker: string) {
         ],
         evidenceText: [],
         evidenceFiles: [],
-        matrixCells: [],
         coverageScore: 0.8,
         coverageCovered: false,
         coverageGaps: [],
@@ -158,7 +157,6 @@ function terminalPayload(marker: string) {
       },
     ],
     placeholderSections: [],
-    matrices: [],
     format: { format: 'template', confidence: 0.95, signals: {}, reasoning: 'detected' },
     stages: [{ name: 'finalize', state: 'done', detail: '' }],
     errors: [],

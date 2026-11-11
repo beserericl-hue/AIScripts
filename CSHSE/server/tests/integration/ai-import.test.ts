@@ -142,7 +142,6 @@ describe('AI Import Wizard — server routes (sub-sprint 1.a)', () => {
         supportingEvidenceFiles: [
           { std: '1', spec: 'a', title: 'Evidence file 1' }
         ],
-        matrixCells: [],
         importTags: [{ tagId: 'tag-1', sectionId: 'sec-1' }],
         placeholderSections: [],
         globalMergeMode: 'merge',
@@ -417,7 +416,6 @@ describe('AI Import Wizard — server routes (sub-sprint 1.a)', () => {
             ],
             evidenceText: [],
             evidenceFiles: [],
-            matrixCells: [],
             coverageScore: 0.8,
             coverageCovered: false,
             coverageGaps: ['gap-1'],
@@ -441,7 +439,6 @@ describe('AI Import Wizard — server routes (sub-sprint 1.a)', () => {
         placeholderSections: [
           { paragraphIndex: 12, heading: 'unwritten', standardHint: '5', specHint: null }
         ],
-        matrices: [],
         format: { format: 'template', confidence: 0.95, signals: {}, reasoning: 'detected' },
         stages: [{ name: 'done', state: 'done', detail: '' }],
         errors: []

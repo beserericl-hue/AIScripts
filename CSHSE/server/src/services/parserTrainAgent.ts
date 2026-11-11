@@ -33,7 +33,6 @@ type Fmt = 'template' | 'self_study' | 'mcc_narrative' | null;
 function mapSectionType(t: string): string {
   const s = String(t || '').toLowerCase();
   if (s.includes('supporting_evidence') || s === 'supporting-evidence') return 'evidence-text';
-  if (s.includes('curriculum_matrix') || s.includes('matrix')) return 'matrix';
   if (s.includes('introduction')) return 'intro';
   return 'narrative'; // narrative_response / context / unknown default to narrative
 }

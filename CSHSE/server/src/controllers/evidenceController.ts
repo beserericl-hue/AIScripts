@@ -5,6 +5,11 @@ import { Submission } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { Assignment } from '../models/Assignment';
 import { indexEvidenceFile } from '../services/evidenceIndexer';
+import { isCurriculumMatrixDocument, notCurriculumMatrixFilter } from '../services/curriculumMatrixExclusion';
+
+/** Readers / lead readers never see a curriculum-matrix document (not part of the self-study). */
+const isReaderRole = (role?: string) => role === 'reader' || role === 'lead_reader';
+const hiddenFromReader = (role: string | undefined, ev: any) => isReaderRole(role) && isCurriculumMatrixDocument(ev);
 import { asyncHandler } from '../middleware/errorHandler';
 import {
   AppError,
@@ -187,6 +192,9 @@ export const listEvidence = asyncHandler(async (req: AuthenticatedRequest, res: 
     filter.institutionId = institution._id;
   }
 
+  // Readers never see a curriculum-matrix document; the PC's File Library still lists it.
+  if (isReaderRole(userRole)) Object.assign(filter, notCurriculumMatrixFilter());
+
   // Don't include file.data in list response (too large)
   const evidence = await SupportingEvidence.find(filter)
     .select('-file.data')
@@ -284,7 +292,7 @@ export const getEvidence = asyncHandler(async (req: AuthenticatedRequest, res: R
     isDeleted: false
   }).select('-file.data').lean();
 
-  if (!evidence) {
+  if (!evidence || hiddenFromReader(userRole, evidence)) {
     throw new NotFoundError('Evidence');
   }
 
@@ -634,6 +642,11 @@ export const updateEvidence = asyncHandler(async (req: AuthenticatedRequest, res
     throw new AuthorizationError('You cannot update this evidence');
   }
 
+  // A curriculum matrix is not part of the self-study — it can't be filed under a Standard.
+  if (standardCode && isCurriculumMatrixDocument(evidence)) {
+    throw new ValidationError('A curriculum matrix is not part of the self-study and cannot be assigned to a Standard.');
+  }
+
   // Update fields
   if (standardCode !== undefined) evidence.standardCode = standardCode || undefined;
   if (specCode !== undefined) evidence.specCode = specCode || undefined;
@@ -769,7 +782,7 @@ export const downloadEvidence = asyncHandler(async (req: AuthenticatedRequest, r
 
   const evidence = await SupportingEvidence.findOne(filter);
 
-  if (!evidence) {
+  if (!evidence || hiddenFromReader(userRole, evidence)) {
     throw new NotFoundError('Evidence');
   }
 
@@ -862,7 +875,7 @@ export const getEvidencePublicUrl = asyncHandler(async (req: AuthenticatedReques
   const filter: any = { _id: evidenceId, submissionId, isDeleted: false };
   if (userRole !== 'admin' && institution) filter.institutionId = institution._id;
   const evidence = await SupportingEvidence.findOne(filter);
-  if (!evidence || !evidence.file) throw new NotFoundError('Evidence');
+  if (!evidence || !evidence.file || hiddenFromReader(userRole, evidence)) throw new NotFoundError('Evidence');
 
   if ((evidence.file.storageType || 'base64') !== 's3' || !evidence.file.s3Key) {
     throw new ValidationError('This file is not stored in a way the web viewer can display.');
@@ -1026,12 +1039,14 @@ export const getEvidenceStats = asyncHandler(async (req: AuthenticatedRequest, r
     standardCode: { $ne: null, $exists: true }
   });
 
+  // A curriculum matrix is excluded from the self-study, not "unlinked".
   const unlinkedCount = await SupportingEvidence.countDocuments({
     ...matchCriteria,
     $or: [
       { standardCode: null },
       { standardCode: { $exists: false } }
-    ]
+    ],
+    ...notCurriculumMatrixFilter(),
   });
 
   res.json({
@@ -1110,7 +1125,7 @@ export const previewEvidence = asyncHandler(async (req: AuthenticatedRequest, re
   }
 
   const evidence = await SupportingEvidence.findOne(filter);
-  if (!evidence || !evidence.file) {
+  if (!evidence || !evidence.file || hiddenFromReader(userRole, evidence)) {
     throw new NotFoundError('Evidence');
   }
 

@@ -10,10 +10,7 @@
  *   POST   /api/submissions/:submissionId/review/discard    — per-item discard / undiscard
  *   POST   /api/submissions/:submissionId/review/clear-item — drop an item entirely (Discard button on the rail)
  *   POST   /api/submissions/:submissionId/review/apply      — read aiReviewState, push approved items to the editor
- *
- * The Matrix surface has a parallel pair:
- *   GET    /api/submissions/:submissionId/matrix-state      — aiMatrixState
- *   POST   /api/submissions/:submissionId/matrix-state      — write back row edits (CR-026)
+
  */
 import { splitReviewStateIntoParts, composeSpecNarrativeHtml } from '../services/specPartSplit';
 import { Request, Response } from 'express';
@@ -23,7 +20,6 @@ import { Document, Packer, Paragraph, HeadingLevel, Table, TableRow, TableCell, 
 
 import { Submission } from '../models/Submission';
 import { SupportingEvidence } from '../models/SupportingEvidence';
-import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Assignment } from '../models/Assignment';
 import { buildEmptyReviewState } from '../services/aiReviewMerge';
@@ -36,6 +32,14 @@ import { suggestStandardForFile, NarrativeTuple, titleFromFilename, folderStanda
 import { indexEvidenceFile, indexAllForSubmission } from '../services/evidenceIndexer';
 import { signFileAccessToken } from '../services/fileAccessToken';
 import { getLevelStandards, normalizeLevel } from '../data/levelStandards';
+import {
+  CURRICULUM_MATRIX_EXCLUDED_TAG,
+  isCurriculumMatrixDocument,
+  isCurriculumMatrixText,
+  curriculumMatrixExclusionUpdate,
+  notCurriculumMatrixFilter,
+  withoutCurriculumMatrixDocuments,
+} from '../services/curriculumMatrixExclusion';
 
 interface AuthenticatedRequest extends Request {
   user?: any;
@@ -138,114 +142,6 @@ function collectAllSectionIds(state: any): string[] {
   return ids;
 }
 
-/**
- * Surface curriculum matrices in the Review rail's MatrixData shape, drawn from
- * the DURABLE sources — the applied `CurriculumMatrix.rawContent` PLUS any
- * importer-detected `isMatrix` section that never got applied. The Review rail
- * reads ONLY `aiMatrixState.matrices`; on some submissions that field was never
- * populated (the matrices live in CurriculumMatrix / SelfStudyImport instead),
- * so the "Matrices" entry silently vanished even though the data was imported.
- * Rebuilding it here — read-only, never persisted — keeps classified matrix
- * content visible no matter which field it landed in. Mirrors getAllMatrices in
- * matrixController (same dedup-by-content-signature). See the hard rule:
- * imported matrix/CV/syllabus/project content must never be lost.
- */
-async function buildMatricesFromDurableSources(
-  submissionId: string,
-  programLevel: string
-): Promise<any[]> {
-  const out: any[] = [];
-  const seen = new Set<string>();
-  const sig = (html: string) =>
-    (html || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 120).toLowerCase();
-  const toMatrixData = (id: string, name: string, html: string) => ({
-    matrixId: id,
-    name,
-    anchorName: '',
-    programLevel: programLevel || '',
-    htmlSnippet: html,
-    columnHeaders: [] as string[],
-    rowsMatched: 0,
-    rowsTotal: 0,
-    columnCount: 0,
-    cells: [] as any[]
-  });
-
-  // 0) AUTHORITATIVE SOURCE — the AI parser's own `aiMatrices` from the most
-  // recent import that produced any. These are the real, full curriculum
-  // matrices (e.g. the HS-courses and non-HS-courses matrices), already in the
-  // exact MatrixData shape with structured cells + per-row anchors. They MUST
-  // win over the legacy fallbacks below, which can hold mis-split fragments
-  // (header + per-standard context paragraphs) of the same document — using
-  // those instead silently shows the wrong, incomplete matrices.
-  const withAiMatrices = await SelfStudyImport.find({
-    submissionId,
-    'aiMatrices.0': { $exists: true }
-  })
-    .sort({ _id: -1 })
-    .limit(1)
-    .lean();
-  if (withAiMatrices.length > 0) {
-    const ai = ((withAiMatrices[0] as any).aiMatrices || []).filter(
-      (m: any) => m && (m.htmlSnippet || '').trim()
-    );
-    if (ai.length > 0) {
-      return ai.map((m: any, i: number) => ({
-        matrixId: m.matrixId || `ai-${i}`,
-        name: m.name || 'Curriculum Matrix',
-        anchorName: m.anchorName || '',
-        programLevel: m.programLevel || programLevel || '',
-        htmlSnippet: m.htmlSnippet || '',
-        columnHeaders: Array.isArray(m.columnHeaders) ? m.columnHeaders : [],
-        rowsMatched: m.rowsMatched || 0,
-        rowsTotal: m.rowsTotal || 0,
-        columnCount: m.columnCount || 0,
-        cells: Array.isArray(m.cells) ? m.cells : []
-      }));
-    }
-  }
-
-  // FALLBACK (only when the AI parser produced no matrices anywhere) — flatten
-  // applied CurriculumMatrix sections + importer-detected isMatrix sections.
-  // 1) Applied/stored matrix sections.
-  const matrices = await CurriculumMatrix.find({ submissionId }).lean();
-  for (const m of matrices) {
-    let idx = 0;
-    for (const rc of ((m as any).rawContent || [])) {
-      const content = rc.content || '';
-      if (!content) continue;
-      seen.add(sig(content));
-      out.push(
-        toMatrixData(
-          `cm-${String((m as any)._id)}-${rc.id || idx}`,
-          rc.title || (m as any).name || 'Curriculum Matrix',
-          content
-        )
-      );
-      idx++;
-    }
-  }
-
-  // 2) Importer-detected matrices not (yet) applied — deduped by content.
-  const imports = await SelfStudyImport.find({ submissionId }).lean();
-  for (const im of imports) {
-    for (const s of (((im as any).detectedSections) || [])) {
-      if (!s?.isMatrix) continue;
-      const content = s.htmlContent || s.fullContent || '';
-      if (!content || seen.has(sig(content))) continue;
-      seen.add(sig(content));
-      out.push(
-        toMatrixData(
-          `im-${String((im as any)._id)}-${s.id || s._id || sig(content)}`,
-          s.headerText || s.title || 'Imported matrix',
-          content
-        )
-      );
-    }
-  }
-  return out;
-}
-
 /** GET /api/submissions/:submissionId/review */
 export async function getReviewState(req: AuthenticatedRequest, res: Response): Promise<void> {
   const submission = await _loadOwnedSubmission(req, res);
@@ -263,39 +159,6 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
       }
     } catch (splitErr) {
       console.warn('[spec-parts] split on read failed (non-fatal):', splitErr);
-    }
-  }
-  let matrixState = (submission as any).aiMatrixState || null;
-  // If the persisted matrix state has no matrices, rebuild the list from the
-  // durable CurriculumMatrix / SelfStudyImport sources AND PERSIST it back into
-  // submission.aiMatrixState. The parse pipeline only writes aiMatrixState when
-  // the AI path emits aiMatrices[]; matrices detected via detectedSections
-  // (isMatrix) or applied into CurriculumMatrix never reached this field, so
-  // the Review rail's "Matrices" entry vanished and the data effectively lived
-  // only wherever the client had cached it. Writing it here makes the parsed
-  // matrices a durable DB field (self-healing on first open) — all parsed data
-  // belongs in the database, never only in browser-local state.
-  if (!matrixState || !Array.isArray(matrixState.matrices) || matrixState.matrices.length === 0) {
-    const rebuilt = await buildMatricesFromDurableSources(
-      String(submission._id),
-      (submission as any).programLevel || ''
-    );
-    if (rebuilt.length > 0) {
-      matrixState = {
-        ...(matrixState || {}),
-        matrices: rebuilt,
-        matrixRowEdits: (matrixState && matrixState.matrixRowEdits) || {},
-        lastUpdatedAt: new Date()
-      };
-      (submission as any).aiMatrixState = matrixState;
-      (submission as any).markModified('aiMatrixState');
-      try {
-        await submission.save();
-      } catch (persistErr) {
-        // Non-fatal: the response still carries the rebuilt matrices even if
-        // the durable write fails (e.g. a transient write conflict).
-        console.warn('[matrices] failed to persist rebuilt aiMatrixState:', persistErr);
-      }
     }
   }
   // Stamp each spec bucket with its AUTHORITATIVE validation verdict so the rail
@@ -335,8 +198,7 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
   }
   res.json({
     submissionId: String(submission._id),
-    aiReviewState: outState,
-    aiMatrixState: matrixState
+    aiReviewState: outState
   });
 }
 
@@ -610,7 +472,7 @@ export async function setEvidenceDocReferences(req: AuthenticatedRequest, res: R
  * bulk moves, standalone-CV routing) is persisted to the DB immediately —
  * instead of surviving only in browser localStorage until "Apply to editor".
  * Only the content fields are replaced; approvedIds / discardedIds /
- * itemSources / aiMatrixState are owned by their dedicated endpoints and left
+ * itemSources are owned by their dedicated endpoints and left
  * untouched.
  */
 const SAVEABLE_FIELDS = [
@@ -1213,63 +1075,6 @@ function evidenceDocxBlocks(html?: string | null, fallbackText?: string): Array<
 }
 
 /**
- * 2026-06-09 — Unify "Approve all" with matrices. Matrices historically had a
- * SEPARATE apply path (import-time → CurriculumMatrix.rawContent), so approving
- * review items moved narratives/evidence/intros but NOT the curriculum matrices.
- * This materializes any detected matrices (aiMatrixState.matrices) into the
- * submission's CurriculumMatrix.rawContent — the source the Matrix editor
- * renders — so a single Approve also pushes the matrices.
- *
- * Idempotent + duplicate-safe: a matrix is skipped if an existing rawContent
- * entry already carries the same HTML or title (the import may have applied it),
- * so this never double-inserts.
- */
-async function materializeApprovedMatrices(submission: any, userId: any): Promise<number> {
-  const matrices = (submission as any).aiMatrixState?.matrices;
-  if (!Array.isArray(matrices) || matrices.length === 0) return 0;
-  let cm: any = await CurriculumMatrix.findOne({ submissionId: submission._id });
-  if (!cm) {
-    cm = new CurriculumMatrix({
-      submissionId: submission._id,
-      matrixType: 'human_services_courses',
-      name: 'Curriculum Matrix',
-      version: 1,
-      lastModified: new Date(),
-      lastModifiedBy: userId ? new mongoose.Types.ObjectId(String(userId)) : submission.submitterId,
-      courses: [],
-      standards: [],
-      rawContent: [],
-    });
-  }
-  if (!Array.isArray(cm.rawContent)) cm.rawContent = [];
-  let changed = 0;
-  for (const m of matrices) {
-    const html = m?.htmlSnippet;
-    if (!html) continue;
-    const already = cm.rawContent.some(
-      (r: any) => r?.content === html || (m.name && r?.title === m.name)
-    );
-    if (already) continue;
-    cm.rawContent.push({
-      id: `matrix-ai-${m.matrixId || m.name || 'mx'}`,
-      content: html,
-      title: m.name || 'Curriculum Matrix',
-      addedAt: new Date(),
-      addedBy: userId ? new mongoose.Types.ObjectId(String(userId)) : submission.submitterId,
-      processed: true,
-      processedAt: new Date(),
-    });
-    changed += 1;
-  }
-  if (changed > 0) {
-    cm.lastModified = new Date();
-    cm.markModified('rawContent');
-    await cm.save();
-  }
-  return changed;
-}
-
-/**
  * Auto-run the AI evaluation for the specs whose editor content just changed,
  * so the final-editing step already has verdicts/suggestions — no manual
  * "Validate" click per spec. Fire-and-forget with a small concurrency cap so a
@@ -1342,9 +1147,6 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
   // Auto-apply: approving moves the text straight into the editor (replaces the
   // old separate "Apply to editor" button). Idempotent — safe on every call.
   const affected = await materializeApprovedToEditor(submission, req.user?.id);
-  // Unify with matrices: approving also pushes detected curriculum matrices into
-  // the editor's CurriculumMatrix (idempotent; no-op when none are pending).
-  const matricesApplied = await materializeApprovedMatrices(submission, req.user?.id);
   await submission.save();
   // 2026-06-09 — instead of synchronously evaluating up to 24 specs (which left
   // the rest un-evaluated), ENQUEUE every affected spec for background AI
@@ -1355,7 +1157,6 @@ export async function setApprovedIds(req: AuthenticatedRequest, res: Response): 
     ok: true,
     approvedIds: state.approvedIds,
     evidence: (submission as any).__evidenceStats ?? null,
-    matricesApplied,
     evalQueued, // how many specs were (re)queued for background evaluation
   });
 }
@@ -1559,7 +1360,6 @@ export async function splitReviewItem(req: AuthenticatedRequest, res: Response):
       narratives: [],
       evidenceText: [],
       evidenceFiles: [],
-      matrixCells: [],
     };
   }
   const target = state.buckets[targetKey];
@@ -1651,7 +1451,6 @@ export async function applyReviewState(
     narratives: {},
     supportingEvidenceText: {},
     supportingEvidenceFiles: [],
-    matrices: (submission as any).aiMatrixState?.matrices || [],
     importTags: [],
     placeholderSections: [],
     introductions: {},
@@ -1815,66 +1614,6 @@ export async function applyReviewState(
   } finally {
     if (session) await session.endSession();
   }
-}
-
-/** GET /api/submissions/:submissionId/matrix-state */
-export async function getMatrixState(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const submission = await _loadOwnedSubmission(req, res);
-  if (!submission) return;
-  res.json({
-    submissionId: String(submission._id),
-    aiMatrixState: (submission as any).aiMatrixState || null
-  });
-}
-
-/** POST /api/submissions/:submissionId/matrix-state */
-export async function setMatrixRowEdit(
-  req: AuthenticatedRequest,
-  res: Response
-): Promise<void> {
-  const submission = await _loadOwnedSubmission(req, res);
-  if (!submission) return;
-  const { matrixSlug, rowAnchor, edit } = req.body || {};
-  if (!matrixSlug || !rowAnchor) {
-    res.status(400).json({ error: 'matrixSlug + rowAnchor required' });
-    return;
-  }
-  const state = (submission as any).aiMatrixState || {
-    matrices: [],
-    matrixRowEdits: {},
-    lastUpdatedAt: new Date()
-  };
-  // Mongoose Mixed-type quirk — an empty nested object can come back
-  // undefined after a save round trip. Re-establish the field so the
-  // mutation below never crashes the request handler.
-  if (!state.matrixRowEdits || typeof state.matrixRowEdits !== 'object') {
-    state.matrixRowEdits = {};
-  }
-  if (!state.matrices) {
-    state.matrices = [];
-  }
-  const key = `${matrixSlug}|${rowAnchor}`;
-  // Build a brand-new plain edits object (handling Map-or-object) and assign a
-  // FRESH aiMatrixState. Mutating-in-place on a Mixed path isn't reliably
-  // change-tracked by Mongoose — a restore (edit:null) silently failed to
-  // persist until we replaced the whole subtree.
-  const edits: Record<string, unknown> =
-    state.matrixRowEdits instanceof Map
-      ? Object.fromEntries(state.matrixRowEdits)
-      : { ...(state.matrixRowEdits || {}) };
-  if (edit === null || edit === undefined) {
-    delete edits[key];
-  } else {
-    edits[key] = edit;
-  }
-  (submission as any).aiMatrixState = {
-    matrices: Array.isArray(state.matrices) ? state.matrices : [],
-    matrixRowEdits: edits,
-    lastUpdatedAt: new Date(),
-  };
-  (submission as any).markModified('aiMatrixState');
-  await submission.save();
-  res.json({ ok: true });
 }
 
 // ============================================================================
@@ -2124,6 +1863,30 @@ export async function bulkAddEvidence(req: AuthenticatedRequest, res: Response):
         : await extractFileText({ s3Key, s3Bucket: bucket, mimeType: mime, filename: f.originalname });
       const text = extracted.text || '';
 
+      // A curriculum matrix is kept in the File Library but is NOT part of the
+      // self-study: never suggested/filed under a Standard, never indexed, never
+      // put on the review rail (the model's pre-save hook tags + un-assigns it).
+      if (isCurriculumMatrixDocument({ file: { originalName: f.originalname } }, text)) {
+        const ev = await SupportingEvidence.create({
+          institutionId,
+          submissionId: submission._id,
+          uploadedBy: userId || submission.submitterId,
+          evidenceType: (mime || '').startsWith('image/') ? 'image' : 'document',
+          file: {
+            filename: f.originalname, originalName: f.originalname, mimeType: mime, size: f.size,
+            s3Key, s3Bucket: bucket, storageType: 's3', uploadedAt: new Date(), uploadedBy: userId || submission.submitterId,
+          },
+          description: title,
+          ...(text ? { extractedText: text.slice(0, 6000) } : {}),
+          ...(relPath !== f.originalname ? { metadata: { sourcePath: relPath } } : {}),
+          versionNumber: 1, isCurrentVersion: true, isDeleted: false, linkedNarratives: [],
+          tags: ['ai-import', 'bulk-import', CURRICULUM_MATRIX_EXCLUDED_TAG],
+        });
+        return { doc: null, summary: { fileName: f.originalname, sourcePath: relPath, fileId: String(ev._id),
+          excludedCurriculumMatrix: true, placedStd: null, placedSpec: null,
+          note: 'Curriculum matrix — kept in your File Library but not part of the self-study (not indexed or evaluated).' } };
+      }
+
       // Suggest a placement (reference-match + semantic).
       const sugg = await suggestStandardForFile({
         title,
@@ -2343,6 +2106,13 @@ export async function suggestStandardForEvidence(req: AuthenticatedRequest, res:
     console.warn('[suggest-standard] text extraction failed, matching on title/filename only:', (e as any)?.message);
   }
 
+  // A curriculum matrix is never filed under a Standard — nothing to suggest.
+  if (isCurriculumMatrixDocument(ev, text)) {
+    if (!isCurriculumMatrixDocument(ev)) await SupportingEvidence.updateOne({ _id: ev._id }, curriculumMatrixExclusionUpdate());
+    res.json({ ok: true, best: null, suggestions: [], excluded: CURRICULUM_MATRIX_EXCLUDED_TAG });
+    return;
+  }
+
   const narratives = gatherNarrativeTuples(submission);
   const { suggestions, best } = await suggestStandardForFile({
     title,
@@ -2371,6 +2141,7 @@ export async function indexEvidenceAll(req: AuthenticatedRequest, res: Response)
   const submissionId = String(submission._id);
   const total = await SupportingEvidence.countDocuments({
     submissionId, isDeleted: { $ne: true }, 'file.s3Key': { $exists: true, $ne: null },
+    ...notCurriculumMatrixFilter(),
   });
   indexAllForSubmission(institutionId, submissionId).catch((e) =>
     console.error('[indexEvidenceAll] failed:', (e as any)?.message)
@@ -2392,8 +2163,9 @@ async function coverageCandidateKeys(submission: any, onlyMissing: boolean): Pro
       submissionId: submission._id,
       isDeleted: { $ne: true },
       standardCode: { $exists: true, $ne: null },
-    }).select('standardCode specCode').lean();
-    for (const f of libFiles) {
+    }).select('standardCode specCode tags file.originalName extractedText').lean();
+    // A curriculum matrix never counts toward coverage.
+    for (const f of withoutCurriculumMatrixDocuments(libFiles)) {
       if (f.standardCode) withFiles.add(`${String(f.standardCode)}.${f.specCode ? String(f.specCode) : ''}`);
     }
   } catch { /* best-effort */ }
@@ -2432,7 +2204,8 @@ export async function assessCoverageForKeys(submissionId: string, keys: string[]
       isDeleted: { $ne: true },
       standardCode: { $exists: true, $ne: null },
     }).lean();
-    for (const f of libFiles) {
+    // A curriculum matrix is never coverage evidence.
+    for (const f of withoutCurriculumMatrixDocuments(libFiles)) {
       const k = `${String(f.standardCode)}.${f.specCode ? String(f.specCode) : ''}`;
       if (!filesByKey.has(k)) filesByKey.set(k, []);
       filesByKey.get(k)!.push(f);
@@ -2448,6 +2221,10 @@ export async function assessCoverageForKeys(submissionId: string, keys: string[]
     try {
       const ex = await extractFileText({ s3Key, s3Bucket: s3BucketName, mimeType: f.file?.mimeType, filename: f.file?.originalName });
       const t = (ex?.text || '').slice(0, 6000);
+      if (t && isCurriculumMatrixText(t)) {
+        await SupportingEvidence.updateOne({ _id: f._id }, { $set: { extractedText: t }, ...curriculumMatrixExclusionUpdate() }).catch(() => undefined);
+        return '';
+      }
       if (t) await SupportingEvidence.updateOne({ _id: f._id }, { $set: { extractedText: t } }).catch(() => undefined);
       return t;
     } catch {
@@ -2815,77 +2592,6 @@ export async function reconcileSpecLevel(req: AuthenticatedRequest, res: Respons
   });
 }
 
-// ---------------------------------------------------------------- matrix denoise
-// A curriculum matrix (spec rows × course columns, cells X/H/M/L) flattened by
-// the PDF text extractor leaks its cells into narrative text. Mirror of the
-// ai-service `denoise_matrix_cells` / `is_matrix_row` so we can clean an
-// already-parsed submission's buckets in place (no re-import → approvals kept).
-const _CELL_RUN = /(?:\b[XHMLIKTS]{1,8}\b[ \t.,]*){4,}/; // test (non-global)
-const _CELL_RUN_G = /(?:\b[XHMLIKTS]{1,8}\b[ \t.,]*){4,}/g; // replace (global)
-function denoiseMatrixCells(text: string): string {
-  if (!text || !_CELL_RUN.test(text)) return text;
-  return text.replace(_CELL_RUN_G, ' ').replace(/[ \t]{2,}/g, ' ').trim();
-}
-function isMatrixRow(text: string): boolean {
-  if (!text || !_CELL_RUN.test(text)) return false;
-  const stripped = denoiseMatrixCells(text);
-  return (stripped.match(/[A-Za-z]{3,}/g) || []).length < 5;
-}
-
-/**
- * POST /api/submissions/:submissionId/review/denoise-narratives
- * Clean curriculum-matrix garbage out of an ALREADY-parsed submission's
- * narratives (no re-import needed, so approvals survive): drop chunks that are
- * pure matrix rows, strip stray cell runs from the rest. Idempotent.
- */
-export async function denoiseNarratives(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const submission = await _loadOwnedSubmission(req, res);
-  if (!submission) return;
-  const state = (submission as any).aiReviewState;
-  if (!state || !state.buckets) {
-    res.status(409).json({ error: 'No review state / buckets to clean.' });
-    return;
-  }
-  const approved = new Set<string>(state.approvedIds || []);
-  const discarded = new Set<string>(state.discardedIds || []);
-  let dropped = 0, cleaned = 0;
-  const removedIds: string[] = [];
-
-  for (const bAny of Object.values(state.buckets)) {
-    const b = bAny as any;
-    const kept: any[] = [];
-    for (const it of (b.narratives || [])) {
-      const snip = String(it.snippet || '');
-      const head = String(it.heading || '');
-      if (isMatrixRow(snip) || isMatrixRow(head)) {
-        dropped += 1;
-        if (it.sectionId) removedIds.push(it.sectionId);
-        continue; // a pure matrix row — the grid lives in Appendix A6
-      }
-      const nSnip = denoiseMatrixCells(snip);
-      const nHead = denoiseMatrixCells(head);
-      const nHtml = it.htmlSnippet ? denoiseMatrixCells(String(it.htmlSnippet)) : it.htmlSnippet;
-      if (nSnip !== snip || nHead !== head || nHtml !== it.htmlSnippet) {
-        it.snippet = nSnip;
-        it.heading = nHead;
-        if (it.htmlSnippet) it.htmlSnippet = nHtml;
-        it.wordCount = nSnip.split(/\s+/).filter(Boolean).length;
-        cleaned += 1;
-      }
-      kept.push(it);
-    }
-    b.narratives = kept;
-  }
-  // Prune removed ids from approved/discarded sets.
-  for (const id of removedIds) { approved.delete(id); discarded.delete(id); }
-  state.approvedIds = [...approved];
-  state.discardedIds = [...discarded];
-  state.lastUpdatedAt = new Date();
-  (submission as any).markModified('aiReviewState');
-  await persistAiReviewState(submission, state);
-  res.json({ ok: true, dropped, cleaned });
-}
-
 /**
  * GET /api/submissions/:submissionId/review/evidence-doc/:sectionId/public-url
  * Mint a short-lived public URL for the Office web viewer (xlsx/pptx). Access is
@@ -2966,6 +2672,8 @@ export async function aiPlaceUnassignedEvidence(req: AuthenticatedRequest, res: 
     isDeleted: { $ne: true },
     isCurrentVersion: { $ne: false },
     $or: [{ standardCode: { $exists: false } }, { standardCode: null }, { standardCode: '' }],
+    // A curriculum matrix is never AI-placed (it is not part of the self-study).
+    ...notCurriculumMatrixFilter(),
   };
   if (Array.isArray(evidenceIds) && evidenceIds.length) base._id = { $in: evidenceIds.filter((x) => mongoose.Types.ObjectId.isValid(x)) };
   if (!force) base['metadata.aiPlacement'] = { $exists: false };
@@ -2984,6 +2692,7 @@ export async function aiPlaceUnassignedEvidence(req: AuthenticatedRequest, res: 
   const bucketName = process.env.AWS_S3_BUCKET_NAME || '';
 
   const files: Array<{ id: string; name: string; path?: string; text: string }> = [];
+  const excludedIds = new Set<string>();
   for (const ev of todo) {
     const name = fixLatin1Filename(ev.file?.originalName || ev.url?.title || ev.description || 'file');
     let text = String(ev.metadata?.description || '');
@@ -2994,6 +2703,12 @@ export async function aiPlaceUnassignedEvidence(req: AuthenticatedRequest, res: 
         ev.metadata = { ...(ev.metadata?.toObject ? ev.metadata.toObject() : ev.metadata || {}), description: text.slice(0, 20000) };
         ev.markModified('metadata');
       }
+    }
+    if (isCurriculumMatrixDocument(ev, text)) {
+      // Identified by its text: the save's pre-save hook tags + un-assigns it.
+      excludedIds.add(String(ev._id));
+      await ev.save();
+      continue;
     }
     if (ev.evidenceType === 'url' && ev.url?.href) text = `Web link: ${ev.url.href}\n${text}`;
     files.push({ id: String(ev._id), name, path: ev.metadata?.sourcePath || '', text: text.slice(0, 12000) });
@@ -3010,6 +2725,7 @@ export async function aiPlaceUnassignedEvidence(req: AuthenticatedRequest, res: 
   const byId = new Map(out.results.map((r) => [String(r.id), r]));
   let placed = 0, working = 0, low = 0, failed = 0;
   for (const ev of todo) {
+    if (excludedIds.has(String(ev._id))) continue;
     const r = byId.get(String(ev._id));
     if (!r || r.error) { failed += 1; if (ev.isModified()) await ev.save(); continue; }
     const conf = typeof r.confidence === 'number' ? r.confidence : 0;
@@ -3069,13 +2785,18 @@ export async function acceptAiPlacements(req: AuthenticatedRequest, res: Respons
     $or: [{ standardCode: { $exists: false } }, { standardCode: null }, { standardCode: '' }],
     'metadata.aiPlacement.kind': 'evidence',
     'metadata.aiPlacement.standardCode': { $nin: [null, ''] },
+    // A curriculum matrix is never filed under a Standard.
+    ...notCurriculumMatrixFilter(),
   };
   if (Array.isArray(evidenceIds) && evidenceIds.length) q._id = { $in: evidenceIds.filter((x) => mongoose.Types.ObjectId.isValid(x)) };
   else if (all !== true) q['metadata.aiPlacement.confidence'] = { $gte: min };
   const evs: any[] = await SupportingEvidence.find(q);
   const state = (submission as any).aiReviewState;
   const docs: any[] = Array.isArray(state?.evidenceDocs) ? state.evidenceDocs : [];
+  let accepted = 0;
   for (const ev of evs) {
+    if (isCurriculumMatrixDocument(ev)) continue;
+    accepted += 1;
     const ai = ev.metadata.aiPlacement;
     ev.standardCode = ai.standardCode;
     ev.specCode = ai.specCode || undefined;
@@ -3088,11 +2809,11 @@ export async function acceptAiPlacements(req: AuthenticatedRequest, res: Respons
       d.routing = { std: ai.standardCode, spec: ai.specCode || undefined, source: 'coordinator' };
     }
   }
-  if (state && docs.length && evs.length) {
+  if (state && docs.length && accepted) {
     (submission as any).markModified('aiReviewState');
     await persistAiReviewState(submission, state);
   }
-  res.json({ ok: true, accepted: evs.length });
+  res.json({ ok: true, accepted });
 }
 
 
@@ -3116,6 +2837,8 @@ export async function fillMissingEvidenceText(req: AuthenticatedRequest, res: Re
     'file.s3Key': { $exists: true, $ne: '' },
     'metadata.textAttemptedAt': { $exists: false },
     $or: [{ 'metadata.description': { $exists: false } }, { 'metadata.description': '' }, { 'metadata.description': null }],
+    // A curriculum matrix is not part of the self-study — no text is read for it.
+    ...notCurriculumMatrixFilter(),
   };
   const started = Date.now();
   const BUDGET_MS = 60_000;

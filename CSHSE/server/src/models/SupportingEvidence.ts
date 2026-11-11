@@ -1,3 +1,4 @@
+import { applyCurriculumMatrixExclusion } from '../services/curriculumMatrixExclusion';
 import mongoose, { Schema, Document } from 'mongoose';
 
 /**
@@ -304,6 +305,11 @@ SupportingEvidenceSchema.pre('save', function(next) {
     next(new Error('institutionId and submissionId are required for access control'));
     return;
   }
+
+  // A curriculum-matrix document stays in the File Library but is never part
+  // of the self-study: tag it and keep it un-assigned from every Standard, on
+  // every create/save path (see services/curriculumMatrixExclusion).
+  applyCurriculumMatrixExclusion(this);
 
   next();
 });

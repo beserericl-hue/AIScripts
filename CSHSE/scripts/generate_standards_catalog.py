@@ -87,12 +87,51 @@ def baccalaureate_from_gold():
     return cat
 
 
+
+# CSHSE board decision (Nov 2026): the curriculum matrix is no longer part of the
+# self-study (it is a prep tool used outside it). Specification 2.e is rewritten
+# without the matrix — DRAFT wording pending CSHSE confirmation. This is the ONE
+# place the 2.e text lives per level; it overrides whatever the PDFs / the gold
+# dataset still say.
+_SPEC_2E_CONCENTRATIONS = (
+    " If a program has specific concentrations, identify the specific core courses in the "
+    "concentration that comply with a Standard and its Specifications."
+)
+SPEC_2E_TEXT = {
+    'baccalaureate': (
+        "Identify the required courses for all students that contribute to compliance with the "
+        "Curriculum Standards (11-20) and their Specifications. The information provided must clearly "
+        "reflect congruence with the information provided in the Self-Study narrative and the syllabi."
+    ),
+    'associate': (
+        "Identify the required courses for all students that contribute to compliance with the "
+        "Curriculum Standards (11-20) and their Specifications. The information provided must clearly "
+        "reflect congruence with the information provided in the Self-Study narrative and the syllabi."
+        + _SPEC_2E_CONCENTRATIONS
+    ),
+    'masters': (
+        "Identify the required courses for all students that contribute to compliance with the "
+        "Curriculum Standards (11-18) and their Specifications. The information provided must clearly "
+        "align with the information presented in the self-study narrative and the syllabi."
+        + _SPEC_2E_CONCENTRATIONS
+    ),
+}
+
+
+def apply_spec_overrides(out):
+    for level, text in SPEC_2E_TEXT.items():
+        spec = out.get(level, {}).get('2', {}).get('specs', {}).get('e')
+        if spec is not None:
+            spec['criteria'] = text
+
+
 def main():
     out = {
         'associate': parse_from_pdf('associate', PDFS['associate']),
         'baccalaureate': baccalaureate_from_gold(),
         'masters': parse_from_pdf('masters', PDFS['masters']),
     }
+    apply_spec_overrides(out)
     for level, cat in out.items():
         nspec = sum(len(v['specs']) for v in cat.values())
         print(f"{level}: {len(cat)} standards, {nspec} specs -> {sorted(cat, key=int)}")

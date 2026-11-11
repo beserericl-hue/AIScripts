@@ -62,7 +62,6 @@ async function seedImport(submission: any, userId: any, evidenceDocs: any[]) {
     aiBuckets: {},
     aiTags: [],
     aiPlaceholderSections: [],
-    aiMatrices: [],
     aiEvidenceDocs: evidenceDocs,
   } as any);
 }

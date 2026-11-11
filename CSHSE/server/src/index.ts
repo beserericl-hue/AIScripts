@@ -23,10 +23,8 @@ import webhooksRouter from './routes/webhooks';
 import reviewsRouter from './routes/reviews';
 import leadReviewsRouter from './routes/leadReviews';
 import reportsRouter from './routes/reports';
-import matrixRouter from './routes/matrix';
 import evidenceRouter from './routes/evidence';
 import submissionsRouter from './routes/submissions';
-import programCoursesRouter from './routes/programCourses';
 import adminRouter from './routes/admin';
 import commentsRouter from './routes/comments';
 import readerLockRouter from './routes/readerLock';
@@ -177,7 +175,7 @@ app.use('/api/invitations', invitationsRouter);
 app.use('/api/standards', standardsRouter); // Public endpoint - standard definitions
 
 // CR-034 — E2E seed router. MUST mount BEFORE the bare-`/api` catch-alls
-// (matrix/evidence/comments/readerLock/scores) which all run authenticate
+// (evidence/comments/readerLock/scores) which all run authenticate
 // middleware and would 401 any /api/test/* request that fell through.
 // buildTestRouter returns null unless E2E_SEED_ENABLED=1; this block is a
 // true no-op in any normal deploy.
@@ -194,10 +192,8 @@ app.use('/api/webhooks', webhooksRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/lead-reviews', leadReviewsRouter);
 app.use('/api/reports', reportsRouter);
-app.use('/api', matrixRouter);
 app.use('/api', evidenceRouter);
 app.use('/api/submissions', submissionsRouter);
-app.use('/api/program-courses', programCoursesRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api', commentsRouter);
 app.use('/api', readerLockRouter);

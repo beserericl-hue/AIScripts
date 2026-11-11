@@ -7,7 +7,7 @@
  *   - Count correctness: seed a submission with a known aiReviewState
  *     (cvs / evidenceDocs syllabus+paper / introductions / buckets),
  *     SelfStudyImport records, standardsStatus, narratives,
- *     CurriculumMatrix rows and SupportingEvidence files — then assert
+ *     and SupportingEvidence files — then assert
  *     each rolled-up count in the response.
  *   - Auth: owner-PC 200, cross-institution PC 403, unauthenticated 401,
  *     missing submission 404, admin 200.
@@ -22,7 +22,6 @@ import mongoose from 'mongoose';
 import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { SelfStudyImport } from '../../src/models/SelfStudyImport';
-import { CurriculumMatrix } from '../../src/models/CurriculumMatrix';
 import { SupportingEvidence } from '../../src/models/SupportingEvidence';
 import { getAllStandards } from '../../src/data/standards';
 import { createUser, signTokenFor } from '../helpers/factories';
@@ -222,17 +221,7 @@ describe('GET /api/submissions/:id/workflow-summary — count correctness', () =
       aiS3Key: 's3://bucket/parsed-key',
     });
 
-    // SELF-STUDY — matrix rows + evidence files.
-    await CurriculumMatrix.create({
-      submissionId: sub._id,
-      name: 'HS Courses',
-      lastModifiedBy: user._id,
-      rawContent: [
-        { id: 'r-0', content: '<tr><td>row 0</td></tr>', addedBy: user._id } as any,
-        { id: 'r-1', content: '<tr><td>row 1</td></tr>', addedBy: user._id } as any,
-        { id: 'r-2', content: '<tr><td>row 2</td></tr>', addedBy: user._id } as any,
-      ],
-    });
+    // SELF-STUDY — evidence files.
     const urlEvidence = {
       evidenceType: 'url' as const,
       url: { href: 'https://example.edu/evidence', title: 'Evidence', addedBy: user._id },
@@ -290,7 +279,8 @@ describe('GET /api/submissions/:id/workflow-summary — count correctness', () =
     expect(res.body.selfStudy.specsTotal).toBe(computeSpecsTotal());
     expect(res.body.selfStudy.specsValidated).toBe(2); // 1.a pass + 2.c validated
     expect(res.body.selfStudy.narrativesWritten).toBe(2); // 1.a + 2.c (1.b empty)
-    expect(res.body.selfStudy.matrixRows).toBe(3);
+    // The curriculum matrix was removed (CSHSE board, Nov 2026) — no matrix count.
+    expect('matrixRows' in res.body.selfStudy).toBe(false);
     expect(res.body.selfStudy.evidenceFiles).toBe(2); // soft-deleted excluded
 
     // SUBMIT
@@ -327,7 +317,6 @@ describe('GET /api/submissions/:id/workflow-summary — count correctness', () =
     });
     expect(res.body.selfStudy.specsValidated).toBe(0);
     expect(res.body.selfStudy.narrativesWritten).toBe(0);
-    expect(res.body.selfStudy.matrixRows).toBe(0);
     expect(res.body.selfStudy.evidenceFiles).toBe(0);
     expect(res.body.submit.ready).toBe(false);
   });

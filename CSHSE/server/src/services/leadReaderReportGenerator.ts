@@ -4,7 +4,7 @@
  * This is the CSHSE board-facing document a lead reader completes once all
  * readers have independently evaluated the Self-Study (and the site visit, if
  * mandated). It merges the system-generated sections (program metadata,
- * required-courses list from the curriculum matrix, compiled non-compliance)
+ * required-courses list derived from the syllabi, compiled non-compliance)
  * assembled by `buildSystemSections` in leadReaderReportController with the
  * lead-reader-authored fields stored in the LeadReaderReport model.
  *

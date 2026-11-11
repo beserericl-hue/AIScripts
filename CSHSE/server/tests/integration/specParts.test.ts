@@ -137,7 +137,7 @@ describe('Specification parts — submit gate', () => {
 describe('Specification parts — Review rail', () => {
   const bucket = (std: string, spec: string, narratives: any[] = []) => ({
     standardCode: std, specCode: spec, standardTitle: 'T', specPrompt: '', narratives,
-    evidenceText: [], evidenceFiles: [], matrixCells: [], coverageScore: null, coverageCovered: null, coverageGaps: [], coverageStrengths: [],
+    evidenceText: [], evidenceFiles: [], coverageScore: null, coverageCovered: null, coverageGaps: [], coverageStrengths: [],
   });
   it('POSITIVE: an old baccalaureate import’s empty 16.d/e/f rows are not shown; NEGATIVE: one holding content is kept', async () => {
     const { sub, token } = await seed('bachelors', {

@@ -41,14 +41,6 @@ import * as gridFsService from '../services/gridFsService';
 // body, not at module load time.
 import * as batchAdvancerService from '../services/batchAdvancer';
 import {
-  CurriculumMatrix,
-  ICourseEntry,
-  ICourseAssessment,
-  IStandardMapping,
-  CoverageType,
-  CoverageDepth
-} from '../models/CurriculumMatrix';
-import {
   ImportCorrection,
   CorrectionType,
   ExpectedSectionType
@@ -201,7 +193,6 @@ function buildSnapshotFromImport(importRecord: any): object {
     stages: importRecord.aiStages || [],
     buckets: importRecord.aiBuckets || null,
     tags: importRecord.aiTags || null,
-    matrices: importRecord.aiMatrices || null,
     placeholderSections: importRecord.aiPlaceholderSections || null,
     errors: importRecord.aiErrors || [],
     // CR-033 / CR-039 / CR-040 Phase 2b/c — surface the detector outputs
@@ -717,9 +708,8 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   if (isTerminalSuccess) {
     const totalItems = sumBucketItems(payload.buckets);
     const totalTags = Array.isArray(payload.tags) ? payload.tags.length : 0;
-    const totalMatrices = Array.isArray(payload.matrices) ? payload.matrices.length : 0;
     // CR-033 / CR-040 — CV-only and evidence-doc-only uploads are
-    // legitimately zero across buckets/tags/matrices (all content lives
+    // legitimately zero across buckets/tags (all content lives
     // in payload.cvs / payload.evidenceDocs / payload.introductions).
     // Counting those in the empty-bucket guard is what made the
     // standalone-CV path silently rewrite successful Stevenson CV-only
@@ -740,7 +730,6 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
     const totalAll =
       totalItems +
       totalTags +
-      totalMatrices +
       totalCVs +
       totalEvidenceDocs +
       totalIntroItems;
@@ -762,7 +751,7 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
     }
   }
 
-  // Terminal payload: persist buckets / tags / placeholders / matrices
+  // Terminal payload: persist buckets / tags / placeholders
   // along with the final status.
   if (payload.status) importRecord.aiStatus = payload.status;
   if (payload.format) importRecord.aiFormat = payload.format;
@@ -785,10 +774,6 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   if (Array.isArray(payload.tags)) importRecord.aiTags = payload.tags;
   if (Array.isArray(payload.placeholderSections)) {
     importRecord.aiPlaceholderSections = payload.placeholderSections;
-  }
-  if (Array.isArray(payload.matrices)) {
-    importRecord.aiMatrices = payload.matrices;
-    importRecord.markModified('aiMatrices');  // Mixed[] needs explicit mark
   }
   // CR-033 Phase 2b — per-faculty CVs from cv_detector. Empty array
   // means "detector ran, no CVs found" — explicitly distinct from
@@ -946,27 +931,6 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
         });
         (submissionDoc as any).aiReviewState = state;
         (submissionDoc as any).markModified('aiReviewState');
-        // Matrix state ships separately (same submission scoping).
-        if (Array.isArray(importRecord.aiMatrices) && importRecord.aiMatrices.length > 0) {
-          const matrixState = (submissionDoc as any).aiMatrixState ?? {
-            matrices: [],
-            matrixRowEdits: {},
-            lastUpdatedAt: new Date()
-          };
-          // Replace whole-matrix by matrixId. matrixRowEdits keyed by
-          // `${matrixId}|${rowAnchor}` so retag/remove decisions survive.
-          const seen = new Set<string>();
-          for (const m of importRecord.aiMatrices as any[]) {
-            seen.add(m.matrixId);
-          }
-          matrixState.matrices = [
-            ...(matrixState.matrices || []).filter((m: any) => !seen.has(m.matrixId)),
-            ...(importRecord.aiMatrices as any[])
-          ];
-          matrixState.lastUpdatedAt = new Date();
-          (submissionDoc as any).aiMatrixState = matrixState;
-          (submissionDoc as any).markModified('aiMatrixState');
-        }
         await submissionDoc.save();
         console.log(
           `[CR-043 merge] importId=${importRecord._id} submissionId=${submissionDoc._id} ` +
@@ -1025,36 +989,10 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
 // server stores the last successful key on the SelfStudyImport doc; a retry
 // with the same key short-circuits to a 200 with the cached counts.
 
-type ApplyMatrixCell = {
-  std: string;
-  spec: string | null;
-  specPrompt?: string;
-  columnIndex: number;
-  columnHeader?: string;
-  codeRaw: string;
-  contentTypes: string[];
-  depth: string | null;
-};
-
-type ApplyMatrix = {
-  matrixId: string;
-  name: string;
-  anchorName?: string;
-  programLevel?: string;
-  htmlSnippet?: string;
-  columnHeaders: string[];
-  cells: ApplyMatrixCell[];
-};
-
 type ApplyPayload = {
   narratives?: Record<string, Record<string, { content: string; mode?: 'merge' | 'replace' | 'keep' | 'take' }>>;
   supportingEvidenceText?: Record<string, Record<string, { text: string; mode?: 'merge' | 'replace' | 'keep' | 'take' }>>;
   supportingEvidenceFiles?: Array<{ std: string; spec: string; sectionId?: string; title?: string; snippet?: string }>;
-  matrixCells?: any[];
-  // Full per-matrix payloads from the wizard. When present, the apply step
-  // creates one CurriculumMatrix document per entry and pushes the new
-  // ObjectId onto submission.curriculumMatrices.
-  matrices?: ApplyMatrix[];
   importTags?: any[];
   placeholderSections?: any[];
   globalMergeMode?: 'merge' | 'replace' | 'per_spec';
@@ -1176,7 +1114,6 @@ const emptyCounts = {
   narratives: 0,
   evidenceText: 0,
   evidenceFiles: 0,
-  matrixCells: 0,
   tags: 0,
   placeholders: 0
 };
@@ -1373,118 +1310,6 @@ async function _runApplyBody(args: {
       counts.evidenceFiles += 1;
     }
 
-    // Persist per-matrix payloads as CurriculumMatrix documents. Each matrix
-    // becomes its own document so the existing MatrixEditor (which fetches
-    // by submission.curriculumMatrices[]) sees them. Rows are grouped by
-    // (std, spec); per-row courseAssessments come from the matrix cells.
-    let appliedMatrixCellCount = 0;
-    if (Array.isArray(payload.matrices) && payload.matrices.length > 0) {
-      const newMatrixIds: mongoose.Types.ObjectId[] = [];
-
-      for (const m of payload.matrices) {
-        // Build the course list from the matrix's column headers. The
-        // `id` field on ICourseEntry is referenced by ICourseAssessment.courseId.
-        const courses: ICourseEntry[] = m.columnHeaders.map((header, idx) => ({
-          id: `${m.matrixId}-col-${idx + 1}`,
-          coursePrefix: header.replace(/\d+$/, '').trim() || header,
-          courseNumber: header.match(/\d+/)?.[0] || '',
-          courseName: header,
-          order: idx
-        }));
-
-        // Group cells by (std, spec) so each row carries all its
-        // courseAssessments.
-        const rowMap = new Map<string, IStandardMapping>();
-        let rowOrder = 0;
-        for (const cell of m.cells) {
-          const spec = cell.spec || '?';
-          const key = `${cell.std}.${spec}`;
-          let row = rowMap.get(key);
-          if (!row) {
-            row = {
-              standardCode: cell.std,
-              specCode: spec,
-              specText: cell.specPrompt || '',
-              rowIndex: rowOrder++,
-              courseAssessments: []
-            };
-            rowMap.set(key, row);
-          }
-          // Validate cell codes against the enum types before pushing.
-          const validTypes = (cell.contentTypes || []).filter((t): t is CoverageType =>
-            t === 'I' || t === 'T' || t === 'K' || t === 'S'
-          );
-          const validDepth =
-            cell.depth === 'L' || cell.depth === 'M' || cell.depth === 'H'
-              ? (cell.depth as CoverageDepth)
-              : ('M' as CoverageDepth);
-          const courseId = `${m.matrixId}-col-${cell.columnIndex}`;
-          const assess: ICourseAssessment = {
-            courseId,
-            type: validTypes,
-            depth: validDepth,
-            notes: cell.codeRaw && cell.codeRaw !== validTypes.join('') + validDepth ? cell.codeRaw : undefined
-          };
-          row.courseAssessments.push(assess);
-          appliedMatrixCellCount += 1;
-        }
-
-        const matrixType =
-          m.matrixId === 'matrix-hsr'
-            ? 'human_services_courses'
-            : m.matrixId === 'matrix-non-hsr'
-              ? 'non_human_services_courses'
-              : 'custom';
-
-        // Seed rawContent so the existing MatrixEditor (which renders from
-        // rawContent[]) shows the full table with row anchors. Each AI matrix
-        // becomes one rawContent entry; `standardCode` is left undefined so
-        // it surfaces in the editor's "Other Imported Sections" group as a
-        // single full-table view (rather than fragmented per-standard).
-        const rawContent = m.htmlSnippet
-          ? [
-              {
-                id: `${m.matrixId}-ai-${Date.now()}`,
-                content: m.htmlSnippet,
-                title: m.name,
-                sourceImportId: importId,
-                addedAt: new Date(),
-                addedBy: new mongoose.Types.ObjectId(userId),
-                processed: true,
-                processedAt: new Date()
-              }
-            ]
-          : [];
-
-        const matrixDoc = await CurriculumMatrix.create(
-          [
-            {
-              submissionId: submission._id,
-              matrixType,
-              name: m.name,
-              version: 1,
-              lastModified: new Date(),
-              lastModifiedBy: new mongoose.Types.ObjectId(userId),
-              courses,
-              standards: [...rowMap.values()],
-              rawContent
-            }
-          ],
-          session ? { session } : undefined
-        );
-        newMatrixIds.push(matrixDoc[0]._id as mongoose.Types.ObjectId);
-      }
-
-      // Replace any AI-derived matrices from a prior re-import: drop the old
-      // refs (the matrices themselves stay for history but we point the
-      // submission at the new ones) and append the new ones.
-      submission.curriculumMatrices = [
-        ...(submission.curriculumMatrices || []),
-        ...newMatrixIds
-      ];
-    }
-
-    counts.matrixCells = appliedMatrixCellCount || (payload.matrixCells || []).length;
     counts.tags = (payload.importTags || []).length;
     counts.placeholders = (payload.placeholderSections || []).length;
 
@@ -2287,218 +2112,4 @@ export async function listImportCorrections(
       correctedAt: r.correctedAt
     }))
   });
-}
-
-/**
- * CR-025 — Infer column → course mappings for one curriculum matrix.
- *
- * The wizard's Matrix step posts to this endpoint per matrix when the
- * coordinator lands on the step (or clicks "Run AI column inference").
- * We pull the institutionId off the user/submission, grab the raw
- * `<table>` HTML + the surrounding-narrative context from the import
- * record, then call cshse-ai's /ai/matrix/infer-columns.
- *
- * Returns suggestions for every column 0..N-1 in the same shape as
- * cshse-ai returns; never throws — falls back to empty suggestions on
- * upstream failure so the wizard reverts to the legacy free-text inputs.
- */
-export async function inferMatrixColumns(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const { importId } = req.params;
-  const _imp = await requireImportAccess(req, res, req.params.importId);
-  if (!_imp) return;
-  const { matrixSlug } = req.body || {};
-  if (!matrixSlug) {
-    res.status(400).json({ error: 'matrixSlug is required' });
-    return;
-  }
-
-  const importRecord = await SelfStudyImport.findById(importId);
-  if (!importRecord) {
-    res.status(404).json({ error: 'Import not found' });
-    return;
-  }
-
-  const submission = importRecord.submissionId
-    ? await Submission.findById(importRecord.submissionId)
-    : null;
-
-  const aiMatrices: any[] = (importRecord as any).aiMatrices || [];
-  const matrix = aiMatrices.find((m: any) => m.matrixId === matrixSlug || m.matrixSlug === matrixSlug);
-  if (!matrix) {
-    res.status(404).json({ error: `Matrix ${matrixSlug} not found on this import` });
-    return;
-  }
-
-  const columnCount = matrix.columnCount || (matrix.columnHeaders || []).length || 0;
-  if (columnCount === 0) {
-    res.json({ matrixSlug, suggestions: [] });
-    return;
-  }
-
-  // Pull surrounding context from any narrative buckets the matcher
-  // already linked to the matrix's standards. Best-effort — cshse-ai
-  // still has the raw HTML from its own ingest run as well.
-  let surroundingContext = '';
-  const buckets: Record<string, any> = (importRecord as any).aiBuckets || {};
-  for (const k of Object.keys(buckets)) {
-    if (k.startsWith('11.') || k.startsWith('12.') || k.startsWith('13.')) {
-      const b = buckets[k];
-      for (const n of [...(b?.narratives || []), ...(b?.evidenceText || [])]) {
-        if (typeof n?.snippet === 'string') surroundingContext += '\n' + n.snippet;
-        if (surroundingContext.length > 4000) break;
-      }
-    }
-    if (surroundingContext.length > 4000) break;
-  }
-
-  try {
-    const result = await postToAIService('/ai/matrix/infer-columns', {
-      matrixSlug,
-      institutionId: submission?.institutionId ? String(submission.institutionId) : null,
-      programLevel: submission?.programLevel || (importRecord as any).aiProgramLevel || 'bachelors',
-      rawTableHtml: matrix.htmlSnippet || '',
-      columnCount,
-      surroundingContext: surroundingContext.slice(0, 4000),
-      knownCourses: matrix.columnHeaders || []
-    });
-    res.json(result);
-  } catch (err: any) {
-    console.warn(
-      `[matrix-infer] cshse-ai inference failed for ${importId}/${matrixSlug}:`,
-      err?.message || err
-    );
-    // Soft-fail: pad an empty-suggestion array so the client UI can render
-    // the dropdown empty and let the PC type free-text.
-    const empty = Array.from({ length: columnCount }, (_, i) => ({
-      columnIndex: i,
-      suggestedCourse: null,
-      confidence: 0.0,
-      rationale: 'ai-service unavailable; please type the course code'
-    }));
-    res.json({ matrixSlug, suggestions: empty });
-  }
-}
-
-/**
- * CR-025 — Persist a coordinator-confirmed column → course mapping.
- *
- * Called when the coordinator clicks Accept on an AI suggestion or
- * types in a free-text override. We forward to cshse-ai which upserts
- * into the per-institution Qdrant collection. Best-effort: a failure
- * here is logged but does not block the wizard.
- */
-export async function confirmMatrixColumn(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const { importId } = req.params;
-  const _imp = await requireImportAccess(req, res, req.params.importId);
-  if (!_imp) return;
-  const { matrixSlug, columnIndex, course, priorConfidence } = req.body || {};
-
-  if (!matrixSlug || typeof columnIndex !== 'number' || !course) {
-    res.status(400).json({ error: 'matrixSlug, columnIndex, course required' });
-    return;
-  }
-
-  const importRecord = await SelfStudyImport.findById(importId);
-  if (!importRecord) {
-    res.status(404).json({ error: 'Import not found' });
-    return;
-  }
-  const submission = importRecord.submissionId
-    ? await Submission.findById(importRecord.submissionId)
-    : null;
-  if (!submission?.institutionId) {
-    res.status(400).json({ error: 'Submission has no institutionId — cannot scope mapping' });
-    return;
-  }
-
-  postToAIService('/ai/matrix/confirm-column', {
-    institutionId: String(submission.institutionId),
-    programLevel: submission.programLevel || 'bachelors',
-    matrixSlug,
-    columnIndex,
-    course: String(course).trim(),
-    priorConfidence: typeof priorConfidence === 'number' ? priorConfidence : 1.0
-  }).catch((err) => {
-    console.warn(
-      `[matrix-confirm] cshse-ai persist failed for ${importId}/${matrixSlug}/${columnIndex}:`,
-      err?.message || err
-    );
-  });
-
-  res.status(201).json({
-    ok: true,
-    matrixSlug,
-    columnIndex,
-    course: String(course).trim()
-  });
-}
-
-/**
- * CR-030 — Infer the subspec for a matrix row when the standard is known
- * but the extractor couldn't pin the subspec letter ('?').
- *
- * The wizard's matrix step calls this on demand when the coordinator
- * clicks "Suggest subspec" on a `?`-marked row. We forward to cshse-ai
- * which loads the Handbook spec list for the standard, builds a Haiku
- * prompt listing the candidates, and returns a confidence-ranked pick.
- *
- * Soft-fails to suggestedSpec=null on upstream failure so the UI can
- * fall back to manual entry rather than 500.
- */
-export async function inferMatrixRowSpec(req: AuthenticatedRequest, res: Response): Promise<void> {
-  const { importId } = req.params;
-  const _imp = await requireImportAccess(req, res, req.params.importId);
-  if (!_imp) return;
-  const { rowPrompt, standardCode } = req.body || {};
-
-  if (!rowPrompt || !standardCode) {
-    res.status(400).json({ error: 'rowPrompt and standardCode are required' });
-    return;
-  }
-
-  const importRecord = await SelfStudyImport.findById(importId);
-  if (!importRecord) {
-    res.status(404).json({ error: 'Import not found' });
-    return;
-  }
-
-  const submission = importRecord.submissionId
-    ? await Submission.findById(importRecord.submissionId)
-    : null;
-
-  // Surrounding-narrative context: grab a few applied buckets for the same
-  // standard to give Haiku additional disambiguating signal.
-  let surroundingContext = '';
-  const buckets: Record<string, any> = (importRecord as any).aiBuckets || {};
-  for (const k of Object.keys(buckets)) {
-    if (k.startsWith(`${standardCode}.`)) {
-      const b = buckets[k];
-      for (const n of [...(b?.narratives || []), ...(b?.evidenceText || [])]) {
-        if (typeof n?.snippet === 'string') surroundingContext += '\n' + n.snippet;
-        if (surroundingContext.length > 3000) break;
-      }
-    }
-    if (surroundingContext.length > 3000) break;
-  }
-
-  try {
-    const result = await postToAIService('/ai/matrix/infer-row-spec', {
-      rowPrompt: String(rowPrompt),
-      standardCode: String(standardCode),
-      programLevel: submission?.programLevel || (importRecord as any).aiProgramLevel || 'bachelors',
-      surroundingContext: surroundingContext.slice(0, 3000)
-    });
-    res.json(result);
-  } catch (err: any) {
-    console.warn(
-      `[matrix-row-spec] cshse-ai inference failed for ${importId}/${standardCode}:`,
-      err?.message || err
-    );
-    res.json({
-      suggestedSpec: null,
-      confidence: 0.0,
-      rationale: 'ai-service unavailable; please pick a subspec manually',
-      candidateSpecs: []
-    });
-  }
 }

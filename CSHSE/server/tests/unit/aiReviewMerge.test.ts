@@ -71,7 +71,6 @@ function makeBucket(specKey: string, narratives: any[] = [], evidenceText: any[]
       narratives,
       evidenceText,
       evidenceFiles,
-      matrixCells: [],
       coverageScore: null,
       coverageCovered: null,
       coverageGaps: [],
@@ -734,7 +733,7 @@ describe('mergeImportIntoReviewState — coverage report', () => {
 // --- clearPreCR043State (DB integration) -----------------------------------
 
 describe('clearPreCR043State', () => {
-  it('AC#13: clears aiBuckets/aiTags/aiCVs/aiEvidenceDocs/aiIntroductions/aiIntroductionHints/aiPlaceholderSections/aiMatrices on prior imports', async () => {
+  it('AC#13: clears aiBuckets/aiTags/aiCVs/aiEvidenceDocs/aiIntroductions/aiIntroductionHints/aiPlaceholderSections on prior imports', async () => {
     const submission = await Submission.create({
       submissionId: 'CLR-001',
       institutionName: 'X',
@@ -756,7 +755,6 @@ describe('clearPreCR043State', () => {
       aiIntroductions: { document: { items: [] } } as any,
       aiIntroductionHints: { 's1': 'document' } as any,
       aiPlaceholderSections: [{ paragraphIndex: 0, heading: 'h', standardHint: null, specHint: null } as any],
-      aiMatrices: [{ slug: 'm1' }],
     });
 
     const cleared = await clearPreCR043State(SelfStudyImport, submission._id);
@@ -770,7 +768,6 @@ describe('clearPreCR043State', () => {
     expect(reloaded?.aiIntroductions).toBeUndefined();
     expect(reloaded?.aiIntroductionHints).toBeUndefined();
     expect(reloaded?.aiPlaceholderSections).toBeUndefined();
-    expect(reloaded?.aiMatrices).toBeUndefined();
   });
 
   it('AC#14: excludeImportId leaves the named import untouched', async () => {

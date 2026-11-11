@@ -3,11 +3,11 @@ import { Submission } from '../models/Submission';
 import { Assignment } from '../models/Assignment';
 import { User } from '../models/User';
 import { Comment } from '../models/Comment';
-import { CurriculumMatrix } from '../models/CurriculumMatrix';
 import { SupportingEvidence } from '../models/SupportingEvidence';
 import { SiteVisit } from '../models/SiteVisit';
 import { LeadReaderReport } from '../models/LeadReaderReport';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
+import { withoutCurriculumMatrixDocuments } from '../services/curriculumMatrixExclusion';
 import { buildReaderConsensus } from '../services/readerConsensus';
 import {
   generateLeadReaderReportDocx,
@@ -81,18 +81,19 @@ function parseCoursesFromFileName(name: string): Array<{ prefix: string; label: 
   return out;
 }
 
-/** Derive the course list from imported evidence when the curriculum matrix has
- *  no named courses. Sources: `rev:syllabus-toc:<n>:<slug>` tags (rich labels)
- *  when present, otherwise the course code in ANY evidence FILE NAME (syllabi,
- *  the matrix PDF, mapping tools…). Splits Program vs General-Education by course
- *  prefix. This is what fills the Lead Reader Report's required-course list for
- *  studies whose matrix was uploaded as a document but never parsed into
- *  structured rows (e.g. AACC — HUS/BIO/COM/CTA/CTP/MAT courses from ~16 syllabi). */
+/** Derive the required-course list from the imported evidence. Sources:
+ *  `rev:syllabus-toc:<n>:<slug>` tags (rich labels) when present, otherwise the
+ *  course code in an evidence FILE NAME (syllabi, mapping tools…). Splits
+ *  Program vs General-Education by course prefix (e.g. AACC — HUS/BIO/COM/CTA/
+ *  CTP/MAT courses from ~16 syllabi). A curriculum-matrix document is not part
+ *  of the self-study, so it never contributes. The lead reader can replace the
+ *  list with requiredCoursesOverride. */
 async function deriveCoursesFromSyllabi(submissionId: any): Promise<{ general: string[]; program: string[] }> {
   const ev: any[] = await SupportingEvidence.find({
     submissionId,
     isDeleted: { $ne: true },
   }).select('tags file.originalName').lean();
+  const evidence = withoutCurriculumMatrixDocuments(ev);
   // Prefer rich TOC labels; index the file-name codes by "PREFIX ###" so a TOC
   // label supersedes a bare code for the same course.
   const parsedMap = new Map<string, { prefix: string; label: string }>();
@@ -105,7 +106,7 @@ async function deriveCoursesFromSyllabi(submissionId: any): Promise<{ general: s
     const k = codeKey(p.label);
     if (!parsedMap.has(k)) parsedMap.set(k, p);
   };
-  for (const e of ev) {
+  for (const e of evidence) {
     const tags = (e.tags || []).map(String);
     for (const t of tags) {
       const mt = /^rev:syllabus-toc:\d+:(.+)$/.exec(t);
@@ -151,34 +152,11 @@ export async function buildSystemSections(submission: any) {
     .map((a) => a.userName)
     .filter(Boolean);
 
-  // Required courses from the curriculum matrices: non-human-services → General
-  // Education; human-services → Program courses.
-  const matrices: any[] = await CurriculumMatrix.find({ submissionId })
-    .select('matrixType courses')
-    .lean();
-  const courseLabel = (c: any) =>
-    [c.coursePrefix, c.courseNumber].filter(Boolean).join(' ').trim() +
-    (c.courseName ? `${c.coursePrefix || c.courseNumber ? ' — ' : ''}${c.courseName}` : '');
-  const collect = (type: string) =>
-    matrices
-      .filter((m) => m.matrixType === type)
-      .flatMap((m) => (m.courses || []).slice().sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0)))
-      .map(courseLabel)
-      .filter(Boolean);
-  let generalEducationCourses = collect('non_human_services_courses');
-  let programCourses = [...collect('human_services_courses'), ...collect('custom')];
-  // Fallback: many submitted matrices have UNNAMED course columns (the grid was
-  // imported without course headers), so `courses` is empty and both lists come
-  // back blank. Derive the course list from the imported syllabi — their
-  // table-of-contents entries carry clean course identifiers (e.g.
-  // "chs-360-counseling-strategies-for-individuals") — so the lead reader
-  // doesn't have to re-key the curriculum. Program vs General-Education is split
-  // by course prefix (the program's own prefix vs everything else).
-  if (generalEducationCourses.length === 0 && programCourses.length === 0) {
-    const derived = await deriveCoursesFromSyllabi(submissionId);
-    generalEducationCourses = derived.general;
-    programCourses = derived.program;
-  }
+  // Required courses, derived from the syllabi (Program vs General Education by
+  // course prefix). The lead reader can override the list in the report.
+  const derived = await deriveCoursesFromSyllabi(submissionId);
+  const generalEducationCourses = derived.general;
+  const programCourses = derived.program;
 
   // Compiled non-compliance: specs whose validation failed, with reader comments.
   const status =
