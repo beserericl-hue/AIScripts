@@ -8,6 +8,19 @@ spec set, not a bacc slice.
 """
 from app.standards.loader import Specification
 
+
+# Spec 2.e — CSHSE board decision (Nov 2026): the curriculum matrix is no longer
+# part of the self-study. DRAFT wording pending CSHSE confirmation; change it
+# here only.
+SPEC_2E_TEXT = (
+    "Identify the required courses for all students that contribute to compliance "
+    "with the Curriculum Standards (11-18) and their Specifications. The information "
+    "provided must clearly align with the information presented in the self-study "
+    "narrative and the syllabi. If a program has specific concentrations, identify "
+    "the specific core courses in the concentration that comply with a Standard and "
+    "its Specifications."
+)
+
 MASTERS_2025: list[Specification] = [
     Specification(standard_code='1', spec_code='a', standard_title='Institutional Requirements and Primary Program Objective', spec_text='The program is part of a degree-granting college or university that is regionally accredited.', program_level='masters', version="2025"),
     Specification(standard_code='1', spec_code='b', standard_title='Institutional Requirements and Primary Program Objective', spec_text='Provide evidence that the development of competent human services professionals is the primary objective of the program and the basis for the degree program title, design, goals, and curriculum, teaching methodology, and program administration (e.g., through documents such as catalog, brochures, course syllabi, website, and marketing materials).', program_level='masters', version="2025"),
@@ -19,7 +32,7 @@ MASTERS_2025: list[Specification] = [
     Specification(standard_code='2', spec_code='b', standard_title='Philosophical Base of Programs', spec_text='Demonstrate alignment with the mission of the units in which the program is housed (e.g., department, college, university, etc.).', program_level='masters', version="2025"),
     Specification(standard_code='2', spec_code='c', standard_title='Philosophical Base of Programs', spec_text='Provide a brief description of the major knowledge base and theories from which the curriculum draws to support the conceptual framework (e.g. counseling theories, biopsychosocial model, systems theory, change theory, etc.).', program_level='masters', version="2025"),
     Specification(standard_code='2', spec_code='d', standard_title='Philosophical Base of Programs', spec_text='Describe the multidisciplinary, interdisciplinary, or transdisciplinary approach to knowledge, theories, and skills included in the curriculum.', program_level='masters', version="2025"),
-    Specification(standard_code='2', spec_code='e', standard_title='Philosophical Base of Programs', spec_text='Provide a matrix mapping the curriculum Standards (11-18) and Specifications to required courses. The information provided on the matrix must clearly align with the information presented in the self-study narrative and the syllabi. NOTE: The Matrix must include required courses for all students that contribute to compliance with the Curriculum Standards and their Specifications. If a program has specific concentrations, identify the specific core courses in the concentration that comply with a Standard and its Specifications.', program_level='masters', version="2025"),
+    Specification(standard_code='2', spec_code='e', standard_title='Philosophical Base of Programs', spec_text=SPEC_2E_TEXT, program_level='masters', version="2025"),
     Specification(standard_code='3', spec_code='a', standard_title='Community Assessment', spec_text='If the program is less than five years old, provide documentation that supported the initial development of the human services program (such as a community needs assessment).', program_level='masters', version="2025"),
     Specification(standard_code='3', spec_code='b', standard_title='Community Assessment', spec_text='An Advisory Committee shall be established to provide feedback on local, state, and national trends and needs, as well as policy changes, and to act as an advocate for the program. The committee should include individuals representing the human services field, such as: field experience agencies, employing agencies, citizen advocacy groups, alumni, current students, adjunct faculty, and other people related to the field of human services.', program_level='masters', version="2025"),
     Specification(standard_code='3', spec_code='c', standard_title='Community Assessment', spec_text='Provide the following: 1. A detailed description of the membership of the Advisory Committee (e.g., names, agencies, roles, relationship to program, etc.), 2. Minutes of advisory committee meetings from the last two years 3. A narrative or table of how the committee interfaces with the program in relation to specific issues.', program_level='masters', version="2025"),

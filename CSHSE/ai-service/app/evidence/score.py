@@ -8,7 +8,7 @@ Output:
     {
       "confidence": 0.0..1.0,
       "rationale": "short paragraph",
-      "citations": [{"chunkId": "...", "matrixRowAnchor": "..."}],
+      "citations": [{"chunkId": "..."}],
     }
 
 The score endpoint is the most expensive of the three so it ships
@@ -36,7 +36,6 @@ def _build_prompt(
     standard_code: str,
     spec_code: str,
     candidate_chunks: list[dict],
-    matrix_rows: list[dict] | None,
 ) -> str:
     chunks_block = "\n\n".join(
         [
@@ -46,18 +45,10 @@ def _build_prompt(
             for i, c in enumerate(candidate_chunks)
         ]
     )
-    matrix_block = ""
-    if matrix_rows:
-        matrix_block = "\n\n<matrix>\n" + "\n".join(
-            [
-                f"row {r.get('rowAnchor') or ''}: {json.dumps(r)[:300]}"
-                for r in matrix_rows
-            ]
-        ) + "\n</matrix>"
     return (
         "You are auditing a self-study submission for the CSHSE accreditation board.\n\n"
         f"Spec: Standard {standard_code}.{spec_code}\n\n"
-        f"Candidate evidence chunks:\n{chunks_block}{matrix_block}\n\n"
+        f"Candidate evidence chunks:\n{chunks_block}\n\n"
         "On a scale of 0.0 to 1.0, how strongly do these chunks support the spec? "
         "Reply with STRICT JSON:\n"
         '{"confidence": <float>, "rationale": "<short paragraph>", '
@@ -97,7 +88,6 @@ def score_evidence(
     standard_code: str,
     spec_code: str,
     candidate_chunks: list[dict],
-    matrix_rows: list[dict] | None = None,
     anthropic: Anthropic | None = None,
     settings: Settings | None = None,
 ) -> dict:
@@ -115,7 +105,7 @@ def score_evidence(
             "citations": [],
         }
 
-    prompt = _build_prompt(standard_code, spec_code, candidate_chunks, matrix_rows)
+    prompt = _build_prompt(standard_code, spec_code, candidate_chunks)
     if len(prompt) > _MAX_INPUT_CHARS:
         prompt = prompt[:_MAX_INPUT_CHARS]
 

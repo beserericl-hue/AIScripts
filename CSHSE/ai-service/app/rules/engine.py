@@ -152,10 +152,13 @@ _CLASS_TO_LIST: dict[str, str] = {
     "appendix": "evidenceFiles",
     "syllabus": "evidenceFiles",
     "cv": "evidenceFiles",
-    "matrix": "evidenceFiles",
     "evidence-file": "evidenceFiles",
 }
-_CLASS_SUBKINDS = {"appendix", "syllabus", "cv", "matrix", "evidence-file"}
+_CLASS_SUBKINDS = {"appendix", "syllabus", "cv", "evidence-file"}
+# Retired classification: the curriculum matrix is no longer part of the
+# self-study. A stored rule that still carries it is IGNORED (never routes or
+# files anything) — the walkers already drop matrix content outright.
+_RETIRED_CLASSIFICATIONS = {"matrix"}
 
 # The three signature keys the post-pass understands. A rule whose signature
 # has none of these matches NOTHING here (this is what keeps the seeded
@@ -342,6 +345,8 @@ class RuleEngine:
         for rule in self._rules:
             extract = rule.get("extract") or {}
             classification = extract.get("classification")
+            if classification in _RETIRED_CLASSIFICATIONS:
+                continue
             params = extract.get("params") or {}
             target_std = params.get("std")
             target_spec = params.get("spec")

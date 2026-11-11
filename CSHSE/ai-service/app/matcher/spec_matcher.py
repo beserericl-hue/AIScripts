@@ -89,7 +89,6 @@ class Candidate:
 SectionType = Literal[
     "narrative_response",   # body answers a (standard, spec) prose prompt
     "supporting_evidence",  # CV, syllabus, course catalog, faculty handbook, etc.
-    "curriculum_matrix",    # the (course × standard.spec) grid
     "introduction",         # CR-039 Phase 2c — intro / mission / about-the-program
     "context",              # framing prose that doesn't answer a specific spec
     "unknown",
@@ -115,7 +114,7 @@ class Recommendation:
     alternates: list[dict]
     rationale: str
 
-    section_type: SectionType  # narrative_response | supporting_evidence | curriculum_matrix | context | unknown
+    section_type: SectionType  # narrative_response | supporting_evidence | introduction | context | unknown
     candidates: list[dict]
 
     # Hints extracted from the document, NOT from a separate "prior spec" load:
@@ -153,7 +152,6 @@ def _build_prompt(
         "  - supporting_evidence: this is a CV, résumé, syllabus, course catalog, faculty",
         "    handbook, accreditation letter, or other artefact that supports a spec rather",
         "    than answering one in prose",
-        "  - curriculum_matrix: the (course x standard.spec) grid (Standard 11 typically)",
         "  - introduction: school-wide intro / mission / philosophy / about-the-program text",
         "    that frames the WHOLE submission or a WHOLE Standard, but does NOT answer any",
         "    specific spec's prompt. Signals: heading contains 'Introduction' / 'Mission' /",
@@ -178,13 +176,12 @@ def _build_prompt(
         "    then the content. 'Describe / Demonstrate / Articulate / Explain / brief",
         "    history / Include a mission statement' → narrative_response (the program's own",
         "    prose, usually after 'Response:'). 'Provide documentation of / Provide evidence",
-        "    of / Include curriculum vitae / Provide a matrix or table / Provide the",
+        "    of / Include curriculum vitae / Provide a table / Provide the",
         "    following / must provide / Attach / See Appendix' → supporting_evidence (an",
         "    artefact or a pointer to one). 'See Appendix…' lines, exhibit/attachment",
         "    references, hyperlinks to source documents, and rosters/data tables are",
         "    supporting_evidence even when they sit inside a narrative Response.",
-        "  - Curriculum Standards 11–21 here are usually the course×spec MATRIX, not prose;",
-        "    an inline '(CSHSE Standard 14)' citation inside other prose is NOT a section for",
+        "  - An inline '(CSHSE Standard 14)' citation inside other prose is NOT a section for",
         "    Standard 14. Bracketed editorial asides and ALL-CAPS reviewer notes ('[FROM",
         "    JENNIFER'S EMAIL…]', 'MONICA NEEDS TO REVIEW') are section_type=context.",
         "",
@@ -216,7 +213,7 @@ def _build_prompt(
         '  "primary_confidence": float 0.0..1.0',
         '  "alternates":       array of objects each with the same field rules: {"standardCode": "<digits>", "specCode": "<letter>", "confidence": <float>}',
         '  "rationale":        1-2 sentence explanation citing the spec language being addressed',
-        '  "section_type":     one of "narrative_response" | "supporting_evidence" | "curriculum_matrix" | "introduction" | "context" | "unknown"',
+        '  "section_type":     one of "narrative_response" | "supporting_evidence" | "introduction" | "context" | "unknown"',
         "",
         "EXAMPLES of CORRECT responses:",
         'Narrative answering a spec prompt about demographics:',
@@ -560,7 +557,7 @@ class SpecMatcher:
                 )
 
         raw_type = str(parsed.get("section_type", "narrative_response")).lower()
-        valid_types = {"narrative_response", "supporting_evidence", "curriculum_matrix", "context", "unknown"}
+        valid_types = {"narrative_response", "supporting_evidence", "context", "unknown"}
         section_type: SectionType = raw_type if raw_type in valid_types else "unknown"  # type: ignore[assignment]
 
         return Recommendation(

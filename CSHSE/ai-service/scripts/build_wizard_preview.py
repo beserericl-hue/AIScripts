@@ -9,7 +9,6 @@ clicked through Steps 1-5 today:
     promoted to evidence text, conf >= 0.85)
   - Supporting evidence FILES (appendix items that are file-shaped — CV,
     syllabus, minutes, brochure — with simulated S3 keys)
-  - Curriculum-matrix cells per spec
   - Gap-fill results (gaps Claude flagged → appendix snippets that fill
     them → remaining gaps after second-pass review)
   - Tag list (low-confidence items, unmatched sections — needing human
@@ -145,15 +144,6 @@ class AppliedEvidenceFile:
 
 
 @dataclass
-class AppliedMatrixCell:
-    matrix: str
-    column_index: int
-    code_raw: str
-    content_types: list[str]
-    depth: str | None
-
-
-@dataclass
 class TagListEntry:
     tag_id: str
     section_id: str
@@ -178,7 +168,6 @@ class SpecBucket:
     narratives: list[AppliedNarrative] = field(default_factory=list)
     evidence_text: list[AppliedEvidenceText] = field(default_factory=list)
     evidence_files: list[AppliedEvidenceFile] = field(default_factory=list)
-    matrix_cells: list[AppliedMatrixCell] = field(default_factory=list)
 
     initial_review: CoverageReview | None = None
     final_review: CoverageReview | None = None
@@ -238,7 +227,7 @@ def _allocate_to_buckets(
 
     Returns:
       buckets: keyed by (std, spec) — SpecBucket with narratives, evidence,
-        files, matrix populated from PRIMARY CLASSIFICATION ONLY (no
+        files populated from PRIMARY CLASSIFICATION ONLY (no
         gap-fill yet — that's layered on later).
       tags: TagListEntry list (rule: section_type=='unknown', or conf <
         TAG_LIST_CONF, or confidence 0.50-0.84 demoted by user — for the
@@ -333,23 +322,6 @@ def _allocate_to_buckets(
             continue
 
         bucket = buckets[key]
-
-        # Curriculum matrix — special case. We don't have per-cell data
-        # here (that's in the matrix data_extractor output); for the
-        # preview we record a single placeholder "matrix detected here"
-        # entry. The matrix-cell exporter is run separately by the
-        # wizard's Step 4.
-        if section_type == "curriculum_matrix":
-            bucket.matrix_cells.append(
-                AppliedMatrixCell(
-                    matrix=heading[:80],
-                    column_index=-1,
-                    code_raw="(see matrix extractor)",
-                    content_types=[],
-                    depth=None,
-                )
-            )
-            continue
 
         if section_type == "narrative_response":
             if conf >= TEXT_AUTO_APPLY_CONF and word_count < TEXT_NARRATIVE_WORD_LIMIT:
@@ -552,7 +524,7 @@ def _render_obsidian(
     out(f"name: AI Import Wizard — Stevenson End-to-End Preview {date_str}")
     out(
         "description: For every Baccalaureate spec, the exact narratives, "
-        "supporting-evidence text snippets, file uploads, matrix detections, "
+        "supporting-evidence text snippets, file uploads, "
         "tag-list entries, and remaining gaps that the wizard would produce on "
         "Stevenson — i.e. the wizard's full output before the user clicks "
         "Apply."
@@ -828,16 +800,6 @@ def _render_spec_block(out, bucket: SpecBucket) -> None:
                 out(body if len(body) <= 1500 else body[:1500] + "\n… (truncated, full DOCX preserves full body)")
                 out("```")
                 out("")
-
-    # --- matrix cells ---
-    if bucket.matrix_cells:
-        out("#### Curriculum matrix cells")
-        out("_Destination: `CurriculumMatrix.cells[]`_")
-        out("")
-        for c in bucket.matrix_cells:
-            out(f"- matrix: `{c.matrix}`, col {c.column_index}, code `{c.code_raw}`, "
-                f"types {c.content_types}, depth `{c.depth or '—'}`")
-        out("")
 
     # --- gaps remaining ---
     if bucket.remaining_gaps:

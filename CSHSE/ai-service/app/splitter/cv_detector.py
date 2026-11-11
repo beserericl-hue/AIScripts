@@ -401,7 +401,7 @@ def detect_cvs_from_html(
     # of word count, so we don't lose CV signals to the walker floor.
     paragraphs: list[str] = []
     for tag in soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"]):
-        # Skip tags inside tables — those are matrix / form territory.
+        # Skip tags inside tables — those are form / data-table territory.
         if any(a.name == "table" for a in tag.parents):
             continue
         text = tag.get_text(separator=" ", strip=True)
@@ -497,7 +497,6 @@ def cv_to_dict(cv: CVDetection) -> dict:
         "snippet": cv.snippet,
         "htmlSnippet": cv.html_snippet,
         "byteOffsetStart": cv.byte_offset_start,
-        "routing": {"source": "matcher"},  # Phase 2: matrix-row routing
-                                            # adds 'matrix'/'heading' values.
+        "routing": {"source": "matcher"},
         "sectionMarkerCount": cv.section_marker_count,
     }

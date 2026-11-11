@@ -75,7 +75,7 @@ def test_embedding_fallback_when_no_llm_key():
                 "standardCode": "11",
                 "specCode": "a",
                 "standardTitle": "Curriculum",
-                "specText": "Provide a curriculum matrix.",
+                "specText": "The historical roots of human services as a discipline and a profession.",
             },
         ),
     ]
@@ -112,7 +112,7 @@ def test_prompt_contains_candidates_and_section_excerpt():
     sec = _fake_section(text="A long history about the program from 1999.")
     candidates = [
         Candidate("1", "d", "Program Context", "Provide a brief history of the program.", 0.93),
-        Candidate("11", "a", "Curriculum", "Provide a curriculum matrix.", 0.42),
+        Candidate("11", "a", "Curriculum", "The historical roots of human services as a discipline and a profession.", 0.42),
     ]
     prompt = _build_prompt(sec, candidates)
     assert "1.d" in prompt

@@ -4,8 +4,8 @@ Covers:
   - template title in the head → template, high confidence
   - many Response: markers + template headings → template, medium confidence
   - free-form self-study shape → self_study, default confidence
-  - explicit self-study signals (Appendix, Faculty CVs, Curriculum
-    Matrix) raise self_study confidence
+  - explicit self-study signals (Appendix, Faculty CVs, Faculty
+    Handbook) raise self_study confidence
   - empty / pathological inputs don't crash
 """
 from __future__ import annotations
@@ -63,7 +63,6 @@ def _stevenson_like_paragraphs() -> list[str]:
         "b. The primary objective of the program is to prepare competent human services professionals.",
         "Standard 2: Program Description",
         "The program operates within the Counseling & Human Services Department.",
-        "Curriculum Matrix",
         "Appendix",
         "Standard 1",
         "Faculty CVs",
@@ -130,7 +129,7 @@ def test_stevenson_like_paragraphs_detected_as_self_study():
 
 
 def test_self_study_signals_raise_confidence():
-    """Curriculum Matrix / Appendix / Faculty CVs / Faculty Handbook
+    """Appendix / Faculty CVs / Faculty Handbook
     headings should bump confidence above the bare-default 0.70."""
     det = detect_format_from_paragraphs(_stevenson_like_paragraphs())
     assert det.format == "self_study"
@@ -140,7 +139,7 @@ def test_self_study_signals_raise_confidence():
 
 
 def test_self_study_confidence_capped_at_0_90():
-    paras = ["Curriculum Matrix"] * 50 + ["Appendix"] * 50
+    paras = ["Faculty CVs"] * 50 + ["Appendix"] * 50
     det = detect_format_from_paragraphs(paras)
     assert det.confidence <= 0.90
 

@@ -72,7 +72,6 @@ _SELF_STUDY_HEADING_RES = [
     # Free-form free-text headings used in real self-studies but NOT in
     # the template format. These are best-effort.
     re.compile(r"^\s*Faculty\s+(CVs?|Resum[eé]s?|Vitae)\b", re.I),
-    re.compile(r"^\s*Curriculum\s+Matrix\b", re.I),
     re.compile(r"^\s*Appendix\b", re.I),
     re.compile(r"^\s*Faculty\s+Handbook\b", re.I),
 ]
@@ -183,7 +182,7 @@ def detect_format_from_paragraphs(
         )
     # No strong template signals. Default to self_study with moderate
     # confidence raised slightly when we see explicit self-study hints
-    # like Faculty CVs / Appendix / Curriculum Matrix.
+    # like Faculty CVs / Appendix.
     confidence = 0.70 + min(0.15, self_study_heading_count * 0.03)
     return FormatDetection(
         format="self_study",

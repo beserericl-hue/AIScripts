@@ -28,9 +28,9 @@ What this walker does NOT do:
 
   - Table extraction. The template format embeds the Table of Contents,
     a Curriculum Requirements credit-hours table, and an Appendix list
-    as tables; none of those carry per-spec narrative content. The
-    matrix data extractor (``app/matrix/data_extractor.py``) handles
-    matrix DOCX/tables separately when present.
+    as tables; none of those carry per-spec narrative content. A
+    curriculum-matrix table (and its title line) is DROPPED outright — the
+    matrix is not part of the self-study (``curriculum_matrix_exclusion``).
   - HTML conversion. The template format ships as DOCX and is small
     (~400 KB) so we read paragraphs directly. A Stevenson-style HTML
     pipeline would be overkill.
@@ -58,6 +58,10 @@ _A = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 # Library instead (a true never-drop route-store is a server-side follow-on).
 _MAX_INLINE_IMAGE_BYTES = 2_000_000
 
+from app.splitter.curriculum_matrix_exclusion import (
+    is_curriculum_matrix_table_html,
+    is_curriculum_matrix_text_block,
+)
 from app.splitter.sections import Section, _heuristic_flags
 
 # A "See Appendix …" / "See Part II Appendices …" reference. In real PC
@@ -301,8 +305,9 @@ def _table_to_html(table) -> str:
 # a paragraph template; several schools keep them.) The paragraph walk can't see
 # cell content, so we DECOMPOSE each standard/spec response table back into the
 # paragraph-block stream the existing walker already understands. Non-standard
-# tables (matrix grids, credit-hour tables, rosters) are left as opaque evidence
-# tables — exactly as before — so the Kennesaw + MCC paths are unaffected.
+# tables (credit-hour tables, rosters) are left as opaque evidence tables —
+# exactly as before — so the Kennesaw + MCC paths are unaffected. A curriculum
+# matrix is dropped before any of this (see _iter_block_items).
 
 _STD_HEADER_CELL_RE = re.compile(r"^\s*Standard\s+(?P<std>\d{1,2})\s*:", re.IGNORECASE)
 _SPEC_LETTER_CELL_RE = re.compile(r"^\s*(?P<letter>[a-j])[.)]?\s*$", re.IGNORECASE)
@@ -566,7 +571,7 @@ def _content_cell(row):
 def _decompose_response_table(table, state: dict) -> list[tuple] | None:
     """Decompose a per-Standard response table into ('p', text, html, is_list)
     blocks the paragraph walker understands. Returns ``None`` when the table is
-    NOT a standard/spec response table (glossary, matrix, roster, credit grid) so
+    NOT a standard/spec response table (glossary, roster, credit grid) so
     the caller keeps it as an opaque evidence table.
 
     Handles the real-world wrinkles:
@@ -847,12 +852,28 @@ def _iter_block_items(doc):
     # template (Kennesaw) or a doc with only evidence tables has no standard
     # tables, so this whole branch is skipped and tables stay opaque evidence —
     # existing behavior preserved.
-    has_standard_tables = any(_looks_like_standard_table(t) for t in doc.tables)
+    # Curriculum-matrix exclusion: the matrix is NOT part of the self-study, so
+    # a matrix table — and its title line — never enters the block stream
+    # (no section, evidence table, narrative or intro). The preceding text
+    # line rides along as context so a titled matrix is recognised.
+    def _is_matrix_tbl(t, context_title: str) -> bool:
+        ctx = f"<p>{_esc(context_title)}</p>" if context_title else ""
+        return is_curriculum_matrix_table_html(ctx + _table_to_html(t))
+
+    has_standard_tables = any(
+        _looks_like_standard_table(t) and not _is_matrix_tbl(t, "") for t in doc.tables
+    )
     state = {"last_std": None, "seen_standard": False}
+    last_text = ""
 
     for child in doc.element.body.iterchildren():
         if isinstance(child, CT_P):
             para = _Paragraph(child, doc)
+            _ptext = (para.text or "").strip()
+            if _ptext:
+                last_text = _ptext
+            if is_curriculum_matrix_text_block(_ptext):
+                continue  # the matrix's title / coding key — not self-study content
             # A paragraph "Standard N:" heading (paragraph template) also marks
             # that we've entered the standards region — so later evidence tables
             # aren't mistaken for front matter.
@@ -865,6 +886,8 @@ def _iter_block_items(doc):
             yield ("p", para.text or "", _paragraph_to_html(para), _is_list_item(child))
         elif isinstance(child, CT_Tbl):
             t = _Table(child, doc)
+            if _is_matrix_tbl(t, last_text):
+                continue
             if has_standard_tables:
                 std_blocks = _decompose_response_table(t, state)
                 if std_blocks is not None:
