@@ -3,47 +3,51 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Loader2, ChevronLeft, Check, X, FileDown, Lock, Send, ClipboardList } from 'lucide-react';
 import { api } from '../../../services/api';
-import { Score4LevelSelector, SCORE_LEVELS } from '../../reader/Score4LevelSelector';
-import type { ScoreValue } from '../../reader/Score4LevelSelector';
 import { useOnceHint } from '../../tour/useOnceHint';
 import { t } from '../../../i18n/strings';
 
 // ---------------------------------------------------------------------------
 // CR-009 / Sprint 5.1 — Compilation tab (lead reader side-by-side).
 //
-// All readers' 0-3 scores per (std, spec) side-by-side, with row
-// highlighting per the CR spec:
-//   - red    when ANY reader scored 0 (Non)
-//   - yellow when at least two reader scores differ (disagreement)
+// Every reader's Compliant / Non-compliant mark per (std, spec) side by
+// side — the marks each reader set on their own Reader Report (Lauri CR,
+// Nov 2026, removed the 0-3 score). Row highlighting:
+//   - red    when ANY reader marked it Non-compliant
+//   - yellow when the readers' marks differ (disagreement)
 //   - green  when all readers agree
 //   - muted  when the spec is excluded (CR-050 N/A)
 //
-// The lead reader stamps a Final score per spec inline. The Final
-// score endpoint is audit-logged server-side (compilation.final_set).
+// The lead reader sets a Final mark (Compliant / Non-compliant) per spec
+// with one click. The write is audit-logged server-side
+// (compilation.final_set); a Non-compliant Final adds the spec to the
+// site-visit checklist, a Compliant one removes the auto-added row.
 //
 // View / container split: CompilationTabView is presentational and gets
 // unit-tested in isolation; the container wires queries/mutations.
 // ---------------------------------------------------------------------------
 
+export type ComplianceMark = 'compliant' | 'noncompliant';
+
 export interface CompilationReader {
   id: string;
   name: string;
+  completed?: boolean;
 }
 
-export interface CompilationReaderVote {
+export interface CompilationReaderMark {
   reviewerId: string;
   reviewerName: string;
-  score: number;
+  mark: ComplianceMark;
 }
 
 export interface CompilationRow {
   standardCode: string;
   specCode: string;
-  scores: CompilationReaderVote[];
-  hasZero: boolean;
+  marks: CompilationReaderMark[];
+  hasNonCompliant: boolean;
   hasDisagreement: boolean;
   allAgree: boolean;
-  finalScore: number | null;
+  finalMark: ComplianceMark | null;
   finalSetByName?: string;
   finalSetAt?: string;
   finalNote?: string;
@@ -67,14 +71,9 @@ export interface CompilationTabViewProps {
   data: CompilationPayload | null;
   isLoading: boolean;
   error?: string | null;
-  editingKey?: string | null;
-  pendingFinalScore?: ScoreValue | null;
   savingKey?: string | null;
-  /** Lead reader opens the inline editor for this (std, spec) pair. */
-  onBeginEdit: (standardCode: string, specCode: string, current: number | null) => void;
-  onCancelEdit: () => void;
-  onChangePendingFinal: (next: ScoreValue) => void;
-  onSaveFinal: (standardCode: string, specCode: string) => void;
+  /** Lead reader sets the Final mark for this (std, spec) pair. */
+  onSetFinal: (standardCode: string, specCode: string, mark: ComplianceMark) => void;
   onClearFinal: (standardCode: string, specCode: string) => void;
   // CR-011 export
   exportMode: SuggestionsExportMode;
@@ -97,7 +96,7 @@ export interface CompilationTabViewProps {
  * CR-056 — "Complete review & send to board".
  *
  * The board queue (admin BoardConsole) reads submissions in `review_complete`.
- * Nothing in the Score-based compilation surface advanced a submission to that
+ * Nothing in the compilation surface advanced a submission to that
  * status, so the reader → lead-reader → board chain dead-ended here. This
  * panel gives the lead reader (or admin) the governed hand-off: a two-step
  * confirm that flips the status. Once sent, it shows the post-hand-off state.
@@ -164,7 +163,7 @@ export function SendToBoardPanel({
         </button>
       ) : (
         <div className="ml-auto inline-flex items-center gap-2">
-          <span className="text-xs">Send to the board now? Readers can no longer change scores after this.</span>
+          <span className="text-xs">Send to the board now? Readers can no longer change their marks after this.</span>
           <button
             type="button"
             data-testid="send-to-board-cancel"
@@ -294,22 +293,67 @@ export function AssignmentChangeRequestBox({
 
 function rowClasses(row: CompilationRow): string {
   if (row.excluded) return 'bg-slate-50 text-slate-500';
-  if (row.hasZero) return 'bg-red-50';
+  if (row.hasNonCompliant) return 'bg-red-50';
   if (row.hasDisagreement) return 'bg-amber-50';
   if (row.allAgree) return 'bg-emerald-50';
   return 'bg-white';
 }
 
-function scoreLabel(value: number): string {
-  const lvl = SCORE_LEVELS.find((l) => l.value === value);
-  return lvl ? `${value} ${lvl.label}` : String(value);
+export function markLabel(mark: ComplianceMark): string {
+  return mark === 'compliant' ? 'Compliant' : 'Non-compliant';
 }
 
-function scoreChipClasses(value: number): string {
-  if (value === 0) return 'border-red-300 bg-red-100 text-red-900';
-  if (value === 1) return 'border-amber-300 bg-amber-100 text-amber-900';
-  if (value === 2) return 'border-lime-300 bg-lime-100 text-lime-900';
-  return 'border-green-300 bg-green-100 text-green-900';
+function markChipClasses(mark: ComplianceMark): string {
+  return mark === 'noncompliant'
+    ? 'border-red-300 bg-red-100 text-red-900'
+    : 'border-green-300 bg-green-100 text-green-900';
+}
+
+/** Two-button Compliant / Non-compliant picker for the lead's Final mark. */
+function FinalMarkPicker({
+  rowKey,
+  value,
+  saving,
+  onPick,
+}: {
+  rowKey: string;
+  value: ComplianceMark | null;
+  saving: boolean;
+  onPick: (mark: ComplianceMark) => void;
+}): JSX.Element {
+  const btn = (mark: ComplianceMark) => {
+    const active = value === mark;
+    const tone =
+      mark === 'compliant'
+        ? active
+          ? 'border-green-600 bg-green-600 text-white'
+          : 'border-green-300 bg-white text-green-800 hover:bg-green-50'
+        : active
+          ? 'border-red-600 bg-red-600 text-white'
+          : 'border-red-300 bg-white text-red-800 hover:bg-red-50';
+    return (
+      <button
+        type="button"
+        id={mark === 'compliant' ? `final-compliant-${rowKey}` : undefined}
+        data-testid={`compilation-final-${mark}-${rowKey}`}
+        aria-pressed={active}
+        disabled={saving}
+        onClick={() => {
+          if (!active) onPick(mark);
+        }}
+        className={`rounded-md border px-2 py-0.5 text-xs font-medium disabled:opacity-50 ${tone}`}
+      >
+        {markLabel(mark)}
+      </button>
+    );
+  };
+  return (
+    <div role="group" aria-label="Final mark" className="inline-flex items-center gap-1">
+      {btn('compliant')}
+      {btn('noncompliant')}
+      {saving ? <Loader2 className="h-3 w-3 animate-spin text-slate-500" aria-hidden /> : null}
+    </div>
+  );
 }
 
 /**
@@ -317,7 +361,7 @@ function scoreChipClasses(value: number): string {
  * Reports. The lead reader IS a reader: this opens THEIR own Reader Report
  * checklist, and the editor there lists every assigned reader's report
  * (lead reader / admin only) so the lead reader can read each one and switch
- * the whole view between readers. Score-based compilation never surfaced this.
+ * the whole view between readers.
  */
 function ReaderReportsLink({ submissionId }: { submissionId: string }): JSX.Element {
   return (
@@ -337,13 +381,8 @@ export function CompilationTabView({
   data,
   isLoading,
   error,
-  editingKey,
-  pendingFinalScore,
   savingKey,
-  onBeginEdit,
-  onCancelEdit,
-  onChangePendingFinal,
-  onSaveFinal,
+  onSetFinal,
   onClearFinal,
   exportMode,
   onChangeExportMode,
@@ -403,7 +442,7 @@ export function CompilationTabView({
           />
         )}
         <div data-testid="compilation-no-rows" className="rounded border border-slate-200 bg-white p-6 text-center text-sm text-slate-600">
-          No reader scores have been submitted yet.
+          No reader has marked a specification Compliant or Non-compliant yet.
         </div>
       </div>
     );
@@ -492,20 +531,19 @@ export function CompilationTabView({
                   {r.name}
                 </th>
               ))}
-              <th className="px-3 py-2 text-left">Final</th>
+              <th className="px-3 py-2 text-left">Final mark</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {data.rows.map((row) => {
               const key = `${row.standardCode}_${row.specCode}`;
-              const editing = editingKey === key;
               const saving = savingKey === key;
               return (
                 <tr
                   key={key}
                   data-testid={`compilation-row-${key}`}
                   data-disagreement={row.hasDisagreement ? 'true' : 'false'}
-                  data-haszero={row.hasZero ? 'true' : 'false'}
+                  data-noncompliant={row.hasNonCompliant ? 'true' : 'false'}
                   data-excluded={row.excluded ? 'true' : 'false'}
                   className={rowClasses(row)}
                 >
@@ -520,18 +558,19 @@ export function CompilationTabView({
                     )}
                   </td>
                   {readers.map((r) => {
-                    const vote = row.scores.find((s) => s.reviewerId === r.id);
+                    const m = row.marks.find((s) => s.reviewerId === r.id);
                     return (
                       <td
                         key={r.id}
                         data-testid={`compilation-cell-${key}-${r.id}`}
                         className="px-3 py-2 align-top"
                       >
-                        {vote ? (
+                        {m ? (
                           <span
-                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${scoreChipClasses(vote.score)}`}
+                            data-mark={m.mark}
+                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${markChipClasses(m.mark)}`}
                           >
-                            {scoreLabel(vote.score)}
+                            {markLabel(m.mark)}
                           </span>
                         ) : (
                           <span className="text-xs text-slate-400">—</span>
@@ -539,73 +578,31 @@ export function CompilationTabView({
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2 align-top">
+                  <td className="px-3 py-2 align-top" data-testid={`compilation-final-${key}`}>
                     {row.excluded ? (
                       <span className="text-xs text-slate-500">Excluded</span>
-                    ) : editing ? (
-                      <div data-testid={`compilation-final-editor-${key}`} className="space-y-2">
-                        <Score4LevelSelector
-                          value={pendingFinalScore ?? null}
-                          onChange={onChangePendingFinal}
-                          saving={saving}
-                        />
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            data-testid={`compilation-final-cancel-${key}`}
-                            onClick={onCancelEdit}
-                            disabled={saving}
-                            className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                          >
-                            <X className="h-3 w-3" aria-hidden />
-                            <span>Cancel</span>
-                          </button>
-                          <button
-                            type="button"
-                            id={`final-save-${key}`}
-                            data-testid={`compilation-final-save-${key}`}
-                            onClick={() => onSaveFinal(row.standardCode, row.specCode)}
-                            disabled={saving || pendingFinalScore == null}
-                            className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-1 text-xs font-medium text-white hover:bg-slate-900 disabled:opacity-50"
-                          >
-                            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
-                            <span>Save final</span>
-                          </button>
-                        </div>
-                      </div>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        {row.finalScore != null ? (
-                          <span
-                            className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${scoreChipClasses(row.finalScore)}`}
-                          >
-                            {scoreLabel(row.finalScore)}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-slate-400">— not set</span>
-                        )}
-                        <button
-                          type="button"
-                          data-testid={`compilation-final-edit-${key}`}
-                          onClick={() => onBeginEdit(row.standardCode, row.specCode, row.finalScore)}
-                          className="text-xs text-slate-600 hover:text-slate-900 underline"
-                        >
-                          {row.finalScore != null ? 'Change' : 'Set'}
-                        </button>
-                        {row.finalScore != null && (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <FinalMarkPicker
+                          rowKey={key}
+                          value={row.finalMark}
+                          saving={saving}
+                          onPick={(mark) => onSetFinal(row.standardCode, row.specCode, mark)}
+                        />
+                        {row.finalMark != null && (
                           <button
                             type="button"
                             data-testid={`compilation-final-clear-${key}`}
                             onClick={() => onClearFinal(row.standardCode, row.specCode)}
                             disabled={saving}
-                            className="text-xs text-red-700 hover:text-red-900 underline disabled:opacity-50"
+                            className="text-xs text-slate-600 hover:text-slate-900 underline disabled:opacity-50"
                           >
                             Clear
                           </button>
                         )}
                       </div>
                     )}
-                    {row.finalSetByName && row.finalScore != null && !editing && (
+                    {row.finalSetByName && row.finalMark != null && (
                       <p className="mt-1 text-[10px] text-slate-500">
                         Set by {row.finalSetByName}
                       </p>
@@ -626,7 +623,7 @@ function CompilationLegend(): JSX.Element {
     <div data-testid="compilation-legend" className="mb-3 flex flex-wrap items-center gap-3 text-xs text-slate-600">
       <span className="inline-flex items-center gap-1">
         <span className="inline-block h-3 w-3 rounded border border-red-300 bg-red-50" />
-        Any reader scored 0
+        Any reader marked Non-compliant
       </span>
       <span className="inline-flex items-center gap-1">
         <span className="inline-block h-3 w-3 rounded border border-amber-300 bg-amber-50" />
@@ -650,8 +647,6 @@ export interface CompilationTabProps {
 
 export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Element {
   const qc = useQueryClient();
-  const [editingKey, setEditingKey] = React.useState<string | null>(null);
-  const [pendingFinal, setPendingFinal] = React.useState<ScoreValue | null>(null);
   const [savingKey, setSavingKey] = React.useState<string | null>(null);
   const [exportMode, setExportMode] = React.useState<SuggestionsExportMode>('internal');
   const [exporting, setExporting] = React.useState<boolean>(false);
@@ -659,18 +654,6 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
   const [finalizing, setFinalizing] = React.useState<boolean>(false);
   const [finalizeError, setFinalizeError] = React.useState<string | null>(null);
   const { fireOnce } = useOnceHint();
-
-  // CR-052 / Sprint 9.3 — first time the lead reader opens the Final-score
-  // editor, nudge them on what the Final score means. Fired from an effect so
-  // the save button (the anchor) is committed to the DOM before we measure it.
-  React.useEffect(() => {
-    if (!editingKey) return;
-    fireOnce({
-      id: 'compilation-first-final',
-      message: t('hint.compilation.firstFinal'),
-      targetId: `final-save-${editingKey}`,
-    });
-  }, [editingKey, fireOnce]);
 
   const compilationQuery = useQuery({
     queryKey: ['compilation', submissionId],
@@ -686,45 +669,49 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
     void qc.invalidateQueries({ queryKey: ['compilation', submissionId] });
   };
 
+  // CR-052 / Sprint 9.3 — first time the compilation table is on screen,
+  // nudge the lead reader on what the Final mark means. Anchored to the first
+  // row's Compliant button, which is committed to the DOM once rows load.
+  const firstOpenRow = compilationQuery.data?.rows.find((r) => !r.excluded);
+  const firstRowKey = firstOpenRow ? `${firstOpenRow.standardCode}_${firstOpenRow.specCode}` : null;
+  React.useEffect(() => {
+    if (!firstRowKey) return;
+    fireOnce({
+      id: 'compilation-first-final',
+      message: t('hint.compilation.firstFinal'),
+      targetId: `final-compliant-${firstRowKey}`,
+    });
+  }, [firstRowKey, fireOnce]);
+
   const setFinal = useMutation({
-    mutationFn: async (vars: { standardCode: string; specCode: string; score: ScoreValue }) => {
+    mutationFn: async (vars: { standardCode: string; specCode: string; mark: ComplianceMark }) => {
       setSavingKey(`${vars.standardCode}_${vars.specCode}`);
-      return api.put(`/api/submissions/${submissionId}/compilation/final-score`, vars);
+      return api.put(`/api/submissions/${submissionId}/compilation/final-mark`, vars);
     },
     onSettled: () => {
       setSavingKey(null);
-      setEditingKey(null);
-      setPendingFinal(null);
       invalidate();
+      // A Final mark changes the site-visit checklist (Non-compliant adds it).
+      void qc.invalidateQueries({ queryKey: ['site-visit-checklist', submissionId] });
     },
   });
 
   const clearFinal = useMutation({
     mutationFn: async (vars: { standardCode: string; specCode: string }) => {
       setSavingKey(`${vars.standardCode}_${vars.specCode}`);
-      return api.delete(`/api/submissions/${submissionId}/compilation/final-score`, {
+      return api.delete(`/api/submissions/${submissionId}/compilation/final-mark`, {
         data: vars,
       });
     },
     onSettled: () => {
       setSavingKey(null);
       invalidate();
+      void qc.invalidateQueries({ queryKey: ['site-visit-checklist', submissionId] });
     },
   });
 
-  const onBeginEdit = (standardCode: string, specCode: string, current: number | null) => {
-    setEditingKey(`${standardCode}_${specCode}`);
-    setPendingFinal((current as ScoreValue) ?? null);
-  };
-
-  const onCancelEdit = () => {
-    setEditingKey(null);
-    setPendingFinal(null);
-  };
-
-  const onSaveFinal = (standardCode: string, specCode: string) => {
-    if (pendingFinal == null) return;
-    setFinal.mutate({ standardCode, specCode, score: pendingFinal });
+  const onSetFinal = (standardCode: string, specCode: string, mark: ComplianceMark) => {
+    setFinal.mutate({ standardCode, specCode, mark });
   };
 
   const onClearFinal = (standardCode: string, specCode: string) => {
@@ -817,13 +804,8 @@ export function CompilationTab({ submissionId }: CompilationTabProps): JSX.Eleme
       data={compilationQuery.data ?? null}
       isLoading={compilationQuery.isLoading}
       error={compilationQuery.error ? (compilationQuery.error as Error).message : null}
-      editingKey={editingKey}
-      pendingFinalScore={pendingFinal}
       savingKey={savingKey}
-      onBeginEdit={onBeginEdit}
-      onCancelEdit={onCancelEdit}
-      onChangePendingFinal={(next) => setPendingFinal(next)}
-      onSaveFinal={onSaveFinal}
+      onSetFinal={onSetFinal}
       onClearFinal={onClearFinal}
       exportMode={exportMode}
       onChangeExportMode={(m) => setExportMode(m)}

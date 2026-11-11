@@ -19,8 +19,8 @@ function makeItem(over: Partial<ChecklistItem> = {}): ChecklistItem {
     _id: 'i1',
     standardCode: '1',
     specCode: 'a',
-    inclusionReason: 'partial',
-    finalScoreAtInclusion: 1,
+    inclusionReason: 'non_compliant',
+    finalMarkAtInclusion: 'noncompliant',
     verified: false,
     source: 'auto',
     ...over,
@@ -73,8 +73,9 @@ describe('ChecklistView', () => {
 
   it('renders one row per item with the right inclusion-reason chip', () => {
     const items = [
-      makeItem({ _id: 'a', standardCode: '1', specCode: 'a', inclusionReason: 'partial' }),
-      makeItem({ _id: 'b', standardCode: '1', specCode: 'b', inclusionReason: 'non_compliant', finalScoreAtInclusion: 0 }),
+      // A legacy row from the retired 0-3 scale still renders.
+      makeItem({ _id: 'a', standardCode: '1', specCode: 'a', inclusionReason: 'partial', finalMarkAtInclusion: undefined }),
+      makeItem({ _id: 'b', standardCode: '1', specCode: 'b', inclusionReason: 'non_compliant' }),
     ];
     render(
       <ChecklistView
@@ -87,15 +88,43 @@ describe('ChecklistView', () => {
     );
     expect(screen.getByTestId('checklist-row-a')).toBeInTheDocument();
     expect(screen.getByTestId('checklist-row-b')).toBeInTheDocument();
-    expect(screen.getByTestId('checklist-row-a')).toHaveTextContent(/Partial/);
+    expect(screen.getByTestId('checklist-row-a')).toHaveTextContent(/Partial \(legacy\)/);
     expect(screen.getByTestId('checklist-row-b')).toHaveTextContent(/Non-compliant/);
   });
 
-  it('toolbar shows partial + non_compliant counts', () => {
+  it('toolbar shows the non-compliant count and no partial count when there are no legacy rows', () => {
     const items = [
-      makeItem({ _id: 'a', inclusionReason: 'partial' }),
-      makeItem({ _id: 'b', inclusionReason: 'non_compliant', finalScoreAtInclusion: 0 }),
-      makeItem({ _id: 'c', inclusionReason: 'partial', verified: true }),
+      makeItem({ _id: 'a' }),
+      makeItem({ _id: 'b', verified: true }),
+    ];
+    render(
+      <ChecklistView
+        {...handlers}
+        data={makePayload(items)}
+        isLoading={false}
+        canWrite
+        draftNotes={{}}
+      />
+    );
+    const toolbar = screen.getByTestId('checklist-toolbar');
+    expect(toolbar).toHaveTextContent(/2 items · 1 verified/);
+    expect(screen.getByTestId('checklist-count-noncompliant')).toHaveTextContent('2 non-compliant');
+    expect(screen.queryByTestId('checklist-count-partial')).not.toBeInTheDocument();
+    expect(toolbar).not.toHaveTextContent(/partial/i);
+  });
+
+  it('empty state explains that a Non-compliant Final mark adds a spec (no 0-3 wording)', () => {
+    render(<ChecklistView {...handlers} data={makePayload([])} isLoading={false} canWrite draftNotes={{}} />);
+    const empty = screen.getByTestId('checklist-empty');
+    expect(empty).toHaveTextContent(/Final mark to Non-compliant/);
+    expect(empty).not.toHaveTextContent(/score|0 or 1/i);
+  });
+
+  it('toolbar still counts legacy partial rows alongside non_compliant', () => {
+    const items = [
+      makeItem({ _id: 'a', inclusionReason: 'partial', finalMarkAtInclusion: undefined }),
+      makeItem({ _id: 'b', inclusionReason: 'non_compliant' }),
+      makeItem({ _id: 'c', inclusionReason: 'partial', finalMarkAtInclusion: undefined, verified: true }),
     ];
     render(
       <ChecklistView
@@ -108,7 +137,7 @@ describe('ChecklistView', () => {
     );
     const toolbar = screen.getByTestId('checklist-toolbar');
     expect(toolbar).toHaveTextContent(/3 items · 1 verified/);
-    expect(toolbar).toHaveTextContent(/2 partial/);
+    expect(toolbar).toHaveTextContent(/2 partial \(legacy\)/);
     expect(toolbar).toHaveTextContent(/1 non-compliant/);
   });
 
@@ -168,7 +197,7 @@ describe('ChecklistView', () => {
   });
 
   it('manual rows render Remove button (when canWrite); auto rows do not', () => {
-    const manual = makeItem({ _id: 'm', inclusionReason: 'manual', source: 'manual', finalScoreAtInclusion: 0 });
+    const manual = makeItem({ _id: 'm', inclusionReason: 'manual', source: 'manual', finalMarkAtInclusion: undefined });
     const auto = makeItem({ _id: 'a', source: 'auto' });
     render(
       <ChecklistView

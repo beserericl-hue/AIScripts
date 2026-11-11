@@ -8,8 +8,10 @@
  *   assign (CR-055)        → readers_assigned, one ACTIVE Assignment per user
  *   access separation      → an UNASSIGNED lead 403s the submission read,
  *                            an ASSIGNED reader 200s it
- *   reader scoring         → PUT /scores (0-3) succeeds for assigned readers
- *   lead final scores      → PUT /compilation/final-score succeeds for lead
+ *   reader marks           → Reader Report Compliant / Non-compliant marks
+ *                            saved by assigned readers (0-3 scores retired)
+ *   compilation            → lead sees both readers' marks side by side
+ *   lead final marks       → PUT /compilation/final-mark succeeds for lead
  *   finalize (CR-056)      → POST /compilation/finalize → review_complete
  *   board queue            → GET /board/queue surfaces the review_complete sub
  *   board decision         → POST /:id/decision accept → compliant
@@ -82,26 +84,35 @@ describe('CR-057 — reader → lead-reader → board pipeline', () => {
     const r1read = await request(app).get(`/api/submissions/${SID}`).set('Authorization', r1Tok);
     expect(r1read.status).toBe(200);
 
-    // 3) readers score a few specs
-    const specs: Array<[string, string, number]> = [['1', 'a', 3], ['1', 'b', 2], ['2', 'a', 3]];
-    for (const [standardCode, specCode, score] of specs) {
-      const a = await request(app)
-        .put(`/api/submissions/${SID}/scores`)
-        .send({ standardCode, specCode, score })
-        .set('Authorization', r1Tok);
-      expect(a.status).toBe(200);
-      const b = await request(app)
-        .put(`/api/submissions/${SID}/scores`)
-        .send({ standardCode, specCode, score: Math.max(0, score - 1) })
-        .set('Authorization', `Bearer ${signTokenFor(r2 as any)}`);
-      expect(b.status).toBe(200);
-    }
+    // 3) readers mark a few specs Compliant / Non-compliant on their Reader Report
+    const specs: Array<[string, string, 'compliant' | 'noncompliant']> = [
+      ['1', 'a', 'compliant'], ['1', 'b', 'noncompliant'], ['2', 'a', 'compliant']
+    ];
+    const r1Save = await request(app)
+      .put(`/api/reports/submission/${SID}/reader-report-data`)
+      .send({ rows: specs.map(([standardCode, specCode, mark]) => ({ standardCode, specCode, mark, comment: '' })), completed: true })
+      .set('Authorization', r1Tok);
+    expect(r1Save.status).toBe(200);
+    const r2Save = await request(app)
+      .put(`/api/reports/submission/${SID}/reader-report-data`)
+      .send({ rows: specs.map(([standardCode, specCode]) => ({ standardCode, specCode, mark: 'noncompliant', comment: '' })) })
+      .set('Authorization', `Bearer ${signTokenFor(r2 as any)}`);
+    expect(r2Save.status).toBe(200);
 
-    // 4) lead final scores
-    for (const [standardCode, specCode, score] of specs) {
+    // 3b) compilation shows both readers' marks
+    const comp = await request(app)
+      .get(`/api/submissions/${SID}/compilation`)
+      .set('Authorization', leadTok);
+    expect(comp.status).toBe(200);
+    const row1a = comp.body.rows.find((r: any) => r.standardCode === '1' && r.specCode === 'a');
+    expect(row1a.marks.map((m: any) => m.mark).sort()).toEqual(['compliant', 'noncompliant']);
+    expect(row1a.hasDisagreement).toBe(true);
+
+    // 4) lead final marks
+    for (const [standardCode, specCode, mark] of specs) {
       const f = await request(app)
-        .put(`/api/submissions/${SID}/compilation/final-score`)
-        .send({ standardCode, specCode, score, note: 'lead consensus' })
+        .put(`/api/submissions/${SID}/compilation/final-mark`)
+        .send({ standardCode, specCode, mark, note: 'lead consensus' })
         .set('Authorization', leadTok);
       expect(f.status).toBe(200);
     }

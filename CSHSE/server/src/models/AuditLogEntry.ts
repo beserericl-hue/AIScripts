@@ -18,8 +18,8 @@ export type AuditAction =
   | 'reader.assignment_change_requested'  // CR-022 / S13c — lead reader asks an admin to change a locked assignment
   | 'comment.relayed'
   | 'comment.unrelayed'
-  | 'compilation.final_set'        // CR-009 / S5.1 — lead reader stamps final 0-3 score per spec
-  | 'compilation.final_cleared'    // CR-009 / S5.1 — lead reader retracts a final score
+  | 'compilation.final_set'        // CR-009 / S5.1 — lead reader sets the Final mark (Compliant / Non-compliant) per spec
+  | 'compilation.final_cleared'    // CR-009 / S5.1 — lead reader clears a Final mark
   | 'compilation.finalized'        // CR-056 — lead reader sends the review to the board (→ review_complete)
   | 'checklist.item_verified'      // CR-012 / S6.1 — visit team verifies a partial-compliance item
   | 'checklist.item_unverified'    // CR-012 / S6.1 — visit team un-verifies

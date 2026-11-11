@@ -252,8 +252,10 @@ describe('CR-060 — multi-role per user', () => {
     expect(insts.every((i: string) => i === String(A._id))).toBe(true);
   });
 
-  // ---- Enforcement: a cross-role reader can score; a PC-only user cannot ----
-  it('a PC@A + Reader@B user can enter a score on B; a PC-only user is 403', async () => {
+  // ---- Enforcement: a cross-role reader can mark; a PC-only user cannot ----
+  // (The 0-3 /scores API is retired — a reader's decision is the Compliant /
+  // Non-compliant mark saved on their Reader Report.)
+  it('a PC@A + Reader@B user can save Reader Report marks on B; a PC-only user is 403', async () => {
     const A = await makeInstitution('A');
     const B = await makeInstitution('B');
     const sub = await makeSubmission(B, 'submitted');
@@ -262,20 +264,20 @@ describe('CR-060 — multi-role per user', () => {
       { role: 'reader', institutionId: B._id },
     ]);
     const pcOnly = await userWithRoles([{ role: 'program_coordinator', institutionId: A._id }]);
-    const body = { standardCode: '1', specCode: 'a', score: 2 };
+    const body = { rows: [{ standardCode: '1', specCode: 'a', mark: 'compliant', comment: '' }] };
 
     // The reviewer (reader@B) reaches submission B through an ACTIVE Assignment —
     // the real state when a reader is put on a panel. pcOnly gets none (403).
     await assignToSubmission(sub, cross, 'reader');
 
-    // The cross-role user holds a reviewer role (reader@B) → may score, even
+    // The cross-role user holds a reviewer role (reader@B) → may mark, even
     // though their PRIMARY role is program_coordinator.
-    const ok = await request(app).put(`/api/submissions/${sub._id}/scores`)
+    const ok = await request(app).put(`/api/reports/submission/${sub._id}/reader-report-data`)
       .set('Authorization', `Bearer ${signTokenFor(cross)}`).send(body);
     expect(ok.status).toBe(200);
 
-    // A PC with no reviewer role anywhere may not score.
-    const denied = await request(app).put(`/api/submissions/${sub._id}/scores`)
+    // A PC with no reviewer role anywhere may not mark.
+    const denied = await request(app).put(`/api/reports/submission/${sub._id}/reader-report-data`)
       .set('Authorization', `Bearer ${signTokenFor(pcOnly)}`).send(body);
     expect(denied.status).toBe(403);
   });

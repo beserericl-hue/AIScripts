@@ -46,8 +46,7 @@ import invitationsRouter from './routes/invitations';
 import specsRouter from './routes/specs';
 import filesRouter from './routes/files';
 import standardsRouter from './routes/standards';
-import scoresRouter from './routes/scores';
-// CR-009 / Sprint 5.1 — lead-reader compilation (0-3 side-by-side + Final).
+// CR-009 / Sprint 5.1 — lead-reader compilation (readers' Compliant / Non-compliant marks + Final).
 import compilationRouter from './routes/compilation';
 import leadReaderReportRouter from './routes/leadReaderReport';
 // CR-010 / Sprint 5.4 — Portal direct messaging.
@@ -177,7 +176,7 @@ app.use('/api/invitations', invitationsRouter);
 app.use('/api/standards', standardsRouter); // Public endpoint - standard definitions
 
 // CR-034 — E2E seed router. MUST mount BEFORE the bare-`/api` catch-alls
-// (matrix/evidence/comments/readerLock/scores) which all run authenticate
+// (matrix/evidence/comments/readerLock) which all run authenticate
 // middleware and would 401 any /api/test/* request that fell through.
 // buildTestRouter returns null unless E2E_SEED_ENABLED=1; this block is a
 // true no-op in any normal deploy.
@@ -209,7 +208,6 @@ app.use('/api/change-requests', changeRequestsRouter);
 app.use('/api/admin/error-logs', errorLogsRouter);
 app.use('/api/specs', specsRouter);
 app.use('/api/files', filesRouter);
-app.use('/api', scoresRouter);
 app.use('/api', compilationRouter);
 app.use('/api', leadReaderReportRouter);
 app.use('/api', directMessagesRouter);

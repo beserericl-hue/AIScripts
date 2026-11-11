@@ -1,9 +1,8 @@
 import { Router } from 'express';
 import {
   getCompilation,
-  getFinalScoresForReader,
-  setFinalScore,
-  clearFinalScore,
+  setFinalMark,
+  clearFinalMark,
   exportSuggestionsDoc,
   finalizeCompilation
 } from '../controllers/compilationController';
@@ -13,17 +12,13 @@ const router = Router();
 
 router.use(authenticate);
 
-// CR-009 / Sprint 5.1 — lead-reader compilation surface (0-3 Scores
-// side-by-side + Final score). Sits next to the existing
-// /api/lead-reviews (LeadReaderCompilation, compliance triplet, legacy).
+// CR-009 / Sprint 5.1 — lead-reader compilation surface: every reader's
+// Compliant / Non-compliant mark side-by-side + the lead reader's Final mark.
+// (Lauri CR Nov 2026 retired the 0–3 score and its /final-score(s) routes.)
 
 router.get('/submissions/:submissionId/compilation', getCompilation);
-// CR-009 follow-on / Sprint 11.3 — readers (assigned) + lead/admin can read
-// the lead reader's Final scores (transparency default). Raw peer votes stay
-// lead/admin-only via getCompilation.
-router.get('/submissions/:submissionId/final-scores', getFinalScoresForReader);
-router.put('/submissions/:submissionId/compilation/final-score', setFinalScore);
-router.delete('/submissions/:submissionId/compilation/final-score', clearFinalScore);
+router.put('/submissions/:submissionId/compilation/final-mark', setFinalMark);
+router.delete('/submissions/:submissionId/compilation/final-mark', clearFinalMark);
 
 // CR-011 / Sprint 5.2 — consolidated suggestions DOCX export.
 router.get('/submissions/:submissionId/compilation/suggestions-doc', exportSuggestionsDoc);

@@ -1,23 +1,24 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 // ---------------------------------------------------------------------------
-// CR-012 / Sprint 6.1 — partial-compliance checklist item.
+// CR-012 / Sprint 6.1 — site-visit checklist item.
 //
-// Auto-populated when the lead reader sets a Final score of 0 or 1 on the
-// Compilation tab (CR-009). The visit team marks each item `verified` (with
-// an optional note) during the in-person site visit.
+// Auto-populated when the lead reader sets a Final mark of Non-compliant on
+// the Compilation tab (CR-009; Lauri CR Nov 2026 replaced the 0-3 score with
+// Compliant / Non-compliant). The visit team marks each item `verified`
+// (with an optional note) during the in-person site visit.
 //
-// Inclusion reason per CR:
-//   - finalScore === 1 → 'partial' (Partial — always included)
-//   - finalScore === 0 → 'non_compliant' (Non-compliant — major remediation)
-//   - "follow-up" (any reader 0/1 but final 2/3) is a lead-reader manual
-//     add; not auto-populated. Defer to Sprint 6.2 follow-on.
+// Inclusion reason:
+//   - lead Final = Non-compliant → 'non_compliant' (auto)
+//   - 'follow_up' / 'manual'     → lead-reader manual add
+//   - 'partial'                  → LEGACY only (old Final score of 1); never
+//                                  written any more, kept so old docs load.
 //
 // Lifecycle:
-//   - setFinalScore(0|1) → upsert with inclusion-reason matching the score
-//   - setFinalScore(2|3) → remove the auto-populated row (verified rows
-//     are preserved — the visit team's note shouldn't be silently lost)
-//   - clearFinalScore     → remove unverified rows only
+//   - set Final = Non-compliant → upsert the auto row
+//   - set Final = Compliant     → remove the auto row unless verified (the
+//                                 visit team's note shouldn't be silently lost)
+//   - clear Final               → remove unverified auto rows only
 // ---------------------------------------------------------------------------
 
 export type ChecklistInclusionReason = 'partial' | 'non_compliant' | 'follow_up' | 'manual';
@@ -27,7 +28,10 @@ export interface ISiteVisitChecklistItem extends Document {
   standardCode: string;
   specCode: string;
   inclusionReason: ChecklistInclusionReason;
-  finalScoreAtInclusion: number; // 0 | 1 | (2/3 only when manual)
+  // The lead reader's Final mark when the row was (re)included. Absent on
+  // manual adds and on legacy rows (which carried a numeric
+  // `finalScoreAtInclusion` — no longer in the schema, ignored on read).
+  finalMarkAtInclusion?: 'compliant' | 'noncompliant';
   verified: boolean;
   verifiedBy?: mongoose.Types.ObjectId;
   verifiedByName?: string;
@@ -51,13 +55,7 @@ const SiteVisitChecklistItemSchema = new Schema<ISiteVisitChecklistItem>(
       enum: ['partial', 'non_compliant', 'follow_up', 'manual'],
       required: true
     },
-    finalScoreAtInclusion: {
-      type: Number,
-      required: true,
-      min: 0,
-      max: 3,
-      validate: { validator: Number.isInteger, message: 'finalScoreAtInclusion must be an integer 0-3' }
-    },
+    finalMarkAtInclusion: { type: String, enum: ['compliant', 'noncompliant'] },
     verified: { type: Boolean, default: false, index: true },
     verifiedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     verifiedByName: String,

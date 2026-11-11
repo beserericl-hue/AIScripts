@@ -3,8 +3,7 @@ import mongoose from 'mongoose';
 import { Review } from '../models/Review';
 import { LeadReaderCompilation } from '../models/LeadReaderCompilation';
 import { User } from '../models/User';
-import { Score } from '../models/Score';
-import { PDFGeneratorService } from '../services/pdfGenerator';
+import { PDFGeneratorService, ReaderMark } from '../services/pdfGenerator';
 import { getSpecParts } from '../data/levelStandards';
 import { formSpecRows, generateAndStoreReaderReport, getReaderReportStructure, renderReaderReportBuffers } from '../services/readerReportGenerator';
 import { ReaderReport } from '../models/ReaderReport';
@@ -17,21 +16,24 @@ import { isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver'
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 /**
- * CR-003 / S11.1 — build the per-spec 0-3 score map for a reader's report,
- * keyed by `${standardCode}.${specCode}`. The reader PDF renders these labels
- * next to the pass/fail compliance verdict. Returns an empty map when a reader
- * hasn't scored (the PDF then simply omits the score line).
+ * Per-spec Compliant / Non-compliant map from a reader's own Reader Report,
+ * keyed by `${standardCode}.${specCode}` (the numeric score is retired —
+ * Lauri CR Nov 2026). The reader PDF prints this mark on each spec row;
+ * unmarked specs are omitted.
  */
-async function buildReaderScoreMap(
+export async function buildReaderMarkMap(
   submissionId: mongoose.Types.ObjectId | string,
   reviewerId: mongoose.Types.ObjectId | string
-): Promise<Record<string, number>> {
-  const scores = await Score.find({ submissionId, reviewerId })
-    .select('standardCode specCode score')
+): Promise<Record<string, ReaderMark>> {
+  const report = await ReaderReport.findOne({ submissionId, reviewerId })
+    .select('rows')
     .lean();
-  const map: Record<string, number> = {};
-  for (const s of scores) {
-    map[`${s.standardCode}.${s.specCode}`] = s.score;
+  const map: Record<string, ReaderMark> = {};
+  for (const r of report?.rows || []) {
+    if (!r.specCode) continue;
+    if (r.mark === 'compliant' || r.mark === 'noncompliant') {
+      map[`${r.standardCode}.${r.specCode}`] = r.mark;
+    }
   }
   return map;
 }
@@ -70,14 +72,14 @@ export const generateReaderReportPDF = async (req: AuthenticatedRequest, res: Re
       return res.status(404).json({ error: 'Reader not found' });
     }
 
-    // Generate PDF — CR-003: include the reader's captured 0-3 scores.
-    const scoreMap = await buildReaderScoreMap(review.submissionId, review.reviewerId);
+    // Generate PDF with the reader's Compliant / Non-compliant marks.
+    const markMap = await buildReaderMarkMap(review.submissionId, review.reviewerId);
     const pdfGenerator = new PDFGeneratorService();
     const pdfBuffer = await pdfGenerator.generateReaderReport(review, {
       firstName: reader.firstName,
       lastName: reader.lastName,
       email: reader.email
-    }, scoreMap);
+    }, markMap);
 
     // Set response headers
     const filename = `reader-report-${review.institutionName.replace(/\s+/g, '-')}-${review.reviewerNumber}.pdf`;
@@ -163,13 +165,13 @@ export const generateAllReaderReportsPDF = async (req: AuthenticatedRequest, res
     const firstReview = reviews[0];
     const reader = firstReview.reviewerId as any;
 
-    const scoreMap = await buildReaderScoreMap(firstReview.submissionId, firstReview.reviewerId);
+    const markMap = await buildReaderMarkMap(firstReview.submissionId, firstReview.reviewerId);
     const pdfGenerator = new PDFGeneratorService();
     const pdfBuffer = await pdfGenerator.generateReaderReport(firstReview, {
       firstName: reader.firstName,
       lastName: reader.lastName,
       email: reader.email
-    }, scoreMap);
+    }, markMap);
 
     const filename = `reader-reports-${submissionId}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');

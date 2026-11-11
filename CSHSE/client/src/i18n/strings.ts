@@ -32,7 +32,7 @@ const STRINGS = {
   'tour.welcome.reviewQueue':
     "This is where you read other schools' stories. You read them and say how well they're doing.",
   'tour.welcome.compilations':
-    "This is where all the reader scores come together so you can pick the final score for each part.",
+    "This is where every reader's Compliant or Non-compliant marks come together so you can pick the final mark for each part.",
   'tour.welcome.settings':
     "This is where the boss sets up the people who use the portal.",
   'tour.welcome.help':
@@ -121,7 +121,7 @@ const STRINGS = {
     "Comments on this part appear here on the right. Select text in the narrative and click Comment to add your own.",
   // tour.rr.* — the Reader Report editor screen
   'tour.rr.intro':
-    "This is the Reader Report. For every part of the self-study you read the school's answer, mark it Compliant or Non-Compliant, give it a 0–3 score, and add comments. Here's a quick tour of the screen.",
+    "This is the Reader Report. For every part of the self-study you read the school's answer, mark it Compliant or Non-Compliant, and add comments. Here's a quick tour of the screen.",
   'tour.rr.backLink':
     "This takes you back to the Self-Study to read the full story and add inline comments on the text.",
   'tour.rr.view':
@@ -140,8 +140,6 @@ const STRINGS = {
     "Click this tag to see the AI helper's view of whether this part is compliant, and why.",
   'tour.rr.checklist':
     "This is the checklist for the part. Mark it Compliant or Non-Compliant and write your comments. It saves automatically.",
-  'tour.rr.score':
-    "Give this part a score from 0 to 3. The dash clears it. It saves automatically.",
   'tour.rr.files':
     "Files opens the documents and links for this part in the Supporting File Library — CVs, syllabi, and projects too.",
   'tour.rr.matrix':
@@ -175,11 +173,9 @@ const STRINGS = {
 
   // tour.readerReview.* — the Reader review queue + review screen.
   'tour.readerReview.intro':
-    "This is where you read other schools' stories and say how well they did. Want a quick look?",
+    "This is where you read other schools' stories and mark each part Compliant or Non-compliant. Want a quick look?",
   'tour.readerReview.queue':
     "These are the schools waiting for you to read. Click one to open it.",
-  'tour.readerReview.screen':
-    "Here is one school's story. You read each part and give it a score.",
   'tour.readerReview.messages':
     "Need to ask a question? Click here to talk with the other people working on this school.",
   'tour.readerReview.lastStep':
@@ -187,13 +183,13 @@ const STRINGS = {
 
   // tour.leadCompilation.* — the Lead-Reader compilation screen.
   'tour.leadCompilation.intro':
-    "This is where all the readers' scores come together so you can pick the final one. Want a quick look?",
+    "This is where all the readers' Compliant or Non-compliant marks come together so you can pick the final mark for each part. Want a quick look?",
   'tour.leadCompilation.toolbar':
     "Use these buttons to choose what you see and how you share it.",
   'tour.leadCompilation.export':
-    "Click here to save all the scores as a file you can print or send.",
+    "Click here to save all the readers' marks and suggestions as a file you can print or send.",
   'tour.leadCompilation.sendBoard':
-    "When the scores are all set, click here to send this school to the board.",
+    "When the final marks are all set, click here to send this school to the board.",
   'tour.leadCompilation.lastStep':
     "That's it! Click the help button anytime to see this again.",
 
@@ -235,11 +231,9 @@ const STRINGS = {
   // hint.* — per-feature first-time nudges (CR-052 / Sprint 9.3). Fire once
   // ever via useOnceHint; five-year-old voice, describe what the thing IS.
   'hint.compilation.firstFinal':
-    "This is the final score for this part. You pick one number from all the readers' scores. The schools see this number.",
+    "This is the final mark for this part. Look at every reader's mark, then pick Compliant or Non-compliant. Non-compliant adds the part to the site-visit checklist.",
   'hint.checklist.firstVerify':
     "Click here when you have checked this part in person. It turns the row to \"Yes\" so everyone knows it is done.",
-  'hint.reader.firstScore':
-    "Pick one number for how well this part is done. 0 means not done, 3 means fully done. Your score is saved right away.",
   'hint.relay.firstQueue':
     "These are reader notes waiting for you. When you share one, the school can read it — but never who wrote it.",
   'hint.messages.firstThread':

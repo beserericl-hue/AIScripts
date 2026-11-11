@@ -28,14 +28,12 @@ interface ReaderInfo {
   credentials?: string;
 }
 
-// CR-003 / S11.1 — the 0-3 compliance rubric readers actually score with.
-// The reader report historically rendered only the pass/fail compliance
-// ternary; these labels surface the captured Score (Score model: 0-3).
-const SCORE_RUBRIC: Record<number, { label: string; color: string }> = {
-  0: { label: 'Non-compliant (0)', color: '#dc2626' },
-  1: { label: 'Partial (1)', color: '#d97706' },
-  2: { label: 'Largely compliant (2)', color: '#2563eb' },
-  3: { label: 'Fully compliant (3)', color: '#059669' }
+// Lauri CR (Nov 2026) — the numeric score is retired. Where the PDF shows a
+// reader's decision it is their Reader Report mark: Compliant / Non-compliant.
+export type ReaderMark = 'compliant' | 'noncompliant';
+const READER_MARK_LABEL: Record<ReaderMark, { label: string; color: string }> = {
+  compliant: { label: 'Compliant', color: COLORS.compliant },
+  noncompliant: { label: 'Non-compliant', color: COLORS.nonCompliant }
 };
 
 export class PDFGeneratorService {
@@ -44,10 +42,10 @@ export class PDFGeneratorService {
   private pageHeight: number;
   private margin: number;
   private contentWidth: number;
-  // CR-003 — per-spec reader scores keyed by `${standardCode}.${specCode}`.
-  // Populated from the Score collection by the controller. Optional so the
-  // legacy callers (which never had scores) keep working unchanged.
-  private readerScores: Record<string, number> = {};
+  // Per-spec Reader Report marks keyed by `${standardCode}.${specCode}`.
+  // Populated from ReaderReport.rows by the controller. Optional so legacy
+  // callers keep working unchanged.
+  private readerMarks: Record<string, ReaderMark> = {};
 
   constructor() {
     this.doc = new PDFDocument({
@@ -66,11 +64,9 @@ export class PDFGeneratorService {
   async generateReaderReport(
     review: IReview,
     reader: ReaderInfo,
-    scoresByKey?: Record<string, number>
+    marksByKey?: Record<string, ReaderMark>
   ): Promise<Buffer> {
-    // CR-003 / S11.1 — capture the per-spec 0-3 scores so the assessment rows
-    // can render the rubric label alongside the compliance verdict.
-    this.readerScores = scoresByKey ?? {};
+    this.readerMarks = marksByKey ?? {};
     return new Promise((resolve, reject) => {
       try {
         const chunks: Buffer[] = [];
@@ -190,18 +186,7 @@ export class PDFGeneratorService {
     this.doc.fillColor(COLORS.text);
     this.doc.moveDown(0.5);
 
-    // CR-003 / S11.1 — 0-3 compliance score rubric legend. Shown so readers
-    // (and the board) can interpret the per-spec score that now appears in
-    // each assessment row.
-    this.doc.font(FONTS.bold).fillColor(COLORS.text).text('Compliance Score Rubric (0-3):');
-    this.doc.font(FONTS.regular);
-    this.doc.fillColor(SCORE_RUBRIC[3].color).text('3 - Fully compliant: standard met without reservation');
-    this.doc.fillColor(SCORE_RUBRIC[2].color).text('2 - Largely compliant: most evidence present, minor gaps');
-    this.doc.fillColor(SCORE_RUBRIC[1].color).text('1 - Partial: some evidence; site visit must verify');
-    this.doc.fillColor(SCORE_RUBRIC[0].color).text('0 - Non-compliant: standard not met');
-
-    this.doc.fillColor(COLORS.text);
-    this.doc.moveDown(1);
+    this.doc.moveDown(0.5);
   }
 
   private addReaderAssessments(review: IReview): void {
@@ -268,27 +253,26 @@ export class PDFGeneratorService {
       .fillColor(this.getComplianceColor(spec.compliance))
       .text(this.getComplianceSymbol(spec.compliance), complianceX, startY, { width: 30 });
 
-    // Comments column (also carries the CR-003 score label, stacked above
-    // the comment text so both flow within the same column width).
+    // Comments column (also carries the reader's Reader Report mark, stacked
+    // above the comment text so both flow within the same column width).
     const commentsX = this.margin + 90;
     const commentsWidth = this.contentWidth - 90;
 
-    // CR-003 / S11.1 — render the captured 0-3 reader score for this spec on
-    // the row's first line; comments (if any) flow underneath in the same
-    // column. `commentsY` tracks where the comment text should start.
-    const scoreKey = `${standardCode}.${spec.specCode}`;
-    const score = this.readerScores[scoreKey];
+    // The reader's Reader Report mark (Compliant / Non-compliant) for this
+    // spec on the row's first line; comments (if any) flow underneath.
+    // `commentsY` tracks where the comment text should start.
+    const mark = this.readerMarks[`${standardCode}.${spec.specCode}`];
     let commentsY = startY;
-    if (typeof score === 'number' && SCORE_RUBRIC[score]) {
+    if (mark && READER_MARK_LABEL[mark]) {
       this.doc
-        .fillColor(SCORE_RUBRIC[score].color)
+        .fillColor(READER_MARK_LABEL[mark].color)
         .font(FONTS.bold)
         .fontSize(9)
-        .text(`Score: ${SCORE_RUBRIC[score].label}`, commentsX, startY, {
+        .text(`Reader mark: ${READER_MARK_LABEL[mark].label}`, commentsX, startY, {
           width: commentsWidth,
           align: 'left'
         });
-      commentsY = this.doc.y; // below the score line
+      commentsY = this.doc.y; // below the mark line
     }
 
     if (spec.comments) {

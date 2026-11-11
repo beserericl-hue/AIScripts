@@ -1,13 +1,14 @@
 /**
- * CR-012 / Sprint 6.1 — site-visit partial-compliance checklist.
+ * CR-012 / Sprint 6.1 — site-visit checklist.
  *
- * Pins:
- *  - Auto-population on setFinalScore:
- *      * score 0 → row with inclusionReason='non_compliant'
- *      * score 1 → row with inclusionReason='partial'
- *      * score 2/3 → no row (and an existing auto row is removed unless verified)
- *  - Verified rows survive a score-up (we never silently lose a visit-team note).
- *  - clearFinalScore removes auto rows (unverified) but not verified ones.
+ * Lauri CR (Nov 2026): the lead reader's Final is a Compliant / Non-compliant
+ * MARK (the 0-3 score is gone). Pins:
+ *  - Auto-population on PUT /compilation/final-mark:
+ *      * Non-compliant → row with inclusionReason='non_compliant'
+ *      * Compliant     → no row (and an existing auto row is removed unless verified)
+ *  - Verified rows survive Non-compliant → Compliant (visit-team note is sticky).
+ *  - clearFinalMark removes auto rows (unverified) but not verified ones.
+ *  - Legacy 'partial' rows (old 0-3 era) still load and count.
  *  - listChecklist groups counts; PC 403; reader can read but cannot write;
  *    lead/admin can write (manual add + delete).
  *  - verifyChecklistItem writes a checklist.item_verified audit entry.
@@ -72,94 +73,57 @@ async function seed() {
   };
 }
 
-describe('CR-012 — auto-population from setFinalScore', () => {
-  it('score 0 → checklist row with non_compliant; score 1 → partial', async () => {
+function putMark(sid: string, tok: string, standardCode: string, specCode: string, mark: string) {
+  return request(app)
+    .put(`/api/submissions/${sid}/compilation/final-mark`)
+    .set('Authorization', `Bearer ${tok}`)
+    .send({ standardCode, specCode, mark });
+}
+
+describe('CR-012 — auto-population from the lead Final mark', () => {
+  it('Non-compliant → checklist row with inclusionReason non_compliant (available as soon as the PUT returns)', async () => {
     const { sid, leadTok } = await seed();
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '1', specCode: 'a', score: 0 });
+    const res = await putMark(sid, leadTok, '1', 'a', 'noncompliant');
+    expect(res.status).toBe(200);
 
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '1', specCode: 'b', score: 1 });
-
-    const itemA = await waitForChecklist({ submissionId: sid, standardCode: '1', specCode: 'a' });
-    expect(itemA?.inclusionReason).toBe('non_compliant');
-    expect(itemA?.finalScoreAtInclusion).toBe(0);
-    expect(itemA?.source).toBe('auto');
-
-    const itemB = await waitForChecklist({ submissionId: sid, standardCode: '1', specCode: 'b' });
-    expect(itemB?.inclusionReason).toBe('partial');
-    expect(itemB?.finalScoreAtInclusion).toBe(1);
+    const item = await SiteVisitChecklistItem.findOne({ submissionId: sid, standardCode: '1', specCode: 'a' }).lean();
+    expect(item?.inclusionReason).toBe('non_compliant');
+    expect(item?.finalMarkAtInclusion).toBe('noncompliant');
+    expect(item?.source).toBe('auto');
+    expect(item?.verified).toBe(false);
+    // The retired numeric field is never written.
+    expect((item as any)?.finalScoreAtInclusion).toBeUndefined();
   });
 
-  it('score 2 → no checklist row; score 3 → no row', async () => {
+  it('Compliant → no checklist row (negative)', async () => {
     const { sid, leadTok } = await seed();
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '2', specCode: 'a', score: 2 });
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '2', specCode: 'b', score: 3 });
-
-    // brief settle for the detached upsert (none should happen)
-    await new Promise((r) => setTimeout(r, 250));
-
+    expect((await putMark(sid, leadTok, '2', 'a', 'compliant')).status).toBe(200);
+    expect((await putMark(sid, leadTok, '2', 'b', 'compliant')).status).toBe(200);
     const all = await SiteVisitChecklistItem.find({ submissionId: sid });
     expect(all.length).toBe(0);
   });
 
-  it('score-up from 1 → 2 removes the auto row (when unverified)', async () => {
+  it('Non-compliant → Compliant removes the auto row (when unverified)', async () => {
     const { sid, leadTok } = await seed();
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '3', specCode: 'a', score: 1 });
-    await waitForChecklist({ submissionId: sid, standardCode: '3', specCode: 'a' });
+    await putMark(sid, leadTok, '3', 'a', 'noncompliant');
+    expect(await SiteVisitChecklistItem.findOne({ submissionId: sid, standardCode: '3', specCode: 'a' })).not.toBeNull();
 
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '3', specCode: 'a', score: 2 });
-
-    // The detached delete runs after the response. Poll for absence.
-    let tries = 0;
-    let item: any = null;
-    while (tries < 60) {
-      item = await SiteVisitChecklistItem.findOne({ submissionId: sid, standardCode: '3', specCode: 'a' });
-      if (!item) break;
-      await new Promise((r) => setTimeout(r, 50));
-      tries++;
-    }
-    expect(item).toBeNull();
+    await putMark(sid, leadTok, '3', 'a', 'compliant');
+    expect(await SiteVisitChecklistItem.findOne({ submissionId: sid, standardCode: '3', specCode: 'a' })).toBeNull();
   });
 
-  it('score-up after verify PRESERVES the row (visit-team note is sticky)', async () => {
+  it('Non-compliant → Compliant after verify PRESERVES the row (visit-team note is sticky)', async () => {
     const { sid, leadTok } = await seed();
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '4', specCode: 'a', score: 1 });
+    await putMark(sid, leadTok, '4', 'a', 'noncompliant');
     const row = await waitForChecklist({ submissionId: sid, standardCode: '4', specCode: 'a' });
 
-    // Verify the row.
     await request(app)
       .patch(`/api/submissions/${sid}/checklist/${row._id}/verify`)
       .set('Authorization', `Bearer ${leadTok}`)
       .send({ verified: true, note: 'Confirmed on visit, classroom 3.' });
 
-    // Bump score to 2.
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '4', specCode: 'a', score: 2 });
+    await putMark(sid, leadTok, '4', 'a', 'compliant');
 
-    // Settle.
-    await new Promise((r) => setTimeout(r, 250));
     const stillThere = await SiteVisitChecklistItem.findOne({
       submissionId: sid,
       standardCode: '4',
@@ -170,28 +134,62 @@ describe('CR-012 — auto-population from setFinalScore', () => {
     expect(stillThere?.verificationNote).toMatch(/classroom 3/);
   });
 
-  it('clearFinalScore removes the auto row (unverified)', async () => {
+  it('a manual row is not converted to auto (and not removed) by a Final mark', async () => {
     const { sid, leadTok } = await seed();
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
+    const add = await request(app)
+      .post(`/api/submissions/${sid}/checklist`)
       .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '5', specCode: 'a', score: 0 });
+      .send({ standardCode: '6', specCode: 'a', inclusionReason: 'follow_up' });
+    expect(add.status).toBe(201);
+
+    await putMark(sid, leadTok, '6', 'a', 'noncompliant');
+    let item = await SiteVisitChecklistItem.findOne({ submissionId: sid, standardCode: '6', specCode: 'a' }).lean();
+    expect(item?.source).toBe('manual');
+    expect(item?.inclusionReason).toBe('follow_up');
+
+    await putMark(sid, leadTok, '6', 'a', 'compliant');
+    item = await SiteVisitChecklistItem.findOne({ submissionId: sid, standardCode: '6', specCode: 'a' }).lean();
+    expect(item).not.toBeNull();
+  });
+
+  it('clearFinalMark removes the auto row (unverified)', async () => {
+    const { sid, leadTok } = await seed();
+    await putMark(sid, leadTok, '5', 'a', 'noncompliant');
     await waitForChecklist({ submissionId: sid, standardCode: '5', specCode: 'a' });
 
-    await request(app)
-      .delete(`/api/submissions/${sid}/compilation/final-score`)
+    const del = await request(app)
+      .delete(`/api/submissions/${sid}/compilation/final-mark`)
       .set('Authorization', `Bearer ${leadTok}`)
       .send({ standardCode: '5', specCode: 'a' });
+    expect(del.status).toBe(200);
+    expect(await SiteVisitChecklistItem.findOne({ submissionId: sid, standardCode: '5', specCode: 'a' })).toBeNull();
+  });
 
-    let tries = 0;
-    let item: any = null;
-    while (tries < 60) {
-      item = await SiteVisitChecklistItem.findOne({ submissionId: sid, standardCode: '5', specCode: 'a' });
-      if (!item) break;
-      await new Promise((r) => setTimeout(r, 50));
-      tries++;
-    }
-    expect(item).toBeNull();
+  it('a legacy 0-3 era row (partial + numeric finalScoreAtInclusion) still lists and is upgraded on Non-compliant', async () => {
+    const { sid, leadTok } = await seed();
+    await SiteVisitChecklistItem.collection.insertOne({
+      submissionId: new mongoose.Types.ObjectId(sid),
+      standardCode: '12',
+      specCode: 'a',
+      inclusionReason: 'partial',
+      finalScoreAtInclusion: 1,
+      verified: false,
+      source: 'auto',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    } as any);
+
+    const list = await request(app)
+      .get(`/api/submissions/${sid}/checklist`)
+      .set('Authorization', `Bearer ${leadTok}`);
+    expect(list.status).toBe(200);
+    expect(list.body.counts.partial).toBe(1);
+
+    await putMark(sid, leadTok, '12', 'a', 'noncompliant');
+    const raw: any = await SiteVisitChecklistItem.collection.findOne({ submissionId: new mongoose.Types.ObjectId(sid), standardCode: '12' });
+    expect(raw.inclusionReason).toBe('non_compliant');
+    expect(raw.finalMarkAtInclusion).toBe('noncompliant');
+    expect(raw.finalScoreAtInclusion).toBeUndefined();
   });
 });
 
@@ -238,10 +236,7 @@ describe('CR-012 — list / role gates / verify audit', () => {
 
   it('verifyChecklistItem fires audit checklist.item_verified', async () => {
     const { sid, leadTok } = await seed();
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '8', specCode: 'a', score: 1 });
+    await putMark(sid, leadTok, '8', 'a', 'noncompliant');
     const row = await waitForChecklist({ submissionId: sid, standardCode: '8', specCode: 'a' });
 
     const res = await request(app)
@@ -258,17 +253,14 @@ describe('CR-012 — list / role gates / verify audit', () => {
       'payload.itemId': String(row._id)
     });
     expect(audit).not.toBeNull();
-    expect(audit.payload?.inclusionReason).toBe('partial');
+    expect(audit.payload?.inclusionReason).toBe('non_compliant');
     expect(audit.payload?.priorVerified).toBe(false);
     expect(audit.reason).toMatch(/In-person evidence/);
   });
 
   it('un-verify writes checklist.item_unverified and clears verifier fields', async () => {
     const { sid, leadTok } = await seed();
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '9', specCode: 'a', score: 1 });
+    await putMark(sid, leadTok, '9', 'a', 'noncompliant');
     const row = await waitForChecklist({ submissionId: sid, standardCode: '9', specCode: 'a' });
     await request(app)
       .patch(`/api/submissions/${sid}/checklist/${row._id}/verify`)
@@ -286,14 +278,8 @@ describe('CR-012 — list / role gates / verify audit', () => {
 
   it('counts are correct in listChecklist', async () => {
     const { sid, leadTok } = await seed();
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '10', specCode: 'a', score: 0 });
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '10', specCode: 'b', score: 1 });
+    await putMark(sid, leadTok, '10', 'a', 'noncompliant');
+    await putMark(sid, leadTok, '10', 'b', 'noncompliant');
     await waitForChecklist({ submissionId: sid, standardCode: '10', specCode: 'b' });
 
     const res = await request(app)
@@ -301,8 +287,8 @@ describe('CR-012 — list / role gates / verify audit', () => {
       .set('Authorization', `Bearer ${leadTok}`);
     expect(res.status).toBe(200);
     expect(res.body.counts.total).toBe(2);
-    expect(res.body.counts.partial).toBe(1);
-    expect(res.body.counts.non_compliant).toBe(1);
+    expect(res.body.counts.partial).toBe(0);
+    expect(res.body.counts.non_compliant).toBe(2);
     expect(res.body.counts.verified).toBe(0);
   });
 });
@@ -310,10 +296,7 @@ describe('CR-012 — list / role gates / verify audit', () => {
 describe('CR-012 — DOCX export', () => {
   it('returns a real .docx with the institution + per-row inclusion reason text', async () => {
     const { sid, leadTok } = await seed();
-    await request(app)
-      .put(`/api/submissions/${sid}/compilation/final-score`)
-      .set('Authorization', `Bearer ${leadTok}`)
-      .send({ standardCode: '11', specCode: 'a', score: 1 });
+    await putMark(sid, leadTok, '11', 'a', 'noncompliant');
     await waitForChecklist({ submissionId: sid, standardCode: '11', specCode: 'a' });
 
     const res = await request(app)
@@ -333,6 +316,9 @@ describe('CR-012 — DOCX export', () => {
     const text = await zip.file('word/document.xml')!.async('string');
     expect(text).toContain('Checklist U');
     expect(text).toContain('Site-Visit Checklist');
-    expect(text).toContain('Partial');
+    expect(text).toContain('Non-compliant');
+    // The retired 0-3 vocabulary is gone from the export.
+    expect(text).not.toMatch(/final = \d/);
+    expect(text).not.toContain('Partial');
   });
 });

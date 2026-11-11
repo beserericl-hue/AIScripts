@@ -22,7 +22,7 @@ import app from '../../src/index';
 import { Submission } from '../../src/models/Submission';
 import { Comment } from '../../src/models/Comment';
 import { ValidationResult } from '../../src/models/ValidationResult';
-import { Score } from '../../src/models/Score';
+import { ReaderReport } from '../../src/models/ReaderReport';
 import { createUser, signTokenFor, assignToSubmission } from '../helpers/factories';
 
 async function readDocxBodyText(buffer: Buffer): Promise<string> {
@@ -251,14 +251,15 @@ describe('CR-011 / S11.4 — CSHSE-branded header / footer / logo', () => {
   });
 });
 
-describe('CR-003 / S11.1 — 0-3 reader scores in the suggestions DOCX', () => {
-  async function seedWithScores() {
+describe('Lauri CR — readers\' Compliant / Non-compliant marks in the suggestions DOCX (0-3 score removed)', () => {
+  async function seedWithMarks() {
     const { user: lead } = await createUser({ role: 'lead_reader' });
-    const { user: r1 } = await createUser({ role: 'reader', firstName: 'Carol', lastName: 'Scorer' });
+    const { user: r1 } = await createUser({ role: 'reader', firstName: 'Carol', lastName: 'Marker' });
+    const { user: r2 } = await createUser({ role: 'reader', firstName: 'Dave', lastName: 'Marker' });
     const { user: pc } = await createUser({ role: 'program_coordinator' });
     const sub: any = await Submission.create({
       submissionId: `SUGSC-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6)}`,
-      institutionName: 'Score U',
+      institutionName: 'Mark U',
       programName: 'HS',
       programLevel: 'bachelors',
       submitterId: pc._id,
@@ -266,23 +267,26 @@ describe('CR-003 / S11.1 — 0-3 reader scores in the suggestions DOCX', () => {
       status: 'review_complete'
     });
     await assignToSubmission(sub, lead, 'lead_reader');
-    // A spec with ONLY a score (no comment) — must still surface.
-    await Score.create({
+    // Specs with ONLY a mark (no comment) — must still surface.
+    await ReaderReport.create({
       submissionId: sub._id,
-      standardCode: '2',
-      specCode: 'c',
       reviewerId: r1._id,
-      reviewerName: 'Carol Scorer',
-      reviewerRole: 'reader',
-      score: 1 // Partial
+      rows: [{ standardCode: '2', specCode: 'c', mark: 'noncompliant', comment: '' }]
+    });
+    await ReaderReport.create({
+      submissionId: sub._id,
+      reviewerId: r2._id,
+      rows: [
+        { standardCode: '2', specCode: 'c', mark: 'compliant', comment: '' },
+        { standardCode: '3', specCode: 'a', mark: '', comment: '' }
+      ]
     });
     return { sid: String(sub._id), lead: signTokenFor(lead as any) };
   }
 
-  it('internal mode shows the rubric label + reviewer name for a score-only spec', async () => {
-    const { sid, lead } = await seedWithScores();
+  async function fetchText(sid: string, lead: string, mode: string): Promise<string> {
     const res = await request(app)
-      .get(`/api/submissions/${sid}/compilation/suggestions-doc?mode=internal`)
+      .get(`/api/submissions/${sid}/compilation/suggestions-doc?mode=${mode}`)
       .set('Authorization', `Bearer ${lead}`)
       .buffer(true)
       .parse((response, callback) => {
@@ -291,30 +295,34 @@ describe('CR-003 / S11.1 — 0-3 reader scores in the suggestions DOCX', () => {
         response.on('end', () => callback(null, Buffer.concat(data)));
       });
     expect(res.status).toBe(200);
-    const text = await readDocxBodyText(res.body);
-    expect(text).toContain('Compliance score (0-3)');
-    expect(text).toContain('Partial (1)');
-    expect(text).toContain('Carol Scorer');
-    // The score-only spec heading is present.
+    return readDocxBodyText(res.body);
+  }
+
+  it('internal mode shows each reader\'s mark + name for a mark-only spec, and no 0-3 score', async () => {
+    const { sid, lead } = await seedWithMarks();
+    const text = await fetchText(sid, lead, 'internal');
+    expect(text).toContain('Reader compliance');
+    expect(text).toContain('Carol Marker');
+    expect(text).toContain('Non-compliant');
+    expect(text).toContain('Dave Marker');
     expect(text).toContain('Standard 2.c');
+    // An unmarked spec is not surfaced.
+    expect(text).not.toContain('Standard 3.a');
+    // Negative: the retired score vocabulary is gone.
+    expect(text).not.toContain('0-3');
+    expect(text).not.toMatch(/Compliance score/i);
+    expect(text).not.toMatch(/Partial \(1\)|Fully compliant \(3\)/);
   });
 
-  it('pc_facing mode keeps the score but redacts the reviewer name', async () => {
-    const { sid, lead } = await seedWithScores();
-    const res = await request(app)
-      .get(`/api/submissions/${sid}/compilation/suggestions-doc?mode=pc_facing`)
-      .set('Authorization', `Bearer ${lead}`)
-      .buffer(true)
-      .parse((response, callback) => {
-        const data: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => data.push(chunk));
-        response.on('end', () => callback(null, Buffer.concat(data)));
-      });
-    expect(res.status).toBe(200);
-    const text = await readDocxBodyText(res.body);
-    expect(text).toContain('Partial (1)');
+  it('pc_facing mode keeps the marks but redacts the reviewer names', async () => {
+    const { sid, lead } = await seedWithMarks();
+    const text = await fetchText(sid, lead, 'pc_facing');
+    expect(text).toContain('Non-compliant');
     expect(text).toContain('Reader 1');
-    expect(text).not.toContain('Carol Scorer');
+    expect(text).toContain('Reader 2');
+    expect(text).not.toContain('Carol Marker');
+    expect(text).not.toContain('Dave Marker');
+    expect(text).not.toContain('0-3');
   });
 });
 

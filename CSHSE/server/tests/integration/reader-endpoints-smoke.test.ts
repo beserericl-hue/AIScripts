@@ -63,21 +63,18 @@ describe('R.2 — reader/lead-reader endpoint smoke (truth table)', () => {
       .set('Authorization', `Bearer ${leadTok}`);
     truth['GET /reviews/submissions/:id'] = subReviews.status;
 
-    const putScore = await request(app)
-      .put(`/api/submissions/${sid}/scores`)
+    // The 0-3 /scores API is retired (Lauri CR, Nov 2026); a reader's
+    // decision is the Compliant / Non-compliant mark on their Reader Report.
+    const saveMarks = await request(app)
+      .put(`/api/reports/submission/${sid}/reader-report-data`)
       .set('Authorization', `Bearer ${readerTok}`)
-      .send({ standardCode: '1', specCode: 'a', score: 2 });
-    truth['PUT /submissions/:id/scores'] = putScore.status;
+      .send({ rows: [{ standardCode: '1', specCode: 'a', mark: 'compliant', comment: '' }] });
+    truth['PUT /reports/submission/:id/reader-report-data'] = saveMarks.status;
 
-    const getScores = await request(app)
-      .get(`/api/submissions/${sid}/scores`)
+    const getMarks = await request(app)
+      .get(`/api/reports/submission/${sid}/reader-report-data`)
       .set('Authorization', `Bearer ${readerTok}`);
-    truth['GET /submissions/:id/scores'] = getScores.status;
-
-    const summary = await request(app)
-      .get(`/api/submissions/${sid}/scores/summary`)
-      .set('Authorization', `Bearer ${readerTok}`);
-    truth['GET /submissions/:id/scores/summary'] = summary.status;
+    truth['GET /reports/submission/:id/reader-report-data'] = getMarks.status;
 
     let submitStatus = -1;
     if (reviewId) {
@@ -113,8 +110,7 @@ describe('R.2 — reader/lead-reader endpoint smoke (truth table)', () => {
 
     // Core read endpoints must be alive (auth OK + controller runs).
     expect(myReviews.status).toBe(200);
-    expect(getScores.status).toBe(200);
-    expect(summary.status).toBe(200);
+    expect(getMarks.status).toBe(200);
     expect(myComps.status).toBe(200);
     // Assign + score writes must not be dead (404) or crash (500).
     for (const [, code] of Object.entries(truth)) {
@@ -124,7 +120,7 @@ describe('R.2 — reader/lead-reader endpoint smoke (truth table)', () => {
     }
   });
 
-  it('scores: rejects a non-reader (403)', async () => {
+  it('the retired 0-3 /scores endpoint is gone (404), even for a PC', async () => {
     const { user: pc } = await createUser({ role: 'program_coordinator' });
     const sub: any = await Submission.create({
       submissionId: `R2x-${Date.now().toString(36)}`,
@@ -139,6 +135,6 @@ describe('R.2 — reader/lead-reader endpoint smoke (truth table)', () => {
       .put(`/api/submissions/${sub._id}/scores`)
       .set('Authorization', `Bearer ${signTokenFor(pc as any)}`)
       .send({ standardCode: '1', specCode: 'a', score: 2 });
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
   });
 });

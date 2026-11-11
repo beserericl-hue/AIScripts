@@ -103,7 +103,6 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-testid="rr-all-reports"]', 'tour.rr.allReports', translate),
       anchorStep('[data-testid^="rr-ai-"]', 'tour.rr.aiAssessment', translate),
       anchorStep('[data-testid^="rr-check-"]', 'tour.rr.checklist', translate, 'left'),
-      anchorStep('[data-testid^="rr-score-"]', 'tour.rr.score', translate, 'left'),
       anchorStep('[data-testid^="rr-files-"]', 'tour.rr.files', translate, 'left'),
       anchorStep('[data-testid^="rr-matrix-"]', 'tour.rr.matrix', translate, 'left'),
       // Comments are explained at a HIGH LEVEL on the toolbar's Comments toggle —
@@ -174,7 +173,7 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
       anchorStep('[data-tour="ss-editor"]', 'tour.ss.editor', translate, 'top'),
       anchorStep('[data-tour="ss-toolbar"]', 'tour.ss.toolbar', translate, 'bottom'),
       anchorStep('[data-tour="ss-evidence-text"]', 'tour.ss.evidenceText', translate, 'top'),
-      // Reader-only — the 0-3 score control + the comments rail on the right.
+      // Reader-only — the comments rail on the right.
       anchorStep('[data-tour="ss-comments"]', 'tour.ss.comments', translate, 'left'),
       anchorStep('[data-tour="ss-clear"]', 'tour.ss.clear', translate, 'top'),
       anchorStep('[data-tour="ss-save"]', 'tour.ss.save', translate, 'top'),
@@ -192,7 +191,6 @@ export const TOUR_REGISTRY: ReadonlyArray<TourDefinition> = [
     getSteps: ({ translate = t }) => [
       centerStep('tour.readerReview.intro', translate),
       anchorStep('[data-testid="reader-dashboard"]', 'tour.readerReview.queue', translate),
-      anchorStep('[data-testid="reader-review-screen"]', 'tour.readerReview.screen', translate),
       anchorStep('[data-testid="reader-messages-link"]', 'tour.readerReview.messages', translate),
       centerStep('tour.readerReview.lastStep', translate),
     ],
