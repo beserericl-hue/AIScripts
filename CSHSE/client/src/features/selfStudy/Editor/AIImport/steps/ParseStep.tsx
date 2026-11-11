@@ -41,7 +41,6 @@ const STAGE_LABELS: Record<string, string> = {
   matcher: 'Matching to specifications',
   coverage_review: 'Reviewing coverage',
   gap_fill: 'Filling coverage gaps',
-  matrix_extract: 'Extracting matrices',
   mcc_walker: 'Reading document (pass 1)',
   mcc_introduction: 'Extracting introduction (pass 2)',
   mcc_subspec_match: 'Placing narratives on specs (pass 2)',
@@ -132,7 +131,6 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
   // the Next button.
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
-  const matrices = useAIImportStore((s) => s.matrices);
   const cvs = useAIImportStore((s) => s.cvs);
   const evidenceDocs = useAIImportStore((s) => s.evidenceDocs);
   const introductions = useAIImportStore((s) => s.introductions);
@@ -146,7 +144,6 @@ export function ParseStep({ onOpenReview }: ParseStepProps = {}): JSX.Element {
       0
     ) +
     (tags?.length ?? 0) +
-    (matrices?.length ?? 0) +
     (cvs?.length ?? 0) +
     (evidenceDocs?.length ?? 0) +
     // Introduction-only documents are still a successful parse.

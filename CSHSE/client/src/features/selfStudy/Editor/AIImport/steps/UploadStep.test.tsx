@@ -173,4 +173,19 @@ describe('<UploadStep />', () => {
     render(<UploadStep />);
     expect(screen.getByText('oops something broke')).toBeInTheDocument();
   });
+
+  it('offers only Self-study / CV / Syllabus / Project kinds — no curriculum matrix', () => {
+    render(<UploadStep />);
+    const radios = screen.getAllByRole('radio', { name: /.+/ }).filter(
+      (r) => (r as HTMLInputElement).name === 'documentKind'
+    );
+    const labels = radios.map((r) => r.closest('label')?.textContent || '');
+    expect(labels).toHaveLength(4);
+    expect(labels[0]).toMatch(/Self-study document/);
+    expect(labels[1]).toMatch(/^CV/);
+    expect(labels[2]).toMatch(/^Syllabus/);
+    expect(labels[3]).toMatch(/^Project/);
+    expect(screen.queryByText(/curriculum matrix/i)).toBeNull();
+    expect(screen.queryByText(/matrix/i)).toBeNull();
+  });
 });

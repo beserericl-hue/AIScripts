@@ -15,7 +15,7 @@ import { Upload as UploadIcon, AlertTriangle, CheckCircle2, FileText } from 'luc
 import { useAIImportStore } from '../../../../../store/aiImportStore';
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;  // 100 MB (raised from legacy 50 MB cap)
-const KIND_LABELS: Record<string, string> = { cv: 'CV', syllabus: 'Syllabus', project: 'Project', matrix: 'Curriculum matrix' };
+const KIND_LABELS: Record<string, string> = { cv: 'CV', syllabus: 'Syllabus', project: 'Project' };
 const ACCEPTED_MIMES = new Set([
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  // .docx
   'application/pdf'  // .pdf fallback
@@ -140,7 +140,7 @@ export function UploadStep(): JSX.Element {
       <p className="text-sm text-gray-600">
         Drop a .docx file (PDF accepted as a fallback). The AI service will auto-detect whether
         this is a finished free-form self-study or a partially-filled template and route accordingly.
-        Importing a standalone CV, syllabus, project, or curriculum matrix? Mark it below and we&rsquo;ll file it directly &mdash;
+        Importing a standalone CV, syllabus, or project? Mark it below and we&rsquo;ll file it directly &mdash;
         no parsing.
       </p>
 
@@ -149,9 +149,7 @@ export function UploadStep(): JSX.Element {
           <CheckCircle2 className="h-5 w-5 flex-shrink-0 text-emerald-600" />
           <div className="flex-1">
             <div className="font-medium" data-testid="direct-stored-title">
-              {directStoredResult.kind === 'matrix'
-                ? 'Curriculum matrix loaded.'
-                : <>Added to your File Library as a {KIND_LABELS[directStoredResult.kind] || directStoredResult.kind.toUpperCase()}.</>}
+              Added to your File Library as a {KIND_LABELS[directStoredResult.kind] || directStoredResult.kind.toUpperCase()}.
             </div>
             <div className="mt-0.5 text-emerald-700" data-testid="direct-stored-detail">
               <span className="font-mono">{directStoredResult.fileName}</span>
@@ -300,13 +298,12 @@ export function UploadStep(): JSX.Element {
 
       <fieldset className="space-y-2">
         <legend className="text-sm font-medium text-gray-700">What kind of file is this?</legend>
-        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4">
           {([
             { val: null, label: 'Self-study document', hint: 'Parse into sections' },
             { val: 'cv', label: 'CV', hint: 'File as a CV' },
             { val: 'syllabus', label: 'Syllabus', hint: 'File as a syllabus' },
             { val: 'project', label: 'Project', hint: 'File as a project' },
-            { val: 'matrix', label: 'Curriculum matrix', hint: 'Load into the Curriculum Matrix' },
           ] as const).map((opt) => {
             const active = documentKind === opt.val;
             return (
@@ -335,10 +332,8 @@ export function UploadStep(): JSX.Element {
           <p className="flex items-start gap-2 rounded-md bg-cshse-50 p-2 text-xs text-cshse-800">
             <FileText className="h-4 w-4 flex-shrink-0" />
             <span>
-              {documentKind === 'matrix'
-                ? <>This Word file is your curriculum matrix: its rows load into the Curriculum Matrix (each specification links to its row) and the file is filed under 2.e. Nothing else is parsed.</>
-                : <>This file will be filed directly in your File Library as a {KIND_LABELS[documentKind]} &mdash; it
-              won&rsquo;t be parsed into standard sections.</>}
+              This file will be filed directly in your File Library as a {KIND_LABELS[documentKind]} &mdash; it
+              won&rsquo;t be parsed into standard sections.
             </span>
           </p>
         )}

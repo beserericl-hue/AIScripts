@@ -32,7 +32,6 @@ const baseSummary: WorkflowSummaryData = {
     specsValidated: 1,
     specsTotal: 83,
     narrativesWritten: 12,
-    matrixRows: 412,
     evidenceFiles: 9,
   },
   submit: {

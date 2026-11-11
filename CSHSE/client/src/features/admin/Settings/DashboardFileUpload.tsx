@@ -158,7 +158,7 @@ export function DashboardFileUpload() {
           <div>
             <h2 className="text-lg font-semibold text-gray-900">Dashboard Files</h2>
             <p className="text-sm text-gray-500">
-              Upload specification documents and curriculum matrices that appear on the Program Coordinator dashboard.
+              Upload specification documents that appear on the Program Coordinator dashboard.
               Files are linked to a degree type and shown based on the institution's assigned spec.
             </p>
           </div>
@@ -198,7 +198,7 @@ export function DashboardFileUpload() {
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="e.g., Curriculum Matrix, Accreditation Standards"
+              placeholder="e.g., Accreditation Standards"
               className="w-full max-w-md px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
             />
           </div>
@@ -255,7 +255,7 @@ export function DashboardFileUpload() {
             <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3" />
             <p className="text-sm text-gray-500">No dashboard files uploaded yet.</p>
             <p className="text-xs text-gray-400 mt-1">
-              Upload specification documents and curriculum matrices for each degree type.
+              Upload specification documents for each degree type.
             </p>
           </div>
         ) : (

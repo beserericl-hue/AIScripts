@@ -18,7 +18,7 @@ import type {
 } from '../../../../../store/aiImportStore';
 import { UNPLACED_KEY, UNWRITTEN_KEY } from './SpecRail';
 
-export type ItemKind = 'text' | 'evidenceText' | 'file' | 'matrix' | 'tag';
+export type ItemKind = 'text' | 'evidenceText' | 'file' | 'tag';
 
 export interface FlatItem {
   /** Stable identifier — sectionId for real items, "placeholder-N" for placeholder rows. */
@@ -109,7 +109,6 @@ const KIND_LABEL: Record<ItemKind, string> = {
   text: 'Narrative',
   evidenceText: 'Evidence text',
   file: 'Evidence file',
-  matrix: 'Matrix cell',
   tag: 'Tag'
 };
 

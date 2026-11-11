@@ -89,7 +89,6 @@ export function DocumentViewer({
 
     const typeColors: Record<string, string> = {
       'standard': 'bg-teal-100 border-teal-400 text-teal-800',
-      'matrix': 'bg-purple-100 border-purple-400 text-purple-800',
       'appendix': 'bg-amber-100 border-amber-400 text-amber-800',
       'skip': 'bg-gray-100 border-gray-400 text-gray-600'
     };

@@ -21,7 +21,7 @@ import { BulkUploadResults, BulkUploadRow } from '../../BulkUploadResults';
 import { scrollInPanel, resetHiddenFrames } from '../../../../../lib/scrollInPanel';
 import { EvidenceEntry, entriesFromDataTransfer, entriesFromFileList, fillMissingText, suggestPlacementsForUnassigned, uploadEvidenceInBatches } from '../../bulkEvidenceUpload';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FileBox, Tag as TagIcon, Move, Grid3x3, Check, Pencil, Trash2, Eye, Columns, Upload, Search, Loader2 } from 'lucide-react';
+import { FileBox, Tag as TagIcon, Move, Check, Pencil, Trash2, Eye, Columns, Upload, Search, Loader2 } from 'lucide-react';
 import { openLinksInNewTab } from './linkNewTab';
 import { api } from '../../../../../services/api';
 import {
@@ -30,7 +30,6 @@ import {
   type CVItem,
   type EvidenceDocItem,
   type IntroductionBucket,
-  type MatrixData,
   type PlaceholderSection,
   type SpecBucket,
   type Tag
@@ -38,7 +37,6 @@ import {
 import {
   UNPLACED_KEY,
   UNWRITTEN_KEY,
-  MATRICES_KEY,
   INTRO_DOC_KEY,
   CVS_KEY,
   EVIDENCE_DOCS_KEY,
@@ -459,7 +457,6 @@ export type ItemKind =
   | 'text'
   | 'evidenceText'
   | 'file'
-  | 'matrix'
   | 'tag'
   | 'introduction'   // CR-039 — Standard-level Introduction items
   | 'evidenceDoc'    // CR-040 Phase 1 — appendix paper / syllabus file
@@ -491,7 +488,6 @@ interface ItemCardListProps {
   bucket: SpecBucket | null;
   unplacedTags: Tag[];
   placeholders: PlaceholderSection[];
-  matrices: MatrixData[];
   selectedSectionId: string | null;
   onSelect: (sectionId: string) => void;
   onBulkAction: (
@@ -516,9 +512,6 @@ interface ItemCardListProps {
   /** CR-070 — upload a file for a specific card; the parent resolves the
    *  card's exact spec from the sectionId. */
   onUploadFile?: (file: File, sectionId: string) => void;
-  /** CR-024: jump to the matrix view scrolled to this spec's row. ReviewStep
-   *  resolves the row anchor and dispatches selectMatrixRow. */
-  onJumpToMatrix?: (specKey: string) => void;
   /** CR-031: coordinator clicked "Append to neighbor's spec" on an Unplaced
    *  fragment. ReviewStep dispatches the move from Tag → Bucket(narrative). */
   onAppendUnplacedToSpec?: (tagId: string, std: string, spec: string) => void;
@@ -602,29 +595,15 @@ interface BucketGroups {
   narratives: CardItem[];
   evidenceText: CardItem[];
   evidenceFiles: CardItem[];
-  matrixCells: CardItem[];
 }
 
 function flattenBucket(bucket: SpecBucket): CardItem[] {
   // Preserves original kind order: narratives first, then evidence text,
-  // then evidence files, then matrix cells.
+  // then evidence files.
   const rows: CardItem[] = [];
   for (const n of bucket.narratives) rows.push(toCard(n, 'text'));
   for (const e of bucket.evidenceText) rows.push(toCard(e, 'evidenceText'));
   for (const f of bucket.evidenceFiles) rows.push(toCard(f, 'file'));
-  for (const m of (bucket as any).matrixCells || []) {
-    rows.push({
-      rowId: `matrix-${m.matrix || 'mx'}-${m.column_index ?? 0}-${m.code_raw || ''}`,
-      sectionId: `matrix-${m.matrix || 'mx'}-${m.column_index ?? 0}-${m.code_raw || ''}`,
-      rawHeading: `Matrix ${m.matrix || ''} · col ${m.column_index ?? 0}`,
-      displayLabel: `Matrix cell: ${m.code_raw || ''} (col ${m.column_index ?? '?'})`,
-      confidence: m.confidence ?? 1.0,
-      kind: 'matrix' as ItemKind,
-      wordCount: 0,
-      snippet: `Code: ${m.code_raw || ''}\nContent types: ${(m.content_types || []).join(', ')}\nDepth: ${m.depth || '—'}`,
-      rationale: m.spec_prompt || ''
-    });
-  }
   return rows;
 }
 
@@ -632,18 +611,7 @@ function groupBucketByKind(bucket: SpecBucket): BucketGroups {
   return {
     narratives: bucket.narratives.map((n) => toCard(n, 'text')),
     evidenceText: bucket.evidenceText.map((e) => toCard(e, 'evidenceText')),
-    evidenceFiles: bucket.evidenceFiles.map((f) => toCard(f, 'file')),
-    matrixCells: ((bucket as any).matrixCells || []).map((m: any) => ({
-      rowId: `matrix-${m.matrix || 'mx'}-${m.column_index ?? 0}-${m.code_raw || ''}`,
-      sectionId: `matrix-${m.matrix || 'mx'}-${m.column_index ?? 0}-${m.code_raw || ''}`,
-      rawHeading: `Matrix ${m.matrix || ''} · col ${m.column_index ?? 0}`,
-      displayLabel: `Matrix cell: ${m.code_raw || ''} (col ${m.column_index ?? '?'})`,
-      confidence: m.confidence ?? 1.0,
-      kind: 'matrix' as ItemKind,
-      wordCount: 0,
-      snippet: `Code: ${m.code_raw || ''}\nContent types: ${(m.content_types || []).join(', ')}\nDepth: ${m.depth || '—'}`,
-      rationale: m.spec_prompt || ''
-    }))
+    evidenceFiles: bucket.evidenceFiles.map((f) => toCard(f, 'file'))
   };
 }
 
@@ -713,7 +681,6 @@ const KIND_LABEL: Record<ItemKind, string> = {
   text: 'Narrative',
   evidenceText: 'Evidence text',
   file: 'Evidence file',
-  matrix: 'Matrix cell',
   tag: 'Tag',
   introduction: 'Introduction',     // CR-039
   evidenceDoc: 'Evidence document', // CR-040 Phase 1
@@ -725,7 +692,6 @@ export function ItemCardList({
   bucket,
   unplacedTags,
   placeholders,
-  matrices,
   selectedSectionId,
   onSelect,
   onBulkAction,
@@ -736,7 +702,6 @@ export function ItemCardList({
   onApproveAll,
   onClearApprovals,
   onUploadFile,
-  onJumpToMatrix,
   onAppendUnplacedToSpec,
   onEditStart,
   onShowAiInfo,
@@ -748,18 +713,6 @@ export function ItemCardList({
 }: ItemCardListProps): JSX.Element {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const listRef = useRef<HTMLDivElement>(null);
-  const selectMatrixRow = useAIImportStore((s) => s.selectMatrixRow);
-  const selectedMatrixRowAnchor = useAIImportStore((s) => s.selectedMatrixRowAnchor);
-  const clearMatrixRowAnchor = useAIImportStore((s) => s.clearMatrixRowAnchor);
-  // CR-024 — broadcast a spec key so every matrix in the view scrolls
-  // simultaneously when the user picks a spec from the rail.
-  const matrixScrollSpec = useAIImportStore((s) => s.matrixScrollSpec);
-  const setMatrixScrollSpec = useAIImportStore((s) => s.setMatrixScrollSpec);
-  const clearMatrixScrollSpec = useCallback(
-    () => setMatrixScrollSpec(null),
-    [setMatrixScrollSpec]
-  );
-  const matrixRowEdits = useAIImportStore((s) => s.matrixRowEdits);
   // CR-031 — full buckets state for the nearest-placed-neighbor computation
   // on the Unplaced view. Subscribe via selector so the panel updates when
   // the coordinator places items elsewhere.
@@ -797,7 +750,7 @@ export function ItemCardList({
     }
 
     // Case 2 — low-confidence bucket item. Only on real spec keys, not
-    // synthetic _matrices/_unwritten.
+    // synthetic _unwritten.
     if (selectedKey && !selectedKey.startsWith('_') && bucket) {
       const inNarr = bucket.narratives.find((i) => i.sectionId === selectedSectionId);
       const inEv = bucket.evidenceText.find((i) => i.sectionId === selectedSectionId);
@@ -837,56 +790,6 @@ export function ItemCardList({
     return null;
   }, [selectedKey, selectedSectionId, unplacedTags, bucket, allBuckets]);
 
-  // Per-spec matrix references: which (matrix, row, columnIndex+code) triples
-  // address the currently-selected spec? Used to surface "View in Matrix"
-  // buttons + inline matrix-coverage breakdown at the top of the spec card.
-  //
-  // Honours matrixRowEdits so a row the coordinator Removed in the Matrix
-  // step disappears from this Review-page view (instead of misleadingly
-  // showing as still associated with the spec). Retags appear under the
-  // NEW (std, spec) as the coordinator intended.
-  const specMatrixRefs = useMemo(() => {
-    if (!bucket) {
-      return [] as Array<{
-        matrix: MatrixData;
-        rowAnchor: string;
-        cellCount: number;
-        cells: MatrixData['cells'];
-      }>;
-    }
-    const std = bucket.standardCode;
-    const spec = bucket.specCode;
-    const out: Array<{
-      matrix: MatrixData;
-      rowAnchor: string;
-      cellCount: number;
-      cells: MatrixData['cells'];
-    }> = [];
-    for (const m of matrices) {
-      // Build the effective (std, spec) for each cell, applying any retag.
-      // Then keep only cells whose effective placement matches this spec AND
-      // whose row was NOT removed.
-      const matching = m.cells.filter((c) => {
-        const rowAnchor =
-          c.rowAnchor ||
-          `matrix-${m.matrixId}-row-${c.std}-${c.spec ?? 'x'}`;
-        const edit = matrixRowEdits[`${m.matrixId}|${rowAnchor}`];
-        if (edit?.kind === 'remove') return false;
-        const effStd = edit?.kind === 'retag' ? edit.newStd : c.std;
-        const effSpec = edit?.kind === 'retag' ? edit.newSpec : c.spec;
-        return effStd === std && effSpec === spec;
-      });
-      if (matching.length === 0) continue;
-      out.push({
-        matrix: m,
-        rowAnchor: matching[0].rowAnchor,
-        cellCount: matching.length,
-        cells: matching,
-      });
-    }
-    return out;
-  }, [bucket, matrices, matrixRowEdits]);
-
   // CR-039 — Resolve the currently-selected Introduction bucket when the
   // selectedKey is an intro key, so the items renderer can flatten it.
   const activeIntroBucket: IntroductionBucket | null = useMemo(() => {
@@ -898,7 +801,6 @@ export function ItemCardList({
   const items = useMemo<CardItem[]>(() => {
     if (selectedKey === UNPLACED_KEY) return flattenTags(unplacedTags);
     if (selectedKey === UNWRITTEN_KEY) return flattenPlaceholders(placeholders);
-    if (selectedKey === MATRICES_KEY) return [];
     if (activeIntroBucket) {
       return activeIntroBucket.items.map((it) => ({
         rowId: it.sectionId,
@@ -980,12 +882,11 @@ export function ItemCardList({
     return out;
   }, [bucket, unplacedTags]);
 
-  // Grouped view for real spec buckets (synthetic Unplaced/Unwritten/Matrices stay flat).
+  // Grouped view for real spec buckets (synthetic Unplaced/Unwritten stay flat).
   const groups: BucketGroups | null = useMemo(() => {
     if (
       selectedKey === UNPLACED_KEY ||
-      selectedKey === UNWRITTEN_KEY ||
-      selectedKey === MATRICES_KEY
+      selectedKey === UNWRITTEN_KEY
     ) return null;
     if (!bucket) return null;
     return groupBucketByKind(bucket);
@@ -1049,18 +950,6 @@ export function ItemCardList({
       <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
         Select a spec from the left.
       </div>
-    );
-  }
-
-  if (selectedKey === MATRICES_KEY) {
-    return (
-      <MatricesView
-        matrices={matrices}
-        highlightedRowAnchor={selectedMatrixRowAnchor}
-        onAnchorConsumed={clearMatrixRowAnchor}
-        broadcastSpecKey={matrixScrollSpec}
-        onBroadcastConsumed={clearMatrixScrollSpec}
-      />
     );
   }
 
@@ -1216,64 +1105,6 @@ export function ItemCardList({
               toolbar button was removed. */}
         </div>
       </div>
-
-      {/* Per-spec matrix references — visible only when a real spec bucket is
-          selected and at least one matrix has a row addressing this spec.
-          Shows the matrix name + click-to-jump button AND the actual
-          column-by-column coverage codes inline, so the coordinator can see
-          what the matrix says about this spec without leaving the page.
-          Filters out rows the coordinator Removed in the Matrix step and
-          honors retags. */}
-      {specMatrixRefs.length > 0 && (
-        <div className="border-b border-gray-200 bg-cshse-50/40 px-4 py-2 text-xs">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-cshse-800">Curriculum matrices for {bucket?.standardCode}.{bucket?.specCode}:</span>
-            {specMatrixRefs.map((ref) => (
-              <button
-                key={ref.matrix.matrixId}
-                onClick={() => selectMatrixRow(ref.rowAnchor)}
-                title={`Jump to this spec's row in ${ref.matrix.name} (${ref.cellCount} course cell${ref.cellCount === 1 ? '' : 's'})`}
-                className="inline-flex items-center gap-1 rounded border border-cshse-300 bg-white px-2 py-0.5 font-medium text-cshse-700 hover:bg-cshse-100"
-              >
-                <Grid3x3 className="h-3 w-3" aria-hidden /> {ref.matrix.name}
-                <span className="ml-1 rounded bg-cshse-100 px-1 text-[10px] text-cshse-800">
-                  {ref.cellCount} cell{ref.cellCount === 1 ? '' : 's'}
-                </span>
-              </button>
-            ))}
-          </div>
-          {/* Inline coverage breakdown per matrix */}
-          <div className="mt-2 space-y-2">
-            {specMatrixRefs.map((ref) => (
-              <div key={`${ref.matrix.matrixId}-cells`} className="rounded border border-cshse-200 bg-white p-2">
-                <div className="mb-1 font-medium text-cshse-800">
-                  {ref.matrix.name}
-                </div>
-                <div className="grid grid-cols-1 gap-x-3 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {ref.cells.map((c, i) => {
-                    const colHeader =
-                      c.columnHeader ||
-                      ref.matrix.columnHeaders?.[(c.columnIndex ?? 1) - 1] ||
-                      `Col ${c.columnIndex ?? i + 1}`;
-                    return (
-                      <div
-                        key={`${ref.matrix.matrixId}-${c.columnIndex}-${i}`}
-                        className="flex items-baseline gap-1.5 truncate"
-                      >
-                        <span className="truncate text-gray-600" title={colHeader}>{colHeader}:</span>
-                        <span className="font-mono font-semibold text-gray-900">{c.codeRaw}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-1 text-[10px] italic text-gray-500">
-                  Codes: I=Introduction · T=Theory · K=Knowledge · S=Skills · L/M/H=low/medium/high depth.
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* CR-031 — neighbor-context panel. Fires for:
             1. Unplaced tag selection (one-click "Append to neighbor's spec")
@@ -1451,29 +1282,6 @@ export function ItemCardList({
               icon="📎"
               items={groups.evidenceFiles}
               startIdx={groups.narratives.length + groups.evidenceText.length + 1}
-              selectedSectionId={selectedSectionId}
-              checked={checked}
-              isPlaceholder={isPlaceholder}
-              onSelect={onSelect}
-              onToggleCheck={toggleCheck}
-              onKeyDown={handleKeyDown}
-              approvedIds={approvedIds}
-              onToggleApproval={onToggleApproval}
-              onChangeKind={onChangeKind}
-              onEditStart={onEditStart} onShowAiInfo={onShowAiInfo} onUploadFile={onUploadFile}
-              editedSectionIds={editedSectionIds}
-            />
-            <KindSection
-              title="Matrix cells"
-              subtitle="Will be applied to CurriculumMatrix.cells[]"
-              icon="🔢"
-              items={groups.matrixCells}
-              startIdx={
-                groups.narratives.length +
-                groups.evidenceText.length +
-                groups.evidenceFiles.length +
-                1
-              }
               selectedSectionId={selectedSectionId}
               checked={checked}
               isPlaceholder={isPlaceholder}
@@ -1689,13 +1497,13 @@ function ItemCard({
       ? item.htmlSnippet
       : `<p>${(item.snippet || '').replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br/>')}</p>`;
   // The kind chips only make sense for items that live in a real spec bucket
-  // (text / evidenceText / file). Tag-list items + matrix cells can't be
+  // (text / evidenceText / file). Tag-list items can't be
   // re-typed in place.
   const canSwitchKind = onChangeKind && (item.kind === 'text' || item.kind === 'evidenceText' || item.kind === 'file');
 
   // Coordinator-editable card name. Persists to the store/server via
   // setItemCustomLabel. Only bucket items + unplaced tags have a backing
-  // record to write to (matrix cells / placeholders are synthetic).
+  // record to write to (placeholders are synthetic).
   const setItemCustomLabel = useAIImportStore((s) => s.setItemCustomLabel);
   const canRename = item.kind === 'text' || item.kind === 'evidenceText' || item.kind === 'file' || item.kind === 'tag';
   const [editingName, setEditingName] = React.useState(false);
@@ -1894,7 +1702,7 @@ function ItemCard({
             )}
             {/* CR-039 — Move-to-Introduction. Two-click flow: click → pick
                 Document or Standard-N. Hidden on intro cards and on
-                non-text kinds (matrices / files / tags don't go into
+                non-text kinds (files / tags don't go into
                 Introductions). */}
             {onMoveToIntroduction && (item.kind === 'text' || item.kind === 'evidenceText') && (
               <select
@@ -2055,177 +1863,6 @@ function ItemCard({
         </div>
       )}
     </li>
-  );
-}
-
-// --------------------------------------------------------------- MatricesView
-//
-// Renders every detected curriculum matrix in the middle pane. The matrix
-// extractor's wire format gives us the original `<table>` HTML with row ids
-// already injected (e.g. `id="matrix-hsr-row-11-a"`) — we just sanitize-pass
-// it through `dangerouslySetInnerHTML` (matching the trust model of the rest
-// of the wizard's docx-derived HTML). When `highlightedRowAnchor` is set we
-// scroll that row into view and add a brief flash highlight, then clear the
-// store anchor so a second click on the same button re-triggers.
-
-interface MatricesViewProps {
-  matrices: MatrixData[];
-  highlightedRowAnchor: string | null;
-  onAnchorConsumed: () => void;
-  // CR-024 Sprint 2B — when the coordinator picks a spec in the rail, the
-  // wizard broadcasts the spec key here. MatricesView resolves it to the
-  // matching row anchor IN EVERY matrix simultaneously and scrolls/flashes
-  // each, so the coordinator sees coverage across both HS and non-HS
-  // matrices without having to scroll twice.
-  broadcastSpecKey?: string | null;
-  onBroadcastConsumed?: () => void;
-}
-
-function MatricesView({
-  matrices,
-  highlightedRowAnchor,
-  onAnchorConsumed,
-  broadcastSpecKey,
-  onBroadcastConsumed
-}: MatricesViewProps): JSX.Element {
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!highlightedRowAnchor || !containerRef.current) return;
-    const row = containerRef.current.querySelector<HTMLElement>(
-      `#${CSS.escape(highlightedRowAnchor)}`
-    );
-    if (!row) {
-      onAnchorConsumed();
-      return;
-    }
-    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    row.classList.add('cshse-matrix-row-flash');
-    const t = setTimeout(() => {
-      row.classList.remove('cshse-matrix-row-flash');
-      onAnchorConsumed();
-    }, 2200);
-    return () => clearTimeout(t);
-  }, [highlightedRowAnchor, onAnchorConsumed]);
-
-  // CR-024 — when the spec broadcast fires, find the matching row in EVERY
-  // matrix (anchor format: matrix-{slug}-row-{std}-{spec}) and scroll +
-  // flash each. Different matrices may use different row layouts; we hunt
-  // them all at once so the coordinator doesn't have to click twice.
-  useEffect(() => {
-    if (!broadcastSpecKey || !containerRef.current) return;
-    const dot = broadcastSpecKey.indexOf('.');
-    if (dot === -1) {
-      onBroadcastConsumed?.();
-      return;
-    }
-    const std = broadcastSpecKey.slice(0, dot);
-    const spec = broadcastSpecKey.slice(dot + 1);
-    const anchorSuffix = `row-${std}-${spec}`;
-    const rows = Array.from(
-      containerRef.current.querySelectorAll<HTMLElement>(
-        `[id$="${CSS.escape(anchorSuffix)}"]`
-      )
-    );
-    if (rows.length === 0) {
-      onBroadcastConsumed?.();
-      return;
-    }
-    // Scroll the first match into view smoothly; flash all matches so even
-    // matrices that don't auto-scroll into view still visually highlight.
-    rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-    for (const r of rows) r.classList.add('cshse-matrix-row-flash');
-    const t = setTimeout(() => {
-      for (const r of rows) r.classList.remove('cshse-matrix-row-flash');
-      onBroadcastConsumed?.();
-    }, 2200);
-    return () => clearTimeout(t);
-  }, [broadcastSpecKey, onBroadcastConsumed]);
-
-  if (matrices.length === 0) {
-    return (
-      <div className="flex h-full flex-1 items-center justify-center text-sm text-gray-500">
-        No curriculum matrices were detected in this import.
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full flex-1 flex-col bg-gray-50">
-      <div className="border-b border-gray-200 bg-white px-4 py-2 text-sm">
-        <span className="font-medium text-gray-800">
-          {matrices.length} matrix{matrices.length === 1 ? '' : 'es'} detected
-        </span>
-        <span className="ml-2 text-xs text-gray-500">
-          The full <code className="rounded bg-gray-100 px-1">{'<table>'}</code> is shown
-          here once per matrix; spec cards link back to the relevant row.
-        </span>
-      </div>
-      <div ref={containerRef} className="flex-1 overflow-auto p-4">
-        <style>{`
-          .cshse-matrix-row-flash { background-color: #fef9c3 !important; transition: background-color 0.4s ease; }
-          .ai-html-snippet table { border-collapse: collapse; width: 100%; font-size: 12px; }
-          .ai-html-snippet table td, .ai-html-snippet table th {
-            border: 1px solid #d1d5db; padding: 4px 6px; vertical-align: top;
-          }
-          .ai-html-snippet table th { background: #f9fafb; font-weight: 600; text-align: left; }
-          .ai-html-snippet table tr.cshse-matrix-row td:first-child {
-            font-weight: 500;
-          }
-          /* CR-024 — sticky column headers AND sticky standard-group
-             heading rows so the coordinator always knows which standard
-             they're scrolled to inside a 70+ row matrix. */
-          .ai-html-snippet table thead th { position: sticky; top: 0; z-index: 2; }
-          .ai-html-snippet table tr.cshse-matrix-standard-header td,
-          .ai-html-snippet table tr.cshse-matrix-standard-header th {
-            position: sticky; top: 24px; z-index: 1;
-            background: #eef2ff; font-weight: 700; color: #312e81;
-          }
-        `}</style>
-        {matrices.map((m) => (
-          <section
-            key={m.matrixId}
-            className="mb-6 rounded-lg border border-gray-200 bg-white"
-            aria-labelledby={`matrix-h-${m.matrixId}`}
-          >
-            <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-gray-200 px-4 py-2">
-              <div>
-                <h3
-                  id={`matrix-h-${m.matrixId}`}
-                  className="text-sm font-semibold text-gray-900"
-                >
-                  <Grid3x3 className="mr-1 inline h-4 w-4 align-text-bottom text-cshse-700" aria-hidden />
-                  {m.name}
-                </h3>
-                <p className="mt-0.5 text-xs text-gray-500">
-                  Program level: {m.programLevel} · {m.rowsMatched} of {m.rowsTotal} rows matched · {m.cells.length} filled cells
-                </p>
-              </div>
-              {m.columnHeaders.length > 0 && (
-                <div className="flex flex-wrap gap-1 text-[10px]">
-                  {m.columnHeaders.map((h, i) => (
-                    <span
-                      key={`${m.matrixId}-col-${i}`}
-                      className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-gray-700"
-                    >
-                      {h}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </header>
-            <div
-              className="ai-html-snippet max-h-[36rem] overflow-auto p-3 text-sm leading-relaxed text-gray-800"
-              // Matrix HTML originates from our own Python extractor (which
-              // copies the mammoth-converted DOCX table and adds row ids).
-              // Same trust model as DocumentViewer and ShowInSourceModal.
-              // eslint-disable-next-line react/no-danger
-              dangerouslySetInnerHTML={{ __html: m.htmlSnippet }}
-            />
-          </section>
-        ))}
-      </div>
-    </div>
   );
 }
 
@@ -2673,7 +2310,7 @@ interface EvidenceDocsViewProps {
 function EvidenceDocsView({ docs, onShowInSource, approvedIds, onToggleApproval, onApproveAll, onClearApprovals }: EvidenceDocsViewProps): JSX.Element {
   // CR-040 Phase 2c — submissionId from the store is required to build
   // the download URL for the View-file button. The same id powers the
-  // ReviewSurface + MatrixSurface.
+  // ReviewSurface.
   const submissionId = useAIImportStore((s) => s.submissionId);
   // CR-040 follow-on — click-to-select so the right-pane AI evaluation
   // shows the detector heuristics + source location for the picked doc.

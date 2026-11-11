@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, Grid3X3, FolderOpen, ClipboardList, ClipboardCheck, Users, Lock, CheckCircle2, MessageSquare, Sparkles, Maximize2, Minimize2, ListTree, Filter } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Save, Check, Loader2, Download, Eye, X, FileText, BookOpen, FolderOpen, ClipboardList, ClipboardCheck, Users, Lock, CheckCircle2, MessageSquare, Sparkles, Maximize2, Minimize2, ListTree, Filter } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { FormattedCommentable } from './FormattedCommentable';
 import { AllCommentsDrawer } from './AllCommentsDrawer';
 import { SpecFilesMenu, type SpecEvidence } from './SpecFilesMenu';
-import { SpecMatrixModal } from './SpecMatrixModal';
 import RequiredDocuments from '../../components/RequiredDocuments';
 
 // Non-compliant summary — per-standard reader agreement (who marked it
@@ -508,9 +507,6 @@ export function ReaderReportEditor(): JSX.Element {
 
   const [dlError, setDlError] = useState<string | null>(null);
   const [viewHtml, setViewHtml] = useState<string | null>(null);
-  // The curriculum matrix is shown IN PLACE (a reader can't reach /self-study),
-  // scrolled to the clicked specification's row.
-  const [matrixFocus, setMatrixFocus] = useState<{ std: string; specText: string } | null>(null);
   const [viewLoading, setViewLoading] = useState(false);
   const reviewerParam = viewReviewerId ? `&reviewerId=${encodeURIComponent(viewReviewerId)}` : '';
   const openViewer = async () => {
@@ -823,13 +819,6 @@ export function ReaderReportEditor(): JSX.Element {
             className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap text-slate-600 hover:bg-slate-100"
           >
             <BookOpen className="h-4 w-4 flex-shrink-0" />Standards
-          </button>
-          <button
-            data-testid="rr-nav-curriculum"
-            onClick={() => navigate(`/self-study/${submissionId}?view=curriculum`)}
-            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap text-slate-600 hover:bg-slate-100"
-          >
-            <Grid3X3 className="h-4 w-4 flex-shrink-0" />Curriculum Matrix
           </button>
           <button
             data-testid="rr-nav-files"
@@ -1325,8 +1314,8 @@ export function ReaderReportEditor(): JSX.Element {
                           />
                         </div>
                         {/* This spec's linked files — a menu (grouped Syllabi /
-                            CVs / Projects) that VIEWS each file in place, plus the
-                            Curriculum Matrix link. No screen shift to the library. */}
+                            CVs / Projects) that VIEWS each file in place. No
+                            screen shift to the library. */}
                         <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-2">
                           <SpecFilesMenu
                             submissionId={submissionId}
@@ -1334,14 +1323,6 @@ export function ReaderReportEditor(): JSX.Element {
                             standardCode={r.code}
                             specCode={sp.specCode}
                           />
-                          <button
-                            data-testid={`rr-matrix-${r.code}-${sp.specCode}`}
-                            onClick={() => setMatrixFocus({ std: r.code, specText: sp.specTitle || '' })}
-                            className="inline-flex items-center gap-1 rounded border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                            title="View the Curriculum Matrix in place"
-                          >
-                            <Grid3X3 className="h-3.5 w-3.5" />Matrix
-                          </button>
                         </div>
                       </div>
                     </div>
@@ -1475,16 +1456,6 @@ export function ReaderReportEditor(): JSX.Element {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Curriculum Matrix, viewed IN PLACE (a reader can't reach /self-study). */}
-      {matrixFocus && (
-        <SpecMatrixModal
-          submissionId={submissionId}
-          focusStandard={matrixFocus.std}
-          focusSpecText={matrixFocus.specText}
-          onClose={() => setMatrixFocus(null)}
-        />
       )}
 
       {/* Non-compliant summary popup (lead/admin) — per standard, who marked it

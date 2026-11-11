@@ -15,8 +15,7 @@
  *   - Unplaced view renders unplaced tags only
  *   - Empty bucket renders "+ Add from source" affordance when callback supplied
  *   - The displayLabel falls back to body snippet for terse headings ("b.")
- *   - CR-024 — per-spec matrix references render when a matrix cell
- *     addresses the selected (std, spec)
+ *   - No curriculum-matrix panel on a spec (CSHSE board, Nov 2026)
  *   - CR-041 US-6 — source-file chip surfaces sourceFilename when present
  *   - "Select all" toggles every card's checkbox
  */
@@ -32,7 +31,6 @@ import type {
   SpecBucket,
   BucketItem,
   Tag,
-  MatrixData,
 } from '../../../../../store/aiImportStore';
 
 function mkItem(overrides: Partial<BucketItem> & Pick<BucketItem, 'sectionId'>): BucketItem {
@@ -55,7 +53,6 @@ function mkBucket(overrides: Partial<SpecBucket>): SpecBucket {
     narratives: [],
     evidenceText: [],
     evidenceFiles: [],
-    matrixCells: [],
     coverageScore: null,
     coverageCovered: null,
     coverageGaps: [],
@@ -90,7 +87,6 @@ describe('<ItemCardList />', () => {
         bucket={null}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
@@ -114,7 +110,6 @@ describe('<ItemCardList />', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
@@ -137,7 +132,6 @@ describe('<ItemCardList />', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={onSelect}
         onBulkAction={() => {}}
@@ -175,7 +169,6 @@ describe('<ItemCardList />', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
@@ -207,7 +200,6 @@ describe('<ItemCardList />', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
@@ -236,7 +228,6 @@ describe('<ItemCardList />', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
@@ -257,7 +248,6 @@ describe('<ItemCardList />', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
@@ -281,7 +271,6 @@ describe('<ItemCardList />', () => {
         bucket={null}
         unplacedTags={tags}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
@@ -300,7 +289,6 @@ describe('<ItemCardList />', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
@@ -328,7 +316,6 @@ describe('<ItemCardList />', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
@@ -345,40 +332,26 @@ describe('<ItemCardList />', () => {
     expect(screen.getByText(/Source heading:/i)).toBeInTheDocument();
   });
 
-  it('CR-024 — per-spec matrix references render when a matrix cell addresses (std, spec)', () => {
-    const bucket = mkBucket({ standardCode: '1', specCode: 'a' });
-    const matrices: MatrixData[] = [
-      {
-        matrixId: 'mx1',
-        name: 'Curriculum Map',
-        cells: [
-          {
-            std: '1',
-            spec: 'a',
-            columnIndex: 1,
-            codeRaw: 'I',
-            rowAnchor: 'matrix-mx1-row-1-a',
-            confidence: 1,
-          } as any,
-        ],
-        columnHeaders: ['CHS 101'],
-      } as any,
-    ];
+  it('a spec card shows no curriculum-matrix panel or matrix buttons', () => {
+    const bucket = mkBucket({
+      standardCode: '11',
+      specCode: 'a',
+      narratives: [mkItem({ sectionId: 's1', heading: 'Curriculum design' })],
+    });
     render(
       <ItemCardList
-        selectedKey="1.a"
+        selectedKey="11.a"
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={matrices}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}
       />
     );
-    expect(screen.getByText(/Curriculum matrices for 1\.a/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Curriculum Map/i })).toBeInTheDocument();
-    expect(screen.getByText('CHS 101:')).toBeInTheDocument();
+    expect(screen.getByText('Curriculum design')).toBeInTheDocument();
+    expect(screen.queryByText(/matri/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /matri/i })).toBeNull();
   });
 
   it('CR-041 US-6 — source-file chip surfaces sourceFilename when present', () => {
@@ -398,7 +371,6 @@ describe('<ItemCardList />', () => {
         bucket={bucket}
         unplacedTags={[]}
         placeholders={[]}
-        matrices={[]}
         selectedSectionId={null}
         onSelect={() => {}}
         onBulkAction={() => {}}

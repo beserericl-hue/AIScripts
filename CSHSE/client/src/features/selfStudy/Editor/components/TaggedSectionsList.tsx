@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, FileText, Grid3X3, BookOpen, Eye, Loader2, Zap, CheckCircle2, Send } from 'lucide-react';
+import { Trash2, FileText, BookOpen, Eye, Loader2, Zap, CheckCircle2, Send } from 'lucide-react';
 
 // Standard names for display - CSHSE Standards 1-21 (Build verification)
 const STANDARD_NAMES: Record<string, string> = {
@@ -28,7 +28,7 @@ const STANDARD_NAMES: Record<string, string> = {
 
 export interface TaggedSection {
   id: string;
-  sectionType: 'standard' | 'matrix' | 'appendix' | 'skip' | 'narrative' | 'supporting_evidence';
+  sectionType: 'standard' | 'appendix' | 'skip' | 'narrative' | 'supporting_evidence';
   standardCode?: string;
   specCode?: string;
   title: string;
@@ -48,7 +48,6 @@ interface TaggedSectionsListProps {
   onDelete: (sectionId: string) => void;
   onView: (section: TaggedSection) => void;
   onApply: (section: TaggedSection, targetStandardCode: string, targetSpecCode: string, toSupportingEvidence?: boolean) => Promise<void>;
-  onApplyToMatrix?: (section: TaggedSection, standardCode: string) => Promise<void>;
   deletingId: string | null;
   applyingId: string | null;
 }
@@ -72,7 +71,6 @@ export function TaggedSectionsList({
   onDelete,
   onView,
   onApply,
-  onApplyToMatrix,
   deletingId,
   applyingId
 }: TaggedSectionsListProps) {
@@ -81,10 +79,6 @@ export function TaggedSectionsList({
   const [selectedStandard, setSelectedStandard] = useState('');
   const [selectedSpec, setSelectedSpec] = useState('');
   const [toSupportingEvidence, setToSupportingEvidence] = useState(false);
-
-  // State for matrix apply form
-  const [matrixApplyFormOpen, setMatrixApplyFormOpen] = useState<string | null>(null);
-  const [matrixStandard, setMatrixStandard] = useState('');
 
   const handleApplyClick = (sectionId: string) => {
     if (applyFormOpen === sectionId) {
@@ -97,29 +91,10 @@ export function TaggedSectionsList({
       const section = sections.find(s => s.id === sectionId);
       const isAppendixType = section?.sectionType === 'appendix' || section?.sectionType === 'supporting_evidence';
       setApplyFormOpen(sectionId);
-      setMatrixApplyFormOpen(null); // Close matrix form if open
       setSelectedStandard('');
       setSelectedSpec('');
       setToSupportingEvidence(isAppendixType);
     }
-  };
-
-  const handleMatrixApplyClick = (sectionId: string) => {
-    if (matrixApplyFormOpen === sectionId) {
-      setMatrixApplyFormOpen(null);
-      setMatrixStandard('');
-    } else {
-      setMatrixApplyFormOpen(sectionId);
-      setApplyFormOpen(null); // Close standard form if open
-      setMatrixStandard('');
-    }
-  };
-
-  const handleMatrixApplySubmit = async (section: TaggedSection) => {
-    if (!matrixStandard || !onApplyToMatrix) return;
-    await onApplyToMatrix(section, matrixStandard);
-    setMatrixApplyFormOpen(null);
-    setMatrixStandard('');
   };
 
   const handleApplySubmit = async (section: TaggedSection) => {
@@ -133,7 +108,6 @@ export function TaggedSectionsList({
 
   // Group sections by type
   const standardSections = sections.filter(s => s.sectionType === 'standard' || s.sectionType === 'narrative');
-  const matrixSections = sections.filter(s => s.sectionType === 'matrix');
   const appendixSections = sections.filter(s => s.sectionType === 'appendix' || s.sectionType === 'supporting_evidence');
 
   const getSectionIcon = (sectionType: string) => {
@@ -141,8 +115,6 @@ export function TaggedSectionsList({
       case 'standard':
       case 'narrative':
         return <FileText className="w-4 h-4" />;
-      case 'matrix':
-        return <Grid3X3 className="w-4 h-4" />;
       case 'appendix':
       case 'supporting_evidence':
         return <BookOpen className="w-4 h-4" />;
@@ -158,9 +130,6 @@ export function TaggedSectionsList({
         ? `${section.standardCode}.${section.specCode} - ${standardName}`
         : `${section.standardCode} - ${standardName}`;
     }
-    if (section.sectionType === 'matrix') {
-      return 'Curriculum Matrix';
-    }
     if (section.sectionType === 'appendix' || section.sectionType === 'supporting_evidence') {
       return 'Appendix / Supporting Document';
     }
@@ -172,8 +141,6 @@ export function TaggedSectionsList({
       case 'standard':
       case 'narrative':
         return 'bg-teal-100 text-teal-700';
-      case 'matrix':
-        return 'bg-purple-100 text-purple-700';
       case 'appendix':
       case 'supporting_evidence':
         return 'bg-amber-100 text-amber-700';
@@ -216,11 +183,6 @@ export function TaggedSectionsList({
           {standardSections.length > 0 && (
             <span className="px-2 py-0.5 bg-teal-100 text-teal-700 rounded-full">
               {standardSections.length} Standards
-            </span>
-          )}
-          {matrixSections.length > 0 && (
-            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">
-              {matrixSections.length} Matrix
             </span>
           )}
           {appendixSections.length > 0 && (
@@ -275,26 +237,8 @@ export function TaggedSectionsList({
 
             {/* Actions */}
             <div className="flex items-center gap-1">
-              {/* Apply button - matrix sections get inline form with standard selector */}
-              {!section.appliedDirectly && section.sectionType === 'matrix' && onApplyToMatrix && (
-                <button
-                  onClick={() => handleMatrixApplyClick(section.id)}
-                  disabled={applyingId === section.id}
-                  className={`p-1.5 rounded transition-colors ${
-                    matrixApplyFormOpen === section.id
-                      ? 'text-purple-600 bg-purple-50'
-                      : 'text-gray-400 hover:text-purple-600 hover:bg-purple-50'
-                  } disabled:opacity-50`}
-                  title="Import to Curriculum Matrix"
-                >
-                  {applyingId === section.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Grid3X3 className="w-4 h-4" />
-                  )}
-                </button>
-              )}
-              {!section.appliedDirectly && section.sectionType !== 'matrix' && (
+              {/* Apply button */}
+              {!section.appliedDirectly && (
                 <button
                   onClick={() => handleApplyClick(section.id)}
                   disabled={applyingId === section.id}
@@ -433,58 +377,6 @@ export function TaggedSectionsList({
             </div>
           )}
 
-          {/* Matrix Inline Apply Form */}
-          {matrixApplyFormOpen === section.id && (
-            <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-              <div className="flex items-center gap-2 mb-2">
-                <Grid3X3 className="w-4 h-4 text-purple-600" />
-                <span className="text-sm font-medium text-purple-800">
-                  Import to Curriculum Matrix
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <select
-                  value={matrixStandard}
-                  onChange={(e) => setMatrixStandard(e.target.value)}
-                  className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-purple-500"
-                >
-                  <option value="">Select Standard...</option>
-                  {Object.entries(STANDARD_NAMES)
-                    .filter(([code]) => parseInt(code) >= 11)
-                    .map(([code, name]) => (
-                      <option key={code} value={code}>
-                        {code}. {name}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  onClick={() => handleMatrixApplySubmit(section)}
-                  disabled={!matrixStandard || applyingId === section.id}
-                  className="px-3 py-1.5 text-white text-sm font-medium rounded bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                >
-                  {applyingId === section.id ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : (
-                    <Grid3X3 className="w-3 h-3" />
-                  )}
-                  Import to Matrix
-                </button>
-                <button
-                  onClick={() => {
-                    setMatrixApplyFormOpen(null);
-                    setMatrixStandard('');
-                  }}
-                  className="px-2 py-1.5 text-gray-600 text-sm hover:bg-gray-200 rounded"
-                >
-                  Cancel
-                </button>
-              </div>
-              <p className="text-xs mt-2 text-purple-600">
-                Content will be stored as rich text in the Curriculum Matrix.
-              </p>
-            </div>
-          )}
         </div>
       ))}
     </div>

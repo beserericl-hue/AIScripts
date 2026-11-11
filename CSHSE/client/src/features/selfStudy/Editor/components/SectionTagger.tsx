@@ -30,7 +30,7 @@ const STANDARD_NAMES: Record<string, string> = {
 // Specification options (varies by standard, but commonly a-f)
 const SPEC_OPTIONS = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
 
-export type SectionType = 'standard' | 'matrix' | 'appendix' | 'skip';
+export type SectionType = 'standard' | 'appendix' | 'skip';
 
 export interface SectionMetadata {
   sectionType: SectionType;
@@ -131,7 +131,6 @@ export function SectionTagger({
   const canSave = hasSelection &&
     (sectionType === 'skip' ||
      (sectionType === 'appendix' && (!toSupportingEvidence || (standardCode && specCode))) ||
-     sectionType === 'matrix' ||
      (sectionType === 'standard' && standardCode));
 
   return (
@@ -197,7 +196,6 @@ export function SectionTagger({
             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 focus:border-teal-500 disabled:bg-gray-100"
           >
             <option value="standard">Standard (1-21)</option>
-            <option value="matrix">Curriculum Matrix</option>
             <option value="appendix">Appendix / Supporting Doc</option>
             <option value="skip">Skip / Ignore</option>
           </select>
