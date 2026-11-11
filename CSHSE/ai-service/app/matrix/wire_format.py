@@ -63,11 +63,20 @@ def _find_anchor_table(soup: BeautifulSoup, anchor: str) -> Tag | None:
 
 
 def _column_headers(table: Tag) -> list[str]:
-    """Pull the first row's non-empty cells as the course header list."""
-    first = table.find("tr")
-    if not first:
+    """The course header list: the row (among the first few) whose cells look
+    most like course numbers ("HDAL 2510", "SRVL 1020"); the first row when
+    none do. The official form puts a title row and a "Knowledge, Theory …"
+    row ABOVE the course row, so the first row alone gave blank headers."""
+    rows = table.find_all("tr")
+    if not rows:
         return []
-    cells = first.find_all(["td", "th"])
+    course_re = re.compile(r"\b[A-Z]{2,5}\s?-?\d{3,4}[A-Z]?\b")
+    best, best_n = rows[0], 0
+    for r in rows[:6]:
+        n = sum(1 for c in r.find_all(["td", "th"])[1:] if course_re.search(c.get_text() or ""))
+        if n > best_n:
+            best, best_n = r, n
+    cells = best.find_all(["td", "th"])
     # Drop the leading prompt cell (column 0) — it's empty / "Specifications".
     headers: list[str] = []
     for c in cells[1:]:
@@ -193,6 +202,45 @@ def _cell_to_dict(
     }
 
 
+# The CSHSE matrix form's own title. A standalone matrix document (the
+# program's "Matrix … Completed 2026.docx", uploaded on its own rather than
+# pasted into the self-study) carries this title but none of the self-study
+# template's #MatrixHSR / #Matrix2 anchors, so the anchor-scoped extractor
+# found nothing and the Curriculum Matrix stayed empty.
+_STANDALONE_MATRIX_TITLE_RE = re.compile(
+    r"matrix\s+illustrating\s+(the\s+)?relationship\s+of\s+(required\s+)?courses\s+to\s+(the\s+)?curriculum\s+standards",
+    re.IGNORECASE,
+)
+
+
+def anchor_standalone_matrix(html_bytes: bytes) -> bytes:
+    """Give a standalone matrix document the anchor the extractor scopes on.
+
+    Only when the document has NO matrix anchor of its own and carries the
+    official matrix title: a ``#MatrixHSR`` anchor goes right before the first
+    real matrix table (>= 4 columns, >= 3 rows) after the title. A self-study
+    with its own anchors, or a document that is not a matrix form, is returned
+    unchanged.
+    """
+    text = html_bytes.decode("utf-8", errors="ignore")
+    if any(f'id="{a}"' in text or f'name="{a}"' in text for a, _, _ in MATRIX_ANCHORS):
+        return html_bytes
+    soup = BeautifulSoup(html_bytes, "html.parser")
+    title = None
+    for el in soup.find_all(["p", "h1", "h2", "h3", "h4", "td"]):
+        if _STANDALONE_MATRIX_TITLE_RE.search(el.get_text(" ", strip=True)):
+            title = el
+            break
+    if title is None:
+        return html_bytes
+    for table in title.find_all_next("table"):
+        rows = table.find_all("tr")
+        if len(rows) >= 3 and max(len(r.find_all(["td", "th"])) for r in rows) >= 4:
+            table.insert_before(soup.new_tag("a", attrs={"id": "MatrixHSR"}))
+            return str(soup).encode("utf-8")
+    return html_bytes
+
+
 def build_wire_matrices(
     html_bytes: bytes,
     template: MatrixTemplate,
@@ -208,6 +256,7 @@ def build_wire_matrices(
         deep_walker should NOT re-emit those as "(curriculum matrix table)"
         data-table sections.
     """
+    html_bytes = anchor_standalone_matrix(html_bytes)
     soup = BeautifulSoup(html_bytes, "html.parser")
     for noise in soup(["script", "style", "head"]):
         noise.decompose()
