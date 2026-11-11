@@ -176,8 +176,8 @@ export function ReaderReportEditor(): JSX.Element {
       setTimeout(() => chk.classList.remove('ring-2', 'ring-teal-400'), 1200);
     }
     // Move keyboard focus onto the Compliant checkbox so the reader can act
-    // immediately — Space to mark Compliant, Tab to Non-Compliant / comments /
-    // Score — without reaching for the mouse. preventScroll keeps the smooth
+    // immediately — Space to mark Compliant, Tab to Non-Compliant / comments
+    // — without reaching for the mouse. preventScroll keeps the smooth
     // scrollIntoView above from being overridden by focus' default jump. (In
     // read-only mode the checkbox is disabled and simply won't take focus.)
     const compliant = document.querySelector(
@@ -958,7 +958,7 @@ export function ReaderReportEditor(): JSX.Element {
       {!focusMode && (
       <p className="mb-4 text-sm text-slate-500">
         For each specification: click the AI assessment tag to see the AI's view, read the narrative and
-        supporting evidence, fill the checklist (Compliant / Non-Compliant + Score) and add comments by
+        supporting evidence, fill the checklist (Compliant / Non-Compliant) and add comments by
         selecting text. Each comment appears in the margin next to the text it flags, with its own
         prev/next to walk every comment. Your work autosaves.
       </p>

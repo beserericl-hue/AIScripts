@@ -66,7 +66,7 @@ export interface ISelfStudyProgress {
 }
 
 // CR-053 / Sprint 7.1 — Board decisions. The board reviews the lead-
-// reader's compilation + reader scores + site-visit verification and
+// reader's compilation + reader marks + site-visit verification and
 // stamps one of these outcomes. The legacy 3-outcome enum
 // (approve / deny / conditional) is preserved for back-compat with
 // pre-Sprint-7 records; new decisions use one of the five values

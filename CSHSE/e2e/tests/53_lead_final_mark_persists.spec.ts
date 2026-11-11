@@ -1,6 +1,8 @@
 /**
- * Lead-reader-role persistence — the consolidated FINAL score (LeadFinalScore,
- * CR-009) is written to the DB and survives a reload. Runs live as a lead reader.
+ * Lead-reader-role persistence — the lead reader's Final MARK (Compliant /
+ * Non-compliant, LeadFinalMark — CR-009; the 0-3 Final score was retired by
+ * the Lauri CR, Nov 2026) is written to the DB and survives a reload.
+ * Runs live as a lead reader.
  */
 import { test, expect } from '@playwright/test';
 import { seedFixture, cleanupSeed, loginAsSeededViaSso, type SeedResult } from '../helpers/seed';
@@ -22,45 +24,48 @@ async function api(page: any, submissionId: string, method: string, path: string
 }
 
 // GET /compilation (lead/admin) returns { rows: [{ standardCode, specCode,
-// finalScore, ... }] }. Find the row for 1.a.
-function finalScoreOf(body: any): number | null | undefined {
+// finalMark, ... }] }. Find the row for 1.a.
+function finalMarkOf(body: any): string | null | undefined {
   const rows = body?.rows ?? [];
   const row = (rows as any[]).find((r) => r.standardCode === '1' && r.specCode === 'a');
-  return row ? row.finalScore : undefined;
+  return row ? row.finalMark : undefined;
 }
 
-test.describe('Lead-reader role — final-score persistence', () => {
+test.describe('Lead-reader role — Final mark persistence', () => {
   let seed: SeedResult | undefined;
   test.afterEach(async () => {
     await cleanupSeed(seed);
     seed = undefined;
   });
 
-  test('a lead reader sets a final score → persists across reload', async ({ page }) => {
+  test('a lead reader sets a Final mark → persists across reload; clear persists too', async ({ page }) => {
     test.setTimeout(90_000);
     seed = await seedFixture('wizard_review_minimal', {
       user: { email: 'lead-final@x.test', role: 'lead_reader' },
     });
     await loginAsSeededViaSso(page, seed);
 
-    // Set a consolidated final score as the lead reader.
-    const put = await api(page, seed.submissionId, 'PUT', '/compilation/final-score', {
+    const put = await api(page, seed.submissionId, 'PUT', '/compilation/final-mark', {
       standardCode: '1',
       specCode: 'a',
-      score: 3,
+      mark: 'noncompliant',
       note: 'e2e final',
     });
     expect(put.status, JSON.stringify(put.body)).toBeLessThan(300);
 
-    // Reload, then read it back via the lead-accessible compilation view.
     await page.reload();
     await page.waitForLoadState('networkidle');
     const got = await api(page, seed.submissionId, 'GET', '/compilation');
     expect(got.status, JSON.stringify(got.body)).toBe(200);
-    expect(finalScoreOf(got.body), `no persisted final score in ${JSON.stringify(got.body)}`).toBe(3);
+    expect(finalMarkOf(got.body), `no persisted final mark in ${JSON.stringify(got.body)}`).toBe('noncompliant');
 
-    // Clearing it also persists (DELETE).
-    const del = await api(page, seed.submissionId, 'DELETE', '/compilation/final-score', {
+    // Negative — a numeric 0-3 score is rejected.
+    const bad = await api(page, seed.submissionId, 'PUT', '/compilation/final-mark', {
+      standardCode: '1', specCode: 'a', score: 3,
+    });
+    expect(bad.status).toBe(400);
+
+    const del = await api(page, seed.submissionId, 'DELETE', '/compilation/final-mark', {
       standardCode: '1',
       specCode: 'a',
     });
@@ -68,7 +73,7 @@ test.describe('Lead-reader role — final-score persistence', () => {
     await page.reload();
     await page.waitForLoadState('networkidle');
     const got2 = await api(page, seed.submissionId, 'GET', '/compilation');
-    // After a clear the 1.a row is dropped entirely (no reader votes, no final).
-    expect(finalScoreOf(got2.body) ?? null, 'final score should be cleared').toBeFalsy();
+    // After a clear the 1.a row is dropped entirely (no reader marks, no final).
+    expect(finalMarkOf(got2.body) ?? null, 'final mark should be cleared').toBeFalsy();
   });
 });

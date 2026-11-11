@@ -148,8 +148,8 @@ describe('CR-013 — PUT /api/submissions/:id/itinerary', () => {
       submissionId: new mongoose.Types.ObjectId(sid),
       standardCode: '1',
       specCode: 'a',
-      inclusionReason: 'partial',
-      finalScoreAtInclusion: 1,
+      inclusionReason: 'non_compliant',
+      finalMarkAtInclusion: 'noncompliant',
       source: 'auto'
     });
 
@@ -243,8 +243,8 @@ describe('CR-013 — DOCX export', () => {
       submissionId: new mongoose.Types.ObjectId(sid),
       standardCode: '3',
       specCode: 'c',
-      inclusionReason: 'partial',
-      finalScoreAtInclusion: 1,
+      inclusionReason: 'non_compliant',
+      finalMarkAtInclusion: 'noncompliant',
       source: 'auto'
     });
     await request(app)

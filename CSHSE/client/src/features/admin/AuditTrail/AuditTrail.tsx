@@ -71,7 +71,7 @@ export function AuditTrailView({
       <header className="mb-3 border-b border-slate-200 pb-3">
         <h1 className="text-xl font-semibold text-slate-900">Audit trail</h1>
         <p className="text-sm text-slate-600">
-          Append-only log of every governance-relevant action — locks, submissions, score changes, board decisions, comment relays, and more.
+          Append-only log of every governance-relevant action — locks, submissions, final-mark changes, board decisions, comment relays, and more.
         </p>
       </header>
 

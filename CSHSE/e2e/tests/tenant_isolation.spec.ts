@@ -65,8 +65,6 @@ test.describe('cross-tenant isolation', () => {
       `/api/submissions/${subA}/failed`,
       `/api/submissions/${subA}/comments`,
       `/api/submissions/${subA}/checklist`,
-      `/api/submissions/${subA}/scores`,
-      `/api/submissions/${subA}/scores/summary`,
       `/api/submissions/${subA}/compilation`,
       `/api/submissions/${subA}/lock`,
       `/api/submissions/${subA}/matrix`,
@@ -96,7 +94,7 @@ test.describe('cross-tenant isolation', () => {
       { m: 'post' as const, p: `/api/submissions/${subA}/standards/1/specs/1.a/override`, d: { verdict: 'pass' } },
       { m: 'post' as const, p: `/api/submissions/${subA}/standards/1/complete`, d: {} },
       { m: 'post' as const, p: `/api/program-courses/${subA}/courses`, d: { courseCode: 'HACK101', courseName: 'x' } },
-      { m: 'put' as const, p: `/api/submissions/${subA}/scores`, d: { standardCode: '1', specCode: 'a', score: 0 } },
+      { m: 'put' as const, p: `/api/submissions/${subA}/compilation/final-mark`, d: { standardCode: '1', specCode: 'a', mark: 'noncompliant' } },
       { m: 'post' as const, p: `/api/webhooks/validate`, d: { submissionId: subA, standardCode: '1', specCode: 'a' } },
       { m: 'post' as const, p: `/api/submissions`, d: { institutionId: instA, institutionName: 'Isolation Inst A', programName: 'x', programLevel: 'associate', type: 'initial' } },
       { m: 'post' as const, p: `/api/imports/upload`, d: null }, // multipart skipped; ownership check must fire on submissionId in body

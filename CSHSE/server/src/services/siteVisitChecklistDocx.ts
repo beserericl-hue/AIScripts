@@ -16,11 +16,11 @@ import { SiteVisitChecklistItem } from '../models/SiteVisitChecklistItem';
 import { brandedSectionChrome } from './docxBranding';
 
 // ---------------------------------------------------------------------------
-// CR-012 / Sprint 6.1 — Site-visit partial-compliance checklist DOCX.
+// CR-012 / Sprint 6.1 — Site-visit compliance checklist DOCX.
 //
 // The visit team prints (or downloads) this and walks the institution with
 // it. Rows are sorted by standard then spec. Each row shows the inclusion
-// reason + the final score that triggered it + a "Verified" column the
+// reason (the lead reader's Final mark that triggered it) + a "Verified" column the
 // team can pencil-tick on paper or that already reflects the in-app verify
 // state.
 // ---------------------------------------------------------------------------
@@ -33,8 +33,9 @@ function cell(text: string, opts: { bold?: boolean; widthPct?: number } = {}): T
 }
 
 function readableReason(reason: string): string {
-  if (reason === 'partial') return 'Partial (final = 1)';
-  if (reason === 'non_compliant') return 'Non-compliant (final = 0)';
+  // 'partial' only exists on legacy rows from the retired 0-3 scale.
+  if (reason === 'partial') return 'Partial (legacy)';
+  if (reason === 'non_compliant') return 'Non-compliant (lead reader final)';
   if (reason === 'follow_up') return 'Follow-up';
   if (reason === 'manual') return 'Manual';
   return reason;
@@ -90,7 +91,7 @@ export async function generateChecklistDocx(submissionId: string): Promise<Buffe
       new Paragraph({
         children: [
           new TextRun(
-            'No partial-compliance items. (Every Final score is 2 or 3, or no Final scores have been set yet.)'
+            'No checklist items. (No specification has a Non-compliant Final mark from the lead reader.)'
           )
         ]
       })
