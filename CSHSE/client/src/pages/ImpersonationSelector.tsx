@@ -8,7 +8,8 @@ interface UserOption {
   email: string;
   firstName: string;
   lastName: string;
-  role: 'admin' | 'program_coordinator' | 'lead_reader' | 'reader';
+  role: 'admin' | 'program_coordinator' | 'lead_reader' | 'reader' | 'board';
+  isBoardMember?: boolean;
   institutionId?: string;
   institutionName?: string;
   // Multi-role users — carried into the impersonated identity so the header
@@ -46,6 +47,16 @@ const roles = [
       <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+      </svg>
+    ),
+  },
+  {
+    id: 'board',
+    name: 'CSHSE Board',
+    description: 'Read-only: view and download completed Lead Reader Reports',
+    icon: (
+      <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M5 21V10m14 11V10M9 21v-6h6v6M12 3l9 5H3l9-5z" />
       </svg>
     ),
   },
@@ -128,6 +139,7 @@ export default function ImpersonationSelector() {
       role: selectedUser.role,
       institutionId: selectedUser.institutionId,
       institutionName: selectedUser.institutionName,
+      isBoardMember: selectedUser.isBoardMember === true || selectedUser.role === 'board',
       roleAssignments: (selectedUser.roleAssignments || []).map((a) => ({
         role: String(a.role),
         institutionId: String((a as any).institutionId?._id || a.institutionId),

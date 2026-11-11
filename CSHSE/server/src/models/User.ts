@@ -1,7 +1,12 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcrypt';
 
-export type UserRole = 'program_coordinator' | 'reader' | 'lead_reader' | 'admin';
+// `board` — CSHSE Board member. GLOBAL (not institution-scoped) and READ-ONLY:
+// the only thing a board session can reach is the completed Lead Reader Reports
+// (routes/boardReports.ts). A user whose ONLY role is board has `role: 'board'`;
+// a user who is ALSO a reader / PC somewhere keeps that primary role and carries
+// `isBoardMember: true`, switching to "Board · CSHSE" via the role switcher.
+export type UserRole = 'program_coordinator' | 'reader' | 'lead_reader' | 'admin' | 'board';
 export type UserStatus = 'pending' | 'active' | 'disabled';
 
 // CR-060 — multi-role. A user can hold DIFFERENT roles at DIFFERENT institutions
@@ -53,6 +58,8 @@ export interface IUser extends Document {
   assignedSubmissions: mongoose.Types.ObjectId[];
   isActive: boolean;
   isSuperuser: boolean; // Superuser has visibility to everything in the system
+  // CSHSE Board member (read-only access to completed Lead Reader Reports).
+  isBoardMember: boolean;
   // How this account may sign in:
   //   'both'            — MemberClick SSO OR the CSHSE password UI (has a password)
   //   'memberclick-only'— MemberClick SSO only (no password; e.g. bulk-added members)
@@ -130,7 +137,7 @@ const UserSchema = new Schema<IUser>({
   },
   role: {
     type: String,
-    enum: ['program_coordinator', 'reader', 'lead_reader', 'admin'],
+    enum: ['program_coordinator', 'reader', 'lead_reader', 'admin', 'board'],
     required: true,
     default: 'program_coordinator'
   },
@@ -186,6 +193,10 @@ const UserSchema = new Schema<IUser>({
     type: Boolean,
     default: false,
     index: true
+  },
+  isBoardMember: {
+    type: Boolean,
+    default: false
   },
   loginMethod: {
     type: String,

@@ -12,7 +12,7 @@ import { Assignment } from '../models/Assignment';
 import { Submission } from '../models/Submission';
 import { ValidationResult } from '../models/ValidationResult';
 import { ingestCorrection } from '../services/cshseAiClient';
-import { isGlobalAdmin, institutionIdsWithRole } from '../services/roleResolver';
+import { isGlobalAdmin, institutionIdsWithRole, isBoardSession } from '../services/roleResolver';
 import { requireSubmissionAccess } from '../services/submissionAccessGuard';
 
 /**
@@ -331,6 +331,8 @@ async function readerMayAccess(req: AuthenticatedRequest, submissionId: string):
   // primary role (a PC@A who is also Reader@B and assigned to B's study passes
   // here for B). Admins always pass.
   if (isGlobalAdmin(req.user)) return true;
+  // CSHSE Board sessions never see individual reader reports.
+  if (isBoardSession(req.user as any)) return false;
   const reviewerId = effectiveReviewerId(req);
   const assigned = await Assignment.exists({ submissionId, userId: reviewerId, status: 'active' });
   return !!assigned;
@@ -873,6 +875,8 @@ export const getReaderDashboard = async (req: AuthenticatedRequest, res: Respons
   try {
     const reviewerId = effectiveReviewerId(req);
     if (!reviewerId) return res.status(401).json({ error: 'Not authenticated' });
+    // A board session reviews nothing (its reader assignments are not in scope).
+    if (isBoardSession(req.user as any)) return res.json({ items: [] });
 
     // Active assignments are the source of truth for what this reviewer may read.
     const assignments = await Assignment.find({ userId: reviewerId, status: 'active' })
