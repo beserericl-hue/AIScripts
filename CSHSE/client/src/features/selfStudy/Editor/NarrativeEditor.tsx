@@ -603,7 +603,9 @@ export function NarrativeEditor({
       className={
         expanded
           ? 'narrative-editor flex flex-col fixed inset-0 z-[60] bg-white p-3 sm:p-5 overflow-auto'
-          : 'narrative-editor flex flex-col h-full'
+          // min-h (not h-full): a fixed height let the spec header + toolbar +
+          // text box overflow onto the "does not apply" panel below it.
+          : 'narrative-editor flex flex-col min-h-full'
       }
     >
       {/* Standard and Specification Guidance */}
@@ -1175,7 +1177,7 @@ export function NarrativeEditor({
       <div className={`editor-content flex-1 border border-gray-200 overflow-auto max-w-full ${expanded ? 'min-h-0' : 'min-h-[240px]'} ${readOnly ? 'rounded-lg' : 'rounded-b-lg'}`}>
         <EditorContent
           editor={editor}
-          className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:max-w-full [&_.ProseMirror_table]:!table-auto [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[300px] [&_.ProseMirror]:overflow-x-auto"
+          className="prose prose-sm max-w-none p-4 min-h-[300px] focus:outline-none [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:mt-4 [&_h2]:text-xl [&_h2]:font-bold [&_h2]:mt-4 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:text-gray-900 [&_h3]:mt-5 [&_h3]:mb-1 [&_h3:first-child]:mt-0 [&_table]:border-collapse [&_table]:w-full [&_table]:my-4 [&_table]:max-w-full [&_.ProseMirror_table]:!table-auto [&_th]:border [&_th]:border-gray-300 [&_th]:bg-gray-100 [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_th]:break-words [&_td]:border [&_td]:border-gray-300 [&_td]:px-3 [&_td]:py-2 [&_td]:break-words [&_mark]:bg-yellow-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:min-h-[300px] [&_.ProseMirror]:overflow-x-auto"
         />
       </div>
 
