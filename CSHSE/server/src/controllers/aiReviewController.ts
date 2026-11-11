@@ -15,6 +15,7 @@
  *   GET    /api/submissions/:submissionId/matrix-state      — aiMatrixState
  *   POST   /api/submissions/:submissionId/matrix-state      — write back row edits (CR-026)
  */
+import { splitReviewStateIntoParts, composeSpecNarrativeHtml } from '../services/specPartSplit';
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 
@@ -250,6 +251,20 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
   const submission = await _loadOwnedSubmission(req, res);
   if (!submission) return;
   const state = (submission as any).aiReviewState || null;
+  // Numbered parts (4.a.1 …): a narrative answering a spec with parts is split
+  // into one item per part heading. Runs once per item (idempotent) and heals
+  // review states imported before the split existed; persisted atomically.
+  if (state?.buckets) {
+    try {
+      const plainState = typeof state.toObject === 'function' ? state.toObject() : state;
+      if (splitReviewStateIntoParts(plainState, (submission as any).programLevel)) {
+        await persistAiReviewState(submission, plainState);
+        (submission as any).aiReviewState = plainState;
+      }
+    } catch (splitErr) {
+      console.warn('[spec-parts] split on read failed (non-fatal):', splitErr);
+    }
+  }
   let matrixState = (submission as any).aiMatrixState || null;
   // If the persisted matrix state has no matrices, rebuild the list from the
   // durable CurriculumMatrix / SelfStudyImport sources AND PERSIST it back into
@@ -302,11 +317,12 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
   const levelCatalog = getLevelStandards(level);
   const inCatalog = new Set<string>();
   for (const std of levelCatalog || []) for (const sp of std.specifications) inCatalog.add(`${std.code}.${sp.code}`);
-  let outState = state;
-  if (state?.buckets) {
+  const readState = (submission as any).aiReviewState || null;
+  let outState = readState;
+  if (readState?.buckets) {
     const buckets: Record<string, any> = {};
-    for (const key of Object.keys(state.buckets)) {
-      const b: any = state.buckets[key];
+    for (const key of Object.keys(readState.buckets)) {
+      const b: any = readState.buckets[key];
       if (b?.standardCode && b?.specCode) {
         const std = String(b.standardCode), spec = String(b.specCode);
         const empty = !(b.narratives || []).length && !(b.evidenceText || []).length && !(b.evidenceFiles || []).length;
@@ -315,7 +331,7 @@ export async function getReviewState(req: AuthenticatedRequest, res: Response): 
       }
       buckets[key] = b;
     }
-    outState = { ...(typeof state.toObject === 'function' ? state.toObject() : state), buckets };
+    outState = { ...(typeof readState.toObject === 'function' ? readState.toObject() : readState), buckets };
   }
   res.json({
     submissionId: String(submission._id),
@@ -791,7 +807,7 @@ async function materializeApprovedToEditor(
   const affected: Array<{ std: string; spec: string }> = [];
 
   // --- 1) narratives + supporting-evidence text → submission.narratives (Map) ---
-  const bySpec = new Map<string, { std: string; spec: string; narr: string[]; ev: string[] }>();
+  const bySpec = new Map<string, { std: string; spec: string; narr: Array<{ html: string; partN?: number; partText?: string }>; ev: string[] }>();
   const slot = (std: string, spec: string) => {
     const k = `${std}.${spec}`;
     if (!bySpec.has(k)) bySpec.set(k, { std, spec, narr: [], ev: [] });
@@ -803,7 +819,11 @@ async function materializeApprovedToEditor(
     if (!std || !spec) continue;
     for (const it of bucket.narratives || []) {
       if (approved.has(it.sectionId)) {
-        slot(std, spec).narr.push(it.htmlSnippet || `<p>${escapeHtml(it.snippet || '')}</p>`);
+        slot(std, spec).narr.push({
+          html: it.htmlSnippet || `<p>${escapeHtml(it.snippet || '')}</p>`,
+          partN: typeof it.partN === 'number' ? it.partN : undefined,
+          partText: it.partText,
+        });
       }
     }
     for (const it of bucket.evidenceText || []) {
@@ -818,7 +838,8 @@ async function materializeApprovedToEditor(
     const stdMap: Map<string, any> = submission.narratives.get(std) || new Map();
     const existing = stdMap.get(spec);
     stdMap.set(spec, {
-      content: narr.length ? narr.join('\n<hr class="ai-import-merge"/>\n') : existing?.content || '',
+      // Numbered parts go under their own "4.a.2 …" heading, in official order.
+      content: narr.length ? composeSpecNarrativeHtml(narr, std, spec) : existing?.content || '',
       supportingEvidenceText: ev.length ? ev.join('\n\n') : existing?.supportingEvidenceText || '',
       lastModified: new Date(),
       isComplete: existing?.isComplete ?? false,

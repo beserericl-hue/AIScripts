@@ -21,6 +21,7 @@ import { SelfStudyImport } from '../models/SelfStudyImport';
 import { Submission, INarrativeContent } from '../models/Submission';
 import { Institution } from '../models/Institution';
 import { levelFromInstitution } from '../data/levelStandards';
+import { splitBucketsIntoParts } from '../services/specPartSplit';
 // Static import (was runtime require() / await import()) — both dynamic forms
 // fail to resolve the relative TS/JS path in one of the two runtimes (vitest vs
 // the compiled dist build), silently no-op'ing the evidence packaging in a
@@ -754,6 +755,16 @@ export async function receiveAICallback(req: AuthenticatedRequest, res: Response
   if (Array.isArray(payload.stages)) importRecord.aiStages = payload.stages;
   if (Array.isArray(payload.errors)) importRecord.aiErrors = payload.errors;
   if (payload.buckets && typeof payload.buckets === 'object') {
+    // Numbered parts (4.a.1 …): one review item per part heading.
+    try {
+      const sub: any = importRecord.submissionId
+        ? await Submission.findById(importRecord.submissionId).select('programLevel').lean()
+        : null;
+      const level = sub?.programLevel || (importRecord as any).programLevel || null;
+      if (level) payload.buckets = splitBucketsIntoParts(payload.buckets, level).buckets;
+    } catch (splitErr) {
+      console.warn('[spec-parts] split on import failed (non-fatal):', splitErr);
+    }
     importRecord.aiBuckets = payload.buckets;
     importRecord.markModified('aiBuckets');  // Mixed type needs explicit mark
   }

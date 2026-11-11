@@ -8,13 +8,19 @@ interface SpecPartsListProps {
   surface: 'rail' | 'editor-nav' | 'editor';
   /** Read-only (a submitted study, or a viewer without write access). */
   readOnly?: boolean;
+  /**
+   * When given, the part's number + wording is a link that opens that part's
+   * text (Review: its draft card; Editor: its "4.a.2 …" heading). The checkbox
+   * alone then approves.
+   */
+  onOpenPart?: (n: number) => void;
 }
 
 /**
  * The numbered parts of one specification (4.a.1, 4.a.2 …), each with its own
  * Approve box. Renders nothing for the many specifications without parts.
  */
-export function SpecPartsList({ submissionId, standardCode, specCode, surface, readOnly }: SpecPartsListProps) {
+export function SpecPartsList({ submissionId, standardCode, specCode, surface, readOnly, onOpenPart }: SpecPartsListProps) {
   const { partsOf, isApproved, setApproved } = useSpecParts(submissionId);
   const parts = partsOf(standardCode, specCode);
   if (!parts.length) return null;
@@ -48,8 +54,27 @@ export function SpecPartsList({ submissionId, standardCode, specCode, surface, r
                 onClick={(e) => e.stopPropagation()}
                 className="mt-0.5 h-3.5 w-3.5 shrink-0 rounded border-gray-300 text-green-600 focus:ring-cshse-500"
               />
-              <span className="font-mono shrink-0">{label}</span>
-              <span className={roomy ? '' : 'truncate'}>{p.text}</span>
+              {onOpenPart ? (
+                <button
+                  type="button"
+                  data-testid={`${id}-${p.n}-open`}
+                  title={`Show the text for ${label}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onOpenPart(p.n);
+                  }}
+                  className={`flex min-w-0 items-start gap-1.5 text-left hover:text-cshse-700 hover:underline`}
+                >
+                  <span className="font-mono shrink-0">{label}</span>
+                  <span className={roomy ? '' : 'truncate'}>{p.text}</span>
+                </button>
+              ) : (
+                <>
+                  <span className="font-mono shrink-0">{label}</span>
+                  <span className={roomy ? '' : 'truncate'}>{p.text}</span>
+                </>
+              )}
             </label>
           </li>
         );
