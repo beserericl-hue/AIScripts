@@ -61,3 +61,37 @@ def test_negative_a_document_without_the_matrix_title_is_unchanged():
 def test_column_headers_fall_back_to_first_row_without_course_numbers():
     t = BeautifulSoup("<table><tr><td>x</td><td>A</td><td>B</td></tr><tr><td>y</td><td>1</td><td>2</td></tr></table>", "html.parser").table
     assert _column_headers(t) == ["A", "B"]
+
+
+def test_matrix_extract_endpoint_returns_matrices(monkeypatch):
+    import base64, io
+    import docx
+    from fastapi.testclient import TestClient
+    import app.main as main
+
+    monkeypatch.setattr(main, "verify_hmac_signature", lambda *a, **k: None)
+    d = docx.Document()
+    d.add_paragraph("Matrix Illustrating Relationship of Required Courses to Curriculum Standards")
+    t = d.add_table(rows=3 + len(ROWS), cols=10)
+    for i, c in enumerate(["History Context"] + COURSES):
+        t.cell(2, i).text = c
+    t.cell(0, 0).text = "Standards and Specifications"
+    t.cell(1, 0).text = "Knowledge, Theory, Skills, and Values"
+    for r, (prompt, cells) in enumerate(ROWS, start=3):
+        t.cell(r, 0).text = prompt
+        for j, v in enumerate(cells, start=1):
+            t.cell(r, j).text = v
+    buf = io.BytesIO(); d.save(buf)
+    r = TestClient(main.app).post("/ai/matrix/extract", json={"base64": base64.b64encode(buf.getvalue()).decode(), "programLevel": "baccalaureate"})
+    assert r.status_code == 200, r.text
+    assert len(r.json()["matrices"]) == 1 and r.json()["level"] == "bachelors"
+
+
+def test_negative_matrix_extract_rejects_a_non_docx(monkeypatch):
+    import base64
+    from fastapi.testclient import TestClient
+    import app.main as main
+
+    monkeypatch.setattr(main, "verify_hmac_signature", lambda *a, **k: None)
+    r = TestClient(main.app).post("/ai/matrix/extract", json={"base64": base64.b64encode(b"%PDF-1.4 not a docx").decode()})
+    assert r.status_code == 422

@@ -417,9 +417,9 @@ interface AIImportState {
   forceFormat: 'template' | 'self_study' | 'mcc_narrative' | null;
   // When set, the upload is filed straight into the File Library as a CV /
   // Syllabus / Project (no AI parsing). See startUpload + UploadStep.
-  documentKind: 'cv' | 'syllabus' | 'project' | null;
+  documentKind: 'cv' | 'syllabus' | 'project' | 'matrix' | null;
   // Set after a direct-store upload completes so the UI can confirm it.
-  directStoredResult: { kind: string; fileName: string } | null;
+  directStoredResult: { kind: string; fileName: string; message?: string } | null;
 
   // Queue + SSE transport state
   queuePosition: number | null;
@@ -631,7 +631,7 @@ interface AIImportState {
   setProgramLevel: (l: ProgramLevel) => void;
   setIsReimport: (v: boolean) => void;
   setForceFormat: (f: 'template' | 'self_study' | 'mcc_narrative' | null) => void;
-  setDocumentKind: (k: 'cv' | 'syllabus' | 'project' | null) => void;
+  setDocumentKind: (k: 'cv' | 'syllabus' | 'project' | 'matrix' | null) => void;
   clearDirectStored: () => void;
   selectSpec: (key: string) => void;
   selectSection: (sectionId: string) => void;
@@ -2321,6 +2321,7 @@ export const useAIImportStore = create<AIImportState>()(
               directStoredResult: {
                 kind: String(uploadRes.data.kind || documentKind || ''),
                 fileName: String(uploadRes.data.fileName || uploadFile.name),
+                message: uploadRes.data.message ? String(uploadRes.data.message) : undefined,
               },
             });
             return;

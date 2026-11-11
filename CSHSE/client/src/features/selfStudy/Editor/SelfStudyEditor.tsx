@@ -3148,15 +3148,20 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       standard header rather than having to pick a spec
                       first. Without-spec → scrolls to the first spec row
                       of that standard in the matrix. */}
-                  {/^(1[1-9]|2[01])$/.test(selectedStandard) && (
+                  {/* 2.e is the specification that ASKS for the curriculum
+                      matrix: it opens the whole matrix (no row to jump to). */}
+                  {(/^(1[1-9]|2[01])$/.test(selectedStandard) || (selectedStandard === '2' && selectedSpec === 'e')) && (
                     <button
+                      data-testid="view-in-matrix"
                       onClick={() => {
-                        setMatrixScrollTarget({
-                          std: selectedStandard,
-                          // Without a spec we anchor to "a" — the first sub-spec
-                          // is always row 1 of that standard in the matrix.
-                          spec: selectedSpec || 'a'
-                        });
+                        if (selectedStandard !== '2') {
+                          setMatrixScrollTarget({
+                            std: selectedStandard,
+                            // Without a spec we anchor to "a" — the first sub-spec
+                            // is always row 1 of that standard in the matrix.
+                            spec: selectedSpec || 'a'
+                          });
+                        }
                         setActiveView('curriculum');
                       }}
                       className="inline-flex items-center gap-1 rounded border border-cshse-400 bg-cshse-50 px-2.5 py-1 text-xs font-medium text-cshse-800 hover:bg-cshse-100"
@@ -3167,7 +3172,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                       }
                     >
                       <Grid3X3 className="w-3.5 h-3.5" aria-hidden />
-                      {selectedSpec
+                      {selectedStandard === '2'
+                        ? 'Open curriculum matrix'
+                        : selectedSpec
                         ? `Matrix · ${selectedStandard}.${selectedSpec}`
                         : `Matrix · Standard ${selectedStandard}`}
                     </button>

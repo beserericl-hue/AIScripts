@@ -72,7 +72,7 @@ interface Evidence {
 // Map the import "kind:" tag to a human label for files whose original name is
 // junk (e.g. a numeric import-row label like "4." → "4..docx").
 const KIND_LABEL: Record<string, string> = {
-  syllabus: 'Syllabus', cv: 'CV', paper: 'Paper', project: 'Project', file: 'Document',
+  syllabus: 'Syllabus', cv: 'CV', paper: 'Paper', project: 'Project', file: 'Document', matrix: 'Curriculum matrix',
 };
 
 /** A readable file name: the real originalName, or — when that's just a number/
