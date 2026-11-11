@@ -24,7 +24,7 @@ let _reviewSaveQueue: Promise<boolean> = Promise.resolve(true);
 
 // ---------------------------------------------------------------- types
 
-export type WizardStep = 'upload' | 'parse' | 'review' | 'matrix' | 'apply' | 'tags';
+export type WizardStep = 'upload' | 'parse' | 'review' | 'apply' | 'tags';
 
 export type WizardStatus =
   | 'idle'
@@ -40,7 +40,7 @@ export type WizardStatus =
 
 export type ProgramLevel = 'associate' | 'bachelors' | 'masters';
 
-export type SectionKind = 'text' | 'evidenceText' | 'file' | 'matrix' | 'tag' | 'discard';
+export type SectionKind = 'text' | 'evidenceText' | 'file' | 'tag' | 'discard';
 
 export type FormatVerdict = {
   format: 'template' | 'self_study' | 'mcc_narrative';
@@ -57,7 +57,7 @@ export type Recommendation = {
   primaryStandard: string | null;
   primarySpec: string | null;
   primaryConfidence: number;
-  sectionType: 'narrative_response' | 'supporting_evidence' | 'curriculum_matrix' | 'context' | 'unknown';
+  sectionType: 'narrative_response' | 'supporting_evidence' | 'context' | 'unknown';
   acceptState: 'auto_accept' | 'review_letter_disagrees' | 'review_low_confidence' | 'review_unknown';
   rationale: string;
   alternates: Array<{ standardCode: string; specCode: string; confidence: number }>;
@@ -115,7 +115,6 @@ export type SpecBucket = {
   narratives: BucketItem[];
   evidenceText: BucketItem[];
   evidenceFiles: BucketItem[];
-  matrixCells: any[];
   coverageScore: number | null;
   coverageCovered: boolean | null;
   coverageGaps: string[];
@@ -160,11 +159,11 @@ function tagToIntroItem(t: Tag): BucketItem {
 }
 
 // CR-033 Phase 1 — faculty CV extracted from the self-study document.
-// Routing precedence: matrix-row → spec → matcher → unplaced. Phase 2
+// Routing precedence: spec heading → matcher → unplaced. Phase 2
 // brings the ai-service `cv_detector.py` + the standalone-CV upload
 // path; this Phase 1 lands the data shape so apply() and the renderer
 // can be wired against a stable contract today.
-export type CVRoutingSource = 'matrix' | 'heading' | 'matcher' | 'unplaced';
+export type CVRoutingSource = 'heading' | 'matcher' | 'unplaced';
 export type CVItem = {
   sectionId: string;
   facultyName: string;
@@ -175,7 +174,6 @@ export type CVItem = {
   sourceFilename?: string;
   routing: {
     source: CVRoutingSource;
-    matrixRowAnchor?: string;
   };
   resolvedStd?: string;
   resolvedSpec?: string;
@@ -269,34 +267,6 @@ export type PlaceholderSection = {
   specHint: string | null;
 };
 
-export type MatrixCell = {
-  std: string;
-  spec: string | null;
-  specPrompt: string;
-  rowAnchor: string;       // e.g. "matrix-hsr-row-11-a" — DOM id on the <tr>
-  columnIndex: number;
-  columnHeader: string;
-  codeRaw: string;
-  contentTypes: string[];  // ["I","T","K","S"] subset
-  depth: string | null;    // "L"|"M"|"H"
-  confidence: number;
-};
-
-export type MatrixData = {
-  matrixId: string;        // "matrix-hsr" | "matrix-non-hsr"
-  name: string;            // "Matrix for Human Services Courses"
-  anchorName: string;      // "MatrixHSR" | "Matrix2"
-  programLevel: string;
-  // Full `<table>...</table>` HTML with per-row id="matrix-{slug}-row-{std}-{spec}"
-  // baked in by the Python wire_format module.
-  htmlSnippet: string;
-  columnHeaders: string[];
-  rowsMatched: number;
-  rowsTotal: number;
-  columnCount: number;
-  cells: MatrixCell[];
-};
-
 export type StageProgress = {
   name: string;
   state: 'queued' | 'running' | 'done' | 'skipped' | 'n/a' | 'failed';
@@ -315,7 +285,6 @@ export type AIStatusSnapshot = {
   stages?: StageProgress[];
   buckets?: Record<string, SpecBucket> | null;
   tags?: Tag[] | null;
-  matrices?: MatrixData[] | null;
   placeholderSections?: PlaceholderSection[] | null;
   errors?: string[];
   // CR-033 / CR-040 / CR-039 Phase 2b/c — detector outputs from
@@ -382,7 +351,6 @@ export type AICoverageReport = {
   sectionsToIntroductions?: number;
   sectionsToCVs?: number;
   sectionsToEvidenceDocs?: number;
-  sectionsToMatrices?: number;
   coveragePercent?: number;
   bytesTotal?: number;
   bytesAssigned?: number;
@@ -417,7 +385,7 @@ interface AIImportState {
   forceFormat: 'template' | 'self_study' | 'mcc_narrative' | null;
   // When set, the upload is filed straight into the File Library as a CV /
   // Syllabus / Project (no AI parsing). See startUpload + UploadStep.
-  documentKind: 'cv' | 'syllabus' | 'project' | 'matrix' | null;
+  documentKind: 'cv' | 'syllabus' | 'project' | null;
   // Set after a direct-store upload completes so the UI can confirm it.
   directStoredResult: { kind: string; fileName: string; message?: string } | null;
 
@@ -436,23 +404,8 @@ interface AIImportState {
   buckets: Record<string, SpecBucket>;
   tags: Tag[];
   placeholderSections: PlaceholderSection[];
-  matrices: MatrixData[];
   selectedSpecKey: string | null;
   selectedSectionId: string | null;
-  // When set, the matrices view scrolls to and highlights this row id
-  // (e.g. "matrix-hsr-row-11-a"). Cleared after the scroll completes.
-  selectedMatrixRowAnchor: string | null;
-
-  // CR-026 per-row controls: coordinator-applied edits to matrix rows.
-  // Local state — applied to the wire-format matrices at apply() time so
-  // the server-side persistence in applyAIImport sees the corrected layout.
-  // Keyed by `${matrixSlug}|${rowAnchor}` so the same row in two matrices
-  // can be edited independently.
-  matrixRowEdits: Record<
-    string,
-    | { kind: 'retag'; newStd: string; newSpec: string }
-    | { kind: 'remove' }
-  >;
 
   // From Apply stage
   mergeMode: 'merge' | 'replace' | 'per_spec';
@@ -462,13 +415,12 @@ interface AIImportState {
     narratives: number;
     evidenceText: number;
     evidenceFiles: number;
-    matrixCells: number;
     tags: number;
     placeholders?: number;
   } | null;
 
-  // True after the coordinator has made any local edit to buckets/tags/
-  // matrices (Reassign, kind-flip, matrix row Keep/Remove, etc). When set,
+  // True after the coordinator has made any local edit to buckets/tags
+  // (Reassign, kind-flip, etc). When set,
   // _applySnapshot keeps local state instead of replaying the server's
   // original AI placement — so a hard refresh doesn't wipe the edits.
   // Cleared on startOver/reset, on a successful Apply, and at the start
@@ -497,13 +449,6 @@ interface AIImportState {
   // DRAFTS counts can show un-triaged items only (total − approved −
   // discarded) and "Finish review" can drop the count to zero.
   discardedIds: string[];
-
-  // CR-024 — spec-rail click broadcasts the selected spec so EVERY visible
-  // matrix scrolls + flashes its matching row simultaneously. Distinct
-  // from selectedMatrixRowAnchor (which targets one specific row from an
-  // explicit "View in matrix" button) — this is the soft pre-position
-  // signal that applies across all matrices at once.
-  matrixScrollSpec: string | null;
 
   // CR-039 — Introduction buckets keyed by 'document' or `standard-{N}`.
   // Coordinators move misplaced intro material here via the Reassign
@@ -573,7 +518,6 @@ interface AIImportState {
   // the DB so every change persists without waiting for "Apply to editor".
   // No-op in a wizard-only run (no submissionId). Clears `dirty` on success.
   saveReviewStateToServer: () => Promise<boolean>;
-  setMatrixScrollSpec: (specKey: string | null) => void;
   // CR-039
   setIntroductions: (introductions: Record<string, IntroductionBucket>) => void;
   moveItemToIntroduction: (
@@ -631,19 +575,10 @@ interface AIImportState {
   setProgramLevel: (l: ProgramLevel) => void;
   setIsReimport: (v: boolean) => void;
   setForceFormat: (f: 'template' | 'self_study' | 'mcc_narrative' | null) => void;
-  setDocumentKind: (k: 'cv' | 'syllabus' | 'project' | 'matrix' | null) => void;
+  setDocumentKind: (k: 'cv' | 'syllabus' | 'project' | null) => void;
   clearDirectStored: () => void;
   selectSpec: (key: string) => void;
   selectSection: (sectionId: string) => void;
-  // Jump the wizard to the Matrices view scrolled+highlighted to the given
-  // row id (e.g. "matrix-hsr-row-11-a"). Used by per-spec "View in Matrix"
-  // buttons and by the Standards-editor "Jump to matrix row" link.
-  selectMatrixRow: (rowAnchor: string) => void;
-  // CR-026 row controls. Per-row coordinator edits applied locally; they
-  // ride along into apply() so applyAIImport persists the corrected layout.
-  retagMatrixRow: (matrixSlug: string, rowAnchor: string, newStd: string, newSpec: string) => void;
-  removeMatrixRow: (matrixSlug: string, rowAnchor: string) => void;
-  restoreMatrixRow: (matrixSlug: string, rowAnchor: string) => void;
   // CR-032 — inline-edit a bucket item's snippet on the Review step.
   // Preserves the AI's original snippet (originalSnippet) on first edit.
   // Sets dirty=true so the edit survives hard refresh via CR-029.
@@ -672,13 +607,6 @@ interface AIImportState {
     kind: 'narratives' | 'evidenceText'
   ) => void;
   revertTag: (tagId: string) => void;
-  // Set the matrix row anchor WITHOUT switching the center pane to the
-  // Matrices view. Used when the user clicks a spec in the rail — we want
-  // the matrix view to pre-position itself silently so when the user
-  // eventually clicks the "Matrices" entry the right row is already
-  // scrolled into view.
-  setMatrixRowAnchor: (rowAnchor: string | null) => void;
-  clearMatrixRowAnchor: () => void;
   setMergeMode: (m: 'merge' | 'replace' | 'per_spec') => void;
 
   startUpload: () => Promise<void>;
@@ -721,7 +649,7 @@ interface AIImportState {
   finishReviewOnServer: () => Promise<number>;
   reset: () => void;
   // Clear the transient state from a finished or failed run (errors, stages,
-  // buckets, matrices, importId) and return the wizard to the Upload step.
+  // buckets, importId) and return the wizard to the Upload step.
   // Used by the Parse step's "Start over" button so the user doesn't see
   // stale red error panels until they drop a new file.
   startOver: () => void;
@@ -757,15 +685,8 @@ const initialState = {
   buckets: {},
   tags: [],
   placeholderSections: [],
-  matrices: [] as MatrixData[],
   selectedSpecKey: null,
   selectedSectionId: null,
-  selectedMatrixRowAnchor: null as string | null,
-  matrixRowEdits: {} as Record<
-    string,
-    | { kind: 'retag'; newStd: string; newSpec: string }
-    | { kind: 'remove' }
-  >,
   mergeMode: 'merge' as const,
   perSpecResolution: {},
   applyError: null,
@@ -776,7 +697,6 @@ const initialState = {
   errors: [],
   approvedIds: [] as string[],
   discardedIds: [] as string[],
-  matrixScrollSpec: null as string | null,
   // CR-039 — seeded with the 1 document-level + 9 standard-level
   // Introduction buckets so the UI can render them as empty rails even
   // before the matcher or coordinator routes anything in. Standards 1-9
@@ -834,8 +754,8 @@ function deriveStepFromStatus(status: WizardStatus, currentStep: WizardStep): Wi
   // the user (or persisted state) thought they were — ParseStep renders the
   // red error surface for failed/canceled and gives a Start Over action.
   if (status === 'failed' || status === 'canceled') return 'parse';
-  // CR-043 follow-on — wizard is now strictly Upload + Parse. Review,
-  // Matrix, and Apply live as standalone toolbar surfaces. When status
+  // CR-043 follow-on — wizard is now strictly Upload + Parse. Review
+  // and Apply live as standalone toolbar surfaces. When status
   // reaches parsed/applied/finished the wizard stays on Parse (which
   // renders a "Done — open the Review tab" banner). The coordinator
   // clicks the toolbar's Review button to continue.
@@ -864,7 +784,7 @@ function snapshotHasItems(snap: any): boolean {
   for (const b of Object.values((snap.buckets || {}) as Record<string, any>)) {
     n += ((b?.narratives?.length || 0) + (b?.evidenceText?.length || 0) + (b?.evidenceFiles?.length || 0));
   }
-  n += (snap.tags?.length || 0) + (snap.matrices?.length || 0) +
+  n += (snap.tags?.length || 0) +
        (snap.cvs?.length || 0) + (snap.evidenceDocs?.length || 0);
   for (const ib of Object.values((snap.introductions || {}) as Record<string, any>)) {
     n += (ib?.items?.length || 0);
@@ -905,24 +825,6 @@ function _clearTransport(): void {
     clearTimeout(_reconnectTimer);
     _reconnectTimer = null;
   }
-}
-
-/**
- * Persist a single matrix per-row edit to the DB via the existing
- * POST /matrix-state endpoint. `edit: null` removes the persisted edit
- * (restore). Fire-and-forget — the local store already updated optimistically.
- */
-function _persistMatrixEdit(
-  get: () => { submissionId: string | null },
-  matrixSlug: string,
-  rowAnchor: string,
-  edit: unknown
-): void {
-  const submissionId = get().submissionId;
-  if (!submissionId) return; // wizard-only run
-  api
-    .post(`/api/submissions/${submissionId}/matrix-state`, { matrixSlug, rowAnchor, edit })
-    .catch((err) => console.warn('[matrix-state] persist failed:', err));
 }
 
 // ---------------------------------------------------------------- store
@@ -1028,7 +930,6 @@ export const useAIImportStore = create<AIImportState>()(
           return false;
         }
       },
-      setMatrixScrollSpec: (specKey) => set({ matrixScrollSpec: specKey }),
       setIntroductions: (introductions) => set({ introductions, dirty: true }),
       setEvidenceDocs: (docs) => set({ evidenceDocs: docs, dirty: true }),
       setCVs: (cvs) => set({ cvs, dirty: true }),
@@ -1052,7 +953,7 @@ export const useAIImportStore = create<AIImportState>()(
                   resolvedSpec: spec,
                   // Coordinator override — mark routing as 'matcher' so the
                   // post-Apply audit shows the choice came from a deliberate
-                  // pick, not a matrix-row autoresolve.
+                  // pick, not an automatic resolve.
                   routing: { ...(c.routing || { source: 'matcher' }), source: 'matcher' as const }
                 }
               : c
@@ -1198,7 +1099,6 @@ export const useAIImportStore = create<AIImportState>()(
                 narratives: [],
                 evidenceText: [],
                 evidenceFiles: [],
-                matrixCells: [],
                 coverageScore: null,
                 coverageCovered: null,
                 coverageGaps: [],
@@ -1274,7 +1174,7 @@ export const useAIImportStore = create<AIImportState>()(
           let pulled: BucketItem | null = null;
 
           // Search SpecBuckets for the item (narratives / evidenceText only;
-          // matrix cells + evidenceFiles aren't movable to Introductions).
+          // evidenceFiles aren't movable to Introductions).
           const newBuckets: Record<string, SpecBucket> = {};
           for (const [key, b] of Object.entries(s.buckets)) {
             const nIdx = b.narratives.findIndex((i) => i.sectionId === sectionId);
@@ -1348,7 +1248,6 @@ export const useAIImportStore = create<AIImportState>()(
         evidenceDocs: [],
         introductions: {},
         placeholderSections: [],
-        matrices: [],
         approvedIds: [],
         discardedIds: [],
       } as any;
@@ -1361,44 +1260,6 @@ export const useAIImportStore = create<AIImportState>()(
       clearDirectStored: () => set({ directStoredResult: null }),
       selectSpec: (key) => set({ selectedSpecKey: key, selectedSectionId: null }),
       selectSection: (id) => set({ selectedSectionId: id }),
-      selectMatrixRow: (rowAnchor) =>
-        set({ selectedSpecKey: '_matrices', selectedMatrixRowAnchor: rowAnchor }),
-      setMatrixRowAnchor: (rowAnchor) => set({ selectedMatrixRowAnchor: rowAnchor }),
-      clearMatrixRowAnchor: () => set({ selectedMatrixRowAnchor: null }),
-
-      // CR-026 row controls — store local-only edits keyed by matrix+row.
-      // The apply() action reads matrixRowEdits and forwards the edited
-      // layout to applyAIImport (S2B.8 follow-on). dirty=true so a hard
-      // refresh + _applySnapshot preserves the row decisions.
-      retagMatrixRow: (matrixSlug, rowAnchor, newStd, newSpec) => {
-        set((s) => ({
-          matrixRowEdits: {
-            ...s.matrixRowEdits,
-            [`${matrixSlug}|${rowAnchor}`]: { kind: 'retag', newStd, newSpec }
-          },
-          dirty: true
-        }));
-        _persistMatrixEdit(get, matrixSlug, rowAnchor, { kind: 'retag', newStd, newSpec });
-      },
-      removeMatrixRow: (matrixSlug, rowAnchor) => {
-        set((s) => ({
-          matrixRowEdits: {
-            ...s.matrixRowEdits,
-            [`${matrixSlug}|${rowAnchor}`]: { kind: 'remove' }
-          },
-          dirty: true
-        }));
-        _persistMatrixEdit(get, matrixSlug, rowAnchor, { kind: 'remove' });
-      },
-      restoreMatrixRow: (matrixSlug, rowAnchor) => {
-        set((s) => {
-          const next = { ...s.matrixRowEdits };
-          delete next[`${matrixSlug}|${rowAnchor}`];
-          return { matrixRowEdits: next, dirty: true };
-        });
-        // edit:null tells the server to drop the persisted row edit.
-        _persistMatrixEdit(get, matrixSlug, rowAnchor, null);
-      },
 
       // CR-032 — inline edit bucket item snippet. The first edit copies
       // the AI's current snippet into originalSnippet so a later
@@ -1608,7 +1469,6 @@ export const useAIImportStore = create<AIImportState>()(
           const bucketsBefore = get().buckets;
           const res = await api.get(`/api/submissions/${submissionId}/review`);
           const state = res.data?.aiReviewState;
-          const matrixState = res.data?.aiMatrixState;
           const bucketsEditedDuringFetch = get().buckets !== bucketsBefore;
           if (state) {
             // CR-043 follow-on — conservative merge: if the server omits a
@@ -1656,13 +1516,6 @@ export const useAIImportStore = create<AIImportState>()(
             // No server-side review state yet (fresh submission). Still mark it
             // loaded so the user can build + autosave content for THIS one.
             set({ loadedForSubmissionId: submissionId });
-          }
-          if (matrixState) {
-            const current = get();
-            set({
-              matrices: matrixState.matrices ?? current.matrices,
-              matrixRowEdits: matrixState.matrixRowEdits ?? current.matrixRowEdits
-            });
           }
 
           // Recovery (2026-06-05): some submissions have rich review content in
@@ -1952,10 +1805,6 @@ export const useAIImportStore = create<AIImportState>()(
           };
         }
         const mergedTags: Tag[] = [...current.tags];
-        // Matrices come from the AI service whole; we union by matrixId
-        // (the matrix structure is per-document; merging cells across
-        // documents is the per-cell concat already in matrices' shape).
-        const mergedMatrices: MatrixData[] = [...current.matrices];
         const mergedCvs: CVItem[] = [...current.cvs];
         const mergedEvidenceDocs: EvidenceDocItem[] = [...current.evidenceDocs];
         const mergedIntroductions: Record<string, IntroductionBucket> = {};
@@ -1977,7 +1826,6 @@ export const useAIImportStore = create<AIImportState>()(
         for (const ib of Object.values(mergedIntroductions)) {
           for (const it of ib.items) seenIntroIds.add(it.sectionId);
         }
-        const seenMatrixIds = new Set(mergedMatrices.map((m) => m.matrixId));
 
         const stamp = <T extends { sourceImportId?: string; sourceFilename?: string }>(
           item: T,
@@ -2038,13 +1886,6 @@ export const useAIImportStore = create<AIImportState>()(
               seenTagIds.add(t.tagId);
             }
           }
-          if (Array.isArray(snap.matrices)) {
-            for (const m of snap.matrices) {
-              if (seenMatrixIds.has(m.matrixId)) continue;
-              mergedMatrices.push(m);
-              seenMatrixIds.add(m.matrixId);
-            }
-          }
           if (Array.isArray(snap.cvs)) {
             for (const c of snap.cvs) {
               if (seenCvIds.has(c.sectionId)) continue;
@@ -2099,7 +1940,6 @@ export const useAIImportStore = create<AIImportState>()(
         set({
           buckets: mergedBuckets,
           tags: mergedTags,
-          matrices: mergedMatrices,
           cvs: mergedCvs,
           evidenceDocs: mergedEvidenceDocs,
           introductions: mergedIntroductions,
@@ -2118,7 +1958,7 @@ export const useAIImportStore = create<AIImportState>()(
         // BUG FIX 2026-05-21: keep local edits across hard-refresh and
         // across mid-session SSE redeliveries. When the coordinator has
         // already made at least one local mutation (Reassign / kind-flip
-        // / matrix row Keep-or-Remove), `dirty` is true and any
+        // / etc.), `dirty` is true and any
         // subsequent snapshot from cshse-ai (which carries the AI's
         // original placement) must NOT overwrite the user's work.
         //
@@ -2221,7 +2061,6 @@ export const useAIImportStore = create<AIImportState>()(
           // the snapshot field is empty; a real non-empty snapshot still applies.
           buckets: keepLocalBuckets ? current.buckets : takeNonEmpty(snap.buckets, current.buckets),
           tags: keepLocalBuckets ? current.tags : takeNonEmpty(snap.tags, current.tags),
-          matrices: keepLocalBuckets ? current.matrices : takeNonEmpty(snap.matrices, current.matrices),
           placeholderSections: keepLocalBuckets
             ? current.placeholderSections
             : takeNonEmpty(snap.placeholderSections, current.placeholderSections),
@@ -2262,7 +2101,7 @@ export const useAIImportStore = create<AIImportState>()(
           throw new Error('uploadFile and submissionId are required to start an import');
         }
 
-        // CR-043 — DO NOT clear buckets / tags / matrices / cvs /
+        // CR-043 — DO NOT clear buckets / tags / cvs /
         // evidenceDocs / introductions / approvedIds on startUpload.
         // The server-side aiReviewState is the source of truth and
         // merges this import's output into the persisted state. The
@@ -2468,7 +2307,7 @@ export const useAIImportStore = create<AIImportState>()(
       },
 
       apply: async () => {
-        const { importId, batchId, buckets, tags, placeholderSections, matrices, mergeMode, perSpecResolution, matrixRowEdits } = get();
+        const { importId, batchId, buckets, tags, placeholderSections, mergeMode, perSpecResolution } = get();
         // CR-041 US-8 — batch mode short-circuits to the batch Apply
         // endpoint which iterates per-child apply server-side.
         //
@@ -2536,36 +2375,6 @@ export const useAIImportStore = create<AIImportState>()(
         }
         if (!importId) return;
         set({ status: 'applying', applyError: null });
-
-        // CR-026 — apply the coordinator's per-row edits to the matrices
-        // payload BEFORE we POST. Removed rows are dropped; retagged rows
-        // get their std/spec updated on every cell of the affected row.
-        // The rowAnchor stays as-is for traceability; the server's
-        // applyAIImport reads std/spec to drive CurriculumMatrix.standards
-        // and tagged-spec lookups, so updating those fields is enough.
-        const editedMatrices = matrices.map((m) => {
-          const cells = (m.cells || []).filter((c: any) => {
-            const std = c?.std ?? c?.standardCode ?? '?';
-            const spec = c?.spec ?? c?.specCode ?? '?';
-            const rk = `${std}.${spec}`;
-            // Find the rowAnchor for this cell — same logic as the UI.
-            const anchor =
-              c?.rowAnchor ||
-              `matrix-${m.matrixId}-row-${rk.replace('.', '-')}`;
-            const edit = matrixRowEdits[`${m.matrixId}|${anchor}`];
-            if (edit?.kind === 'remove') return false;
-            if (edit?.kind === 'retag') {
-              // Mutate in-place via the map below — keep the cell here.
-              c.std = edit.newStd;
-              c.spec = edit.newSpec;
-              // Some legacy payloads also carry standardCode/specCode
-              if (c.standardCode !== undefined) c.standardCode = edit.newStd;
-              if (c.specCode !== undefined) c.specCode = edit.newSpec;
-            }
-            return true;
-          });
-          return { ...m, cells };
-        });
 
         // Idempotency key — stored in localStorage so a retry after a
         // refresh hits the same key (server dedupes).
@@ -2693,11 +2502,6 @@ export const useAIImportStore = create<AIImportState>()(
             narratives: narrativesPayload,
             supportingEvidenceText: evidenceTextPayload,
             supportingEvidenceFiles: evidenceFilesPayload,
-            // Legacy flat-cell payload retained for back-compat; new server
-            // code reads `matrices` (per-matrix object) instead. CR-026:
-            // editedMatrices reflects the coordinator's per-row retag/remove.
-            matrixCells: editedMatrices.flatMap((m: any) => m.cells || []),
-            matrices: editedMatrices,
             importTags: tags,
             placeholderSections,
             globalMergeMode: mergeMode,
@@ -2776,10 +2580,10 @@ export const useAIImportStore = create<AIImportState>()(
       // 2026-06-06 — localStorage now holds ONLY the lightweight, resumable
       // wizard identity (which import / submission / step / selection we're on,
       // + batch progress). The heavy review CONTENT — buckets (narratives),
-      // tags, cvs, evidenceDocs, introductions, matrices, matrixRowEdits,
+      // tags, cvs, evidenceDocs, introductions,
       // approvedIds, discardedIds, coverageReport, placeholderSections — is NO
       // LONGER persisted to the browser. It lives on the server
-      // (Submission.aiReviewState / aiMatrixState) and is the single source of
+      // (Submission.aiReviewState) and is the single source of
       // truth: the import merge writes it, the store-level autosave keeps it in
       // sync on every edit, and loadPersistedReviewState reads it back. This is
       // the user's directive ("nothing in localStorage except the document +

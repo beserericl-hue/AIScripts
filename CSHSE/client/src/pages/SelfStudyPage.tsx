@@ -150,8 +150,7 @@ export default function SelfStudyPage() {
     standardCode: string;
     specCode: string;
     toSupportingEvidence: boolean;
-    toCurriculumMatrix: boolean;
-  }>({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
+  }>({ standardCode: '', specCode: '', toSupportingEvidence: false });
   const [isBatchMoving, setIsBatchMoving] = useState(false);
 
   // Individual section editing state
@@ -159,8 +158,7 @@ export default function SelfStudyPage() {
   const [sectionEdit, setSectionEdit] = useState<{
     standardCode: string;
     specCode: string;
-    toCurriculumMatrix: boolean;
-  }>({ standardCode: '', specCode: '', toCurriculumMatrix: false });
+  }>({ standardCode: '', specCode: '' });
   const [isSavingSection, setIsSavingSection] = useState(false);
   const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null);
 
@@ -433,43 +431,32 @@ export default function SelfStudyPage() {
     setEditingSectionId(section.id);
     setSectionEdit({
       standardCode: section.mapping?.standardCode || '',
-      specCode: section.mapping?.specCode || '',
-      toCurriculumMatrix: false
+      specCode: section.mapping?.specCode || ''
     });
   };
 
   // Cancel editing
   const cancelEditingSection = () => {
     setEditingSectionId(null);
-    setSectionEdit({ standardCode: '', specCode: '', toCurriculumMatrix: false });
+    setSectionEdit({ standardCode: '', specCode: '' });
   };
 
   // Save individual section mapping change
   const handleSaveSectionMapping = async (sectionId: string) => {
-    // Allow save if either: (1) moving to curriculum matrix, or (2) standard and spec are selected
-    const canMoveToMatrix = sectionEdit.toCurriculumMatrix;
+    // Allow save only when a standard and spec are selected
     const canMoveToStandard = sectionEdit.standardCode && sectionEdit.specCode;
 
-    if (!importId || (!canMoveToMatrix && !canMoveToStandard)) return;
+    if (!importId || !canMoveToStandard) return;
 
     setIsSavingSection(true);
     try {
-      if (sectionEdit.toCurriculumMatrix) {
-        // Move to curriculum matrix
-        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-          action: 'move_to_matrix',
-          toCurriculumMatrix: true,
-          matrixType: 'non_human_services_courses'
-        });
-      } else {
-        // Use the map endpoint to reassign the section
-        await api.post(`/api/imports/${importId}/map`, {
-          extractedSectionId: sectionId,
-          standardCode: sectionEdit.standardCode,
-          specCode: sectionEdit.specCode,
-          fieldType: 'narrative'
-        });
-      }
+      // Use the map endpoint to reassign the section
+      await api.post(`/api/imports/${importId}/map`, {
+        extractedSectionId: sectionId,
+        standardCode: sectionEdit.standardCode,
+        specCode: sectionEdit.specCode,
+        fieldType: 'narrative'
+      });
 
       // Refresh sections and status
       const [sectionsResponse, statusResponse] = await Promise.all([
@@ -480,7 +467,7 @@ export default function SelfStudyPage() {
       setExtractedSections(sectionsResponse.data.sections);
       setImportStatus(statusResponse.data);
       setEditingSectionId(null);
-      setSectionEdit({ standardCode: '', specCode: '', toCurriculumMatrix: false });
+      setSectionEdit({ standardCode: '', specCode: '' });
     } catch (err) {
       console.error('Failed to save section mapping:', err);
     } finally {
@@ -517,34 +504,24 @@ export default function SelfStudyPage() {
     });
   };
 
-  // Batch move selected unmapped sections to a standard or curriculum matrix
+  // Batch move selected unmapped sections to a standard/spec
   const handleBatchMoveUnmapped = async () => {
-    // Allow move if either: (1) moving to curriculum matrix, or (2) standard and spec are selected
-    const canMoveToMatrix = batchAssignment.toCurriculumMatrix;
+    // Allow move only when a standard and spec are selected
     const canMoveToStandard = batchAssignment.standardCode && batchAssignment.specCode;
 
-    if (!importId || selectedUnmappedIds.size === 0 || (!canMoveToMatrix && !canMoveToStandard)) return;
+    if (!importId || selectedUnmappedIds.size === 0 || !canMoveToStandard) return;
 
     setIsBatchMoving(true);
     try {
       // Map each selected section
       for (const sectionId of selectedUnmappedIds) {
-        if (batchAssignment.toCurriculumMatrix) {
-          // Move to curriculum matrix
-          await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-            action: 'move_to_matrix',
-            toCurriculumMatrix: true,
-            matrixType: 'non_human_services_courses' // Default to non-HS courses
-          });
-        } else {
-          // Move to standard/spec
-          await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-            action: 'assign',
-            standardCode: batchAssignment.standardCode,
-            specCode: batchAssignment.specCode,
-            toSupportingEvidence: batchAssignment.toSupportingEvidence
-          });
-        }
+        // Move to standard/spec
+        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+          action: 'assign',
+          standardCode: batchAssignment.standardCode,
+          specCode: batchAssignment.specCode,
+          toSupportingEvidence: batchAssignment.toSupportingEvidence
+        });
       }
 
       // Refresh sections and status
@@ -556,7 +533,7 @@ export default function SelfStudyPage() {
       setExtractedSections(sectionsResponse.data.sections);
       setImportStatus(statusResponse.data);
       setSelectedUnmappedIds(new Set());
-      setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
+      setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false });
     } catch (err) {
       console.error('Failed to batch move sections:', err);
     } finally {
@@ -609,7 +586,7 @@ export default function SelfStudyPage() {
     setImportStep('upload');
     setExtractedSections([]);
     setSelectedUnmappedIds(new Set());
-    setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
+    setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false });
   };
 
   // If viewing a specific submission
@@ -677,7 +654,6 @@ export default function SelfStudyPage() {
                         value={batchAssignment.standardCode}
                         onChange={(e) => setBatchAssignment(prev => ({ ...prev, standardCode: e.target.value, specCode: '' }))}
                         className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
-                        disabled={batchAssignment.toCurriculumMatrix}
                       >
                         <option value="">Standard...</option>
                         {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -688,7 +664,7 @@ export default function SelfStudyPage() {
                         value={batchAssignment.specCode}
                         onChange={(e) => setBatchAssignment(prev => ({ ...prev, specCode: e.target.value }))}
                         className="w-24 px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
-                        disabled={!batchAssignment.standardCode || batchAssignment.toCurriculumMatrix}
+                        disabled={!batchAssignment.standardCode}
                       >
                         <option value="">Spec...</option>
                         {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
@@ -704,41 +680,22 @@ export default function SelfStudyPage() {
                           checked={batchAssignment.toSupportingEvidence}
                           onChange={(e) => setBatchAssignment(prev => ({
                             ...prev,
-                            toSupportingEvidence: e.target.checked,
-                            toCurriculumMatrix: e.target.checked ? false : prev.toCurriculumMatrix
+                            toSupportingEvidence: e.target.checked
                           }))}
-                          disabled={batchAssignment.toCurriculumMatrix}
                           className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
                         />
                         <span className="text-gray-700">Evidence</span>
-                      </label>
-                      <label className="flex items-center gap-1.5">
-                        <input
-                          type="checkbox"
-                          checked={batchAssignment.toCurriculumMatrix}
-                          onChange={(e) => setBatchAssignment(prev => ({
-                            ...prev,
-                            toCurriculumMatrix: e.target.checked,
-                            standardCode: e.target.checked ? '' : prev.standardCode,
-                            specCode: e.target.checked ? '' : prev.specCode,
-                            toSupportingEvidence: e.target.checked ? false : prev.toSupportingEvidence
-                          }))}
-                          className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                        />
-                        <span className="text-gray-700">Matrix</span>
                       </label>
                     </div>
 
                     <div className="flex gap-2">
                       <button
                         onClick={handleBatchMoveUnmapped}
-                        disabled={isBatchMoving || selectedUnmappedIds.size === 0 || (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode))}
-                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-white rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
-                          batchAssignment.toCurriculumMatrix ? 'bg-purple-600 hover:bg-purple-700' : 'bg-teal-600 hover:bg-teal-700'
-                        }`}
+                        disabled={isBatchMoving || selectedUnmappedIds.size === 0 || !batchAssignment.standardCode || !batchAssignment.specCode}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-1.5 text-white rounded text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed bg-teal-600 hover:bg-teal-700"
                       >
                         {isBatchMoving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                        {batchAssignment.toCurriculumMatrix ? 'To Matrix' : 'Assign'}
+                        Assign
                       </button>
                       <button
                         onClick={handleBatchDiscardUnmapped}
@@ -787,9 +744,8 @@ export default function SelfStudyPage() {
                             <div className="flex items-center gap-1 flex-1 flex-wrap">
                               <select
                                 value={sectionEdit.standardCode}
-                                onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '', toCurriculumMatrix: false }))}
+                                onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '' }))}
                                 className="flex-1 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-50"
-                                disabled={sectionEdit.toCurriculumMatrix}
                               >
                                 <option value="">Std...</option>
                                 {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -800,27 +756,13 @@ export default function SelfStudyPage() {
                                 value={sectionEdit.specCode}
                                 onChange={(e) => setSectionEdit(prev => ({ ...prev, specCode: e.target.value }))}
                                 className="w-14 px-1.5 py-0.5 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-teal-500 disabled:opacity-50"
-                                disabled={!sectionEdit.standardCode || sectionEdit.toCurriculumMatrix}
+                                disabled={!sectionEdit.standardCode}
                               >
                                 <option value="">Spec</option>
                                 {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
                                   <option key={spec} value={spec}>{spec}</option>
                                 ))}
                               </select>
-                              <label className="flex items-center gap-1 text-xs text-purple-700 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={sectionEdit.toCurriculumMatrix}
-                                  onChange={(e) => setSectionEdit(prev => ({
-                                    ...prev,
-                                    toCurriculumMatrix: e.target.checked,
-                                    standardCode: e.target.checked ? '' : prev.standardCode,
-                                    specCode: e.target.checked ? '' : prev.specCode
-                                  }))}
-                                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                />
-                                Matrix
-                              </label>
                             </div>
                           ) : (
                             <span className="text-xs font-medium text-gray-900 truncate">
@@ -866,9 +808,9 @@ export default function SelfStudyPage() {
                           <>
                             <button
                               onClick={() => handleSaveSectionMapping(section.id)}
-                              disabled={isSavingSection || (!sectionEdit.toCurriculumMatrix && (!sectionEdit.standardCode || !sectionEdit.specCode))}
-                              className={`p-1 disabled:opacity-50 ${sectionEdit.toCurriculumMatrix ? 'text-purple-600 hover:text-purple-700' : 'text-green-600 hover:text-green-700'}`}
-                              title={sectionEdit.toCurriculumMatrix ? 'Move to Matrix' : 'Save'}
+                              disabled={isSavingSection || (!sectionEdit.standardCode || !sectionEdit.specCode)}
+                              className="p-1 disabled:opacity-50 text-green-600 hover:text-green-700"
+                              title="Save"
                             >
                               {isSavingSection ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                             </button>
@@ -1445,7 +1387,6 @@ export default function SelfStudyPage() {
                               specCode: '' // Reset spec when standard changes
                             }))}
                             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
-                            disabled={batchAssignment.toCurriculumMatrix}
                           >
                             <option value="">Select Standard...</option>
                             {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -1462,7 +1403,7 @@ export default function SelfStudyPage() {
                               specCode: e.target.value
                             }))}
                             className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
-                            disabled={!batchAssignment.standardCode || batchAssignment.toCurriculumMatrix}
+                            disabled={!batchAssignment.standardCode}
                           >
                             <option value="">Select Spec...</option>
                             {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
@@ -1478,51 +1419,29 @@ export default function SelfStudyPage() {
                               checked={batchAssignment.toSupportingEvidence}
                               onChange={(e) => setBatchAssignment(prev => ({
                                 ...prev,
-                                toSupportingEvidence: e.target.checked,
-                                toCurriculumMatrix: e.target.checked ? false : prev.toCurriculumMatrix
+                                toSupportingEvidence: e.target.checked
                               }))}
-                              disabled={batchAssignment.toCurriculumMatrix}
                               className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
                             />
                             To Supporting Evidence
                           </label>
 
-                          <label className="flex items-center gap-2 text-sm text-gray-700">
-                            <input
-                              type="checkbox"
-                              checked={batchAssignment.toCurriculumMatrix}
-                              onChange={(e) => setBatchAssignment(prev => ({
-                                ...prev,
-                                toCurriculumMatrix: e.target.checked,
-                                // Clear standard/spec when moving to matrix
-                                standardCode: e.target.checked ? '' : prev.standardCode,
-                                specCode: e.target.checked ? '' : prev.specCode,
-                                toSupportingEvidence: e.target.checked ? false : prev.toSupportingEvidence
-                              }))}
-                              className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                            />
-                            To Curriculum Matrix
-                          </label>
 
                           <button
                             onClick={handleBatchMoveUnmapped}
                             disabled={
                               isBatchMoving ||
                               selectedUnmappedIds.size === 0 ||
-                              (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode))
+                              !batchAssignment.standardCode || !batchAssignment.specCode
                             }
-                            className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium ${
-                              batchAssignment.toCurriculumMatrix
-                                ? 'bg-purple-600 hover:bg-purple-700'
-                                : 'bg-teal-600 hover:bg-teal-700'
-                            }`}
+                            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium bg-teal-600 hover:bg-teal-700"
                           >
                             {isBatchMoving ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
                               <Check className="w-4 h-4" />
                             )}
-                            {batchAssignment.toCurriculumMatrix ? 'Move to Matrix' : 'Move Selected'} ({selectedUnmappedIds.size})
+                            Move Selected ({selectedUnmappedIds.size})
                           </button>
 
                           <button
@@ -1578,9 +1497,8 @@ export default function SelfStudyPage() {
                                       <div className="flex items-center gap-2 flex-1 flex-wrap">
                                         <select
                                           value={sectionEdit.standardCode}
-                                          onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '', toCurriculumMatrix: false }))}
+                                          onChange={(e) => setSectionEdit(prev => ({ ...prev, standardCode: e.target.value, specCode: '' }))}
                                           className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
-                                          disabled={sectionEdit.toCurriculumMatrix}
                                         >
                                           <option value="">Select Standard...</option>
                                           {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -1591,27 +1509,13 @@ export default function SelfStudyPage() {
                                           value={sectionEdit.specCode}
                                           onChange={(e) => setSectionEdit(prev => ({ ...prev, specCode: e.target.value }))}
                                           className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 disabled:opacity-50"
-                                          disabled={!sectionEdit.standardCode || sectionEdit.toCurriculumMatrix}
+                                          disabled={!sectionEdit.standardCode}
                                         >
                                           <option value="">Spec</option>
                                           {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
                                             <option key={spec} value={spec}>{spec}</option>
                                           ))}
                                         </select>
-                                        <label className="flex items-center gap-1.5 text-sm text-purple-700 cursor-pointer whitespace-nowrap">
-                                          <input
-                                            type="checkbox"
-                                            checked={sectionEdit.toCurriculumMatrix}
-                                            onChange={(e) => setSectionEdit(prev => ({
-                                              ...prev,
-                                              toCurriculumMatrix: e.target.checked,
-                                              standardCode: e.target.checked ? '' : prev.standardCode,
-                                              specCode: e.target.checked ? '' : prev.specCode
-                                            }))}
-                                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                          />
-                                          To Matrix
-                                        </label>
                                       </div>
                                     ) : (
                                       <span className="text-sm font-medium text-gray-900">
@@ -1663,9 +1567,9 @@ export default function SelfStudyPage() {
                                   <>
                                     <button
                                       onClick={() => handleSaveSectionMapping(section.id)}
-                                      disabled={isSavingSection || (!sectionEdit.toCurriculumMatrix && (!sectionEdit.standardCode || !sectionEdit.specCode))}
-                                      className={`p-1 disabled:opacity-50 ${sectionEdit.toCurriculumMatrix ? 'text-purple-600 hover:text-purple-700' : 'text-green-600 hover:text-green-700'}`}
-                                      title={sectionEdit.toCurriculumMatrix ? 'Move to Matrix' : 'Save'}
+                                      disabled={isSavingSection || (!sectionEdit.standardCode || !sectionEdit.specCode)}
+                                      className="p-1 disabled:opacity-50 text-green-600 hover:text-green-700"
+                                      title="Save"
                                     >
                                       {isSavingSection ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                                     </button>

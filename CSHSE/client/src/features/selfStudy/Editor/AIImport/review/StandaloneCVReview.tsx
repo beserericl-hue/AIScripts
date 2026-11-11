@@ -213,9 +213,6 @@ export function StandaloneCVReview(): JSX.Element {
                 {cv.routing?.source && cv.routing.source !== 'matcher' && (
                   <div className="mt-3 text-[11px] italic text-gray-500">
                     Auto-routed via {cv.routing.source}
-                    {cv.routing.matrixRowAnchor
-                      ? ` (${cv.routing.matrixRowAnchor})`
-                      : ''}
                     . Override above if needed.
                   </div>
                 )}

@@ -6,15 +6,11 @@
  * state (UI spec §6).
  *
  * CR-043 follow-on (post-release feedback): the wizard's internal
- * Review / Matrix / Apply steps are REMOVED from this stepper. They
- * live on the Self-Study Editor toolbar as standalone surfaces
- * (ReviewSurface, MatrixSurface) and the Review surface itself carries
- * an Apply button. The wizard is now strictly the "ingest" phase —
- * Upload a file, watch it Parse, then the coordinator switches to the
- * Review tab to do everything else.
- *
- * `showMatrix` is retained as a prop for backward compatibility; it
- * no longer affects rendering since Matrix is not a wizard step.
+ * Review / Apply steps are REMOVED from this stepper. Review lives on
+ * the Self-Study Editor toolbar as a standalone surface (ReviewSurface)
+ * which itself carries an Apply button. The wizard is now strictly the
+ * "ingest" phase — Upload a file, watch it Parse, then the coordinator
+ * switches to the Review tab to do everything else.
  */
 import React from 'react';
 import { Check, Loader2 } from 'lucide-react';
@@ -25,7 +21,6 @@ const STEP_LABELS: Record<WizardStep, string> = {
   upload: 'Upload',
   parse: 'Parse',
   review: 'Review',
-  matrix: 'Matrix',
   apply: 'Apply',
   tags: 'Tags'
 };
@@ -33,7 +28,6 @@ const STEP_LABELS: Record<WizardStep, string> = {
 interface StepperProps {
   current: WizardStep;
   status: WizardStatus;
-  showMatrix: boolean;
   onSelect: (step: WizardStep) => void;
 }
 
@@ -54,10 +48,7 @@ function stepState(step: WizardStep, current: WizardStep, status: WizardStatus):
   return 'locked';
 }
 
-export function Stepper({ current, status, showMatrix: _showMatrix, onSelect }: StepperProps): JSX.Element {
-  // CR-043 follow-on — Matrix is no longer a wizard step; the prop
-  // stays in the interface for any spec test still passing it.
-  void _showMatrix;
+export function Stepper({ current, status, onSelect }: StepperProps): JSX.Element {
   const visible = STEP_ORDER;
 
   return (

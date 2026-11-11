@@ -5,8 +5,9 @@
  * surface in the wizard to unit-test. We assert:
  *   - Buckets group by standard and render under "Standard N" headers
  *   - Coverage glyph (🟢 / 🟡 / 🔴) reflects the coverage fields
- *   - Synthetic Unplaced / Unwritten / Matrices buckets appear when
- *     their inputs are non-empty
+ *   - Synthetic Unplaced / Unwritten buckets appear when their inputs
+ *     are non-empty
+ *   - There is NO curriculum-matrix entry (CSHSE board, Nov 2026)
  *   - CR-033 CVs + CR-040 evidence-docs entries render only when present
  *   - CR-039 Document + per-Standard Introductions render alongside specs
  *   - CR-040 Phase 3b "Missing from import" entry surfaces when
@@ -22,7 +23,6 @@ import {
   SpecRail,
   UNPLACED_KEY,
   UNWRITTEN_KEY,
-  MATRICES_KEY,
   CVS_KEY,
   EVIDENCE_DOCS_KEY,
   MISSING_FRAGMENTS_KEY,
@@ -32,7 +32,6 @@ import type {
   SpecBucket,
   PlaceholderSection,
   Tag,
-  MatrixData,
   IntroductionBucket,
   CVItem,
   EvidenceDocItem,
@@ -45,7 +44,6 @@ function mkBucket(overrides: Partial<SpecBucket> & Pick<SpecBucket, 'standardCod
     narratives: [],
     evidenceText: [],
     evidenceFiles: [],
-    matrixCells: [],
     coverageScore: null,
     coverageCovered: null,
     coverageGaps: [],
@@ -64,7 +62,6 @@ function mkBuckets(...specs: Array<Partial<SpecBucket> & Pick<SpecBucket, 'stand
 
 const NO_TAGS: Tag[] = [];
 const NO_PLACEHOLDERS: PlaceholderSection[] = [];
-const NO_MATRICES: MatrixData[] = [];
 
 describe('<SpecRail />', () => {
   it('groups buckets by standard and renders "Standard N" headers', () => {
@@ -78,7 +75,6 @@ describe('<SpecRail />', () => {
         buckets={buckets}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
       />
@@ -110,7 +106,6 @@ describe('<SpecRail />', () => {
         buckets={buckets}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
       />
@@ -131,7 +126,6 @@ describe('<SpecRail />', () => {
         buckets={{}}
         tags={tags}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
       />
@@ -147,7 +141,6 @@ describe('<SpecRail />', () => {
         buckets={{}}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
       />
@@ -159,7 +152,6 @@ describe('<SpecRail />', () => {
         buckets={{}}
         tags={NO_TAGS}
         placeholders={[{ paragraphIndex: 0, heading: 'h' } as any]}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
       />
@@ -167,41 +159,23 @@ describe('<SpecRail />', () => {
     expect(screen.getByRole('tab', { name: /Unwritten/i })).toBeInTheDocument();
   });
 
-  it('Matrices tile ALWAYS renders (like CVs/Syllabi/Papers), showing 0 when empty', () => {
-    // Post-release feedback (2026-06-13) — coordinators expect "CV, Syllabi,
-    // Projects, Matrices" listed together as file types; hiding the entry when
-    // empty made them think the feature was removed. Now it always renders.
-    const { rerender } = render(
+  it('has no curriculum-matrix (Matrices) entry — the matrix is not part of the self-study', () => {
+    render(
       <SpecRail
-        buckets={{}}
+        buckets={mkBuckets({ standardCode: '11', specCode: 'a' })}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
+        cvs={[]}
+        evidenceDocs={[]}
       />
     );
-    const emptyTile = screen.getByTestId('rail-matrices');
-    expect(emptyTile).toBeInTheDocument();
-    expect(emptyTile).toHaveTextContent(/Matrices/i);
-    expect(emptyTile).toHaveTextContent('0');
-
-    const matrices: MatrixData[] = [
-      { matrixId: 'mx1', name: 'Curriculum Map', cells: [], columnHeaders: [] } as any,
-    ];
-    rerender(
-      <SpecRail
-        buckets={{}}
-        tags={NO_TAGS}
-        placeholders={NO_PLACEHOLDERS}
-        matrices={matrices}
-        selectedKey={null}
-        onSelect={() => {}}
-      />
-    );
-    const tile = screen.getByTestId('rail-matrices');
-    expect(tile).toBeInTheDocument();
-    expect(tile).toHaveTextContent('1');
+    expect(screen.queryByTestId('rail-matrices')).toBeNull();
+    expect(screen.queryByRole('tab', { name: /matri/i })).toBeNull();
+    expect(screen.queryByText(/matri/i)).toBeNull();
+    // The other supporting-evidence tiles still render.
+    expect(screen.getByRole('tab', { name: /CVs/i })).toBeInTheDocument();
   });
 
   it('Supporting Evidence group: CVs / Syllabi / Papers tiles ALWAYS render (even when empty)', () => {
@@ -214,7 +188,6 @@ describe('<SpecRail />', () => {
         buckets={{}}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
         cvs={[]}
@@ -245,7 +218,6 @@ describe('<SpecRail />', () => {
         buckets={{}}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
         cvs={cvs}
@@ -266,7 +238,6 @@ describe('<SpecRail />', () => {
         buckets={{}}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
         introductions={introductions}
@@ -285,7 +256,6 @@ describe('<SpecRail />', () => {
         buckets={buckets}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
         introductions={introductions}
@@ -304,7 +274,6 @@ describe('<SpecRail />', () => {
         buckets={{}}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
         missingFragmentCount={0}
@@ -317,7 +286,6 @@ describe('<SpecRail />', () => {
         buckets={{}}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
         missingFragmentCount={7}
@@ -339,7 +307,6 @@ describe('<SpecRail />', () => {
         buckets={buckets}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
       />
@@ -359,7 +326,6 @@ describe('<SpecRail />', () => {
         buckets={buckets}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={onSelect}
       />
@@ -375,7 +341,6 @@ describe('<SpecRail />', () => {
         buckets={{}}
         tags={[{ tagId: 't', sectionId: 's', suggestedStd: null, suggestedSpec: null } as any]}
         placeholders={[{ paragraphIndex: 0, heading: 'h' } as any]}
-        matrices={[{ matrixId: 'mx', name: 'M', cells: [], columnHeaders: [] } as any]}
         selectedKey={null}
         onSelect={onSelect}
         missingFragmentCount={1}
@@ -384,9 +349,6 @@ describe('<SpecRail />', () => {
     );
     await userEvent.click(screen.getByRole('tab', { name: /Document Introduction/i }));
     expect(onSelect).toHaveBeenCalledWith(INTRO_DOC_KEY);
-
-    await userEvent.click(screen.getByRole('tab', { name: /Matrices/i }));
-    expect(onSelect).toHaveBeenCalledWith(MATRICES_KEY);
 
     await userEvent.click(screen.getByRole('tab', { name: /Unplaced/i }));
     expect(onSelect).toHaveBeenCalledWith(UNPLACED_KEY);
@@ -405,7 +367,6 @@ describe('<SpecRail />', () => {
         buckets={buckets}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey="1.a"
         onSelect={() => {}}
       />
@@ -425,7 +386,6 @@ describe('<SpecRail />', () => {
         buckets={buckets}
         tags={NO_TAGS}
         placeholders={NO_PLACEHOLDERS}
-        matrices={NO_MATRICES}
         selectedKey={null}
         onSelect={() => {}}
         introductions={introductions}

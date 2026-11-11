@@ -18,7 +18,6 @@ import {
   MapPin,
   Trash2,
   RefreshCw,
-  Grid3X3,
   BookOpen,
   FolderOpen,
   Maximize2,
@@ -43,9 +42,7 @@ import { ImportFilePanel } from './ImportFilePanel';
 import { SpecNotApplicable } from './SpecNotApplicable';
 import { ReviewSurface } from './Review/ReviewSurface';
 import { SurfaceErrorBoundary } from '../../../components/SurfaceErrorBoundary';
-import { MatrixSurface } from './Review/MatrixSurface';
 import { FinalSubmitModal, type NeedsImprovementItem, type NeedsImprovementNote } from './FinalSubmitModal';
-import { CurriculumMatrixEditor } from '../MatrixEditor';
 import { FileLibrary } from '../FileLibrary';
 import { LeadReaderReportPage } from '../LeadReaderReport/LeadReaderReportPage';
 import { CommentSidebar } from '../../comments';
@@ -194,7 +191,6 @@ interface UnmappedAssignment {
   standardCode: string;
   specCode: string;
   toSupportingEvidence: boolean;
-  toCurriculumMatrix: boolean;
 }
 
 // Part 6: Component for rendering section selection items with hierarchy
@@ -271,8 +267,8 @@ function AIImportTabButton({
   setActiveView,
   showAiBadge = false
 }: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report') => void;
+  activeView: 'standards' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'lead-reader-report';
+  setActiveView: (v: 'standards' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'lead-reader-report') => void;
   // CR-045 — show the purple "AI" badge only when the legacy importer is
   // ALSO visible (so the two need disambiguating). When legacy is hidden
   // this is the only importer and the badge is noise.
@@ -377,8 +373,8 @@ function ReviewSurfaceButton({
   activeView,
   setActiveView
 }: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report') => void;
+  activeView: 'standards' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'lead-reader-report';
+  setActiveView: (v: 'standards' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'lead-reader-report') => void;
 }) {
   const buckets = useAIImportStore((s) => s.buckets);
   const tags = useAIImportStore((s) => s.tags);
@@ -427,43 +423,6 @@ function ReviewSurfaceButton({
       {approvedIds.length > 0 && (
         <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
           {approvedIds.length} approved
-        </span>
-      )}
-    </button>
-  );
-}
-
-function MatrixSurfaceButton({
-  activeView,
-  setActiveView
-}: {
-  activeView: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report';
-  setActiveView: (v: 'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report') => void;
-}) {
-  const matrices = useAIImportStore((s) => s.matrices);
-  const hasContent = matrices.length > 0;
-  return (
-    <button
-      onClick={() => hasContent && setActiveView('matrix-surface')}
-      disabled={!hasContent}
-      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-        !hasContent
-          ? 'text-gray-400 cursor-not-allowed'
-          : activeView === 'matrix-surface'
-            ? 'bg-cshse-100 text-cshse-700'
-            : 'text-gray-600 hover:bg-gray-100'
-      }`}
-      title={
-        !hasContent
-          ? 'Matrix enables once a parsed import produces curriculum matrices'
-          : 'Matrix — edit row mappings; survives wizard close'
-      }
-    >
-      <Grid3X3 className="w-4 h-4 flex-shrink-0" />
-      Matrix
-      {hasContent && (
-        <span className="rounded bg-cshse-100 px-1.5 py-0.5 text-[10px] font-semibold text-cshse-700">
-          {matrices.length}
         </span>
       )}
     </button>
@@ -548,7 +507,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [selectedStandard, setSelectedStandard] = useState('1');
   const [selectedSpec, setSelectedSpec] = useState<string | null>('a');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [activeView, setActiveView] = useState<'standards' | 'curriculum' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'matrix-surface' | 'lead-reader-report'>(() => {
+  const [activeView, setActiveView] = useState<'standards' | 'files' | 'introduction' | 'ai-import' | 'review-surface' | 'lead-reader-report'>(() => {
     // Open the editor on the step that matches where the PC is in the
     // IMPORT → DRAFTS → SELF-STUDY → SUBMIT workflow. When un-applied
     // drafts are still waiting in Review (an import has parsed but its
@@ -572,8 +531,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       // refresh keeps the user where they were instead of dropping them on
       // Standards.
       if (viewParam === 'standards') return 'standards';
-      if (viewParam === 'curriculum' || viewParam === 'matrix') return 'curriculum';
-      if (viewParam === 'matrix-surface') return 'matrix-surface';
       if (viewParam === 'files') return 'files';
       if (viewParam === 'introduction') return 'introduction';
       if (canViewLeadReaderReport && viewParam === 'lead-reader-report') return 'lead-reader-report';
@@ -656,9 +613,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         });
       // The dashboard DRAFTS / workflow-summary also reflect approvals.
       queryClient.invalidateQueries({ queryKey: ['workflow-summary', submissionId] });
-      // Approving now also applies curriculum matrices (server-side) — refresh
-      // the Curriculum Matrix view so they appear without a manual reload.
-      queryClient.invalidateQueries({ queryKey: ['matrix', submissionId] });
     });
     return unsub;
   }, [submissionId, queryClient]);
@@ -675,7 +629,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     const view = deepLinkParams.get('view');
     // Section deep-links work for EVERY role (readers/lead-readers navigate
     // here from the Reader Report screen's top menu — see ReaderReportEditor).
-    // Optional spec target for deep-links into the file library / matrix
+    // Optional spec target for deep-links into the file library
     // (the Reader Report screen links "Open files for 1.a" etc.).
     const dlStd = deepLinkParams.get('std');
     const dlSpec = deepLinkParams.get('spec');
@@ -683,9 +637,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       setActiveView('introduction');
     } else if (view === 'standards') {
       setActiveView('standards');
-    } else if (view === 'curriculum' || view === 'matrix') {
-      setActiveView('curriculum');
-      if (dlStd && dlSpec) setMatrixScrollTarget({ std: dlStd, spec: dlSpec });
     } else if (view === 'files') {
       setActiveView('files');
       if (dlStd && dlSpec) setFileScrollTarget({ std: dlStd, spec: dlSpec });
@@ -724,8 +675,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         ? 'review'
         : activeView === 'ai-import'
         ? 'import'
-        : activeView === 'matrix-surface'
-        ? 'matrix-surface'
         : activeView;
     const sp = new URLSearchParams(window.location.search);
     if (sp.get('view') !== param) {
@@ -737,14 +686,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
       );
     }
   }, [activeView]);
-  // When the user clicks "View in matrix" from a spec, we stash the target
-  // (std, spec) here and switch to the curriculum view. CurriculumMatrixEditor
-  // consumes the target via `scrollToSpec` and clears the state after it has
-  // scrolled+highlighted the row.
-  const [matrixScrollTarget, setMatrixScrollTarget] = useState<
-    { std: string; spec: string } | null
-  >(null);
-  // Same idea for the Supporting File Library — a reader can jump from a spec on
+  // Supporting File Library deep-link target — a reader can jump from a spec on
   // the Reader Report straight to that spec's files/links in the library.
   const [fileScrollTarget, setFileScrollTarget] = useState<
     { std: string; spec: string } | null
@@ -791,8 +733,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const [batchAssignment, setBatchAssignment] = useState<UnmappedAssignment>({
     standardCode: '',
     specCode: '',
-    toSupportingEvidence: false,
-    toCurriculumMatrix: false
+    toSupportingEvidence: false
   });
   const [isBatchMoving, setIsBatchMoving] = useState(false);
 
@@ -1250,7 +1191,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     setMovingSection(null);
     // Reset batch assignment state
     setSelectedSectionIds(new Set());
-    setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false, toCurriculumMatrix: false });
+    setBatchAssignment({ standardCode: '', specCode: '', toSupportingEvidence: false });
     setIsBatchMoving(false);
     // Reset Part 6 section selection state
     setDetectedSections([]);
@@ -1711,65 +1652,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     }
   };
 
-  // Manual Tagging: Apply tagged section to curriculum matrix (store as rich content)
-  const handleApplyToMatrix = async (section: TaggedSection, standardCode: string) => {
-    if (!importId) return;
-
-    setApplyingSectionId(section.id);
-    setSectionError(null);
-
-    try {
-      // Fetch the full content of the section
-      const contentResponse = await api.get(`/api/imports/${importId}/tagged-sections/${section.id}`);
-      const htmlContent = contentResponse.data.htmlContent || '';
-
-      if (!htmlContent.trim()) {
-        throw new Error('Section has no content to import');
-      }
-
-      // Get the matrix for this submission
-      const matrixResponse = await api.get(`/api/submissions/${submissionId}/matrix`);
-      const matrixId = matrixResponse.data._id;
-      const existingRaw = matrixResponse.data.rawContent || [];
-
-      if (!matrixId) {
-        throw new Error('No curriculum matrix found for this submission');
-      }
-
-      // Check for duplicate: same section already imported
-      const isDuplicate = existingRaw.some((r: any) =>
-        r.sourceImportId === importId && r.standardCode === standardCode &&
-        r.title === (section.title || `Matrix - Standard ${standardCode}`)
-      );
-
-      if (isDuplicate) {
-        throw new Error(`This section has already been imported to Standard ${standardCode}`);
-      }
-
-      // Store the HTML content directly in the matrix (rich text approach)
-      await api.post(`/api/submissions/${submissionId}/matrix/${matrixId}/raw-content`, {
-        content: htmlContent,
-        title: section.title || `Matrix - Standard ${standardCode}`,
-        standardCode,
-        sourceImportId: importId
-      });
-
-      // Mark the tagged section as applied
-      await api.patch(`/api/imports/${importId}/tagged-sections/${section.id}`, {
-        appliedDirectly: true
-      });
-
-      // Refresh tagged sections and matrix data
-      await loadTaggedSections();
-      queryClient.invalidateQueries({ queryKey: ['matrix', submissionId] });
-
-    } catch (err: any) {
-      setSectionError(err.response?.data?.error || err.message || 'Failed to import matrix content');
-    } finally {
-      setApplyingSectionId(null);
-    }
-  };
-
   // Manual Tagging: View tagged section content (fetch full content from API)
   const handleViewTaggedSection = async (section: TaggedSection) => {
     setViewingTaggedSection(section);
@@ -1933,7 +1815,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     }
   };
 
-  // Handle moving an unmapped section to a spec or curriculum matrix
+  // Handle moving an unmapped section to a spec
   const handleMoveUnmapped = async (sectionId: string) => {
     if (!importId) return;
 
@@ -1941,16 +1823,13 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     const section = extractedSections.find(s => s.id === sectionId);
     const assignment = unmappedAssignments[sectionId];
 
-    // Check if moving to curriculum matrix
-    const toCurriculumMatrix = assignment?.toCurriculumMatrix || false;
-
     // Use user assignment if available, otherwise fall back to AI suggestions
     const standardCode = assignment?.standardCode || section?.suggestedStandardCode || '';
     const specCode = assignment?.specCode || section?.suggestedSpecCode || '';
     const toSupportingEvidence = assignment?.toSupportingEvidence || false;
 
-    // Require standard/spec selection unless moving to curriculum matrix
-    if (!toCurriculumMatrix && (!standardCode || !specCode)) {
+    // Require standard/spec selection
+    if (!standardCode || !specCode) {
       setUploadError('Please select a standard and specification');
       return;
     }
@@ -1959,22 +1838,13 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
     setUploadError(null);
 
     try {
-      if (toCurriculumMatrix) {
-        // Move to curriculum matrix
-        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-          action: 'move_to_matrix',
-          toCurriculumMatrix: true,
-          matrixType: 'non_human_services_courses'
-        });
-      } else {
-        // Move to standard/spec
-        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-          action: 'assign',
-          standardCode,
-          specCode,
-          toSupportingEvidence
-        });
-      }
+      // Move to standard/spec
+      await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+        action: 'assign',
+        standardCode,
+        specCode,
+        toSupportingEvidence
+      });
 
       // Remove from extracted sections list
       setExtractedSections(prev => prev.filter(s => s.id !== sectionId));
@@ -2026,7 +1896,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
         standardCode: prev[sectionId]?.standardCode || '',
         specCode: prev[sectionId]?.specCode || '',
         toSupportingEvidence: prev[sectionId]?.toSupportingEvidence || false,
-        toCurriculumMatrix: prev[sectionId]?.toCurriculumMatrix || false,
         ...update
       }
     }));
@@ -2058,8 +1927,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   const handleBatchMoveSections = async () => {
     if (!importId || selectedSectionIds.size === 0) return;
 
-    // Require standard/spec selection unless moving to curriculum matrix
-    if (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode)) {
+    // Require standard/spec selection
+    if (!batchAssignment.standardCode || !batchAssignment.specCode) {
       setUploadError('Please select a standard and specification');
       return;
     }
@@ -2072,22 +1941,13 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
 
     for (const sectionId of selectedSectionIds) {
       try {
-        if (batchAssignment.toCurriculumMatrix) {
-          // Move to curriculum matrix
-          await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-            action: 'move_to_matrix',
-            toCurriculumMatrix: true,
-            matrixType: 'non_human_services_courses'
-          });
-        } else {
-          // Move to standard/spec
-          await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
-            action: 'assign',
-            standardCode: batchAssignment.standardCode,
-            specCode: batchAssignment.specCode,
-            toSupportingEvidence: batchAssignment.toSupportingEvidence
-          });
-        }
+        // Move to standard/spec
+        await api.put(`/api/imports/${importId}/unmapped/${sectionId}`, {
+          action: 'assign',
+          standardCode: batchAssignment.standardCode,
+          specCode: batchAssignment.specCode,
+          toSupportingEvidence: batchAssignment.toSupportingEvidence
+        });
         successCount++;
       } catch (err) {
         failCount++;
@@ -2447,14 +2307,14 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
   // writes with 403 LOCKED, but the UI should never let them try).
   const isEditingDisabled = isReadOnly || (isProgramCoordinator && isSubmissionLocked);
 
-  // CR-074 — once the study is submitted the import/review/matrix triage panels
+  // CR-074 — once the study is submitted the import/review triage panels
   // are archived. If a stale activeView or a ?view= deep-link would land a PC on
   // one of them, redirect to the read-only Standards view.
   useEffect(() => {
     if (
       isProgramCoordinator &&
       isSubmissionLocked &&
-      (activeView === 'review-surface' || activeView === 'ai-import' || activeView === 'matrix-surface')
+      (activeView === 'review-surface' || activeView === 'ai-import')
     ) {
       setActiveView('standards');
     }
@@ -2619,9 +2479,9 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           {/* CR-045 — wizard phase indicator strip. Shows the PC where they
             are in the 4-step guided workflow. PC-only (the wizard
             workflow doesn't apply to readers). Hidden on the full-screen
-            Review/Matrix draft surfaces to reclaim vertical work area. Sits in
+            Review draft surface to reclaim vertical work area. Sits in
             the title row (compact) instead of its own row. */}
-        {isProgramCoordinator && activeView !== 'review-surface' && activeView !== 'matrix-surface' && (
+        {isProgramCoordinator && activeView !== 'review-surface' && (
           <PhaseIndicator
             compact
             activeView={activeView}
@@ -2671,10 +2531,8 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                     {([
                       isProgramCoordinator && !isSubmissionLocked && canImport && { label: 'Import file', fn: () => setShowImportFile(true) },
                       isProgramCoordinator && !isSubmissionLocked && { label: 'Review drafts', fn: () => setActiveView('review-surface') },
-                      isProgramCoordinator && !isSubmissionLocked && { label: 'Curriculum Matrix drafts', fn: () => setActiveView('matrix-surface') },
                       { label: 'Introduction', fn: () => setActiveView('introduction') },
                       { label: 'Standards', fn: () => setActiveView('standards') },
-                      { label: 'Curriculum Matrix', fn: () => setActiveView('curriculum') },
                       { label: 'Supporting File Library', fn: () => setActiveView('files') },
                     ].filter(Boolean) as { label: string; fn: () => void }[]).map((it) => (
                       <button
@@ -2692,7 +2550,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             </div>
           </div>
 
-          <div className={`flex flex-wrap items-center gap-3 min-w-0 ${activeView !== 'review-surface' && activeView !== 'matrix-surface' ? '2xl:order-last 2xl:basis-full' : ''}`}>
+          <div className={`flex flex-wrap items-center gap-3 min-w-0 ${activeView !== 'review-surface' ? '2xl:order-last 2xl:basis-full' : ''}`}>
             {/* CR-045 — toolbar grouped by workflow phase. Left-to-right
                 matches the data flow: IMPORT → DRAFTS → SELF-STUDY. Each
                 group carries a plain-English label so a teacher reads the
@@ -2751,7 +2609,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   </span>
                   <div className="flex items-center gap-1">
                     <ReviewSurfaceButton activeView={activeView} setActiveView={setActiveView} />
-                    <MatrixSurfaceButton activeView={activeView} setActiveView={setActiveView} />
                   </div>
                 </div>
               )}
@@ -2791,18 +2648,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   >
                     <BookOpen className="w-4 h-4 flex-shrink-0" />
                     Standards
-                  </button>
-                  <button
-                    data-tour="ss-tab-curriculum"
-                    onClick={() => setActiveView('curriculum')}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
-                      activeView === 'curriculum'
-                        ? 'bg-teal-100 text-teal-700'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Grid3X3 className="w-4 h-4 flex-shrink-0" />
-                    Curriculum Matrix
                   </button>
                   <button
                     data-tour="ss-tab-files"
@@ -2871,12 +2716,12 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
             {/* CR-064 — the self-study chrome (overall progress, Validate All,
                 the Validated counter, Submit Self-Study) is NOISE on the Review
                 surface (Monica: "just give me buttons for the editor"). Hide it
-                on the Review/Matrix surfaces; it belongs to the self-study phase. */}
-            {activeView !== 'review-surface' && activeView !== 'matrix-surface' && (
+                on the Review surface; it belongs to the self-study phase. */}
+            {activeView !== 'review-surface' && (
               <ProgressIndicator submission={submission} />
             )}
 
-            {isProgramCoordinator && activeView !== 'review-surface' && activeView !== 'matrix-surface' && (
+            {isProgramCoordinator && activeView !== 'review-surface' && (
               <>
                 {/* CR-001 / S2A.4 — Both importers ship side-by-side.
                     "Import Document" tab above triggers the legacy
@@ -3076,45 +2921,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {/* CR-024 (post-apply) — Jump to matrix row from the spec
-                      breadcrumb. Visible for Standards 11–21 which are the
-                      only ones the CSHSE curriculum matrices cover. Now
-                      ALSO appears at the standard level (no spec selected)
-                      so the coordinator can jump to the matrix from a
-                      standard header rather than having to pick a spec
-                      first. Without-spec → scrolls to the first spec row
-                      of that standard in the matrix. */}
-                  {/* 2.e is the specification that ASKS for the curriculum
-                      matrix: it opens the whole matrix (no row to jump to). */}
-                  {(/^(1[1-9]|2[01])$/.test(selectedStandard) || (selectedStandard === '2' && selectedSpec === 'e')) && (
-                    <button
-                      data-testid="view-in-matrix"
-                      onClick={() => {
-                        if (selectedStandard !== '2') {
-                          setMatrixScrollTarget({
-                            std: selectedStandard,
-                            // Without a spec we anchor to "a" — the first sub-spec
-                            // is always row 1 of that standard in the matrix.
-                            spec: selectedSpec || 'a'
-                          });
-                        }
-                        setActiveView('curriculum');
-                      }}
-                      className="inline-flex items-center gap-1 rounded border border-cshse-400 bg-cshse-50 px-2.5 py-1 text-xs font-medium text-cshse-800 hover:bg-cshse-100"
-                      title={
-                        selectedSpec
-                          ? `Jump to ${selectedStandard}.${selectedSpec} in the curriculum matrix`
-                          : `Jump to Standard ${selectedStandard} in the curriculum matrix`
-                      }
-                    >
-                      <Grid3X3 className="w-3.5 h-3.5" aria-hidden />
-                      {selectedStandard === '2'
-                        ? 'Open curriculum matrix'
-                        : selectedSpec
-                        ? `Matrix · ${selectedStandard}.${selectedSpec}`
-                        : `Matrix · Standard ${selectedStandard}`}
-                    </button>
-                  )}
                   {/* Panel Navigation — previous / next panel in document order
                       (each Standard's Introduction then its specs, wrapping
                       between standards). Up/down and the ‹ › pair do the same. */}
@@ -3294,17 +3100,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           </>
         )}
 
-          {/* Curriculum Matrix View */}
-          {activeView === 'curriculum' && (
-            <main className="flex-1 min-h-0 overflow-hidden p-2">
-              <CurriculumMatrixEditor
-                submissionId={submissionId}
-                scrollToSpec={matrixScrollTarget}
-                onScrollConsumed={() => setMatrixScrollTarget(null)}
-              />
-            </main>
-          )}
-
           {/* Supporting File Library View */}
           {activeView === 'files' && (
             <main className="flex-1 min-h-0 overflow-hidden">
@@ -3353,7 +3148,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
           {/* AI Import Wizard View (Sprint 1). CR-043 follow-on:
               pass setActiveView down so the wizard's Open-Review CTA
               flips us to the toolbar Review surface directly (no more
-              wizard-internal Review/Matrix/Apply steps). */}
+              wizard-internal Review/Apply steps). */}
           {activeView === 'ai-import' && isProgramCoordinator && submissionId && (
             <main className="flex-1 min-h-0 overflow-hidden p-2">
               <AIImportWizard submissionId={submissionId} setActiveView={setActiveView} />
@@ -3371,16 +3166,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                   onOpenFileLibrary={() => setActiveView('files')}
                 />
               </SurfaceErrorBoundary>
-            </main>
-          )}
-
-          {/* CR-043 — Matrix surface, decoupled from the wizard. */}
-          {activeView === 'matrix-surface' && isProgramCoordinator && submissionId && (
-            <main className="flex flex-1 flex-col min-h-0 overflow-hidden">
-              <MatrixSurface
-                submissionId={submissionId}
-                onClose={() => setActiveView('standards')}
-              />
             </main>
           )}
 
@@ -3817,7 +3602,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                               onDelete={handleDeleteTaggedSection}
                               onView={handleViewTaggedSection}
                               onApply={handleApplyTaggedSection}
-                              onApplyToMatrix={handleApplyToMatrix}
                               deletingId={deletingSectionId}
                               applyingId={applyingSectionId}
                             />
@@ -4125,7 +3909,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                             specCode: '' // Reset spec when standard changes
                           }))}
                           className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
-                          disabled={batchAssignment.toCurriculumMatrix}
                         >
                           <option value="">Select Standard...</option>
                           {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -4142,7 +3925,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                             specCode: e.target.value
                           }))}
                           className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
-                          disabled={!batchAssignment.standardCode || batchAssignment.toCurriculumMatrix}
+                          disabled={!batchAssignment.standardCode}
                         >
                           <option value="">Select Spec...</option>
                           {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
@@ -4158,30 +3941,11 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                             checked={batchAssignment.toSupportingEvidence}
                             onChange={(e) => setBatchAssignment(prev => ({
                               ...prev,
-                              toSupportingEvidence: e.target.checked,
-                              toCurriculumMatrix: e.target.checked ? false : prev.toCurriculumMatrix
+                              toSupportingEvidence: e.target.checked
                             }))}
-                            disabled={batchAssignment.toCurriculumMatrix}
                             className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
                           />
                           Supporting Evidence
-                        </label>
-
-                        <label className="flex items-center gap-2 text-sm text-gray-700">
-                          <input
-                            type="checkbox"
-                            checked={batchAssignment.toCurriculumMatrix}
-                            onChange={(e) => setBatchAssignment(prev => ({
-                              ...prev,
-                              toCurriculumMatrix: e.target.checked,
-                              // Clear standard/spec when moving to matrix
-                              standardCode: e.target.checked ? '' : prev.standardCode,
-                              specCode: e.target.checked ? '' : prev.specCode,
-                              toSupportingEvidence: e.target.checked ? false : prev.toSupportingEvidence
-                            }))}
-                            className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                          />
-                          To Curriculum Matrix
                         </label>
 
                         <button
@@ -4189,20 +3953,16 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                           disabled={
                             isBatchMoving ||
                             selectedSectionIds.size === 0 ||
-                            (!batchAssignment.toCurriculumMatrix && (!batchAssignment.standardCode || !batchAssignment.specCode))
+                            !batchAssignment.standardCode || !batchAssignment.specCode
                           }
-                          className={`flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium ${
-                            batchAssignment.toCurriculumMatrix
-                              ? 'bg-purple-600 hover:bg-purple-700'
-                              : 'bg-teal-600 hover:bg-teal-700'
-                          }`}
+                          className="flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium bg-teal-600 hover:bg-teal-700"
                         >
                           {isBatchMoving ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
                           ) : (
                             <Check className="w-4 h-4" />
                           )}
-                          {batchAssignment.toCurriculumMatrix ? 'Move to Matrix' : 'Move Selected'} ({selectedSectionIds.size})
+                          Move Selected ({selectedSectionIds.size})
                         </button>
 
                         <button
@@ -4313,7 +4073,6 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                                   });
                                 }}
                                 className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
-                                disabled={unmappedAssignments[section.id]?.toCurriculumMatrix}
                               >
                                 <option value="">Select Standard...</option>
                                 {Object.entries(STANDARD_NAMES).map(([code, name]) => (
@@ -4329,7 +4088,7 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                                   updateUnmappedAssignment(section.id, { specCode: e.target.value });
                                 }}
                                 className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-teal-500 focus:border-teal-500 disabled:opacity-50 disabled:bg-gray-100"
-                                disabled={(!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode) || unmappedAssignments[section.id]?.toCurriculumMatrix}
+                                disabled={!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode}
                               >
                                 <option value="">Select Spec...</option>
                                 {['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((spec) => (
@@ -4345,32 +4104,12 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                                   checked={unmappedAssignments[section.id]?.toSupportingEvidence || false}
                                   onChange={(e) => {
                                     updateUnmappedAssignment(section.id, {
-                                      toSupportingEvidence: e.target.checked,
-                                      toCurriculumMatrix: e.target.checked ? false : unmappedAssignments[section.id]?.toCurriculumMatrix
+                                      toSupportingEvidence: e.target.checked
                                     });
                                   }}
-                                  disabled={unmappedAssignments[section.id]?.toCurriculumMatrix}
                                   className="rounded border-gray-300 text-teal-600 focus:ring-teal-500 disabled:opacity-50"
                                 />
                                 Evidence
-                              </label>
-
-                              <label className="flex items-center gap-1 text-xs text-purple-700">
-                                <input
-                                  type="checkbox"
-                                  checked={unmappedAssignments[section.id]?.toCurriculumMatrix || false}
-                                  onChange={(e) => {
-                                    updateUnmappedAssignment(section.id, {
-                                      toCurriculumMatrix: e.target.checked,
-                                      // Clear standard/spec when moving to matrix
-                                      standardCode: e.target.checked ? '' : unmappedAssignments[section.id]?.standardCode,
-                                      specCode: e.target.checked ? '' : unmappedAssignments[section.id]?.specCode,
-                                      toSupportingEvidence: e.target.checked ? false : unmappedAssignments[section.id]?.toSupportingEvidence
-                                    });
-                                  }}
-                                  className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                                />
-                                Matrix
                               </label>
                             </div>
 
@@ -4380,22 +4119,17 @@ export function SelfStudyEditor({ submissionId, userRole = 'program_coordinator'
                                 onClick={() => handleMoveUnmapped(section.id)}
                                 disabled={
                                   movingSection === section.id ||
-                                  (!unmappedAssignments[section.id]?.toCurriculumMatrix &&
-                                    ((!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode) ||
-                                    (!unmappedAssignments[section.id]?.specCode && !section.suggestedSpecCode)))
+                                  (!unmappedAssignments[section.id]?.standardCode && !section.suggestedStandardCode) ||
+                                  (!unmappedAssignments[section.id]?.specCode && !section.suggestedSpecCode)
                                 }
-                                className={`flex items-center gap-1 px-3 py-1 text-xs text-white rounded disabled:opacity-50 disabled:cursor-not-allowed ${
-                                  unmappedAssignments[section.id]?.toCurriculumMatrix
-                                    ? 'bg-purple-600 hover:bg-purple-700'
-                                    : 'bg-teal-600 hover:bg-teal-700'
-                                }`}
+                                className="flex items-center gap-1 px-3 py-1 text-xs text-white rounded disabled:opacity-50 disabled:cursor-not-allowed bg-teal-600 hover:bg-teal-700"
                               >
                                 {movingSection === section.id ? (
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                 ) : (
                                   <Check className="w-3 h-3" />
                                 )}
-                                {unmappedAssignments[section.id]?.toCurriculumMatrix ? 'Move to Matrix' : 'Move to Spec'}
+                                Move to Spec
                               </button>
                               <button
                                 onClick={() => handleDiscardUnmapped(section.id)}

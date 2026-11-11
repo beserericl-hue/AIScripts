@@ -45,7 +45,7 @@ export default function ParserTrainPage() {
   // active run being trained
   const [run, setRun] = useState<{ submissionId: string; pcUserId: string; programLevel: Level; institutionId?: string } | null>(null);
   // Opt-in: extract inline appendices (CVs / syllabi / papers / minutes /
-  // handbooks / the curriculum matrix) into supporting evidence instead of
+  // handbooks) into supporting evidence instead of
   // standard narratives. Sets the institution-scoped enableAppendixEvidence
   // rule before the parse; off by default (default-preserving).
   const [extractAppendices, setExtractAppendices] = useState(false);
@@ -130,7 +130,7 @@ export default function ParserTrainPage() {
       setImportId(impId);
       // Opt-in appendix extraction: enable the institution-scoped rule BEFORE
       // start-ai so the parse pulls inline CVs / syllabi / papers / minutes /
-      // handbooks / the matrix into supporting evidence.
+      // handbooks into supporting evidence.
       if (extractAppendices && run.institutionId) {
         setBusy('Enabling appendix extraction…');
         await api.post('/api/parser-train/set-rule', {
@@ -253,7 +253,7 @@ export default function ParserTrainPage() {
         </div>
         {/* Opt-in appendix extraction (template docs). Off by default so every
             institution parses as before; enable it here to pull inline CVs /
-            syllabi / papers / minutes / handbooks / the curriculum matrix into
+            syllabi / papers / minutes / handbooks into
             supporting evidence for THIS run's institution. */}
         <label className="mt-3 flex items-start gap-2 text-sm text-gray-700" title="Enables the institution-scoped enableAppendixEvidence rule before the parse">
           <input
@@ -265,7 +265,7 @@ export default function ParserTrainPage() {
           />
           <span>
             <span className="font-medium">Extract inline appendices as supporting evidence</span>{' '}
-            <span className="text-gray-500">— pull embedded CVs, syllabi, papers, meeting minutes, handbooks, and the curriculum matrix out of the standard narratives (template docs). Opt-in; the detectors can over-fire, so review the results before approving.</span>
+            <span className="text-gray-500">— pull embedded CVs, syllabi, papers, meeting minutes, and handbooks out of the standard narratives (template docs). Opt-in; the detectors can over-fire, so review the results before approving.</span>
           </span>
         </label>
       </section>

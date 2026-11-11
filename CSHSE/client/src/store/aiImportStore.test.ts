@@ -109,7 +109,6 @@ describe('aiImportStore — _applySnapshot', () => {
       ],
       introductionHints: { 'sec-glossary': 'introduction:document' },
       placeholderSections: [],
-      matrices: [],
       stages: [{ name: 'done', state: 'done' }]
     } as any);
     const s = useAIImportStore.getState();
@@ -143,7 +142,6 @@ describe('aiImportStore — _applySnapshot', () => {
           ],
           evidenceText: [],
           evidenceFiles: [],
-          matrixCells: [],
           coverageScore: 0.8,
           coverageCovered: false,
           coverageGaps: [],
@@ -152,15 +150,14 @@ describe('aiImportStore — _applySnapshot', () => {
       },
       tags: [],
       placeholderSections: [],
-      matrices: [],
       stages: [{ name: 'done', state: 'done' }]
     });
     const s = useAIImportStore.getState();
     expect(s.status).toBe('parsed');
     expect(s.buckets['1.a']).toBeDefined();
     expect(s.buckets['1.a'].narratives).toHaveLength(1);
-    // CR-043 follow-on — wizard is Upload + Parse only; Review,
-    // Matrix, Apply are toolbar surfaces. status='parsed' keeps the
+    // CR-043 follow-on — wizard is Upload + Parse only; Review and
+    // Apply are toolbar surfaces. status='parsed' keeps the
     // wizard on 'parse' (where the "Open Review" CTA lives).
     expect(s.step).toBe('parse');
   });
@@ -168,7 +165,7 @@ describe('aiImportStore — _applySnapshot', () => {
   it('does not bounce the user back when they have already moved past', () => {
     // CR-043 follow-on — the wizard no longer routes through `apply`
     // as a step. The closest forward state is `parse` (parsing) and
-    // anything past it stays in the toolbar Review/Matrix surfaces.
+    // anything past it stays in the toolbar Review surface.
     // We pin the regression-relevant invariant: a `parsed` snapshot
     // doesn't yank a user already on `parse` somewhere else.
     useAIImportStore.getState().setStep('parse');
@@ -230,7 +227,6 @@ describe('aiImportStore — CR-032 inline edit', () => {
           ],
           evidenceText: [],
           evidenceFiles: [],
-          matrixCells: [],
           coverageScore: null,
           coverageCovered: null,
           coverageGaps: [],
@@ -371,11 +367,11 @@ describe('aiImportStore — parsed-but-empty transport (prod zero-items strand)'
         '1.a': {
           standardCode: '1', specCode: 'a', standardTitle: 'T', specPrompt: 'p',
           narratives: [{ sectionId: 's1', heading: 'h', snippet: 's', wordCount: 5, confidence: 0.9, acceptState: 'auto_accept', rationale: 'r' }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
           coverageScore: null, coverageCovered: null, coverageGaps: [], coverageStrengths: []
         }
       },
-      tags: [], matrices: [], stages: []
+      tags: [], stages: []
     } as any);
     const s = useAIImportStore.getState();
     expect(s.status).toBe('parsed');

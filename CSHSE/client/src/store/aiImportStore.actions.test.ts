@@ -11,7 +11,7 @@
  *   - startOver vs reset (CR-043 follow-on — startOver preserves
  *     submissionId/programLevel/isReimport)
  *   - moveItemToIntroduction (CR-039 — move narrative to intro bucket)
- *   - setCVs / setMatrices (detector outputs)
+ *   - setCVs (detector outputs)
  *   - introductionHints rehydration in _applySnapshot (CR-039 Phase 2c)
  */
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -34,7 +34,7 @@ describe('aiImportStore — _applySnapshot dirty=true preservation', () => {
           narratives: [
             { sectionId: 'sec-local', heading: 'h', snippet: 'local edit', wordCount: 2, confidence: 0.9, acceptState: 'auto_accept', rationale: '' },
           ],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
           coverageScore: 0.8, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
         },
       },
@@ -47,11 +47,11 @@ describe('aiImportStore — _applySnapshot dirty=true preservation', () => {
           narratives: [
             { sectionId: 'sec-from-server', heading: 'h', snippet: 'AI original', wordCount: 2, confidence: 0.9, acceptState: 'auto_accept', rationale: '' },
           ],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
           coverageScore: 0.8, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
         },
       },
-      tags: [], placeholderSections: [], matrices: [], stages: [],
+      tags: [], placeholderSections: [], stages: [],
     });
     const s = useAIImportStore.getState();
     // Local edit survives — bug fix from 2026-05-21.
@@ -66,7 +66,7 @@ describe('aiImportStore — _applySnapshot dirty=true preservation', () => {
         '1.a': {
           standardCode: '1', specCode: 'a', standardTitle: 'T', specPrompt: 'p',
           narratives: [{ sectionId: 'sec-stale', heading: 'h', snippet: 'stale', wordCount: 1, confidence: 0.5, acceptState: 'auto_accept', rationale: '' }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
           coverageScore: 0.5, coverageCovered: false, coverageGaps: [], coverageStrengths: [],
         },
       },
@@ -77,11 +77,11 @@ describe('aiImportStore — _applySnapshot dirty=true preservation', () => {
         '1.a': {
           standardCode: '1', specCode: 'a', standardTitle: 'T', specPrompt: 'p',
           narratives: [{ sectionId: 'sec-new', heading: 'h', snippet: 'new', wordCount: 1, confidence: 0.9, acceptState: 'auto_accept', rationale: '' }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
           coverageScore: 0.9, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
         },
       },
-      tags: [], placeholderSections: [], matrices: [], stages: [],
+      tags: [], placeholderSections: [], stages: [],
     });
     const s = useAIImportStore.getState();
     expect(s.buckets['1.a'].narratives[0].sectionId).toBe('sec-new');
@@ -208,7 +208,7 @@ describe('aiImportStore — moveItemToIntroduction (CR-039)', () => {
           narratives: [
             { sectionId: 'sec-mission', heading: 'Mission', snippet: 'Our mission is...', wordCount: 4, confidence: 0.6, acceptState: 'auto_accept', rationale: '' },
           ],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
           coverageScore: 0.6, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
         },
       },
@@ -254,11 +254,11 @@ describe('aiImportStore — introductionHints rehydration in _applySnapshot (CR-
             { sectionId: 'sec-intro', heading: 'About the Program', snippet: 'The program...', wordCount: 2, confidence: 0.5, acceptState: 'auto_accept', rationale: '' },
             { sectionId: 'sec-keep', heading: 'Real spec content', snippet: '...', wordCount: 1, confidence: 0.95, acceptState: 'auto_accept', rationale: '' },
           ],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
           coverageScore: 0.8, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
         },
       },
-      tags: [], placeholderSections: [], matrices: [], stages: [],
+      tags: [], placeholderSections: [], stages: [],
       introductionHints: { 'sec-intro': 'introduction:document' },
     });
     const s = useAIImportStore.getState();
@@ -276,7 +276,7 @@ describe('aiImportStore — introductionHints rehydration in _applySnapshot (CR-
         '1.a': {
           standardCode: '1', specCode: 'a', standardTitle: 'T', specPrompt: 'p',
           narratives: [{ sectionId: 'sec-local', heading: 'h', snippet: 'local', wordCount: 1, confidence: 0.9, acceptState: 'auto_accept', rationale: '' }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
           coverageScore: null, coverageCovered: null, coverageGaps: [], coverageStrengths: [],
         },
       },
@@ -287,11 +287,11 @@ describe('aiImportStore — introductionHints rehydration in _applySnapshot (CR-
         '1.a': {
           standardCode: '1', specCode: 'a', standardTitle: 'T', specPrompt: 'p',
           narratives: [{ sectionId: 'sec-from-server', heading: 'h', snippet: 'from server', wordCount: 1, confidence: 0.9, acceptState: 'auto_accept', rationale: '' }],
-          evidenceText: [], evidenceFiles: [], matrixCells: [],
+          evidenceText: [], evidenceFiles: [],
           coverageScore: 0.8, coverageCovered: true, coverageGaps: [], coverageStrengths: [],
         },
       },
-      tags: [], placeholderSections: [], matrices: [], stages: [],
+      tags: [], placeholderSections: [], stages: [],
       introductionHints: { 'sec-from-server': 'introduction:document' },
     });
     const s = useAIImportStore.getState();
@@ -370,57 +370,5 @@ describe('aiImportStore — setStep clears stale errors (CR-027)', () => {
     useAIImportStore.setState({ status: 'queued', errors: ['x'] });
     useAIImportStore.getState().setStep('upload');
     expect(useAIImportStore.getState().errors).toEqual(['x']);
-  });
-});
-
-describe('aiImportStore — matrix row edits (CR-035 + CR-026)', () => {
-  beforeEach(reset);
-
-  const slug = 'mx-1';
-  const anchor = 'matrix-mx-1-row-3-a';
-  const key = `${slug}|${anchor}`;
-
-  it('retagMatrixRow records a {kind:"retag", newStd, newSpec} entry + dirty=true', () => {
-    useAIImportStore.getState().retagMatrixRow(slug, anchor, '4', 'b');
-    const s = useAIImportStore.getState();
-    expect(s.matrixRowEdits[key]).toEqual({ kind: 'retag', newStd: '4', newSpec: 'b' });
-    expect(s.dirty).toBe(true);
-  });
-
-  it('removeMatrixRow records a {kind:"remove"} entry + dirty=true', () => {
-    useAIImportStore.getState().removeMatrixRow(slug, anchor);
-    const s = useAIImportStore.getState();
-    expect(s.matrixRowEdits[key]).toEqual({ kind: 'remove' });
-    expect(s.dirty).toBe(true);
-  });
-
-  it('restoreMatrixRow deletes the entry + bumps dirty=true', () => {
-    useAIImportStore.setState({
-      matrixRowEdits: { [key]: { kind: 'remove' } },
-      dirty: false,
-    });
-    useAIImportStore.getState().restoreMatrixRow(slug, anchor);
-    const s = useAIImportStore.getState();
-    expect(s.matrixRowEdits[key]).toBeUndefined();
-    expect(s.dirty).toBe(true);
-  });
-
-  it('retag overrides a prior remove for the same row (last write wins)', () => {
-    useAIImportStore.getState().removeMatrixRow(slug, anchor);
-    useAIImportStore.getState().retagMatrixRow(slug, anchor, '5', 'c');
-    expect(useAIImportStore.getState().matrixRowEdits[key]).toEqual({
-      kind: 'retag',
-      newStd: '5',
-      newSpec: 'c',
-    });
-  });
-
-  it('different (matrixSlug, anchor) tuples write to different keys', () => {
-    useAIImportStore.getState().retagMatrixRow('mx-a', 'row-1', '1', 'a');
-    useAIImportStore.getState().retagMatrixRow('mx-b', 'row-2', '2', 'b');
-    const edits = useAIImportStore.getState().matrixRowEdits;
-    expect(Object.keys(edits).length).toBe(2);
-    expect(edits['mx-a|row-1']).toEqual({ kind: 'retag', newStd: '1', newSpec: 'a' });
-    expect(edits['mx-b|row-2']).toEqual({ kind: 'retag', newStd: '2', newSpec: 'b' });
   });
 });

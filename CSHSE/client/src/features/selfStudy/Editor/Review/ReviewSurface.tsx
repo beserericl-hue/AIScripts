@@ -1,8 +1,8 @@
 /**
  * CR-043 — Review surface, decoupled from the AI Import Wizard.
  *
- * Lives on the Self-Study Editor toolbar (between "Importer Wizard"
- * and "Matrix"). Renders the same UX the wizard's ReviewStep used to
+ * Lives on the Self-Study Editor toolbar (next to "Importer Wizard").
+ * Renders the same UX the wizard's ReviewStep used to
  * render, but its state comes from the submission-scoped persisted
  * `aiReviewState` (via aiImportStore.loadPersistedReviewState) and
  * NOT from the wizard's ephemeral run.

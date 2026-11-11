@@ -449,7 +449,6 @@ export function DataManagement() {
               <ul className="text-sm text-red-700 mt-2 list-disc list-inside">
                 <li>All self-study submissions ({submissions?.length || 0})</li>
                 <li>All narrative content and imports</li>
-                <li>All curriculum matrix data</li>
                 <li>All supporting evidence</li>
               </ul>
             </div>

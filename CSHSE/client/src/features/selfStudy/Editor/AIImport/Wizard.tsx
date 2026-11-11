@@ -2,9 +2,9 @@
  * AI Import Wizard — top-level component.
  *
  * CR-043 follow-on (post-release feedback 2026-05-26): the wizard is
- * now strictly the INGEST surface — Upload + Parse only. Review, Matrix,
- * and Apply moved to standalone toolbar surfaces (ReviewSurface,
- * MatrixSurface, with Apply inline in the Review header). When parsing
+ * now strictly the INGEST surface — Upload + Parse only. Review and
+ * Apply moved to a standalone toolbar surface (ReviewSurface, with Apply
+ * inline in the Review header). When parsing
  * completes the wizard stays on its Parse step but renders a
  * "Done — open the Review tab" CTA that flips the editor's activeView
  * to 'review-surface'. Coordinator never has to think about wizard
@@ -22,11 +22,9 @@ import { useAIImportStore } from '../../../../store/aiImportStore';
 
 type ActiveView =
   | 'standards'
-  | 'curriculum'
   | 'files'
   | 'ai-import'
   | 'review-surface'
-  | 'matrix-surface'
   | 'lead-reader-report';
 
 interface WizardProps {
@@ -45,7 +43,6 @@ interface WizardProps {
 export function Wizard({ submissionId, initialTagId = null, setActiveView }: WizardProps): JSX.Element {
   const step = useAIImportStore((s) => s.step);
   const status = useAIImportStore((s) => s.status);
-  const matrices = useAIImportStore((s) => s.matrices);
   const tags = useAIImportStore((s) => s.tags);
   const importId = useAIImportStore((s) => s.importId);
   const setStep = useAIImportStore((s) => s.setStep);
@@ -93,14 +90,13 @@ export function Wizard({ submissionId, initialTagId = null, setActiveView }: Wiz
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, tags.length]);
 
-  // CR-043 follow-on — `review` / `matrix` / `apply` are no longer
-  // wizard steps. If the persisted store still carries one of those
-  // (older Zustand snapshots from before this deploy), normalize to
-  // 'parse' so the wizard surface renders correctly.
-  const normalizedStep =
-    step === 'review' || step === 'matrix' || step === 'apply' ? 'parse' : step;
-  // Suppress unused-imports lint complaint after we stopped rendering matrices/tags here.
-  void matrices;
+  // CR-043 follow-on — only Upload / Parse / Tags are wizard steps. If
+  // the persisted store still carries any other step (older Zustand
+  // snapshots from before this deploy), normalize to 'parse' so the
+  // wizard surface renders correctly.
+  const normalizedStep: 'upload' | 'parse' | 'tags' =
+    step === 'upload' || step === 'tags' ? step : 'parse';
+  // Suppress unused-imports lint complaint after we stopped rendering tags here.
   void tags;
 
   return (
@@ -109,7 +105,6 @@ export function Wizard({ submissionId, initialTagId = null, setActiveView }: Wiz
         <Stepper
           current={normalizedStep}
           status={status}
-          showMatrix={false}
           onSelect={setStep}
         />
       )}

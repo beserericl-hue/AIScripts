@@ -20,12 +20,10 @@ import { Upload, ClipboardCheck, BookOpen, Send, ChevronRight } from 'lucide-rea
 
 export type EditorActiveView =
   | 'standards'
-  | 'curriculum'
   | 'files'
   | 'introduction'
   | 'ai-import'
   | 'review-surface'
-  | 'matrix-surface'
   | 'lead-reader-report';
 
 type Phase = 'import' | 'drafts' | 'self-study' | 'submit';
@@ -49,8 +47,8 @@ export interface PhaseIndicatorProps {
 /** Map the current view to its workflow phase. */
 function phaseForView(view: EditorActiveView): Phase {
   if (view === 'ai-import') return 'import';
-  if (view === 'review-surface' || view === 'matrix-surface') return 'drafts';
-  // standards / curriculum / files / introduction
+  if (view === 'review-surface') return 'drafts';
+  // standards / files / introduction
   return 'self-study';
 }
 

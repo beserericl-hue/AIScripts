@@ -67,13 +67,11 @@ const STRINGS = {
   // are triaged before they go into the story). These steps only show up
   // when the Review screen is open; on the writing screen they stay hidden.
   'tour.review.summary':
-    "You're on the Drafts screen. This line at the top counts everything the helper pulled out of your paper: stories, proof, files, and tables.",
+    "You're on the Drafts screen. This line at the top counts everything the helper pulled out of your paper: stories, proof, and files.",
   'tour.review.rail':
     "This left-hand list is your menu. Each row is one part of your story. Click a row and its drafts show up in the middle.",
   'tour.review.docIntro':
     "This is the opening for your whole school — the part that comes before any numbered standard. Drafts dropped here introduce the school.",
-  'tour.review.matrices':
-    "These are your big charts (the curriculum tables). Click here to check the rows the helper found inside them.",
   'tour.review.supportingEvidence':
     "Three kinds of extra proof live here: faculty CVs, course Syllabi, and Papers or Projects. Click one to see what the helper found — and to tell it which Standard and Substandard each one belongs to.",
   'tour.review.cvs':
@@ -96,8 +94,6 @@ const STRINGS = {
     "Tell the helper what a draft really is — a Narrative, Evidence, or a File — or send it to a different Standard and Substandard if it landed in the wrong place.",
   'tour.review.apply':
     "When the drafts look right, this sends everything you approved into your story so you can write with it.",
-  'tour.review.next':
-    "Move on to the next step — the charts (Matrix) — before you finish.",
   'tour.review.redetect':
     "Ask the helper to read your paper again and look for more CVs, syllabi, and papers. Anything you already approved stays safe.",
   'tour.review.finish':
@@ -111,8 +107,6 @@ const STRINGS = {
     "The Introduction is the opening of your whole self-study — your mission and program description. Click here to write it.",
   'tour.ss.tabStandards':
     "Standards is where you answer each part, one at a time. You're looking at it now.",
-  'tour.ss.tabCurriculum':
-    "The Curriculum Matrix is the big table that maps your courses to the standards. Click here to fill it in.",
   'tour.ss.tabFiles':
     "Supporting File Library holds every file you uploaded — CVs, syllabi, papers. Click here to see them.",
   'tour.ss.readerReport':
@@ -133,7 +127,7 @@ const STRINGS = {
   'tour.rr.markComplete':
     "Mark complete when you're finished. That's when the lead reader can see your report.",
   'tour.rr.nav':
-    "These tabs jump to any part of the self-study — Introduction, Standards, Curriculum Matrix, and the Supporting File Library — without losing your place.",
+    "These tabs jump to any part of the self-study — Introduction, Standards, and the Supporting File Library — without losing your place.",
   'tour.rr.allReports':
     "Lead readers see every reader's report here, with the vote tally. Open each one once that reader marks it complete.",
   'tour.rr.aiAssessment':
@@ -144,8 +138,6 @@ const STRINGS = {
     "Give this part a score from 0 to 3. The dash clears it. It saves automatically.",
   'tour.rr.files':
     "Files opens the documents and links for this part in the Supporting File Library — CVs, syllabi, and projects too.",
-  'tour.rr.matrix':
-    "Matrix shows this part in the Curriculum Matrix.",
   'tour.rr.comments':
     "Add a comment about this part: select text here and right-click. Everyone — reader 1, reader 2, and the lead reader — can see it.",
   'tour.rr.chatWindow':
